@@ -1,0 +1,21 @@
+input = "static"
+output = "dist"
+
+[[rules]]
+include = "**/*.xcf"
+handler = "Ignore"
+
+[[rules]]
+include = "main.css"
+handler = {Command = ["tailwindcss", "--minify", "--input", "$infile", "--output", "$outfile"]}
+skip_unchanged = false
+
+[[rules]]
+include = "**/*.min.js"
+handler = "Copy"
+rename = "$1$2.js"
+
+[[rules]]
+include = "**/*.min.css"
+handler = "Copy"
+rename = "$1$2.css"
