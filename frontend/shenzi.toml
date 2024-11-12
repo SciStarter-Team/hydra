@@ -1,3 +1,7 @@
+# To get the Shenzi tool which uses this file to generate the contents
+# of the dist directory, install the Rust compiler and then run
+# `cargo install --git https://git.sr.ht/~djarb/shenzi`
+
 input = "static"
 output = "dist"
 

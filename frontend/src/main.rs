@@ -1,4 +1,10 @@
-use poem::endpoint::{EmbeddedFileEndpoint, EmbeddedFilesEndpoint};
+use poem::{
+    endpoint::{EmbeddedFileEndpoint, EmbeddedFilesEndpoint},
+    get, handler,
+    listener::TcpListener,
+    web::Path,
+    Route, Server,
+};
 use rust_embed::Embed;
 use sqlx::{sqlite::SqliteConnectOptions, SqlitePool};
 
@@ -14,6 +20,11 @@ struct Static;
 
 type StaticFiles = EmbeddedFilesEndpoint<Static>;
 type StaticFile = EmbeddedFileEndpoint<Static>;
+
+#[handler]
+fn hello(Path(name): Path<String>) -> String {
+    format!("hello: {}", name)
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -34,6 +45,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .await?;
 
     sqlx::migrate!("./migrations").run(&conx).await?;
+
+    let routes = Route::new().at("/hello/:name", get(hello));
+
+    Server::new(TcpListener::bind(env!("LISTEN_ON")))
+        .run(routes)
+        .await?;
 
     Ok(())
 }
