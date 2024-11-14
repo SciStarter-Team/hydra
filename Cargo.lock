@@ -809,6 +809,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "frontend"
+version = "0.1.0"
+dependencies = [
+ "async-nats",
+ "flexbuffers",
+ "jiff",
+ "object_store",
+ "poem",
+ "reqwest",
+ "rust-embed",
+ "sailfish",
+ "serde",
+ "sqlx",
+ "thiserror 2.0.1",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "futures"
 version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1129,25 +1148,6 @@ name = "humantime"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
-
-[[package]]
-name = "hydra"
-version = "0.1.0"
-dependencies = [
- "async-nats",
- "flexbuffers",
- "jiff",
- "object_store",
- "poem",
- "reqwest",
- "rust-embed",
- "sailfish",
- "serde",
- "sqlx",
- "thiserror 2.0.1",
- "tokio",
- "url",
-]
 
 [[package]]
 name = "hyper"

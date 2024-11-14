@@ -1,5 +1,7 @@
 .envrc
+remote.ron
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
 /target
+/misc
