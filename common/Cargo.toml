@@ -1,0 +1,13 @@
+[package]
+name = "common"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.93"
+async-nats = { version = "0.37.0", features = ["service"] }
+futures = "0.3.31"
+num_enum = "0.7.3"
+serde = { version = "1.0.215", features = ["derive"] }
+sqlx = { version = "0.8.2", features = ["runtime-tokio", "sqlite", "macros", "migrate"] }
+tokio = { version = "1.41.1", features = ["full"] }

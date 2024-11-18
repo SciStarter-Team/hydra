@@ -1,18 +1,16 @@
+pub mod session;
+
+use common::shared::db;
 use poem::{
     endpoint::{EmbeddedFileEndpoint, EmbeddedFilesEndpoint},
     get, handler,
     listener::TcpListener,
-    web::Path,
-    Route, Server,
+    session::{CookieConfig, ServerSession, Session},
+    web::{cookie::SameSite, Path},
+    EndpointExt, Route, Server,
 };
 use rust_embed::Embed;
-use sqlx::{sqlite::SqliteConnectOptions, SqlitePool};
-
-#[cfg(debug_assertions)]
-const STORAGE_PATH: &'static str = ".";
-
-#[cfg(not(debug_assertions))]
-const STORAGE_PATH: &'static str = env!("STORAGE_PATH");
+use session::UserServiceSessionStorage;
 
 #[derive(Embed)]
 #[folder = "dist/"]
@@ -22,31 +20,37 @@ type StaticFiles = EmbeddedFilesEndpoint<Static>;
 type StaticFile = EmbeddedFileEndpoint<Static>;
 
 #[handler]
-fn hello(Path(name): Path<String>) -> String {
-    format!("hello: {}", name)
+fn hello(session: &Session, Path(name): Path<String>) -> String {
+    let prev = session.get("moo");
+    session.set("moo", &name);
+    format!(
+        "hello: {}, {}",
+        prev.unwrap_or_else(|| String::from("default")),
+        name
+    )
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let conx = SqlitePool::connect_with(
-        SqliteConnectOptions::new()
-            .filename(std::path::Path::join(
-                STORAGE_PATH.as_ref(),
-                "frontend.sqlite",
-            ))
-            .create_if_missing(true)
-            .busy_timeout(std::time::Duration::from_secs(300))
-            .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
-            .synchronous(sqlx::sqlite::SqliteSynchronous::Normal)
-            .foreign_keys(true)
-            .optimize_on_close(true, Some(1000))
-            .extension("mod_spatialite"),
-    )
-    .await?;
+    common::shared::init("frontend").await;
 
-    sqlx::migrate!("./migrations").run(&conx).await?;
+    sqlx::migrate!("./migrations").run(db()).await?;
 
-    let routes = Route::new().at("/hello/:name", get(hello));
+    let session_storage = UserServiceSessionStorage;
+
+    let routes = Route::new()
+        .at("/hello/:name", get(hello))
+        .nest("/static", StaticFiles::new())
+        .with(ServerSession::new(
+            CookieConfig::default()
+                .name("session")
+                .http_only(true)
+                .secure(true)
+                .same_site(SameSite::Lax)
+                .path("/")
+                .max_age(std::time::Duration::from_secs(60 * 60 * 24 * 365)),
+            session_storage,
+        ));
 
     Server::new(TcpListener::bind(env!("LISTEN_ON")))
         .run(routes)
