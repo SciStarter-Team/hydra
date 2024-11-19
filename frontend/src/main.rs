@@ -1,4 +1,6 @@
+pub mod channel;
 pub mod session;
+pub mod upload;
 
 use common::shared::db;
 use poem::{
@@ -6,12 +8,25 @@ use poem::{
     get, handler,
     listener::TcpListener,
     session::{CookieConfig, ServerSession, Session},
-    web::{cookie::SameSite, Path},
-    EndpointExt, Route, Server,
+    web::{cookie::SameSite, Html, Path},
+    EndpointExt, IntoResponse, Route, Server,
 };
 use rust_embed::Embed;
 use session::UserServiceSessionStorage;
+use ulid::Ulid;
 
+#[cfg(debug_assertions)]
+pub const SESSION_COOKIE: &'static str = "session";
+
+#[cfg(not(debug_assertions))]
+pub const SESSION_COOKIE: &'static str = "__Host-session";
+
+#[cfg(debug_assertions)]
+#[derive(Embed)]
+#[folder = "static/"]
+struct Static;
+
+#[cfg(not(debug_assertions))]
 #[derive(Embed)]
 #[folder = "dist/"]
 struct Static;
@@ -19,14 +34,57 @@ struct Static;
 type StaticFiles = EmbeddedFilesEndpoint<Static>;
 type StaticFile = EmbeddedFileEndpoint<Static>;
 
+/// Ensures that the session contains a unique NATS subject, and
+/// returns it
+pub fn session_subject(session: &Session) -> String {
+    if let Some(subj) = session.get::<String>("subject") {
+        subj
+    } else {
+        let subj = Ulid::new().to_string();
+        session.set("subject", &subj);
+        subj
+    }
+}
+
 #[handler]
-fn hello(session: &Session, Path(name): Path<String>) -> String {
-    let prev = session.get("moo");
-    session.set("moo", &name);
-    format!(
-        "hello: {}, {}",
-        prev.unwrap_or_else(|| String::from("default")),
-        name
+fn index(session: &Session) -> impl IntoResponse {
+    let session = session.clone();
+    tokio::spawn(async move {
+        for counter in 0..32 {
+            tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+            channel::send(
+                &session,
+                "moocow",
+                channel::Event::new("test", format!("<p>iteration {}</p>", counter)),
+            )
+            .await
+            .unwrap();
+        }
+
+        channel::send(&session, "moocow", channel::Event::new("shutdown", ""))
+            .await
+            .unwrap();
+    });
+
+    Html(
+        r#"<!doctype html>
+<html>
+  <head>
+    <script src="/-static/htmx.js"></script>
+    <script src="/-static/hx-sse.js"></script>
+    <script src="/-static/hx-alpine-morph.js"></script>
+    <script src="/-static/alpine-morph.js"></script>
+    <script src="/-static/alpine.js"></script>
+  </head>
+  <body hx-ext="sse,alpine-morph">
+    <p>Before</p>
+    <div sse-connect="/-channel/moocow" sse-swap=test sse-close=shutdown hx-target="find p" hx-swap=morph>
+      <p>No events yet</p>
+    </div>
+    <p>After</p>
+  </body>
+</html>
+"#,
     )
 }
 
@@ -39,11 +97,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let session_storage = UserServiceSessionStorage;
 
     let routes = Route::new()
-        .at("/hello/:name", get(hello))
-        .nest("/static", StaticFiles::new())
+        .nest("/-static", StaticFiles::new())
+        .nest("/-upload", upload::routes())
+        .nest("/-channel", channel::routes())
+        .at("/", get(index))
+        .at("/index.html", get(index))
         .with(ServerSession::new(
             CookieConfig::default()
-                .name("session")
+                .name(SESSION_COOKIE)
                 .http_only(true)
                 .secure(true)
                 .same_site(SameSite::Lax)

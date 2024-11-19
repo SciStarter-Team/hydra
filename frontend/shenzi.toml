@@ -10,6 +10,10 @@ include = "**/*.xcf"
 handler = "Ignore"
 
 [[rules]]
+include = "update.sh"
+handler = "Ignore"
+
+[[rules]]
 include = "main.css"
 handler = {Command = ["tailwindcss", "--minify", "--input", "$infile", "--output", "$outfile"]}
 skip_unchanged = false
