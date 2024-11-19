@@ -8,7 +8,7 @@ use poem::{
     get, handler,
     listener::TcpListener,
     session::{CookieConfig, ServerSession, Session},
-    web::{cookie::SameSite, Html, Path},
+    web::{cookie::SameSite, Html},
     EndpointExt, IntoResponse, Route, Server,
 };
 use rust_embed::Embed;
@@ -48,6 +48,11 @@ pub fn session_subject(session: &Session) -> String {
 
 #[handler]
 fn index(session: &Session) -> impl IntoResponse {
+    // Cloning the session is fine except that changing the clone
+    // won't cause the session cookie to be saved. Ensuring that
+    // there's a session subject here avoids that problem.
+    session_subject(session);
+
     let session = session.clone();
     tokio::spawn(async move {
         for counter in 0..32 {
