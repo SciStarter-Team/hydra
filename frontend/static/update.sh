@@ -17,3 +17,6 @@ curl -L https://unpkg.com/alpinejs/dist/cdn.min.js -o alpine.min.js
 # Alpine morph plugin in both readable and minified forms
 curl -L https://unpkg.com/@alpinejs/morph/dist/cdn.js -o alpine-morph.js
 curl -L https://unpkg.com/@alpinejs/morph/dist/cdn.min.js -o alpine-morph.min.js
+
+# Official ulid implementation for JS
+curl -L https://raw.githubusercontent.com/ulid/javascript/refs/heads/master/dist/index.umd.js -o ulid.js
