@@ -7,7 +7,7 @@ use common::{message::user::Session, shared::db};
 /// Does not reply, so the requestor should not wait for a
 /// response. In other words, use publish rather than request when
 /// communicating with this endpoint.
-pub async fn store(req: Request) -> Result<(), Error> {
+pub async fn store(req: &Request) -> Result<(), Error> {
     let session: Session = flexbuffers::from_slice(&req.message.payload)?;
 
     sqlx::query!(
@@ -26,7 +26,7 @@ pub async fn store(req: Request) -> Result<(), Error> {
 }
 
 /// Fetch session data
-pub async fn retrieve(req: Request) -> Result<(), Error> {
+pub async fn retrieve(req: &Request) -> Result<Session, Error> {
     let session_id: String = flexbuffers::from_slice(&req.message.payload)?;
 
     let session = sqlx::query_as!(
@@ -37,10 +37,7 @@ pub async fn retrieve(req: Request) -> Result<(), Error> {
     .fetch_optional(db())
     .await?;
 
-    let payload = flexbuffers::to_vec(session)?;
-    req.respond(Ok(payload.into())).await?;
-
-    Ok(())
+    Ok(session)
 }
 
 /// Delete session data
@@ -48,7 +45,7 @@ pub async fn retrieve(req: Request) -> Result<(), Error> {
 /// Does not reply, so the requestor should not wait for a
 /// response. In other words, use publish rather than request when
 /// communicating with this endpoint.
-pub async fn delete(req: Request) -> Result<(), Error> {
+pub async fn delete(req: &Request) -> Result<(), Error> {
     let session_id: String = flexbuffers::from_slice(&req.message.payload)?;
 
     sqlx::query!(

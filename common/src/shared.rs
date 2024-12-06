@@ -55,3 +55,28 @@ pub async fn init(db_name: impl AsRef<str>) {
     NATS.set(nats)
         .expect("Unable to set shared NATS connection");
 }
+
+pub async fn extra_nats() -> async_nats::Client {
+    let nats = async_nats::connect_with_options(NATS_HOST, async_nats::ConnectOptions::default())
+        .await
+        .expect("Unable to connect to NATS");
+    nats
+}
+
+pub async fn extra_db(db_name: impl AsRef<str>, create: bool) -> Result<SqlitePool, sqlx::Error> {
+    Ok(SqlitePool::connect_with(
+        SqliteConnectOptions::new()
+            .filename(std::path::Path::join(
+                STORAGE_PATH.as_ref(),
+                format!("{}.sqlite", db_name.as_ref()),
+            ))
+            .create_if_missing(create)
+            .busy_timeout(std::time::Duration::from_secs(300))
+            .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
+            .synchronous(sqlx::sqlite::SqliteSynchronous::Normal)
+            .foreign_keys(true)
+            .optimize_on_close(true, Some(1000))
+            .extension("mod_spatialite"),
+    )
+    .await?)
+}
