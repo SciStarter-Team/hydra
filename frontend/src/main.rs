@@ -6,6 +6,7 @@ use common::shared::db;
 use poem::{
     endpoint::{EmbeddedFileEndpoint, EmbeddedFilesEndpoint},
     get, handler,
+    http::HeaderMap,
     listener::TcpListener,
     session::{CookieConfig, ServerSession, Session},
     web::{cookie::SameSite, Html},
@@ -47,7 +48,7 @@ pub fn session_subject(session: &Session) -> String {
 }
 
 #[handler]
-fn index(session: &Session) -> impl IntoResponse {
+fn index(session: &Session, headers: &HeaderMap) -> impl IntoResponse {
     // Cloning the session is fine except that changing the clone
     // won't cause the session cookie to be saved. Ensuring that
     // there's a session subject here avoids that problem.
@@ -71,26 +72,31 @@ fn index(session: &Session) -> impl IntoResponse {
             .unwrap();
     });
 
-    Html(
+    Html(format!(
         r#"<!doctype html>
-<html>
-  <head>
-    <script src="/-static/htmx.js"></script>
-    <script src="/-static/hx-sse.js"></script>
-    <script src="/-static/hx-alpine-morph.js"></script>
-    <script src="/-static/alpine-morph.js"></script>
-    <script src="/-static/alpine.js"></script>
-  </head>
-  <body hx-ext="sse,alpine-morph">
-    <p>Before</p>
-    <div sse-connect="/-channel/moocow" sse-swap=test sse-close=shutdown hx-target="find p" hx-swap=morph>
-      <p>No events yet</p>
-    </div>
-    <p>After</p>
-  </body>
-</html>
-"#,
-    )
+           <html>
+             <head>
+               <script src="/-static/htmx.js"></script>
+               <script src="/-static/hx-sse.js"></script>
+               <script src="/-static/hx-alpine-morph.js"></script>
+               <script src="/-static/alpine-morph.js"></script>
+               <script src="/-static/alpine.js"></script>
+             </head>
+             <body hx-ext="sse,alpine-morph">
+               <p>Before</p>
+               <div sse-connect="/-channel/moocow" sse-swap=test sse-close=shutdown hx-target="find p" hx-swap=morph>
+                 <p>No events yet</p>
+               </div>
+               <p>After</p>
+               <p>Headers</p>
+               <div>
+                 {:?}
+               </div>
+             </body>
+           </html>
+        "#,
+        headers,
+    ))
 }
 
 #[tokio::main]

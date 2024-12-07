@@ -26,7 +26,7 @@ pub async fn store(req: &Request) -> Result<(), Error> {
 }
 
 /// Fetch session data
-pub async fn retrieve(req: &Request) -> Result<Session, Error> {
+pub async fn retrieve(req: &Request) -> Result<Option<Session>, Error> {
     let session_id: String = flexbuffers::from_slice(&req.message.payload)?;
 
     let session = sqlx::query_as!(
