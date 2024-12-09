@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.93"
 async-nats = { version = "0.37.0", features = ["service"] }
+flexbuffers = "2.0.0"
 futures = "0.3.31"
 num_enum = "0.7.3"
 serde = { version = "1.0.215", features = ["derive"] }

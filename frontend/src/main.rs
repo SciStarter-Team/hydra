@@ -2,14 +2,14 @@ pub mod channel;
 pub mod session;
 pub mod upload;
 
-use common::shared::db;
+use common::{message::location::LocationInfo, service::request, shared::db};
 use poem::{
     endpoint::{EmbeddedFileEndpoint, EmbeddedFilesEndpoint},
     get, handler,
     http::HeaderMap,
     listener::TcpListener,
     session::{CookieConfig, ServerSession, Session},
-    web::{cookie::SameSite, Html},
+    web::{cookie::SameSite, Html, RealIp},
     EndpointExt, IntoResponse, Route, Server,
 };
 use rust_embed::Embed;
@@ -48,7 +48,11 @@ pub fn session_subject(session: &Session) -> String {
 }
 
 #[handler]
-fn index(session: &Session, headers: &HeaderMap) -> impl IntoResponse {
+async fn index(
+    session: &Session,
+    headers: &HeaderMap,
+    RealIp(client_ip): RealIp,
+) -> impl IntoResponse {
     // Cloning the session is fine except that changing the clone
     // won't cause the session cookie to be saved. Ensuring that
     // there's a session subject here avoids that problem.
@@ -72,6 +76,14 @@ fn index(session: &Session, headers: &HeaderMap) -> impl IntoResponse {
             .unwrap();
     });
 
+    let location = if let Some(addr) = client_ip {
+        request("location.ip", addr.to_string())
+            .await
+            .unwrap_or_default()
+    } else {
+        LocationInfo::default()
+    };
+
     Html(format!(
         r#"<!doctype html>
            <html>
@@ -92,10 +104,11 @@ fn index(session: &Session, headers: &HeaderMap) -> impl IntoResponse {
                <div>
                  {:?}
                </div>
+               <code>{:?}</code>
              </body>
            </html>
         "#,
-        headers,
+        headers, location,
     ))
 }
 
@@ -111,6 +124,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nest("/-static", StaticFiles::new())
         .nest("/-upload", upload::routes())
         .nest("/-channel", channel::routes())
+        .at("/favicon.ico", StaticFile::new("favicon.ico"))
         .at("/", get(index))
         .at("/index.html", get(index))
         .with(ServerSession::new(

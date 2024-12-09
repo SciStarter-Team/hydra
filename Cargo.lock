@@ -374,6 +374,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-nats",
+ "flexbuffers",
  "futures",
  "num_enum 0.7.3",
  "serde",

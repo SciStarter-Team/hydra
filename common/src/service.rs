@@ -1,3 +1,11 @@
+use anyhow::anyhow;
+use async_nats::{subject::ToSubject, Message};
+use errors::DecodeError;
+use futures::StreamExt;
+use serde::de::DeserializeOwned;
+
+use crate::shared::nats;
+
 #[macro_export]
 macro_rules! handler {
     ($group:ident, $name:literal, $fut:expr) => {
@@ -39,6 +47,88 @@ macro_rules! handler {
                 }
             })
     };
+}
+
+/// Publish a structured data message through NATS, without waiting
+/// for a reply.
+pub async fn send(
+    subject: impl ToSubject,
+    message: impl serde::Serialize,
+) -> Result<(), anyhow::Error> {
+    let payload = flexbuffers::to_vec(message)?;
+
+    nats().publish(subject, payload.into()).await?;
+
+    Ok(())
+}
+
+/// Transforms an [`async_nats::Message`] (or anything which is
+/// `Into<Message>` such as [`async_nats::jetream::Message`]) into
+/// structured data.
+pub fn decode_structured_message<R>(msg: impl Into<Message>) -> Result<R, anyhow::Error>
+where
+    R: DeserializeOwned,
+{
+    let msg = msg.into();
+    Ok(flexbuffers::from_slice(&msg.payload)?)
+}
+
+/// Receive a message through NATS, and decode it into structured data.
+///
+/// This creates a subscription, waits for a single message, decodes
+/// the payload, and returns it. That's useful for one-offs, but doing
+/// it in a loop means you're *not* subscribed during the rest of the
+/// loop body, and risks missing messages.
+///
+/// If you need to listen for and process multiple messages in a loop,
+/// and you're not doing something which should use the NATS Service
+/// API instead, create a subscription and apply
+/// [decode_structured_message] to the messages it
+/// produces. [`StreamExt::map`] can help streamline that.
+pub async fn recv<R>(
+    subject: impl ToSubject,
+    queue: impl Into<Option<String>>,
+) -> Result<R, anyhow::Error>
+where
+    R: DeserializeOwned,
+{
+    let mut subs = if let Some(q) = queue.into() {
+        nats().queue_subscribe(subject, q).await
+    } else {
+        nats().subscribe(subject).await
+    }?;
+
+    subs.unsubscribe_after(1).await?;
+
+    let Some(msg) = subs.next().await else {
+        return Err(anyhow!("Subscription ended prematurely"));
+    };
+
+    decode_structured_message(msg)
+}
+
+/// Publish a structured data message through NATS, wait for a reply,
+/// and decode it into structured data.
+///
+/// This uses the [NATS Service API] mechanism and is meant for
+/// bidirectional communication with services.
+///
+/// [NATS Service API]: https://docs.rs/async-nats/latest/async_nats/service/struct.Service.html
+pub async fn request<R>(
+    subject: impl ToSubject,
+    message: impl serde::Serialize,
+) -> Result<R, anyhow::Error>
+where
+    R: DeserializeOwned,
+{
+    let payload = flexbuffers::to_vec(message)?;
+
+    let msg = nats()
+        .request(subject, payload.into())
+        .await?
+        .decode_error()?;
+
+    decode_structured_message(msg)
 }
 
 pub mod errors {
