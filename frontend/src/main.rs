@@ -20,7 +20,7 @@ use ulid::Ulid;
 pub const SESSION_COOKIE: &'static str = "session";
 
 #[cfg(not(debug_assertions))]
-pub const SESSION_COOKIE: &'static str = "__Host-session";
+pub const SESSION_COOKIE: &'static str = "__Host-session-id";
 
 #[cfg(debug_assertions)]
 #[derive(Embed)]

@@ -45,6 +45,16 @@ pub async fn init(db_name: impl AsRef<str>) {
     .await
     .expect("Unable to connect to SQLite");
 
+    sqlx::query!(
+        r#"create table if not exists "misc" (
+          "key" text primary key not null,
+          "value" any not null
+        ) strict;"#
+    )
+    .execute(&conx)
+    .await
+    .expect("Error creating misc KV table");
+
     DB.set(conx)
         .expect("Unable to set shared database connection pool");
 
