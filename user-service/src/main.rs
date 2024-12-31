@@ -37,7 +37,7 @@ async fn synchronize() {
         let last = misc::get("session-sync-bookmark")
             .await
             .expect("Retrieving sync bookmark failed")
-            .unwrap_or_else(|| String::from("2000-01-01 00:00:00"));
+            .unwrap_or_else(|| String::from("2000-01-01 00:00:00+00"));
 
         let client = reqwest::Client::new();
 
@@ -48,12 +48,16 @@ async fn synchronize() {
             .send()
             .await
             .expect("Retrieving session data failed")
+            .error_for_status()
+            .expect("Retrieving session data produced an error")
             .json()
             .await
             .expect("JSON decoding of session data failed");
 
         let db = db();
         let mut bookmark = last.clone();
+
+        let got_sessions = sessions.len();
 
         for session in sessions {
             let data =
@@ -86,7 +90,11 @@ async fn synchronize() {
             .await
             .expect("Saving sync bookmark failed");
 
-        sleep(Duration::from_secs(60 * 60)).await;
+        if got_sessions == 500 {
+            sleep(Duration::from_secs(60)).await;
+        } else {
+            sleep(Duration::from_secs(60 * 60)).await;
+        }
     }
 }
 
