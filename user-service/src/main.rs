@@ -99,152 +99,152 @@ async fn sessions_synchronize() {
     }
 }
 
-// dev feature, remove when this codebase becomes the primary version
-async fn users_synchronize() {
-    #[derive(serde::Deserialize)]
-    struct UserDataImport {
-        id: i32,
-        legacy_id: Option<i32>,
-        ulid: String,
-        updated: String,
-        username: String,
-        password: String,
-        is_superuser: bool,
-        is_staff: bool,
-        is_test: bool,
-        is_active: bool,
-        first_name: String,
-        last_name: String,
-        date_joined: String,
-        date_active: String,
-        last_login: Option<String>,
-        public: bool,
-        accept_emails: bool,
-        accept_messages: bool,
-        track_contributions: bool,
-        handle: String,
-        image: Option<String>,
-        birthday: Option<String>,
-        gender: Option<String>,
-        bio: String,
-        facebook_url: String,
-        twitter_profile: String,
-        inat_username: String,
-        inat_last_update: Option<String>,
-        zipcode: String,
-        country: String,
-        mailing_address: String,
-        point: Option<String>,
-        scientist: bool,
-        educator: bool,
-        origin: String,
-        referer: String,
-        utm_source: String,
-        utm_medium: String,
-        utm_campaign: String,
-        utm_term: String,
-        utm_content: String,
-        misc: String,
-        restricted_navigation: bool,
-        received_certificate: bool,
-        protected: bool,
-        extra_skills: String,
-        extra_tools: String,
-        regions: Option<String>,
-        api_key: Option<String>,
-        site_dressing: i64,
-        email: String,
-        tags: String,
-        additional_email: String,
-        needs_additional_email: bool,
-        country_code: String,
-        needs_inat_username: bool,
-        opaque_id: Option<String>,
-        legacy_userdata_id: Option<i32>,
-        zooniverse_username: String,
-        degree: Option<String>,
-        ethnicity: Option<String>,
-        income: Option<String>,
-        ai_opt_out: bool,
-        umbrella_project_id: Option<String>,
-        automatic_affiliate: bool,
-        primary_email: i64,
-        circuit_id: Option<String>,
-        home_page: String,
-        newsletter: bool,
-        constant_contact_id: Option<String>,
-        ai_opt_out_at: Option<String>,
-        date_unsubscribed: Option<String>,
-        ambassador: Option<String>,
-        profile_id: i32,
-        profile_legacy_id: Option<i32>,
-        profile_alias_id: Option<i32>,
-        profile_identifier_username: Option<String>,
-        profile_identifier_username_normalized: Option<String>,
-        profile_identifier_email: Option<String>,
-        profile_identifier_additional: Option<String>,
-        profile_anonymized: Option<String>,
-        profile_extra: String,
-    }
+// // dev feature, remove when this codebase becomes the primary version
+// async fn users_synchronize() {
+//     #[derive(serde::Deserialize)]
+//     struct UserDataImport {
+//         id: i32,
+//         legacy_id: Option<i32>,
+//         ulid: String,
+//         updated: String,
+//         username: String,
+//         password: String,
+//         is_superuser: bool,
+//         is_staff: bool,
+//         is_test: bool,
+//         is_active: bool,
+//         first_name: String,
+//         last_name: String,
+//         date_joined: String,
+//         date_active: String,
+//         last_login: Option<String>,
+//         public: bool,
+//         accept_emails: bool,
+//         accept_messages: bool,
+//         track_contributions: bool,
+//         handle: String,
+//         image: Option<String>,
+//         birthday: Option<String>,
+//         gender: Option<String>,
+//         bio: String,
+//         facebook_url: String,
+//         twitter_profile: String,
+//         inat_username: String,
+//         inat_last_update: Option<String>,
+//         zipcode: String,
+//         country: String,
+//         mailing_address: String,
+//         point: Option<String>,
+//         scientist: bool,
+//         educator: bool,
+//         origin: String,
+//         referer: String,
+//         utm_source: String,
+//         utm_medium: String,
+//         utm_campaign: String,
+//         utm_term: String,
+//         utm_content: String,
+//         misc: String,
+//         restricted_navigation: bool,
+//         received_certificate: bool,
+//         protected: bool,
+//         extra_skills: String,
+//         extra_tools: String,
+//         regions: Option<String>,
+//         api_key: Option<String>,
+//         site_dressing: i64,
+//         email: String,
+//         tags: String,
+//         additional_email: String,
+//         needs_additional_email: bool,
+//         country_code: String,
+//         needs_inat_username: bool,
+//         opaque_id: Option<String>,
+//         legacy_userdata_id: Option<i32>,
+//         zooniverse_username: String,
+//         degree: Option<String>,
+//         ethnicity: Option<String>,
+//         income: Option<String>,
+//         ai_opt_out: bool,
+//         umbrella_project_id: Option<String>,
+//         automatic_affiliate: bool,
+//         primary_email: i64,
+//         circuit_id: Option<String>,
+//         home_page: String,
+//         newsletter: bool,
+//         constant_contact_id: Option<String>,
+//         ai_opt_out_at: Option<String>,
+//         date_unsubscribed: Option<String>,
+//         ambassador: Option<String>,
+//         profile_id: i32,
+//         profile_legacy_id: Option<i32>,
+//         profile_alias_id: Option<i32>,
+//         profile_identifier_username: Option<String>,
+//         profile_identifier_username_normalized: Option<String>,
+//         profile_identifier_email: Option<String>,
+//         profile_identifier_additional: Option<String>,
+//         profile_anonymized: Option<String>,
+//         profile_extra: String,
+//     }
 
-    loop {
-        let last = misc::get("user-sync-bookmark")
-            .await
-            .expect("Retrieving sync bookmark failed")
-            .unwrap_or_else(|| String::from("2000-01-01 00:00:00+00"));
+//     loop {
+//         let last = misc::get("user-sync-bookmark")
+//             .await
+//             .expect("Retrieving sync bookmark failed")
+//             .unwrap_or_else(|| String::from("2000-01-01 00:00:00+00"));
 
-        let client = reqwest::Client::new();
+//         let client = reqwest::Client::new();
 
-        let users: Vec<UserDataImport> = client
-            .get("https://scistarter.org/staff/sync/users")
-            .bearer_auth(env!("SYNC_TOKEN"))
-            .query(&[("since", &last)])
-            .send()
-            .await
-            .expect("Retrieving session data failed")
-            .error_for_status()
-            .expect("Retrieving session data produced an error")
-            .json()
-            .await
-            .expect("JSON decoding of session data failed");
+//         let users: Vec<UserDataImport> = client
+//             .get("https://scistarter.org/staff/sync/users")
+//             .bearer_auth(env!("SYNC_TOKEN"))
+//             .query(&[("since", &last)])
+//             .send()
+//             .await
+//             .expect("Retrieving session data failed")
+//             .error_for_status()
+//             .expect("Retrieving session data produced an error")
+//             .json()
+//             .await
+//             .expect("JSON decoding of session data failed");
 
-        let db = db();
-        let mut bookmark = last.clone();
+//         let db = db();
+//         let mut bookmark = last.clone();
 
-        let got_users = users.len();
+//         let got_users = users.len();
 
-        for user in users {
-            if user.updated > bookmark {
-                bookmark = user.updated.clone();
-            }
+//         for user in users {
+//             if user.updated > bookmark {
+//                 bookmark = user.updated.clone();
+//             }
 
-            sqlx::query!(
-                r#"insert into "sessions" ("session_id", "expires", "data")
-                   values (?, ?, ?)
-                   on conflict ("session_id") do
-                   update set "expires" = excluded."expires", "data" = excluded."data""#,
-                user.session_key,
-                user.expire_date,
-                data,
-            )
-            .execute(db)
-            .await
-            .expect("Saving session failed");
+//             sqlx::query!(
+//                 r#"insert into "sessions" ("session_id", "expires", "data")
+//                    values (?, ?, ?)
+//                    on conflict ("session_id") do
+//                    update set "expires" = excluded."expires", "data" = excluded."data""#,
+//                 user.session_key,
+//                 user.expire_date,
+//                 data,
+//             )
+//             .execute(db)
+//             .await
+//             .expect("Saving session failed");
 
-            println!("Saved user {}", user.username,);
-        }
+//             println!("Saved user {}", user.username,);
+//         }
 
-        misc::set("user-sync-bookmark", bookmark)
-            .await
-            .expect("Saving sync bookmark failed");
+//         misc::set("user-sync-bookmark", bookmark)
+//             .await
+//             .expect("Saving sync bookmark failed");
 
-        if got_users == 500 {
-            sleep(Duration::from_secs(60)).await;
-        } else {
-            sleep(Duration::from_secs(60 * 60)).await;
-        }
-    }
-}
+//         if got_users == 500 {
+//             sleep(Duration::from_secs(60)).await;
+//         } else {
+//             sleep(Duration::from_secs(60 * 60)).await;
+//         }
+//     }
+// }
 
 #[tokio::main]
 async fn main() {

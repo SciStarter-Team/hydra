@@ -64,7 +64,9 @@ create table "users" (
        "home_page" text,
        "constant_contact_id" text,
        "ambassador" text -- datetime
-) strict;
+); -- Not strict, so that it can have geometry columns
+
+select InitSpatialMetaDataFull();
 
 select AddGeometryColumn('users', 'point', 4326, 'POINT', 'XY');
 select AddGeometryColumn('users', 'regions', 4326, 'MULTIPOLYGON', 'XY');
@@ -80,7 +82,7 @@ create table "emails" (
        "email" text not null,
        "hash" text not null,
        "hash_lower" text not null,
-       "hash_capfirst" text not null,
+       "hash_capfirst" text not null
 ) strict;
 
 create unique index "emails_by_email" on "emails" ("email");
@@ -89,7 +91,7 @@ create unique index "emails_by_hash_lower" on "emails" ("hash_lower");
 create unique index "emails_by_hash_capfirst" on "emails" ("hash_capfirst");
 
 create table "tags" (
-       "tag" text not null,
+       "tag" text not null
 ) strict;
 
 create unique index "tags_by_tag" on "tags" ("tag");
