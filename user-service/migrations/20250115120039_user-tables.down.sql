@@ -10,3 +10,4 @@ drop table if exists "emails";
 drop index if exists "users_by_username";
 drop index if exists "users_by_user_id";
 select DropTable(NULL, 'users', 1); -- also cleans up Spatialite data associated with the table
+

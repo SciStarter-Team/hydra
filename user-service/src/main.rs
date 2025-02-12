@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, time::Duration};
 use async_nats::service::ServiceExt;
 use common::{
     handler, misc,
-    shared::{db, nats},
+    shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower, nats},
 };
 use futures::StreamExt;
 use jiff::Timestamp;
@@ -99,152 +99,647 @@ async fn sessions_synchronize() {
     }
 }
 
-// // dev feature, remove when this codebase becomes the primary version
-// async fn users_synchronize() {
-//     #[derive(serde::Deserialize)]
-//     struct UserDataImport {
-//         id: i32,
-//         legacy_id: Option<i32>,
-//         ulid: String,
-//         updated: String,
-//         username: String,
-//         password: String,
-//         is_superuser: bool,
-//         is_staff: bool,
-//         is_test: bool,
-//         is_active: bool,
-//         first_name: String,
-//         last_name: String,
-//         date_joined: String,
-//         date_active: String,
-//         last_login: Option<String>,
-//         public: bool,
-//         accept_emails: bool,
-//         accept_messages: bool,
-//         track_contributions: bool,
-//         handle: String,
-//         image: Option<String>,
-//         birthday: Option<String>,
-//         gender: Option<String>,
-//         bio: String,
-//         facebook_url: String,
-//         twitter_profile: String,
-//         inat_username: String,
-//         inat_last_update: Option<String>,
-//         zipcode: String,
-//         country: String,
-//         mailing_address: String,
-//         point: Option<String>,
-//         scientist: bool,
-//         educator: bool,
-//         origin: String,
-//         referer: String,
-//         utm_source: String,
-//         utm_medium: String,
-//         utm_campaign: String,
-//         utm_term: String,
-//         utm_content: String,
-//         misc: String,
-//         restricted_navigation: bool,
-//         received_certificate: bool,
-//         protected: bool,
-//         extra_skills: String,
-//         extra_tools: String,
-//         regions: Option<String>,
-//         api_key: Option<String>,
-//         site_dressing: i64,
-//         email: String,
-//         tags: String,
-//         additional_email: String,
-//         needs_additional_email: bool,
-//         country_code: String,
-//         needs_inat_username: bool,
-//         opaque_id: Option<String>,
-//         legacy_userdata_id: Option<i32>,
-//         zooniverse_username: String,
-//         degree: Option<String>,
-//         ethnicity: Option<String>,
-//         income: Option<String>,
-//         ai_opt_out: bool,
-//         umbrella_project_id: Option<String>,
-//         automatic_affiliate: bool,
-//         primary_email: i64,
-//         circuit_id: Option<String>,
-//         home_page: String,
-//         newsletter: bool,
-//         constant_contact_id: Option<String>,
-//         ai_opt_out_at: Option<String>,
-//         date_unsubscribed: Option<String>,
-//         ambassador: Option<String>,
-//         profile_id: i32,
-//         profile_legacy_id: Option<i32>,
-//         profile_alias_id: Option<i32>,
-//         profile_identifier_username: Option<String>,
-//         profile_identifier_username_normalized: Option<String>,
-//         profile_identifier_email: Option<String>,
-//         profile_identifier_additional: Option<String>,
-//         profile_anonymized: Option<String>,
-//         profile_extra: String,
-//     }
+// dev feature, remove when this codebase becomes the primary version
+async fn users_synchronize() {
+    #[derive(serde::Deserialize)]
+    struct UserDataImport {
+        id: i32,
+        legacy_id: Option<i32>,
+        ulid: String,
+        updated: String,
+        username: String,
+        password: String,
+        is_superuser: bool,
+        is_staff: bool,
+        is_test: bool,
+        is_active: bool,
+        first_name: String,
+        last_name: String,
+        date_joined: String,
+        date_active: String,
+        last_login: Option<String>,
+        public: bool,
+        accept_emails: bool,
+        accept_messages: bool,
+        track_contributions: bool,
+        handle: String,
+        image: Option<String>,
+        birthday: Option<String>,
+        gender: Option<String>,
+        bio: String,
+        facebook_url: String,
+        twitter_profile: String,
+        inat_username: String,
+        inat_last_update: Option<String>,
+        zipcode: String,
+        country: String,
+        mailing_address: String,
+        point: Option<String>,
+        scientist: bool,
+        educator: bool,
+        origin: String,
+        referer: String,
+        utm_source: String,
+        utm_medium: String,
+        utm_campaign: String,
+        utm_term: String,
+        utm_content: String,
+        misc: String,
+        restricted_navigation: bool,
+        received_certificate: bool,
+        protected: bool,
+        extra_skills: String,
+        extra_tools: String,
+        regions: Option<String>,
+        api_key: Option<String>,
+        site_dressing: i64,
+        email: String,
+        tags: String,
+        additional_email: String,
+        needs_additional_email: bool,
+        country_code: String,
+        needs_inat_username: bool,
+        opaque_id: Option<String>,
+        legacy_userdata_id: Option<i32>,
+        zooniverse_username: String,
+        degree: Option<String>,
+        ethnicity: Option<String>,
+        income: Option<String>,
+        ai_opt_out: bool,
+        umbrella_project_id: Option<String>,
+        automatic_affiliate: bool,
+        primary_email: i64,
+        circuit_id: Option<String>,
+        home_page: String,
+        newsletter: bool,
+        constant_contact_id: Option<String>,
+        ai_opt_out_at: Option<String>,
+        date_unsubscribed: Option<String>,
+        ambassador: Option<String>,
+        profile_id: i32,
+        profile_legacy_id: Option<i32>,
+        profile_alias_id: Option<i32>,
+        profile_identifier_username: Option<String>,
+        profile_identifier_username_normalized: Option<String>,
+        profile_identifier_email: Option<String>,
+        profile_identifier_additional: Option<String>,
+        profile_anonymized: Option<String>,
+        profile_extra: String,
+    }
 
-//     loop {
-//         let last = misc::get("user-sync-bookmark")
-//             .await
-//             .expect("Retrieving sync bookmark failed")
-//             .unwrap_or_else(|| String::from("2000-01-01 00:00:00+00"));
+    loop {
+        let last = misc::get("user-sync-bookmark")
+            .await
+            .expect("Retrieving sync bookmark failed")
+            .unwrap_or_else(|| String::from("2000-01-01 00:00:00+00"));
 
-//         let client = reqwest::Client::new();
+        println!("Syncing users since {}", &last);
 
-//         let users: Vec<UserDataImport> = client
-//             .get("https://scistarter.org/staff/sync/users")
-//             .bearer_auth(env!("SYNC_TOKEN"))
-//             .query(&[("since", &last)])
-//             .send()
-//             .await
-//             .expect("Retrieving session data failed")
-//             .error_for_status()
-//             .expect("Retrieving session data produced an error")
-//             .json()
-//             .await
-//             .expect("JSON decoding of session data failed");
+        let client = reqwest::Client::new();
 
-//         let db = db();
-//         let mut bookmark = last.clone();
+        let users: Vec<UserDataImport> = client
+            .get("https://scistarter.org/staff/sync/users")
+            .bearer_auth(env!("SYNC_TOKEN"))
+            .query(&[("since", &last)])
+            .send()
+            .await
+            .expect("Retrieving session data failed")
+            .error_for_status()
+            .expect("Retrieving session data produced an error")
+            .json()
+            .await
+            .expect("JSON decoding of session data failed");
 
-//         let got_users = users.len();
+        let db = db();
+        let mut bookmark = last.clone();
 
-//         for user in users {
-//             if user.updated > bookmark {
-//                 bookmark = user.updated.clone();
-//             }
+        let got_users = users.len();
 
-//             sqlx::query!(
-//                 r#"insert into "sessions" ("session_id", "expires", "data")
-//                    values (?, ?, ?)
-//                    on conflict ("session_id") do
-//                    update set "expires" = excluded."expires", "data" = excluded."data""#,
-//                 user.session_key,
-//                 user.expire_date,
-//                 data,
-//             )
-//             .execute(db)
-//             .await
-//             .expect("Saving session failed");
+        for user in users {
+            println!(
+                "Saving user {} {} {}",
+                &user.username, &user.updated, &user.ulid
+            );
 
-//             println!("Saved user {}", user.username,);
-//         }
+            if user.updated > bookmark {
+                bookmark = user.updated.clone();
+            }
 
-//         misc::set("user-sync-bookmark", bookmark)
-//             .await
-//             .expect("Saving sync bookmark failed");
+            // These bindings to user_* are because SQLx macros don't
+            // like having complex expressions for parameter values.
+            let user_username = user.username.clone();
 
-//         if got_users == 500 {
-//             sleep(Duration::from_secs(60)).await;
-//         } else {
-//             sleep(Duration::from_secs(60 * 60)).await;
-//         }
-//     }
-// }
+            let user_primary_email = match user.primary_email {
+                1 => user.email.clone(),
+                2 => user.additional_email.clone(),
+                _ => user.username.clone(),
+            };
+
+            let user_is_superuser = match user.is_superuser {
+                true => 1,
+                false => 0,
+            };
+
+            let user_is_staff = match user.is_staff {
+                true => 1,
+                false => 0,
+            };
+
+            let user_is_test = match user.is_test {
+                true => 1,
+                false => 0,
+            };
+
+            let user_is_active = match user.is_active {
+                true => 1,
+                false => 0,
+            };
+
+            let user_is_public = match user.public {
+                true => 1,
+                false => 0,
+            };
+
+            let user_accept_emails = match user.accept_emails {
+                true => 1,
+                false => 0,
+            };
+
+            let user_newsletter = match user.newsletter {
+                true => 1,
+                false => 0,
+            };
+
+            let user_accept_messages = match user.accept_messages {
+                true => 1,
+                false => 0,
+            };
+
+            let user_track_contributions = match user.track_contributions {
+                true => 1,
+                false => 0,
+            };
+
+            let user_image = user
+                .image
+                .and_then(|s| if s.is_empty() { None } else { Some(s) })
+                .map(|s| format!("https://orrery-media.s3.amazonaws.com/{}", s));
+
+            let user_scientist = match user.scientist {
+                true => 1,
+                false => 0,
+            };
+
+            let user_educator = match user.educator {
+                true => 1,
+                false => 0,
+            };
+
+            let user_restricted_navigation = match user.restricted_navigation {
+                true => 1,
+                false => 0,
+            };
+
+            let user_protected = match user.protected {
+                true => 1,
+                false => 0,
+            };
+
+            let user_needs_inat_username = match user.needs_inat_username {
+                true => 1,
+                false => 0,
+            };
+
+            let user_ai_opt_out = match user.ai_opt_out {
+                true => 1,
+                false => 0,
+            };
+
+            let user_automatic_affiliate = match user.automatic_affiliate {
+                true => 1,
+                false => 0,
+            };
+
+            // I would really like to see keyword parameters in SQLx
+            // for DBs that support them.
+            sqlx::query!(
+                r#"insert into "users" (
+                     "user_id",
+                     "legacy_v2_id",
+                     "legacy_v2_userdata_id",
+                     "legacy_v3_id",
+                     "legacy_v2_profile_id",
+                     "legacy_v3_alias_id",
+                     "legacy_v3_profile_id",
+                     "date_joined",
+                     "updated",
+                     "username",
+                     "password",
+                     "handle",
+                     "primary_email",
+                     "is_superuser",
+                     "is_staff",
+                     "is_test",
+                     "is_active",
+                     "public",
+                     "accept_emails",
+                     "newsletter",
+                     "date_unsubscribed",
+                     "accept_messages",
+                     "track_contributions",
+                     "first_name",
+                     "last_name",
+                     "image",
+                     "birthday",
+                     "gender",
+                     "bio",
+                     "facebook_url",
+                     "twitter_profile",
+                     "inat_username",
+                     "inat_last_update",
+                     "zipcode",
+                     "country",
+                     "mailing_address",
+                     "scientist",
+                     "educator",
+                     "origin",
+                     "referer",
+                     "utm_source",
+                     "utm_medium",
+                     "utm_campaign",
+                     "utm_term",
+                     "utm_content",
+                     "misc",
+                     "restricted_navigation",
+                     "protected",
+                     "extra_skills",
+                     "extra_tools",
+                     "api_key",
+                     "site_dressing",
+                     "country_code",
+                     "needs_inat_username",
+                     "opaque_id",
+                     "zooniverse_username",
+                     "degree",
+                     "ethnicity",
+                     "income",
+                     "ai_opt_out",
+                     "ai_opt_out_at",
+                     "umbrella_project_id",
+                     "automatic_affiliate",
+                     "circuit_id",
+                     "home_page",
+                     "constant_contact_id",
+                     "ambassador",
+                     "point",
+                     "regions"
+                   )
+                   values (
+                     ?1,
+                     ?2,
+                     ?3,
+                     ?4,
+                     ?5,
+                     ?6,
+                     ?7,
+                     ?8,
+                     ?9,
+                     ?10,
+                     ?11,
+                     ?12,
+                     ?13,
+                     ?14,
+                     ?15,
+                     ?16,
+                     ?17,
+                     ?18,
+                     ?19,
+                     ?20,
+                     ?21,
+                     ?22,
+                     ?23,
+                     ?24,
+                     ?25,
+                     ?26,
+                     ?27,
+                     ?28,
+                     ?29,
+                     ?30,
+                     ?31,
+                     ?32,
+                     ?33,
+                     ?34,
+                     ?35,
+                     ?36,
+                     ?37,
+                     ?38,
+                     ?39,
+                     ?40,
+                     ?41,
+                     ?42,
+                     ?43,
+                     ?44,
+                     ?45,
+                     ?46,
+                     ?47,
+                     ?48,
+                     ?49,
+                     ?50,
+                     ?51,
+                     ?52,
+                     ?53,
+                     ?54,
+                     ?55,
+                     ?56,
+                     ?57,
+                     ?58,
+                     ?59,
+                     ?60,
+                     ?61,
+                     ?62,
+                     ?63,
+                     ?64,
+                     ?65,
+                     ?66,
+                     ?67,
+                     GeomFromEWKT(?68),
+                     GeomFromEWKT(?69)
+                   )
+                   on conflict ("user_id") do
+                   update set
+                     "legacy_v2_id" = "excluded"."legacy_v2_id",
+                     "legacy_v2_userdata_id" = "excluded"."legacy_v2_userdata_id",
+                     "legacy_v3_id" = "excluded"."legacy_v3_id",
+                     "legacy_v2_profile_id" = "excluded"."legacy_v2_profile_id",
+                     "legacy_v3_alias_id" = "excluded"."legacy_v3_alias_id",
+                     "legacy_v3_profile_id" = "excluded"."legacy_v3_profile_id",
+                     "date_joined" = "excluded"."date_joined",
+                     "updated" = "excluded"."updated",
+                     "username" = "excluded"."username",
+                     "password" = "excluded"."password",
+                     "handle" = "excluded"."handle",
+                     "primary_email" = "excluded"."primary_email",
+                     "is_superuser" = "excluded"."is_superuser",
+                     "is_staff" = "excluded"."is_staff",
+                     "is_test" = "excluded"."is_test",
+                     "is_active" = "excluded"."is_active",
+                     "public" = "excluded"."public",
+                     "accept_emails" = "excluded"."accept_emails",
+                     "newsletter" = "excluded"."newsletter",
+                     "date_unsubscribed" = "excluded"."date_unsubscribed",
+                     "accept_messages" = "excluded"."accept_messages",
+                     "track_contributions" = "excluded"."track_contributions",
+                     "first_name" = "excluded"."first_name",
+                     "last_name" = "excluded"."last_name",
+                     "image" = "excluded"."image",
+                     "birthday" = "excluded"."birthday",
+                     "gender" = "excluded"."gender",
+                     "bio" = "excluded"."bio",
+                     "facebook_url" = "excluded"."facebook_url",
+                     "twitter_profile" = "excluded"."twitter_profile",
+                     "inat_username" = "excluded"."inat_username",
+                     "inat_last_update" = "excluded"."inat_last_update",
+                     "zipcode" = "excluded"."zipcode",
+                     "country" = "excluded"."country",
+                     "mailing_address" = "excluded"."mailing_address",
+                     "scientist" = "excluded"."scientist",
+                     "educator" = "excluded"."educator",
+                     "origin" = "excluded"."origin",
+                     "referer" = "excluded"."referer",
+                     "utm_source" = "excluded"."utm_source",
+                     "utm_medium" = "excluded"."utm_medium",
+                     "utm_campaign" = "excluded"."utm_campaign",
+                     "utm_term" = "excluded"."utm_term",
+                     "utm_content" = "excluded"."utm_content",
+                     "misc" = "excluded"."misc",
+                     "restricted_navigation" = "excluded"."restricted_navigation",
+                     "protected" = "excluded"."protected",
+                     "extra_skills" = "excluded"."extra_skills",
+                     "extra_tools" = "excluded"."extra_tools",
+                     "api_key" = "excluded"."api_key",
+                     "site_dressing" = "excluded"."site_dressing",
+                     "country_code" = "excluded"."country_code",
+                     "needs_inat_username" = "excluded"."needs_inat_username",
+                     "opaque_id" = "excluded"."opaque_id",
+                     "zooniverse_username" = "excluded"."zooniverse_username",
+                     "degree" = "excluded"."degree",
+                     "ethnicity" = "excluded"."ethnicity",
+                     "income" = "excluded"."income",
+                     "ai_opt_out" = "excluded"."ai_opt_out",
+                     "ai_opt_out_at" = "excluded"."ai_opt_out_at",
+                     "umbrella_project_id" = "excluded"."umbrella_project_id",
+                     "automatic_affiliate" = "excluded"."automatic_affiliate",
+                     "circuit_id" = "excluded"."circuit_id",
+                     "home_page" = "excluded"."home_page",
+                     "constant_contact_id" = "excluded"."constant_contact_id",
+                     "ambassador" = "excluded"."ambassador",
+                     "point" = "excluded"."point",
+                     "regions" = "excluded"."regions""#,
+                user.ulid,
+                user.legacy_id,
+                user.legacy_userdata_id,
+                user.id,
+                user.profile_legacy_id,
+                user.profile_alias_id,
+                user.profile_id,
+                user.date_joined,
+                user.updated,
+                user_username,
+                user.password,
+                user.handle,
+                user_primary_email,
+                user_is_superuser,
+                user_is_staff,
+                user_is_test,
+                user_is_active,
+                user_is_public,
+                user_accept_emails,
+                user_newsletter,
+                user.date_unsubscribed,
+                user_accept_messages,
+                user_track_contributions,
+                user.first_name,
+                user.last_name,
+                user_image,
+                user.birthday,
+                user.gender,
+                user.bio,
+                user.facebook_url,
+                user.twitter_profile,
+                user.inat_username,
+                user.inat_last_update,
+                user.zipcode,
+                user.country,
+                user.mailing_address,
+                user_scientist,
+                user_educator,
+                user.origin,
+                user.referer,
+                user.utm_source,
+                user.utm_medium,
+                user.utm_campaign,
+                user.utm_term,
+                user.utm_content,
+                user.misc,
+                user_restricted_navigation,
+                user_protected,
+                user.extra_skills,
+                user.extra_tools,
+                user.api_key,
+                user.site_dressing,
+                user.country_code,
+                user_needs_inat_username,
+                user.opaque_id,
+                user.zooniverse_username,
+                user.degree,
+                user.ethnicity,
+                user.income,
+                user_ai_opt_out,
+                user.ai_opt_out_at,
+                user.umbrella_project_id,
+                user_automatic_affiliate,
+                user.circuit_id,
+                user.home_page,
+                user.constant_contact_id,
+                user.ambassador,
+                user.point,
+                user.regions,
+            )
+            .execute(db)
+            .await
+            .expect("Saving user failed");
+
+            if let Some(stamp) = user.last_login {
+                sqlx::query!(
+                    r#"
+                    insert into "user_log" ("user_id", "when", "action")
+                    values (?, ?, 'login')
+                    "#,
+                    user.ulid,
+                    stamp
+                )
+                .execute(db)
+                .await
+                .expect("Saving last login entry failed");
+            }
+
+            sqlx::query!(
+                r#"
+                insert into "user_log" ("user_id", "when", "action")
+                values (?, ?, 'imported-activity')
+                "#,
+                user.ulid,
+                user.date_active,
+            )
+            .execute(db)
+            .await
+            .expect("Saving date active entry failed");
+
+            let hashed = hash_identifier(&user.username);
+            let hashed_lower = hash_identifier_lower(&user.username);
+            let hashed_capfirst = hash_identifier_capfirst(&user.username);
+            sqlx::query!(
+                r#"
+                insert into "emails" ("user_id", "email", "hash", "hash_lower", "hash_capfirst")
+                values (?, ?, ?, ?, ?)
+                on conflict ("email") do
+                update set "user_id" = excluded."user_id"
+                on conflict ("hash") do
+                update set "user_id" = excluded."user_id"
+                on conflict ("hash_lower") do
+                update set "user_id" = excluded."user_id"
+                on conflict ("hash_capfirst") do
+                update set "user_id" = excluded."user_id"
+                "#,
+                user.ulid,
+                user.username,
+                hashed,
+                hashed_lower,
+                hashed_capfirst
+            )
+            .execute(db)
+            .await
+            .expect("Saving username email failed");
+
+            if !user.email.is_empty() && user.email != user.username {
+                let hashed = hash_identifier(&user.email);
+                let hashed_lower = hash_identifier_lower(&user.email);
+                let hashed_capfirst = hash_identifier_capfirst(&user.email);
+                sqlx::query!(
+                    r#"
+                insert into "emails" ("user_id", "email", "hash", "hash_lower", "hash_capfirst")
+                values (?, ?, ?, ?, ?)
+                on conflict ("email") do nothing
+                on conflict ("hash") do nothing
+                on conflict ("hash_lower") do nothing
+                on conflict ("hash_capfirst") do nothing
+                "#,
+                    user.ulid,
+                    user.email,
+                    hashed,
+                    hashed_lower,
+                    hashed_capfirst
+                )
+                .execute(db)
+                .await
+                .expect("Saving first email failed");
+            }
+
+            if !user.additional_email.is_empty()
+                && user.additional_email != user.username
+                && user.additional_email != user.email
+            {
+                let hashed = hash_identifier(&user.additional_email);
+                let hashed_lower = hash_identifier_lower(&user.additional_email);
+                let hashed_capfirst = hash_identifier_capfirst(&user.additional_email);
+                sqlx::query!(
+                    r#"
+                insert into "emails" ("user_id", "email", "hash", "hash_lower", "hash_capfirst")
+                values (?, ?, ?, ?, ?)
+                on conflict ("email") do nothing
+                on conflict ("hash") do nothing
+                on conflict ("hash_lower") do nothing
+                on conflict ("hash_capfirst") do nothing
+                "#,
+                    user.ulid,
+                    user.additional_email,
+                    hashed,
+                    hashed_lower,
+                    hashed_capfirst
+                )
+                .execute(db)
+                .await
+                .expect("Saving second email failed");
+            }
+
+            for tag in user.tags.split("||") {
+                sqlx::query!(
+                    r#"
+                    insert into "user_tags" ("user_id", "tag")
+                    values (?, ?)
+                    on conflict ("user_id", "tag") do nothing"#,
+                    user.ulid,
+                    tag
+                )
+                .execute(db)
+                .await
+                .expect("Error inserting tag");
+            }
+
+            println!("Saved user {}", user.username);
+        }
+
+        misc::set("user-sync-bookmark", bookmark)
+            .await
+            .expect("Saving sync bookmark failed");
+
+        if got_users == 500 {
+            sleep(Duration::from_secs(60)).await;
+        } else {
+            sleep(Duration::from_secs(60 * 60)).await;
+        }
+    }
+}
 
 #[tokio::main]
 async fn main() {
@@ -258,6 +753,8 @@ async fn main() {
     let cleanup_task = spawn(cleanup());
 
     let sessions_sync_task = spawn(sessions_synchronize());
+
+    let users_sync_task = spawn(users_synchronize());
 
     let nats = nats();
 
@@ -280,4 +777,5 @@ async fn main() {
     cleanup_task.abort();
 
     sessions_sync_task.abort();
+    users_sync_task.abort();
 }

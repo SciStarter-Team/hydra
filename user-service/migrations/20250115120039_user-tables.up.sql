@@ -3,9 +3,11 @@ create table "users" (
        "legacy_v2_id" integer,
        "legacy_v2_userdata_id" integer,
        "legacy_v3_id" integer,
+       "legacy_v2_profile_id" integer,
+       "legacy_v3_alias_id" integer,
+       "legacy_v3_profile_id" integer,
        "date_joined" text not null,
-       "last_login"text not null,
-       "updated" text not null,
+       "updated" text not null default current_timestamp,
        "username" text not null,
        "password" text not null,
        "handle" text not null,
@@ -66,7 +68,7 @@ create table "users" (
        "ambassador" text -- datetime
 ); -- Not strict, so that it can have geometry columns
 
-select InitSpatialMetaDataFull();
+select InitSpatialMetaDataFull() where not exists(select 1 from sqlite_master where type = 'table' and name = 'spatial_ref_sys');
 
 select AddGeometryColumn('users', 'point', 4326, 'POINT', 'XY');
 select AddGeometryColumn('users', 'regions', 4326, 'MULTIPOLYGON', 'XY');
@@ -90,15 +92,25 @@ create unique index "emails_by_hash" on "emails" ("hash");
 create unique index "emails_by_hash_lower" on "emails" ("hash_lower");
 create unique index "emails_by_hash_capfirst" on "emails" ("hash_capfirst");
 
-create table "tags" (
+create table "user_tags" (
+       "user_id" text not null references "users" ("user_id") on delete cascade,
        "tag" text not null
 ) strict;
 
-create unique index "tags_by_tag" on "tags" ("tag");
+create unique index "user_tags_by_user_id_and_tag" on "user_tags" ("user_id", "tag");
+create index "user_tags_by_user_id" on "user_tags" ("user_id");
+create index "user_tags_by_tag" on "user_tags" ("tag");
 
-create table "user_tags" (
+create table "user_log" (
        "user_id" text not null references "users" ("user_id") on delete cascade,
-       "tag" text not null references "tags" ("tag") on delete cascade
+       "when" text not null default current_timestamp,
+       "action" text not null,
+       "target" text,
+       "extra" text
 ) strict;
 
-create unique index "user_tags_by_user_and_tag" on "user_tags" ("user_id", "tag");
+create index "user_log_by_user_id" on "user_log" ("user_id");
+create index "user_log_by_when" on "user_log" ("when");
+create index "user_log_by_action" on "user_log" ("action");
+create index "user_log_by_target" on "user_log" ("target") where "target" is not null;
+create index "user_log_by_when_and_action" on "user_log" ("when", "action");

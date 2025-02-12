@@ -90,3 +90,25 @@ pub async fn extra_db(db_name: impl AsRef<str>, create: bool) -> Result<SqlitePo
     )
     .await?)
 }
+
+pub fn hash_identifier(ident: impl AsRef<str>) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(ident.as_ref().as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+pub fn hash_identifier_lower(ident: impl AsRef<str>) -> String {
+    hash_identifier(ident.as_ref().to_lowercase())
+}
+
+pub fn hash_identifier_capfirst(ident: impl AsRef<str>) -> String {
+    let ident = ident.as_ref().to_lowercase();
+    let mut letters = ident.chars();
+    let transformed: String = if let Some(first) = letters.next() {
+        first.to_uppercase().chain(letters).collect()
+    } else {
+        String::new()
+    };
+    hash_identifier(transformed)
+}

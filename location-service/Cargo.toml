@@ -4,11 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.94"
+anyhow = "1.0.95"
 async-nats = { version = "0.37.0", features = ["service"] }
 common = { version = "0.1.0", path = "../common" }
 flexbuffers = "2.0.0"
 futures = "0.3.31"
-serde = { version = "1.0.215", features = ["derive"] }
-sqlx = { version = "0.8.2", features = ["migrate"] }
-tokio = { version = "1.42.0", features = ["full"] }
+serde = { version = "1.0.217", features = ["derive"] }
+sqlx = { version = "0.8.3", features = ["migrate"] }
+tokio = { version = "1.43.0", features = ["full"] }

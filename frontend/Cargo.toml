@@ -7,19 +7,19 @@ edition = "2021"
 common = { version = "0.1.0", path = "../common" }
 async-nats = "0.37.0"
 flexbuffers = "2.0.0"
-jiff = { version = "0.1.14", features = ["serde"] }
-object_store = { version = "0.11.1", features = ["aws"] }
-poem = { version = "3.1.3", features = ["sse", "cookie", "csrf", "multipart", "rustls", "session", "static-files", "embed", "i18n"] }
-reqwest = { version = "0.12.9", features = ["json", "rustls-tls"] }
+jiff = { version = "0.1.24", features = ["serde"] }
+object_store = { version = "0.11.2", features = ["aws"] }
+poem = { version = "3.1.6", features = ["sse", "cookie", "csrf", "multipart", "rustls", "session", "static-files", "embed", "i18n"] }
+reqwest = { version = "0.12.12", features = ["json", "rustls-tls"] }
 rust-embed = "8.5.0"
 sailfish = "0.9.0"
-serde = { version = "1.0.214", features = ["derive"] }
-serde_json = "1.0.133"
-sqlx = { version = "0.8.2", features = ["runtime-tokio", "sqlite", "macros", "migrate"] }
-thiserror = "2.0.1"
-tokio = { version = "1.41.1", features = ["full"] }
-ulid = { version = "1.1.3", features = ["serde"] }
-url = { version = "2.5.3", features = ["serde"] }
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1.0.137"
+sqlx = { version = "0.8.3", features = ["runtime-tokio", "sqlite", "macros", "migrate"] }
+thiserror = "2.0.11"
+tokio = { version = "1.43.0", features = ["full"] }
+ulid = { version = "1.1.4", features = ["serde"] }
+url = { version = "2.5.4", features = ["serde"] }
 base64 = "0.22.1"
 futures = "0.3.31"
-anyhow = "1.0.93"
+anyhow = "1.0.95"
