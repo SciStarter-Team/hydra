@@ -176,7 +176,7 @@ async fn users_synchronize() {
         ai_opt_out_at: Option<String>,
         date_unsubscribed: Option<String>,
         ambassador: Option<String>,
-        profile_id: i32,
+        profile_id: Option<i32>,
         profile_legacy_id: Option<i32>,
         profile_alias_id: Option<i32>,
         profile_identifier_username: Option<String>,
