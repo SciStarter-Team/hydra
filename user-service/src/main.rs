@@ -102,6 +102,7 @@ async fn sessions_synchronize() {
 // dev feature, remove when this codebase becomes the primary version
 async fn users_synchronize() {
     #[derive(serde::Deserialize)]
+    #[allow(dead_code)]
     struct UserDataImport {
         id: i32,
         legacy_id: Option<i32>,
@@ -184,7 +185,7 @@ async fn users_synchronize() {
         profile_identifier_email: Option<String>,
         profile_identifier_additional: Option<String>,
         profile_anonymized: Option<String>,
-        profile_extra: String,
+        profile_extra: Option<String>,
     }
 
     loop {
@@ -208,7 +209,7 @@ async fn users_synchronize() {
             .expect("Retrieving session data produced an error")
             .json()
             .await
-            .expect("JSON decoding of session data failed");
+            .expect("JSON decoding of user data failed");
 
         let db = db();
         let mut bookmark = last.clone();
