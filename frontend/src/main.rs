@@ -1,6 +1,9 @@
 pub mod channel;
+pub mod project;
 pub mod session;
 pub mod upload;
+
+use std::sync::LazyLock;
 
 use common::{message::location::LocationInfo, service::request, shared::db};
 use poem::{
@@ -17,10 +20,13 @@ use session::UserServiceSessionStorage;
 use ulid::Ulid;
 
 #[cfg(debug_assertions)]
-pub const SESSION_COOKIE: &'static str = "session";
+pub const SESSION_COOKIE: &'static str = "session-id";
 
 #[cfg(not(debug_assertions))]
 pub const SESSION_COOKIE: &'static str = "__Host-session-id";
+
+pub static SERVER_ID: LazyLock<Ulid> = LazyLock::new(Ulid::new);
+pub static SERVER_ID_STR: LazyLock<String> = LazyLock::new(|| SERVER_ID.to_string());
 
 #[cfg(debug_assertions)]
 #[derive(Embed)]
@@ -137,6 +143,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .max_age(std::time::Duration::from_secs(60 * 60 * 24 * 365)),
             session_storage,
         ));
+
+    let _updates = tokio::spawn(project::receive_updates());
 
     Server::new(TcpListener::bind(env!("LISTEN_ON")))
         .run(routes)
