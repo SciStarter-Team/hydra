@@ -1,4 +1,6 @@
 pub mod channel;
+pub mod contact;
+pub mod entity;
 pub mod project;
 pub mod session;
 pub mod upload;

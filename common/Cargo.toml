@@ -15,3 +15,4 @@ sqlx = { features = ["runtime-tokio", "sqlite", "macros", "migrate"], path = "/h
 tokio = { version = "1.44.1", features = ["full"] }
 hex = "0.4.3"
 sha2 = "0.10.8"
+jiff = "0.2.9"
