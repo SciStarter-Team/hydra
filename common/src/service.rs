@@ -1,5 +1,5 @@
 use anyhow::anyhow;
-use async_nats::{subject::ToSubject, Message};
+use async_nats::{HeaderMap, Message, subject::ToSubject};
 use errors::DecodeError;
 use futures::StreamExt;
 use serde::de::DeserializeOwned;
@@ -58,6 +58,22 @@ pub async fn send(
     let payload = flexbuffers::to_vec(message)?;
 
     nats().publish(subject, payload.into()).await?;
+
+    Ok(())
+}
+
+/// Publish a structured data message with headers through NATS,
+/// without waiting for a reply.
+pub async fn send_with_headers(
+    subject: impl ToSubject,
+    headers: HeaderMap,
+    message: impl serde::Serialize,
+) -> Result<(), anyhow::Error> {
+    let payload = flexbuffers::to_vec(message)?;
+
+    nats()
+        .publish_with_headers(subject, headers, payload.into())
+        .await?;
 
     Ok(())
 }

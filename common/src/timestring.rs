@@ -1,7 +1,16 @@
 use jiff::Timestamp;
 
 #[derive(
-    Clone, Default, Eq, PartialEq, Ord, PartialOrd, sqlx::Type, serde::Serialize, serde::Deserialize,
+    Debug,
+    Clone,
+    Default,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    sqlx::Type,
+    serde::Serialize,
+    serde::Deserialize,
 )]
 #[sqlx(transparent)]
 pub struct TimeString(String);
