@@ -4,6 +4,8 @@ use ulid::Ulid;
 pub enum EntityKind {
     Redirect,
     RawHTML,
+    Wysiwyg,
+    PageBuilder,
     Form,
     Project,
     Event,

@@ -7,6 +7,7 @@ pub mod upload;
 
 use std::sync::LazyLock;
 
+use anyhow::Error;
 use common::{message::location::LocationInfo, service::request, shared::db};
 use poem::{
     EndpointExt, IntoResponse, Route, Server,
@@ -121,7 +122,7 @@ async fn index(
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Error> {
     common::shared::init("frontend").await;
 
     sqlx::migrate!("./migrations").run(db()).await?;
@@ -164,7 +165,7 @@ mod sync {
     use jiff::Timestamp;
     use tokio::time::sleep;
 
-    use crate::project::Project;
+    use crate::project::ProjectAll;
 
     #[derive(Default, Debug, serde::Deserialize)]
     #[serde(default)]
@@ -344,7 +345,7 @@ mod sync {
         sustainable_development_goals: String,
     }
 
-    pub async fn synchronize() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn synchronize() -> Result<(), anyhow::Error> {
         loop {
             let last = misc::get("project-sync-bookmark")
                 .await
@@ -366,7 +367,6 @@ mod sync {
                 .await
                 .expect("JSON decoding of session data failed");
 
-            let db = common::shared::db();
             let mut bookmark = last.clone();
 
             let got_projects = projects.len();
@@ -374,9 +374,17 @@ mod sync {
             for data in projects {
                 let updated = data.updated.to_string();
 
-                let mut proj = Project::default();
+                let mut proj = ProjectAll::default();
 
-                proj.project_id = data.ulid;
+                proj.project_id = match data.id.parse() {
+                    Ok(ulid) => ulid,
+                    Err(err) => {
+                        eprintln!("Error parsing ULID {:?}: {}", data.id, err);
+                        continue;
+                    }
+                };
+
+                proj.save().await?;
 
                 if updated > bookmark {
                     bookmark = updated.clone();

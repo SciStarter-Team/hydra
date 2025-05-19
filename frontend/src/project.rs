@@ -1,11 +1,12 @@
+use anyhow::Error;
 use async_nats::Message;
-use common::{shared::nats, timestring::TimeString};
+use common::{nats_headers, service::send_with_headers, shared::nats, timestring::TimeString};
 use futures::StreamExt;
 use ulid::Ulid;
 
 use crate::{SERVER_ID_STR, contact::Contact};
 
-#[derive(Default, sqlx::Type, serde::Serialize, serde::Deserialize)]
+#[derive(Default, Debug, sqlx::Type, serde::Serialize, serde::Deserialize)]
 pub enum ProjectStatus {
     Pending,
     #[default]
@@ -17,7 +18,7 @@ pub enum ProjectStatus {
     Hidden,
 }
 
-#[derive(Default, sqlx::Type, serde::Serialize, serde::Deserialize)]
+#[derive(Default, Debug, sqlx::Type, serde::Serialize, serde::Deserialize)]
 pub enum ProjectPromotionTime {
     #[default]
     #[sqlx(rename = "Promote at any time")]
@@ -28,7 +29,7 @@ pub enum ProjectPromotionTime {
     PreferOnTargetDate,
 }
 
-#[derive(Default, serde::Serialize, serde::Deserialize)]
+#[derive(Default, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct ProjectAll {
     pub project_id: Ulid,
@@ -195,7 +196,29 @@ pub struct ProjectAll {
     pub sustainable_development_goals: String,
 }
 
-async fn project_all_save(msg: Message) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+impl ProjectAll {
+    async fn save_local(&self) -> Result<(), Error> {
+        println!("save_local({:?})", self);
+        // let db = common::shared::db();
+        Ok(())
+    }
+
+    pub async fn save(&self) -> Result<(), Error> {
+        self.save_local().await?;
+        // Box::new([("", SERVER_ID_STR.as_str())]),
+        send_with_headers(
+            "frontend.project.save.all",
+            nats_headers! {
+                "Source": SERVER_ID_STR.as_str(),
+            },
+            self,
+        )
+        .await?;
+        Ok(())
+    }
+}
+
+async fn project_all_save(msg: Message) -> Result<(), Error> {
     if let Some(headers) = msg.headers {
         if headers
             .get("Source")
@@ -211,20 +234,26 @@ async fn project_all_save(msg: Message) -> Result<(), Box<dyn std::error::Error 
                     return Ok(());
                 }
             };
+
+            project.save_local().await?;
+
+            println!("Update accepted");
+        } else {
+            println!("Update rejected, Source header matches server id");
         }
     }
 
     Ok(())
 }
 
-pub async fn receive_project_updates() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub async fn receive_project_updates() -> Result<(), Error> {
     let client = nats();
 
     let mut updates = client.subscribe("frontend.project.>").await?;
 
     while let Some(msg) = updates.next().await {
         match msg.subject.as_str() {
-            "frontend.project.save.all" => project_save(msg).await?,
+            "frontend.project.save.all" => project_all_save(msg).await?,
             subj => eprintln!("Unrecognized frontend.project.> subject {}", subj),
         }
     }

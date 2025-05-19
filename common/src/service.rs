@@ -62,6 +62,18 @@ pub async fn send(
     Ok(())
 }
 
+#[macro_export]
+macro_rules! nats_headers {
+    ( $($name: literal : $value: expr ),* $(,)?) => {
+        {
+            use async_nats::header::{IntoHeaderName, IntoHeaderValue};
+            let mut headers = async_nats::header::HeaderMap::new();
+            $(headers.append($name.into_header_name(), $value.into_header_value()));+;
+            headers
+        }
+    };
+}
+
 /// Publish a structured data message with headers through NATS,
 /// without waiting for a reply.
 pub async fn send_with_headers(
