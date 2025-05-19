@@ -147,9 +147,9 @@ async fn main() -> Result<(), Error> {
             session_storage,
         ));
 
-    let updates = tokio::spawn(project::receive_project_updates());
+    let _updates = tokio::spawn(project::receive_project_updates());
 
-    let synchronize = tokio::spawn(sync::synchronize());
+    let _synchronize = tokio::spawn(sync::synchronize());
 
     Server::new(TcpListener::bind(env!("LISTEN_ON")))
         .run(routes)

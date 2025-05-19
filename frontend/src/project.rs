@@ -6,6 +6,8 @@ use ulid::Ulid;
 
 use crate::{SERVER_ID_STR, contact::Contact};
 
+pub mod field;
+
 #[derive(Default, Debug, sqlx::Type, serde::Serialize, serde::Deserialize)]
 pub enum ProjectStatus {
     Pending,
@@ -57,8 +59,8 @@ pub struct ProjectAll {
     pub is_inaturalist: bool,
     pub inat_project_id: Option<i32>,
     pub welcomed: bool,
-    pub page_creator_id: String, // NB was "owner"
-    pub page_manager_ids: Box<[String]>,
+    pub page_creator_id: Ulid, // NB was "owner"
+    pub page_manager_ids: Box<[Ulid]>,
     pub extra: String,
     pub project_last_editor: Option<Ulid>,
     pub project_last_edited: Option<TimeString>,
@@ -197,15 +199,8 @@ pub struct ProjectAll {
 }
 
 impl ProjectAll {
-    async fn save_local(&self) -> Result<(), Error> {
-        println!("save_local({:?})", self);
-        // let db = common::shared::db();
-        Ok(())
-    }
-
     pub async fn save(&self) -> Result<(), Error> {
-        self.save_local().await?;
-        // Box::new([("", SERVER_ID_STR.as_str())]),
+        save_local(self).await?;
         send_with_headers(
             "frontend.project.save.all",
             nats_headers! {
@@ -216,6 +211,17 @@ impl ProjectAll {
         .await?;
         Ok(())
     }
+
+    pub async fn load(project_id: Ulid) -> Result<ProjectAll, Error> {
+        let _db = common::shared::db();
+        todo!()
+    }
+}
+
+async fn save_local(all: &ProjectAll) -> Result<(), Error> {
+    println!("save_local({:?})", all);
+    // let db = common::shared::db();
+    Ok(())
 }
 
 async fn project_all_save(msg: Message) -> Result<(), Error> {
@@ -228,14 +234,14 @@ async fn project_all_save(msg: Message) -> Result<(), Error> {
                 Ok(proj) => proj,
                 Err(err) => {
                     eprintln!(
-                        "Unable to decode message payload to project record in receive_updates: {}",
+                        "Unable to decode message payload to project record in project_all_save: {}",
                         err
                     );
                     return Ok(());
                 }
             };
 
-            project.save_local().await?;
+            save_local(&project).await?;
 
             println!("Update accepted");
         } else {
@@ -246,6 +252,7 @@ async fn project_all_save(msg: Message) -> Result<(), Error> {
     Ok(())
 }
 
+/// Launch as a separate task to receive and process project updates over NATS
 pub async fn receive_project_updates() -> Result<(), Error> {
     let client = nats();
 
@@ -254,6 +261,7 @@ pub async fn receive_project_updates() -> Result<(), Error> {
     while let Some(msg) = updates.next().await {
         match msg.subject.as_str() {
             "frontend.project.save.all" => project_all_save(msg).await?,
+            "frontend.project.save.field" => field::project_field_save(msg).await?,
             subj => eprintln!("Unrecognized frontend.project.> subject {}", subj),
         }
     }
