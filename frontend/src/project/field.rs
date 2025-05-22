@@ -3,11 +3,9 @@ use async_nats::Message;
 use common::{nats_headers, service::send_with_headers, timestring::TimeString};
 use ulid::Ulid;
 
-use crate::{
-    SERVER_ID_STR,
-    contact::Contact,
-    project::{ProjectPromotionTime, ProjectStatus},
-};
+use crate::{SERVER_ID_STR, contact::Contact};
+
+use super::{ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus};
 
 #[derive(Clone, Copy)]
 pub enum ProjectFieldType {
@@ -180,7 +178,7 @@ pub enum ProjectField {
     Draft(bool),
     Name(String),
     Tags(Box<[String]>),
-    ParticipationDegree(String),
+    ParticipationDegree(ProjectParticipationDegree),
     ParticipantInstructions(String),
     ParticipantInstructionsEmail(String),
     ParticipantFiles(Box<[String]>),
@@ -625,8 +623,8 @@ async fn save_local(project_id: Ulid, field: &ProjectField) -> Result<(), Error>
         ProjectField::Duplicate(value) => save_duplicate_local(project_id, value).await?,
         ProjectField::Flagged(value) => save_flagged_local(project_id, value).await?,
         ProjectField::IsTest(value) => save_is_test_local(project_id, value).await?,
-        ProjectField::Status(value) => save_status_local(project_id, value).await?,
-        ProjectField::PromotionTime(value) => save_promotion_time_local(project_id, value).await?,
+        ProjectField::Status(value) => save_status_local(project_id, *value).await?,
+        ProjectField::PromotionTime(value) => save_promotion_time_local(project_id, *value).await?,
         ProjectField::PromotionTarget(value) => {
             save_promotion_target_local(project_id, value).await?
         }
@@ -665,7 +663,7 @@ async fn save_local(project_id: Ulid, field: &ProjectField) -> Result<(), Error>
         ProjectField::Name(value) => save_name_local(project_id, value).await?,
         ProjectField::Tags(value) => save_tags_local(project_id, value).await?,
         ProjectField::ParticipationDegree(value) => {
-            save_participation_degree_local(project_id, value).await?
+            save_participation_degree_local(project_id, *value).await?
         }
         ProjectField::ParticipantInstructions(value) => {
             save_participant_instructions_local(project_id, value).await?
@@ -891,14 +889,14 @@ async fn save_is_test_local(_project_id: Ulid, _value: &bool) -> Result<(), Erro
     todo!()
 }
 
-async fn save_status_local(_project_id: Ulid, _value: &ProjectStatus) -> Result<(), Error> {
+async fn save_status_local(_project_id: Ulid, _value: ProjectStatus) -> Result<(), Error> {
     let _db = common::shared::db();
     todo!()
 }
 
 async fn save_promotion_time_local(
     _project_id: Ulid,
-    _value: &ProjectPromotionTime,
+    _value: ProjectPromotionTime,
 ) -> Result<(), Error> {
     let _db = common::shared::db();
     todo!()
@@ -1034,7 +1032,10 @@ async fn save_tags_local(_project_id: Ulid, _value: &Box<[String]>) -> Result<()
     todo!()
 }
 
-async fn save_participation_degree_local(_project_id: Ulid, _value: &String) -> Result<(), Error> {
+async fn save_participation_degree_local(
+    _project_id: Ulid,
+    _value: ProjectParticipationDegree,
+) -> Result<(), Error> {
     let _db = common::shared::db();
     todo!()
 }

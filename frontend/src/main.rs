@@ -159,13 +159,15 @@ async fn main() -> Result<(), Error> {
 }
 
 mod sync {
-    use std::time::Duration;
+    use std::{str::FromStr, time::Duration};
 
     use common::misc;
     use jiff::Timestamp;
     use tokio::time::sleep;
 
-    use crate::project::ProjectAll;
+    use crate::project::{
+        ProjectAll, ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus,
+    };
 
     #[derive(Default, Debug, serde::Deserialize)]
     #[serde(default)]
@@ -346,6 +348,16 @@ mod sync {
     }
 
     pub async fn synchronize() -> Result<(), anyhow::Error> {
+        trait EmptyAsNone: Sized {
+            fn empty_as_none(self) -> Option<Self>;
+        }
+
+        impl EmptyAsNone for String {
+            fn empty_as_none(self) -> Option<Self> {
+                if self.is_empty() { None } else { Some(self) }
+            }
+        }
+
         loop {
             let last = misc::get("project-sync-bookmark")
                 .await
@@ -383,6 +395,221 @@ mod sync {
                         continue;
                     }
                 };
+
+                proj.legacy_v1_project_id = data.legacy_v1_project_id.map(|x| x as i64);
+                proj.legacy_v2_project_id = Some(data.legacy_v2_project_id as i64);
+                proj.foreign_id = data.foreign_id.empty_as_none();
+                proj.publish = data.publish;
+                proj.duplicate = data.duplicate;
+                proj.flagged = data.flagged;
+                proj.is_test = data.is_test;
+                proj.status = match data.status.as_str() {
+                    "Pending" => ProjectStatus::Pending,
+                    "Active" => ProjectStatus::Active,
+                    "Periodically Active" => ProjectStatus::PeriodicallyActive,
+                    "Hiatus" => ProjectStatus::Hiatus,
+                    "Complete" => ProjectStatus::Complete,
+                    "Hidden" => ProjectStatus::Hidden,
+                    s => {
+                        eprintln!("Unknown project status `{}`, settingto Hidden", s);
+                        ProjectStatus::Hidden
+                    }
+                };
+                proj.promotion_time = match data.promotion_time.as_str() {
+                    "Promote at any time" => ProjectPromotionTime::PromoteAtAnyTime,
+                    "Do not promote" => ProjectPromotionTime::DoNotPromote,
+                    "Prefer promotion on the target date" => {
+                        ProjectPromotionTime::PreferOnTargetDate
+                    }
+                    s => {
+                        eprintln!(
+                            "Unknown project protion time `{}`, settingto PromoteAtAnyTime ",
+                            s
+                        );
+                        ProjectPromotionTime::PromoteAtAnyTime
+                    }
+                };
+                proj.promotion_target = data.promotion_target.map(|ts| ts.into());
+                proj.admin_notes = data.admin_notes;
+                proj.created = data.created.into();
+                proj.wild_hope = data.wild_hope;
+                proj.exchange = data.exchange;
+                proj.origin = data.origin;
+                proj.suborigin = data.suborigin;
+                proj.guid = data.guid;
+                proj.opengraph_description = data.opengraph_description;
+                proj.is_affiliate = data.is_affiliate;
+                proj.is_inaturalist = data.is_inaturalist;
+                proj.inat_project_id = data.inat_project_id;
+                proj.welcomed = data.welcomed;
+                proj.page_creator_id = data.owner.parse().unwrap_or_default();
+                proj.page_manager_ids = data
+                    .managers
+                    .split(',')
+                    .filter_map(|u| u.parse().ok())
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice();
+                proj.extra = data.extra;
+                proj.project_last_editor = data
+                    .last_editor
+                    .empty_as_none()
+                    .and_then(|s| s.parse().ok());
+                proj.project_last_edited = Some(data.updated.into());
+                proj.scistarter_last_editor = data
+                    .last_editor_staff
+                    .empty_as_none()
+                    .and_then(|s| s.parse().ok());
+                proj.scistarter_last_edited = data.updated_staff.map(|ts| ts.into());
+                proj.draft = data.draft;
+                proj.name = data.name;
+                proj.tags = data
+                    .tags
+                    .split("||")
+                    .filter_map(|s| s.trim_matches('|').trim().to_string().empty_as_none())
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice();
+                proj.participation_degree = match data.participation_degree.as_str() {
+                    "Collegial" => ProjectParticipationDegree::Collegial,
+                    "Co-Created" => ProjectParticipationDegree::CoCreated,
+                    "Collaborative" => ProjectParticipationDegree::Collaborative,
+                    "Contributory" => ProjectParticipationDegree::Contributory,
+                    "Contractual" => ProjectParticipationDegree::Contractual,
+                    s => {
+                        eprintln!("Unknown participation degree `{s}`, defaulting to Collegial");
+                        ProjectParticipationDegree::Collegial
+                    }
+                };
+                proj.participant_instructions = data.participant_instructions;
+                proj.participant_instructions_email = data.participant_instructions_email;
+                proj.participant_files = data
+                    .participant_files
+                    .split("||")
+                    .filter_map(|s| s.trim_matches('|').trim().to_string().empty_as_none())
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice();
+                proj.us_federally_funded = data.us_federally_funded;
+                proj.presenter = data.presenter;
+                proj.goal = data.goal;
+                proj.task = data.task;
+                proj.description = data.description;
+                proj.image = data.image;
+                proj.image_credit = data.image_credit;
+                proj.connect_opaque_url = data.connect_opaque_url;
+                proj.connect_opaque_url1 = data.connect_opaque_url1;
+                proj.connect_opaque_url2 = data.connect_opaque_url2;
+
+                // manager_name: String,
+                // manager_affiliation: String,
+                // manager_email: String,
+                // manager_phone: String,
+                // manager_address: String,
+                // contact_is_manager: bool,
+                // contact_name: String,
+                // contact_affiliation: String,
+                // contact_email: String,
+                // contact_phone: String,
+                // contact_address: String,
+                // additional_contact_name: String,
+                // additional_contact_affiliation: String,
+                // additional_contact_email: String,
+                // additional_contact_phone: String,
+                // additional_contact_address: String,
+                // technical_contact_email: String,
+                // notification_email: String,
+
+                let mut contacts = Vec::with_capacity(5);
+
+                todo!(
+                    "Fill the contacts Vec with the manager, contact, additional contact, technical contact, and notification contact"
+                );
+
+                proj.contacts = contacts.into_boxed_slice();
+                proj.url = todo!();
+                proj.video_url = todo!();
+                proj.blog_url = todo!();
+                proj.twitter_name = todo!();
+                proj.facebook_page = todo!();
+                proj.instagram_page = todo!();
+                proj.topics = todo!();
+                proj.fields_of_science = todo!();
+                proj.practices = todo!();
+                proj.practices_how = todo!();
+                proj.search_terms = todo!();
+                proj.difficulty = todo!();
+                proj.diy = todo!();
+                proj.audience = todo!();
+                proj.signup_url = todo!();
+                proj.prefix_how_to_logged_in = todo!();
+                proj.prefix_how_to_logged_out = todo!();
+                proj.how_to_join = todo!();
+                proj.howto_video = todo!();
+                proj.outcomes_label = todo!();
+                proj.outcomes_link = todo!();
+                proj.time_required = todo!();
+                proj.training_materials = todo!();
+                proj.classroom_materials = todo!();
+                proj.consent_statement = todo!();
+                proj.consent_statement_date = todo!();
+                proj.participation_tools = todo!();
+                proj.participation_prompt = todo!();
+                proj.participation_confirmation_message = todo!();
+                proj.participation_notification_email = todo!();
+                proj.participation_usage = todo!();
+                proj.part_of = todo!();
+                proj.associated_projects = todo!();
+                proj.total_expense = todo!();
+                proj.materials = todo!();
+                proj.gear = todo!();
+                proj.mobile_app_url_android = todo!();
+                proj.mobile_app_url_ios = todo!();
+                proj.mobile_app_url = todo!();
+                proj.location_type = todo!();
+                proj.entirely_online = todo!();
+                proj.on_demand = todo!();
+                proj.in_person = todo!();
+                proj.indoors = todo!();
+                proj.outdoors = todo!();
+                proj.regions = todo!();
+                proj.regions_description = todo!();
+                proj.point = todo!();
+                proj.address = todo!();
+                proj.city = todo!();
+                proj.state = todo!();
+                proj.zip = todo!();
+                proj.country = todo!();
+                proj.other = todo!();
+                proj.location_name = todo!();
+                proj.location_landuse = todo!();
+                proj.location_description = todo!();
+                proj.geographic_scope = todo!();
+                proj.united_nations_region = todo!();
+                proj.begin = todo!();
+                proj.end = todo!();
+                proj.project_timing = todo!();
+                proj.participation_schedule = todo!();
+                proj.time_per_participation = todo!();
+                proj.year_started = todo!();
+                proj.year_completed = todo!();
+                proj.month_completed = todo!();
+                proj.participation_tasks = todo!();
+                proj.activities = todo!();
+                proj.special_skills = todo!();
+                proj.data_results = todo!();
+                proj.data_aggregation = todo!();
+                proj.data_consent = todo!();
+                proj.data_visualization = todo!();
+                proj.data_access = todo!();
+                proj.data_quality = todo!();
+                proj.metadata_publication_url = todo!();
+                proj.data_publication_url = todo!();
+                proj.data_license = todo!();
+                proj.intended_outcomes = todo!();
+                proj.outcome_other = todo!();
+                proj.university_affiliation = todo!();
+                proj.sponsors = todo!();
+                proj.stakeholders = todo!();
+                proj.circuit_id = todo!();
+                proj.sustainable_development_goals = todo!();
 
                 proj.save().await?;
 

@@ -8,7 +8,7 @@ use crate::{SERVER_ID_STR, contact::Contact};
 
 pub mod field;
 
-#[derive(Default, Debug, sqlx::Type, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Default, Debug, sqlx::Type, serde::Serialize, serde::Deserialize)]
 pub enum ProjectStatus {
     Pending,
     #[default]
@@ -20,7 +20,7 @@ pub enum ProjectStatus {
     Hidden,
 }
 
-#[derive(Default, Debug, sqlx::Type, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Default, Debug, sqlx::Type, serde::Serialize, serde::Deserialize)]
 pub enum ProjectPromotionTime {
     #[default]
     #[sqlx(rename = "Promote at any time")]
@@ -29,6 +29,17 @@ pub enum ProjectPromotionTime {
     DoNotPromote,
     #[sqlx(rename = "Prefer promotion on the target date")]
     PreferOnTargetDate,
+}
+
+#[derive(Clone, Copy, Default, Debug, sqlx::Type, serde::Serialize, serde::Deserialize)]
+pub enum ProjectParticipationDegree {
+    #[default]
+    Collegial,
+    #[sqlx(rename = "Co-Created")]
+    CoCreated,
+    Collaborative,
+    Contributory,
+    Contractual,
 }
 
 #[derive(Default, Debug, serde::Serialize, serde::Deserialize)]
@@ -71,7 +82,7 @@ pub struct ProjectAll {
     pub draft: bool,
     pub name: String,
     pub tags: Box<[String]>,
-    pub participation_degree: String,
+    pub participation_degree: ProjectParticipationDegree,
     pub participant_instructions: String,
     pub participant_instructions_email: String,
     pub participant_files: Box<[String]>,
