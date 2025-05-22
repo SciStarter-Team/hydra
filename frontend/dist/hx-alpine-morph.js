@@ -1,1 +1,1 @@
-htmx.defineExtension(`alpine-morph`,{isInlineSwap:(a=>a===`morph`),handleSwap:((a,b,c)=>{if(a===`morph`)return c.nodeType===Node.DOCUMENT_FRAGMENT_NODE?(Alpine.morph(b,c.firstElementChild),[b]):(Alpine.morph(b,c.outerHTML),[b])})})
+(()=>{htmx.defineExtension(`alpine-morph`,{isInlineSwap:(a=>a===`morph`),handleSwap:((a,b,c)=>{if(a===`morph`)return c.nodeType===Node.DOCUMENT_FRAGMENT_NODE?(Alpine.morph(b,c.firstElementChild),[b]):(Alpine.morph(b,c.outerHTML),[b])})})})()

@@ -19,4 +19,7 @@ curl -L https://unpkg.com/@alpinejs/morph/dist/cdn.js -o alpine-morph.js
 curl -L https://unpkg.com/@alpinejs/morph/dist/cdn.min.js -o alpine-morph.min.js
 
 # Official ulid implementation for JS
-curl -L https://raw.githubusercontent.com/ulid/javascript/refs/heads/master/dist/index.umd.js -o ulid.js
+#curl -L https://cdn.jsdelivr.net/npm/ulid@2.4.0/dist/index.umd.js -o ulid.js
+#curl -L https://cdn.jsdelivr.net/npm/ulid@2.4.0/dist/index.umd.min.js -o ulid.min.js
+curl -L https://cdn.jsdelivr.net/npm/ulid@3/dist/browser/index.js -o ulid.js
+curl -L https://cdn.jsdelivr.net/npm/ulid@3/dist/browser/index.min.js -o ulid.min.js
