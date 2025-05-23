@@ -165,9 +165,11 @@ mod sync {
     use common::misc;
     use jiff::Timestamp;
     use tokio::time::sleep;
+    use ulid::Ulid;
 
-    use crate::project::{
-        ProjectAll, ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus,
+    use crate::{
+        contact::{Contact, ContactRole},
+        project::{ProjectAll, ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus},
     };
 
     #[derive(Default, Debug, serde::Deserialize)]
@@ -499,118 +501,235 @@ mod sync {
                 proj.connect_opaque_url1 = data.connect_opaque_url1;
                 proj.connect_opaque_url2 = data.connect_opaque_url2;
 
-                // manager_name: String,
-                // manager_affiliation: String,
-                // manager_email: String,
-                // manager_phone: String,
-                // manager_address: String,
-                // contact_is_manager: bool,
-                // contact_name: String,
-                // contact_affiliation: String,
-                // contact_email: String,
-                // contact_phone: String,
-                // contact_address: String,
-                // additional_contact_name: String,
-                // additional_contact_affiliation: String,
-                // additional_contact_email: String,
-                // additional_contact_phone: String,
-                // additional_contact_address: String,
-                // technical_contact_email: String,
-                // notification_email: String,
-
                 let mut contacts = Vec::with_capacity(5);
 
-                todo!(
-                    "Fill the contacts Vec with the manager, contact, additional contact, technical contact, and notification contact"
-                );
+                if !data.contact_email.is_empty() {
+                    contacts.push(Contact {
+                        contact_id: Ulid::new(),
+                        role: ContactRole::ContactPerson,
+                        name: data.contact_name.clone().empty_as_none(),
+                        affiliation: data.contact_affiliation.clone().empty_as_none(),
+                        email: data.contact_email.clone(),
+                        phone: data.contact_phone.clone().empty_as_none(),
+                        address: data.contact_address.clone().empty_as_none(),
+                    });
+                }
+
+                if data.contact_is_manager {
+                    contacts.push(Contact {
+                        contact_id: Ulid::new(),
+                        role: ContactRole::Manager,
+                        name: data.contact_name.clone().empty_as_none(),
+                        affiliation: data.contact_affiliation.clone().empty_as_none(),
+                        email: data.contact_email.clone(),
+                        phone: data.contact_phone.clone().empty_as_none(),
+                        address: data.contact_address.clone().empty_as_none(),
+                    });
+                } else if !data.manager_email.is_empty() {
+                    contacts.push(Contact {
+                        contact_id: Ulid::new(),
+                        role: ContactRole::Manager,
+                        name: data.manager_name.empty_as_none(),
+                        affiliation: data.manager_affiliation.empty_as_none(),
+                        email: data.manager_email,
+                        phone: data.manager_phone.empty_as_none(),
+                        address: data.manager_address.empty_as_none(),
+                    });
+                }
+
+                if !data.additional_contact_email.is_empty() {
+                    contacts.push(Contact {
+                        contact_id: Ulid::new(),
+                        role: ContactRole::ContactPerson,
+                        name: data.additional_contact_name.clone().empty_as_none(),
+                        affiliation: data.additional_contact_affiliation.clone().empty_as_none(),
+                        email: data.additional_contact_email.clone(),
+                        phone: data.additional_contact_phone.clone().empty_as_none(),
+                        address: data.additional_contact_address.clone().empty_as_none(),
+                    });
+                }
+
+                if !data.technical_contact_email.is_empty() {
+                    contacts.push(Contact {
+                        contact_id: Ulid::new(),
+                        role: ContactRole::Technical,
+                        name: None,
+                        affiliation: None,
+                        email: data.technical_contact_email.clone(),
+                        phone: None,
+                        address: None,
+                    });
+                }
+
+                if !data.notification_email.is_empty() {
+                    contacts.push(Contact {
+                        contact_id: Ulid::new(),
+                        role: ContactRole::Notification,
+                        name: None,
+                        affiliation: None,
+                        email: data.notification_email.clone(),
+                        phone: None,
+                        address: None,
+                    });
+                }
 
                 proj.contacts = contacts.into_boxed_slice();
-                proj.url = todo!();
-                proj.video_url = todo!();
-                proj.blog_url = todo!();
-                proj.twitter_name = todo!();
-                proj.facebook_page = todo!();
-                proj.instagram_page = todo!();
-                proj.topics = todo!();
-                proj.fields_of_science = todo!();
-                proj.practices = todo!();
-                proj.practices_how = todo!();
-                proj.search_terms = todo!();
-                proj.difficulty = todo!();
-                proj.diy = todo!();
-                proj.audience = todo!();
-                proj.signup_url = todo!();
-                proj.prefix_how_to_logged_in = todo!();
-                proj.prefix_how_to_logged_out = todo!();
-                proj.how_to_join = todo!();
-                proj.howto_video = todo!();
-                proj.outcomes_label = todo!();
-                proj.outcomes_link = todo!();
-                proj.time_required = todo!();
-                proj.training_materials = todo!();
-                proj.classroom_materials = todo!();
-                proj.consent_statement = todo!();
-                proj.consent_statement_date = todo!();
-                proj.participation_tools = todo!();
-                proj.participation_prompt = todo!();
-                proj.participation_confirmation_message = todo!();
-                proj.participation_notification_email = todo!();
-                proj.participation_usage = todo!();
-                proj.part_of = todo!();
-                proj.associated_projects = todo!();
-                proj.total_expense = todo!();
-                proj.materials = todo!();
-                proj.gear = todo!();
-                proj.mobile_app_url_android = todo!();
-                proj.mobile_app_url_ios = todo!();
-                proj.mobile_app_url = todo!();
-                proj.location_type = todo!();
-                proj.entirely_online = todo!();
-                proj.on_demand = todo!();
-                proj.in_person = todo!();
-                proj.indoors = todo!();
-                proj.outdoors = todo!();
-                proj.regions = todo!();
-                proj.regions_description = todo!();
-                proj.point = todo!();
-                proj.address = todo!();
-                proj.city = todo!();
-                proj.state = todo!();
-                proj.zip = todo!();
-                proj.country = todo!();
-                proj.other = todo!();
-                proj.location_name = todo!();
-                proj.location_landuse = todo!();
-                proj.location_description = todo!();
-                proj.geographic_scope = todo!();
-                proj.united_nations_region = todo!();
-                proj.begin = todo!();
-                proj.end = todo!();
-                proj.project_timing = todo!();
-                proj.participation_schedule = todo!();
-                proj.time_per_participation = todo!();
-                proj.year_started = todo!();
-                proj.year_completed = todo!();
-                proj.month_completed = todo!();
-                proj.participation_tasks = todo!();
-                proj.activities = todo!();
-                proj.special_skills = todo!();
-                proj.data_results = todo!();
-                proj.data_aggregation = todo!();
-                proj.data_consent = todo!();
-                proj.data_visualization = todo!();
-                proj.data_access = todo!();
-                proj.data_quality = todo!();
-                proj.metadata_publication_url = todo!();
-                proj.data_publication_url = todo!();
-                proj.data_license = todo!();
-                proj.intended_outcomes = todo!();
-                proj.outcome_other = todo!();
-                proj.university_affiliation = todo!();
-                proj.sponsors = todo!();
-                proj.stakeholders = todo!();
-                proj.circuit_id = todo!();
-                proj.sustainable_development_goals = todo!();
+                proj.url = data.url;
+                proj.video_url = data.video_url;
+                proj.blog_url = data.blog_url;
+                proj.twitter_name = data.twitter_name;
+                proj.facebook_page = data.facebook_page;
+                proj.instagram_page = data.instagram_page;
+                proj.topics = data
+                    .topics
+                    .split("||")
+                    .filter_map(|s| s.trim_matches('|').to_string().empty_as_none())
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice();
+                proj.fields_of_science = data
+                    .fields_of_science
+                    .split("||")
+                    .filter_map(|s| s.trim_matches('|').to_string().empty_as_none())
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice();
+                proj.practices = data
+                    .practices
+                    .split("||")
+                    .filter_map(|s| s.trim_matches('|').to_string().empty_as_none())
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice();
+                proj.practices_how = data.practices_how;
+                proj.search_terms = data.search_terms;
+                proj.difficulty = data.difficulty;
+                proj.diy = data.diy;
+                proj.audience = data
+                    .audience
+                    .split("||")
+                    .filter_map(|s| s.trim_matches('|').to_string().empty_as_none())
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice();
+                proj.signup_url = data.signup_url;
+                proj.prefix_how_to_logged_in = data.prefix_how_to_logged_in;
+                proj.prefix_how_to_logged_out = data.prefix_how_to_logged_out;
+                proj.how_to_join = data.how_to_join;
+                proj.howto_video = data.howto_video;
+                proj.outcomes_label = data.outcomes_label;
+                proj.outcomes_link = data.outcomes_link;
+                proj.time_required = data.time_required;
+                proj.training_materials = data.training_materials;
+                proj.classroom_materials = data.classroom_materials;
+                proj.consent_statement = data.consent_statement;
+                proj.consent_statement_date = data.consent_statement_date.map(|ts| ts.into());
+                proj.participation_tools = data.participation_tools;
+                proj.participation_prompt = data.participation_prompt;
+                proj.participation_confirmation_message = data.participation_confirmation_message;
+                proj.participation_notification_email = data.participation_notification_email;
+                proj.participation_usage = data.participation_usage;
+                proj.part_of = data.part_of.parse().ok();
+                proj.associated_projects = data
+                    .associated_projects
+                    .split(',')
+                    .filter_map(|s| s.parse().ok())
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice();
+                proj.total_expense = data.total_expense;
+                proj.materials = data.materials;
+                proj.gear = data.gear;
+                proj.mobile_app_url_android = data.mobile_app_url_android;
+                proj.mobile_app_url_ios = data.mobile_app_url_ios;
+                proj.mobile_app_url = data.mobile_app_url;
+                proj.location_type = data.location_type;
+                proj.entirely_online = data.entirely_online;
+                proj.on_demand = data.on_demand;
+                proj.in_person = data.in_person;
+                proj.indoors = data.indoors;
+                proj.outdoors = data.outdoors;
+                proj.regions = data.regions.empty_as_none();
+                proj.regions_description = data.regions_description;
+                proj.point = data.point.empty_as_none();
+                proj.address = data.address;
+                proj.city = data.city;
+                proj.state = data.state;
+                proj.zip = data.zip;
+                proj.country = data.country;
+                proj.other = data.other;
+                proj.location_name = data.location_name;
+                proj.location_landuse = data.location_landuse;
+                proj.location_description = data.location_description;
+                proj.geographic_scope = data
+                    .geographic_scope
+                    .split("||")
+                    .filter_map(|s| s.trim_matches('|').to_string().empty_as_none())
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice();
+                proj.united_nations_region = data.united_nations_region;
+                proj.begin = data.begin.map(|ts| ts.into());
+                proj.end = data.end.map(|ts| ts.into());
+                proj.project_timing = data.project_timing;
+                proj.participation_schedule = data.participation_schedule;
+                proj.time_per_participation = data.time_per_participation;
+                proj.year_started = data.year_started;
+                proj.year_completed = data.year_completed;
+                proj.month_completed = data.month_completed;
+                proj.participation_tasks = data
+                    .participation_tasks
+                    .split("||")
+                    .filter_map(|s| s.trim_matches('|').to_string().empty_as_none())
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice();
+                proj.activities = data
+                    .activities
+                    .split("||")
+                    .filter_map(|s| s.trim_matches('|').to_string().empty_as_none())
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice();
+                proj.special_skills = data.special_skills;
+                proj.data_results = data.data_results;
+                proj.data_aggregation = data
+                    .data_aggregation
+                    .split("||")
+                    .filter_map(|s| s.trim_matches('|').to_string().empty_as_none())
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice();
+                proj.data_consent = data
+                    .data_consent
+                    .split("||")
+                    .filter_map(|s| s.trim_matches('|').to_string().empty_as_none())
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice();
+                proj.data_visualization = data.data_visualization;
+                proj.data_access = data
+                    .data_access
+                    .split("||")
+                    .filter_map(|s| s.trim_matches('|').to_string().empty_as_none())
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice();
+                proj.data_quality = data.data_quality;
+                proj.metadata_publication_url = data.metadata_publication_url;
+                proj.data_publication_url = data.data_publication_url;
+                proj.data_license = data.data_license;
+                proj.intended_outcomes = data
+                    .intended_outcomes
+                    .split("||")
+                    .filter_map(|s| s.trim_matches('|').to_string().empty_as_none())
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice();
+                proj.outcome_other = data.outcome_other;
+                proj.university_affiliation = data.university_affiliation;
+                proj.sponsors = data
+                    .sponsors
+                    .split("||")
+                    .filter_map(|s| s.trim_matches('|').to_string().empty_as_none())
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice();
+                proj.stakeholders = data
+                    .stakeholders
+                    .split("||")
+                    .filter_map(|s| s.trim_matches('|').to_string().empty_as_none())
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice();
+                proj.circuit_id = data.circuit_id;
+                proj.sustainable_development_goals = data.sustainable_development_goals;
 
                 proj.save().await?;
 
@@ -619,6 +738,7 @@ mod sync {
                 }
             }
 
+            todo!("Enable project sync bookmarking");
             // misc::set("project-sync-bookmark", bookmark)
             //     .await
             //     .expect("Saving sync bookmark failed");

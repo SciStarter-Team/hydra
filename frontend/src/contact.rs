@@ -10,11 +10,11 @@ pub enum ContactRole {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Contact {
-    contact_id: Ulid,
-    role: ContactRole,
-    name: Option<String>,
-    affiliation: Option<String>,
-    email: String,
-    phone: Option<String>,
-    address: Option<String>,
+    pub contact_id: Ulid,
+    pub role: ContactRole,
+    pub name: Option<String>,
+    pub affiliation: Option<String>,
+    pub email: String,
+    pub phone: Option<String>,
+    pub address: Option<String>,
 }
