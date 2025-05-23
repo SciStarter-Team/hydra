@@ -3,9 +3,9 @@ use std::{collections::BTreeMap, time::Duration};
 use common::{message::user::Session, shared::nats};
 use jiff::Timestamp;
 use poem::{
+    Result,
     error::{BadRequest, InternalServerError},
     session::SessionStorage,
-    Result,
 };
 use sqlx::types::JsonValue;
 
@@ -20,7 +20,7 @@ impl SessionStorage for UserServiceSessionStorage {
         let nats = nats();
 
         if let Some(msg) = nats
-            .request("session.retrieve", session_id.into())
+            .request("user.session.retrieve", session_id.into())
             .await
             .ok()
         {
@@ -61,7 +61,7 @@ impl SessionStorage for UserServiceSessionStorage {
 
         let nats = nats();
 
-        nats.publish("session.store", payload)
+        nats.publish("user.session.store", payload)
             .await
             .map_err(InternalServerError)?;
 
@@ -72,7 +72,7 @@ impl SessionStorage for UserServiceSessionStorage {
         let session_id = flexbuffers::to_vec(session_id.to_owned()).map_err(BadRequest)?;
         let nats = nats();
 
-        nats.publish("session.delete", session_id.into())
+        nats.publish("user.session.delete", session_id.into())
             .await
             .map_err(InternalServerError)?;
 

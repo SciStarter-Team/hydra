@@ -6,7 +6,6 @@ use common::{
     shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower, nats},
 };
 use futures::StreamExt;
-use jiff::Timestamp;
 use tokio::{spawn, task::JoinSet, time::sleep};
 
 pub mod sessions;
@@ -765,7 +764,7 @@ async fn main() {
         .await
         .expect("Unable to start user service");
 
-    let session = service.group("session");
+    let session = service.group("user.session");
 
     let mut toplevel = JoinSet::new();
 

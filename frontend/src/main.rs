@@ -1,6 +1,7 @@
 pub mod channel;
 pub mod contact;
 pub mod entity;
+pub mod middleware;
 pub mod project;
 pub mod session;
 pub mod upload;
@@ -159,7 +160,7 @@ async fn main() -> Result<(), Error> {
 }
 
 mod sync {
-    use std::{str::FromStr, time::Duration};
+    use std::time::Duration;
 
     use common::misc;
     use jiff::Timestamp;
