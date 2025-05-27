@@ -446,7 +446,7 @@ mod sync {
                 proj.inat_project_id = data.inat_project_id;
                 proj.welcomed = data.welcomed;
                 proj.page_creator_id = data.owner.parse().unwrap_or_default();
-                proj.page_manager_ids = data
+                proj.page_editor_ids = data
                     .managers
                     .split(',')
                     .filter_map(|u| u.parse().ok())

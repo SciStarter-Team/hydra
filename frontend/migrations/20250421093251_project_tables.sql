@@ -1,29 +1,29 @@
-create table "entity" (
+create table "entities" (
        "slug" text not null,
        "kind" text not null,
        "target" text not null
 );
 
-create unique index "entity_by_slug" on "entity" ("slug");
-create index "entity_by_kind" on "entity" ("kind");
-create unique index "entity_by_target" on "entity" ("target");
+create unique index "entities_by_slug" on "entities" ("slug");
+create index "entities_by_kind" on "entities" ("kind");
+create unique index "entities_by_target" on "entities" ("target");
 
-create table "project_tag" (
+create table "project_tags" (
        "project_id" text not null,
        "tag" text not null
 );
 
-create index "project_tag_by_project_id" on "project_tag" ("project_id");
-create index "project_tag_by_tag" on "project_tag" (upper("tag"));
-create unique index "project_tag_by_project_and_tag" on "project_tag" ("project_id", upper("tag"));
+create index "project_tags_by_project_id" on "project_tags" ("project_id");
+create index "project_tags_by_tag" on "project_tags" (upper("tag"));
+create unique index "project_tags_by_project_and_tag" on "project_tags" ("project_id", upper("tag"));
 
-create table "project_editor" (
+create table "project_page_editors" (
        "project_id" text not null,
        "user_id" text not null
 );
 
-create index "project_editor_by_project_id" on "project_editor" ("project_id");
-create index "project_editor_by_user_id" on "project_editor" ("user_id");
+create index "project_page_editors_by_project_id" on "project_page_editors" ("project_id");
+create index "project_page_editors_by_user_id" on "project_page_editors" ("user_id");
 
 create table "project_participant_files" (
        "project_id" text not null,
@@ -32,7 +32,7 @@ create table "project_participant_files" (
 
 create index "project_participant_files_by_project_id" on "project_participant_files" ("project_id");
 
-create table "contact" (
+create table "project_contacts" (
        "contact_id" text not null,
        "project_id" text not null,
        "role" text not null,
@@ -43,10 +43,10 @@ create table "contact" (
        "address" text
 );
 
-create unique index "contact_by_contact_id" on "contact" ("contact_id");
-create index "contact_by_project_id" on "contact" ("project_id");
-create index "contact_by_role" on "contact" ("role");
-create index "contact_by_email" on "contact" (upper("email"));
+create unique index "project_contacts_by_contact_id" on "project_contacts" ("contact_id");
+create index "project_contacts_by_project_id" on "project_contacts" ("project_id");
+create index "project_contacts_by_role" on "project_contacts" ("role");
+create index "project_contacts_by_email" on "project_contacts" (upper("email"));
 
 create table "project_topics" (
        "project_id" text not null,
@@ -112,26 +112,26 @@ create table "project_activities" (
 create index "project_activities_by_project_id" on "project_activities" ("project_id");
 create index "project_activities_by_activity" on "project_activities" ("activity");
 
-create table "project_aggregations" (
+create table "project_data_aggregations" (
        "project_id" text not null,
-       "aggregation" text not null
+       "data_aggregation" text not null
 );
 
-create index "project_aggregations_by_project_id" on "project_aggregations" ("project_id");
+create index "project_data_aggregations_by_project_id" on "project_data_aggregations" ("project_id");
 
-create table "project_consents" (
+create table "project_data_consents" (
        "project_id" text not null,
-       "consent" text not null
+       "data_consent" text not null
 );
 
-create index "project_consents_by_project_id" on "project_consents" ("project_id");
+create index "project_data_consents_by_project_id" on "project_data_consents" ("project_id");
 
-create table "project_access" (
+create table "project_data_access" (
        "project_id" text not null,
-       "access" text not null
+       "data_access" text not null
 );
 
-create index "project_access_by_project_id" on "project_access" ("project_id");
+create index "project_data_access_by_project_id" on "project_data_access" ("project_id");
 
 create table "project_intended_outcomes" (
        "project_id" text not null,

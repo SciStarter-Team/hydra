@@ -70,8 +70,8 @@ pub struct ProjectAll {
     pub is_inaturalist: bool,
     pub inat_project_id: Option<i32>,
     pub welcomed: bool,
-    pub page_creator_id: Ulid, // NB was "owner"
-    pub page_manager_ids: Box<[Ulid]>,
+    pub page_creator_id: Ulid,        // NB was "owner"
+    pub page_editor_ids: Box<[Ulid]>, // NB was "managers"
     pub extra: String,
     pub project_last_editor: Option<Ulid>,
     pub project_last_edited: Option<TimeString>,
@@ -594,30 +594,514 @@ async fn save_local(all: &ProjectAll) -> Result<(), Error> {
     .execute(db)
     .await?;
 
-    todo!("Handle saving one-to-many fields");
+    // The following all have to be fully written out, because there's
+    // no way to parameterize the table and field names in a
+    // compile-time checked SQLx query. We can't even use a macro to
+    // manage it, because the query! macro requires a literal token
+    // for the query, and we can't construct those at compile
+    // time. Revisit this later.
 
-    // "page_manager_ids",
+    // "page_editor_ids",
+    let tx = db.begin().await?;
+    sqlx::query!(
+        r#"delete from project_page_editors where project_id = ?"#,
+        project_id
+    )
+    .execute(db)
+    .await?;
+    for user_id in all.page_editor_ids.iter() {
+        let user_id = user_id.to_string();
+        sqlx::query!(
+            r#"insert into project_page_editors (
+              "project_id",
+              "user_id"
+            )
+            values (
+              ?,
+              ?
+            )"#,
+            project_id,
+            user_id,
+        )
+        .execute(db)
+        .await?;
+    }
+    tx.commit().await?;
+
     // "project_last_editor",
+    sqlx::query!(r#""#).execute(db).await?;
+
     // "project_last_edited",
+    sqlx::query!(r#""#).execute(db).await?;
+
     // "scistarter_last_editor",
+    sqlx::query!(r#""#).execute(db).await?;
+
     // "scistarter_last_edited",
+    sqlx::query!(r#""#).execute(db).await?;
+
     // "tags",
+    let tx = db.begin().await?;
+    sqlx::query!(
+        r#"delete from project_tags where project_id = ?"#,
+        project_id
+    )
+    .execute(db)
+    .await?;
+    for val in all.tags.iter() {
+        sqlx::query!(
+            r#"insert into project_tags (
+              "project_id",
+              "tag"
+            )
+            values (
+              ?,
+              ?
+            )"#,
+            project_id,
+            val,
+        )
+        .execute(db)
+        .await?;
+    }
+    tx.commit().await?;
+
     // "participant_files",
+    sqlx::query!(r#""#).execute(db).await?;
+    let tx = db.begin().await?;
+    sqlx::query!(
+        r#"delete from project_participant_files where project_id = ?"#,
+        project_id
+    )
+    .execute(db)
+    .await?;
+    for val in all.participant_files.iter() {
+        sqlx::query!(
+            r#"insert into project_participant_files (
+              "project_id",
+              "url"
+            )
+            values (
+              ?,
+              ?
+            )"#,
+            project_id,
+            val,
+        )
+        .execute(db)
+        .await?;
+    }
+    tx.commit().await?;
+
     // "contacts",
+    let tx = db.begin().await?;
+    sqlx::query!(
+        r#"delete from project_contacts where project_id = ?"#,
+        project_id
+    )
+    .execute(db)
+    .await?;
+    for contact in all.contacts.iter() {
+        let contact_id = contact.contact_id.to_string();
+        sqlx::query!(
+            r#"insert into project_contacts (
+              "contact_id",
+              "project_id",
+              "role",
+              "name",
+              "affiliation",
+              "email",
+              "phone",
+              "address"
+            )
+            values (
+              ?,
+              ?,
+              ?,
+              ?,
+              ?,
+              ?,
+              ?,
+              ?
+            )"#,
+            contact_id,
+            project_id,
+            contact.role,
+            contact.name,
+            contact.affiliation,
+            contact.email,
+            contact.phone,
+            contact.address,
+        )
+        .execute(db)
+        .await?;
+    }
+    tx.commit().await?;
+
     // "topics",
+    let tx = db.begin().await?;
+    sqlx::query!(
+        r#"delete from project_topics where project_id = ?"#,
+        project_id
+    )
+    .execute(db)
+    .await?;
+    for val in all.topics.iter() {
+        sqlx::query!(
+            r#"insert into project_topics (
+              "project_id",
+              "topic"
+            )
+            values (
+              ?,
+              ?
+            )"#,
+            project_id,
+            val,
+        )
+        .execute(db)
+        .await?;
+    }
+    tx.commit().await?;
+
     // "fields_of_science",
+    let tx = db.begin().await?;
+    sqlx::query!(
+        r#"delete from project_fields_of_science where project_id = ?"#,
+        project_id
+    )
+    .execute(db)
+    .await?;
+    for val in all.fields_of_science.iter() {
+        sqlx::query!(
+            r#"insert into project_fields_of_science (
+              "project_id",
+              "field_of_science"
+            )
+            values (
+              ?,
+              ?
+            )"#,
+            project_id,
+            val,
+        )
+        .execute(db)
+        .await?;
+    }
+    tx.commit().await?;
+
     // "practices",
+    let tx = db.begin().await?;
+    sqlx::query!(
+        r#"delete from project_practices where project_id = ?"#,
+        project_id
+    )
+    .execute(db)
+    .await?;
+    for val in all.practices.iter() {
+        sqlx::query!(
+            r#"insert into project_practices (
+              "project_id",
+              "practice"
+            )
+            values (
+              ?,
+              ?
+            )"#,
+            project_id,
+            val,
+        )
+        .execute(db)
+        .await?;
+    }
+    tx.commit().await?;
+
     // "audience",
+    let tx = db.begin().await?;
+    sqlx::query!(
+        r#"delete from project_audiences where project_id = ?"#,
+        project_id
+    )
+    .execute(db)
+    .await?;
+    for val in all.audience.iter() {
+        sqlx::query!(
+            r#"insert into project_audiences (
+              "project_id",
+              "audience"
+            )
+            values (
+              ?,
+              ?
+            )"#,
+            project_id,
+            val,
+        )
+        .execute(db)
+        .await?;
+    }
+    tx.commit().await?;
+
     // "associated_projects",
+    let tx = db.begin().await?;
+    sqlx::query!(
+        r#"delete from project_associated_projects where project_id = ?"#,
+        project_id
+    )
+    .execute(db)
+    .await?;
+    for assoc_id in all.associated_projects.iter() {
+        let assoc_id = assoc_id.to_string();
+        sqlx::query!(
+            r#"insert into project_associated_projects (
+              "project_id",
+              "associated_project_id"
+            )
+            values (
+              ?,
+              ?
+            )"#,
+            project_id,
+            assoc_id,
+        )
+        .execute(db)
+        .await?;
+    }
+    tx.commit().await?;
+
     // "geographic_scope",
+    let tx = db.begin().await?;
+    sqlx::query!(
+        r#"delete from project_geographic_scopes where project_id = ?"#,
+        project_id
+    )
+    .execute(db)
+    .await?;
+    for val in all.geographic_scope.iter() {
+        sqlx::query!(
+            r#"insert into project_geographic_scopes (
+              "project_id",
+              "geographic_scope"
+            )
+            values (
+              ?,
+              ?
+            )"#,
+            project_id,
+            val,
+        )
+        .execute(db)
+        .await?;
+    }
+    tx.commit().await?;
+
     // "participation_tasks",
+    let tx = db.begin().await?;
+    sqlx::query!(
+        r#"delete from project_participation_tasks where project_id = ?"#,
+        project_id
+    )
+    .execute(db)
+    .await?;
+    for val in all.participation_tasks.iter() {
+        sqlx::query!(
+            r#"insert into project_participation_tasks (
+              "project_id",
+              "participation_task"
+            )
+            values (
+              ?,
+              ?
+            )"#,
+            project_id,
+            val,
+        )
+        .execute(db)
+        .await?;
+    }
+    tx.commit().await?;
+
     // "activities",
+    let tx = db.begin().await?;
+    sqlx::query!(
+        r#"delete from project_activities where project_id = ?"#,
+        project_id
+    )
+    .execute(db)
+    .await?;
+    for val in all.activities.iter() {
+        sqlx::query!(
+            r#"insert into project_activities (
+              "project_id",
+              "activity"
+            )
+            values (
+              ?,
+              ?
+            )"#,
+            project_id,
+            val,
+        )
+        .execute(db)
+        .await?;
+    }
+    tx.commit().await?;
+
     // "data_aggregation",
+    let tx = db.begin().await?;
+    sqlx::query!(
+        r#"delete from project_data_aggregations where project_id = ?"#,
+        project_id
+    )
+    .execute(db)
+    .await?;
+    for val in all.data_aggregation.iter() {
+        sqlx::query!(
+            r#"insert into project_data_aggregations (
+              "project_id",
+              "data_aggregation"
+            )
+            values (
+              ?,
+              ?
+            )"#,
+            project_id,
+            val,
+        )
+        .execute(db)
+        .await?;
+    }
+    tx.commit().await?;
+
     // "data_consent",
+    let tx = db.begin().await?;
+    sqlx::query!(
+        r#"delete from project_data_consents where project_id = ?"#,
+        project_id
+    )
+    .execute(db)
+    .await?;
+    for val in all.data_consent.iter() {
+        sqlx::query!(
+            r#"insert into project_data_consents (
+              "project_id",
+              "data_consent"
+            )
+            values (
+              ?,
+              ?
+            )"#,
+            project_id,
+            val,
+        )
+        .execute(db)
+        .await?;
+    }
+    tx.commit().await?;
+
     // "data_access",
+    let tx = db.begin().await?;
+    sqlx::query!(
+        r#"delete from project_data_consents where project_id = ?"#,
+        project_id
+    )
+    .execute(db)
+    .await?;
+    for val in all.data_consent.iter() {
+        sqlx::query!(
+            r#"insert into project_data_consents (
+              "project_id",
+              "data_consent"
+            )
+            values (
+              ?,
+              ?
+            )"#,
+            project_id,
+            val,
+        )
+        .execute(db)
+        .await?;
+    }
+    tx.commit().await?;
+
     // "intended_outcomes",
+    let tx = db.begin().await?;
+    sqlx::query!(
+        r#"delete from project_intended_outcomes where project_id = ?"#,
+        project_id
+    )
+    .execute(db)
+    .await?;
+    for val in all.intended_outcomes.iter() {
+        sqlx::query!(
+            r#"insert into project_intended_outcomes (
+              "project_id",
+              "intended_outcome"
+            )
+            values (
+              ?,
+              ?
+            )"#,
+            project_id,
+            val,
+        )
+        .execute(db)
+        .await?;
+    }
+    tx.commit().await?;
+
     // "sponsors",
+    let tx = db.begin().await?;
+    sqlx::query!(
+        r#"delete from project_sponsors where project_id = ?"#,
+        project_id
+    )
+    .execute(db)
+    .await?;
+    for val in all.sponsors.iter() {
+        sqlx::query!(
+            r#"insert into project_sponsors (
+              "project_id",
+              "sponsor"
+            )
+            values (
+              ?,
+              ?
+            )"#,
+            project_id,
+            val,
+        )
+        .execute(db)
+        .await?;
+    }
+    tx.commit().await?;
+
     // "stakeholders",
+    let tx = db.begin().await?;
+    sqlx::query!(
+        r#"delete from project_stakeholders where project_id = ?"#,
+        project_id
+    )
+    .execute(db)
+    .await?;
+    for val in all.stakeholders.iter() {
+        sqlx::query!(
+            r#"insert into project_stakeholders (
+              "project_id",
+              "stakeholder"
+            )
+            values (
+              ?,
+              ?
+            )"#,
+            project_id,
+            val,
+        )
+        .execute(db)
+        .await?;
+    }
+    tx.commit().await?;
 
     Ok(())
 }
