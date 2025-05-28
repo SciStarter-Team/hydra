@@ -24,3 +24,4 @@ url = { version = "2.5.4", features = ["serde"] }
 base64 = "0.22.1"
 futures = "0.3.31"
 anyhow = "1.0.98"
+urlencoding = "2.1.3"

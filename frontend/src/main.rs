@@ -9,15 +9,16 @@ pub mod upload;
 use std::sync::LazyLock;
 
 use anyhow::Error;
-use common::{message::location::LocationInfo, service::request, shared::db};
+use common::{message::location::LocationInfo, shared::db};
+use middleware::authorization::{NotAuthorized, SessionSubject};
 use poem::{
-    EndpointExt, IntoResponse, Route, Server,
+    EndpointExt, IntoResponse, Response, Route, Server,
     endpoint::{EmbeddedFileEndpoint, EmbeddedFilesEndpoint},
     get, handler,
     http::HeaderMap,
     listener::TcpListener,
     session::{CookieConfig, ServerSession, Session},
-    web::{Html, RealIp, cookie::SameSite},
+    web::{Html, RealIp, Redirect, cookie::SameSite},
 };
 use rust_embed::Embed;
 use session::UserServiceSessionStorage;
@@ -45,35 +46,19 @@ struct Static;
 type StaticFiles = EmbeddedFilesEndpoint<Static>;
 type StaticFile = EmbeddedFileEndpoint<Static>;
 
-/// Ensures that the session contains a unique NATS subject, and
-/// returns it
-pub fn session_subject(session: &Session) -> String {
-    if let Some(subj) = session.get::<String>("subject") {
-        subj
-    } else {
-        let subj = Ulid::new().to_string();
-        session.set("subject", &subj);
-        subj
-    }
-}
-
 #[handler]
 async fn index(
-    session: &Session,
+    _session: &Session,
     headers: &HeaderMap,
+    subject: SessionSubject,
     RealIp(client_ip): RealIp,
-) -> impl IntoResponse {
-    // Cloning the session is fine except that changing the clone
-    // won't cause the session cookie to be saved. Ensuring that
-    // there's a session subject here avoids that problem.
-    session_subject(session);
-
-    let session = session.clone();
+) -> poem::Result<Html<String>> {
     tokio::spawn(async move {
         for counter in 0..32 {
             tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+            println!("send");
             channel::send(
-                &session,
+                subject.as_ref(),
                 "moocow",
                 channel::Event::new("test", format!("<p>iteration {}</p>", counter)),
             )
@@ -81,20 +66,24 @@ async fn index(
             .unwrap();
         }
 
-        channel::send(&session, "moocow", channel::Event::new("shutdown", ""))
-            .await
-            .unwrap();
+        channel::send(
+            subject.as_ref(),
+            "moocow",
+            channel::Event::new("shutdown", ""),
+        )
+        .await
+        .unwrap();
     });
 
     let location = if let Some(addr) = client_ip {
-        request("location.ip", addr.to_string())
+        common::service::request("location.ip", addr.to_string())
             .await
             .unwrap_or_default()
     } else {
         LocationInfo::default()
     };
 
-    Html(format!(
+    Ok(Html(format!(
         r#"<!doctype html>
            <html>
              <head>
@@ -119,7 +108,47 @@ async fn index(
            </html>
         "#,
         headers, location,
-    ))
+    )))
+}
+
+async fn not_found(_err: poem::Error) -> Response {
+    Response::builder()
+        .content_type("text/html")
+        .body("Not found") // Render 'not found' error page template
+}
+
+async fn not_authorized(err: poem::Error) -> Response {
+    if let Ok(err) = err.downcast::<NotAuthorized>() {
+        // In the login handler, remember to reject all next
+        // values that don't start with '/'
+        Redirect::see_other(format!("/login?unauthorized=true&next={}", err.target()))
+            .into_response()
+    } else {
+        Redirect::see_other("/login&unauthorized=true").into_response()
+    }
+}
+
+async fn forbidden(_err: poem::Error) -> Response {
+    Response::builder()
+        .content_type("text/html")
+        .body("Not allowed") // Render 'forbidden' error page template
+}
+
+async fn internal_server_error(err: poem::Error) -> Response {
+    eprintln!("{}", err);
+
+    Response::builder()
+        .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+        .body("Internal Server Error") // Render error page template
+}
+
+async fn error_dispatch(err: poem::Error) -> Response {
+    match err.status() {
+        poem::http::StatusCode::NOT_FOUND => not_found(err).await,
+        poem::http::StatusCode::UNAUTHORIZED => not_authorized(err).await,
+        poem::http::StatusCode::FORBIDDEN => forbidden(err).await,
+        _ => internal_server_error(err).await,
+    }
 }
 
 #[tokio::main]
@@ -137,6 +166,8 @@ async fn main() -> Result<(), Error> {
         .at("/favicon.ico", StaticFile::new("favicon.ico"))
         .at("/", get(index))
         .at("/index.html", get(index))
+        .with(middleware::analytics::AnalyticsMiddleware)
+        .with(middleware::authorization::AuthMiddleware)
         .with(ServerSession::new(
             CookieConfig::default()
                 .name(SESSION_COOKIE)
@@ -146,11 +177,14 @@ async fn main() -> Result<(), Error> {
                 .path("/")
                 .max_age(std::time::Duration::from_secs(60 * 60 * 24 * 365)),
             session_storage,
-        ));
+        ))
+        .catch_all_error(error_dispatch);
 
     let _updates = tokio::spawn(project::receive_project_updates());
 
     let _synchronize = tokio::spawn(sync::synchronize());
+
+    println!("Listening on {}", env!("LISTEN_ON"));
 
     Server::new(TcpListener::bind(env!("LISTEN_ON")))
         .run(routes)
@@ -169,7 +203,9 @@ mod sync {
 
     use crate::{
         contact::{Contact, ContactRole},
-        project::{ProjectAll, ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus},
+        project::{
+            ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus, all::ProjectAll,
+        },
     };
 
     #[derive(Default, Debug, serde::Deserialize)]

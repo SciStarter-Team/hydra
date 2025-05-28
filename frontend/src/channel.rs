@@ -1,30 +1,25 @@
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use common::shared::nats;
 use futures::StreamExt;
 use poem::{
+    Route,
     error::InternalServerError,
     handler,
-    session::Session,
     web::{
-        sse::{self, SSE},
         Path,
+        sse::{self, SSE},
     },
-    Route,
 };
 
-use crate::session_subject;
+use crate::middleware::authorization::SessionSubject;
 
 pub fn routes() -> Route {
     Route::new().at("/:channel", listen)
 }
 
 #[handler]
-pub async fn listen(session: &Session, Path(channel): Path<String>) -> poem::Result<SSE> {
-    let subject = format!(
-        "{}.{}",
-        session_subject(session),
-        URL_SAFE_NO_PAD.encode(channel),
-    );
+pub async fn listen(subject: SessionSubject, Path(channel): Path<String>) -> poem::Result<SSE> {
+    let subject = format!("{}.{}", subject.as_ref(), URL_SAFE_NO_PAD.encode(channel),);
 
     let subscription = nats()
         .subscribe(subject)
@@ -41,13 +36,13 @@ pub async fn listen(session: &Session, Path(channel): Path<String>) -> poem::Res
 }
 
 pub async fn send(
-    to_session: &Session,
+    to_session_subject: impl AsRef<str>,
     to_channel: impl AsRef<str>,
     event: Event,
 ) -> Result<(), anyhow::Error> {
     let subject = format!(
         "{}.{}",
-        session_subject(to_session),
+        to_session_subject.as_ref(),
         URL_SAFE_NO_PAD.encode(to_channel.as_ref()),
     );
 

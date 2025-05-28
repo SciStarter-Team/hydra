@@ -2,13 +2,14 @@ use std::{collections::BTreeMap, time::Duration};
 
 use async_nats::service::ServiceExt;
 use common::{
-    handler, misc,
+    handler, misc, recv_handler,
     shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower, nats},
 };
 use futures::StreamExt;
 use tokio::{spawn, task::JoinSet, time::sleep};
 
 pub mod sessions;
+pub mod users;
 
 async fn cleanup() {
     loop {
@@ -764,13 +765,16 @@ async fn main() {
         .await
         .expect("Unable to start user service");
 
-    let session = service.group("user.session");
-
     let mut toplevel = JoinSet::new();
 
-    toplevel.spawn(handler!(session, "store", sessions::store));
+    let info = service.group("user.basic_info");
+    toplevel.spawn(handler!(info, "by_username", users::basic_info_by_username));
+    toplevel.spawn(handler!(info, "by_user_id", users::basic_info_by_user_id));
+
+    let session = service.group("user.session");
+    toplevel.spawn(recv_handler!(session, "store", sessions::store));
     toplevel.spawn(handler!(session, "retrieve", sessions::retrieve));
-    toplevel.spawn(handler!(session, "delete", sessions::delete));
+    toplevel.spawn(recv_handler!(session, "delete", sessions::delete));
 
     toplevel.join_all().await;
 

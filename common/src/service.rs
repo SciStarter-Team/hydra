@@ -6,6 +6,7 @@ use serde::de::DeserializeOwned;
 
 use crate::shared::nats;
 
+/// Handler helper for duplex request-response service endpoints
 #[macro_export]
 macro_rules! handler {
     ($group:ident, $name:literal, $fut:expr) => {
@@ -43,6 +44,25 @@ macro_rules! handler {
                         {
                             eprintln!("{}: {:?}", x.to_string(), x);
                         }
+                    }
+                }
+            })
+    };
+}
+
+/// Handler helper for simplex service endpoints
+#[macro_export]
+macro_rules! recv_handler {
+    ($group:ident, $name:literal, $fut:expr) => {
+        $group
+            .endpoint($name)
+            .await
+            .expect("Unable to create endpoint")
+            .for_each_concurrent(None, |req| async move {
+                match $fut(&req).await {
+                    Ok(_) => {}
+                    Err(err) => {
+                        eprintln!("{}: {:?}", err.to_string(), err);
                     }
                 }
             })

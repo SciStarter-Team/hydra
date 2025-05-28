@@ -24,16 +24,20 @@ impl SessionStorage for UserServiceSessionStorage {
             .await
             .ok()
         {
-            let session: Session =
-                flexbuffers::from_slice(&msg.payload).map_err(InternalServerError)?;
-
-            if let Some(expires) = &session.expires {
-                if expires.parse::<Timestamp>().map_err(InternalServerError)? < Timestamp::now() {
-                    return Ok(None);
+            if let Some(session) = flexbuffers::from_slice::<Option<Session>>(&msg.payload)
+                .map_err(InternalServerError)?
+            {
+                if let Some(expires) = &session.expires {
+                    if expires.parse::<Timestamp>().map_err(InternalServerError)? < Timestamp::now()
+                    {
+                        return Ok(None);
+                    }
                 }
-            }
 
-            Ok(flexbuffers::from_slice(&session.data).map_err(InternalServerError)?)
+                Ok(flexbuffers::from_slice(&session.data).map_err(InternalServerError)?)
+            } else {
+                Ok(None)
+            }
         } else {
             Ok(None)
         }
