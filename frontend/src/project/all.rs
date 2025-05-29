@@ -1,9 +1,8 @@
 use anyhow::Error;
-use async_nats::Message;
-use common::{nats_headers, service::send_with_headers, timestring::TimeString};
+use common::timestring::TimeString;
 use ulid::Ulid;
 
-use crate::{SERVER_ID_STR, contact::Contact};
+use crate::{contact::Contact, peering::LoadStorePeered};
 
 use super::{ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus};
 
@@ -180,37 +179,21 @@ pub struct ProjectAll {
     pub sustainable_development_goals: String,
 }
 
-impl ProjectAll {
-    pub async fn save(&self) -> Result<(), Error> {
-        save_local(self).await?;
-        send_with_headers(
-            "frontend.project.save.all",
-            nats_headers! {
-                "Source": SERVER_ID_STR.as_str(),
-            },
-            self,
-        )
-        .await?;
-        Ok(())
-    }
+impl LoadStorePeered for ProjectAll {
+    type DatabaseKey = Ulid;
 
-    pub async fn load(_project_id: Ulid) -> Result<ProjectAll, Error> {
-        let _db = common::shared::db();
-        unimplemented!(
-            "Loading ProjectAll from the database has been deferred until a need is demonstrated"
-        )
-    }
-}
+    const GROUP: &str = "project";
+    const SPECIFIC: &str = "all";
 
-async fn save_local(all: &ProjectAll) -> Result<(), Error> {
-    let db = common::shared::db();
+    async fn save_to_database(&self) -> Result<(), Error> {
+        let db = common::shared::db();
 
-    let project_id = all.project_id.to_string();
-    let page_creator_id = all.page_creator_id.to_string();
-    let part_of = all.part_of.map(|u| u.to_string());
+        let project_id = self.project_id.to_string();
+        let page_creator_id = self.page_creator_id.to_string();
+        let part_of = self.part_of.map(|u| u.to_string());
 
-    sqlx::query!(
-        r#"insert or replace into projects (
+        sqlx::query!(
+            r#"insert or replace into projects (
           "project_id",
           "legacy_v1_project_id",
           "legacy_v2_project_id",
@@ -451,141 +434,141 @@ async fn save_local(all: &ProjectAll) -> Result<(), Error> {
               GeomFromEWKT(?112)
           end
         )"#,
-        project_id,
-        all.legacy_v1_project_id,
-        all.legacy_v2_project_id,
-        all.foreign_id,
-        all.publish,
-        all.duplicate,
-        all.flagged,
-        all.is_test,
-        all.status,
-        all.promotion_time,
-        all.promotion_target,
-        all.admin_notes,
-        all.created,
-        all.wild_hope,
-        all.exchange,
-        all.origin,
-        all.suborigin,
-        all.guid,
-        all.opengraph_description,
-        all.is_affiliate,
-        all.is_inaturalist,
-        all.inat_project_id,
-        all.welcomed,
-        page_creator_id,
-        all.extra,
-        all.draft,
-        all.name,
-        all.participation_degree,
-        all.participant_instructions,
-        all.participant_instructions_email,
-        all.us_federally_funded,
-        all.presenter,
-        all.goal,
-        all.task,
-        all.description,
-        all.image,
-        all.image_credit,
-        all.connect_opaque_url,
-        all.connect_opaque_url1,
-        all.connect_opaque_url2,
-        all.url,
-        all.video_url,
-        all.blog_url,
-        all.twitter_name,
-        all.facebook_page,
-        all.instagram_page,
-        all.practices_how,
-        all.search_terms,
-        all.difficulty,
-        all.diy,
-        all.signup_url,
-        all.prefix_how_to_logged_in,
-        all.prefix_how_to_logged_out,
-        all.how_to_join,
-        all.howto_video,
-        all.outcomes_label,
-        all.outcomes_link,
-        all.time_required,
-        all.training_materials,
-        all.classroom_materials,
-        all.consent_statement,
-        all.consent_statement_date,
-        all.participation_tools,
-        all.participation_prompt,
-        all.participation_confirmation_message,
-        all.participation_notification_email,
-        all.participation_usage,
-        part_of,
-        all.total_expense,
-        all.materials,
-        all.gear,
-        all.mobile_app_url_android,
-        all.mobile_app_url_ios,
-        all.mobile_app_url,
-        all.location_type,
-        all.entirely_online,
-        all.on_demand,
-        all.in_person,
-        all.indoors,
-        all.outdoors,
-        all.regions_description,
-        all.address,
-        all.city,
-        all.state,
-        all.zip,
-        all.country,
-        all.other,
-        all.location_name,
-        all.location_landuse,
-        all.location_description,
-        all.united_nations_region,
-        all.begin,
-        all.end,
-        all.project_timing,
-        all.participation_schedule,
-        all.time_per_participation,
-        all.year_started,
-        all.year_completed,
-        all.month_completed,
-        all.special_skills,
-        all.data_results,
-        all.data_visualization,
-        all.data_quality,
-        all.metadata_publication_url,
-        all.data_publication_url,
-        all.data_license,
-        all.outcome_other,
-        all.university_affiliation,
-        all.circuit_id,
-        all.sustainable_development_goals,
-        all.regions,
-        all.point,
-    )
-    .execute(db)
-    .await?;
+            project_id,
+            self.legacy_v1_project_id,
+            self.legacy_v2_project_id,
+            self.foreign_id,
+            self.publish,
+            self.duplicate,
+            self.flagged,
+            self.is_test,
+            self.status,
+            self.promotion_time,
+            self.promotion_target,
+            self.admin_notes,
+            self.created,
+            self.wild_hope,
+            self.exchange,
+            self.origin,
+            self.suborigin,
+            self.guid,
+            self.opengraph_description,
+            self.is_affiliate,
+            self.is_inaturalist,
+            self.inat_project_id,
+            self.welcomed,
+            page_creator_id,
+            self.extra,
+            self.draft,
+            self.name,
+            self.participation_degree,
+            self.participant_instructions,
+            self.participant_instructions_email,
+            self.us_federally_funded,
+            self.presenter,
+            self.goal,
+            self.task,
+            self.description,
+            self.image,
+            self.image_credit,
+            self.connect_opaque_url,
+            self.connect_opaque_url1,
+            self.connect_opaque_url2,
+            self.url,
+            self.video_url,
+            self.blog_url,
+            self.twitter_name,
+            self.facebook_page,
+            self.instagram_page,
+            self.practices_how,
+            self.search_terms,
+            self.difficulty,
+            self.diy,
+            self.signup_url,
+            self.prefix_how_to_logged_in,
+            self.prefix_how_to_logged_out,
+            self.how_to_join,
+            self.howto_video,
+            self.outcomes_label,
+            self.outcomes_link,
+            self.time_required,
+            self.training_materials,
+            self.classroom_materials,
+            self.consent_statement,
+            self.consent_statement_date,
+            self.participation_tools,
+            self.participation_prompt,
+            self.participation_confirmation_message,
+            self.participation_notification_email,
+            self.participation_usage,
+            part_of,
+            self.total_expense,
+            self.materials,
+            self.gear,
+            self.mobile_app_url_android,
+            self.mobile_app_url_ios,
+            self.mobile_app_url,
+            self.location_type,
+            self.entirely_online,
+            self.on_demand,
+            self.in_person,
+            self.indoors,
+            self.outdoors,
+            self.regions_description,
+            self.address,
+            self.city,
+            self.state,
+            self.zip,
+            self.country,
+            self.other,
+            self.location_name,
+            self.location_landuse,
+            self.location_description,
+            self.united_nations_region,
+            self.begin,
+            self.end,
+            self.project_timing,
+            self.participation_schedule,
+            self.time_per_participation,
+            self.year_started,
+            self.year_completed,
+            self.month_completed,
+            self.special_skills,
+            self.data_results,
+            self.data_visualization,
+            self.data_quality,
+            self.metadata_publication_url,
+            self.data_publication_url,
+            self.data_license,
+            self.outcome_other,
+            self.university_affiliation,
+            self.circuit_id,
+            self.sustainable_development_goals,
+            self.regions,
+            self.point,
+        )
+        .execute(db)
+        .await?;
 
-    // The following all have to be fully written out, because there's
-    // no way to parameterize the table and field names in a
-    // compile-time checked SQLx query. We can't even use a macro to
-    // manage it, because the query! macro requires a literal token
-    // for the query, and we can't construct those at compile
-    // time. Revisit this later.
+        // The following all have to be fully written out, because there's
+        // no way to parameterize the table and field names in a
+        // compile-time checked SQLx query. We can't even use a macro to
+        // manage it, because the query! macro requires a literal token
+        // for the query, and we can't construct those at compile
+        // time. Revisit this later.
 
-    // "page_editor_ids",
-    let tx = db.begin().await?;
-    sqlx::query!(
-        r#"delete from project_page_editors where project_id = ?"#,
-        project_id
-    )
-    .execute(db)
-    .await?;
-    for user_id in all.page_editor_ids.iter() {
-        let user_id = user_id.to_string();
+        // "page_editor_ids",
+        let tx = db.begin().await?;
         sqlx::query!(
-            r#"insert into project_page_editors (
+            r#"delete from project_page_editors where project_id = ?"#,
+            project_id
+        )
+        .execute(db)
+        .await?;
+        for user_id in self.page_editor_ids.iter() {
+            let user_id = user_id.to_string();
+            sqlx::query!(
+                r#"insert into project_page_editors (
               "project_id",
               "user_id"
             )
@@ -593,45 +576,45 @@ async fn save_local(all: &ProjectAll) -> Result<(), Error> {
               ?,
               ?
             )"#,
-            project_id,
-            user_id,
+                project_id,
+                user_id,
+            )
+            .execute(db)
+            .await?;
+        }
+        tx.commit().await?;
+
+        // "project_last_editor",
+        // "project_last_edited",
+        if let Some(last_editor) = self.project_last_editor {
+            common::service::send(
+                "log.project.user-edit",
+                (last_editor, self.project_last_edited.to_owned(), "all"),
+            )
+            .await?;
+        }
+
+        // "scistarter_last_editor",
+        // "scistarter_last_edited",
+        if let Some(last_editor) = self.scistarter_last_editor {
+            common::service::send(
+                "log.project.staff-edit",
+                (last_editor, self.scistarter_last_edited.to_owned(), "all"),
+            )
+            .await?;
+        }
+
+        // "tags",
+        let tx = db.begin().await?;
+        sqlx::query!(
+            r#"delete from project_tags where project_id = ?"#,
+            project_id
         )
         .execute(db)
         .await?;
-    }
-    tx.commit().await?;
-
-    // "project_last_editor",
-    // "project_last_edited",
-    if let Some(last_editor) = all.project_last_editor {
-        common::service::send(
-            "log.project.user-edit",
-            (last_editor, all.project_last_edited.to_owned(), "all"),
-        )
-        .await?;
-    }
-
-    // "scistarter_last_editor",
-    // "scistarter_last_edited",
-    if let Some(last_editor) = all.scistarter_last_editor {
-        common::service::send(
-            "log.project.staff-edit",
-            (last_editor, all.scistarter_last_edited.to_owned(), "all"),
-        )
-        .await?;
-    }
-
-    // "tags",
-    let tx = db.begin().await?;
-    sqlx::query!(
-        r#"delete from project_tags where project_id = ?"#,
-        project_id
-    )
-    .execute(db)
-    .await?;
-    for val in all.tags.iter() {
-        sqlx::query!(
-            r#"insert into project_tags (
+        for val in self.tags.iter() {
+            sqlx::query!(
+                r#"insert into project_tags (
               "project_id",
               "tag"
             )
@@ -639,26 +622,26 @@ async fn save_local(all: &ProjectAll) -> Result<(), Error> {
               ?,
               ?
             )"#,
-            project_id,
-            val,
+                project_id,
+                val,
+            )
+            .execute(db)
+            .await?;
+        }
+        tx.commit().await?;
+
+        // "participant_files",
+        sqlx::query!(r#""#).execute(db).await?;
+        let tx = db.begin().await?;
+        sqlx::query!(
+            r#"delete from project_participant_files where project_id = ?"#,
+            project_id
         )
         .execute(db)
         .await?;
-    }
-    tx.commit().await?;
-
-    // "participant_files",
-    sqlx::query!(r#""#).execute(db).await?;
-    let tx = db.begin().await?;
-    sqlx::query!(
-        r#"delete from project_participant_files where project_id = ?"#,
-        project_id
-    )
-    .execute(db)
-    .await?;
-    for val in all.participant_files.iter() {
-        sqlx::query!(
-            r#"insert into project_participant_files (
+        for val in self.participant_files.iter() {
+            sqlx::query!(
+                r#"insert into project_participant_files (
               "project_id",
               "url"
             )
@@ -666,26 +649,26 @@ async fn save_local(all: &ProjectAll) -> Result<(), Error> {
               ?,
               ?
             )"#,
-            project_id,
-            val,
+                project_id,
+                val,
+            )
+            .execute(db)
+            .await?;
+        }
+        tx.commit().await?;
+
+        // "contacts",
+        let tx = db.begin().await?;
+        sqlx::query!(
+            r#"delete from project_contacts where project_id = ?"#,
+            project_id
         )
         .execute(db)
         .await?;
-    }
-    tx.commit().await?;
-
-    // "contacts",
-    let tx = db.begin().await?;
-    sqlx::query!(
-        r#"delete from project_contacts where project_id = ?"#,
-        project_id
-    )
-    .execute(db)
-    .await?;
-    for contact in all.contacts.iter() {
-        let contact_id = contact.contact_id.to_string();
-        sqlx::query!(
-            r#"insert into project_contacts (
+        for contact in self.contacts.iter() {
+            let contact_id = contact.contact_id.to_string();
+            sqlx::query!(
+                r#"insert into project_contacts (
               "contact_id",
               "project_id",
               "role",
@@ -705,31 +688,31 @@ async fn save_local(all: &ProjectAll) -> Result<(), Error> {
               ?,
               ?
             )"#,
-            contact_id,
-            project_id,
-            contact.role,
-            contact.name,
-            contact.affiliation,
-            contact.email,
-            contact.phone,
-            contact.address,
+                contact_id,
+                project_id,
+                contact.role,
+                contact.name,
+                contact.affiliation,
+                contact.email,
+                contact.phone,
+                contact.address,
+            )
+            .execute(db)
+            .await?;
+        }
+        tx.commit().await?;
+
+        // "topics",
+        let tx = db.begin().await?;
+        sqlx::query!(
+            r#"delete from project_topics where project_id = ?"#,
+            project_id
         )
         .execute(db)
         .await?;
-    }
-    tx.commit().await?;
-
-    // "topics",
-    let tx = db.begin().await?;
-    sqlx::query!(
-        r#"delete from project_topics where project_id = ?"#,
-        project_id
-    )
-    .execute(db)
-    .await?;
-    for val in all.topics.iter() {
-        sqlx::query!(
-            r#"insert into project_topics (
+        for val in self.topics.iter() {
+            sqlx::query!(
+                r#"insert into project_topics (
               "project_id",
               "topic"
             )
@@ -737,25 +720,25 @@ async fn save_local(all: &ProjectAll) -> Result<(), Error> {
               ?,
               ?
             )"#,
-            project_id,
-            val,
+                project_id,
+                val,
+            )
+            .execute(db)
+            .await?;
+        }
+        tx.commit().await?;
+
+        // "fields_of_science",
+        let tx = db.begin().await?;
+        sqlx::query!(
+            r#"delete from project_fields_of_science where project_id = ?"#,
+            project_id
         )
         .execute(db)
         .await?;
-    }
-    tx.commit().await?;
-
-    // "fields_of_science",
-    let tx = db.begin().await?;
-    sqlx::query!(
-        r#"delete from project_fields_of_science where project_id = ?"#,
-        project_id
-    )
-    .execute(db)
-    .await?;
-    for val in all.fields_of_science.iter() {
-        sqlx::query!(
-            r#"insert into project_fields_of_science (
+        for val in self.fields_of_science.iter() {
+            sqlx::query!(
+                r#"insert into project_fields_of_science (
               "project_id",
               "field_of_science"
             )
@@ -763,25 +746,25 @@ async fn save_local(all: &ProjectAll) -> Result<(), Error> {
               ?,
               ?
             )"#,
-            project_id,
-            val,
+                project_id,
+                val,
+            )
+            .execute(db)
+            .await?;
+        }
+        tx.commit().await?;
+
+        // "practices",
+        let tx = db.begin().await?;
+        sqlx::query!(
+            r#"delete from project_practices where project_id = ?"#,
+            project_id
         )
         .execute(db)
         .await?;
-    }
-    tx.commit().await?;
-
-    // "practices",
-    let tx = db.begin().await?;
-    sqlx::query!(
-        r#"delete from project_practices where project_id = ?"#,
-        project_id
-    )
-    .execute(db)
-    .await?;
-    for val in all.practices.iter() {
-        sqlx::query!(
-            r#"insert into project_practices (
+        for val in self.practices.iter() {
+            sqlx::query!(
+                r#"insert into project_practices (
               "project_id",
               "practice"
             )
@@ -789,25 +772,25 @@ async fn save_local(all: &ProjectAll) -> Result<(), Error> {
               ?,
               ?
             )"#,
-            project_id,
-            val,
+                project_id,
+                val,
+            )
+            .execute(db)
+            .await?;
+        }
+        tx.commit().await?;
+
+        // "audience",
+        let tx = db.begin().await?;
+        sqlx::query!(
+            r#"delete from project_audiences where project_id = ?"#,
+            project_id
         )
         .execute(db)
         .await?;
-    }
-    tx.commit().await?;
-
-    // "audience",
-    let tx = db.begin().await?;
-    sqlx::query!(
-        r#"delete from project_audiences where project_id = ?"#,
-        project_id
-    )
-    .execute(db)
-    .await?;
-    for val in all.audience.iter() {
-        sqlx::query!(
-            r#"insert into project_audiences (
+        for val in self.audience.iter() {
+            sqlx::query!(
+                r#"insert into project_audiences (
               "project_id",
               "audience"
             )
@@ -815,26 +798,26 @@ async fn save_local(all: &ProjectAll) -> Result<(), Error> {
               ?,
               ?
             )"#,
-            project_id,
-            val,
+                project_id,
+                val,
+            )
+            .execute(db)
+            .await?;
+        }
+        tx.commit().await?;
+
+        // "associated_projects",
+        let tx = db.begin().await?;
+        sqlx::query!(
+            r#"delete from project_associated_projects where project_id = ?"#,
+            project_id
         )
         .execute(db)
         .await?;
-    }
-    tx.commit().await?;
-
-    // "associated_projects",
-    let tx = db.begin().await?;
-    sqlx::query!(
-        r#"delete from project_associated_projects where project_id = ?"#,
-        project_id
-    )
-    .execute(db)
-    .await?;
-    for assoc_id in all.associated_projects.iter() {
-        let assoc_id = assoc_id.to_string();
-        sqlx::query!(
-            r#"insert into project_associated_projects (
+        for assoc_id in self.associated_projects.iter() {
+            let assoc_id = assoc_id.to_string();
+            sqlx::query!(
+                r#"insert into project_associated_projects (
               "project_id",
               "associated_project_id"
             )
@@ -842,25 +825,25 @@ async fn save_local(all: &ProjectAll) -> Result<(), Error> {
               ?,
               ?
             )"#,
-            project_id,
-            assoc_id,
+                project_id,
+                assoc_id,
+            )
+            .execute(db)
+            .await?;
+        }
+        tx.commit().await?;
+
+        // "geographic_scope",
+        let tx = db.begin().await?;
+        sqlx::query!(
+            r#"delete from project_geographic_scopes where project_id = ?"#,
+            project_id
         )
         .execute(db)
         .await?;
-    }
-    tx.commit().await?;
-
-    // "geographic_scope",
-    let tx = db.begin().await?;
-    sqlx::query!(
-        r#"delete from project_geographic_scopes where project_id = ?"#,
-        project_id
-    )
-    .execute(db)
-    .await?;
-    for val in all.geographic_scope.iter() {
-        sqlx::query!(
-            r#"insert into project_geographic_scopes (
+        for val in self.geographic_scope.iter() {
+            sqlx::query!(
+                r#"insert into project_geographic_scopes (
               "project_id",
               "geographic_scope"
             )
@@ -868,25 +851,25 @@ async fn save_local(all: &ProjectAll) -> Result<(), Error> {
               ?,
               ?
             )"#,
-            project_id,
-            val,
+                project_id,
+                val,
+            )
+            .execute(db)
+            .await?;
+        }
+        tx.commit().await?;
+
+        // "participation_tasks",
+        let tx = db.begin().await?;
+        sqlx::query!(
+            r#"delete from project_participation_tasks where project_id = ?"#,
+            project_id
         )
         .execute(db)
         .await?;
-    }
-    tx.commit().await?;
-
-    // "participation_tasks",
-    let tx = db.begin().await?;
-    sqlx::query!(
-        r#"delete from project_participation_tasks where project_id = ?"#,
-        project_id
-    )
-    .execute(db)
-    .await?;
-    for val in all.participation_tasks.iter() {
-        sqlx::query!(
-            r#"insert into project_participation_tasks (
+        for val in self.participation_tasks.iter() {
+            sqlx::query!(
+                r#"insert into project_participation_tasks (
               "project_id",
               "participation_task"
             )
@@ -894,25 +877,25 @@ async fn save_local(all: &ProjectAll) -> Result<(), Error> {
               ?,
               ?
             )"#,
-            project_id,
-            val,
+                project_id,
+                val,
+            )
+            .execute(db)
+            .await?;
+        }
+        tx.commit().await?;
+
+        // "activities",
+        let tx = db.begin().await?;
+        sqlx::query!(
+            r#"delete from project_activities where project_id = ?"#,
+            project_id
         )
         .execute(db)
         .await?;
-    }
-    tx.commit().await?;
-
-    // "activities",
-    let tx = db.begin().await?;
-    sqlx::query!(
-        r#"delete from project_activities where project_id = ?"#,
-        project_id
-    )
-    .execute(db)
-    .await?;
-    for val in all.activities.iter() {
-        sqlx::query!(
-            r#"insert into project_activities (
+        for val in self.activities.iter() {
+            sqlx::query!(
+                r#"insert into project_activities (
               "project_id",
               "activity"
             )
@@ -920,25 +903,25 @@ async fn save_local(all: &ProjectAll) -> Result<(), Error> {
               ?,
               ?
             )"#,
-            project_id,
-            val,
+                project_id,
+                val,
+            )
+            .execute(db)
+            .await?;
+        }
+        tx.commit().await?;
+
+        // "data_aggregation",
+        let tx = db.begin().await?;
+        sqlx::query!(
+            r#"delete from project_data_aggregations where project_id = ?"#,
+            project_id
         )
         .execute(db)
         .await?;
-    }
-    tx.commit().await?;
-
-    // "data_aggregation",
-    let tx = db.begin().await?;
-    sqlx::query!(
-        r#"delete from project_data_aggregations where project_id = ?"#,
-        project_id
-    )
-    .execute(db)
-    .await?;
-    for val in all.data_aggregation.iter() {
-        sqlx::query!(
-            r#"insert into project_data_aggregations (
+        for val in self.data_aggregation.iter() {
+            sqlx::query!(
+                r#"insert into project_data_aggregations (
               "project_id",
               "data_aggregation"
             )
@@ -946,25 +929,25 @@ async fn save_local(all: &ProjectAll) -> Result<(), Error> {
               ?,
               ?
             )"#,
-            project_id,
-            val,
+                project_id,
+                val,
+            )
+            .execute(db)
+            .await?;
+        }
+        tx.commit().await?;
+
+        // "data_consent",
+        let tx = db.begin().await?;
+        sqlx::query!(
+            r#"delete from project_data_consents where project_id = ?"#,
+            project_id
         )
         .execute(db)
         .await?;
-    }
-    tx.commit().await?;
-
-    // "data_consent",
-    let tx = db.begin().await?;
-    sqlx::query!(
-        r#"delete from project_data_consents where project_id = ?"#,
-        project_id
-    )
-    .execute(db)
-    .await?;
-    for val in all.data_consent.iter() {
-        sqlx::query!(
-            r#"insert into project_data_consents (
+        for val in self.data_consent.iter() {
+            sqlx::query!(
+                r#"insert into project_data_consents (
               "project_id",
               "data_consent"
             )
@@ -972,25 +955,25 @@ async fn save_local(all: &ProjectAll) -> Result<(), Error> {
               ?,
               ?
             )"#,
-            project_id,
-            val,
+                project_id,
+                val,
+            )
+            .execute(db)
+            .await?;
+        }
+        tx.commit().await?;
+
+        // "data_access",
+        let tx = db.begin().await?;
+        sqlx::query!(
+            r#"delete from project_data_consents where project_id = ?"#,
+            project_id
         )
         .execute(db)
         .await?;
-    }
-    tx.commit().await?;
-
-    // "data_access",
-    let tx = db.begin().await?;
-    sqlx::query!(
-        r#"delete from project_data_consents where project_id = ?"#,
-        project_id
-    )
-    .execute(db)
-    .await?;
-    for val in all.data_consent.iter() {
-        sqlx::query!(
-            r#"insert into project_data_consents (
+        for val in self.data_consent.iter() {
+            sqlx::query!(
+                r#"insert into project_data_consents (
               "project_id",
               "data_consent"
             )
@@ -998,25 +981,25 @@ async fn save_local(all: &ProjectAll) -> Result<(), Error> {
               ?,
               ?
             )"#,
-            project_id,
-            val,
+                project_id,
+                val,
+            )
+            .execute(db)
+            .await?;
+        }
+        tx.commit().await?;
+
+        // "intended_outcomes",
+        let tx = db.begin().await?;
+        sqlx::query!(
+            r#"delete from project_intended_outcomes where project_id = ?"#,
+            project_id
         )
         .execute(db)
         .await?;
-    }
-    tx.commit().await?;
-
-    // "intended_outcomes",
-    let tx = db.begin().await?;
-    sqlx::query!(
-        r#"delete from project_intended_outcomes where project_id = ?"#,
-        project_id
-    )
-    .execute(db)
-    .await?;
-    for val in all.intended_outcomes.iter() {
-        sqlx::query!(
-            r#"insert into project_intended_outcomes (
+        for val in self.intended_outcomes.iter() {
+            sqlx::query!(
+                r#"insert into project_intended_outcomes (
               "project_id",
               "intended_outcome"
             )
@@ -1024,25 +1007,25 @@ async fn save_local(all: &ProjectAll) -> Result<(), Error> {
               ?,
               ?
             )"#,
-            project_id,
-            val,
+                project_id,
+                val,
+            )
+            .execute(db)
+            .await?;
+        }
+        tx.commit().await?;
+
+        // "sponsors",
+        let tx = db.begin().await?;
+        sqlx::query!(
+            r#"delete from project_sponsors where project_id = ?"#,
+            project_id
         )
         .execute(db)
         .await?;
-    }
-    tx.commit().await?;
-
-    // "sponsors",
-    let tx = db.begin().await?;
-    sqlx::query!(
-        r#"delete from project_sponsors where project_id = ?"#,
-        project_id
-    )
-    .execute(db)
-    .await?;
-    for val in all.sponsors.iter() {
-        sqlx::query!(
-            r#"insert into project_sponsors (
+        for val in self.sponsors.iter() {
+            sqlx::query!(
+                r#"insert into project_sponsors (
               "project_id",
               "sponsor"
             )
@@ -1050,25 +1033,25 @@ async fn save_local(all: &ProjectAll) -> Result<(), Error> {
               ?,
               ?
             )"#,
-            project_id,
-            val,
+                project_id,
+                val,
+            )
+            .execute(db)
+            .await?;
+        }
+        tx.commit().await?;
+
+        // "stakeholders",
+        let tx = db.begin().await?;
+        sqlx::query!(
+            r#"delete from project_stakeholders where project_id = ?"#,
+            project_id
         )
         .execute(db)
         .await?;
-    }
-    tx.commit().await?;
-
-    // "stakeholders",
-    let tx = db.begin().await?;
-    sqlx::query!(
-        r#"delete from project_stakeholders where project_id = ?"#,
-        project_id
-    )
-    .execute(db)
-    .await?;
-    for val in all.stakeholders.iter() {
-        sqlx::query!(
-            r#"insert into project_stakeholders (
+        for val in self.stakeholders.iter() {
+            sqlx::query!(
+                r#"insert into project_stakeholders (
               "project_id",
               "stakeholder"
             )
@@ -1076,37 +1059,21 @@ async fn save_local(all: &ProjectAll) -> Result<(), Error> {
               ?,
               ?
             )"#,
-            project_id,
-            val,
-        )
-        .execute(db)
-        .await?;
-    }
-    tx.commit().await?;
-
-    Ok(())
-}
-
-pub(super) async fn project_all_save(msg: Message) -> Result<(), Error> {
-    if let Some(headers) = msg.headers {
-        if headers
-            .get("Source")
-            .is_some_and(|v| v.as_str() != SERVER_ID_STR.as_str())
-        {
-            let project: ProjectAll = match flexbuffers::from_slice(&msg.payload) {
-                Ok(proj) => proj,
-                Err(err) => {
-                    eprintln!(
-                        "Unable to decode message payload to project record in project_all_save: {}",
-                        err
-                    );
-                    return Ok(());
-                }
-            };
-
-            save_local(&project).await?;
+                project_id,
+                val,
+            )
+            .execute(db)
+            .await?;
         }
+
+        tx.commit().await?;
+
+        Ok(())
     }
 
-    Ok(())
+    async fn read_from_database(_key: &Self::DatabaseKey) -> Result<Self, Error> {
+        unimplemented!(
+            "Loading ProjectAll from the database has been deferred until a need is demonstrated"
+        )
+    }
 }

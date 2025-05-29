@@ -2,36 +2,36 @@ pub mod channel;
 pub mod contact;
 pub mod entity;
 pub mod middleware;
+pub mod peering;
 pub mod project;
 pub mod session;
+pub mod ui;
 pub mod upload;
-
-use std::sync::LazyLock;
 
 use anyhow::Error;
 use common::{message::location::LocationInfo, shared::db};
+use entity::Entity;
 use middleware::authorization::{NotAuthorized, SessionSubject};
+use peering::LoadStorePeered;
 use poem::{
-    EndpointExt, IntoResponse, Response, Route, Server,
+    Endpoint, EndpointExt, IntoResponse, Response, Route, Server,
     endpoint::{EmbeddedFileEndpoint, EmbeddedFilesEndpoint},
     get, handler,
     http::HeaderMap,
     listener::TcpListener,
+    middleware::{Csrf, NormalizePath, TrailingSlash},
     session::{CookieConfig, ServerSession, Session},
-    web::{Html, RealIp, Redirect, cookie::SameSite},
+    web::{Html, Path, RealIp, Redirect, cookie::SameSite},
 };
+use project::{all::ProjectAll, field::ProjectField};
 use rust_embed::Embed;
 use session::UserServiceSessionStorage;
-use ulid::Ulid;
 
 #[cfg(debug_assertions)]
 pub const SESSION_COOKIE: &'static str = "session-id";
 
 #[cfg(not(debug_assertions))]
 pub const SESSION_COOKIE: &'static str = "__Host-session-id";
-
-pub static SERVER_ID: LazyLock<Ulid> = LazyLock::new(Ulid::new);
-pub static SERVER_ID_STR: LazyLock<String> = LazyLock::new(|| SERVER_ID.to_string());
 
 #[cfg(debug_assertions)]
 #[derive(Embed)]
@@ -47,7 +47,7 @@ type StaticFiles = EmbeddedFilesEndpoint<Static>;
 type StaticFile = EmbeddedFileEndpoint<Static>;
 
 #[handler]
-async fn index(
+async fn index_page(
     _session: &Session,
     headers: &HeaderMap,
     subject: SessionSubject,
@@ -56,7 +56,6 @@ async fn index(
     tokio::spawn(async move {
         for counter in 0..32 {
             tokio::time::sleep(std::time::Duration::from_secs(10)).await;
-            println!("send");
             channel::send(
                 subject.as_ref(),
                 "moocow",
@@ -111,10 +110,15 @@ async fn index(
     )))
 }
 
+#[handler]
+async fn entity_page(Path(slug): Path<String>) -> poem::Result<poem::Response> {
+    Entity::lookup_response(slug).await
+}
+
 async fn not_found(_err: poem::Error) -> Response {
     Response::builder()
         .content_type("text/html")
-        .body("Not found") // Render 'not found' error page template
+        .body("Not Found") // Render 'not found' error page template
 }
 
 async fn not_authorized(err: poem::Error) -> Response {
@@ -131,7 +135,7 @@ async fn not_authorized(err: poem::Error) -> Response {
 async fn forbidden(_err: poem::Error) -> Response {
     Response::builder()
         .content_type("text/html")
-        .body("Not allowed") // Render 'forbidden' error page template
+        .body("Not Allowed") // Render 'forbidden' error page template
 }
 
 async fn internal_server_error(err: poem::Error) -> Response {
@@ -147,25 +151,21 @@ async fn error_dispatch(err: poem::Error) -> Response {
         poem::http::StatusCode::NOT_FOUND => not_found(err).await,
         poem::http::StatusCode::UNAUTHORIZED => not_authorized(err).await,
         poem::http::StatusCode::FORBIDDEN => forbidden(err).await,
-        _ => internal_server_error(err).await,
+        poem::http::StatusCode::INTERNAL_SERVER_ERROR => internal_server_error(err).await,
+        _ => err.into_response(),
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Error> {
-    common::shared::init("frontend").await;
-
-    sqlx::migrate!("./migrations").run(db()).await?;
-
+fn user_facing() -> impl Endpoint {
     let session_storage = UserServiceSessionStorage;
 
-    let routes = Route::new()
-        .nest("/-static", StaticFiles::new())
+    Route::new()
+        .at("/:slug", get(entity_page))
+        .at("/", get(index_page))
+        .at("/index.html", get(index_page))
         .nest("/-upload", upload::routes())
         .nest("/-channel", channel::routes())
-        .at("/favicon.ico", StaticFile::new("favicon.ico"))
-        .at("/", get(index))
-        .at("/index.html", get(index))
+        .nest("/-ui", ui::routes())
         .with(middleware::analytics::AnalyticsMiddleware)
         .with(middleware::authorization::AuthMiddleware)
         .with(ServerSession::new(
@@ -178,9 +178,24 @@ async fn main() -> Result<(), Error> {
                 .max_age(std::time::Duration::from_secs(60 * 60 * 24 * 365)),
             session_storage,
         ))
+        .with(Csrf::new())
+        .with(NormalizePath::new(TrailingSlash::Trim))
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Error> {
+    common::shared::init("frontend").await;
+
+    sqlx::migrate!("./migrations").run(db()).await?;
+
+    let routes = Route::new()
+        .nest_no_strip("/", user_facing())
+        .nest("/-static", StaticFiles::new())
+        .at("/favicon.ico", StaticFile::new("favicon.ico"))
         .catch_all_error(error_dispatch);
 
-    let _updates = tokio::spawn(project::receive_project_updates());
+    let _project_all_updates = tokio::spawn(ProjectAll::peering_task());
+    let _project_field_updates = tokio::spawn(ProjectField::peering_task());
 
     let _synchronize = tokio::spawn(sync::synchronize());
 
@@ -203,6 +218,7 @@ mod sync {
 
     use crate::{
         contact::{Contact, ContactRole},
+        peering::LoadStorePeered,
         project::{
             ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus, all::ProjectAll,
         },
@@ -767,7 +783,7 @@ mod sync {
                 proj.circuit_id = data.circuit_id;
                 proj.sustainable_development_goals = data.sustainable_development_goals;
 
-                proj.save().await?;
+                proj.store().await?;
 
                 if updated > bookmark {
                     bookmark = updated.clone();

@@ -1,7 +1,3 @@
-use anyhow::Error;
-use common::shared::nats;
-use futures::StreamExt;
-
 pub mod all;
 pub mod field;
 
@@ -37,21 +33,4 @@ pub enum ProjectParticipationDegree {
     Collaborative,
     Contributory,
     Contractual,
-}
-
-/// Launch as a separate task to receive and process project updates over NATS
-pub async fn receive_project_updates() -> Result<(), Error> {
-    let client = nats();
-
-    let mut updates = client.subscribe("frontend.project.>").await?;
-
-    while let Some(msg) = updates.next().await {
-        match msg.subject.as_str() {
-            "frontend.project.save.all" => all::project_all_save(msg).await?,
-            "frontend.project.save.field" => field::project_field_save(msg).await?,
-            subj => eprintln!("Unrecognized frontend.project.> subject {}", subj),
-        }
-    }
-
-    Ok(())
 }
