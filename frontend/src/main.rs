@@ -19,7 +19,7 @@ use poem::{
     get, handler,
     http::HeaderMap,
     listener::TcpListener,
-    middleware::{Csrf, NormalizePath, TrailingSlash},
+    middleware::{Csrf, NormalizePath, SetHeader, TrailingSlash},
     session::{CookieConfig, ServerSession, Session},
     web::{Html, Path, RealIp, Redirect, cookie::SameSite},
 };
@@ -156,14 +156,13 @@ async fn error_dispatch(err: poem::Error) -> Response {
     }
 }
 
-fn user_facing() -> impl Endpoint {
+fn dynamic() -> impl Endpoint {
     let session_storage = UserServiceSessionStorage;
 
     Route::new()
         .at("/:slug", get(entity_page))
         .at("/", get(index_page))
         .at("/index.html", get(index_page))
-        .nest("/-upload", upload::routes())
         .nest("/-channel", channel::routes())
         .nest("/-ui", ui::routes())
         .with(middleware::analytics::AnalyticsMiddleware)
@@ -179,7 +178,9 @@ fn user_facing() -> impl Endpoint {
             session_storage,
         ))
         .with(Csrf::new())
+        .with(SetHeader::new().overriding("Cache-Control", "no-store"))
         .with(NormalizePath::new(TrailingSlash::Trim))
+        .catch_all_error(error_dispatch)
 }
 
 #[tokio::main]
@@ -189,10 +190,10 @@ async fn main() -> Result<(), Error> {
     sqlx::migrate!("./migrations").run(db()).await?;
 
     let routes = Route::new()
-        .nest_no_strip("/", user_facing())
+        .nest_no_strip("/", dynamic())
+        .nest("/-upload", upload::routes())
         .nest("/-static", StaticFiles::new())
-        .at("/favicon.ico", StaticFile::new("favicon.ico"))
-        .catch_all_error(error_dispatch);
+        .at("/favicon.ico", StaticFile::new("favicon.ico"));
 
     let _project_all_updates = tokio::spawn(ProjectAll::peering_task());
     let _project_field_updates = tokio::spawn(ProjectField::peering_task());
