@@ -39,6 +39,10 @@ pub trait LoadStorePeered: serde::Serialize + for<'d> serde::Deserialize<'d> {
     }
 
     /// Send a custom signal for this type.
+    ///
+    /// Signal names should consist of alphanumeric characters,
+    /// dashes, and underscores only. Particularly, do not use period
+    /// (.) characters.
     async fn transmit(signal: impl AsRef<str>, msg: impl serde::Serialize) -> Result<(), Error> {
         send_with_headers(
             peering_subject_signal::<Self>(signal),
@@ -99,7 +103,9 @@ pub trait LoadStorePeered: serde::Serialize + for<'d> serde::Deserialize<'d> {
                             Ok(val) => val,
                             Err(err) => {
                                 eprintln!(
-                                    "Unable to decode message payload to record in peering_task: {}",
+                                    "({}:{}) Unable to decode message payload to record in peering_task: {}",
+                                    Self::GROUP,
+                                    Self::SPECIFIC,
                                     err
                                 );
                                 return Ok(());
@@ -107,7 +113,12 @@ pub trait LoadStorePeered: serde::Serialize + for<'d> serde::Deserialize<'d> {
                         };
 
                         if let Err(err) = value.save_to_database().await {
-                            eprintln!("Error in save_to_database(): {}", err);
+                            eprintln!(
+                                "({}:{}) Error in save_to_database(): {}",
+                                Self::GROUP,
+                                Self::SPECIFIC,
+                                err
+                            );
                         }
                     } else if msg_subject == load_subject {
                         unimplemented!("Peer loading")
@@ -121,16 +132,25 @@ pub trait LoadStorePeered: serde::Serialize + for<'d> serde::Deserialize<'d> {
                                 };
 
                             if let Err(err) = Self::receive(signal, specific, msg).await {
-                                eprintln!("Error during message processing: {}", err);
+                                eprintln!(
+                                    "({}:{}) Error during message processing: {}",
+                                    Self::GROUP,
+                                    Self::SPECIFIC,
+                                    err
+                                );
                             }
-                        } else {
-                            eprintln!("Badly formed subject: {}", msg.subject.as_str());
                         }
+                        // else, silently ignore the message, it's not a custom signal
                     }
                 }
                 // else, silently discard the message since it was sent from the same server
             } else {
-                eprintln!("Message has no headers: {}", msg.subject.as_str());
+                eprintln!(
+                    "({}:{}) Message has no headers: {}",
+                    Self::GROUP,
+                    Self::SPECIFIC,
+                    msg.subject.as_str()
+                );
             }
         }
 
@@ -160,10 +180,6 @@ fn peering_subject_load<T: LoadStorePeered>() -> String {
 }
 
 /// Returns the NATS subject used for listening for peering messages
-///
-/// The default listens for messages addressed to
-/// *"frontend._GROUP_.>"*,  which is to say, all messages addressed
-/// to Self.
 fn peering_subject_listen<T: LoadStorePeered>() -> String {
     format!("frontend.{}.>", T::GROUP)
 }
