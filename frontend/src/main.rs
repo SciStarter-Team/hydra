@@ -112,7 +112,7 @@ async fn index_page(
 
 #[handler]
 async fn entity_page(Path(slug): Path<String>) -> poem::Result<poem::Response> {
-    Entity::lookup_response(slug).await
+    Entity::response_for_slug(slug).await
 }
 
 async fn not_found(_err: poem::Error) -> Response {
@@ -212,13 +212,14 @@ async fn main() -> Result<(), Error> {
 mod sync {
     use std::time::Duration;
 
-    use common::misc;
+    use common::{insensitivestring::InsensitiveString, misc};
     use jiff::Timestamp;
     use tokio::time::sleep;
     use ulid::Ulid;
 
     use crate::{
         contact::{Contact, ContactRole},
+        entity::{Entity, EntityKind},
         peering::LoadStorePeered,
         project::{
             ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus, all::ProjectAll,
@@ -328,22 +329,22 @@ mod sync {
         outcomes_label: String,
         outcomes_link: String,
         time_required: String,
-        training_materials: String,
-        classroom_materials: String,
-        consent_statement: String,
+        training_materials: Option<String>,
+        classroom_materials: Option<String>,
+        consent_statement: Option<String>,
         consent_statement_date: Option<Timestamp>,
-        participation_tools: bool,    // deprecated, maybe don't implement
-        participation_prompt: String, // deprecated, maybe don't implement
-        participation_confirmation_message: String, // deprecated, maybe don't implement
-        participation_notification_email: String, // deprecated, maybe don't implement
-        participation_usage: String,  // deprecated, maybe don't implement
+        participation_tools: Option<bool>, // deprecated, maybe don't implement
+        participation_prompt: Option<String>, // deprecated, maybe don't implement
+        participation_confirmation_message: Option<String>, // deprecated, maybe don't implement
+        participation_notification_email: Option<String>, // deprecated, maybe don't implement
+        participation_usage: Option<String>, // deprecated, maybe don't implement
         // section Relations
-        part_of: String,
-        associated_projects: String, // multiple, joined by ,
-        associated_tools: String,    // multiple, joined by , but also deprecated
+        part_of: Option<String>,
+        associated_projects: Option<String>, // multiple, joined by ,
+        associated_tools: Option<String>,    // multiple, joined by , but also deprecated
         // section Participants Need
         total_expense: Option<f32>,
-        materials: String,
+        materials: Option<String>,
         gear: String,
         mobile_app_url_android: String,
         mobile_app_url_ios: String,
@@ -414,33 +415,48 @@ mod sync {
             }
         }
 
+        impl EmptyAsNone for InsensitiveString {
+            fn empty_as_none(self) -> Option<Self> {
+                if self.is_empty() { None } else { Some(self) }
+            }
+        }
+
         loop {
-            let last = misc::get("project-sync-bookmark")
+            let last_update = misc::get("project-sync-bookmark-update")
                 .await
                 .expect("Retrieving sync bookmark failed")
-                .unwrap_or_else(|| String::from("2000-01-01 00:00:00+00"));
+                .unwrap_or_else(|| String::from("2000-01-01T00:00:00.0Z"));
+
+            let last_id = misc::get("project-sync-bookmark-id")
+                .await
+                .expect("Retrieving sync bookmark failed.")
+                .unwrap_or(0);
 
             let client = reqwest::Client::new();
+
+            println!("Retrieving projects since {} {}...", &last_update, last_id);
 
             let projects: Vec<ProjectData> = client
                 .get("https://scistarter.org/staff/sync/projects")
                 .bearer_auth(env!("SYNC_TOKEN"))
-                .query(&[("since", &last)])
+                .query(&[("since", &last_update), ("last_id", &last_id.to_string())])
                 .send()
                 .await
-                .expect("Retrieving session data failed")
+                .expect("Retrieving project data failed")
                 .error_for_status()
-                .expect("Retrieving session data produced an error")
+                .expect("Retrieving project data produced an error")
                 .json()
                 .await
-                .expect("JSON decoding of session data failed");
+                .expect("JSON decoding of project data failed");
 
-            let mut bookmark = last.clone();
+            let mut bookmark = (last_update.clone(), last_id);
 
             let got_projects = projects.len();
+            println!("Synchronization received {} projects", got_projects);
 
             for data in projects {
-                let updated = data.updated.to_string();
+                let updated = data.updated.to_string(); //.strftime("%Y-%m-%d %H:%M:%S+00").to_string();
+                let legacy_id = data.legacy_v2_project_id;
 
                 let mut proj = ProjectAll::default();
 
@@ -467,7 +483,10 @@ mod sync {
                     "Complete" => ProjectStatus::Complete,
                     "Hidden" => ProjectStatus::Hidden,
                     s => {
-                        eprintln!("Unknown project status `{}`, settingto Hidden", s);
+                        eprintln!(
+                            "Unknown project status `{}` in {}, setting to Hidden",
+                            s, &data.name,
+                        );
                         ProjectStatus::Hidden
                     }
                 };
@@ -479,8 +498,8 @@ mod sync {
                     }
                     s => {
                         eprintln!(
-                            "Unknown project protion time `{}`, settingto PromoteAtAnyTime ",
-                            s
+                            "Unknown project protion time `{}` in {}, setting to PromoteAtAnyTime ",
+                            s, &data.name,
                         );
                         ProjectPromotionTime::PromoteAtAnyTime
                     }
@@ -521,9 +540,10 @@ mod sync {
                 proj.tags = data
                     .tags
                     .split("||")
-                    .filter_map(|s| s.trim_matches('|').trim().to_string().empty_as_none())
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice();
+                    .filter_map(|s| {
+                        InsensitiveString::from(s.trim_matches('|').trim()).empty_as_none()
+                    })
+                    .collect();
                 proj.participation_degree = match data.participation_degree.as_str() {
                     "Collegial" => ProjectParticipationDegree::Collegial,
                     "Co-Created" => ProjectParticipationDegree::CoCreated,
@@ -531,7 +551,10 @@ mod sync {
                     "Contributory" => ProjectParticipationDegree::Contributory,
                     "Contractual" => ProjectParticipationDegree::Contractual,
                     s => {
-                        eprintln!("Unknown participation degree `{s}`, defaulting to Collegial");
+                        eprintln!(
+                            "Unknown participation degree `{}` in {}, defaulting to Collegial",
+                            s, &proj.name
+                        );
                         ProjectParticipationDegree::Collegial
                     }
                 };
@@ -669,24 +692,29 @@ mod sync {
                 proj.outcomes_label = data.outcomes_label;
                 proj.outcomes_link = data.outcomes_link;
                 proj.time_required = data.time_required;
-                proj.training_materials = data.training_materials;
-                proj.classroom_materials = data.classroom_materials;
-                proj.consent_statement = data.consent_statement;
+                proj.training_materials = data.training_materials.unwrap_or_default();
+                proj.classroom_materials = data.classroom_materials.unwrap_or_default();
+                proj.consent_statement = data.consent_statement.unwrap_or_default();
                 proj.consent_statement_date = data.consent_statement_date.map(|ts| ts.into());
-                proj.participation_tools = data.participation_tools;
-                proj.participation_prompt = data.participation_prompt;
-                proj.participation_confirmation_message = data.participation_confirmation_message;
-                proj.participation_notification_email = data.participation_notification_email;
-                proj.participation_usage = data.participation_usage;
-                proj.part_of = data.part_of.parse().ok();
+                proj.participation_tools = data.participation_tools.unwrap_or_default();
+                proj.participation_prompt = data.participation_prompt.unwrap_or_default();
+                proj.participation_confirmation_message =
+                    data.participation_confirmation_message.unwrap_or_default();
+                proj.participation_notification_email =
+                    data.participation_notification_email.unwrap_or_default();
+                proj.participation_usage = data.participation_usage.unwrap_or_default();
+                proj.part_of = data.part_of.and_then(|s| s.parse().ok());
                 proj.associated_projects = data
                     .associated_projects
-                    .split(',')
-                    .filter_map(|s| s.parse().ok())
-                    .collect::<Vec<_>>()
+                    .map(|s| {
+                        s.split(',')
+                            .filter_map(|s| s.parse().ok())
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default()
                     .into_boxed_slice();
                 proj.total_expense = data.total_expense;
-                proj.materials = data.materials;
+                proj.materials = data.materials.unwrap_or_default();
                 proj.gear = data.gear;
                 proj.mobile_app_url_android = data.mobile_app_url_android;
                 proj.mobile_app_url_ios = data.mobile_app_url_ios;
@@ -784,19 +812,38 @@ mod sync {
                 proj.circuit_id = data.circuit_id;
                 proj.sustainable_development_goals = data.sustainable_development_goals;
 
-                proj.store().await?;
+                if let Err(err) = proj.store().await {
+                    eprintln!("Error saving {}: {}", &proj.name, err);
+                    continue;
+                }
 
-                if updated > bookmark {
-                    bookmark = updated.clone();
+                let entity = Entity::new(data.slug, EntityKind::Project, proj.project_id);
+
+                if let Err(err) = entity.store().await {
+                    eprintln!(
+                        "Error creating entity for {} ({}): {}",
+                        &proj.name,
+                        &entity.slug(),
+                        err
+                    );
+                    continue;
+                }
+
+                let new_bookmark = (updated, legacy_id);
+                if new_bookmark > bookmark {
+                    bookmark = new_bookmark;
                 }
             }
 
-            todo!("Enable project sync bookmarking");
-            // misc::set("project-sync-bookmark", bookmark)
-            //     .await
-            //     .expect("Saving sync bookmark failed");
+            misc::set("project-sync-bookmark-update", bookmark.0)
+                .await
+                .expect("Saving sync bookmark failed");
 
-            if got_projects == 500 {
+            misc::set("project-sync-bookmark-id", bookmark.1)
+                .await
+                .expect("Saving sync bookmark failed");
+
+            if got_projects == 50 {
                 sleep(Duration::from_secs(60)).await;
             } else {
                 sleep(Duration::from_secs(60 * 60)).await;

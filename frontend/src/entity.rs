@@ -1,12 +1,11 @@
 use anyhow::Error;
-use common::shared::{db, nats};
-use futures::StreamExt;
+use common::shared::db;
 use poem::{IntoResponse, web::Html};
 use ulid::Ulid;
 
 use crate::peering::LoadStorePeered;
 
-#[derive(sqlx::Type, serde::Serialize, serde::Deserialize)]
+#[derive(Copy, Clone, sqlx::Type, serde::Serialize, serde::Deserialize)]
 pub enum EntityKind {
     Redirect,
     RawHTML,
@@ -15,6 +14,8 @@ pub enum EntityKind {
     Form,
     Project,
     Event,
+    Tool,
+    Placeholder,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -43,29 +44,98 @@ impl TryFrom<EntityDB> for Entity {
 }
 
 impl Entity {
-    pub async fn lookup(slug: impl AsRef<str>) -> Result<Entity, Error> {
-        Ok(Entity {
-            slug: slug.as_ref().to_string(),
-            kind: EntityKind::RawHTML,
-            target: Ulid::nil(),
-        })
+    pub fn new(slug: impl Into<String>, kind: EntityKind, target: Ulid) -> Entity {
+        Entity {
+            slug: slug.into(),
+            kind,
+            target,
+        }
     }
 
-    pub async fn build_response(&self) -> poem::Result<poem::Response> {
+    pub async fn new_by_name(
+        name: impl AsRef<str>,
+        kind: EntityKind,
+        target: Ulid,
+    ) -> Result<Entity, Error> {
+        let name = name.as_ref();
+
+        let base_slug = name
+            .chars()
+            .fold(String::with_capacity(name.len()), |mut s, c| {
+                if c.is_ascii_alphanumeric() {
+                    s.push(c.to_ascii_lowercase());
+                    s
+                } else if !s.ends_with('-') {
+                    s.push('-');
+                    s
+                } else {
+                    s
+                }
+            });
+
+        let mut slug = base_slug.clone();
+        let mut counter = 0u32;
+
+        // Putting this in a transaction and storing a placeholder
+        // makes collisions less likely, but it does not make them
+        // impossible due to the distributed nature of the
+        // system. Fortunately, the system can tolerate occasinal
+        // collisions, especially since they're confined to entities
+        // with the same ASCII representation of their name and are
+        // probably the result of bouncy inputs.
+        let mut tx = db().begin().await?;
+
+        while sqlx::query_scalar!(
+            r#"select exists(select 1 from "entities" where "slug" = ?) as "conflict: bool""#,
+            slug
+        )
+        .fetch_one(&mut *tx)
+        .await?
+        {
+            counter += 1;
+            slug = format!("{}-{}", &base_slug, counter);
+        }
+
+        sqlx::query!(
+            r#"insert into "entities" ("slug", "kind", "target") values (?, ?, '00000000000000000000000000')"#,
+            slug,
+            EntityKind::Placeholder,
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(Entity::new(slug, kind, target))
+    }
+
+    pub async fn response(&self) -> poem::Result<poem::Response> {
         Ok(Html(format!("Viewing entity `{}`", &self.slug)).into_response())
     }
 
-    pub async fn lookup_response(slug: impl AsRef<str>) -> poem::Result<poem::Response> {
-        Entity::lookup(slug).await?.build_response().await
+    pub async fn response_for_slug(slug: impl AsRef<str>) -> poem::Result<poem::Response> {
+        // This as_ref().to_string() silliness is due to the issue
+        // mentioned in peering.rs forcing us to use String instead of
+        // &str as the key type.
+        Entity::load(slug.as_ref().to_string())
+            .await?
+            .response()
+            .await
+    }
+
+    pub fn slug(&self) -> &str {
+        &self.slug
     }
 }
 
 impl LoadStorePeered for Entity {
+    //type DatabaseKey<'k> = &'k str;
     type DatabaseKey = String;
 
     const GROUP: &str = "entity";
 
-    async fn read_from_database(slug: &Self::DatabaseKey) -> Result<Self, Error> {
+    //async fn read_from_database<'k>(slug: Self::DatabaseKey<'k>) -> Result<Self, Error> {
+    async fn read_from_database(slug: Self::DatabaseKey) -> Result<Self, Error> {
         Ok(sqlx::query_as!(
             EntityDB,
             r#"select

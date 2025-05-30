@@ -1,5 +1,7 @@
+use std::collections::HashSet;
+
 use anyhow::Error;
-use common::timestring::TimeString;
+use common::{insensitivestring::InsensitiveString, timestring::TimeString};
 use ulid::Ulid;
 
 use crate::{contact::Contact, peering::LoadStorePeered};
@@ -51,7 +53,7 @@ pub struct ProjectAll {
     // section Project
     pub draft: bool,
     pub name: String,
-    pub tags: Box<[String]>,
+    pub tags: HashSet<InsensitiveString>,
     pub participation_degree: ProjectParticipationDegree,
     pub participant_instructions: String,
     pub participant_instructions_email: String,
@@ -180,6 +182,7 @@ pub struct ProjectAll {
 }
 
 impl LoadStorePeered for ProjectAll {
+    //type DatabaseKey<'k> = Ulid;
     type DatabaseKey = Ulid;
 
     const GROUP: &str = "project";
@@ -613,6 +616,8 @@ impl LoadStorePeered for ProjectAll {
         .execute(db)
         .await?;
         for val in self.tags.iter() {
+            let val = val.as_ref();
+
             sqlx::query!(
                 r#"insert into project_tags (
               "project_id",
@@ -1071,7 +1076,8 @@ impl LoadStorePeered for ProjectAll {
         Ok(())
     }
 
-    async fn read_from_database(_key: &Self::DatabaseKey) -> Result<Self, Error> {
+    //async fn read_from_database<'k>(_key: Self::DatabaseKey<'k>) -> Result<Self, Error> {
+    async fn read_from_database(_key: Self::DatabaseKey) -> Result<Self, Error> {
         unimplemented!(
             "Loading ProjectAll from the database has been deferred until a need is demonstrated"
         )

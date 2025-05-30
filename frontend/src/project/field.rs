@@ -1,6 +1,7 @@
+use std::collections::HashSet;
+
 use anyhow::Error;
-use async_nats::Message;
-use common::{nats_headers, service::send_with_headers, timestring::TimeString};
+use common::{insensitivestring::InsensitiveString, timestring::TimeString};
 use ulid::Ulid;
 
 use crate::{contact::Contact, peering::LoadStorePeered};
@@ -177,7 +178,7 @@ pub enum ProjectField {
     ScistarterLastEdited(Option<TimeString>),
     Draft(bool),
     Name(String),
-    Tags(Box<[String]>),
+    Tags(HashSet<InsensitiveString>),
     ParticipationDegree(ProjectParticipationDegree),
     ParticipantInstructions(String),
     ParticipantInstructionsEmail(String),
@@ -282,6 +283,7 @@ pub enum ProjectField {
 }
 
 impl LoadStorePeered for ProjectField {
+    //type DatabaseKey<'k> = (Ulid, ProjectFieldType);
     type DatabaseKey = (Ulid, ProjectFieldType);
 
     const GROUP: &str = "project";
@@ -291,7 +293,8 @@ impl LoadStorePeered for ProjectField {
         todo!()
     }
 
-    async fn read_from_database(key: &Self::DatabaseKey) -> Result<Self, Error> {
+    //async fn read_from_database<'k>(key: Self::DatabaseKey<'k>) -> Result<Self, Error> {
+    async fn read_from_database(key: Self::DatabaseKey) -> Result<Self, Error> {
         todo!()
     }
 }

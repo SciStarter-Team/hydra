@@ -1,5 +1,6 @@
 .envrc
 remote.ron
+scripts
 /local
 /target
 /misc

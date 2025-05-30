@@ -13,7 +13,8 @@ pub static SERVER_ID_STR: LazyLock<String> = LazyLock::new(|| SERVER_ID.to_strin
 /// stored instances.
 #[allow(async_fn_in_trait)]
 pub trait LoadStorePeered: serde::Serialize + for<'d> serde::Deserialize<'d> {
-    type DatabaseKey;
+    //type DatabaseKey<'k>;
+    type DatabaseKey; // Should be DatabaseKey<'k> but as of Rust 1.87 that triggers https://github.com/rust-lang/rust/issues/100013
 
     const GROUP: &str;
     const SPECIFIC: &str = "";
@@ -22,7 +23,8 @@ pub trait LoadStorePeered: serde::Serialize + for<'d> serde::Deserialize<'d> {
     async fn save_to_database(&self) -> Result<(), Error>;
 
     /// Loads the Self with the given id from the local database, without any peer involvement.
-    async fn read_from_database(key: &Self::DatabaseKey) -> Result<Self, Error>;
+    //async fn read_from_database<'k>(key: Self::DatabaseKey<'k>) -> Result<Self, Error>;
+    async fn read_from_database(key: Self::DatabaseKey) -> Result<Self, Error>;
 
     /// Override the default implementation if you want to handle
     /// custom signals for this type.
@@ -57,7 +59,8 @@ pub trait LoadStorePeered: serde::Serialize + for<'d> serde::Deserialize<'d> {
     }
 
     /// Loads the Self with the given id
-    async fn load(key: &Self::DatabaseKey) -> Result<Self, Error> {
+    //async fn load<'k>(key: Self::DatabaseKey<'k>) -> Result<Self, Error> {
+    async fn load(key: Self::DatabaseKey) -> Result<Self, Error> {
         Self::read_from_database(key).await
     }
 
