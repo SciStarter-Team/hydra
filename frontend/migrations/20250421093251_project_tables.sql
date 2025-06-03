@@ -1,3 +1,5 @@
+select InitSpatialMetaDataFull() where not exists(select 1 from sqlite_master where type = 'table' and name = 'spatial_ref_sys');
+
 create table "entities" (
        "slug" text not null,
        "kind" text not null,
@@ -293,8 +295,6 @@ create table "projects" (
        "sustainable_development_goals" text not null default ''
 );
 
-select InitSpatialMetaDataFull() where not exists(select 1 from sqlite_master where type = 'table' and name = 'spatial_ref_sys');
-
 select AddGeometryColumn('projects', 'point', 4326, 'POINT', 'XY');
 select AddGeometryColumn('projects', 'regions', 4326, 'MULTIPOLYGON', 'XY');
 
@@ -304,3 +304,69 @@ select CreateSpatialIndex('projects', 'regions');
 create index "projects_by_project_id" on "projects" ("project_id");
 create index "projects_by_legacy_v1_project_id" on "projects" ("legacy_v1_project_id") where "legacy_v1_project_id" not null;
 create index "projects_by_legacy_v2_project_id" on "projects" ("legacy_v2_project_id") where "legacy_v2_project_id" not null;
+
+create table "event_contacts" (
+       "contact_id" text not null,
+       "event_id" text not null,
+       "role" text not null,
+       "name" text,
+       "affiliation" text,
+       "email" text not null,
+       "phone" text,
+       "address" text
+);
+
+create unique index "event_contacts_by_contact_id" on "event_contacts" ("contact_id");
+create index "event_contacts_by_event_id" on "event_contacts" ("event_id");
+create index "event_contacts_by_role" on "event_contacts" ("role");
+create index "event_contacts_by_email" on "event_contacts" (upper("email"));
+
+create table "event_instances" (
+       "event_id" text not null,
+       "begin" text not null,
+       "end" text not null
+);
+
+create index "event_instances_by_event_id" on "event_instances" ("event_id");
+create index "event_instances_by_begin" on "event_instances" ("begin");
+create index "event_instances_by_end" on "event_instances" ("end");
+
+create table "events" (
+       "event_id" text not null, -- Ulid
+       "flagged" boolean not null, -- bool
+       "redirect" text, -- Option<String>
+       "admin_notes" text not null, -- bool
+       "authoritative" boolean not null, -- bool
+       "welcomed" boolean not null, -- bool
+       "description" text not null, -- String,
+       "guid" text not null, -- String,
+       "origin" text not null, -- String,
+       "presenter" text not null, -- String,
+       "url" text not null, -- String,
+       "image" text not null, -- String,
+       "image_credit" text not null, -- String,
+       "how_to_join" text not null, -- String,
+       "part_of" text, -- Option<Ulid>,
+       "location_type" text not null, -- String,
+       "entirely_online" boolean not null, -- bool,
+       "location_name" text not null, -- String,
+       "location_description" text not null, -- String,
+       "address" text not null, -- String,
+       "city" text not null, -- String,
+       "zip" text not null, -- String,
+       "state" text not null, -- String,
+       "country" text not null, -- String,
+       "event_type" text not null, -- EventType,
+       "ticketing_begins" text not null, -- TimeString,
+       "outcomes_label" text not null, -- String,
+       "outcomes_link" text not null, -- String,
+       "circuit_id" text not null -- String
+);
+
+select AddGeometryColumn('events', 'point', 4326, 'POINT', 'XY');
+select AddGeometryColumn('events', 'regions', 4326, 'MULTIPOLYGON', 'XY');
+
+select CreateSpatialIndex('events', 'point');
+select CreateSpatialIndex('events', 'regions');
+
+create index "events_by_event_id" on "events" ("event_id");

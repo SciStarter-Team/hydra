@@ -3008,7 +3008,7 @@ dependencies = [
 
 [[package]]
 name = "sqlx"
-version = "0.8.3"
+version = "0.9.0-alpha.1"
 dependencies = [
  "sqlx-core",
  "sqlx-macros",
@@ -3019,8 +3019,9 @@ dependencies = [
 
 [[package]]
 name = "sqlx-core"
-version = "0.8.3"
+version = "0.9.0-alpha.1"
 dependencies = [
+ "base64 0.22.1",
  "bytes",
  "crc",
  "crossbeam-queue",
@@ -3051,7 +3052,7 @@ dependencies = [
 
 [[package]]
 name = "sqlx-macros"
-version = "0.8.3"
+version = "0.9.0-alpha.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3062,7 +3063,7 @@ dependencies = [
 
 [[package]]
 name = "sqlx-macros-core"
-version = "0.8.3"
+version = "0.9.0-alpha.1"
 dependencies = [
  "dotenvy",
  "either",
@@ -3079,14 +3080,13 @@ dependencies = [
  "sqlx-postgres",
  "sqlx-sqlite",
  "syn 2.0.101",
- "tempfile",
  "tokio",
  "url",
 ]
 
 [[package]]
 name = "sqlx-mysql"
-version = "0.8.3"
+version = "0.9.0-alpha.1"
 dependencies = [
  "atoi",
  "base64 0.22.1",
@@ -3126,7 +3126,7 @@ dependencies = [
 
 [[package]]
 name = "sqlx-postgres"
-version = "0.8.3"
+version = "0.9.0-alpha.1"
 dependencies = [
  "atoi",
  "base64 0.22.1",
@@ -3161,7 +3161,7 @@ dependencies = [
 
 [[package]]
 name = "sqlx-sqlite"
-version = "0.8.3"
+version = "0.9.0-alpha.1"
 dependencies = [
  "atoi",
  "flume",
@@ -3176,6 +3176,7 @@ dependencies = [
  "serde",
  "serde_urlencoded",
  "sqlx-core",
+ "thiserror 2.0.12",
  "tracing",
  "url",
 ]

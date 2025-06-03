@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, fmt::Display, hash::Hash, ops::Deref};
+use std::{fmt::Display, hash::Hash, ops::Deref};
 
 /// A newtype for String which stores case (as String does) but does
 /// hashing and comparison in a case-insensitive manner.

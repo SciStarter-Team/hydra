@@ -1,6 +1,7 @@
 pub mod channel;
 pub mod contact;
 pub mod entity;
+pub mod event;
 pub mod middleware;
 pub mod peering;
 pub mod project;
