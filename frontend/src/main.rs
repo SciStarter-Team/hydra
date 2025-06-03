@@ -8,6 +8,7 @@ pub mod project;
 pub mod session;
 pub mod ui;
 pub mod upload;
+pub mod misc;
 
 use anyhow::Error;
 use common::{message::location::LocationInfo, shared::db};

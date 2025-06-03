@@ -10,6 +10,34 @@ create unique index "entities_by_slug" on "entities" ("slug");
 create index "entities_by_kind" on "entities" ("kind");
 create unique index "entities_by_target" on "entities" ("target");
 
+create table "redirects" (
+       "redirect_id" text not null,
+       "target" text not null
+);
+
+create unique index "redirects_by_redirect_id" on "redirects" ("redirect_id");
+
+create table "html_stylesheet_urls" (
+       "html_id" text not null,
+       "url" text not null
+);
+
+create index "html_stylesheet_urls_by_html_id" on "html_stylesheet_urls" ("html_id");
+
+create table "html_script_urls" (
+       "html_id" text not null,
+       "url" text not null
+);
+
+create index "html_script_urls_by_html_id" on "html_script_urls" ("html_id");
+
+create table "htmls" (
+       "html_id" text not null,
+       "content" text not null
+);
+
+create unique index "htmls_by_html_id" on "htmls" ("html_id");
+
 create table "project_tags" (
        "project_id" text not null,
        "tag" text not null
@@ -301,9 +329,26 @@ select AddGeometryColumn('projects', 'regions', 4326, 'MULTIPOLYGON', 'XY');
 select CreateSpatialIndex('projects', 'point');
 select CreateSpatialIndex('projects', 'regions');
 
-create index "projects_by_project_id" on "projects" ("project_id");
+create unique index "projects_by_project_id" on "projects" ("project_id");
 create index "projects_by_legacy_v1_project_id" on "projects" ("legacy_v1_project_id") where "legacy_v1_project_id" not null;
 create index "projects_by_legacy_v2_project_id" on "projects" ("legacy_v2_project_id") where "legacy_v2_project_id" not null;
+
+create table "event_tags" (
+       "event_id" text not null,
+       "tag" text not null
+);
+
+create index "event_tags_by_event_id" on "event_tags" ("event_id");
+create index "event_tags_by_tag" on "event_tags" (upper("tag"));
+create unique index "event_tags_by_event_and_tag" on "event_tags" ("event_id", upper("tag"));
+
+create table "event_page_editors" (
+       "event_id" text not null,
+       "user_id" text not null
+);
+
+create index "event_page_editors_by_event_id" on "event_page_editors" ("event_id");
+create index "event_page_editors_by_user_id" on "event_page_editors" ("user_id");
 
 create table "event_contacts" (
        "contact_id" text not null,
@@ -333,11 +378,12 @@ create index "event_instances_by_end" on "event_instances" ("end");
 
 create table "events" (
        "event_id" text not null, -- Ulid
+       "publish" boolean not null, -- bool
        "flagged" boolean not null, -- bool
-       "redirect" text, -- Option<String>
        "admin_notes" text not null, -- bool
        "authoritative" boolean not null, -- bool
        "welcomed" boolean not null, -- bool
+       "page_creator_id" text not null, -- Ulid
        "description" text not null, -- String,
        "guid" text not null, -- String,
        "origin" text not null, -- String,
@@ -369,4 +415,4 @@ select AddGeometryColumn('events', 'regions', 4326, 'MULTIPOLYGON', 'XY');
 select CreateSpatialIndex('events', 'point');
 select CreateSpatialIndex('events', 'regions');
 
-create index "events_by_event_id" on "events" ("event_id");
+create unique index "events_by_event_id" on "events" ("event_id");

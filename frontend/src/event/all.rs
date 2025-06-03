@@ -1,4 +1,6 @@
-use common::{shared::db, timestring::TimeString};
+use std::collections::HashSet;
+
+use common::{insensitivestring::InsensitiveString, shared::db, timestring::TimeString};
 use ulid::Ulid;
 
 use crate::{contact::Contact, peering::LoadStorePeered};
@@ -9,11 +11,18 @@ use super::{EventInstance, EventType};
 #[serde(default)]
 pub struct EventAll {
     pub event_id: Ulid,
+    pub publish: bool,
     pub flagged: bool,
-    pub redirect: Option<String>,
     pub admin_notes: String,
     pub authoritative: bool,
     pub welcomed: bool,
+    pub page_creator_id: Ulid,        // NB was "owner"
+    pub page_editor_ids: Box<[Ulid]>, // NB was "managers"
+    pub event_last_editor: Option<Ulid>,
+    pub event_last_edited: Option<TimeString>,
+    pub scistarter_last_editor: Option<Ulid>,
+    pub scistarter_last_edited: Option<TimeString>,
+    pub tags: HashSet<InsensitiveString>,
     pub description: String,
     pub guid: String,
     pub origin: String,
@@ -50,19 +59,21 @@ impl LoadStorePeered for EventAll {
     const SPECIFIC: &str = "all";
 
     async fn save_to_database(&self) -> Result<(), anyhow::Error> {
-        let db = db();
-
         let event_id = self.event_id.to_string();
         let part_of = self.part_of.map(|u| u.to_string());
+        let page_creator_id = self.page_creator_id.to_string();
+
+        let mut tx = db().begin().await?;
 
         sqlx::query!(
             r#"insert or replace into "events" (
               "event_id",
+              "publish",
               "flagged",
-              "redirect",
               "admin_notes",
               "authoritative",
               "welcomed",
+              "page_creator_id",
               "description",
               "guid",
               "origin",
@@ -119,14 +130,7 @@ impl LoadStorePeered for EventAll {
               ?27,
               ?28,
               ?29,
-              case
-                when ?30 is null then
-                  null
-                when substr(?30, 1, 1) == '{' and substr(?30, -1, 1) == '}' then
-                  GeomFromGeoJSON(?30)
-                else
-                  GeomFromEWKT(?30)
-              end,
+              ?30,
               case
                 when ?31 is null then
                   null
@@ -134,14 +138,23 @@ impl LoadStorePeered for EventAll {
                   GeomFromGeoJSON(?31)
                 else
                   GeomFromEWKT(?31)
+              end,
+              case
+                when ?32 is null then
+                  null
+                when substr(?32, 1, 1) == '{' and substr(?32, -1, 1) == '}' then
+                  GeomFromGeoJSON(?32)
+                else
+                  GeomFromEWKT(?32)
               end
             )"#,
             event_id,
+            self.publish,
             self.flagged,
-            self.redirect,
             self.admin_notes,
             self.authoritative,
             self.welcomed,
+            page_creator_id,
             self.description,
             self.guid,
             self.origin,
@@ -168,14 +181,84 @@ impl LoadStorePeered for EventAll {
             self.regions,
             self.point,
         )
-        .execute(db)
+        .execute(&mut *tx)
         .await?;
 
-        //pub contacts: Box<[Contact]>,
-        let tx = db.begin().await?;
-        sqlx::query!(r#"delete from event_contacts where event_id = ?"#, event_id)
-            .execute(db)
+        // "page_editor_ids",
+        sqlx::query!(
+            r#"delete from event_page_editors where event_id = ?"#,
+            event_id
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        for user_id in self.page_editor_ids.iter() {
+            let user_id = user_id.to_string();
+            sqlx::query!(
+                r#"insert into event_page_editors (
+                  "event_id",
+                  "user_id"
+                )
+                values (
+                  ?,
+                  ?
+                )"#,
+                event_id,
+                user_id,
+            )
+            .execute(&mut *tx)
             .await?;
+        }
+
+        // "event_last_editor",
+        // "event_last_edited",
+        if let Some(last_editor) = self.event_last_editor {
+            common::service::send(
+                "log.event.user-edit",
+                (last_editor, self.event_last_edited.to_owned(), "all"),
+            )
+            .await?;
+        }
+
+        // "scistarter_last_editor",
+        // "scistarter_last_edited",
+        if let Some(last_editor) = self.scistarter_last_editor {
+            common::service::send(
+                "log.event.staff-edit",
+                (last_editor, self.scistarter_last_edited.to_owned(), "all"),
+            )
+            .await?;
+        }
+
+        // "tags",
+        sqlx::query!(r#"delete from event_tags where event_id = ?"#, event_id)
+            .execute(&mut *tx)
+            .await?;
+
+        for val in self.tags.iter() {
+            let val = val.as_ref();
+
+            sqlx::query!(
+                r#"insert into event_tags (
+              "event_id",
+              "tag"
+            )
+            values (
+              ?,
+              ?
+            )"#,
+                event_id,
+                val,
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        //pub contacts: Box<[Contact]>,
+        sqlx::query!(r#"delete from event_contacts where event_id = ?"#, event_id)
+            .execute(&mut *tx)
+            .await?;
+
         for contact in self.contacts.iter() {
             let contact_id = contact.contact_id.to_string();
             sqlx::query!(
@@ -208,19 +291,18 @@ impl LoadStorePeered for EventAll {
                 contact.phone,
                 contact.address,
             )
-            .execute(db)
+            .execute(&mut *tx)
             .await?;
         }
-        tx.commit().await?;
 
         // pub instances: Box<[EventInstance]>,
-        let tx = db.begin().await?;
         sqlx::query!(
             r#"delete from event_instances where event_id = ?"#,
             event_id
         )
-        .execute(db)
+        .execute(&mut *tx)
         .await?;
+
         for val in self.instances.iter() {
             sqlx::query!(
                 r#"insert into "event_instances" (
@@ -237,9 +319,10 @@ impl LoadStorePeered for EventAll {
                 val.begin,
                 val.end,
             )
-            .execute(db)
+            .execute(&mut *tx)
             .await?;
         }
+
         tx.commit().await?;
 
         Ok(())
