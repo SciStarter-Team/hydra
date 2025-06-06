@@ -54,11 +54,41 @@ impl UserInfo for BasicInfo {
     }
 
     fn is_staff(&self) -> bool {
-        self.is_staff
+        self.is_staff || self.is_superuser
     }
 
     fn is_superuser(&self) -> bool {
         self.is_superuser
+    }
+}
+
+impl UserInfo for Option<BasicInfo> {
+    fn user_id(&self) -> Option<&str> {
+        match self {
+            Some(info) => info.user_id(),
+            None => Unauthenticated.user_id(),
+        }
+    }
+
+    fn handle(&self) -> &str {
+        match self {
+            Some(info) => info.handle(),
+            None => Unauthenticated.handle(),
+        }
+    }
+
+    fn is_staff(&self) -> bool {
+        match self {
+            Some(info) => info.is_staff(),
+            None => Unauthenticated.is_staff(),
+        }
+    }
+
+    fn is_superuser(&self) -> bool {
+        match self {
+            Some(info) => info.is_superuser(),
+            None => Unauthenticated.is_superuser(),
+        }
     }
 }
 

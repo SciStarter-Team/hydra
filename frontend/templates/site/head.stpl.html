@@ -1,0 +1,16 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel=stylesheet href="/-static/main.css"/>
+<% if self.enable_shoelace { %><link rel="stylesheet" href="/-static/shoelace/themes/light.css" /><% } %>
+<script src="/-static/htmx.js"></script>
+<% if self.enable_sse { %><script src="/-static/hx-sse.js"></script><% } %>
+<% if self.enable_alpine { %>
+  <script src="/-static/hx-alpine-morph.js"></script>
+  <script src="/-static/alpine-morph.js"></script>
+  <script src="/-static/alpine.js"></script>
+<% } %>
+<% if self.enable_shoelace { %>
+  <script type="module" src="/-static/shoelace/shoelace-autoloader.js"></script>
+  <style>body:not([data-loading-phase-over]):has(:not(:defined)),:not(:defined){opacity:0;}</style>
+  <script>setTimeout(() => {document.body.dataset.loadingPhaseOver=true;}, 2000);</script>
+<% } %>

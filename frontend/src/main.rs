@@ -1,14 +1,18 @@
+pub mod admin;
+pub mod auth;
 pub mod channel;
+pub mod component;
 pub mod contact;
+pub mod dev;
 pub mod entity;
 pub mod event;
 pub mod middleware;
+pub mod misc;
 pub mod peering;
 pub mod project;
 pub mod session;
 pub mod ui;
 pub mod upload;
-pub mod misc;
 
 use anyhow::Error;
 use common::{message::location::LocationInfo, shared::db};
@@ -21,7 +25,7 @@ use poem::{
     get, handler,
     http::HeaderMap,
     listener::TcpListener,
-    middleware::{Csrf, NormalizePath, SetHeader, TrailingSlash},
+    middleware::{ForceHttps, NormalizePath, SetHeader, TrailingSlash},
     session::{CookieConfig, ServerSession, Session},
     web::{Html, Path, RealIp, Redirect, cookie::SameSite},
 };
@@ -51,31 +55,9 @@ type StaticFile = EmbeddedFileEndpoint<Static>;
 #[handler]
 async fn index_page(
     _session: &Session,
-    headers: &HeaderMap,
-    subject: SessionSubject,
+    _headers: &HeaderMap,
     RealIp(client_ip): RealIp,
-) -> poem::Result<Html<String>> {
-    tokio::spawn(async move {
-        for counter in 0..32 {
-            tokio::time::sleep(std::time::Duration::from_secs(10)).await;
-            channel::send(
-                subject.as_ref(),
-                "moocow",
-                channel::Event::new("test", format!("<p>iteration {}</p>", counter)),
-            )
-            .await
-            .unwrap();
-        }
-
-        channel::send(
-            subject.as_ref(),
-            "moocow",
-            channel::Event::new("shutdown", ""),
-        )
-        .await
-        .unwrap();
-    });
-
+) -> poem::Result<Response> {
     let location = if let Some(addr) = client_ip {
         common::service::request("location.ip", addr.to_string())
             .await
@@ -84,32 +66,7 @@ async fn index_page(
         LocationInfo::default()
     };
 
-    Ok(Html(format!(
-        r#"<!doctype html>
-           <html>
-             <head>
-               <script src="/-static/htmx.js"></script>
-               <script src="/-static/hx-sse.js"></script>
-               <script src="/-static/hx-alpine-morph.js"></script>
-               <script src="/-static/alpine-morph.js"></script>
-               <script src="/-static/alpine.js"></script>
-             </head>
-             <body hx-ext="sse,alpine-morph">
-               <p>Before</p>
-               <div sse-connect="/-channel/moocow" sse-swap=test sse-close=shutdown hx-target="find p" hx-swap=morph>
-                 <p>No events yet</p>
-               </div>
-               <p>After</p>
-               <p>Headers</p>
-               <div>
-                 {:?}
-               </div>
-               <code>{:?}</code>
-             </body>
-           </html>
-        "#,
-        headers, location,
-    )))
+    Ok(Html(format!("{}", location.city_name)).into_response())
 }
 
 #[handler]
@@ -125,8 +82,7 @@ async fn not_found(_err: poem::Error) -> Response {
 
 async fn not_authorized(err: poem::Error) -> Response {
     if let Ok(err) = err.downcast::<NotAuthorized>() {
-        // In the login handler, remember to reject all next
-        // values that don't start with '/'
+        // The NotAuthorized type handles URL-encoding the target
         Redirect::see_other(format!("/login?unauthorized=true&next={}", err.target()))
             .into_response()
     } else {
@@ -158,16 +114,30 @@ async fn error_dispatch(err: poem::Error) -> Response {
     }
 }
 
-fn dynamic() -> impl Endpoint {
-    let session_storage = UserServiceSessionStorage;
-
+fn user_facing() -> impl Endpoint {
     Route::new()
         .at("/:slug", get(entity_page))
         .at("/", get(index_page))
         .at("/index.html", get(index_page))
+        .at(
+            "/login",
+            get(auth::login_signup_page).post(auth::login_action),
+        )
+        .at("/logout", get(auth::logout_action))
+        .with(middleware::analytics::AnalyticsMiddleware)
+}
+
+fn dynamic() -> impl Endpoint {
+    let session_storage = UserServiceSessionStorage;
+
+    Route::new()
+        .nest_no_strip("/", user_facing())
+        .nest("/-dev", dev::routes())
+        .nest("/-admin", admin::routes().catch_all_error(error_dispatch))
         .nest("/-channel", channel::routes())
         .nest("/-ui", ui::routes())
-        .with(middleware::analytics::AnalyticsMiddleware)
+        .nest("/-upload", upload::authenticated_routes())
+        .catch_all_error(error_dispatch)
         .with(middleware::authorization::AuthMiddleware)
         .with(ServerSession::new(
             CookieConfig::default()
@@ -179,10 +149,8 @@ fn dynamic() -> impl Endpoint {
                 .max_age(std::time::Duration::from_secs(60 * 60 * 24 * 365)),
             session_storage,
         ))
-        .with(Csrf::new())
         .with(SetHeader::new().overriding("Cache-Control", "no-store"))
         .with(NormalizePath::new(TrailingSlash::Trim))
-        .catch_all_error(error_dispatch)
 }
 
 #[tokio::main]
@@ -193,9 +161,14 @@ async fn main() -> Result<(), Error> {
 
     let routes = Route::new()
         .nest_no_strip("/", dynamic())
-        .nest("/-upload", upload::routes())
         .nest("/-static", StaticFiles::new())
-        .at("/favicon.ico", StaticFile::new("favicon.ico"));
+        .nest("/-uploaded", upload::anonymous_routes())
+        .at("/favicon.ico", StaticFile::new("favicon.ico"))
+        .with(SetHeader::new().overriding(
+            "Strict-Transport-Security",
+            "max-age=31536000; includeSubDomains",
+        ))
+        .with(ForceHttps::new());
 
     let _project_all_updates = tokio::spawn(ProjectAll::peering_task());
     let _project_field_updates = tokio::spawn(ProjectField::peering_task());

@@ -5,6 +5,8 @@ use jiff::{ToSpan, Zoned};
 use poem::{Endpoint, FromRequest, Middleware, session::Session};
 use ulid::Ulid;
 
+use super::authorization::Authenticated;
+
 #[derive(Debug, Clone)]
 pub struct Interaction(Arc<String>);
 
@@ -33,7 +35,35 @@ impl From<Interaction> for String {
     }
 }
 
-/// Records views and interactions sequences
+#[derive(Debug, Clone)]
+pub struct Device(Arc<String>);
+
+impl<'a> FromRequest<'a> for Device {
+    async fn from_request(
+        req: &'a poem::Request,
+        _body: &mut poem::RequestBody,
+    ) -> poem::Result<Self> {
+        Ok(req
+            .extensions()
+            .get::<Device>()
+            .cloned()
+            .expect("AuthMiddleware must be installed to use Device"))
+    }
+}
+
+impl AsRef<str> for Device {
+    fn as_ref(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl From<Device> for String {
+    fn from(value: Device) -> Self {
+        value.0.to_string()
+    }
+}
+
+/// Records views and interaction sequences
 pub struct AnalyticsMiddleware;
 
 pub struct AnalyticsMiddlewareEndpoint<E> {
@@ -57,19 +87,34 @@ impl<E: Endpoint> Endpoint for AnalyticsMiddlewareEndpoint<E> {
             return self.wrapped.call(req).await;
         };
 
+        let device = session_device(session);
         let interaction = session_interaction(session);
 
-        if req.method() == poem::http::Method::GET {
-            let uri = req.uri();
-            let path = uri.path();
-            let query = uri.query();
-            let user_info = req.extensions().get::<BasicInfo>();
+        let method = req.method().to_string();
+        let uri = req.uri();
+        let path = uri.path();
+        let query = uri.query();
+        let user_info = req
+            .extensions()
+            .get::<Authenticated>()
+            .cloned()
+            .unwrap_or_default();
 
-            common::service::send("log.view", (path, query, &interaction, user_info.user_id()))
-                .await?;
-        }
+        common::service::send(
+            "log.view",
+            (
+                method,
+                path,
+                query,
+                &interaction,
+                &device,
+                user_info.user_id(),
+            ),
+        )
+        .await?;
 
         let extensions = req.extensions_mut();
+        extensions.insert(Device(Arc::new(device)));
         extensions.insert(Interaction(Arc::new(interaction)));
 
         self.wrapped.call(req).await
@@ -101,5 +146,17 @@ fn session_interaction(session: &Session) -> String {
         interaction
     } else {
         new(session)
+    }
+}
+
+/// Ensures that the session contains a unique device id, and
+/// returns it
+fn session_device(session: &Session) -> String {
+    if let Some(device) = session.get::<String>("device") {
+        device
+    } else {
+        let device = Ulid::new().to_string();
+        session.set("device", &device);
+        device
     }
 }
