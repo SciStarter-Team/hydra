@@ -11,10 +11,10 @@ use super::{EventInstance, EventType};
 #[serde(default)]
 pub struct EventAll {
     pub event_id: Ulid,
+    pub created: TimeString,
     pub publish: bool,
     pub flagged: bool,
     pub admin_notes: String,
-    pub authoritative: bool,
     pub welcomed: bool,
     pub page_creator_id: Ulid,        // NB was "owner"
     pub page_editor_ids: Box<[Ulid]>, // NB was "managers"
@@ -22,9 +22,9 @@ pub struct EventAll {
     pub event_last_edited: Option<TimeString>,
     pub scistarter_last_editor: Option<Ulid>,
     pub scistarter_last_edited: Option<TimeString>,
+    pub name: String,
     pub tags: HashSet<InsensitiveString>,
     pub description: String,
-    pub guid: String,
     pub origin: String,
     pub contacts: Box<[Contact]>,
     pub presenter: String,
@@ -45,10 +45,10 @@ pub struct EventAll {
     pub regions: Option<String>,
     pub point: Option<String>,
     pub event_type: EventType,
-    pub ticketing_begins: TimeString,
-    pub outcomes_label: String,
-    pub outcomes_link: String,
-    pub circuit_id: String,
+    pub ticketing_begins: Option<TimeString>,
+    pub outcomes_label: Option<String>,
+    pub outcomes_link: Option<String>,
+    pub circuit_id: Option<String>,
     pub instances: Box<[EventInstance]>,
 }
 
@@ -68,14 +68,14 @@ impl LoadStorePeered for EventAll {
         sqlx::query!(
             r#"insert or replace into "events" (
               "event_id",
+              "created",
               "publish",
               "flagged",
               "admin_notes",
-              "authoritative",
               "welcomed",
               "page_creator_id",
+              "name",
               "description",
-              "guid",
               "origin",
               "presenter",
               "url",
@@ -149,14 +149,14 @@ impl LoadStorePeered for EventAll {
               end
             )"#,
             event_id,
+            self.created,
             self.publish,
             self.flagged,
             self.admin_notes,
-            self.authoritative,
             self.welcomed,
             page_creator_id,
+            self.name,
             self.description,
-            self.guid,
             self.origin,
             self.presenter,
             self.url,

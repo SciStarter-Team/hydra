@@ -4,14 +4,13 @@
     <%+ Head::default().with_sse() %>
     <title>Background Processing Test</title>
   </head>
-  <!-- Not actually using Alpine, just including it here as a memo -->
   <body>
-    <%+ header %>
+    <%+ self.header %>
 
     <div hx-ext=sse sse-connect="/-channel/moocow" sse-swap=test sse-close=shutdown hx-target="find p" hx-swap=morph>
       <p>No events yet</p>
     </div>
 
-    <%+ footer %>
+    <%+ self.footer %>
   </body>
 </html>

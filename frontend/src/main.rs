@@ -173,7 +173,8 @@ async fn main() -> Result<(), Error> {
     let _project_all_updates = tokio::spawn(ProjectAll::peering_task());
     let _project_field_updates = tokio::spawn(ProjectField::peering_task());
 
-    let _synchronize = tokio::spawn(sync::synchronize());
+    let _synchronize_projects = tokio::spawn(sync::synchronize_projects());
+    let _synchronize_events = tokio::spawn(sync::synchronize_events());
 
     println!("Listening on {}", env!("LISTEN_ON"));
 
@@ -195,11 +196,28 @@ mod sync {
     use crate::{
         contact::{Contact, ContactRole},
         entity::{Entity, EntityKind},
+        event::{EventInstance, all::EventAll},
         peering::LoadStorePeered,
         project::{
             ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus, all::ProjectAll,
         },
     };
+
+    trait EmptyAsNone: Sized {
+        fn empty_as_none(self) -> Option<Self>;
+    }
+
+    impl EmptyAsNone for String {
+        fn empty_as_none(self) -> Option<Self> {
+            if self.is_empty() { None } else { Some(self) }
+        }
+    }
+
+    impl EmptyAsNone for InsensitiveString {
+        fn empty_as_none(self) -> Option<Self> {
+            if self.is_empty() { None } else { Some(self) }
+        }
+    }
 
     #[derive(Default, Debug, serde::Deserialize)]
     #[serde(default)]
@@ -212,9 +230,9 @@ mod sync {
         foreign_id: String, // default blank, partial index
         created: Timestamp,
         updated: Timestamp,
-        last_editor: String,
+        last_editor: Option<String>,
         updated_staff: Option<Timestamp>,
-        last_editor_staff: String,
+        last_editor_staff: Option<String>,
         name: String,
         tags: String,
         meta_description: String,
@@ -379,23 +397,7 @@ mod sync {
         sustainable_development_goals: String,
     }
 
-    pub async fn synchronize() -> Result<(), anyhow::Error> {
-        trait EmptyAsNone: Sized {
-            fn empty_as_none(self) -> Option<Self>;
-        }
-
-        impl EmptyAsNone for String {
-            fn empty_as_none(self) -> Option<Self> {
-                if self.is_empty() { None } else { Some(self) }
-            }
-        }
-
-        impl EmptyAsNone for InsensitiveString {
-            fn empty_as_none(self) -> Option<Self> {
-                if self.is_empty() { None } else { Some(self) }
-            }
-        }
-
+    pub async fn synchronize_projects() -> Result<(), anyhow::Error> {
         loop {
             let last_update = misc::get("project-sync-bookmark-update")
                 .await
@@ -448,6 +450,7 @@ mod sync {
                 proj.foreign_id = data.foreign_id.empty_as_none();
                 proj.publish = data.publish;
                 proj.duplicate = data.duplicate;
+                proj.authoritative = data.authoritative;
                 proj.flagged = data.flagged;
                 proj.is_test = data.is_test;
                 proj.status = match data.status.as_str() {
@@ -502,12 +505,12 @@ mod sync {
                 proj.extra = data.extra;
                 proj.project_last_editor = data
                     .last_editor
-                    .empty_as_none()
+                    .and_then(|s| s.empty_as_none())
                     .and_then(|s| s.parse().ok());
                 proj.project_last_edited = Some(data.updated.into());
                 proj.scistarter_last_editor = data
                     .last_editor_staff
-                    .empty_as_none()
+                    .and_then(|s| s.empty_as_none())
                     .and_then(|s| s.parse().ok());
                 proj.scistarter_last_edited = data.updated_staff.map(|ts| ts.into());
                 proj.draft = data.draft;
@@ -819,6 +822,303 @@ mod sync {
                 .expect("Saving sync bookmark failed");
 
             if got_projects == 50 {
+                sleep(Duration::from_secs(60)).await;
+            } else {
+                sleep(Duration::from_secs(60 * 60)).await;
+            }
+        }
+    }
+
+    #[derive(Default, Debug, serde::Deserialize)]
+    #[serde(default)]
+    struct EventData {
+        legacy_id: i32,
+        event_id: String, // Ulid,
+        slug: String,
+        created: Timestamp,
+        publish: bool,
+        published_at: Option<Timestamp>,
+        flagged: bool,
+        admin_notes: String,
+        welcomed: bool,
+        page_creator_id: String,           // Ulid,        // NB was "owner"
+        page_editor_ids: String,           // Box<[Ulid]>, // NB was "managers"
+        event_last_editor: Option<String>, // Option<Ulid>,
+        event_last_edited: Option<Timestamp>, // Option<TimeString>,
+        scistarter_last_editor: Option<String>, // Option<Ulid>,
+        scistarter_last_edited: Option<Timestamp>, // Option<TimeString>,
+        name: String,
+        tags: String, // HashSet<InsensitiveString>,
+        meta_description: String,
+        description: String,
+        // contacts: Box<[Contact]>,
+        manager_name: String,
+        manager_affiliation: String,
+        manager_email: String,
+        manager_phone: String,
+        manager_address: String,
+        contact_name: String,
+        contact_affiliation: String,
+        contact_email: String,
+        contact_phone: String,
+        contact_address: String,
+        presenter: String,
+        url: String,
+        image: String,
+        image_credit: String,
+        how_to_join: String,
+        part_of: Option<String>, // Option<Ulid>,
+        location_type: String,
+        entirely_online: bool,
+        location_name: String,
+        location_description: String,
+        address: String,
+        city: String,
+        zip: String,
+        state: String,
+        country: String,
+        regions: Option<String>,
+        point: Option<String>,
+        event_type: String,                  // EventType,
+        ticketing_begins: Option<Timestamp>, // TimeString,
+        outcomes_label: String,
+        outcomes_link: String,
+        circuit_id: String,
+        // instances: Box<[EventInstance]>,
+        begin0: Option<Timestamp>,
+        end0: Option<Timestamp>,
+        begin1: Option<Timestamp>,
+        end1: Option<Timestamp>,
+        begin2: Option<Timestamp>,
+        end2: Option<Timestamp>,
+        begin3: Option<Timestamp>,
+        end3: Option<Timestamp>,
+        begin4: Option<Timestamp>,
+        end4: Option<Timestamp>,
+        begin5: Option<Timestamp>,
+        end5: Option<Timestamp>,
+        begin6: Option<Timestamp>,
+        end6: Option<Timestamp>,
+        begin7: Option<Timestamp>,
+        end7: Option<Timestamp>,
+        begin8: Option<Timestamp>,
+        end8: Option<Timestamp>,
+        begin9: Option<Timestamp>,
+        end9: Option<Timestamp>,
+        begin10: Option<Timestamp>,
+        end10: Option<Timestamp>,
+        begin11: Option<Timestamp>,
+        end11: Option<Timestamp>,
+        begin12: Option<Timestamp>,
+        end12: Option<Timestamp>,
+        begin13: Option<Timestamp>,
+        end13: Option<Timestamp>,
+        begin14: Option<Timestamp>,
+        end14: Option<Timestamp>,
+        begin15: Option<Timestamp>,
+        end15: Option<Timestamp>,
+        begin16: Option<Timestamp>,
+        end16: Option<Timestamp>,
+        begin17: Option<Timestamp>,
+        end17: Option<Timestamp>,
+        begin18: Option<Timestamp>,
+        end18: Option<Timestamp>,
+        begin19: Option<Timestamp>,
+        end19: Option<Timestamp>,
+    }
+
+    pub async fn synchronize_events() -> Result<(), anyhow::Error> {
+        loop {
+            let last_update = misc::get("event-sync-bookmark-update")
+                .await
+                .expect("Retrieving sync bookmark failed")
+                .unwrap_or_else(|| String::from("2000-01-01T00:00:00.0Z"));
+
+            let last_id = misc::get("event-sync-bookmark-id")
+                .await
+                .expect("Retrieving sync bookmark failed.")
+                .unwrap_or(0);
+
+            let client = reqwest::Client::new();
+
+            println!("Retrieving events since {} {}...", &last_update, last_id);
+
+            let events: Vec<EventData> = client
+                .get("https://scistarter.org/staff/sync/events")
+                .bearer_auth(env!("SYNC_TOKEN"))
+                .query(&[("since", &last_update), ("last_id", &last_id.to_string())])
+                .send()
+                .await
+                .expect("Retrieving event data failed")
+                .error_for_status()
+                .expect("Retrieving event data produced an error")
+                .json()
+                .await
+                .expect("JSON decoding of event data failed");
+
+            let mut bookmark = (last_update.clone(), last_id);
+
+            let got_events = events.len();
+            println!("Synchronization received {} events", got_events);
+
+            for data in events {
+                let updated = data
+                    .event_last_edited
+                    .unwrap_or_else(|| Timestamp::now())
+                    .to_string();
+
+                let legacy_id = data.legacy_id;
+
+                let mut evt = EventAll::default();
+
+                evt.event_id = match data.event_id.parse() {
+                    Ok(ulid) => ulid,
+                    Err(err) => {
+                        eprintln!("Error parsing ULID {:?}: {}", data.event_id, err);
+                        continue;
+                    }
+                };
+
+                evt.created = data.created.into();
+                evt.publish = data.publish;
+                evt.flagged = data.flagged;
+                evt.admin_notes = data.admin_notes;
+                evt.welcomed = data.welcomed;
+
+                evt.page_creator_id = match data.page_creator_id.parse() {
+                    Ok(ulid) => ulid,
+                    Err(err) => {
+                        eprintln!("Error parsing ULID {:?}: {}", data.event_id, err);
+                        continue;
+                    }
+                };
+
+                evt.page_editor_ids = data
+                    .page_editor_ids
+                    .split(",")
+                    .flat_map(|s| s.trim().parse().ok())
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice();
+
+                evt.event_last_editor = data
+                    .event_last_editor
+                    .and_then(|s| s.empty_as_none())
+                    .and_then(|s| s.parse().ok());
+
+                evt.event_last_edited = data.event_last_edited.map(|ts| ts.into());
+
+                evt.scistarter_last_editor = data
+                    .scistarter_last_editor
+                    .and_then(|s| s.empty_as_none())
+                    .and_then(|s| s.parse().ok());
+
+                evt.scistarter_last_edited = data.scistarter_last_edited.map(|ts| ts.into());
+
+                evt.name = data.name;
+
+                evt.tags = data
+                    .tags
+                    .trim_matches('|')
+                    .split("||")
+                    .map(|s| s.into())
+                    .collect();
+
+                evt.description = data.description;
+
+                let mut contacts = Vec::with_capacity(5);
+
+                if !data.contact_email.is_empty() {
+                    contacts.push(Contact {
+                        contact_id: Ulid::new(),
+                        role: ContactRole::ContactPerson,
+                        name: data.contact_name.clone().empty_as_none(),
+                        affiliation: data.contact_affiliation.clone().empty_as_none(),
+                        email: data.contact_email.clone(),
+                        phone: data.contact_phone.clone().empty_as_none(),
+                        address: data.contact_address.clone().empty_as_none(),
+                    });
+                }
+
+                if !data.manager_email.is_empty() {
+                    contacts.push(Contact {
+                        contact_id: Ulid::new(),
+                        role: ContactRole::Manager,
+                        name: data.manager_name.empty_as_none(),
+                        affiliation: data.manager_affiliation.empty_as_none(),
+                        email: data.manager_email,
+                        phone: data.manager_phone.empty_as_none(),
+                        address: data.manager_address.empty_as_none(),
+                    });
+                }
+
+                evt.contacts = contacts.into_boxed_slice();
+
+                evt.presenter = data.presenter;
+                evt.url = data.url;
+                evt.image = data.image;
+                evt.image_credit = data.image_credit;
+                evt.how_to_join = data.how_to_join;
+                evt.part_of = data.part_of.and_then(|s| s.parse().ok());
+                evt.location_type = data.location_type;
+                evt.entirely_online = data.entirely_online;
+                evt.location_name = data.location_name;
+                evt.location_description = data.location_description;
+                evt.address = data.address;
+                evt.city = data.city;
+                evt.zip = data.zip;
+                evt.state = data.state;
+                evt.country = data.country;
+                evt.regions = data.regions;
+                evt.point = data.point;
+                evt.event_type = data.event_type.parse().unwrap_or_default();
+                evt.ticketing_begins = data.ticketing_begins.map(|ts| ts.into());
+                evt.outcomes_label = data.outcomes_label.empty_as_none();
+                evt.outcomes_link = data.outcomes_link.empty_as_none();
+                evt.circuit_id = data.circuit_id.empty_as_none();
+
+                let mut instances = Vec::with_capacity(20);
+
+                if let (Some(begin), Some(end)) = (data.begin0, data.end0) {
+                    instances.push(EventInstance {
+                        begin: begin.into(),
+                        end: end.into(),
+                    });
+                }
+
+                evt.instances = instances.into_boxed_slice();
+
+                if let Err(err) = evt.store().await {
+                    eprintln!("Error saving {}: {}", &evt.name, err);
+                    continue;
+                }
+
+                let entity = Entity::new(data.slug, EntityKind::Event, evt.event_id);
+
+                if let Err(err) = entity.store().await {
+                    eprintln!(
+                        "Error creating entity for {} ({}): {}",
+                        &evt.name,
+                        &entity.slug(),
+                        err
+                    );
+                    continue;
+                }
+
+                let new_bookmark = (updated, legacy_id);
+                if new_bookmark > bookmark {
+                    bookmark = new_bookmark;
+                }
+            }
+
+            misc::set("event-sync-bookmark-update", bookmark.0)
+                .await
+                .expect("Saving sync bookmark failed");
+
+            misc::set("event-sync-bookmark-id", bookmark.1)
+                .await
+                .expect("Saving sync bookmark failed");
+
+            if got_events == 50 {
                 sleep(Duration::from_secs(60)).await;
             } else {
                 sleep(Duration::from_secs(60 * 60)).await;

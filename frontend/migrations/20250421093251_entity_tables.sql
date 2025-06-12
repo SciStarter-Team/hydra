@@ -192,6 +192,7 @@ create table "projects" (
 
        -- section Admin
        "publish" boolean,
+       "authoritative" boolean not null,
        "duplicate" boolean not null default false,
        "flagged" boolean not null default false,
        "is_test" boolean not null default false,
@@ -378,14 +379,14 @@ create index "event_instances_by_end" on "event_instances" ("end");
 
 create table "events" (
        "event_id" text not null, -- Ulid
+       "created" text not null, -- TimeString
        "publish" boolean not null, -- bool
        "flagged" boolean not null, -- bool
        "admin_notes" text not null, -- bool
-       "authoritative" boolean not null, -- bool
        "welcomed" boolean not null, -- bool
        "page_creator_id" text not null, -- Ulid
+       "name" text not null,
        "description" text not null, -- String,
-       "guid" text not null, -- String,
        "origin" text not null, -- String,
        "presenter" text not null, -- String,
        "url" text not null, -- String,
@@ -403,10 +404,10 @@ create table "events" (
        "state" text not null, -- String,
        "country" text not null, -- String,
        "event_type" text not null, -- EventType,
-       "ticketing_begins" text not null, -- TimeString,
-       "outcomes_label" text not null, -- String,
-       "outcomes_link" text not null, -- String,
-       "circuit_id" text not null -- String
+       "ticketing_begins" text, -- Option<TimeString>,
+       "outcomes_label" text, -- Option<String>,
+       "outcomes_link" text, -- Option<String>,
+       "circuit_id" text -- Option<String>
 );
 
 select AddGeometryColumn('events', 'point', 4326, 'POINT', 'XY');

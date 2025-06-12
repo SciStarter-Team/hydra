@@ -1,9 +1,14 @@
-use crate::{component::*, middleware::authorization::Authenticated};
-use common::message::user::BasicInfo;
-use poem::{Endpoint, EndpointExt, Route, handler, web::headers::Header};
+use std::sync::Arc;
+
+use poem::{Endpoint, EndpointExt, Route, handler};
 use sailfish::TemplateOnce;
 
-use crate::{component::header::HeaderTpl, middleware::authorization::StaffOnly};
+use crate::middleware::authorization::StaffOnly;
+use crate::{
+    component::{Component, Footer, Head, Header},
+    middleware::authorization::Authenticated,
+};
+use common::message::user::BasicInfo;
 
 pub fn routes() -> impl Endpoint {
     Route::new()
@@ -15,24 +20,25 @@ pub fn routes() -> impl Endpoint {
 pub async fn background_processing(
     Authenticated(basic_info): Authenticated,
 ) -> poem::Result<poem::Response> {
-    todo!()
+    Ok(BackgroundProcessing.render(basic_info).await?)
 }
 
-pub struct BackgroundProcessing {}
+pub struct BackgroundProcessing;
 
 impl Component for BackgroundProcessing {
-    type Param<'l> = Option<&'l BasicInfo>;
+    type Param = Option<Arc<BasicInfo>>;
     type Prepared = BackgroundProcessingTpl;
 
-    async fn prepare<'l>(self, param: Self::Param<'l>) -> Result<Self::Prepared, anyhow::Error> {
-        let header = Header::default().prepare(param).await?;
+    async fn prepare(self, param: Self::Param) -> Result<Self::Prepared, anyhow::Error> {
+        let header = Header::default().prepare(param.clone()).await?;
+        let footer = Footer::default().prepare(param).await?;
         Ok(BackgroundProcessingTpl { header, footer })
     }
 }
 
 #[derive(TemplateOnce)]
 #[template(path = "dev/background_processing.stpl.html")]
-struct BackgroundProcessingTpl {
-    header: HeaderTpl,
-    footer: FooterTpl,
+pub struct BackgroundProcessingTpl {
+    header: <Header as Component>::Prepared,
+    footer: <Footer as Component>::Prepared,
 }

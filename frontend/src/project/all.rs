@@ -25,6 +25,7 @@ pub struct ProjectAll {
     // section Admin
     pub publish: bool,
     pub duplicate: bool,
+    pub authoritative: bool,
     pub flagged: bool,
     pub is_test: bool,
     pub status: ProjectStatus,
@@ -203,6 +204,7 @@ impl LoadStorePeered for ProjectAll {
           "foreign_id",
           "publish",
           "duplicate",
+          "authoritative",
           "flagged",
           "is_test",
           "status",
@@ -420,14 +422,7 @@ impl LoadStorePeered for ProjectAll {
           ?108,
           ?109,
           ?110,
-          case
-            when ?111 is null then
-              null
-            when substr(?111, 1, 1) == '{' and substr(?111, -1, 1) == '}' then
-              GeomFromGeoJSON(?111)
-            else
-              GeomFromEWKT(?111)
-          end,
+          ?111,
           case
             when ?112 is null then
               null
@@ -435,6 +430,14 @@ impl LoadStorePeered for ProjectAll {
               GeomFromGeoJSON(?112)
             else
               GeomFromEWKT(?112)
+          end,
+          case
+            when ?113 is null then
+              null
+            when substr(?113, 1, 1) == '{' and substr(?113, -1, 1) == '}' then
+              GeomFromGeoJSON(?113)
+            else
+              GeomFromEWKT(?113)
           end
         )"#,
             project_id,
@@ -443,6 +446,7 @@ impl LoadStorePeered for ProjectAll {
             self.foreign_id,
             self.publish,
             self.duplicate,
+            self.authoritative,
             self.flagged,
             self.is_test,
             self.status,

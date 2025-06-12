@@ -5,13 +5,14 @@ use sailfish::TemplateOnce;
 
 use super::Component;
 
+#[derive(Default)]
 pub struct Header;
 
 impl Component for Header {
-    type Param<'l> = Option<Arc<BasicInfo>>;
+    type Param = Option<Arc<BasicInfo>>;
     type Prepared = HeaderTpl;
 
-    async fn prepare<'l>(self, param: Self::Param<'l>) -> Result<Self::Prepared, anyhow::Error> {
+    async fn prepare(self, param: Self::Param) -> Result<Self::Prepared, anyhow::Error> {
         Ok(HeaderTpl {
             basic_info: param.clone(),
         })
