@@ -33,11 +33,11 @@ class ULIDError extends Error {
 }
 
 function randomChar(prng) {
-    let rand = Math.floor(prng() * ENCODING_LEN);
-    if (rand === ENCODING_LEN) {
-        rand = ENCODING_LEN - 1;
-    }
-    return ENCODING.charAt(rand);
+    // Currently PRNGs generate fractions from 0 to _less than_ 1, so no "%" is necessary.
+    // However, just in case a future PRNG can generate 1,
+    // we are applying "% ENCODING LEN" to wrap back to the first character
+    const randomPosition = Math.floor(prng() * ENCODING_LEN) % ENCODING_LEN;
+    return ENCODING.charAt(randomPosition);
 }
 function replaceCharAt(str, index, char) {
     if (index > str.length - 1) {

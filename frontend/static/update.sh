@@ -23,3 +23,14 @@ curl -L https://unpkg.com/@alpinejs/morph/dist/cdn.min.js -o alpine-morph.min.js
 #curl -L https://cdn.jsdelivr.net/npm/ulid@2.4.0/dist/index.umd.min.js -o ulid.min.js
 curl -L https://cdn.jsdelivr.net/npm/ulid@3/dist/browser/index.js -o ulid.js
 curl -L https://cdn.jsdelivr.net/npm/ulid@3/dist/browser/index.min.js -o ulid.min.js
+
+# Quill rich text editor
+curl -L https://cdn.jsdelivr.net/npm/quill@2/dist/quill.js -o quill.js
+curl -L https://cdn.jsdelivr.net/npm/quill@2/dist/quill.snow.css -o quill.snow.css
+# We don't have a non-minified equivalents for Quill
+cp quill.js quill.min.js
+cp quill.snow.css quill.snow.min.css
+
+# Lit Web Component framework
+curl -L https://cdn.jsdelivr.net/gh/lit/dist@3/core/lit-core.min.js -o lit-core.js
+cp lit-core.js lit-core.min.js
