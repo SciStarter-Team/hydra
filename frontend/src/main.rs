@@ -39,12 +39,14 @@ pub const SESSION_COOKIE: &'static str = "session-id";
 #[cfg(not(debug_assertions))]
 pub const SESSION_COOKIE: &'static str = "__Host-session-id";
 
-#[cfg(debug_assertions)]
-#[derive(Embed)]
-#[folder = "static/"]
-struct Static;
-
-#[cfg(not(debug_assertions))]
+// Serving the files from static instead of dist doesn't work well
+// when many of those files are inputs for compilers and are not ready
+// for direct use
+// #[cfg(debug_assertions)]
+// #[derive(Embed)]
+// #[folder = "static/"]
+// struct Static;
+// #[cfg(not(debug_assertions))]
 #[derive(Embed)]
 #[folder = "dist/"]
 struct Static;
@@ -164,11 +166,14 @@ async fn main() -> Result<(), Error> {
         .nest("/-static", StaticFiles::new())
         .nest("/-uploaded", upload::anonymous_routes())
         .at("/favicon.ico", StaticFile::new("favicon.ico"))
-        .with(SetHeader::new().overriding(
-            "Strict-Transport-Security",
-            "max-age=31536000; includeSubDomains",
-        ))
-        .with(ForceHttps::new());
+        .with_if(
+            cfg!(not(debug_assertions)),
+            SetHeader::new().overriding(
+                "Strict-Transport-Security",
+                "max-age=31536000; includeSubDomains",
+            ),
+        )
+        .with_if(cfg!(not(debug_assertions)), ForceHttps::new());
 
     let _project_all_updates = tokio::spawn(ProjectAll::peering_task());
     let _project_field_updates = tokio::spawn(ProjectField::peering_task());

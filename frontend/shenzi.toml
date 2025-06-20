@@ -15,7 +15,7 @@ handler = "Ignore"
 
 [[rules]]
 include = "css/style.css"
-handler = {Command = ["tailwindcss", "--minify", "--input", "$infile", "--output", "$outfile"]}
+handler = {Command = ["tailwindcss", "--cwd", ".", "--minify", "--input", "$infile", "--output", "$outfile"]}
 skip_unchanged = false
 
 # This rule skips minifying shoelace js files. That's fine since
