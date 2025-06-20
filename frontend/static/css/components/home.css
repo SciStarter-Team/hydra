@@ -376,7 +376,7 @@
     @apply rounded border-[3px] border-purple p-4 inline-block relative;
 }
 .speech-bubble::after {
-    content: url(/static/img/home/speech-tail.svg);
+    content: url(/-static/img/home/speech-tail.svg);
     position: absolute;
     bottom: -24px;
     left: 50%;

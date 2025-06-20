@@ -14,7 +14,7 @@ include = "update.sh"
 handler = "Ignore"
 
 [[rules]]
-include = "main.css"
+include = "css/style.css"
 handler = {Command = ["tailwindcss", "--minify", "--input", "$infile", "--output", "$outfile"]}
 skip_unchanged = false
 
