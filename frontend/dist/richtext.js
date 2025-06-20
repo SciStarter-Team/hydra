@@ -17,7 +17,7 @@ customElements.define(
         }
 
         render() {
-            return html``;
+            return html`<slot></slot>`;
         }
     }
 );

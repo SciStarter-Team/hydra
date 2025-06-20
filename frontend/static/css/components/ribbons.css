@@ -1,0 +1,132 @@
+@reference "tailwindcss";
+@reference "../theme.css";
+
+.ribbon {
+    position: relative;
+    padding: 0.1em 1rem;
+    white-space: nowrap;
+  }
+  .ribbon::before {
+    content: '';
+    position: absolute;
+    top: 0; 
+    display: block;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-color: #25284F transparent transparent transparent;
+  }
+  .ribbon::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      display: block;
+      width: 0;
+      height: 0;
+      border-style: solid;
+      border-color: transparent transparent transparent #25284F;
+  }
+
+  .ribbon-lg-4xl::before {
+    right: -0.99rem;
+    border-width: 1rem 1rem 0 0;
+  }
+
+  .ribbon-lg-4xl::after {
+    right: -0.99rem;
+    border-width: 1rem 0 0 1rem;
+  }
+
+  .ribbon.ribbon-orange::before {
+    border-color: #F26100 transparent transparent transparent;
+  }
+
+  .ribbon.ribbon-orange::after {
+    border-color: transparent transparent transparent #F26100;
+  }
+
+  .ribbon.ribbon-blue::before {
+    border-color: #0071C2 transparent transparent transparent;
+  }
+
+  .ribbon.ribbon-blue::after {
+    border-color: transparent transparent transparent #0071C2;
+  }
+
+
+  .double-ribbon {
+    position: relative;
+    display: block;
+  }
+
+  .double-ribbon::before {
+    content: '';
+    position: absolute;
+    top: -0.1em;
+    left: -2.74em;
+    display: block;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-color: transparent #0071C2 transparent transparent  ;
+    border-width: 0 1em 1em 0;
+  }
+
+  .double-ribbon::after {
+    content: '';
+    position: absolute;
+    bottom: -0.1em;
+    left: -2.74em;
+    display: block;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-color: transparent #0071C2 transparent transparent;
+    border-width: 1em 1em 0 0;
+  }
+
+  @media (min-width:768px) {
+    .ribbon-lg-4xl::before {
+        right: -0.74em;
+        border-width: 0.75em 0.75em 0 0;
+      }
+      .ribbon-lg-4xl::after {
+        right: -0.74em;
+        border-width: 0.75em 0 0 0.75em;
+      }
+      .ribbon-lg-4xl .double-ribbon::before, .ribbon-lg-4xl .double-ribbon::after {
+        left: -1.54em;
+      }
+  }
+
+  
+  .pull-ribbon {
+    margin-left: -2rem;
+    padding-left: 2rem;
+  }
+
+  .ribbon-project {
+    position: relative;
+    z-index: 1;
+    display: inline-block;
+    @apply px-4 font-semibold tracking-wide;
+    border-top-left-radius: 4px;
+  }
+  .ribbon-project::after {
+    content: "";
+    height: 0;
+    width: 0;
+    display: block;
+    position: absolute;
+    top: 0;
+    right: -12px;
+    border-top: 12px solid #252750;
+    border-bottom: 12px solid #252750;
+    border-right: 12px solid transparent;
+    border-left: 12px solid transparent;
+    z-index: 0;
+  }
+
+  .ribbon-project.ribbon-subproject {
+    border-top-left-radius: 0px;
+  }

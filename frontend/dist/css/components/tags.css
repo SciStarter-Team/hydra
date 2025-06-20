@@ -1,0 +1,1 @@
+@reference "tailwindcss";@reference "../theme.css";.ss-tag{@apply px-4 py-2 border-line-blue border mb-2;font-size:var(--ss-xxs);display:inline-block}

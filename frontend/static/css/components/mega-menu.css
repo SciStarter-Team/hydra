@@ -1,0 +1,240 @@
+@reference "tailwindcss";
+@reference "../theme.css";
+
+/* https://codepen.io/cuonoj/pen/abogzwP */
+.mega-menu {
+    opacity:0;
+    visibility:hidden;
+    z-index: -900;
+    display: none;
+    left: 0;
+    position: static;
+    text-align: left;
+    width: 100%;
+    transition: all 0.15s linear 0s;
+    margin-bottom: 0;
+    @apply transition-all;
+    /* transition: max-height 500ms ease-out;
+    max-height: 0; */
+    /* position: relative; */
+  }
+
+  @media (min-width:768px) {
+    .mega-menu {
+      position: absolute;
+      display: block;
+      background-color: #fff;
+    }
+
+    .mega-menu.not-absolute {
+      position: relative;
+    }
+
+  }
+
+
+
+  /* #hoverable Class Styles */
+  .hoverable {
+    position: static;
+  }
+
+  .hoverable > a:after {
+    content: "\25BC";
+    font-size: 10px;
+    padding-left: 6px;
+    position: relative;
+    top: -1px;
+  }
+
+  .hoverable:hover .mega-menu {
+    opacity:1;
+    visibility:visible;
+    z-index: 900;
+  }
+
+
+  /* #toggle Class Styles */
+
+  /* .toggleable > label:after {
+    content: "\25BC";
+    font-size: 10px;
+    padding-left: 6px;
+    position: relative;
+    top: -1px;
+  } */
+
+  .toggle-input {
+    display: none;
+  }
+  .toggle-input:not(checked) ~ .mega-menu {
+    opacity:0;
+    visibility:hidden;
+    z-index: -900;
+    display: none;
+    /* max-height: 0;
+    transition: max-height 500ms ease-out;
+    overflow: hidden; */
+  }
+
+
+  .toggle-input:checked ~ .mega-menu {
+    opacity:1;
+    visibility:visible;
+    z-index: 900;
+    display: block;
+    /* max-height: 9999px; */
+  }
+
+
+
+  .toggle-input + label {
+    display: flex;
+    gap:0.3rem;
+    @apply transition-all;
+  }
+
+  .toggle-input + label > svg {
+    width: 12px;
+  }
+
+@media (max-width:767px) {
+  .toggle-input:checked + label {
+    @apply text-2xl text-white;
+  }
+  .toggle-input:checked + label > svg {
+    width:20px;
+    margin-left:6px;
+  }
+}
+
+  .toggle-input:not(:checked) + label > .closed  {
+    display: block;
+  }
+
+  .toggle-input:not(:checked) + label > .open  {
+    display: none;
+  }
+
+  .toggle-input:checked + label > .closed {
+    display: none;
+  }
+
+  .toggle-input:checked + label > .open {
+    display: block;
+  }
+
+  /* @media (max-width:767px){
+    .toggle-input + label > .closed, .toggle-input + label > .open {
+      display: none!important;
+    }
+  } */
+
+  /* .toggle-input:checked ~ label:after {
+    content: "\25B2";
+    font-size: 10px;
+    padding-left: 6px;
+    position: relative;
+    top: -1px;
+  } */
+
+  #menu {
+    top: 0;
+    width: 100%;
+    /* box-shadow: 3px 6px 14px #00000033; */
+    height: 100vh;
+    overflow: auto;
+    position: fixed;
+  }
+
+  #menu.off-canvas {
+    left: -100%;
+  }
+  #menu:not(.off-canvas) {
+    left:0;
+  }
+
+  @media (min-width:768px){
+    #menu {
+      top: auto;
+      width: auto;
+      box-shadow: none;
+      height: auto;
+      overflow: visible;
+      position: static;
+    }
+    #menu.off-canvas, #menu:not(.off-canvas) {
+      left: auto;
+      top: auto;
+    }
+    #search-nav {
+      visibility: hidden;
+      opacity: 0;
+      transition: visibility 0s, opacity 200ms ease-in-out;
+    }
+    .toggle-input:checked ~  #search-nav {
+      display: flex!important;
+      visibility: visible;
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      left:0;
+      @apply bg-purple flex-col justify-center items-center;
+      opacity: 1;
+    }
+    #dashboard-drop {
+      width: 200px;
+    }
+
+    #dashboard-drop:before {
+      content:'';
+      position: absolute;
+      top:-17px;
+      right:13px;
+      width: 0px;
+      height: 0px;
+      border-style: solid;
+      border-width: 0 15px 17px 15px;
+      border-color: transparent transparent #C8E9F8 transparent;
+     }
+      #dashboard-drop:after {
+        content:'';
+        position: absolute;
+        top:-16px;
+        right:14px;
+        width: 0px;
+        height: 0px;
+        border-style: solid;
+        border-width: 0 14px 16px 14px;
+        border-color: transparent transparent #fff transparent;
+      }
+      .mega-menu a:hover > h3, .mega-menu ul a:hover {
+        text-decoration: underline;
+      }
+      .toggle-input.toggle-line:checked + label {
+        position: relative;
+      }
+      .toggle-input.toggle-line:checked + label::after {
+        content:'';
+        position:absolute;
+        bottom:-24px;
+        left:-3px;
+        right:0;
+        /* width:100%; */
+        border-bottom:4px solid #F26100;
+        padding-bottom: 2rem;
+      }
+
+    }
+  
+
+  .basis-thirds-minus-gap {
+    flex-basis: calc(33.33% - 1rem);
+  }
+
+ /** for project page more info **/
+ #toggle-more-info:checked + label > svg {
+  transform:rotate(45deg);
+  transition: all 100ms ease-in-out;
+}

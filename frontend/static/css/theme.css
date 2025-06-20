@@ -1,0 +1,29 @@
+@theme {
+  --color-*: initial;
+  --color-orange: #f26100;
+  --color-orange-hover: #c45306;
+  --color-action-blue: #0071c2;
+  --color-action-blue-hover: #0a619f;
+  --color-purple: #25284f;
+  --color-line-blue: #c8e9f8;
+  --color-bg-blue: #e8f8ff;
+  --color-line-purple: #f4f1fd;
+  --color-white: #fff;
+  --color-white-alpha: rgba(255, 255, 255, 0.2);
+  --color-light-blue: #47a8d4;
+  --color-green: #a9b725;
+  --color-green-hover: #76801a;
+  --color-black: #000;
+  --color-alert: #990000;
+  --color-girlscout: #00b34d;
+  --color-girlscout-alpha: rgba(0, 179, 77, 0.1);
+  --color-girlscout-hover: #028a3d;
+  --color-girlscout-tan: #f1ecdc;
+  --color-light-gray: #d9d9d9;
+  --color-bg-cool: #f3f7fd;
+
+  --font-*: initial;
+  --font-sans: Nunito, Helvetica Neue, ui-sans-serif, system-ui, sans-serif;
+  --font-condensed:
+    Nunito, Helvetica Neue, ui-sans-serif, system-ui, sans-serif;
+}

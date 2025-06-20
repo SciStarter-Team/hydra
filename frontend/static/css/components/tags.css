@@ -1,0 +1,8 @@
+@reference "tailwindcss";
+@reference "../theme.css";
+
+.ss-tag {
+    @apply px-4 py-2 border-line-blue border mb-2;
+    display: inline-block;
+    font-size: var(--ss-xxs);
+}

@@ -1,0 +1,170 @@
+@reference "tailwindcss";
+@reference "../theme.css";
+
+.tab-contents {
+    @apply w-full;
+}
+
+.tabs-tabs {
+    @apply inline-flex pt-2 px-1 w-full border-b border-line-blue mb-4;
+}
+
+.tabs-tabs > li {
+    margin-left: 0;
+    margin-bottom: 0!important;
+    list-style-type: none;
+}
+
+.tabs-tabs > li > a {
+    @apply flex gap-2 items-center border border-line-blue border-b-0;
+    @apply  bg-action-blue px-4 text-white font-semibold py-2 border-r-0 underline;
+    border-radius: 0;
+    @apply hover:bg-action-blue-hover;
+}
+
+.tabs-tabs > li:first-child > a {
+    border-top-left-radius: 4px;
+}
+.tabs-tabs > li:last-child > a {
+    border-top-right-radius: 4px;
+    @apply border-r;
+}
+
+
+.tabs-tabs  > li > a > svg {
+    @apply h-4 fill-action-blue;
+}
+
+.tabs-tabs > li.tab-active > a  {
+    @apply  bg-white px-4 text-purple font-semibold py-2;
+    text-decoration: none;
+    pointer-events: none
+}
+.tabs-tabs > li.tab-active {
+    position: relative;
+}
+.tabs-tabs > li.tab-active::after {
+    content:'';
+    display: block;
+    width:100%;
+    height: 1px;
+    position: absolute;
+    bottom:-2px;
+    left: 0;
+    border-bottom:2px solid white;
+
+}
+
+
+.tabs-tabs  > li.tab-active > a > svg {
+    @apply h-4 fill-purple;
+}
+
+
+
+.tabs-line {
+    @apply inline-flex pt-2 px-1 w-full border-b border-line-purple mb-4;
+}
+
+.tabs-line > li > a {
+    @apply flex gap-2 items-center;
+}
+
+.tabs-line > li > a {
+    @apply  bg-white px-4 text-action-blue font-semibold py-2 border-orange hover:underline;
+}
+
+
+.tabs-line  > li > a > svg {
+    @apply h-4 fill-action-blue;
+}
+
+.tabs-line > li.tab-active > a  {
+    @apply  bg-white px-4 text-purple font-semibold py-2 border-b-[3px] border-orange;
+}
+
+
+.tabs-line  > li.tab-active > a > svg {
+    @apply h-4 fill-purple;
+}
+
+.tabs-style2 .tabs-tabs {
+    border-color:#d9d9d9;
+    /* position: sticky;
+    top:0; */
+    background-color: #fff;
+    padding-top:1rem;
+    z-index: 99;
+}
+
+@media (max-width:500px) {
+    .tabs-overflow {
+        max-width: 100%;
+        overflow: auto;
+        padding-right: 1rem;
+    }
+}
+
+.tabs-style2 .tabs-tabs {
+    margin: 0;
+    border: 0;
+    padding: 0;
+}
+
+
+.tabs-style2 .tabs-tabs > li {
+    margin-right: 0;
+}
+
+.tabs-style2 .tabs-tabs > li > a {
+    border-radius: 0;
+    text-transform: uppercase;
+    font-size: 1rem;
+    font-size: var(--ss-small);
+    text-decoration: none;
+    border:0;
+    white-space: nowrap;
+    padding:0.5rem 1rem;
+}
+
+.tabs-style2 .tabs-tabs > li > a:hover {
+    color: #fff;
+}
+
+.tabs-style2 .tabs-tabs > li.tab-active > a {
+    @apply bg-bg-blue text-purple;    
+}
+.tabs-style2 .tabs-tabs > li.tab-active::after {
+    display: none;
+}
+/* .tabs-style2 .tabs-tabs > li.tab-active::after {
+
+    z-index: -1;
+    position: absolute;
+    top: 98.1%;
+    left: calc(50% - 5px);
+    content: '';
+    width: 0;
+    height: 0;
+    border-top: solid 10px #D9D9D9;
+    border-left: solid 10px transparent;
+    border-right: solid 10px transparent;
+    border-bottom: 0;
+} */
+
+.tabs-style2 .tab-contents {
+    @apply bg-bg-blue;
+}
+
+@media (max-width:768px) {
+    .tabs-style2 .tabs-tabs > li > a {
+        font-size: 1rem;
+    }
+}
+
+.girlscout .tabs-style2 .tabs-tabs > li:not(.tab-active) > a {
+    @apply bg-girlscout text-white;
+}
+.girlscout .tabs-style2 .tabs-tabs > li:not(.tab-active) > a:hover {
+    @apply bg-girlscout-hover;
+}

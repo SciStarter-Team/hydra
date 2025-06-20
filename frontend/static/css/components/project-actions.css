@@ -1,0 +1,176 @@
+@reference "tailwindcss";
+@reference "../theme.css";
+
+#project-actions {
+    position: fixed;
+    bottom:0;
+    left:0;
+    right:0;
+    /* background-color: #fff; */
+    padding:0.5rem 1rem 0;
+    flex-wrap: wrap;
+    box-shadow: 0 -2px 5px rgba(0,0,0,.2);
+    @apply bg-purple;
+}
+
+#project-actions > :nth-child(2) {
+    margin-right: 42px;
+}
+#project-actions .more-actions {
+    width: 100%;
+}
+
+#project-actions .more-actions label {
+    @apply bg-action-blue;
+    border-radius: 100%;
+    width: 2rem;
+    height: 2rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-grow: 0;
+    position: absolute;
+    top:-41px;
+    right:0;
+    margin:0;
+}
+#project-actions .more-actions label span {
+    display: none;
+}
+
+#project-actions .more-actions label > svg {
+    width: 1rem;
+    fill: #fff;
+    min-width: 1rem;
+    transform: rotate(-45deg);
+}
+
+#project-actions .toggle-input:checked ~ .mega-menu {
+    padding:0;
+}
+
+#project-actions .more-actions .toggle-input:checked ~ label > svg {
+    transform: rotate(0deg);
+    position: relative;
+    left:-3px;
+}
+
+
+#project-actions .toggle-input:checked ~ .mega-menu li button {
+    @apply text-lg text-action-blue px-4 py-1 mb-2 border-[1px] rounded border-line-blue justify-start;
+    text-align: left;
+    @apply bg-white;
+    line-height: 1.2;
+}
+
+
+#project-actions a, #project-actions button {
+    justify-content: center;
+    flex-grow: 1;
+}
+
+
+@media (min-width:768px){
+    #project-actions {
+        position: relative;
+        @apply bg-white;
+        box-shadow: none;
+        padding: 0;
+    }
+
+    #project-actions > :nth-child(2) {
+        margin-right: 0;
+    }
+
+    #project-actions .more-actions label {
+        @apply bg-white;
+        border-radius: 0;
+        width: auto;
+        height: auto;
+        display: flex;
+        flex-grow: 0;
+        position: relative;
+        top:auto;
+        left:auto;
+        right:auto;
+    }
+    #project-actions .more-actions {
+        width:auto;
+    }
+    
+    #project-actions a, #project-actions button, #project-actions .more-actions {
+        justify-content: center;
+        flex-grow: 0;
+    }
+    #project-actions .more-actions label span {
+        display: block;
+    }
+    
+    #project-actions .more-actions label {
+        width: auto;
+        fill: #fff;
+        @apply rounded;
+    }
+
+    #project-actions .more-actions .mega-menu {
+        width:200px;
+        left: 0;
+        right: auto;
+        margin-top: 17px;
+        @apply border-action-blue;
+    }
+    #project-actions .more-actions .mega-menu button {
+        justify-content: flex-start;
+    }
+    #project-actions .more-actions label {
+        cursor: pointer;
+        @apply gap-3;
+    }
+    #project-actions .more-actions label:hover {
+        @apply bg-action-blue;
+    }
+    #project-actions .more-actions label:hover > span {
+        @apply text-white;
+    }
+    #project-actions .more-actions label:hover > svg {
+        @apply fill-white;
+    }
+    
+    #project-actions .more-actions label > svg {
+        @apply fill-action-blue;
+        transform: rotate(-45deg);
+        transition: all 100ms ease-in-out;
+    }
+    #project-actions .more-actions label > span {
+        @apply text-action-blue;
+    }
+    
+    #project-actions .more-actions .toggle-input:checked + label {
+        @apply bg-action-blue !text-white;
+    }
+
+    #project-actions .more-actions .toggle-input:checked + label > span {
+        @apply !text-white;
+    }
+
+    
+    #project-actions .more-actions .toggle-input:checked + label svg {
+        transform: rotate(0deg);
+        @apply fill-white;
+    }
+    #project-actions .more-actions .toggle-input:checked .mega-menu {
+        position: relative;
+        display: block;
+        background-color: #fff;
+      }
+      #project-actions .more-actions .toggle-input:checked .mega-menu ul {
+        width:100%;
+      }
+
+      #project-actions .toggle-input:checked ~ .mega-menu li button {
+        @apply !text-base font-normal border-0 border-b-[1px];
+      }
+      #project-actions .toggle-input:checked ~ .mega-menu li:last-child button {
+        @apply border-b-0;
+      }
+}
