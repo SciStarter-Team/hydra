@@ -1,8 +1,55 @@
+use std::collections::BTreeMap;
+
+use anyhow::Error;
+use sqlx::types::JsonValue;
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct Signup {
+    pub session_id: String,
+    pub handle: String,
+    pub email: String,
+    pub password: String,
+    pub newsletter: bool,
+    pub zipcode: String,
+    pub protected: bool,
+    pub point: Option<String>,
+    pub tags: Vec<String>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct Login {
+    pub email: String,
+    pub password: String,
+}
+
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Session {
     pub session_id: String,
     pub expires: Option<String>,
     pub data: Box<[u8]>,
+}
+
+impl Session {
+    pub fn new(
+        session_id: impl Into<String>,
+        expires: impl Into<Option<String>>,
+        data: &BTreeMap<String, JsonValue>,
+    ) -> Result<Session, Error> {
+        Ok(Session {
+            session_id: session_id.into(),
+            expires: expires.into(),
+            data: flexbuffers::to_vec(data)?.into_boxed_slice(),
+        })
+    }
+
+    pub fn decode(&self) -> Result<BTreeMap<String, JsonValue>, Error> {
+        Ok(flexbuffers::from_slice(&self.data)?)
+    }
+
+    pub fn encode(&mut self, data: BTreeMap<String, JsonValue>) -> Result<(), Error> {
+        self.data = flexbuffers::to_vec(data)?.into_boxed_slice();
+        Ok(())
+    }
 }
 
 pub trait UserInfo {

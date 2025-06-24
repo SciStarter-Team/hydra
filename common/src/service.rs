@@ -1,10 +1,12 @@
-use anyhow::anyhow;
+use anyhow::{Error, anyhow};
 use async_nats::{HeaderMap, Message, subject::ToSubject};
 use errors::DecodeError;
 use futures::StreamExt;
+use jiff::Timestamp;
 use serde::de::DeserializeOwned;
+use ulid::Ulid;
 
-use crate::shared::nats;
+use crate::{shared::nats, timestring::TimeString, ulid::AsUlid};
 
 /// Handler helper for duplex request-response service endpoints
 #[macro_export]
@@ -177,6 +179,29 @@ where
         .decode_error()?;
 
     decode_structured_message(msg)
+}
+
+/// A convenience wrapper around [`common::service::send`] for sending
+/// logging messages.
+pub fn log_activity(
+    when: impl Into<Option<TimeString>>,
+    action: impl Into<String>,
+    user_id: impl Into<Option<Ulid>>,
+    target_id: impl Into<Option<Ulid>>,
+    extra: impl Into<Option<String>>,
+) -> impl Future<Output = Result<(), Error>> {
+    let when: String = when.into().unwrap_or_else(|| TimeString::now()).into();
+    let action: String = action.into();
+    let user_id: Option<String> = user_id
+        .into()
+        .and_then(|u| u.as_ulid().ok())
+        .map(|u| u.to_string());
+    let target_id: Option<String> = target_id
+        .into()
+        .and_then(|t| t.as_ulid().ok())
+        .map(|t| t.to_string());
+    let extra: Option<String> = extra.into().map(|e| e.into());
+    send("log.activity", (when, action, user_id, target_id, extra))
 }
 
 pub mod errors {

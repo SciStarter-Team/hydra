@@ -12,6 +12,7 @@ create table "users" (
        "password" text not null,
        "handle" text not null,
        "primary_email" text not null,
+       "verified" boolean not null,
        "is_superuser" integer not null default 0,
        "is_staff" integer not null default 0,
        "is_test" integer not null default 0,
@@ -66,7 +67,7 @@ create table "users" (
        "home_page" text,
        "constant_contact_id" text,
        "ambassador" text -- datetime
-); -- Not strict, so that it can have geometry columns
+);
 
 select InitSpatialMetaDataFull() where not exists(select 1 from sqlite_master where type = 'table' and name = 'spatial_ref_sys');
 
@@ -82,10 +83,11 @@ create unique index "users_by_username" on "users" ("username");
 create table "emails" (
        "user_id" text not null references "users" ("user_id") on delete cascade,
        "email" text not null,
+       "verified" boolean not null,
        "hash" text not null,
        "hash_lower" text not null,
        "hash_capfirst" text not null
-) strict;
+);
 
 create unique index "emails_by_email" on "emails" ("email");
 create unique index "emails_by_hash" on "emails" ("hash");
@@ -95,22 +97,9 @@ create unique index "emails_by_hash_capfirst" on "emails" ("hash_capfirst");
 create table "user_tags" (
        "user_id" text not null references "users" ("user_id") on delete cascade,
        "tag" text not null
-) strict;
+);
 
 create unique index "user_tags_by_user_id_and_tag" on "user_tags" ("user_id", "tag");
 create index "user_tags_by_user_id" on "user_tags" ("user_id");
 create index "user_tags_by_tag" on "user_tags" ("tag");
 
-create table "user_log" (
-       "user_id" text not null references "users" ("user_id") on delete cascade,
-       "when" text not null default current_timestamp,
-       "action" text not null,
-       "target" text,
-       "extra" text
-) strict;
-
-create index "user_log_by_user_id" on "user_log" ("user_id");
-create index "user_log_by_when" on "user_log" ("when");
-create index "user_log_by_action" on "user_log" ("action");
-create index "user_log_by_target" on "user_log" ("target") where "target" is not null;
-create index "user_log_by_when_and_action" on "user_log" ("when", "action");

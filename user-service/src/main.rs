@@ -3,11 +3,15 @@ use std::{collections::BTreeMap, time::Duration};
 use async_nats::service::ServiceExt;
 use common::{
     handler, misc, recv_handler,
+    service::log_activity,
     shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower, nats},
+    timestring::TimeString,
+    ulid::AsUlid,
 };
 use futures::StreamExt;
 use tokio::{spawn, task::JoinSet, time::sleep};
 
+pub mod auth;
 pub mod sessions;
 pub mod users;
 
@@ -110,6 +114,7 @@ async fn users_synchronize() {
         updated: String,
         username: String,
         password: String,
+        verified: bool,
         is_superuser: bool,
         is_staff: bool,
         is_test: bool,
@@ -187,6 +192,8 @@ async fn users_synchronize() {
         profile_anonymized: Option<String>,
         profile_extra: Option<String>,
     }
+
+    let backplane = nats();
 
     loop {
         let last = misc::get("user-sync-bookmark")
@@ -338,6 +345,7 @@ async fn users_synchronize() {
                      "password",
                      "handle",
                      "primary_email",
+                     "verified",
                      "is_superuser",
                      "is_staff",
                      "is_test",
@@ -463,8 +471,9 @@ async fn users_synchronize() {
                      ?65,
                      ?66,
                      ?67,
-                     GeomFromEWKT(?68),
-                     GeomFromEWKT(?69)
+                     ?68,
+                     GeomFromEWKT(?69),
+                     GeomFromEWKT(?70)
                    )
                    on conflict ("user_id") do
                    update set
@@ -480,6 +489,7 @@ async fn users_synchronize() {
                      "password" = "excluded"."password",
                      "handle" = "excluded"."handle",
                      "primary_email" = "excluded"."primary_email",
+                     "verified" = "excluded"."verified",
                      "is_superuser" = "excluded"."is_superuser",
                      "is_staff" = "excluded"."is_staff",
                      "is_test" = "excluded"."is_test",
@@ -549,6 +559,7 @@ async fn users_synchronize() {
                 user.password,
                 user.handle,
                 user_primary_email,
+                user.verified,
                 user_is_superuser,
                 user_is_staff,
                 user_is_test,
@@ -611,38 +622,25 @@ async fn users_synchronize() {
             .expect("Saving user failed");
 
             if let Some(stamp) = user.last_login {
-                sqlx::query!(
-                    r#"
-                    insert into "user_log" ("user_id", "when", "action")
-                    values (?, ?, 'login')
-                    "#,
-                    user.ulid,
-                    stamp
+                log_activity(
+                    stamp.try_into().ok(),
+                    "login",
+                    user.ulid.as_ulid().ok(),
+                    None,
+                    None,
                 )
-                .execute(db)
                 .await
-                .expect("Saving last login entry failed");
+                .expect("Error sending log entry");
             }
 
-            sqlx::query!(
-                r#"
-                insert into "user_log" ("user_id", "when", "action")
-                values (?, ?, 'imported-activity')
-                "#,
-                user.ulid,
-                user.date_active,
-            )
-            .execute(db)
-            .await
-            .expect("Saving date active entry failed");
-
+            let verified = user.verified && user.username == user_primary_email;
             let hashed = hash_identifier(&user.username);
             let hashed_lower = hash_identifier_lower(&user.username);
             let hashed_capfirst = hash_identifier_capfirst(&user.username);
             sqlx::query!(
                 r#"
-                insert into "emails" ("user_id", "email", "hash", "hash_lower", "hash_capfirst")
-                values (?, ?, ?, ?, ?)
+                insert into "emails" ("user_id", "email", "verified", "hash", "hash_lower", "hash_capfirst")
+                values (?, ?, ?, ?, ?, ?)
                 on conflict ("email") do
                 update set "user_id" = excluded."user_id"
                 on conflict ("hash") do
@@ -654,6 +652,7 @@ async fn users_synchronize() {
                 "#,
                 user.ulid,
                 user.username,
+                verified,
                 hashed,
                 hashed_lower,
                 hashed_capfirst
@@ -663,13 +662,14 @@ async fn users_synchronize() {
             .expect("Saving username email failed");
 
             if !user.email.is_empty() && user.email != user.username {
+                let verified = user.verified && user.email == user_primary_email;
                 let hashed = hash_identifier(&user.email);
                 let hashed_lower = hash_identifier_lower(&user.email);
                 let hashed_capfirst = hash_identifier_capfirst(&user.email);
                 sqlx::query!(
                     r#"
-                insert into "emails" ("user_id", "email", "hash", "hash_lower", "hash_capfirst")
-                values (?, ?, ?, ?, ?)
+                insert into "emails" ("user_id", "email", "verified", "hash", "hash_lower", "hash_capfirst")
+                values (?, ?, ?, ?, ?, ?)
                 on conflict ("email") do nothing
                 on conflict ("hash") do nothing
                 on conflict ("hash_lower") do nothing
@@ -677,6 +677,7 @@ async fn users_synchronize() {
                 "#,
                     user.ulid,
                     user.email,
+                    verified,
                     hashed,
                     hashed_lower,
                     hashed_capfirst
@@ -690,13 +691,14 @@ async fn users_synchronize() {
                 && user.additional_email != user.username
                 && user.additional_email != user.email
             {
+                let verified = user.verified && user.additional_email == user_primary_email;
                 let hashed = hash_identifier(&user.additional_email);
                 let hashed_lower = hash_identifier_lower(&user.additional_email);
                 let hashed_capfirst = hash_identifier_capfirst(&user.additional_email);
                 sqlx::query!(
                     r#"
-                insert into "emails" ("user_id", "email", "hash", "hash_lower", "hash_capfirst")
-                values (?, ?, ?, ?, ?)
+                insert into "emails" ("user_id", "email", "verified", "hash", "hash_lower", "hash_capfirst")
+                values (?, ?, ?, ?, ?, ?)
                 on conflict ("email") do nothing
                 on conflict ("hash") do nothing
                 on conflict ("hash_lower") do nothing
@@ -704,6 +706,7 @@ async fn users_synchronize() {
                 "#,
                     user.ulid,
                     user.additional_email,
+                    verified,
                     hashed,
                     hashed_lower,
                     hashed_capfirst
@@ -726,6 +729,10 @@ async fn users_synchronize() {
                 .await
                 .expect("Error inserting tag");
             }
+
+            log_activity(None, "imported", user.ulid.as_ulid().ok(), None, None)
+                .await
+                .ok();
 
             println!("Saved user {}", user.username);
         }
@@ -775,6 +782,11 @@ async fn main() {
     toplevel.spawn(recv_handler!(session, "store", sessions::store));
     toplevel.spawn(handler!(session, "retrieve", sessions::retrieve));
     toplevel.spawn(recv_handler!(session, "delete", sessions::delete));
+
+    let auth = service.group("user.auth");
+    toplevel.spawn(handler!(auth, "signup", auth::signup));
+    toplevel.spawn(handler!(auth, "login", auth::login));
+    toplevel.spawn(handler!(auth, "logout", auth::logout));
 
     toplevel.join_all().await;
 

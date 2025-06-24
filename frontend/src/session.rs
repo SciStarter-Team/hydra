@@ -34,7 +34,7 @@ impl SessionStorage for UserServiceSessionStorage {
                     }
                 }
 
-                Ok(flexbuffers::from_slice(&session.data).map_err(InternalServerError)?)
+                Ok(Some(session.decode()?))
             } else {
                 Ok(None)
             }
@@ -49,15 +49,9 @@ impl SessionStorage for UserServiceSessionStorage {
         entries: &'a BTreeMap<String, JsonValue>,
         expires: Option<Duration>,
     ) -> Result<()> {
-        let session_id = session_id.to_owned();
         let expires = expires.map(|d| (Timestamp::now() + d).to_string());
-        let data = flexbuffers::to_vec(entries).map_err(BadRequest)?.into();
 
-        let session = Session {
-            session_id,
-            expires,
-            data,
-        };
+        let session = Session::new(session_id, expires, entries)?;
 
         let payload = flexbuffers::to_vec(session)
             .map_err(InternalServerError)?

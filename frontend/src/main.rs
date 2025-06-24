@@ -26,6 +26,7 @@ use poem::{
     http::HeaderMap,
     listener::TcpListener,
     middleware::{ForceHttps, NormalizePath, SetHeader, TrailingSlash},
+    post,
     session::{CookieConfig, ServerSession, Session},
     web::{Html, Path, RealIp, Redirect, cookie::SameSite},
 };
@@ -121,6 +122,7 @@ fn user_facing() -> impl Endpoint {
         .at("/:slug", get(entity_page))
         .at("/", get(index_page))
         .at("/index.html", get(index_page))
+        .at("/signup", post(auth::signup_action))
         .at(
             "/login",
             get(auth::login_signup_page).post(auth::login_action),
