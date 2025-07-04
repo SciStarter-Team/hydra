@@ -17,6 +17,7 @@
   margin-right: auto;
 }
 
+
 @media (min-width:768px) {
     .ss-container {
         padding: 0 2rem;
@@ -153,6 +154,6 @@
 
 .girlscout-hr {
   width: 80%;
-  margin:2rem auto;
+  margin:2rem auto 3rem;
   color: #00b34d;
 }

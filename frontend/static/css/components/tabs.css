@@ -116,6 +116,10 @@
     margin-right: 0;
 }
 
+.tabs-style2 .tabs-tabs > li:not(first-child) {
+    border-left:1px solid #fff;
+}
+
 .tabs-style2 .tabs-tabs > li > a {
     border-radius: 0;
     text-transform: uppercase;

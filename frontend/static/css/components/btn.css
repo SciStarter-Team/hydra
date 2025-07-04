@@ -4,21 +4,26 @@
 .btn {
     @apply py-2 px-4 rounded;
     display: inline-block;
+    white-space: nowrap;
 }
 .btn-square {
     @apply py-2 px-4;
 }
 .btn-blue {
-    @apply bg-action-blue text-white;
+    @apply bg-blue-action text-white;
 }
 .btn-blue:hover {
-    @apply bg-action-blue-hover;
+    @apply bg-blue-dark;
 }
 .btn-green {
     @apply bg-green text-white;
 }
 .btn-green:hover {
     @apply bg-green-hover;
+}
+
+.btn-accent {
+    @apply bg-coral text-white font-bold hover:bg-coral-dark;
 }
 
 .btn-gray {

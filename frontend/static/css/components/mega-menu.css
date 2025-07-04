@@ -180,7 +180,7 @@
       right: 0;
       bottom: 0;
       left:0;
-      @apply bg-purple flex-col justify-center items-center;
+      @apply bg-blue-dark flex-col justify-center items-center;
       opacity: 1;
     }
     #dashboard-drop {

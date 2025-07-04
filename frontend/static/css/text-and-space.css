@@ -1,0 +1,27 @@
+@reference "tailwindcss";
+@reference "./theme.css";
+
+
+:root {
+  /** TEXT SIZING ***/
+  /* Base type size: 18px (1.125rem) */
+  --step--2: clamp(0.72rem, 0.65rem + 0.25vw, 0.72rem);     /* ~11.52px */
+  --step--1: clamp(0.9rem, 0.82rem + 0.25vw, 0.9rem);       /* ~14.4px */
+  --step-0: clamp(1.125rem, 1rem + 0.25vw, 1.125rem);       /* 18px */
+  --step-1: clamp(1.406rem, 1.3rem + 0.5vw, 1.406rem);      /* ~22.5px */
+  --step-2: clamp(1.757rem, 1.6rem + 0.8vw, 1.757rem);      /* ~28.125px */
+  --step-3: clamp(2.197rem, 1.9rem + 1vw, 2.197rem);        /* ~35.16px */
+  --step-4: clamp(2.747rem, 2.4rem + 1.25vw, 2.747rem);     /* ~43.95px */
+
+ /* Spacing system (1.25 scale, base = 18px = 1.125rem) */
+  --space--3: 0.36rem;    /* ~5.76px */
+  --space--2: 0.45rem;    /* ~7.2px */
+  --space--1: 0.5625rem;  /* ~9px */
+  --space-0: 1.125rem;    /* 18px */
+  --space-1: 1.406rem;    /* ~22.5px */
+  --space-2: 1.757rem;    /* ~28.125px */
+  --space-3: 2.197rem;    /* ~35.16px */
+  --space-4: 2.747rem;    /* ~43.95px */
+
+
+}

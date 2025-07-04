@@ -959,17 +959,17 @@ impl LoadStorePeered for ProjectAll {
 
         // "data_access",
         sqlx::query!(
-            r#"delete from project_data_consents where project_id = ?"#,
+            r#"delete from project_data_access where project_id = ?"#,
             project_id
         )
         .execute(&mut *tx)
         .await?;
 
-        for val in self.data_consent.iter() {
+        for val in self.data_access.iter() {
             sqlx::query!(
-                r#"insert into project_data_consents (
+                r#"insert into project_data_access (
               "project_id",
-              "data_consent"
+              "data_access"
             )
             values (
               ?,

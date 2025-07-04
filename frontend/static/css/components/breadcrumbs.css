@@ -13,4 +13,5 @@
 
 .ss-breadcrumbs > li > a, .ss-text .ss-breadcrumbs > li > a {
     text-decoration: underline;
+    color: var(--color-blue-action);
 }
