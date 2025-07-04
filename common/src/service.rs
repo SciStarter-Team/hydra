@@ -2,7 +2,6 @@ use anyhow::{Error, anyhow};
 use async_nats::{HeaderMap, Message, subject::ToSubject};
 use errors::DecodeError;
 use futures::StreamExt;
-use jiff::Timestamp;
 use serde::de::DeserializeOwned;
 use ulid::Ulid;
 

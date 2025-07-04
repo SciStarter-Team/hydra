@@ -16,4 +16,4 @@ tokio = { version = "1.45.0", features = ["full"] }
 hex = "0.4.3"
 sha2 = "0.10.9"
 jiff = "0.2.14"
-ulid = "1.2.1"
+ulid = { version = "1.2.1", features = ["serde"] }

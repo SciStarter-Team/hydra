@@ -2,10 +2,10 @@ use std::collections::BTreeMap;
 
 use anyhow::Error;
 use sqlx::types::JsonValue;
+use ulid::Ulid;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Signup {
-    pub session_id: String,
     pub handle: String,
     pub email: String,
     pub password: String,
@@ -53,7 +53,7 @@ impl Session {
 }
 
 pub trait UserInfo {
-    fn user_id(&self) -> Option<&str>;
+    fn user_id(&self) -> Option<Ulid>;
     fn handle(&self) -> &str;
     fn is_staff(&self) -> bool;
     fn is_superuser(&self) -> bool;
@@ -67,14 +67,14 @@ pub struct Unauthenticated;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BasicInfo {
-    pub user_id: String,
+    pub user_id: Ulid,
     pub handle: String,
     pub is_staff: bool,
     pub is_superuser: bool,
 }
 
 impl UserInfo for Unauthenticated {
-    fn user_id(&self) -> Option<&str> {
+    fn user_id(&self) -> Option<Ulid> {
         None
     }
 
@@ -92,8 +92,8 @@ impl UserInfo for Unauthenticated {
 }
 
 impl UserInfo for BasicInfo {
-    fn user_id(&self) -> Option<&str> {
-        Some(self.user_id.as_str())
+    fn user_id(&self) -> Option<Ulid> {
+        Some(self.user_id)
     }
 
     fn handle(&self) -> &str {
@@ -110,7 +110,7 @@ impl UserInfo for BasicInfo {
 }
 
 impl UserInfo for Option<BasicInfo> {
-    fn user_id(&self) -> Option<&str> {
+    fn user_id(&self) -> Option<Ulid> {
         match self {
             Some(info) => info.user_id(),
             None => Unauthenticated.user_id(),
@@ -140,7 +140,7 @@ impl UserInfo for Option<BasicInfo> {
 }
 
 impl UserInfo for Option<&BasicInfo> {
-    fn user_id(&self) -> Option<&str> {
+    fn user_id(&self) -> Option<Ulid> {
         match self {
             Some(info) => info.user_id(),
             None => Unauthenticated.user_id(),

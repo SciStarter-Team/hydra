@@ -1,18 +1,25 @@
 use anyhow::Error;
 use async_nats::service::Request;
 use common::{
-    message::user::{Session, Signup},
+    message::user::{BasicInfo, Login, Signup},
     service::log_activity,
     shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower},
+    ulid::AsUlid,
 };
 use ulid::Ulid;
 
-use crate::sessions::read_session;
+#[derive(Debug)]
+struct UserWithPassword {
+    user_id: String,
+    handle: String,
+    password: String,
+    is_staff: i64,
+    is_superuser: i64,
+}
 
 /// Sign the current session up for a new account
-pub async fn signup(req: &Request) -> Result<Option<Ulid>, Error> {
+pub async fn signup(req: &Request) -> Result<Option<BasicInfo>, Error> {
     let form: Signup = flexbuffers::from_slice(&req.message.payload)?;
-    let mut session = read_session(&form.session_id).await?;
 
     let user_id = Ulid::new();
     let user_id_str = user_id.to_string();
@@ -117,13 +124,54 @@ pub async fn signup(req: &Request) -> Result<Option<Ulid>, Error> {
 
     log_activity(None, "signup", user_id, None, None).await.ok();
 
-    Ok(Some(user_id))
+    Ok(Some(BasicInfo {
+        user_id: user_id,
+        handle,
+        is_staff: false,
+        is_superuser: false,
+    }))
 }
 
-pub async fn login(req: &Request) -> Result<Option<Ulid>, Error> {
-    todo!()
-}
+pub async fn login(req: &Request) -> Result<Option<BasicInfo>, Error> {
+    let form: Login = flexbuffers::from_slice(&req.message.payload)?;
 
-pub async fn logout(req: &Request) -> Result<Option<Ulid>, Error> {
-    todo!()
+    // Look up user by email using query_as
+    let user_record = sqlx::query_as!(
+        UserWithPassword,
+        r#"select u.user_id, u.handle, u.password, u.is_staff, u.is_superuser
+           from users u
+           join emails e on u.user_id = e.user_id
+           where e.email = ?
+           limit 1"#,
+        form.email
+    )
+    .fetch_optional(db())
+    .await?;
+
+    if let Some(user) = user_record {
+        // Verify password
+        if djangohashers::check_password(&form.password, &user.password).unwrap_or(false) {
+            // Log successful login
+            let user_id = user.user_id.as_ulid().ok();
+            log_activity(None, "login", user_id, None, None).await.ok();
+
+            // Return BasicInfo
+            Ok(Some(BasicInfo {
+                user_id: user.user_id.as_ulid()?,
+                handle: user.handle,
+                is_staff: user.is_staff != 0,
+                is_superuser: user.is_superuser != 0,
+            }))
+        } else {
+            // Log failed login attempt
+            let user_id = user.user_id.as_ulid().ok();
+            log_activity(None, "login-failed", user_id, None, None)
+                .await
+                .ok();
+            Ok(None)
+        }
+    } else {
+        // User not found
+        Ok(None)
+    }
 }

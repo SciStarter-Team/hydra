@@ -43,7 +43,7 @@ impl Default for Authenticated {
 }
 
 impl UserInfo for Authenticated {
-    fn user_id(&self) -> Option<&str> {
+    fn user_id(&self) -> Option<Ulid> {
         self.0.as_ref().and_then(|i| i.user_id())
     }
 
@@ -102,7 +102,7 @@ impl<E: Endpoint> Endpoint for AuthEndpoint<E> {
         if basic_info.is_none() {
             if let Some(username) = session.get::<String>("auth_username") {
                 basic_info =
-                    common::service::request("users.basic_info.by_username", username).await?;
+                    common::service::request("user.basic_info.by_username", username).await?;
 
                 if let Some(info) = &basic_info {
                     session.remove("auth_username");

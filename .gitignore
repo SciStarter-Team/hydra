@@ -1,3 +1,6 @@
+/*.md
+!/README.md
+!/LICENSE.md
 .envrc
 remote.ron
 scripts

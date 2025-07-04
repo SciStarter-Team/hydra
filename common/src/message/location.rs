@@ -10,6 +10,18 @@ pub struct LocationInfo {
     pub time_zone: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct Point {
+    pub latitude: f64,
+    pub longitude: f64,
+}
+
+impl std::fmt::Display for Point {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, r#"{{"type":"Point","coordinates":[{},{}]}}"#, self.longitude, self.latitude)
+    }
+}
+
 impl Default for LocationInfo {
     fn default() -> Self {
         LocationInfo {
@@ -22,5 +34,20 @@ impl Default for LocationInfo {
             zip_code: String::new(),
             time_zone: String::from("+00:00"),
         }
+    }
+}
+
+impl LocationInfo {
+    /// Convert to Point if latitude and longitude are valid numbers
+    /// Returns None if either latitude or longitude is empty or invalid
+    pub fn as_point(&self) -> Option<Point> {
+        if self.latitude.is_empty() || self.longitude.is_empty() {
+            return None;
+        }
+        
+        let latitude = self.latitude.parse().ok()?;
+        let longitude = self.longitude.parse().ok()?;
+        
+        Some(Point { latitude, longitude })
     }
 }

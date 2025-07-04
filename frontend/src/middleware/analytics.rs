@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use common::message::user::{BasicInfo, UserInfo};
+use common::message::user::UserInfo;
 use jiff::{ToSpan, Zoned};
 use poem::{Endpoint, FromRequest, Middleware, session::Session};
 use ulid::Ulid;

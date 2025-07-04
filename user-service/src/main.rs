@@ -193,8 +193,6 @@ async fn users_synchronize() {
         profile_extra: Option<String>,
     }
 
-    let backplane = nats();
-
     loop {
         let last = misc::get("user-sync-bookmark")
             .await
@@ -327,6 +325,16 @@ async fn users_synchronize() {
                 true => 1,
                 false => 0,
             };
+
+            let user_date_joined = match TimeString::try_from(user.date_joined) {
+                Ok(ts) => ts,
+                Err(err) => {
+                    eprintln!("{}", err);
+                    continue;
+                }
+            };
+
+            let user_date_active = TimeString::try_from(user.date_active).ok();
 
             // I would really like to see keyword parameters in SQLx
             // for DBs that support them.
@@ -553,7 +561,7 @@ async fn users_synchronize() {
                 user.profile_legacy_id,
                 user.profile_alias_id,
                 user.profile_id,
-                user.date_joined,
+                user_date_joined,
                 user.updated,
                 user_username,
                 user.password,
@@ -734,6 +742,18 @@ async fn users_synchronize() {
                 .await
                 .ok();
 
+            if let Some(date_active) = user_date_active {
+                log_activity(
+                    date_active,
+                    "legacy-active",
+                    user.ulid.as_ulid().ok(),
+                    None,
+                    None,
+                )
+                .await
+                .ok();
+            }
+
             println!("Saved user {}", user.username);
         }
 
@@ -786,7 +806,6 @@ async fn main() {
     let auth = service.group("user.auth");
     toplevel.spawn(handler!(auth, "signup", auth::signup));
     toplevel.spawn(handler!(auth, "login", auth::login));
-    toplevel.spawn(handler!(auth, "logout", auth::logout));
 
     toplevel.join_all().await;
 
