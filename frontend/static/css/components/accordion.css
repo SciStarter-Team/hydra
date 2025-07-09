@@ -2,26 +2,33 @@
 @reference "../theme.css";
 
 .ss-accordion-wrapper {
-    @apply mx-auto my-[var(--space-2)] space-y-[var(--space-0)];
+    @apply mx-auto my-8 space-y-4;
 }
 
 .ss-accordion {
-    @apply border border-blue-light rounded-lg;
+    @apply border border-primary-light rounded-lg;
     overflow: hidden;
 }
 
 .ss-accordion button {
-    @apply text-blue-dark;
+    @apply text-primary-dark text-base;
     cursor: pointer;
-    font-size: var(--ss-text-0);
 }
 
 .ss-accordion.open .accordion-toggle {
-    border-bottom: 1px solid var(--color-blue-light);
+    border-bottom: 1px solid var(--color-primary-light);
 }
 
 .ss-accordion.completed {
-    @apply bg-green border border-green-dark;
+    @apply bg-neutral-xlight border border-neutral-mid;
+}
+
+.ss-accordion.completed button {
+    @apply text-accent2-dark;
+}
+
+.ss-accordion.completed span svg * {
+    @apply fill-accent2-dark;
 }
 
 .ss-accordion.completed .accordion-content {
@@ -29,10 +36,10 @@
 }
 
 .ss-accordion.current {
-    @apply border border-green;
+    @apply border border-accent2-dark;
 }
 .ss-accordion.current .accordion-toggle {
-    @apply  border-green;
+    @apply  border-accent2 bg-accent2;
 }
 
 .ss-accordion.blocked {

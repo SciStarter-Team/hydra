@@ -1,17 +1,20 @@
 @reference "tailwindcss";
 @reference "../theme.css";
 
+@import "../theme.css";
+
+
 .ss-breadcrumbs, .ss-text .ss-breadcrumbs {
     list-style-type: none!important;
-    @apply mx-0 px-0;
+    @apply mx-0 px-0 mb-16;
 }
 
-.ss-breadcrumbs > li, .ss-text .ss-breadcrumbs > li {
-    font-size: 1.125rem;
-    font-size: var(--ss-xsmall);
+.ss-breadcrumbs > li, .ss-text .ss-breadcrumbs > li, .ss-breadcrumbs > li {
+    @apply text-sm;
 }
 
 .ss-breadcrumbs > li > a, .ss-text .ss-breadcrumbs > li > a {
     text-decoration: underline;
-    color: var(--color-blue-action);
+    color: var(--color-primary-action);
+    @apply text-sm;
 }

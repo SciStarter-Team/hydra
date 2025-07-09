@@ -1,2 +1,2 @@
 [common.drivers.sqlite]
-load_extensions = ["mod_spatialite"]
+load-extensions = ["mod_spatialite"]

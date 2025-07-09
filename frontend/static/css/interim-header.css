@@ -1,0 +1,105 @@
+header.site-header.site-header-interim {
+	background-color: #fff!important;
+	border-top: 7.2px solid #04A0C3;
+	border-bottom: 0;
+	box-shadow: 0 4px 8px rgba(0,0,0,.1)!important;
+        font-family: "Nunito",sans-serif;
+}
+
+
+.site-header.site-header-interim .nav--active a {
+    color: #037F9B;
+}
+
+.site-header.site-header-interim .nav--active a:hover {
+    color: #004B5C;
+}
+
+.site-header.site-header-interim .nav--links ul li a {
+	color: #037F9B;
+}
+
+.site-header.site-header-interim .nav--links ul li a:hover {
+	color: #004B5C;
+	border-bottom: 2px solid #F54017;
+}
+
+.site-header.site-header-interim button.menu-trigger {
+	background-color: transparent;
+	color: #037F9B;
+}
+
+.site-header.site-header-interim button.el-button--user a {
+	font-size: 14px;
+}
+
+body:not(.raw) .site-header.site-header-interim .el-button--user, body.raw .site-header.site-header-interim .el-button--user {
+    background-color: #037F9B!important;
+    color: #fff!important;
+    border-radius: 4px;
+    height: 30px;
+    float: left !important;
+    padding: 4px 8px !important;
+}
+
+header.site-header {
+        font-family: "Nunito",sans-serif !important;
+}
+
+header.site-header .el-button--user, body.raw header.site-header .el-button--user {
+    height: 30px;
+    float: left !important;
+    padding: 4px 8px !important;
+}
+
+body:not(.raw) header.site-header.site-header-interim .el-button--user a, body.raw header.site-header.site-header-interim .el-button--user a {
+    color: #fff!important;
+}
+
+html>body.raw .el-icon-search:before, html>body:not(.raw) .el-icon-search:before {
+    color: #fff;
+}
+
+@media (max-width: 815px) {
+	.site-header.site-header-interim  .logo > img {
+		width: unset;
+		height: 40px;
+	}
+	.site-header.site-header-interim .nav--links {
+		background-color: #037F9B;
+	}
+	.site-header.site-header-interim .nav--links ul li a, .site-header.site-header-interim .nav--links ul li a:hover {
+		color: #fff;
+		border: 0;
+	}
+	.site-header.site-header-interim .nav--links.open ul li {
+		border-top: 1px solid #d7eeff;
+	}
+}
+
+
+#footer.footer-interim #cookie-policy {
+	background-color: #24284E;
+}
+
+#footer.footer-interim {
+	background-color: #E8F7FF!important;
+}
+
+#footer p, #footer .footer-section a {
+	color: #004B5C!important;
+}
+
+#footer .footer-section a:hover {
+	color: #037F9B!important;
+}
+
+#footer .content-info {
+	background-color: #004B5C;
+	color: #fff;
+}
+
+#footer .content-info a {
+	color: #fff!important;
+}
+

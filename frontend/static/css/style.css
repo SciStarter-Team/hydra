@@ -1,24 +1,7 @@
 
 @import 'tailwindcss';
-@import "./components/mega-menu.css";
-@import "./components/btn.css";
-@import "./components/home.css";
-@import "./components/ribbons.css";
-@import "./components/glide.core.css";
-@import "./components/like-btn.css";
-@import "./components/project-actions.css";
-@import "./components/tabs.css";
-@import "./components/multiselect.css";
-@import "./components/self-tooltip.css";
-/* @import "./components/text.css"; */
-@import "./components/tags.css";
-@import "./components/breadcrumbs.css";
-@import "./theme.css";
-@import "./main.css";
-@import "./components/accordion.css";
-
-
-@custom-variant dark (&:is(.dark *));
+@reference "tailwindcss";
+@reference "./theme.css";
 
 /*
   The default border color has changed to `currentcolor` in Tailwind CSS v4,
@@ -30,126 +13,7 @@
 */
 @layer base {
 
-  :root {
 
-     /** NEW COLOR SCHEME ***/
-  --color-blue-dark: #24284E;
-  --color-blue-action: #1A5C8B;
-  --color-blue-logo: #04B2D9;
-  --color-blue-light: #C8E9F8;
-  --color-coral: #F54017;
-  --color-green: #ADBD49;
-  --color-black: #222;
-
-
-  --font-*: initial;
-  --font-sans: Inter, Helvetica Neue, ui-sans-serif, system-ui, sans-serif;
-  --font-condensed: Barlow, Inter, Helvetica Neue, ui-sans-serif, system-ui, sans-serif;
-  --font-header: Inter, Helvetica Neue, ui-sans-serif, system-ui, sans-serif;
-
-      --font-header-lg: Barlow, Inter, Helvetica Neue, ui-sans-serif, system-ui, sans-serif;
-
-
-     /* ↓ Font sizes below the base (scale: ÷1.2 from 18px) */
-    --ss-text--4: 0.625rem;   /* 10px */
-    --ss-text--3: 0.695rem;  /* ~11.15px */
-    --ss-text--2: 0.766rem;  /* ~12.25px */
-    --ss-text--1: 0.875rem;    /* 14px */
-
-    /* Base font size */
-    --ss-text-0: clamp(1rem, 0.9rem + 0.25vw, 1.125rem);        /* 16px → 18px */
-
-    /* ↑ Font sizes above the base (scale: ×1.25 from 18px) */
-    --ss-text-1: clamp(1.25rem, 1.1rem + 0.4vw, 1.406rem);      /* 20px → 22.5px */
-    --ss-text-2: clamp(1.563rem, 1.4rem + 0.6vw, 1.758rem);     /* 25px → 28.13px */
-    --ss-text-3: clamp(1.953rem, 1.7rem + 0.8vw, 2.197rem);     /* 31.25px → 35.16px */
-    --ss-text-4: clamp(2.441rem, 2.2rem + 1vw, 2.747rem);       /* 39.06px → 43.95px */
-
-    /* Spacing scale using same ss-text pattern */
-    --space--2: clamp(0.45rem, 0.4rem + 0.2vw, 0.45rem);      /* ~7.2px */
-    --space--1: clamp(0.5625rem, 0.5rem + 0.2vw, 0.5625rem);  /* ~9px */
-    --space-0: clamp(1.125rem, 1rem + 0.25vw, 1.125rem);      /* 18px */
-    --space-1: clamp(1.406rem, 1.2rem + 0.4vw, 1.406rem);     /* ~22.5px */
-    --space-2: clamp(1.757rem, 1.5rem + 0.6vw, 1.757rem);     /* ~28.1px */
-    --space-3: clamp(2.197rem, 1.8rem + 0.8vw, 2.197rem);     /* ~35.2px */
-    --space-4: clamp(2.747rem, 2.2rem + 1vw, 2.747rem);       /* ~44px */
-    --space-5: clamp(3.434rem, 2.75rem + 1.25vw, 3.434rem);   /* ~55px */
-    --space-6: clamp(4.293rem, 3.45rem + 1.6vw, 4.293rem);    /* ~68.6px */
-    --space-7: clamp(5.366rem, 4.3rem + 2vw, 5.366rem);       /* ~85.8px */
-    --space-8: clamp(6.707rem, 5.4rem + 2.5vw, 6.707rem);     /* ~107px */
-
-  }
-
-  /* Apply to base elements */
-  html {
-    font-size: 16px;
-    color: var(--color-black);
-  }
-
- .ss-xxxl { font-family: var(--font-header-lg); font-size: var(--ss-text-4); line-height: 1.2; max-width: 35ch; }
-
-  h1, .ss-xxl { font-family: var(--font-header-lg); font-size: var(--ss-text-3); line-height: 1.2; max-width:45ch; }
-  h2, .ss-xl { font-family: var(--font-header-lg); font-size: var(--ss-text-2); line-height: 1.2; max-width: 55ch; }
-  h3, .ss-large {font-family: var(--font-header); font-size: var(--ss-text-1); line-height: 1.2; max-width: 65ch}
-
-  h4, h5, h6 {font-family: var(--font-header);}
-
-  h1, h2 {
-    font-weight: 700;
-  }
-
-  h3, h4 {
-    font-weight: 700;
-  }
-
-  .ss-bolder {
-    font-weight: 900;
-    letter-spacing: 0.1em;
-  }
-
-  p.ss-large {line-height: 1.5;
-  }
-
-  p, li, .ss-normal  { font-size: var(--ss-text-0); line-height: 1.75; max-width: 80ch; margin-bottom: var(--space-0); }
-  small, .ss-small { font-size: var(--ss-text--1); margin-bottom: var(--space--2);}
-  .ss-xs {font-size: var(--ss-text--2); margin-bottom: var(--space--2); }
-  .ss-xxs {font-size: var(--ss-text--3); margin-bottom: var(--space--2);}
-  .ss-xxxs {font-size: var(--ss-text--4); margin-bottom: var(--space--2);}
-  .uppercase { letter-spacing: 0.05em;}
-
-  .tight li {margin-bottom: var(--space--2)}
-
-  h1 + p, h1 + .ss-normal, .ss-xxl + p, .ss-xxl + .ss-normal, h1 + p.ss-large {
-    margin-top: var(--space-0);
-  }
-  h2 + p, h2 + .ss-normal, .ss-xl + p, .ss-xl + .ss-normal {
-    margin-top: var(--space--1);
-  }
-  h3 + p, h4 + p {
-    margin-top: var(--space--1);
-  }
-
-  p + h2, p + h3, p + h4 {
-    margin-top: var(--space-4);
-  }
-
-  ul.bullets {
-    list-style-type: disc;
-    margin-left: var(--space-4);
-  }
-
-  ol {
-    list-style-type: decimal;
-    margin-left: 2rem;
-  }
-
-  ul.no-li-space li {
-    margin-bottom: 0;
-  }
-
-  p a,a.hyperlink {
-    @apply text-blue-action underline hover:text-blue-dark;
-  }
 
   input[type=text] {
     background-color: #fff;
@@ -164,14 +28,51 @@
   }
 }
 
+
+
+/** Load Elements **/
+@import "./elements/typography.css";
+@import "./elements/btn.css";
+
+
+
+/** Load Components **/
+@import "./components/mega-menu.css";
+@import "./components/accordion.css";
+@import "./components/ribbons.css";
+@import "./components/glide.core.css";
+@import "./components/like-btn.css";
+@import "./components/project-actions.css";
+@import "./components/tabs.css";
+@import "./components/multiselect.css";
+@import "./components/self-tooltip.css";
+@import "./components/tags.css";
+@import "./components/breadcrumbs.css";
+
+
+/** Load Templates (page patterns) **/
+
+
+
+/** Load Page Specific **/
+@import "./components/home.css";
+
+
+
+@import "./main.css";
+
+
+
+
+
+
+
+
+@custom-variant dark (&:is(.dark *));
+
+
+
 .gradient-bg {
     background: -webkit-linear-gradient(to bottom, #f64f59, #c471ed, #12c2e9);  /* Chrome 10-25, Safari 5.1-6 */
     background: linear-gradient(to bottom, #f64f59, #c471ed, #12c2e9); /* W3C, IE 10+/ Edge, Firefox 16+, Chrome 26+, Opera 12+, Safari 7+ */
-}
-
-.ss-text .markdown-container {
-    h1 { font-size: var(--ss-text-2); margin-bottom: var(--ss-text--1); }
-    h2 { font-size: var(--ss-text-0); }
-    hr { width: 400px; max-width: 80%; margin: 2rem auto; opacity: 0.5; }
-    ol { list-style: decimal; padding-left: 3em; }
 }

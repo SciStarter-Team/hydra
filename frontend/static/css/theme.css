@@ -1,4 +1,5 @@
-@theme {
+@import "tailwindcss";
+@theme static  {
   --color-*: initial;
   --color-orange: #f26100;
   --color-orange-hover: #c45306;
@@ -8,10 +9,9 @@
   --color-line-blue: #c8e9f8;
   --color-bg-blue: #e8f8ff;
   --color-line-purple: #f4f1fd;
-  --color-white: #fff;
   --color-white-alpha: rgba(255, 255, 255, 0.2);
   --color-light-blue: #47a8d4;
-  --color-green-hover: #76801a;
+  --color-accent2-hover: #76801a;
   --color-alert: #990000;
   --color-girlscout: #00b34d;
   --color-girlscout-alpha: rgba(0, 179, 77, 0.1);
@@ -21,20 +21,56 @@
   --color-bg-cool: #f3f7fd;
 
   /** NEW COLOR SCHEME ***/
-  --color-blue-dark: #24284E;
-  --color-blue-action: #1A5C8B;
-  --color-blue-logo: #04B2D9;
-  --color-blue-light: #C8E9F8;
-  --color-blue-lightest: #e8f8ff;
-  --color-coral: #F54017;
-  --color-coral-dark: #B92D0E;
-  --color-green: #ADBD49;
-  --color-green-dark: #76801a;
-  --color-black: #111111;
-
+   /** NEW COLOR SCHEME ***/
+    /* --color-primary: #04B2D9; */
+    --color-primary: #04A0C3;
+    /* --color-primary-dark: #050067; */
+    --color-primary-dark: #24284E;
+    /* --color-primary-dark: #14115b; */
+    --color-primary-action: #037F9B;
+    --color-primary-action-dark: #004B5C;
+    /* 0579CC */
+    --color-primary-light: #E8F7FF;
+    --color-accent1: #F54017;
+    --color-accent1-dark: #B92D0E;
+    --color-accent2: #ADBD49;
+    --color-accent2-dark: #76801a;
+    /* --color-black: #1C1C1C; */
+    --color-black: #000;
+    --color-white: #fff;
+    --color-linework: #d7eeff;
+    --color-neutral-xlight: #F8F8F8;
+    --color-neutral-light: #D9D9D9;
+    --color-neutral-mid: #757575;
+    --color-neutral-dark: #404040;
+    --color-alert: #B92D0E;
 
   --font-*: initial;
-  --font-sans: Inter, Helvetica Neue, ui-sans-serif, system-ui, sans-serif;
-  --font-condensed: Barlow, Inter, Helvetica Neue, ui-sans-serif, system-ui, sans-serif;
-  --font-header: Inter, Helvetica Neue, ui-sans-serif, system-ui, sans-serif;
+  --font-sans: Inter, Roboto, 'Helvetica Neue', 'Arial Nova', 'Nimbus Sans', Arial, ui-sans-serif, system-ui, sans-serif;
+  --font-header-lg: Barlow, Inter, Roboto, 'Helvetica Neue', 'Arial Nova', 'Nimbus Sans', Arial, ui-sans-serif, system-ui, sans-serif;
+  --font-header: Inter, Roboto, 'Helvetica Neue', 'Arial Nova', 'Nimbus Sans', Arial, ui-sans-serif, system-ui, sans-serif;
+
+  --spacing: 3.6px;
+
+  --text-3xs: 0.55rem;   /* ~8.8px */
+  --text-2xs: 0.65rem;  /* ~10.4px */
+  --text-xs: 0.78125rem;  /* 12.5x */
+  --text-sm: 0.9375rem; /* 15px */
+  --text-base: 1.125rem; /* 18px */ 
+  --text-lg:  1.406rem; /* 22.5px */
+  --text-xl: 1.758rem; /* 28.13px */
+  --text-2xl:  2.197rem; /* 35.16px */
+  --text-3xl: 2.747rem; /* 43.95px */
+  --text-4xl: 3.052rem; /* 54.93px */
+
+
+
+   /** custom text adjustments for small screens ~1.17x scale **/
+   --text-lg-mobile: 1.32rem; /* ~21px */
+   --text-xl-mobile: 1.5rem; /* 24px -- this keeps this accessible */
+   --text-2xl-mobile: 1.755rem; /* 28.08px */
+   --text-3xl-mobile:  2.05rem; /* 32.85px	*/
+   --text-4xl-mobile:  2.4rem /* 38.44px	*/
+  
+
 }

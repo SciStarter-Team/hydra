@@ -1,0 +1,48 @@
+<p class="text-base text-gray-700">The base font size of SciStarter is 18px. As such the default line-height is 28.8px (1.6x base). This number is used to create a vertical rhythm. Tailwind CSS needs a multiplier, which is set at 3.6x because 3.6 x 8 = 28.8.</p>
+<p class="text-base text-gray-700">SciStarter uses Tailwind 4 and has customized the spacing variable to adhere to this vertical rhythm. Tailwind works with utility classes for space such as <code class="bg-gray-100 px-1 rounded text-sm">p-</code>, <code class="bg-gray-100 px-1 rounded text-sm">m-</code>, <code class="bg-gray-100 px-1 rounded text-sm">gap-</code>, etc. where you put a multiplier within those classes.</p>
+<p class="font-bold text-accent1-dark">Note that typography has default spacing built in. This is mostly for "reading" text. It will be overridden for components such as cards. Otherwise you should not have to add space to text tags.</p>
+<p class="text-base text-gray-700">The following are notes on space classes and how they should be used:</p>
+
+<div class="overflow-x-auto">
+  <table class="min-w-full border border-linework rounded-lg bg-white shadow-sm">
+    <thead>
+      <tr class="bg-neutral-xlight">
+        <th class="px-4 py-3 text-left font-semibold text-gray-700 border-b border-linework">Multiplier</th>
+        <th class="px-4 py-3 text-left font-semibold text-gray-700 border-b border-linework">Ultimate Pixel Size</th>
+        <th class="px-4 py-3 text-left font-semibold text-gray-700 border-b border-linework">Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="px-4 py-2 border-b border-linework">0</td>
+        <td class="px-4 py-2 border-b border-linework">0</td>
+        <td class="px-4 py-2 border-b border-linework">Remove spacing</td>
+      </tr>
+      <tr class="bg-gray-50">
+        <td class="px-4 py-2 border-b border-linework">4</td>
+        <td class="px-4 py-2 border-b border-linework">14.4px</td>
+        <td class="px-4 py-2 border-b border-linework">The default half space. Used for space after text in related contexts (same section of text).</td>
+      </tr>
+      <tr>
+        <td class="px-4 py-2 border-b border-linework">8</td>
+        <td class="px-4 py-2 border-b border-linework">28.8px</td>
+        <td class="px-4 py-2 border-b border-linework">The default space. Used for padding in a container, and gaps in flexboxes.</td>
+      </tr>
+      <tr class="bg-gray-50">
+        <td class="px-4 py-2 border-b border-linework">16</td>
+        <td class="px-4 py-2 border-b border-linework">57.6px</td>
+        <td class="px-4 py-2 border-b border-linework">The default double space. Used to separate sections of a page.</td>
+      </tr>
+      <tr>
+        <td class="px-4 py-2 border-b border-linework">Numbers lower than 8.</td>
+        <td class="px-4 py-2 border-b border-linework">Variable</td>
+        <td class="px-4 py-2 border-b border-linework">Generally used to tighten up design and try to adhere to a vertical rhythm. To be used sparingly.</td>
+      </tr>
+      <tr class="bg-gray-50">
+        <td class="px-4 py-2">Numbers higher than 8.</td>
+        <td class="px-4 py-2">Variable</td>
+        <td class="px-4 py-2">Generally used to loosen up design and try to adhere to a vertical rhythm. To be used sparingly.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
