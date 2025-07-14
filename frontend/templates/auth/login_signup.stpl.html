@@ -1,9 +1,11 @@
 <!doctype html>
 <html>
   <head>
+    <%+ head %>
     <title>Log In or Sign Up</title>
   </head>
   <body>
+    <%+ header %>
     <% if self.unauthorized { %>
       <p>
         You're not logged in to an account which is authorized to access that resource. If you have a different account which might be allowed, try logging in to that account now.
@@ -29,6 +31,42 @@
       <p><input type=submit value="Log In"></p>
     </form>
     <form method=post action="/signup">
+      <p>
+        <label>
+          Handle
+          <input type=text name=handle required>
+        </label>
+      </p>
+      <p>
+        <label>
+          Email
+          <input type=email name=email required>
+        </label>
+      </p>
+      <p>
+        <label>
+          Password
+          <input type=password name=password1 required>
+        </label>
+        <label>
+          Re-type Password
+          <input type=password name=password2 required>
+        </label>
+      </p>
+      <p>
+        <label>
+          Zip/Postal Code
+          <input type=text name=zipcode>
+        </label>
+      </p>
+      <p>
+        <label>
+          Sign up for our newsletter
+          <input type=checkbox name=newsletter value=true checked>
+        </label>
+      </p>
+      <p><input type=submit value="Sign Up"></p>
     </form>
+    <%+ footer %>
   </body>
 </html>

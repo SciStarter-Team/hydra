@@ -11,7 +11,10 @@ use poem::{
     web::{Form, Query, RealIp, Redirect},
 };
 
-use crate::component::Component;
+use crate::{
+    component::{Component, Footer, Head, Header},
+    middleware::authorization::Authenticated,
+};
 
 #[derive(serde::Deserialize)]
 struct LoginPageParameters {
@@ -27,11 +30,15 @@ struct LoginSignupPage {
     username: bool,
     password: bool,
     unauthorized: bool,
+    head: <Head as Component>::Prepared,
+    header: <Header as Component>::Prepared,
+    footer: <Footer as Component>::Prepared,
 }
 
 #[handler]
 pub async fn login_signup_page(
     session: &Session,
+    Authenticated(user_info): Authenticated,
     Query(params): Query<LoginPageParameters>,
 ) -> Result<Response, anyhow::Error> {
     if let Some(next) = params.next {
@@ -45,6 +52,9 @@ pub async fn login_signup_page(
         username: params.username.unwrap_or_default(),
         password: params.password.unwrap_or_default(),
         unauthorized: params.unauthorized.unwrap_or_default(),
+        head: Head::default().prepare(None).await?,
+        header: Header::default().prepare(user_info.clone()).await?,
+        footer: Footer::default().prepare(user_info).await?,
     }
     .render(None)
     .await
