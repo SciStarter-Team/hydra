@@ -1,10 +1,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel=stylesheet href="/-static/css/style.css"/>
 <% if self.enable_webawesome { %>
   <link rel="stylesheet" href="/-static/webawesome/styles/utilities.css" />
+  <%# Leaving out WebAwesome's native.css on purpose, it's optional and would conflict with Tailwind %>
   <link rel="stylesheet" href="/-static/webawesome/styles/themes/default.css" />
 <% } %>
+<link rel=stylesheet href="/-static/css/style.css"/>
 <script src="/-static/htmx.js"></script>
 <% if self.enable_sse { %><script src="/-static/hx-sse.js"></script><% } %>
 <% if self.enable_alpine { %>
