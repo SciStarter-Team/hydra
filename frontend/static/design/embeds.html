@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Document</title>
-    
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;700;800;900&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">
@@ -295,8 +295,25 @@
     <div class="ss-container mx-auto py-4!">
 
       <div class="flex flex-col md:flex-row">
-        <span>a</span>
-        <span>b</span>
+        <section class="grow p-4">
+          <h1>SciStarter Exchange</h1>
+          <p>
+            Customize the SciStarter Finder and Search Results to display opportunities in an iframe, aligned with your community's location and interests! Include an optional "Add Project or Event" feature to add your opportunities and/or invite local organizers to add opportunities to SciStarter and your site without leaving your site. Access on-demand analytics and download all projects and events added through your site anytime!
+          </p>
+          <p>
+            To set up an Exchange on your site, <a href="mailto:info@scistarter.org">contact us</a> for more information.
+          </p>
+        </section>
+
+        <section class="grow p-4">
+          <h1>SciStarter Widget</h1>
+          <p>
+            Display up to 2 SciStarter Projects on your website through our simple plug and play tool. Follow the instructions below.
+          </p>
+          <p>
+            For customizable and more comprehensive options, see SciStarter Exchange.
+          </p>
+        </section>
       </div>
 
       <!-- TAB PATTERN -->
@@ -307,21 +324,63 @@
 
           <ul class="tab-links tabs-tabs flex border-b border-gray-200 mb-4" role="tablist">
             <li class="tab-active" role="presentation">
-              <a href="#first" id="tab-projects" class="px-4 py-2" role="tab" aria-selected="true" aria-controls="first" tabindex="0">Projects</a>
+              <a href="#exchange" id="tab-projects" class="px-4 py-2" role="tab" aria-selected="true" aria-controls="first" tabindex="0">Get the Exchange</a>
             </li>
             <li role="presentation">
-              <a href="#second" id="tab-moreinfo" class="px-4 py-2" role="tab" aria-selected="false" aria-controls="second" tabindex="-1">More Info</a>
+              <a href="#widget" id="tab-moreinfo" class="px-4 py-2" role="tab" aria-selected="false" aria-controls="second" tabindex="-1">Get the Widget</a>
             </li>
           </ul>
 
           <div class="tab-contents" id="tab-content" >
-            <div id="first" class="p-4" role="tabpanel" aria-labelledby="tab-projects">
-
+            <div id="exchange" class="p-4" role="tabpanel" aria-labelledby="tab-projects">
+              <p>
+                If you have many existing opportunities you'd like to display on SciStarter and your Exchange, please select one of the options to share your opportunities on our add opportunities page. That way all those opportunities will appear on SciStarter and on your Exchange, in addition to any others available to your community from SciStarter! You'll still have the option to use the Add Opportunity Form on your site to add future opportunities.
+              </p>
+              <div class="ss-media-object flex flex-col-reverse md:flex-row gap-8 mb-16"> <!-- Media Block Pattern -->
+                <div class="md:flex-grow">
+                  <img src="/-static/img/ss-australia.png" alt="screen capture of SciStarter Australia showing the Exchange" class="w-full">
+                </div>
+                <div class="md:flex-grow">
+                  <h3>Example Exchange</h3>
+                  <p>SciStarter Australia uses an Exchange to provide a localized project finder for Australians. The blue part at the top is part of their site dressing, while the white part beneath is the Exchange.</p>
+                </div>
+              </div><!-- end media block -->
+              <p>
+                An exchange is intended to be embedded on your site inside an iframe. It has no effect on the look of your site outside the iframe. The exchange is a high-level integration which provides a user interface which you can use and offer to your members. As a side-effect of offering the user interface directly, the exchange is also able to enforce data entry requirements which guarantee nice-looking records on SciStarter.
+              </p>
+              <h3>Request an Exchange</h3>
+              <ol>
+                <li>Create a SciStarter account, if you haven't done so already</li>
+                <li>Send an email request to <a href="mailto:info@scistarter.org">info@scistarter.org</a></li>
+              </ol>
+              <p class="mt-2 mb-1">Please include:</p>
+              <ul class="bullets">
+                <li class="!mb-1">The email address associated with your SciStarter account</li>
+                <li class="!mb-1">The name of your organization</li>
+                <li class="!mb-1">Your organization's contact info (address, phone)</li>
+                <li class="!mb-1">The URL or website on which you plan to host the exchange.</li>
+              </ul>
             </div><!-- tab content 1-->
 
-            <div id="second" class="p-4 hidden" role="tabpanel" aria-labelledby="tab-moreinfo">
-              
-
+            <div id="widget" class="p-4 hidden" role="tabpanel" aria-labelledby="tab-moreinfo">
+              <p>
+                Add citizen science to your website with our widget or our API! It's all free.
+              </p>
+              <p>
+                Feature two projects or a project AND a mini Project Finder on YOUR site and make it easy to convert your website viewers to doers! It's easy with our plug-and-play widget.
+              </p>
+              Simply:
+              <ol>
+                <li><a href="/widget/new">select the search filter and styles you want</a></li>
+                <li>add the generated widget embed code to your website</li>
+                <li>and snap! just like that, your community will find up-to-date, awesome citizen science projects from SciStarter.</li>
+              </ol>
+              <p>
+                Want more control? Use our <a href="/api">API</a> (click "documentation" from the API page) to customize the way you want to display all types of citizen science opportunities on your website!
+              </p>
+              <p>
+                This is a freely available service, thanks to support from The Simons Foundation.
+              </p>
             </div><!-- tab content 2-->
 
           </div><!-- Tab Contents -->
@@ -407,4 +466,3 @@
 
   </body>
 </html>
-

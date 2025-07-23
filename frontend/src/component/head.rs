@@ -3,7 +3,7 @@ use sailfish::TemplateOnce;
 #[derive(TemplateOnce)]
 #[template(path = "site/head.stpl.html")]
 pub struct Head {
-    enable_shoelace: bool,
+    enable_webawesome: bool,
     enable_sse: bool,
     enable_alpine: bool,
 }
@@ -11,7 +11,7 @@ pub struct Head {
 impl Default for Head {
     fn default() -> Self {
         Head {
-            enable_shoelace: true,
+            enable_webawesome: true,
             enable_sse: false,
             enable_alpine: false,
         }
@@ -19,8 +19,8 @@ impl Default for Head {
 }
 
 impl Head {
-    pub fn with_shoelace(mut self) -> Self {
-        self.enable_shoelace = true;
+    pub fn with_webawesome(mut self) -> Self {
+        self.enable_webawesome = true;
         self
     }
 
@@ -34,8 +34,8 @@ impl Head {
         self
     }
 
-    pub fn without_shoelace(mut self) -> Self {
-        self.enable_shoelace = false;
+    pub fn without_webawesome(mut self) -> Self {
+        self.enable_webawesome = false;
         self
     }
 
