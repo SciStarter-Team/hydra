@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SciStarter Design System</title>
+     <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;700;800;900&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">
+<link rel="stylesheet" type="text/css" href="/-static/css/style.css" />
+</head>
+<body>
+    <div class="flex flex-col md:flex-row min-h-screen">
+  <!-- Left Navigation -->
+  <nav class="md:w-64 bg-neutral-xlight border-r p-8 flex-shrink-0">
+    <h2 class="text-lg font-bold mb-6">Categories</h2>
+    <ul class="space-y-2">
+      <li>
+        <button class="w-full text-left px-3 py-2 rounded hover:bg-gray-200 font-semibold nav-link" data-category="elements">Elements</button>
+        <ul class="ml-4 mt-1 space-y-1 text-sm">
+            <li><button class="nav-link text-left px-2 py-1 rounded hover:bg-gray-200" data-category="element-colors">Colors</button></li>
+            <li><button class="nav-link text-left px-2 py-1 rounded hover:bg-gray-200" data-category="element-typography">Typography</button></li>
+            <li><button class="nav-link text-left px-2 py-1 rounded hover:bg-gray-200" data-category="element-accessibility">Accessibility</button></li>
+            <li><button class="nav-link text-left px-2 py-1 rounded hover:bg-gray-200" data-category="element-space">Space</button></li>
+             <li><button class="nav-link text-left px-2 py-1 rounded hover:bg-gray-200" data-category="element-lists">Lists</button></li>
+          <li><button class="nav-link text-left px-2 py-1 rounded hover:bg-gray-200" data-category="element-buttons">Buttons</button></li>
+          <li><button class="nav-link text-left px-2 py-1 rounded hover:bg-gray-200" data-category="element-inputs">Inputs</button></li>
+        </ul>
+      </li>
+      <li>
+        <button class="w-full text-left px-3 py-2 rounded hover:bg-gray-200 font-semibold nav-link" data-category="components">Components</button>
+        <ul class="ml-4 mt-1 space-y-1 text-sm">
+          <li><button class="nav-link text-left px-2 py-1 rounded hover:bg-gray-200" data-category="component-media-object">Media Object</button></li>
+          <li><button class="nav-link text-left px-2 py-1 rounded hover:bg-gray-200" data-category="component-project-card">Project Card</button></li>
+          <li><button class="nav-link text-left px-2 py-1 rounded hover:bg-gray-200" data-category="component-tabs">Tabs</button></li>
+          <li><button class="nav-link text-left px-2 py-1 rounded hover:bg-gray-200" data-category="component-pagination">Pagination</button></li>
+        </ul>
+      </li>
+
+
+    </ul>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="flex-1 p-8 md:p-16 w-full">
+    <header class="mb-8">
+      <h1 class="text-3xl text-primary-dark">SciStarter Design System</h1>
+    </header>
+
+    <!-- ELEMENTS -->
+    <section id="elements" class="category-section block">
+      <h2 class="text-2xl font-bold mb-4">Elements</h2>
+      <p>Smallest building blocks: colors, text, buttons, inputs, icons, etc.</p>
+    </section>
+    <section id="element-colors" class="category-section hidden">
+      <h2 class="text-xl font-bold mb-4">Element: Colors</h2>
+      <div>
+        <div class="mx-auto py-12 px-4">
+
+    <h2 class="text-lg mb-4 border-b border-linework pb-2">Primaries</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8">
+      <div class="flex flex-col items-center text-center">
+        <div class="w-20 h-20 rounded-lg bg-primary border border-gray-200 mb-2"></div>
+        <div class="text-base text-gray-700 font-bold">SciStarter Aqua</div>
+        <div class="text-sm text-gray-700 font-bold">Tailwind: primary</div>
+        <div class="text-sm text-gray-500 mb-1">#04A0C3</div>
+        <div class="text-xs"><b>Uses:</b> logo, backgrounds</div>
+        <div class="text-xs"><b>Warning: </b> This color is only accessible for large text. Only use on heading tags (h1, h2, h3, h4) and text sized above text-base.</div>
+      </div>
+
+      <div class="flex flex-col items-center text-center">
+        <div class="w-20 h-20 rounded-lg bg-primary-dark border border-gray-200 mb-2"></div>
+        <div class="text-base text-gray-700 font-bold">Indigo</div>
+        <div class="text-sm text-gray-700 font-bold">Primary-Dark</div>
+        <div class="text-sm text-gray-500 mb-1">#24284E</div>
+        <div class="text-xs"><b>Uses:</b> large headers, dark backgrounds</div>
+      </div>
+
+      <div class="flex flex-col items-center text-center">
+        <div class="w-20 h-20 rounded-lg bg-primary-action border border-gray-200 mb-2"></div>
+        <div class="text-base text-gray-700 font-bold">Link Teal</div>
+        <div class="text-sm text-gray-700 font-bold">Primary-Action</div>
+        <div class="text-sm text-gray-500 mb-1">#037F9B</div>
+        <div class="text-xs"><b>Uses:</b> links &amp; buttons ONLY</div>
+        <div class="text-xs"><b>Note:</b> Black and white are accessible as text or background for this color.</div>
+      </div>
+
+      <div class="flex flex-col items-center text-center">
+        <div class="w-20 h-20 rounded-lg bg-primary-action-dark border border-gray-200 mb-2"></div>
+        <div class="text-base text-gray-700 font-bold">Deep Teal</div>
+        <div class="text-sm text-gray-700 font-bold">Primary-Action-Dark</div>
+        <div class="text-sm text-gray-500 mb-1">#004B5C</div>
+        <div class="text-xs"><b>Uses:</b> hover for links and buttons, occassional small headers/text</div>
+      </div>
+
+      <div class="flex flex-col items-center text-center">
+        <div class="w-20 h-20 rounded-lg bg-primary-light border border-gray-200 mb-2"></div>
+        <div class="text-base text-gray-500 font-bold">Sky Blue</div>
+        <div class="text-sm text-gray-700 font-bold">Primary-Light</div>
+        <div class="text-sm text-gray-500 mb-1">#E8F7FF</div>
+        <div class="text-xs"><b>Uses:</b> backgrounds</div>
+        <div class="text-xs"><b>Warning: </b> White text is not accessible. Only use black, primary-dark, and action-blue/action-blue-dark text on this color.</div>
+      </div>
+
+      </div>
+      <h2 class="text-lg mb-4 border-b border-linework pb-2 mt-8">Accents</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8">
+
+      <div class="flex flex-col items-center text-center">
+        <div class="w-20 h-20 rounded-lg bg-accent1 border border-gray-200 mb-2"></div>
+        <div class="text-base text-gray-700 font-bold">SciStarter Coral</div>
+        <div class="text-sm text-gray-700 font-bold">Accent1</div>
+        <div class="text-sm text-gray-500 mb-1">#F54017</div>
+        <div class="text-xs"><b>Uses:</b> logo, really attention getting buttons</div>
+        <div class="text-xs"><b>Warning: </b> White text is not accessible. Only use black.</div>
+      </div>
+
+      <div class="flex flex-col items-center text-center">
+        <div class="w-20 h-20 rounded-lg bg-accent1-dark border border-gray-200 mb-2"></div>
+        <div class="text-base text-gray-700 font-bold">Brick</div>
+        <div class="text-sm text-gray-700 font-bold">Accent1-Dark</div>
+        <div class="text-sm text-gray-500 mb-1">#B92D0E</div>
+        <div class="text-xs"><b>Uses:</b> Text on white, hover of accent1 </div>
+      </div>
+
+      <div class="flex flex-col items-center text-center">
+        <div class="w-20 h-20 rounded-lg bg-accent2 border border-gray-200 mb-2"></div>
+        <div class="text-base text-gray-700 font-bold">Chartreuse</div>
+        <div class="text-sm text-gray-700 font-bold">Accent2</div>
+        <div class="text-sm text-gray-500 mb-1">#ADBD49</div>
+        <div class="text-xs"><b>Uses:</b> limited, backgrounds </div>
+        <div class="text-xs"><b>Warning: </b> White text is not accessible. Only use black.</div>
+      </div>
+
+      <div class="flex flex-col items-center text-center">
+        <div class="w-20 h-20 rounded-lg bg-accent2-dark border border-gray-200 mb-2"></div>
+        <div class="text-base text-gray-700 font-bold">Moss</div>
+        <div class="text-sm text-gray-700 font-bold">Accent2-Dark</div>
+        <div class="text-sm text-gray-500 mb-1">#76801a</div>
+        <div class="text-xs"><b>Uses: Text on white, hover of accent2</b> </div>
+      </div>
+
+      </div>
+
+      <h2 class="text-lg mb-4 border-b border-linework pb-2 mt-8">Neutrals</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8">
+
+      <div class="flex flex-col items-center text-center">
+        <div class="w-20 h-20 rounded-lg bg-black border border-gray-200 mb-2"></div>
+        <div class="text-sm text-gray-700 font-bold">Black</div>
+        <div class="text-xs text-gray-500 mb-1">#000000</div>
+        <div class="text-xs"><b>Uses:</b> ??? </div>
+      </div>
+
+      <div class="flex flex-col items-center text-center">
+        <div class="w-20 h-20 rounded-lg bg-white border border-gray-200 mb-2"></div>
+        <div class="text-sm text-gray-700 font-bold">White</div>
+        <div class="text-xs text-gray-500 mb-1">#ffffff</div>
+        <div class="text-xs"><b>Uses:</b> Main text color on dark, main background </div>
+      </div>
+
+      <div class="flex flex-col items-center text-center">
+        <div class="w-20 h-20 rounded-lg bg-neutral-xlight  mb-2"></div>
+        <div class="text-sm text-gray-700 font-bold">Neutral-Xlight</div>
+        <div class="text-xs text-gray-500 mb-1">#F8F8F8</div>
+        <div class="text-xs"><b>Uses:</b> Background color </div>
+      </div>
+
+      <div class="flex flex-col items-center text-center">
+        <div class="w-20 h-20 rounded-lg bg-neutral-light  mb-2"></div>
+        <div class="text-sm text-gray-700 font-bold">Neutral-Light</div>
+        <div class="text-xs text-gray-500 mb-1">#D9D9D9</div>
+        <div class="text-xs"><b>Uses:</b> Background color </div>
+      </div>
+
+      <div class="flex flex-col items-center text-center">
+        <div class="w-20 h-20 rounded-lg bg-neutral-mid  mb-2"></div>
+        <div class="text-sm text-gray-700 font-bold">Neutral-Mid</div>
+        <div class="text-xs text-gray-500 mb-1">#737373</div>
+        <div class="text-xs"><b>Uses:</b> Text or background color </div>
+        <div class="text-xs"><b>Note:</b> White and Black text or backgrounds are accessible with this gray.</div>
+      </div>
+
+      <div class="flex flex-col items-center text-center">
+        <div class="w-20 h-20 rounded-lg bg-neutral-dark  mb-2"></div>
+        <div class="text-sm text-gray-700 font-bold">Neutral-Dark</div>
+        <div class="text-xs text-gray-500 mb-1">#404040</div>
+        <div class="text-xs"><b>Uses:</b> Text default </div>
+      </div>
+
+      <div class="flex flex-col items-center text-center">
+        <div class="w-20 h-20 rounded-lg bg-white border border-linework mb-2"></div>
+        <div class="text-sm text-gray-700 font-bold">Linework</div>
+        <div class="text-xs text-gray-500 mb-1">#d7eeff</div>
+        <div class="text-xs"><b>Uses:</b> Borders of cards, rules</div>
+      </div>
+
+      
+    </div>
+
+
+    <h2 class="text-lg mb-4 border-b border-linework pb-2 mt-8">Other</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8">
+      <div class="flex flex-col items-center text-center">
+        <div class="w-20 h-20 rounded-lg bg-alert border border-gray-200 mb-2"></div>
+        <div class="text-sm text-gray-700 font-bold">Alert</div>
+        <div class="text-xs text-gray-500 mb-1">#B92D0E</div>
+        <div class="text-xs"><b>Uses:</b> alert text</div>
+        <div class="text-xs"><b>Note: </b> This is just a remapping of accent1-dark.</div>
+      </div>
+    </div>
+
+
+  </div>
+      </div>
+    </section>
+    <section id="element-typography" class="category-section hidden">
+      <h2 class="text-xl font-bold mb-4">Element: Typography</h2>
+      <div>
+        <h4>About Fonts</h4>
+<p>The primary font of SciStarter is Inter. It is used in paragraphs and small headers.</p>
+<p>Barlow is an accent font used in large headers and occassional other sized headers. It is slightly condensed and, because of this, by default it is only automatically applied to text-xl, text-2xl, and text-3xl.</p>
+<h4>About Sizing</h4>
+<p>SciStarter Typography uses a dual type scale. At large sizes the text has a scale of 1.25x and below base size it has a scale of 1.2x</p>
+<p>The base size is 18px.</p>
+<p>For mobile, the large text sizes size down to accomodate the smaller viewport.</p>
+<p>There are default sizes applied for "reading" text, but also the Tailwind utility text-* is overridden and extended to adhere to this scale.</p>
+
+<div class="overflow-x-auto">
+
+ <table class="min-w-full border border-linework rounded-lg bg-white shadow-sm mb-16 whitespace-nowrap">
+    <thead>
+      <tr class="bg-neutral-xlight">
+        <th class="px-4 py-3 text-left font-semibold text-gray-700 border-b border-linework">Class</th>
+        <th class="px-4 py-3 text-left font-semibold text-gray-700 border-b border-linework">Element </th>
+        <th class="px-4 py-3 text-left font-semibold text-gray-700 border-b border-linework">Size (px) </th>
+        <th class="px-4 py-3 text-left font-semibold text-gray-700 border-b border-linework">Example</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="px-4 py-2 border-b border-linework">text-4xl</td>
+        <td class="px-4 py-2 border-b border-linework">none</td>
+        <td class="px-4 py-2 border-b border-linework">54.93px (38.44px mobile)</td>
+        <td class="px-4 py-2 border-b border-linework w-full"><span class="text-4xl mb-0">Lorem ipsum</span></td>
+       </tr> <tr>
+        <td class="px-4 py-2 border-b border-linework">text-3xl</td>
+        <td class="px-4 py-2 border-b border-linework">h1</td>
+        <td class="px-4 py-2 border-b border-linework">43.95px (32.85px mobile)</td>
+        <td class="px-4 py-2 border-b border-linework w-full"><span class="text-3xl mb-0">Lorem ipsum</span></td>
+      </tr>
+      <tr>
+        <td class="px-4 py-2 border-b border-linework">text-2xl</td>
+        <td class="px-4 py-2 border-b border-linework">h2</td>
+        <td class="px-4 py-2 border-b border-linework">35.16px (28px mobile)</td>
+        <td class="px-4 py-2 border-b border-linework w-full"><span class="text-2xl mb-0">Lorem ipsum</span></td>
+      </tr>
+      <tr>
+        <td class="px-4 py-2 border-b border-linework">text-xl</td>
+        <td class="px-4 py-2 border-b border-linework">h3</td>
+        <td class="px-4 py-2 border-b border-linework">28.13px (24px mobile)</td>
+        <td class="px-4 py-2 border-b border-linework w-full"><span class="text-xl mb-0">Lorem ipsum</span></td>
+      </tr>
+      <tr>
+        <td class="px-4 py-2 border-b border-linework">text-lg</td>
+        <td class="px-4 py-2 border-b border-linework">h4</td>
+        <td class="px-4 py-2 border-b border-linework">22.5px (21px mobile)</td>
+        <td class="px-4 py-2 border-b border-linework w-full"><span class="text-lg mb-0">Lorem ipsum</span></td>
+      </tr>
+      <tr>
+        <td class="px-4 py-2 border-b border-linework">text-lg intro</td>
+        <td class="px-4 py-2 border-b border-linework">p.intro</td>
+        <td class="px-4 py-2 border-b border-linework">22.5px (21px mobile)</td>
+        <td class="px-4 py-2 border-b border-linework w-full"><p class="text-lg !mb-0 intro">Lorem ipsum</p></td>
+      </tr>
+      <tr>
+        <td class="px-4 py-2 border-b border-linework">text-base</td>
+        <td class="px-4 py-2 border-b border-linework">p</td>
+        <td class="px-4 py-2 border-b border-linework">18px</td>
+        <td class="px-4 py-2 border-b border-linework w-full"><p class="mb-0">Lorem ipsum</p></td>
+      </tr>
+      <tr>
+        <td class="px-4 py-2 border-b border-linework">text-sm</td>
+        <td class="px-4 py-2 border-b border-linework">none</td>
+        <td class="px-4 py-2 border-b border-linework">15px</td>
+        <td class="px-4 py-2 border-b border-linework w-full"><p class="text-sm mb-0">Lorem ipsum</p></td>
+      </tr>
+      <tr>
+        <td class="px-4 py-2 border-b border-linework">text-xs</td>
+        <td class="px-4 py-2 border-b border-linework">small</td>
+        <td class="px-4 py-2 border-b border-linework">12.5px</td>
+        <td class="px-4 py-2 border-b border-linework w-full"><p class="text-xs mb-0">Lorem ipsum</p></td>
+      </tr>
+      <tr>
+        <td class="px-4 py-2 border-b border-linework">text-2xs</td>
+        <td class="px-4 py-2 border-b border-linework">none</td>
+        <td class="px-4 py-2 border-b border-linework">10.4px </td>
+        <td class="px-4 py-2 border-b border-linework w-full"><p class="text-2xs mb-0">Lorem ipsum</p></td>
+      </tr>
+      <tr>
+        <td class="px-4 py-2 border-b border-linework">text-3xs</td>
+        <td class="px-4 py-2 border-b border-linework">none</td>
+        <td class="px-4 py-2 border-b border-linework">8.8px </td>
+        <td class="px-4 py-2 border-b border-linework w-full"><p class="text-3xs mb-0">Lorem ipsum</p></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+<section class="text-section">
+  <h1>This is an h1 header</h1>
+  <p class="intro">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nullam sed pulvinar orci, eget porttitor nulla. Quisque interdum dignissim lorem, at sagittis sapien ultrices sed.</p>
+  <p>Donec fringilla velit ut sapien dictum, vel efficitur urna iaculis. Etiam nec nulla a odio aliquam euismod a in sem. Curabitur eu justo diam. Sed lacinia velit nec orci dapibus convallis.</p>
+  <p>Mauris a pulvinar sapien. Curabitur fermentum, ex eu lacinia egestas, arcu velit cursus arcu, ac fermentum libero urna a nisl.</p>
+
+  <h2>This is an h2 header</h2>
+  <p>Aliquam in volutpat augue. Phasellus iaculis nisl id lacus lacinia, vel vestibulum arcu euismod. Duis blandit urna at lorem vestibulum, et tempor tellus laoreet.</p>
+  <p>Suspendisse potenti. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas.</p>
+
+  <h3>This is an h3 header</h3>
+  <p>Sed vel diam sed ante tincidunt bibendum. Integer pulvinar posuere lectus, vel varius leo sodales a.</p>
+  <p>Praesent tristique, ligula nec facilisis gravida, lectus nulla gravida justo, a fermentum nisl tellus et sem. Proin sit amet tortor eu justo eleifend placerat.</p>
+
+  <h2>This is an h2 header</h2>
+  <p>Morbi non eros porta, convallis justo a, rutrum sem. Suspendisse eu tincidunt elit. Fusce feugiat ante et mi scelerisque, nec faucibus velit pretium.</p>
+  <p>Vestibulum in arcu id diam tincidunt commodo. Pellentesque at bibendum arcu. Integer cursus nisi nec nulla fermentum, sed fermentum justo hendrerit.</p>
+  <p>In ut diam sit amet lorem fringilla cursus. Nullam ac metus in urna dictum porta. Pellentesque sodales, sapien non lacinia laoreet, risus justo vehicula eros, ac porta lorem nunc in sapien.</p>
+
+  <h3>This is an h3 header</h3>
+  <p>Quisque accumsan leo a turpis dapibus, eget tincidunt erat tincidunt. Sed ac efficitur arcu. Nullam auctor ante sed risus tincidunt facilisis.</p>
+  <p>Morbi rutrum metus nec nunc ultrices, non sollicitudin turpis scelerisque. Aenean lobortis diam non justo porttitor, ut elementum elit pulvinar.</p>
+
+  <h4>This is an h4 header</h4>
+  <p>Ut consequat turpis nec nulla pretium, ac ultricies sapien faucibus. Cras ac dui sit amet nisi posuere tincidunt.</p>
+  <p>Integer at justo in nulla tincidunt sollicitudin sed non nisl. In at mi at purus malesuada sagittis. Nulla facilisi.</p>
+  <p>Nam imperdiet tincidunt metus, vitae varius nunc efficitur vel. Donec ut lorem at enim pretium pretium a sed massa.</p>
+
+  </section>
+
+
+
+      </div>
+    </section>
+    <section id="element-accessibility" class="category-section hidden">
+      <h2 class="text-xl font-bold mb-4">Accessibility</h2>
+      <div>
+        <p>The following table shows accessibility of the SciStarter color scheme.</p>
+<p>Normal text below 24px (text-lg and below) or bold text below 18.66px (text-base and below) needs contrast 4.5 or above.</p>
+<p>Normal text 24px (text-xl and above) and above or 18.66px and above (text-lg and above) needs contrast 3 or above.</p>
+
+
+
+<h1 class="text-alert">NOT RIGHT. CHATGPT MADE UP NUMBERS.</h1>
+<p>eventually I want to do this...</p>
+
+<table class="min-w-full border border-gray-300 text-sm text-center mb-16">
+  <thead>
+    <tr class="bg-gray-100">
+      <th class="border px-2 py-1 bg-white">Color</th>
+      <th class="border px-2 py-1" style="background-color: #04A0C3;">SciStarter Aqua</th>
+      <th class="border px-2 py-1" style="background-color: #24284E; color: white;">Indigo</th>
+      <th class="border px-2 py-1" style="background-color: #037F9B; color: white;">Link Teal</th>
+      <th class="border px-2 py-1" style="background-color: #004B5C; color: white;">Deep Teal</th>
+      <th class="border px-2 py-1" style="background-color: #E8F7FF;">Sky Blue</th>
+      <th class="border px-2 py-1" style="background-color: #ADBD49;">Chartreuse</th>
+      <th class="border px-2 py-1" style="background-color: #76801A; color: white;">Moss</th>
+      <th class="border px-2 py-1" style="background-color: #F54017;color: white;">SciStarter Coral</th>
+      <th class="border px-2 py-1" style="background-color: #B92D0E; color: white;">Brick</th>
+    </tr>
+  </thead>
+  <tbody class="text-gray-800">
+    <!-- Row: #04A0C3 -->
+    <tr>
+      <th class="border px-2 py-1" style="background-color: #04A0C3;">SciStarter Aqua</th>
+      <td class="border px-2 py-1">1.00</td>
+      <td class="border px-2 py-1">2.60</td>
+      <td class="border px-2 py-1">1.18</td>
+      <td class="border px-2 py-1">1.31</td>
+      <td class="border px-2 py-1">8.81</td>
+      <td class="border px-2 py-1">2.54</td>
+      <td class="border px-2 py-1">2.89</td>
+      <td class="border px-2 py-1">1.25</td>
+      <td class="border px-2 py-1">1.08</td>
+    </tr>
+    <!-- Row: #24284E -->
+    <tr>
+      <th class="border px-2 py-1" style="background-color: #24284E; color: white;">Indigo</th>
+      <td class="border px-2 py-1">8.81</td>
+      <td class="border px-2 py-1">1.00</td>
+      <td class="border px-2 py-1">3.14</td>
+      <td class="border px-2 py-1">3.84</td>
+      <td class="border px-2 py-1">1.25</td>
+      <td class="border px-2 py-1">5.55</td>
+      <td class="border px-2 py-1">6.68</td>
+      <td class="border px-2 py-1">4.89</td>
+      <td class="border px-2 py-1">6.06</td>
+    </tr>
+    <!-- Row: #037F9B -->
+    <tr>
+      <th class="border px-2 py-1" style="background-color: #037F9B; color: white;">Link Teal</th>
+      <td class="border px-2 py-1">8.48</td>
+      <td class="border px-2 py-1">1.68</td>
+      <td class="border px-2 py-1">1.00</td>
+      <td class="border px-2 py-1">1.19</td>
+      <td class="border px-2 py-1">9.67</td>
+      <td class="border px-2 py-1">1.98</td>
+      <td class="border px-2 py-1">2.30</td>
+      <td class="border px-2 py-1">1.33</td>
+      <td class="border px-2 py-1">1.19</td>
+    </tr>
+    <!-- Row: #004B5C -->
+    <tr>
+      <th class="border px-2 py-1" style="background-color: #004B5C; color: white;">Deep Teal</th>
+      <td class="border px-2 py-1">7.85</td>
+      <td class="border px-2 py-1">1.56</td>
+      <td class="border px-2 py-1">3.22</td>
+      <td class="border px-2 py-1">1.00</td>
+      <td class="border px-2 py-1">7.05</td>
+      <td class="border px-2 py-1">1.47</td>
+      <td class="border px-2 py-1">1.71</td>
+      <td class="border px-2 py-1">1.40</td>
+      <td class="border px-2 py-1">1.32</td>
+    </tr>
+    <!-- Row: #E8F7FF -->
+    <tr>
+      <th class="border px-2 py-1" style="background-color: #E8F7FF;">Sky Blue</th>
+      <td class="border px-2 py-1">1.20</td>
+      <td class="border px-2 py-1">8.74</td>
+      <td class="border px-2 py-1">1.17</td>
+      <td class="border px-2 py-1">1.42</td>
+      <td class="border px-2 py-1">1.00</td>
+      <td class="border px-2 py-1">1.36</td>
+      <td class="border px-2 py-1">1.58</td>
+      <td class="border px-2 py-1">1.18</td>
+      <td class="border px-2 py-1">1.07</td>
+    </tr>
+    <!-- Row: #ADBD49 -->
+    <tr>
+      <th class="border px-2 py-1" style="background-color: #ADBD49;">Chartreuse</th>
+      <td class="border px-2 py-1">2.14</td>
+      <td class="border px-2 py-1">1.44</td>
+      <td class="border px-2 py-1">1.34</td>
+      <td class="border px-2 py-1">1.12</td>
+      <td class="border px-2 py-1">4.27</td>
+      <td class="border px-2 py-1">1.00</td>
+      <td class="border px-2 py-1">4.06</td>
+      <td class="border px-2 py-1">1.15</td>
+      <td class="border px-2 py-1">1.03</td>
+    </tr>
+    <!-- Row: #76801A -->
+    <tr>
+      <th class="border px-2 py-1" style="background-color: #76801A; color: white;">Moss</th>
+      <td class="border px-2 py-1">2.46</td>
+      <td class="border px-2 py-1">1.57</td>
+      <td class="border px-2 py-1">1.48</td>
+      <td class="border px-2 py-1">1.23</td>
+      <td class="border px-2 py-1">4.71</td>
+      <td class="border px-2 py-1">1.24</td>
+      <td class="border px-2 py-1">1.00</td>
+      <td class="border px-2 py-1">1.21</td>
+      <td class="border px-2 py-1">1.08</td>
+    </tr>
+    <!-- Row: #F54017 -->
+    <tr>
+      <th class="border px-2 py-1" style="background-color: #F54017;">SciStarter Coral</th>
+      <td class="border px-2 py-1">3.22</td>
+      <td class="border px-2 py-1">2.68</td>
+      <td class="border px-2 py-1">1.80</td>
+      <td class="border px-2 py-1">1.70</td>
+      <td class="border px-2 py-1">8.96</td>
+      <td class="border px-2 py-1">1.48</td>
+      <td class="border px-2 py-1">1.56</td>
+      <td class="border px-2 py-1">1.00</td>
+      <td class="border px-2 py-1">1.70</td>
+    </tr>
+    <!-- Row: #B92D0E -->
+    <tr>
+      <th class="border px-2 py-1" style="background-color: #B92D0E; color: white;">Brick</th>
+      <td class="border px-2 py-1">3.05</td>
+      <td class="border px-2 py-1">2.38</td>
+      <td class="border px-2 py-1">1.59</td>
+      <td class="border px-2 py-1">1.57</td>
+      <td class="border px-2 py-1">7.74</td>
+      <td class="border px-2 py-1">1.36</td>
+      <td class="border px-2 py-1">1.41</td>
+      <td class="border px-2 py-1">1.51</td>
+      <td class="border px-2 py-1">1.00</td>
+    </tr>
+  </tbody>
+</table>
+
+<table class="min-w-full border border-gray-300 text-sm text-center">
+  <thead>
+    <tr class="bg-gray-100">
+      <th class="border px-2 py-1 bg-white text-left">Color</th>
+      <th class="border px-2 py-1 bg-white">White<br>#FFFFFF</th>
+      <th class="border px-2 py-1 text-white" style="background-color: #000000;">Black<br>#000000</th>
+      <th class="border px-2 py-1 bg-gray-100">Light Gray<br>#F8F8F8</th>
+      <th class="border px-2 py-1 text-white" style="background-color: #737373;">Medium Gray<br>#737373</th>
+      <th class="border px-2 py-1 text-white" style="background-color: #404040;">Dark Gray<br>#404040</th>
+    </tr>
+  </thead>
+  <tbody class="text-gray-800">
+    <tr>
+      <th class="border px-2 py-1 font-medium" style="background-color: #04A0C3; color: white;">SciStarter Aqua</th>
+      <td class="border px-2 py-1">3.57</td>
+      <td class="border px-2 py-1">8.82</td>
+      <td class="border px-2 py-1">3.53</td>
+      <td class="border px-2 py-1">2.48</td>
+      <td class="border px-2 py-1">4.21</td>
+    </tr>
+    <tr>
+      <th class="border px-2 py-1 font-medium" style="background-color: #24284E; color: white;">Indigo</th>
+      <td class="border px-2 py-1">11.96</td>
+      <td class="border px-2 py-1">1.88</td>
+      <td class="border px-2 py-1">10.71</td>
+      <td class="border px-2 py-1">6.21</td>
+      <td class="border px-2 py-1">8.86</td>
+    </tr>
+    <tr>
+      <th class="border px-2 py-1 font-medium" style="background-color: #037F9B; color: white;">Link Teal</th>
+      <td class="border px-2 py-1">3.64</td>
+      <td class="border px-2 py-1">9.38</td>
+      <td class="border px-2 py-1">3.60</td>
+      <td class="border px-2 py-1">2.55</td>
+      <td class="border px-2 py-1">4.31</td>
+    </tr>
+    <tr>
+      <th class="border px-2 py-1 font-medium" style="background-color: #004B5C; color: white;">Deep Teal</th>
+      <td class="border px-2 py-1">4.90</td>
+      <td class="border px-2 py-1">7.85</td>
+      <td class="border px-2 py-1">4.79</td>
+      <td class="border px-2 py-1">3.86</td>
+      <td class="border px-2 py-1">5.95</td>
+    </tr>
+    <tr>
+      <th class="border px-2 py-1" style="background-color: #E8F7FF;">Sky Blue</th>
+      <td class="border px-2 py-1">1.16</td>
+      <td class="border px-2 py-1">13.60</td>
+      <td class="border px-2 py-1">1.15</td>
+      <td class="border px-2 py-1">1.68</td>
+      <td class="border px-2 py-1">2.85</td>
+    </tr>
+    <tr>
+      <th class="border px-2 py-1" style="background-color: #ADBD49;">Chartreuse</th>
+      <td class="border px-2 py-1">1.44</td>
+      <td class="border px-2 py-1">13.05</td>
+      <td class="border px-2 py-1">1.40</td>
+      <td class="border px-2 py-1">1.06</td>
+      <td class="border px-2 py-1">1.98</td>
+    </tr>
+    <tr>
+      <th class="border px-2 py-1 font-medium" style="background-color: #76801A; color: white;">Moss</th>
+      <td class="border px-2 py-1">1.76</td>
+      <td class="border px-2 py-1">14.30</td>
+      <td class="border px-2 py-1">1.72</td>
+      <td class="border px-2 py-1">1.30</td>
+      <td class="border px-2 py-1">2.34</td>
+    </tr>
+    <tr>
+      <th class="border px-2 py-1" style="background-color: #F54017;">SciStarter Coral</th>
+      <td class="border px-2 py-1">2.96</td>
+      <td class="border px-2 py-1">11.70</td>
+      <td class="border px-2 py-1">2.90</td>
+      <td class="border px-2 py-1">1.67</td>
+      <td class="border px-2 py-1">3.60</td>
+    </tr>
+    <tr>
+      <th class="border px-2 py-1 font-medium" style="background-color: #B92D0E; color: white;">Brick</th>
+      <td class="border px-2 py-1">3.10</td>
+      <td class="border px-2 py-1">9.51</td>
+      <td class="border px-2 py-1">3.04</td>
+      <td class="border px-2 py-1">1.73</td>
+      <td class="border px-2 py-1">3.75</td>
+    </tr>
+  </tbody>
+</table>
+
+
+
+
+      </div>
+    </section>
+     <section id="element-space" class="category-section hidden">
+      <h2 class="text-xl font-bold mb-4">Element: Space</h2>
+      <div>
+        <p class="text-base text-gray-700">The base font size of SciStarter is 18px. As such the default line-height is 28.8px (1.6x base). This number is used to create a vertical rhythm. Tailwind CSS needs a multiplier, which is set at 3.6x because 3.6 x 8 = 28.8.</p>
+<p class="text-base text-gray-700">SciStarter uses Tailwind 4 and has customized the spacing variable to adhere to this vertical rhythm. Tailwind works with utility classes for space such as <code class="bg-gray-100 px-1 rounded text-sm">p-</code>, <code class="bg-gray-100 px-1 rounded text-sm">m-</code>, <code class="bg-gray-100 px-1 rounded text-sm">gap-</code>, etc. where you put a multiplier within those classes.</p>
+<p class="font-bold text-accent1-dark">Note that typography has default spacing built in. This is mostly for "reading" text. It will be overridden for components such as cards. Otherwise you should not have to add space to text tags.</p>
+<p class="text-base text-gray-700">The following are notes on space classes and how they should be used:</p>
+
+<div class="overflow-x-auto">
+  <table class="min-w-full border border-linework rounded-lg bg-white shadow-sm">
+    <thead>
+      <tr class="bg-neutral-xlight">
+        <th class="px-4 py-3 text-left font-semibold text-gray-700 border-b border-linework">Multiplier</th>
+        <th class="px-4 py-3 text-left font-semibold text-gray-700 border-b border-linework">Ultimate Pixel Size</th>
+        <th class="px-4 py-3 text-left font-semibold text-gray-700 border-b border-linework">Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="px-4 py-2 border-b border-linework">0</td>
+        <td class="px-4 py-2 border-b border-linework">0</td>
+        <td class="px-4 py-2 border-b border-linework">Remove spacing</td>
+      </tr>
+      <tr class="bg-gray-50">
+        <td class="px-4 py-2 border-b border-linework">4</td>
+        <td class="px-4 py-2 border-b border-linework">14.4px</td>
+        <td class="px-4 py-2 border-b border-linework">The default half space. Used for space after text in related contexts (same section of text).</td>
+      </tr>
+      <tr>
+        <td class="px-4 py-2 border-b border-linework">8</td>
+        <td class="px-4 py-2 border-b border-linework">28.8px</td>
+        <td class="px-4 py-2 border-b border-linework">The default space. Used for padding in a container, and gaps in flexboxes.</td>
+      </tr>
+      <tr class="bg-gray-50">
+        <td class="px-4 py-2 border-b border-linework">16</td>
+        <td class="px-4 py-2 border-b border-linework">57.6px</td>
+        <td class="px-4 py-2 border-b border-linework">The default double space. Used to separate sections of a page.</td>
+      </tr>
+      <tr>
+        <td class="px-4 py-2 border-b border-linework">Numbers lower than 8.</td>
+        <td class="px-4 py-2 border-b border-linework">Variable</td>
+        <td class="px-4 py-2 border-b border-linework">Generally used to tighten up design and try to adhere to a vertical rhythm. To be used sparingly.</td>
+      </tr>
+      <tr class="bg-gray-50">
+        <td class="px-4 py-2">Numbers higher than 8.</td>
+        <td class="px-4 py-2">Variable</td>
+        <td class="px-4 py-2">Generally used to loosen up design and try to adhere to a vertical rhythm. To be used sparingly.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+      </div>
+    </section>
+    <section id="element-lists" class="category-section hidden">
+      <h2 class="text-xl font-bold mb-4">Element: Lists</h2>
+      <div>
+        <p>These are basic typography lists.</p>
+
+<h3>Bulleted list</h3>
+<p>Note: add class of "bullets"</p>
+<ul class="bullets mb-16">
+  <li>Nam imperdiet tincidunt metus, vitae varius nunc efficitur vel. Donec ut lorem at enim pretium pretium a sed massa.</li>
+  <li>Nam imperdiet tincidunt metus, vitae varius nunc efficitur vel. Donec ut lorem at enim pretium pretium a sed massa.</li>
+  <li>Nam imperdiet tincidunt metus, vitae varius nunc efficitur vel. Donec ut lorem at enim pretium pretium a sed massa.</li>
+</ul>
+
+<h3>Ordered list</h3>
+<ol>
+    <li>Nam imperdiet tincidunt metus, vitae varius nunc efficitur vel. Donec ut lorem at enim pretium pretium a sed massa.</li>
+  <li>Nam imperdiet tincidunt metus, vitae varius nunc efficitur vel. Donec ut lorem at enim pretium pretium a sed massa.</li>
+  <li>Nam imperdiet tincidunt metus, vitae varius nunc efficitur vel. Donec ut lorem at enim pretium pretium a sed massa.</li>
+</ol>
+      </div>
+    </section>
+    <section id="element-buttons" class="category-section hidden">
+      <h2 class="text-xl font-bold mb-4">Element: Buttons</h2>
+      <div>
+        <section class="mb-16">
+    <h4>Text Links</h4>
+    <a href="#">Click here</a>
+</section>
+<section class="mb-16">
+    <h4>Primary Action</h4>
+    <a href="#" class="btn btn-primary">Submit Now - a</a>
+    <button type="button" class="btn btn-primary">Submit Now - button</a>
+</section>
+<section class="mb-16">
+    <h4>Accent Button</h4>
+    <p>Used in contexts you want to really draw attention to a single button on the page</p>
+    <a href="#" class="btn btn-accent">Submit Now - a</a>
+    <button type="button" class="btn btn-accent">Submit Now - button</a>
+</section>
+<section class="mb-16">
+    <h4>Disabled</h4>
+    <p>Add a class of btn-disabled to any button to gray out and kill pointer events.</p>
+    <a href="#" class="btn btn-primary btn-disabled">Submit Now - a</a>
+    <button type="button" class="btn btn-primary btn-disabled">Submit Now - button</a>
+</section>
+<section class="mb-16">
+    <h4>Icons</h4>
+    <p>Add svgs and a class of btn-icon</p>
+    <a href="#" class="btn btn-primary btn-icon"><svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg"><path d="m256 0c-141.164062 0-256 114.835938-256 256s114.835938 256 256 256 256-114.835938 256-256-114.835938-256-256-256zm112 277.332031h-90.667969v90.667969c0 11.777344-9.554687 21.332031-21.332031 21.332031s-21.332031-9.554687-21.332031-21.332031v-90.667969h-90.667969c-11.777344 0-21.332031-9.554687-21.332031-21.332031s9.554687-21.332031 21.332031-21.332031h90.667969v-90.667969c0-11.777344 9.554687-21.332031 21.332031-21.332031s21.332031 9.554687 21.332031 21.332031v90.667969h90.667969c11.777344 0 21.332031 9.554687 21.332031 21.332031s-9.554687 21.332031-21.332031 21.332031zm0 0"></path></svg> Submit Now - a</a>
+    <button type="button" class="btn btn-accent btn-icon"><svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg"><path d="m256 0c-141.164062 0-256 114.835938-256 256s114.835938 256 256 256 256-114.835938 256-256-114.835938-256-256-256zm112 277.332031h-90.667969v90.667969c0 11.777344-9.554687 21.332031-21.332031 21.332031s-21.332031-9.554687-21.332031-21.332031v-90.667969h-90.667969c-11.777344 0-21.332031-9.554687-21.332031-21.332031s9.554687-21.332031 21.332031-21.332031h90.667969v-90.667969c0-11.777344 9.554687-21.332031 21.332031-21.332031s21.332031 9.554687 21.332031 21.332031v90.667969h90.667969c11.777344 0 21.332031 9.554687 21.332031 21.332031s-9.554687 21.332031-21.332031 21.332031zm0 0"></path></svg> Submit Now - button</a>
+</section>
+
+
+      </div>
+    </section>
+    <section id="element-inputs" class="category-section hidden">
+      <h2 class="text-xl font-bold mb-4">Element: Inputs</h2>
+      <p>Todo</p>
+    </section>
+
+    <!-- COMPONENTS -->
+    <section id="components" class="category-section hidden">
+      <h2 class="text-2xl font-bold mb-4">Components</h2>
+      <p>Combinations of elements: input groups, cards, etc.</p>
+    </section>
+    <section id="component-input-group" class="category-section hidden">
+      <h2 class="text-xl font-bold mb-4">Component: Input Group</h2>
+      <div class="flex gap-2">
+        <input class="border px-3 py-2 rounded" placeholder="Username" />
+        <button class="btn btn-accent">Go</button>
+      </div>
+    </section>
+    <section id="component-card" class="category-section hidden">
+      <h2 class="text-xl font-bold mb-4">Component: Card</h2>
+      <div class="border rounded p-4 shadow">This is a card component.</div>
+    </section>
+    <section id="component-card" class="category-section hidden">
+      <h2 class="text-xl font-bold mb-4">Component: Card</h2>
+      <div class="border rounded p-4 shadow">This is a card component.</div>
+    </section>
+    <section id="component-media-object" class="category-section hidden">
+      <h2 class="text-xl font-bold mb-4">Component: Media Object</h2>
+      <div>
+            <p class="mb-16">The purpose of a media object is to have an image or video next to some text. It is used in "reading" contexts whereas the card molecule is used in wayfinding contexts (project cards and similar).</p>
+
+<div class="ss-media-object flex flex-col md:flex-row gap-8 mb-16">
+    <div class="md:flex-grow md:flex-shrink-0 md:basis-[50%]">
+        <img src="https://picsum.photos/300/200" alt="" class="w-full" />
+    </div>
+    <div class="md:flex-grow md:flex-shrink-0 md:basis-[50%]">
+        <h3>Some Header (optional)</h3>
+        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed in viverra magna. Etiam eget elit at ipsum pellentesque pharetra vel non quam. Donec vehicula nec dui non blandit. Sed laoreet turpis sed bibendum feugiat. Mauris hendrerit justo nec lacus feugiat rhoncus. Nulla libero tortor, tincidunt non lobortis et, ultricies eu libero. Pellentesque feugiat purus dolor, a vulputate orci congue a. Duis luctus elit elit, sed pellentesque nibh sollicitudin ac. Proin feugiat lectus iaculis nunc ultricies convallis. Fusce volutpat dignissim imperdiet. In eget nisi leo.</p>
+    </div>
+</div>
+
+<h3 class="mt-7">Variants</h3>
+<div class="my-4 ss-message bg-bg-cool p-4">
+    <ul class="bullets">
+        <li>If you want a background, add bg-[color] to the wrapping div, add p-8 to the content div and add a colors as necessary to content. If you want space around the image, also add p-8 to that column div</li>
+    </ul>
+</div>
+
+<!--- -->    
+<div class="ss-media-object flex flex-col md:flex-row gap-8 bg-primary-dark mb-8">
+    <div class="md:basis-[50%]">
+        <img src="https://picsum.photos/300/200" alt="" class="w-full" />
+    </div>
+    <div class="md:basis-[50%] p-8 text-white">
+        <h3>Some Header (optional)</h3>
+        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed in viverra magna. Etiam eget elit at ipsum pellentesque pharetra vel non quam. Donec vehicula nec dui non blandit. Sed laoreet turpis sed bibendum feugiat. Mauris hendrerit justo nec lacus feugiat rhoncus. Nulla libero tortor, tincidunt non lobortis et, ultricies eu libero. Pellentesque feugiat purus dolor, a vulputate orci congue a. Duis luctus elit elit, sed pellentesque nibh sollicitudin ac. Proin feugiat lectus iaculis nunc ultricies convallis. Fusce volutpat dignissim imperdiet. In eget nisi leo.</p>
+    </div>
+</div>
+<!--- -->  
+<!--- -->    
+<div class="ss-media-object flex flex-col md:flex-row  bg-primary-dark">
+    <div class="md:basis-[50%] p-8">
+        <img src="https://picsum.photos/300/200" alt="" class="w-full" />
+    </div>
+    <div class="md:basis-[50%] p-8 md:pl-0 text-white">
+        <h3>Some Header (optional)</h3>
+        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed in viverra magna. Etiam eget elit at ipsum pellentesque pharetra vel non quam. Donec vehicula nec dui non blandit. Sed laoreet turpis sed bibendum feugiat. Mauris hendrerit justo nec lacus feugiat rhoncus. Nulla libero tortor, tincidunt non lobortis et, ultricies eu libero. Pellentesque feugiat purus dolor, a vulputate orci congue a. Duis luctus elit elit, sed pellentesque nibh sollicitudin ac. Proin feugiat lectus iaculis nunc ultricies convallis. Fusce volutpat dignissim imperdiet. In eget nisi leo.</p>
+    </div>
+</div>
+<!--- -->  
+
+
+<div class="my-4 ss-message bg-bg-cool p-4">
+    <ul class="bullets">
+        <li>If you want a background, add bg-[color] & p-8</li>
+        <li>You can change the size of two divs by changing the class basis-[] to any percent. If you change one, change the other so they add up to 100%.</li>
+        <li>You can control sizes at md: and lg:</li>
+        <li>You can control min and max sizes of image by adding min-w-[px] and/or max-w-[px] to the column div</li>
+    </ul>
+</div>
+<!--- -->    
+<div class="ss-media-object flex flex-col md:flex-row gap-8 bg-primary-dark mb-16">
+    <div class="md:basis-[30%] p-8 pr-0">
+        <img src="https://picsum.photos/300/200" alt="" class="w-full" />
+    </div>
+    <div class="md:basis-[70%] p-8 pl-0 text-white">
+        <h3>Some Header (optional)</h3>
+        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed in viverra magna. Etiam eget elit at ipsum pellentesque pharetra vel non quam. Donec vehicula nec dui non blandit. Sed laoreet turpis sed bibendum feugiat. Mauris hendrerit justo nec lacus feugiat rhoncus. Nulla libero tortor, tincidunt non lobortis et, ultricies eu libero. Pellentesque feugiat purus dolor, a vulputate orci congue a. Duis luctus elit elit, sed pellentesque nibh sollicitudin ac. Proin feugiat lectus iaculis nunc ultricies convallis. Fusce volutpat dignissim imperdiet. In eget nisi leo.</p>
+    </div>
+</div>
+<!--- -->  
+
+
+<div class="my-4 ss-message bg-bg-cool p-8">
+    <ul class="bullets">
+        <li>Flip the sides of each by adding a class of md:flex-row-reverse to the wrapping div. Add a class of text-right to the content div if you flip and want the text right aligned.</li>
+    </ul>
+</div>
+<!--- -->    
+<div class="ss-media-object flex flex-col md:flex-row-reverse gap-8 bg-primary-dark mb-16 p-8">
+    <div class="md:basis-[30%] p-8 min-w-[300px]">
+        <img src="https://picsum.photos/300/200" alt="" class="w-full" />
+    </div>
+    <div class="md:basis-[70%] p-8 pl-0 text-white">
+        <h3>Some Header (optional)</h3>
+        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed in viverra magna. Etiam eget elit at ipsum pellentesque pharetra vel non quam. Donec vehicula nec dui non blandit. Sed laoreet turpis sed bibendum feugiat. Mauris hendrerit justo nec lacus feugiat rhoncus. Nulla libero tortor, tincidunt non lobortis et, ultricies eu libero. Pellentesque feugiat purus dolor, a vulputate orci congue a. Duis luctus elit elit, sed pellentesque nibh sollicitudin ac. Proin feugiat lectus iaculis nunc ultricies convallis. Fusce volutpat dignissim imperdiet. In eget nisi leo.</p>
+    </div>
+</div>
+<!--- -->  
+      </div>
+    </section>
+    <section id="component-project-card" class="category-section hidden">
+      <h2 class="text-xl font-bold mb-4">Component: Project Card</h2>
+      <div>
+                <!-- PROJECT CARD WITH AFFILIATE -->
+          <div class="ss-project-card">
+            <a href="https://scistarter.org/training-foundations/project-squirrel-training" class="w-full flex flex-col sm:flex-row bg-white shadow-md mx-auto mb-4 border border-primary-light rounded-md overflow-hidden no-underline">
+            <img src="https://orrery-media.s3.amazonaws.com/library/project_squirrel-card_NqhYvGZ.jpeg" alt="squirrel" class="w-full sm:w-[300px] self-start sm:max-w-[33%]" />
+            <div class="flex flex-col p-4 justify-center relative gap-4 w-full">
+              <div>
+                <h3 class="text-lg mb-2! text-primary-dark">Project Squirrel</h3>
+                <p class="text-sm mb-4! text-neutral-dark">Help scientists better understand tree squirrel ecology.</p>
+                <div class="ss-cat-tags flex gap-2 flex-wrap">
+                  
+                  <span class="bg-accent2 px-2 rounded-xs text-white flex flex-nowrap w-auto text-nowrap text-sm"><svg class="w-[10px] mr-2 fill-white" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" ><path d="m256 0c-141.164062 0-256 114.835938-256 256s114.835938 256 256 256 256-114.835938 256-256-114.835938-256-256-256zm121.75 388.414062c-4.160156 4.160157-9.621094 6.253907-15.082031 6.253907-5.460938 0-10.925781-2.09375-15.082031-6.253907l-106.667969-106.664062c-4.011719-3.988281-6.25-9.410156-6.25-15.082031v-138.667969c0-11.796875 9.554687-21.332031 21.332031-21.332031s21.332031 9.535156 21.332031 21.332031v129.835938l100.417969 100.414062c8.339844 8.34375 8.339844 21.824219 0 30.164062zm0 0"></path></svg> 15&ndash;30 minutes</span>
+                  <span class="bg-accent2 px-2 rounded-xs text-white flex flex-nowrap w-auto text-nowrap text-sm"><svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="w-[12px] mr-1 fill-white" viewBox="0 0 512 512" style="enable-background:new 0 0 512 512;" xml:space="preserve"><path d="M256,0C153.755,0,70.573,83.182,70.573,185.426c0,126.888,165.939,313.167,173.004,321.035		c6.636,7.391,18.222,7.378,24.846,0c7.065-7.868,173.004-194.147,173.004-321.035C441.425,83.182,358.244,0,256,0z M256,278.719			c-51.442,0-93.292-41.851-93.292-93.293S204.559,92.134,256,92.134s93.291,41.851,93.291,93.293S307.441,278.719,256,278.719z"></path>
+</svg> outdoors</span>
+                </div>
+                <span class="btn btn-primary mt-4">LEARN MORE</span>
+              </div>
+              <img class="absolute top-4 right-4 w-[30px]" src="/-static/img/affiliate-logo.svg" alt="SciStarter affiliate logo" />
+            </div>
+            </a>
+          </div>
+<!-- end project card with affiliate-->
+
+      </div>
+    </section>
+    <section id="component-tabs" class="category-section hidden">
+      <h2 class="text-xl font-bold mb-4">Component: Tabs</h2>
+      <div>
+                  <div class="w-full mx-auto mt-4"> <!-- tab wrap-->
+
+                  <!-- Tabs -->
+                  <div class="tabs">
+
+                  <ul class="tab-links tabs-tabs">
+                    <li class="tab-active"><a href="#first" class="">Projects</a></li>
+                    <li><a href="#second">Events</a></li>
+                  </ul>
+                
+                  
+                  <div class="tab-contents"><!-- Tab Contents -->
+  
+                    <div id="first" class="p-4">
+                      
+                        First Tab Content
+
+                    </div><!-- tab content 1-->
+
+                    <div id="second" class="p-4 hidden">
+                    
+                        Second Tab Content
+
+                    </div><!-- tab content 2-->
+
+                  </div><!-- Tab Contents -->
+
+                  </div><!-- .tabs -->
+
+                </div><!-- tab wrap-->
+      </div>
+    </section>
+    <section id="component-pagination" class="category-section hidden">
+      <h2 class="text-xl font-bold mb-4">Component: Pagination</h2>
+      <div>
+             <!-- pagination -->
+                         <div class="flex items-center mx-auto bg-white px-4 py-3 sm:px-6 mt-4">
+                          <div class="flex items-center justify-center w-full">
+                          <div>
+                              <nav class="isolate inline-flex -space-x-px rounded-md shadow-xs" aria-label="Pagination">
+                              <a href="#" class="relative inline-flex items-center rounded-l-md px-2 py-2 text-action-blue ring-1 ring-inset ring-gray-300  focus:z-20 focus:outline-offset-0 hover:text-white hover:bg-action-blue">
+                                  <span class="sr-only">Previous</span>
+                                  <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                  <path fill-rule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clip-rule="evenodd" />
+                                  </svg>
+                              </a>
+                              <!-- current-->
+                              <a href="#" aria-current="page" class="relative z-10 inline-flex items-center bg-action-blue px-4 py-2 text-sm font-semibold text-white focus:z-20 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">1</a>
+                              <!-- end current -->
+                              <a href="#" class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-action-blue ring-1 ring-inset hover:bg-action-blue hover:text-white focus:z-20 focus:outline-offset-0">2</a>
+                              <a href="#" class="relative hidden items-center px-4 py-2 text-sm font-semibold text-action-blue hover:bg-action-blue hover:text-white ring-1 ring-inset focus:z-20 focus:outline-offset-0 md:inline-flex">3</a>
+                              <span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-700 ring-1 ring-inset focus:outline-offset-0">...</span>
+                              <a href="#" class="relative hidden items-center px-4 py-2 text-sm font-semibold text-action-blue ring-1 ring-inset hover:bg-action-blue hover:text-white focus:z-20 focus:outline-offset-0 md:inline-flex">8</a>
+                              <a href="#" class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-action-blue ring-1 ring-inset hover:bg-action-blue hover:text-white focus:z-20 focus:outline-offset-0">9</a>
+                              <a href="#" class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-action-blue ring-1 ring-inset hover:bg-action-blue hover:text-white focus:z-20 focus:outline-offset-0">10</a>
+                              <a href="#" class="relative inline-flex items-center rounded-r-md px-2 py-2 text-action-blue ring-1 ring-inset hover:bg-action-blue hover:text-white focus:z-20 focus:outline-offset-0">
+                                  <span class="sr-only">Next</span>
+                                  <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                  <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
+                                  </svg>
+                              </a>
+                              </nav>
+                          </div>
+                          </div>
+                      </div>
+                      <!-- end pagination -->  
+      </div>
+    </section>
+
+
+    <section id="templates" class="category-section hidden">
+      <h2 class="text-2xl font-bold mb-4">Templates</h2>
+      <p>Page-level layouts with placeholder content.</p>
+    </section>
+    <section id="template-dashboard" class="category-section hidden">
+      <h2 class="text-xl font-bold mb-4">Template: Dashboard</h2>
+      <div class="border rounded p-4 shadow">Dashboard template example.</div>
+    </section>
+    <section id="pages" class="category-section hidden">
+      <h2 class="text-2xl font-bold mb-4">Pages</h2>
+      <p>Specific page designs built from templates.</p>
+    </section>
+    <section id="page-home" class="category-section hidden">
+      <h2 class="text-xl font-bold mb-4">Page: Home</h2>
+      <div class="border rounded p-4 shadow">Home page example.</div>
+    </section>
+  </main>
+</div>
+
+<script>
+  // Tab logic for swapping categories and nested items
+  document.querySelectorAll('.nav-link').forEach(btn => {
+    btn.addEventListener('click', function() {
+      // Hide all sections
+      document.querySelectorAll('.category-section').forEach(sec => {
+        sec.classList.add('hidden');
+        sec.classList.remove('block');
+      });
+      // Remove active state from all nav links
+      document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('bg-gray-300'));
+      // Show selected section
+      const cat = this.getAttribute('data-category');
+      const section = document.getElementById(cat);
+      if(section) {
+        section.classList.remove('hidden');
+        section.classList.add('block');
+      }
+      // Highlight active nav
+      this.classList.add('bg-gray-300');
+    });
+  });
+</script>
+</body>
+</html>

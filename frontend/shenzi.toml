@@ -18,11 +18,11 @@ include = "css/style.css"
 handler = {Command = ["tailwindcss", "--cwd", ".", "--minify", "--input", "$infile", "--output", "$outfile"]}
 skip_unchanged = false
 
-# This rule skips minifying shoelace js files. That's fine since
+# This rule skips minifying webawesome js files. That's fine since
 # they're small anyway, but once shenzi is able to minify them without
 # hitting a panic in minify_js this rule can be removed.
 [[rules]]
-include = "shoelace/**/*.js"
+include = "webawesome/**/*.js"
 handler = "Copy"
 
 [[rules]]
