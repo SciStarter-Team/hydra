@@ -3,7 +3,7 @@
 @import "../theme.css";
 
 @layer utilities {
-    button {
+    button,a,.btn {
         cursor: pointer;
     }
 }

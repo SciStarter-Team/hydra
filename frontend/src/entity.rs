@@ -7,6 +7,7 @@ use crate::peering::LoadStorePeered;
 
 #[derive(Copy, Clone, sqlx::Type, serde::Serialize, serde::Deserialize)]
 pub enum EntityKind {
+    Proxied, // Used for publishing WordPress pages and the like
     Redirect,
     RawHTML,
     Wysiwyg,

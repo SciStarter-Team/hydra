@@ -31,6 +31,10 @@ async fn cleanup() {
 
 // dev feature, remove when this codebase becomes the primary version
 async fn sessions_synchronize() {
+    if cfg!(debug_assertions) {
+        return;
+    }
+
     #[derive(serde::Deserialize)]
     struct SessionDataImport {
         session_key: String,
@@ -203,18 +207,22 @@ async fn users_synchronize() {
 
         let client = reqwest::Client::new();
 
-        let users: Vec<UserDataImport> = client
+        let Some(users): Option<Vec<UserDataImport>> = client
             .get("https://scistarter.org/staff/sync/users")
             .bearer_auth(env!("SYNC_TOKEN"))
             .query(&[("since", &last)])
             .send()
             .await
-            .expect("Retrieving session data failed")
+            .expect("Retrieving user data failed")
             .error_for_status()
-            .expect("Retrieving session data produced an error")
+            .expect("Retrieving user data produced an error")
             .json()
             .await
-            .expect("JSON decoding of user data failed");
+            .ok()
+        else {
+            println!("JSON parsing error, retrying...");
+            continue;
+        };
 
         let db = db();
         let mut bookmark = last.clone();
