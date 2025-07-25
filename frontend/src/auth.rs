@@ -18,7 +18,7 @@ use crate::{
 
 #[derive(serde::Deserialize)]
 struct LoginPageParameters {
-    username: Option<bool>,
+    system: Option<bool>,
     password: Option<bool>,
     unauthorized: Option<bool>,
     next: Option<String>,
@@ -27,7 +27,7 @@ struct LoginPageParameters {
 #[derive(sailfish::TemplateOnce)]
 #[template(path = "auth/login_signup.stpl.html")]
 struct LoginSignupPage {
-    username: bool,
+    system: bool,
     password: bool,
     unauthorized: bool,
     head: <Head as Component>::Prepared,
@@ -49,7 +49,7 @@ pub async fn login_signup_page(
     }
 
     LoginSignupPage {
-        username: params.username.unwrap_or_default(),
+        system: params.system.unwrap_or_default(),
         password: params.password.unwrap_or_default(),
         unauthorized: params.unauthorized.unwrap_or_default(),
         head: Head::default().prepare(None).await?,
@@ -170,19 +170,11 @@ pub async fn login_action(session: &Session, Form(form): Form<LoginForm>) -> Res
         }
         Ok(None) => {
             // Login failed - redirect back with error
-            Redirect::see_other(format!(
-                "/login?username={}&password=true",
-                urlencoding::encode(&form.email)
-            ))
-            .into_response()
+            Redirect::see_other("/login?password=true").into_response()
         }
         Err(_) => {
             // Service error
-            Redirect::see_other(format!(
-                "/login?username={}&error=true",
-                urlencoding::encode(&form.email)
-            ))
-            .into_response()
+            Redirect::see_other("/login?system=true").into_response()
         }
     }
 }

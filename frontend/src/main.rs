@@ -8,6 +8,7 @@ pub mod entity;
 pub mod event;
 pub mod middleware;
 pub mod misc;
+pub mod pages;
 pub mod peering;
 pub mod project;
 pub mod session;
@@ -54,23 +55,6 @@ struct Static;
 
 type StaticFiles = EmbeddedFilesEndpoint<Static>;
 type StaticFile = EmbeddedFileEndpoint<Static>;
-
-#[handler]
-async fn index_page(
-    _session: &Session,
-    _headers: &HeaderMap,
-    RealIp(client_ip): RealIp,
-) -> poem::Result<Response> {
-    let location = if let Some(addr) = client_ip {
-        common::service::request("location.ip", addr.to_string())
-            .await
-            .unwrap_or_default()
-    } else {
-        LocationInfo::default()
-    };
-
-    Ok(Html(format!("{}", location.city_name)).into_response())
-}
 
 #[handler]
 async fn entity_page(Path(slug): Path<String>) -> poem::Result<poem::Response> {
@@ -120,8 +104,8 @@ async fn error_dispatch(err: poem::Error) -> Response {
 fn user_facing() -> impl Endpoint {
     Route::new()
         .at("/:slug", get(entity_page))
-        .at("/", get(index_page))
-        .at("/index.html", get(index_page))
+        .at("/", get(pages::index::index_page))
+        .at("/index.html", get(pages::index::index_page))
         .at("/signup", post(auth::signup_action))
         .at(
             "/login",

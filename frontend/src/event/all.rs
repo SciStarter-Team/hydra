@@ -1,6 +1,9 @@
 use std::collections::HashSet;
 
-use common::{insensitivestring::InsensitiveString, shared::db, timestring::TimeString};
+use common::{
+    insensitivestring::InsensitiveString, shared::db, timestring::TimeString,
+    transaction::Immediate,
+};
 use ulid::Ulid;
 
 use crate::{contact::Contact, peering::LoadStorePeered};
@@ -63,7 +66,7 @@ impl LoadStorePeered for EventAll {
         let part_of = self.part_of.map(|u| u.to_string());
         let page_creator_id = self.page_creator_id.to_string();
 
-        let mut tx = db().begin().await?;
+        let mut tx = Immediate::begin_with_retry(db(), None, None).await?;
 
         sqlx::query!(
             r#"insert or replace into "events" (
@@ -181,7 +184,7 @@ impl LoadStorePeered for EventAll {
             self.regions,
             self.point,
         )
-        .execute(&mut *tx)
+        .execute(&mut tx)
         .await?;
 
         // "page_editor_ids",
@@ -189,7 +192,7 @@ impl LoadStorePeered for EventAll {
             r#"delete from event_page_editors where event_id = ?"#,
             event_id
         )
-        .execute(&mut *tx)
+        .execute(&mut tx)
         .await?;
 
         for user_id in self.page_editor_ids.iter() {
@@ -206,7 +209,7 @@ impl LoadStorePeered for EventAll {
                 event_id,
                 user_id,
             )
-            .execute(&mut *tx)
+            .execute(&mut tx)
             .await?;
         }
 
@@ -232,7 +235,7 @@ impl LoadStorePeered for EventAll {
 
         // "tags",
         sqlx::query!(r#"delete from event_tags where event_id = ?"#, event_id)
-            .execute(&mut *tx)
+            .execute(&mut tx)
             .await?;
 
         for val in self.tags.iter() {
@@ -250,13 +253,13 @@ impl LoadStorePeered for EventAll {
                 event_id,
                 val,
             )
-            .execute(&mut *tx)
+            .execute(&mut tx)
             .await?;
         }
 
         //pub contacts: Box<[Contact]>,
         sqlx::query!(r#"delete from event_contacts where event_id = ?"#, event_id)
-            .execute(&mut *tx)
+            .execute(&mut tx)
             .await?;
 
         for contact in self.contacts.iter() {
@@ -291,7 +294,7 @@ impl LoadStorePeered for EventAll {
                 contact.phone,
                 contact.address,
             )
-            .execute(&mut *tx)
+            .execute(&mut tx)
             .await?;
         }
 
@@ -300,7 +303,7 @@ impl LoadStorePeered for EventAll {
             r#"delete from event_instances where event_id = ?"#,
             event_id
         )
-        .execute(&mut *tx)
+        .execute(&mut tx)
         .await?;
 
         for val in self.instances.iter() {
@@ -319,7 +322,7 @@ impl LoadStorePeered for EventAll {
                 val.begin,
                 val.end,
             )
-            .execute(&mut *tx)
+            .execute(&mut tx)
             .await?;
         }
 

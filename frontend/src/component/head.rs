@@ -11,7 +11,7 @@ pub struct Head {
 impl Default for Head {
     fn default() -> Self {
         Head {
-            enable_webawesome: true,
+            enable_webawesome: false,
             enable_sse: false,
             enable_alpine: false,
         }

@@ -1,7 +1,10 @@
 use std::collections::HashSet;
 
 use anyhow::Error;
-use common::{insensitivestring::InsensitiveString, shared::db, timestring::TimeString};
+use common::{
+    insensitivestring::InsensitiveString, shared::db, timestring::TimeString,
+    transaction::Immediate,
+};
 use ulid::Ulid;
 
 use crate::{contact::Contact, peering::LoadStorePeered};
@@ -190,7 +193,9 @@ impl LoadStorePeered for ProjectAll {
     const SPECIFIC: &str = "all";
 
     async fn save_to_database(&self) -> Result<(), Error> {
-        let mut tx = db().begin().await?;
+        let mut tx = Immediate::begin_with_retry(db(), None, None).await?;
+
+        //let mut tx = db().begin().await?;
 
         let project_id = self.project_id.to_string();
         let page_creator_id = self.page_creator_id.to_string();
@@ -554,7 +559,7 @@ impl LoadStorePeered for ProjectAll {
             self.regions,
             self.point,
         )
-        .execute(&mut *tx)
+        .execute(&mut tx)
         .await?;
 
         // The following all have to be fully written out, because there's
@@ -569,7 +574,7 @@ impl LoadStorePeered for ProjectAll {
             r#"delete from project_page_editors where project_id = ?"#,
             project_id
         )
-        .execute(&mut *tx)
+        .execute(&mut tx)
         .await?;
 
         for user_id in self.page_editor_ids.iter() {
@@ -586,7 +591,7 @@ impl LoadStorePeered for ProjectAll {
                 project_id,
                 user_id,
             )
-            .execute(&mut *tx)
+            .execute(&mut tx)
             .await?;
         }
 
@@ -615,7 +620,7 @@ impl LoadStorePeered for ProjectAll {
             r#"delete from project_tags where project_id = ?"#,
             project_id
         )
-        .execute(&mut *tx)
+        .execute(&mut tx)
         .await?;
 
         for val in self.tags.iter() {
@@ -633,7 +638,7 @@ impl LoadStorePeered for ProjectAll {
                 project_id,
                 val,
             )
-            .execute(&mut *tx)
+            .execute(&mut tx)
             .await?;
         }
 
@@ -642,7 +647,7 @@ impl LoadStorePeered for ProjectAll {
             r#"delete from project_participant_files where project_id = ?"#,
             project_id
         )
-        .execute(&mut *tx)
+        .execute(&mut tx)
         .await?;
 
         for val in self.participant_files.iter() {
@@ -658,7 +663,7 @@ impl LoadStorePeered for ProjectAll {
                 project_id,
                 val,
             )
-            .execute(&mut *tx)
+            .execute(&mut tx)
             .await?;
         }
 
@@ -667,7 +672,7 @@ impl LoadStorePeered for ProjectAll {
             r#"delete from project_contacts where project_id = ?"#,
             project_id
         )
-        .execute(&mut *tx)
+        .execute(&mut tx)
         .await?;
 
         for contact in self.contacts.iter() {
@@ -702,7 +707,7 @@ impl LoadStorePeered for ProjectAll {
                 contact.phone,
                 contact.address,
             )
-            .execute(&mut *tx)
+            .execute(&mut tx)
             .await?;
         }
 
@@ -711,7 +716,7 @@ impl LoadStorePeered for ProjectAll {
             r#"delete from project_topics where project_id = ?"#,
             project_id
         )
-        .execute(&mut *tx)
+        .execute(&mut tx)
         .await?;
 
         for val in self.topics.iter() {
@@ -727,7 +732,7 @@ impl LoadStorePeered for ProjectAll {
                 project_id,
                 val,
             )
-            .execute(&mut *tx)
+            .execute(&mut tx)
             .await?;
         }
 
@@ -736,7 +741,7 @@ impl LoadStorePeered for ProjectAll {
             r#"delete from project_fields_of_science where project_id = ?"#,
             project_id
         )
-        .execute(&mut *tx)
+        .execute(&mut tx)
         .await?;
 
         for val in self.fields_of_science.iter() {
@@ -752,7 +757,7 @@ impl LoadStorePeered for ProjectAll {
                 project_id,
                 val,
             )
-            .execute(&mut *tx)
+            .execute(&mut tx)
             .await?;
         }
 
@@ -761,7 +766,7 @@ impl LoadStorePeered for ProjectAll {
             r#"delete from project_practices where project_id = ?"#,
             project_id
         )
-        .execute(&mut *tx)
+        .execute(&mut tx)
         .await?;
 
         for val in self.practices.iter() {
@@ -777,7 +782,7 @@ impl LoadStorePeered for ProjectAll {
                 project_id,
                 val,
             )
-            .execute(&mut *tx)
+            .execute(&mut tx)
             .await?;
         }
 
@@ -786,7 +791,7 @@ impl LoadStorePeered for ProjectAll {
             r#"delete from project_audiences where project_id = ?"#,
             project_id
         )
-        .execute(&mut *tx)
+        .execute(&mut tx)
         .await?;
 
         for val in self.audience.iter() {
@@ -802,7 +807,7 @@ impl LoadStorePeered for ProjectAll {
                 project_id,
                 val,
             )
-            .execute(&mut *tx)
+            .execute(&mut tx)
             .await?;
         }
 
@@ -811,7 +816,7 @@ impl LoadStorePeered for ProjectAll {
             r#"delete from project_associated_projects where project_id = ?"#,
             project_id
         )
-        .execute(&mut *tx)
+        .execute(&mut tx)
         .await?;
 
         for assoc_id in self.associated_projects.iter() {
@@ -828,7 +833,7 @@ impl LoadStorePeered for ProjectAll {
                 project_id,
                 assoc_id,
             )
-            .execute(&mut *tx)
+            .execute(&mut tx)
             .await?;
         }
 
@@ -837,7 +842,7 @@ impl LoadStorePeered for ProjectAll {
             r#"delete from project_geographic_scopes where project_id = ?"#,
             project_id
         )
-        .execute(&mut *tx)
+        .execute(&mut tx)
         .await?;
 
         for val in self.geographic_scope.iter() {
@@ -853,7 +858,7 @@ impl LoadStorePeered for ProjectAll {
                 project_id,
                 val,
             )
-            .execute(&mut *tx)
+            .execute(&mut tx)
             .await?;
         }
 
@@ -862,7 +867,7 @@ impl LoadStorePeered for ProjectAll {
             r#"delete from project_participation_tasks where project_id = ?"#,
             project_id
         )
-        .execute(&mut *tx)
+        .execute(&mut tx)
         .await?;
 
         for val in self.participation_tasks.iter() {
@@ -878,7 +883,7 @@ impl LoadStorePeered for ProjectAll {
                 project_id,
                 val,
             )
-            .execute(&mut *tx)
+            .execute(&mut tx)
             .await?;
         }
 
@@ -887,7 +892,7 @@ impl LoadStorePeered for ProjectAll {
             r#"delete from project_activities where project_id = ?"#,
             project_id
         )
-        .execute(&mut *tx)
+        .execute(&mut tx)
         .await?;
 
         for val in self.activities.iter() {
@@ -903,7 +908,7 @@ impl LoadStorePeered for ProjectAll {
                 project_id,
                 val,
             )
-            .execute(&mut *tx)
+            .execute(&mut tx)
             .await?;
         }
 
@@ -912,7 +917,7 @@ impl LoadStorePeered for ProjectAll {
             r#"delete from project_data_aggregations where project_id = ?"#,
             project_id
         )
-        .execute(&mut *tx)
+        .execute(&mut tx)
         .await?;
 
         for val in self.data_aggregation.iter() {
@@ -928,7 +933,7 @@ impl LoadStorePeered for ProjectAll {
                 project_id,
                 val,
             )
-            .execute(&mut *tx)
+            .execute(&mut tx)
             .await?;
         }
 
@@ -937,7 +942,7 @@ impl LoadStorePeered for ProjectAll {
             r#"delete from project_data_consents where project_id = ?"#,
             project_id
         )
-        .execute(&mut *tx)
+        .execute(&mut tx)
         .await?;
 
         for val in self.data_consent.iter() {
@@ -953,7 +958,7 @@ impl LoadStorePeered for ProjectAll {
                 project_id,
                 val,
             )
-            .execute(&mut *tx)
+            .execute(&mut tx)
             .await?;
         }
 
@@ -962,7 +967,7 @@ impl LoadStorePeered for ProjectAll {
             r#"delete from project_data_access where project_id = ?"#,
             project_id
         )
-        .execute(&mut *tx)
+        .execute(&mut tx)
         .await?;
 
         for val in self.data_access.iter() {
@@ -978,7 +983,7 @@ impl LoadStorePeered for ProjectAll {
                 project_id,
                 val,
             )
-            .execute(&mut *tx)
+            .execute(&mut tx)
             .await?;
         }
 
@@ -987,7 +992,7 @@ impl LoadStorePeered for ProjectAll {
             r#"delete from project_intended_outcomes where project_id = ?"#,
             project_id
         )
-        .execute(&mut *tx)
+        .execute(&mut tx)
         .await?;
 
         for val in self.intended_outcomes.iter() {
@@ -1003,7 +1008,7 @@ impl LoadStorePeered for ProjectAll {
                 project_id,
                 val,
             )
-            .execute(&mut *tx)
+            .execute(&mut tx)
             .await?;
         }
 
@@ -1012,7 +1017,7 @@ impl LoadStorePeered for ProjectAll {
             r#"delete from project_sponsors where project_id = ?"#,
             project_id
         )
-        .execute(&mut *tx)
+        .execute(&mut tx)
         .await?;
 
         for val in self.sponsors.iter() {
@@ -1028,7 +1033,7 @@ impl LoadStorePeered for ProjectAll {
                 project_id,
                 val,
             )
-            .execute(&mut *tx)
+            .execute(&mut tx)
             .await?;
         }
 
@@ -1037,7 +1042,7 @@ impl LoadStorePeered for ProjectAll {
             r#"delete from project_stakeholders where project_id = ?"#,
             project_id
         )
-        .execute(&mut *tx)
+        .execute(&mut tx)
         .await?;
 
         for val in self.stakeholders.iter() {
@@ -1053,7 +1058,7 @@ impl LoadStorePeered for ProjectAll {
                 project_id,
                 val,
             )
-            .execute(&mut *tx)
+            .execute(&mut tx)
             .await?;
         }
 

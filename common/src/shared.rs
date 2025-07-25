@@ -1,6 +1,9 @@
-use std::sync::OnceLock;
+use std::{sync::OnceLock, time::Duration};
 
-use sqlx::{sqlite::SqliteConnectOptions, SqlitePool};
+use sqlx::{
+    SqlitePool,
+    sqlite::{SqliteConnectOptions, SqlitePoolOptions},
+};
 
 #[cfg(debug_assertions)]
 const STORAGE_PATH: &'static str = env!("LOCAL_STORAGE_PATH");
@@ -13,6 +16,9 @@ const NATS_HOST: &'static str = "127.0.0.1";
 
 #[cfg(not(debug_assertions))]
 const NATS_HOST: &'static str = env!("NATS_HOST");
+
+const MAX_CONNECTION_LIFETIME: u64 = 60 * 60 * 4;
+const MAX_CONNECTION_IDLE_TIME: u64 = 60;
 
 static DB: OnceLock<SqlitePool> = OnceLock::new();
 
@@ -28,22 +34,26 @@ pub fn nats() -> &'static async_nats::Client {
 }
 
 pub async fn init(db_name: impl AsRef<str>) {
-    let conx = SqlitePool::connect_with(
-        SqliteConnectOptions::new()
-            .filename(std::path::Path::join(
-                STORAGE_PATH.as_ref(),
-                format!("{}.sqlite", db_name.as_ref()),
-            ))
-            .create_if_missing(true)
-            .busy_timeout(std::time::Duration::from_secs(300))
-            .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
-            .synchronous(sqlx::sqlite::SqliteSynchronous::Normal)
-            .foreign_keys(true)
-            .optimize_on_close(true, Some(1000))
-            .extension("mod_spatialite"),
-    )
-    .await
-    .expect("Unable to connect to SQLite");
+    let conx = SqlitePoolOptions::new()
+        .max_connections(100)
+        .max_lifetime(Duration::from_secs(MAX_CONNECTION_LIFETIME))
+        .idle_timeout(Duration::from_secs(MAX_CONNECTION_IDLE_TIME))
+        .connect_with(
+            SqliteConnectOptions::new()
+                .filename(std::path::Path::join(
+                    STORAGE_PATH.as_ref(),
+                    format!("{}.sqlite", db_name.as_ref()),
+                ))
+                .create_if_missing(true)
+                .busy_timeout(std::time::Duration::from_secs(300))
+                .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
+                .synchronous(sqlx::sqlite::SqliteSynchronous::Normal)
+                .foreign_keys(true)
+                .optimize_on_close(true, Some(1000))
+                .extension("mod_spatialite"),
+        )
+        .await
+        .expect("Unable to connect to SQLite");
 
     sqlx::query!(
         r#"create table if not exists "misc" (

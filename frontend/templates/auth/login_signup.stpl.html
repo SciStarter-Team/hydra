@@ -11,9 +11,9 @@
         You're not logged in to an account which is authorized to access that resource. If you have a different account which might be allowed, try logging in to that account now.
       </p>
     <% } %>
-    <% if self.username { %>
+    <% if self.system { %>
       <p>
-        Unable to find that account
+        Something went wrong on our end. It's not your fault. Please wait a little while and then try again.
       </p>
     <% } %>
     <% if self.password { %>
@@ -23,40 +23,46 @@
     <% } %>
     <form method=post action="/login">
       <p>
-        <input type=text name=username>
-      </p>
-      <p>
-        <input type=password name=password>
-      </p>
-      <p><input type=submit value="Log In"></p>
-    </form>
-    <form method=post action="/signup">
-      <p>
-        <label>
-          Handle
-          <input type=text name=handle required>
-        </label>
-      </p>
-      <p>
         <label>
           Email
-          <input type=email name=email required>
+          <input class="p-1 border-1 border-solid" type=text name=email>
         </label>
       </p>
       <p>
         <label>
           Password
-          <input type=password name=password1 required>
+          <input class="p-1 border-1 border-solid" type=password name=password>
+        </label>
+      </p>
+      <p><input class="btn btn-primary" type=submit value="Log In"></p>
+    </form>
+    <form method=post action="/signup">
+      <p>
+        <label>
+          Handle
+          <input class="p-1 border-1 border-solid" type=text name=handle required>
+        </label>
+      </p>
+      <p>
+        <label>
+          Email
+          <input class="p-1 border-1 border-solid" type=email name=email required>
+        </label>
+      </p>
+      <p>
+        <label>
+          Password
+          <input class="p-1 border-1 border-solid" type=password name=password1 required>
         </label>
         <label>
           Re-type Password
-          <input type=password name=password2 required>
+          <input class="p-1 border-1 border-solid" type=password name=password2 required>
         </label>
       </p>
       <p>
         <label>
           Zip/Postal Code
-          <input type=text name=zipcode>
+          <input class="p-1 border-1 border-solid" type=text name=zipcode>
         </label>
       </p>
       <p>
@@ -65,7 +71,7 @@
           <input type=checkbox name=newsletter value=true checked>
         </label>
       </p>
-      <p><input type=submit value="Sign Up"></p>
+      <p><input class="btn btn-primary" type=submit value="Sign Up"></p>
     </form>
     <%+ self.footer %>
   </body>
