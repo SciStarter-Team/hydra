@@ -362,13 +362,13 @@
       </svg>
     </button>
     <div class="p-8 accordion-content">
-      <p><b><a href="/login?next=/training-foundations">Create</a> or <a href="/login?next=/training-foundations">log in</a> to your SciStarter account.</b> Without completing this step, you won't be able to claim your badge.</p>
+      <p data-slot="signin">Placeholder text which will be replaced with customized greeting message / login prompt</p>
     </div>
   </div>
   <!-- end accordion item -->
  
   <!-- Accordion Item  -->
-  <div class="ss-training-step ss-accordion group current open">
+  <div class="ss-training-step ss-accordion group">
     <button type="button" class="w-full flex justify-between items-center px-4 py-3 text-left font-semibold focus:outline-none accordion-toggle">
         <div class="flex gap-6 items-center !mb-0"><span class="group-[.completed]:hidden font-condensed text-xl font-bold !mb-0">&#x27A4;</span><span class="hidden group-[.completed]:block font-condensed text-xl font-bold"><?xml version="1.0" encoding="UTF-8"?>
           <svg width="22px" class="fill-blue-dark" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 682.7 682.7">
@@ -380,6 +380,7 @@
       </svg>
     </button>
     <div class="p-8 accordion-content">
+      <p class="hidden group-[.completed]:block">You're <strong>done</strong> with this step!</p>
       <p><b>Complete this self-guided tutorial and quiz.</b> Score an 80% or higher to move on to the next steps towards claiming your badge! This module opens in a new tab. Return to this page to claim your badge upon completion.</p>
       <div class="flex flex-col md:flex-row gap-2">
       <a target="_blank" class="ss-articulate" href="PLACEHOLDER"><img src="https://static.scistarter.org/img/training/foundations-en.png" style="max-width: 100%;"></a>
@@ -391,7 +392,7 @@
 
     <!-- Accordion Item  -->
   <!-- data-hint is set programmatically to indicate which, if either, of the two projects has already been done. Currently not used in the styling. -->
-  <div data-hint="stallcatchers" class="ss-training-step ss-accordion group blocked">
+  <div data-hint="stallcatchers" class="ss-training-step ss-accordion group  current open">
     <button type="button" class="w-full flex justify-between items-center px-4 py-3 text-left font-semibold focus:outline-none accordion-toggle">
       <div class="flex gap-6 items-center !mb-0"><span class="group-[.completed]:hidden font-condensed text-xl font-bold !mb-0">&#x27A4;</span><span class="hidden group-[.completed]:block font-condensed text-xl font-bold !mb-0"><?xml version="1.0" encoding="UTF-8"?>
           <svg width="22px" class="fill-blue-dark" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 682.7 682.7">
@@ -403,13 +404,19 @@
       </svg>
     </button>
     <div class="p-8 accordion-content">
+      <p class="hidden group-[.completed]:block">You're <strong>done</strong> with this step!</p>
       <p><b>Participate in two citizen science projects.</b> It's time to participate in two projects selected because they represent common types of citizen science projects: one where you add data observations to help when there's not enough data; and another where you review and classify data to help when there's too much data. Even if you've completed these projects before, repeat them now to proceed to Step 4 of the training. Important: When you create your Stall Catchers account, be sure to use the same email address you used to create your SciStarter account! And remember, you can find thousands of additional projects anytime on SciStarter.org.</p>
-          <!-- PROJECT CARD WITH AFFILIATE -->
-          <div class="ss-project-card">
+   
+      <!-- PROJECT CARD WITH AFFILIATE WITH COMPLETED STATE -->
+          <div class="ss-project-card completed">
             <a href="https://scistarter.org/training-foundations/project-squirrel-training" class="w-full flex flex-col sm:flex-row bg-white shadow-md mx-auto mb-4 border border-primary-light rounded-md overflow-hidden no-underline">
             <img src="https://orrery-media.s3.amazonaws.com/library/project_squirrel-card_NqhYvGZ.jpeg" alt="squirrel" class="w-full sm:w-[300px] self-start sm:max-w-[33%]" />
-            <div class="flex flex-col p-4 justify-center relative gap-4 w-full">
+            <div class="flex flex-col p-4 justify-center relative gap-4 w-full ">
               <div>
+                <div class="ss-complete flex gap-2 text-accent2-dark mb-2 font-bold hidden"> <svg width="22px" class="fill-accent2-dark" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 682.7 682.7">
+          <path d="M341.3,0C152.8,0,0,152.8,0,341.4s152.8,341.4,341.4,341.4,341.4-152.8,341.4-341.4S529.9,0,341.3,0ZM341.3,616.8c-152.1,0-275.4-123.3-275.4-275.4S189.2,65.9,341.3,65.9s275.5,123.3,275.5,275.5-123.3,275.4-275.5,275.4Z"/>
+          <path d="M291.9,456.3c-6.7,0-13.5-2.6-18.6-7.8l-84.8-86.4c-10.1-10.3-9.9-26.7.4-36.8,10.3-10.1,26.7-9.9,36.8.4l66.7,68,165.1-159.9c10.3-10,26.8-9.7,36.8.6,10,10.3,9.7,26.8-.6,36.8l-183.6,177.8c-5,4.9-11.6,7.3-18.1,7.3Z"/>
+        </svg> Completed!</div>
                 <h3 class="text-lg mb-2! text-primary-dark">Project Squirrel</h3>
                 <p class="text-sm mb-4! text-neutral-dark">Help scientists better understand tree squirrel ecology.</p>
                 <div class="ss-cat-tags flex gap-2 flex-wrap">

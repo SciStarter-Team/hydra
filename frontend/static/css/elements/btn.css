@@ -22,6 +22,10 @@
     @apply bg-primary-action text-white hover:bg-primary-action-dark border border-linework;
 }
 
+.btn-secondary {
+    @apply bg-white text-primary-action border border-primary-action hover:bg-primary-action-dark hover:text-white;
+}
+
 .btn-accent {
     @apply bg-accent1 text-white hover:bg-accent1-dark border border-linework;
 }

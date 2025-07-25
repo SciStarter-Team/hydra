@@ -48,6 +48,7 @@
 @import "./components/self-tooltip.css";
 @import "./components/tags.css";
 @import "./components/breadcrumbs.css";
+@import "./components/project-card.css";
 
 
 /** Load Templates (page patterns) **/

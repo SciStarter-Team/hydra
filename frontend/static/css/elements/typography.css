@@ -10,6 +10,7 @@
     font-size: 16px;
     color: var(--color-black);
     @apply text-neutral-dark;
+    line-height: 1.6;
   }
 
   
