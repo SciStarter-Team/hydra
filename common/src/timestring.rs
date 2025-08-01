@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use jiff::Timestamp;
 
+#[cfg_attr(feature = "database", derive(sqlx::Type))]
 #[derive(
     Debug,
     Clone,
@@ -10,11 +11,10 @@ use jiff::Timestamp;
     PartialEq,
     Ord,
     PartialOrd,
-    sqlx::Type,
     serde::Serialize,
     serde::Deserialize,
 )]
-#[sqlx(transparent)]
+#[cfg_attr(feature = "database", sqlx(transparent))]
 pub struct TimeString(String);
 
 impl TimeString {

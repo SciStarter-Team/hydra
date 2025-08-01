@@ -1,8 +1,10 @@
 pub mod insensitivestring;
 pub mod message;
+#[cfg(feature = "database")]
 pub mod misc;
 pub mod service;
 pub mod shared;
 pub mod timestring;
+#[cfg(feature = "database")]
 pub mod transaction;
 pub mod ulid;

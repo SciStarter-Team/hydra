@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use anyhow::Error;
-use sqlx::types::JsonValue;
+use serde_json::Value as JsonValue;
 use ulid::Ulid;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]

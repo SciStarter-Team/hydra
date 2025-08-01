@@ -77,3 +77,50 @@ impl SessionStorage for UserServiceSessionStorage {
         Ok(())
     }
 }
+
+/// Session tag management helper functions
+pub mod session_tags {
+    use poem::session::Session;
+    use std::collections::BTreeSet;
+
+    /// Add a tag to the session
+    pub fn add(session: &Session, tag: &str) {
+        let mut tags = get_set(session);
+        let tag_lower = tag.to_lowercase();
+        
+        if tags.insert(tag_lower) {
+            // Only update session if tag was actually added
+            session.set("session_tags", tags);
+        }
+    }
+
+    /// Get all tags from the session
+    pub fn list(session: &Session) -> Vec<String> {
+        get_set(session).into_iter().collect()
+    }
+
+    /// Clear all tags from the session and return them
+    pub fn clear(session: &Session) -> Vec<String> {
+        let tags = list(session);
+        session.remove("session_tags");
+        tags
+    }
+
+    /// Remove a specific tag from the session
+    pub fn remove(session: &Session, tag: &str) {
+        let mut tags = get_set(session);
+        let tag_lower = tag.to_lowercase();
+        
+        if tags.remove(&tag_lower) {
+            // Only update session if tag was actually removed
+            session.set("session_tags", tags);
+        }
+    }
+    
+    /// Helper function to get tags as BTreeSet
+    fn get_set(session: &Session) -> BTreeSet<String> {
+        session
+            .get::<BTreeSet<String>>("session_tags")
+            .unwrap_or_default()
+    }
+}

@@ -14,6 +14,7 @@ use poem::{
 use crate::{
     component::{Component, Footer, Head, Header},
     middleware::authorization::Authenticated,
+    session::session_tags,
 };
 
 #[derive(serde::Deserialize)]
@@ -85,9 +86,7 @@ pub async fn signup_action(
 
     // Get session values for protected and tags
     let protected = session.get::<bool>("signup_protected").unwrap_or(false);
-    let tags = session
-        .get::<Vec<String>>("signup_tags")
-        .unwrap_or_default();
+    let tags = session_tags::list(session);
 
     // Get user location from location service
     let point: Option<String> = if let Some(addr) = client_ip {
@@ -118,7 +117,7 @@ pub async fn signup_action(
 
             // Clear signup-specific session data
             session.remove("signup_protected");
-            session.remove("signup_tags");
+            session_tags::clear(session);
 
             // Redirect to intended page or home
             if let Some(next) = next {
@@ -157,6 +156,19 @@ pub async fn login_action(session: &Session, Form(form): Form<LoginForm>) -> Res
     // Call user-service's login via NATS
     match request::<Option<BasicInfo>>("user.auth.login", login_request).await {
         Ok(Some(basic_info)) => {
+            // Merge session tags with user tags if any exist
+            let session_tags = session_tags::clear(session);
+            if !session_tags.is_empty() {
+                // Add session tags to the user's account
+                for tag in session_tags {
+                    let _ = common::service::send(
+                        "user.tags.add",
+                        (basic_info.user_id.to_string(), tag),
+                    )
+                    .await;
+                }
+            }
+
             // Store user info in session
             session.set("basic_info", &basic_info);
 

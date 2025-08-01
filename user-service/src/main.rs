@@ -732,7 +732,12 @@ async fn users_synchronize() {
                 .expect("Saving second email failed");
             }
 
-            for tag in user.tags.split("||") {
+            let tag_list: Vec<String> = user.tags.split("||")
+                .filter(|tag| !tag.is_empty())
+                .map(|tag| tag.to_string())
+                .collect();
+            
+            for tag in &tag_list {
                 sqlx::query!(
                     r#"
                     insert into "user_tags" ("user_id", "tag")
@@ -744,6 +749,13 @@ async fn users_synchronize() {
                 .execute(db)
                 .await
                 .expect("Error inserting tag");
+            }
+            
+            // Notify log service of tag update if there are tags
+            if !tag_list.is_empty() {
+                if let Err(e) = common::service::send("log.user_tags_update", (user.ulid.clone(), tag_list)).await {
+                    eprintln!("Failed to notify log service of tag update: {}", e);
+                }
             }
 
             log_activity(None, "imported", user.ulid.as_ulid().ok(), None, None)
@@ -814,6 +826,12 @@ async fn main() {
     let auth = service.group("user.auth");
     toplevel.spawn(handler!(auth, "signup", auth::signup));
     toplevel.spawn(handler!(auth, "login", auth::login));
+
+    let tags = service.group("user.tags");
+    toplevel.spawn(handler!(tags, "get", users::get_user_tags));
+    toplevel.spawn(recv_handler!(tags, "set", users::set_user_tags));
+    toplevel.spawn(recv_handler!(tags, "add", users::add_user_tag));
+    toplevel.spawn(recv_handler!(tags, "remove", users::remove_user_tag));
 
     toplevel.join_all().await;
 

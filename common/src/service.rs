@@ -181,7 +181,7 @@ where
 }
 
 /// A convenience wrapper around [`common::service::send`] for sending
-/// logging messages.
+/// activity logging messages.
 pub fn log_activity(
     when: impl Into<Option<TimeString>>,
     action: impl Into<String>,
@@ -201,6 +201,90 @@ pub fn log_activity(
         .map(|t| t.to_string());
     let extra: Option<String> = extra.into().map(|e| e.into());
     send("log.activity", (when, action, user_id, target_id, extra))
+}
+
+/// A convenience wrapper around [`common::service::send`] for sending
+/// page view logging messages. Automatically resolves geolocation from IP address if not provided.
+pub async fn log_pageview(
+    when: impl Into<Option<TimeString>>,
+    ip_address: impl Into<String>,
+    session_id: impl Into<String>,
+    interaction_id: impl Into<String>,
+    user_id: impl Into<Option<Ulid>>,
+    path: impl Into<String>,
+    referrer: impl Into<Option<String>>,
+    query: impl Into<Option<String>>,
+    geolocation: impl Into<Option<String>>,
+) -> Result<(), Error> {
+    use crate::message::location::LocationInfo;
+    
+    let when: String = when.into().unwrap_or_else(|| TimeString::now()).into();
+    let ip_address: String = ip_address.into();
+    let session_id: String = session_id.into();
+    let interaction_id: String = interaction_id.into();
+    let user_id: Option<String> = user_id
+        .into()
+        .and_then(|u| u.as_ulid().ok())
+        .map(|u| u.to_string());
+    let path: String = path.into();
+    let referrer: Option<String> = referrer.into();
+    let query: Option<String> = query.into();
+    
+    // Use provided geolocation or resolve from IP address
+    let geolocation = match geolocation.into() {
+        Some(geo) => geo,
+        None => {
+            let location_info: LocationInfo = request("location.ip", &ip_address).await.unwrap_or_default();
+            location_info.as_point()
+                .map(|p| p.to_string())
+                .unwrap_or_else(|| r#"{"type":"Point","coordinates":[0.0,0.0]}"#.to_string())
+        }
+    };
+    
+    send("log.pageview", (when, ip_address, session_id, interaction_id, user_id, path, referrer, query, geolocation)).await
+}
+
+/// A convenience wrapper around [`common::service::send`] for sending
+/// clickthrough logging messages. Automatically resolves geolocation from IP address if not provided.
+pub async fn log_clickthrough(
+    when: impl Into<Option<TimeString>>,
+    ip_address: impl Into<String>,
+    session_id: impl Into<String>,
+    interaction_id: impl Into<String>,
+    user_id: impl Into<Option<Ulid>>,
+    from_path: impl Into<String>,
+    to_url: impl Into<String>,
+    link_type: impl Into<String>,
+    program_id: impl Into<Option<String>>,
+    geolocation: impl Into<Option<String>>,
+) -> Result<(), Error> {
+    use crate::message::location::LocationInfo;
+    
+    let when: String = when.into().unwrap_or_else(|| TimeString::now()).into();
+    let ip_address: String = ip_address.into();
+    let session_id: String = session_id.into();
+    let interaction_id: String = interaction_id.into();
+    let user_id: Option<String> = user_id
+        .into()
+        .and_then(|u| u.as_ulid().ok())
+        .map(|u| u.to_string());
+    let from_path: String = from_path.into();
+    let to_url: String = to_url.into();
+    let link_type: String = link_type.into();
+    let program_id: Option<String> = program_id.into();
+    
+    // Use provided geolocation or resolve from IP address
+    let geolocation = match geolocation.into() {
+        Some(geo) => geo,
+        None => {
+            let location_info: LocationInfo = request("location.ip", &ip_address).await.unwrap_or_default();
+            location_info.as_point()
+                .map(|p| p.to_string())
+                .unwrap_or_else(|| r#"{"type":"Point","coordinates":[0.0,0.0]}"#.to_string())
+        }
+    };
+    
+    send("log.clickthrough", (when, ip_address, session_id, interaction_id, user_id, from_path, to_url, link_type, program_id, geolocation)).await
 }
 
 pub mod errors {
