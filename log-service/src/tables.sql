@@ -1,5 +1,5 @@
 -- Activity logging table
-CREATE TABLE activity_log (
+CREATE TABLE IF NOT EXISTS activity_log (
     when_timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     action VARCHAR NOT NULL,
     user_id VARCHAR,
@@ -7,13 +7,13 @@ CREATE TABLE activity_log (
     extra VARCHAR
 );
 
-CREATE INDEX activity_log_by_when ON activity_log (when_timestamp);
-CREATE INDEX activity_log_by_action ON activity_log (action);
-CREATE INDEX activity_log_by_user_id ON activity_log (user_id) WHERE user_id IS NOT NULL;
-CREATE INDEX activity_log_by_target ON activity_log (target) WHERE target IS NOT NULL;
+CREATE INDEX IF NOT EXISTS activity_log_by_when ON activity_log (when_timestamp);
+CREATE INDEX IF NOT EXISTS activity_log_by_action ON activity_log (action);
+CREATE INDEX IF NOT EXISTS activity_log_by_user_id ON activity_log (user_id);
+CREATE INDEX IF NOT EXISTS activity_log_by_target ON activity_log (target);
 
 -- Page view logging table
-CREATE TABLE page_views (
+CREATE TABLE IF NOT EXISTS page_views (
     when_timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     ip_address VARCHAR NOT NULL,
     session_id VARCHAR NOT NULL,
@@ -25,15 +25,15 @@ CREATE TABLE page_views (
     geolocation VARCHAR NOT NULL -- GeoJSON point string
 );
 
-CREATE INDEX page_views_by_when ON page_views (when_timestamp);
-CREATE INDEX page_views_by_session ON page_views (session_id);
-CREATE INDEX page_views_by_interaction ON page_views (interaction_id);
-CREATE INDEX page_views_by_user ON page_views (user_id) WHERE user_id IS NOT NULL;
-CREATE INDEX page_views_by_path ON page_views (path);
-CREATE INDEX page_views_by_ip ON page_views (ip_address);
+CREATE INDEX IF NOT EXISTS page_views_by_when ON page_views (when_timestamp);
+CREATE INDEX IF NOT EXISTS page_views_by_session ON page_views (session_id);
+CREATE INDEX IF NOT EXISTS page_views_by_interaction ON page_views (interaction_id);
+CREATE INDEX IF NOT EXISTS page_views_by_user ON page_views (user_id);
+CREATE INDEX IF NOT EXISTS page_views_by_path ON page_views (path);
+CREATE INDEX IF NOT EXISTS page_views_by_ip ON page_views (ip_address);
 
 -- Clickthrough tracking table
-CREATE TABLE clickthroughs (
+CREATE TABLE IF NOT EXISTS clickthroughs (
     when_timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     ip_address VARCHAR NOT NULL,
     session_id VARCHAR NOT NULL,
@@ -46,24 +46,26 @@ CREATE TABLE clickthroughs (
     geolocation VARCHAR NOT NULL -- GeoJSON point string
 );
 
-CREATE INDEX clickthroughs_by_when ON clickthroughs (when_timestamp);
-CREATE INDEX clickthroughs_by_session ON clickthroughs (session_id);
-CREATE INDEX clickthroughs_by_interaction ON clickthroughs (interaction_id);
-CREATE INDEX clickthroughs_by_user ON clickthroughs (user_id) WHERE user_id IS NOT NULL;
-CREATE INDEX clickthroughs_by_link_type ON clickthroughs (link_type);
-CREATE INDEX clickthroughs_by_program ON clickthroughs (program_id) WHERE program_id IS NOT NULL;
-CREATE INDEX clickthroughs_by_from_path ON clickthroughs (from_path);
-CREATE INDEX clickthroughs_by_ip ON clickthroughs (ip_address);
+CREATE INDEX IF NOT EXISTS clickthroughs_by_when ON clickthroughs (when_timestamp);
+CREATE INDEX IF NOT EXISTS clickthroughs_by_session ON clickthroughs (session_id);
+CREATE INDEX IF NOT EXISTS clickthroughs_by_interaction ON clickthroughs (interaction_id);
+CREATE INDEX IF NOT EXISTS clickthroughs_by_user ON clickthroughs (user_id);
+CREATE INDEX IF NOT EXISTS clickthroughs_by_link_type ON clickthroughs (link_type);
+CREATE INDEX IF NOT EXISTS clickthroughs_by_program ON clickthroughs (program_id);
+CREATE INDEX IF NOT EXISTS clickthroughs_by_from_path ON clickthroughs (from_path);
+CREATE INDEX IF NOT EXISTS clickthroughs_by_ip ON clickthroughs (ip_address);
 
 -- User tags cache table (normalized)
-CREATE TABLE user_tags (
+CREATE TABLE IF NOT EXISTS user_tags (
     user_id VARCHAR NOT NULL,
     tag VARCHAR NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (user_id, tag)
 );
 
-CREATE INDEX user_tags_by_user ON user_tags (user_id);
-CREATE INDEX user_tags_by_tag ON user_tags (tag);
-CREATE INDEX user_tags_by_updated ON user_tags (updated_at);
+CREATE INDEX IF NOT EXISTS user_tags_by_user ON user_tags (user_id);
+CREATE INDEX IF NOT EXISTS user_tags_by_tag ON user_tags (tag);
+CREATE INDEX IF NOT EXISTS user_tags_by_updated ON user_tags (updated_at);
+
+-- Affiliate events table is created by migration system
 

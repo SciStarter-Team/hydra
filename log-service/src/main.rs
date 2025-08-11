@@ -3,9 +3,10 @@ use async_nats::service::ServiceExt;
 use common::{service::decode_structured_message, shared};
 use duckdb::{params, Connection};
 use futures::StreamExt;
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
-use std::sync::OnceLock;
-use tokio::{sync::mpsc, task::JoinSet};
+use std::{str::FromStr, sync::OnceLock, time::Duration};
+use tokio::{sync::mpsc, task::JoinSet, time::sleep, spawn};
 
 static DATABASE_PATH: OnceLock<String> = OnceLock::new();
 
@@ -47,14 +48,244 @@ pub enum LogEntry {
     },
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AffiliateEventData {
+    id: i32,
+    origin: i16,
+    when: String, // ISO 8601 timestamp string
+    duration: f64,
+    where_point: Option<String>,
+    magnitude: i32,
+    authenticated: bool,
+    extra: String,
+    repetitions: i32,
+    fidelity: f64,
+    entity_ulid: String,
+    profile_user_ulid: String,
+    task_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BookmarkData {
+    id: i32,
+    when: String, // ISO 8601 timestamp string
+    entity_ulid: String,
+    user_ulid: String,
+    active: bool,
+    activity: String, // ISO 8601 timestamp string
+    contacted: Option<String>, // ISO 8601 timestamp string
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JoinData {
+    id: i32,
+    when: String, // ISO 8601 timestamp string
+    entity_ulid: String,
+    user_ulid: String,
+    active: bool,
+    consented: Option<String>, // ISO 8601 timestamp string
+    contacted: Option<String>, // ISO 8601 timestamp string
+    explicit: bool,
+    notified: bool,
+    activity: String, // ISO 8601 timestamp string
+    kind: i32,
+    reason: String,
+}
+
 fn get_database_path() -> &'static str {
     DATABASE_PATH.get().expect("Database path not initialized")
 }
 
 fn init_database(database_path: &str) -> Result<()> {
     let conn = Connection::open(database_path)?;
+    
+    // Initialize migrations table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
+        params![]
+    )?;
+    
+    // Run base schema (only creates tables/indexes that don't exist)
     let schema = include_str!("tables.sql");
     conn.execute_batch(schema)?;
+    
+    // Run migrations
+    run_migrations(&conn)?;
+    
+    Ok(())
+}
+
+fn run_migrations(conn: &Connection) -> Result<()> {
+    // Migration 1: Fix affiliate table auto-increment
+    if !migration_applied(conn, 1)? {
+        println!("Running migration 1: Fix affiliate table auto-increment");
+        
+        // Check if affiliate table exists and has data
+        let has_data = conn.prepare("SELECT COUNT(*) FROM affiliate")
+            .and_then(|mut stmt| stmt.query_row([], |row| Ok(row.get::<_, i64>(0)?)))
+            .unwrap_or(0) > 0;
+        
+        if has_data {
+            println!("Backing up existing affiliate data...");
+            // Create backup table
+            conn.execute("CREATE TABLE affiliate_backup AS SELECT * FROM affiliate", params![])?;
+            
+            // Drop and recreate with proper auto-increment
+            conn.execute("DROP TABLE affiliate", params![])?;
+            conn.execute("CREATE SEQUENCE IF NOT EXISTS affiliate_id_seq", params![])?;
+            conn.execute(r#"
+                CREATE TABLE affiliate (
+                    id BIGINT PRIMARY KEY DEFAULT nextval('affiliate_id_seq'),
+                    origin SMALLINT NOT NULL,
+                    when_timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+                    duration DOUBLE NOT NULL,
+                    where_point VARCHAR,
+                    magnitude INTEGER NOT NULL,
+                    authenticated BOOLEAN NOT NULL,
+                    extra VARCHAR NOT NULL,
+                    fidelity DOUBLE NOT NULL,
+                    entity_id VARCHAR NOT NULL,
+                    user_id VARCHAR NOT NULL,
+                    task_name VARCHAR
+                )
+            "#, params![])?;
+            
+            // Restore data (excluding id column to let auto-increment work)
+            conn.execute(r#"
+                INSERT INTO affiliate (origin, when_timestamp, duration, where_point, magnitude, authenticated, extra, fidelity, entity_id, user_id, task_name)
+                SELECT origin, when_timestamp, duration, where_point, magnitude, authenticated, extra, fidelity, entity_id, user_id, task_name 
+                FROM affiliate_backup
+            "#, params![])?;
+            
+            // Recreate indexes
+            conn.execute("CREATE INDEX IF NOT EXISTS affiliate_by_when ON affiliate (when_timestamp)", params![])?;
+            conn.execute("CREATE INDEX IF NOT EXISTS affiliate_by_user ON affiliate (user_id)", params![])?;
+            conn.execute("CREATE INDEX IF NOT EXISTS affiliate_by_entity ON affiliate (entity_id)", params![])?;
+            conn.execute("CREATE INDEX IF NOT EXISTS affiliate_by_task ON affiliate (task_name)", params![])?;
+            conn.execute("CREATE INDEX IF NOT EXISTS affiliate_by_origin ON affiliate (origin)", params![])?;
+            
+            // Drop backup table
+            conn.execute("DROP TABLE affiliate_backup", params![])?;
+            
+            println!("Migration 1 completed: Restored {} records with new auto-increment IDs", has_data);
+        } else {
+            // No data, safe to recreate
+            conn.execute("DROP TABLE IF EXISTS affiliate", params![])?;
+            conn.execute("CREATE SEQUENCE IF NOT EXISTS affiliate_id_seq", params![])?;
+            conn.execute(r#"
+                CREATE TABLE affiliate (
+                    id BIGINT PRIMARY KEY DEFAULT nextval('affiliate_id_seq'),
+                    origin SMALLINT NOT NULL,
+                    when_timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+                    duration DOUBLE NOT NULL,
+                    where_point VARCHAR,
+                    magnitude INTEGER NOT NULL,
+                    authenticated BOOLEAN NOT NULL,
+                    extra VARCHAR NOT NULL,
+                    fidelity DOUBLE NOT NULL,
+                    entity_id VARCHAR NOT NULL,
+                    user_id VARCHAR NOT NULL,
+                    task_name VARCHAR
+                )
+            "#, params![])?;
+            
+            // Create indexes
+            conn.execute("CREATE INDEX affiliate_by_when ON affiliate (when_timestamp)", params![])?;
+            conn.execute("CREATE INDEX affiliate_by_user ON affiliate (user_id)", params![])?;
+            conn.execute("CREATE INDEX affiliate_by_entity ON affiliate (entity_id)", params![])?;
+            conn.execute("CREATE INDEX affiliate_by_task ON affiliate (task_name)", params![])?;
+            conn.execute("CREATE INDEX affiliate_by_origin ON affiliate (origin)", params![])?;
+            
+            println!("Migration 1 completed: Created affiliate table with auto-increment");
+        }
+        
+        mark_migration_applied(conn, 1)?;
+    }
+    
+    // Migration 2: Add bookmark and join tables
+    if !migration_applied(conn, 2)? {
+        println!("Running migration 2: Add bookmark and join tables");
+        
+        // Create bookmark table
+        conn.execute("CREATE SEQUENCE IF NOT EXISTS bookmark_id_seq", params![])?;
+        conn.execute(r#"
+            CREATE TABLE IF NOT EXISTS bookmark (
+                id BIGINT PRIMARY KEY DEFAULT nextval('bookmark_id_seq'),
+                when_timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+                entity_id VARCHAR NOT NULL,
+                user_id VARCHAR NOT NULL,
+                active BOOLEAN NOT NULL,
+                activity TIMESTAMP WITH TIME ZONE NOT NULL,
+                contacted TIMESTAMP WITH TIME ZONE,
+                current BOOLEAN NOT NULL DEFAULT TRUE
+            )
+        "#, params![])?;
+        
+        // Create bookmark indexes
+        conn.execute("CREATE INDEX IF NOT EXISTS bookmark_by_activity ON bookmark (activity)", params![])?;
+        conn.execute("CREATE INDEX IF NOT EXISTS bookmark_by_user ON bookmark (user_id)", params![])?;
+        conn.execute("CREATE INDEX IF NOT EXISTS bookmark_by_entity ON bookmark (entity_id)", params![])?;
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS bookmark_user_entity_unique ON bookmark (user_id, entity_id)", params![])?;
+        
+        // Create join table (kind field removed - filtering handled in sync logic)
+        conn.execute("CREATE SEQUENCE IF NOT EXISTS join_id_seq", params![])?;
+        conn.execute(r#"
+            CREATE TABLE IF NOT EXISTS join_table (
+                id BIGINT PRIMARY KEY DEFAULT nextval('join_id_seq'),
+                when_timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+                entity_id VARCHAR NOT NULL,
+                user_id VARCHAR NOT NULL,
+                active BOOLEAN NOT NULL,
+                consented TIMESTAMP WITH TIME ZONE,
+                contacted TIMESTAMP WITH TIME ZONE,
+                explicit BOOLEAN NOT NULL,
+                notified BOOLEAN NOT NULL,
+                activity TIMESTAMP WITH TIME ZONE NOT NULL,
+                reason TEXT NOT NULL,
+                current BOOLEAN NOT NULL DEFAULT TRUE
+            )
+        "#, params![])?;
+        
+        // Create join indexes
+        conn.execute("CREATE INDEX IF NOT EXISTS join_by_activity ON join_table (activity)", params![])?;
+        conn.execute("CREATE INDEX IF NOT EXISTS join_by_user ON join_table (user_id)", params![])?;
+        conn.execute("CREATE INDEX IF NOT EXISTS join_by_entity ON join_table (entity_id)", params![])?;
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS join_user_entity_unique ON join_table (user_id, entity_id)", params![])?;
+        
+        println!("Migration 2 completed: Created bookmark and join_table tables");
+        mark_migration_applied(conn, 2)?;
+    }
+    
+    // Migration 3: Add optimized indexes for bookmark and join tables
+    if !migration_applied(conn, 3)? {
+        println!("Running migration 3: Add optimized indexes for bookmark and join tables");
+        
+        // Add composite indexes for bookmark table
+        // For queries filtering by current status
+        conn.execute("CREATE INDEX IF NOT EXISTS bookmark_user_current ON bookmark (user_id, current)", params![])?;
+        conn.execute("CREATE INDEX IF NOT EXISTS bookmark_entity_current ON bookmark (entity_id, current)", params![])?;
+        conn.execute("CREATE INDEX IF NOT EXISTS bookmark_user_entity ON bookmark (user_id, entity_id)", params![])?;
+        
+        // Add composite indexes for join_table  
+        conn.execute("CREATE INDEX IF NOT EXISTS join_user_current ON join_table (user_id, current)", params![])?;
+        conn.execute("CREATE INDEX IF NOT EXISTS join_entity_current ON join_table (entity_id, current)", params![])?;
+        conn.execute("CREATE INDEX IF NOT EXISTS join_user_entity ON join_table (user_id, entity_id)", params![])?;
+        
+        println!("Migration 3 completed: Added optimized composite indexes");
+        mark_migration_applied(conn, 3)?;
+    }
+    
+    Ok(())
+}
+
+fn migration_applied(conn: &Connection, version: i32) -> Result<bool> {
+    let mut stmt = conn.prepare("SELECT COUNT(*) FROM schema_migrations WHERE version = ?")?;
+    let count: i64 = stmt.query_row([version], |row| Ok(row.get(0)?))?;
+    Ok(count > 0)
+}
+
+fn mark_migration_applied(conn: &Connection, version: i32) -> Result<()> {
+    conn.execute("INSERT INTO schema_migrations (version) VALUES (?)", params![version])?;
     Ok(())
 }
 
@@ -177,6 +408,27 @@ async fn main() -> Result<()> {
     // Spawn database writer task
     tasks.spawn(database_writer(rx));
 
+    // Spawn affiliate sync task
+    let affiliate_sync_task = spawn(affiliate_synchronize());
+    tasks.spawn(async move {
+        affiliate_sync_task.await.unwrap_or_else(|e| eprintln!("Affiliate sync task panicked: {}", e));
+        Ok::<(), anyhow::Error>(())
+    });
+
+    // Spawn bookmark sync task
+    let bookmark_sync_task = spawn(bookmark_synchronize());
+    tasks.spawn(async move {
+        bookmark_sync_task.await.unwrap_or_else(|e| eprintln!("Bookmark sync task panicked: {}", e));
+        Ok::<(), anyhow::Error>(())
+    });
+
+    // Spawn join sync task
+    let join_sync_task = spawn(join_synchronize());
+    tasks.spawn(async move {
+        join_sync_task.await.unwrap_or_else(|e| eprintln!("Join sync task panicked: {}", e));
+        Ok::<(), anyhow::Error>(())
+    });
+
     let svc = shared::nats()
         .service_builder()
         .start("log", "0.1.0")
@@ -266,6 +518,9 @@ async fn main() -> Result<()> {
     println!("  - log.pageview");
     println!("  - log.clickthrough");
     println!("  - log.user_tags_update");
+    println!("  - affiliate sync running in background");
+    println!("  - bookmark sync running in background");
+    println!("  - join sync running in background");
 
     // Wait for any task to complete (which would indicate an error)
     while let Some(result) = tasks.join_next().await {
@@ -410,4 +665,416 @@ async fn get_popular_tags(limit: usize) -> Result<Vec<(String, i64)>> {
     
     let tags: Result<Vec<(String, i64)>, _> = tag_iter.collect();
     tags.map_err(Into::into)
+}
+
+// Affiliate sync functions
+async fn affiliate_synchronize() {
+    loop {
+        let last = get_sync_bookmark("affiliate-sync-bookmark").unwrap_or_else(|_| String::from("1900-01-01T00:00:00Z"));
+        let last_id = get_sync_last_id("affiliate-sync-last-id").unwrap_or_else(|_| 0);
+        
+        println!("Syncing affiliate events since {} with last_id {}", last, last_id);
+        
+        let sync_token = std::env::var("SYNC_TOKEN").expect("SYNC_TOKEN environment variable must be set");
+        
+        let client = reqwest::Client::new();
+        
+        let affiliate_events: Vec<AffiliateEventData> = match client
+            .get("https://scistarter.org/staff/sync/affiliate_events")
+            .bearer_auth(sync_token)
+            .query(&[("since", &last), ("last_id", &last_id.to_string())])
+            .send()
+            .await
+        {
+            Ok(response) => match response.error_for_status() {
+                Ok(resp) => match resp.json().await {
+                    Ok(events) => events,
+                    Err(e) => {
+                        eprintln!("JSON parsing error: {}", e);
+                        sleep(Duration::from_secs(60)).await;
+                        continue;
+                    }
+                },
+                Err(e) => {
+                    eprintln!("HTTP error: {}", e);
+                    sleep(Duration::from_secs(60)).await;
+                    continue;
+                }
+            },
+            Err(e) => {
+                eprintln!("Request error: {}", e);
+                sleep(Duration::from_secs(60)).await;
+                continue;
+            }
+        };
+        
+        let got_events = affiliate_events.len();
+        
+        if got_events == 0 {
+            println!("No new affiliate events to sync");
+        } else {
+            let conn = create_connection().expect("Failed to connect to database");
+            let mut bookmark = last.clone();
+            let mut bookmark_id = last_id;
+            
+            for event in affiliate_events {
+                if let Err(e) = insert_affiliate_event(&conn, &event) {
+                    eprintln!("Failed to insert affiliate event: {}", e);
+                    continue;
+                }
+                
+                // Update bookmark to the latest timestamp and id
+                if event.when > bookmark || (event.when == bookmark && event.id > bookmark_id) {
+                    bookmark = event.when.clone();
+                    bookmark_id = event.id;
+                }
+                
+                println!("Inserted {} repetitions for affiliate event {}", event.repetitions, event.id);
+            }
+            
+            set_sync_bookmark("affiliate-sync-bookmark", &bookmark).expect("Failed to save sync bookmark");
+            set_sync_last_id("affiliate-sync-last-id", bookmark_id).expect("Failed to save sync last_id");
+        }
+        
+        // If we got the full batch size, sync again quickly, otherwise wait longer
+        if got_events == 500 {
+            sleep(Duration::from_secs(60)).await;
+        } else {
+            sleep(Duration::from_secs(60 * 60)).await;
+        }
+    }
+}
+
+// Generalized sync bookmark functions
+fn get_sync_bookmark(key: &str) -> Result<String> {
+    let conn = create_connection()?;
+    
+    // Create bookmarks table if it doesn't exist
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS sync_bookmarks (key VARCHAR PRIMARY KEY, value VARCHAR)",
+        params![]
+    )?;
+    
+    let mut stmt = conn.prepare("SELECT value FROM sync_bookmarks WHERE key = ?")?;
+    let result = stmt.query_row([key], |row| {
+        Ok(row.get::<_, String>(0)?)
+    });
+    
+    match result {
+        Ok(value) => Ok(value),
+        Err(duckdb::Error::QueryReturnedNoRows) => Ok(String::from("1900-01-01T00:00:00Z")),
+        Err(e) => Err(e.into()),
+    }
+}
+
+fn set_sync_bookmark(key: &str, value: &str) -> Result<()> {
+    let conn = create_connection()?;
+    conn.execute(
+        "INSERT OR REPLACE INTO sync_bookmarks (key, value) VALUES (?, ?)",
+        params![key, value]
+    )?;
+    Ok(())
+}
+
+fn get_sync_last_id(key: &str) -> Result<i32> {
+    let conn = create_connection()?;
+    let mut stmt = conn.prepare("SELECT value FROM sync_bookmarks WHERE key = ?")?;
+    let result = stmt.query_row([key], |row| {
+        let value: String = row.get(0)?;
+        Ok(value.parse::<i32>().unwrap_or(0))
+    });
+    
+    match result {
+        Ok(id) => Ok(id),
+        Err(duckdb::Error::QueryReturnedNoRows) => Ok(0),
+        Err(e) => Err(e.into()),
+    }
+}
+
+fn set_sync_last_id(key: &str, last_id: i32) -> Result<()> {
+    let conn = create_connection()?;
+    conn.execute(
+        "INSERT OR REPLACE INTO sync_bookmarks (key, value) VALUES (?, ?)",
+        params![key, last_id.to_string()]
+    )?;
+    Ok(())
+}
+
+
+fn insert_affiliate_event(conn: &Connection, event: &AffiliateEventData) -> Result<()> {
+    // Parse the timestamp - jiff can parse ISO 8601 directly
+    let timestamp = Timestamp::from_str(&event.when)?;
+    let timestamp_str = timestamp.to_string();
+    
+    // Insert one record for each repetition
+    for _rep in 0..event.repetitions {
+        conn.execute(
+            r#"INSERT INTO affiliate (
+                origin, when_timestamp, duration, where_point, magnitude, 
+                authenticated, extra, fidelity, entity_id, user_id, task_name
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+            params![
+                event.origin,
+                timestamp_str,
+                event.duration,
+                event.where_point,
+                event.magnitude,
+                event.authenticated,
+                event.extra,
+                event.fidelity,
+                event.entity_ulid,
+                event.profile_user_ulid,
+                event.task_name
+            ],
+        )?;
+    }
+    
+    Ok(())
+}
+
+// Bookmark sync functions
+async fn bookmark_synchronize() {
+    loop {
+        let last = get_sync_bookmark("bookmark-sync-bookmark").unwrap_or_else(|_| String::from("1900-01-01T00:00:00Z"));
+        let last_id = get_sync_last_id("bookmark-sync-last-id").unwrap_or_else(|_| 0);
+        
+        println!("Syncing bookmarks since {} with last_id {}", last, last_id);
+        
+        let sync_token = std::env::var("SYNC_TOKEN").expect("SYNC_TOKEN environment variable must be set");
+        let client = reqwest::Client::new();
+        
+        let bookmarks: Vec<BookmarkData> = match client
+            .get("https://scistarter.org/staff/sync/bookmarks")
+            .bearer_auth(sync_token)
+            .query(&[("since", &last), ("last_id", &last_id.to_string())])
+            .send()
+            .await
+        {
+            Ok(response) => match response.error_for_status() {
+                Ok(resp) => match resp.json().await {
+                    Ok(events) => events,
+                    Err(e) => {
+                        eprintln!("JSON parsing error: {}", e);
+                        sleep(Duration::from_secs(60)).await;
+                        continue;
+                    }
+                },
+                Err(e) => {
+                    eprintln!("HTTP error: {}", e);
+                    sleep(Duration::from_secs(60)).await;
+                    continue;
+                }
+            },
+            Err(e) => {
+                eprintln!("Request error: {}", e);
+                sleep(Duration::from_secs(60)).await;
+                continue;
+            }
+        };
+        
+        let got_bookmarks = bookmarks.len();
+        
+        if got_bookmarks == 0 {
+            println!("No new bookmarks to sync");
+        } else {
+            let conn = create_connection().expect("Failed to connect to database");
+            let mut bookmark = last.clone();
+            let mut bookmark_id = last_id;
+            
+            for bm in bookmarks {
+                if let Err(e) = insert_bookmark(&conn, &bm) {
+                    eprintln!("Failed to insert bookmark: {}", e);
+                    continue;
+                }
+                
+                if bm.activity > bookmark || (bm.activity == bookmark && bm.id > bookmark_id) {
+                    bookmark = bm.activity.clone();
+                    bookmark_id = bm.id;
+                }
+                
+                println!("Inserted bookmark {}", bm.id);
+            }
+            
+            set_sync_bookmark("bookmark-sync-bookmark", &bookmark).expect("Failed to save sync bookmark");
+            set_sync_last_id("bookmark-sync-last-id", bookmark_id).expect("Failed to save sync last_id");
+        }
+        
+        if got_bookmarks == 500 {
+            sleep(Duration::from_secs(60)).await;
+        } else {
+            sleep(Duration::from_secs(60 * 60)).await;
+        }
+    }
+}
+
+async fn join_synchronize() {
+    loop {
+        let last = get_sync_bookmark("join-sync-bookmark").unwrap_or_else(|_| String::from("1900-01-01T00:00:00Z"));
+        let last_id = get_sync_last_id("join-sync-last-id").unwrap_or_else(|_| 0);
+        
+        println!("Syncing joins since {} with last_id {}", last, last_id);
+        
+        let sync_token = std::env::var("SYNC_TOKEN").expect("SYNC_TOKEN environment variable must be set");
+        let client = reqwest::Client::new();
+        
+        let joins: Vec<JoinData> = match client
+            .get("https://scistarter.org/staff/sync/joins")
+            .bearer_auth(sync_token)
+            .query(&[("since", &last), ("last_id", &last_id.to_string())])
+            .send()
+            .await
+        {
+            Ok(response) => match response.error_for_status() {
+                Ok(resp) => match resp.json().await {
+                    Ok(events) => events,
+                    Err(e) => {
+                        eprintln!("JSON parsing error: {}", e);
+                        sleep(Duration::from_secs(60)).await;
+                        continue;
+                    }
+                },
+                Err(e) => {
+                    eprintln!("HTTP error: {}", e);
+                    sleep(Duration::from_secs(60)).await;
+                    continue;
+                }
+            },
+            Err(e) => {
+                eprintln!("Request error: {}", e);
+                sleep(Duration::from_secs(60)).await;
+                continue;
+            }
+        };
+        
+        let got_joins = joins.len();
+        
+        if got_joins == 0 {
+            println!("No new joins to sync");
+        } else {
+            let conn = create_connection().expect("Failed to connect to database");
+            let mut bookmark = last.clone();
+            let mut bookmark_id = last_id;
+            
+            for join in joins {
+                match join.kind {
+                    0 => {
+                        if let Err(e) = insert_join_as_clickthrough(&conn, &join) {
+                            eprintln!("Failed to insert join as clickthrough: {}", e);
+                            continue;
+                        }
+                        println!("Inserted join {} as clickthrough", join.id);
+                    },
+                    1 => {
+                        if let Err(e) = insert_join_as_clickthrough(&conn, &join) {
+                            eprintln!("Failed to insert join as clickthrough: {}", e);
+                            continue;
+                        }
+                        if let Err(e) = insert_join(&conn, &join) {
+                            eprintln!("Failed to insert join: {}", e);
+                            continue;
+                        }
+                        println!("Inserted join {} as both clickthrough and join", join.id);
+                    },
+                    _ => {
+                        println!("Skipping join {} with kind {}", join.id, join.kind);
+                        continue;
+                    }
+                }
+                
+                if join.activity > bookmark || (join.activity == bookmark && join.id > bookmark_id) {
+                    bookmark = join.activity.clone();
+                    bookmark_id = join.id;
+                }
+            }
+            
+            set_sync_bookmark("join-sync-bookmark", &bookmark).expect("Failed to save sync bookmark");
+            set_sync_last_id("join-sync-last-id", bookmark_id).expect("Failed to save sync last_id");
+        }
+        
+        if got_joins == 500 {
+            sleep(Duration::from_secs(60)).await;
+        } else {
+            sleep(Duration::from_secs(60 * 60)).await;
+        }
+    }
+}
+
+
+
+fn insert_bookmark(conn: &Connection, bookmark: &BookmarkData) -> Result<()> {
+    let when_timestamp = Timestamp::from_str(&bookmark.when)?;
+    let activity_timestamp = Timestamp::from_str(&bookmark.activity)?;
+    let contacted_timestamp = bookmark.contacted.as_ref()
+        .map(|s| Timestamp::from_str(s))
+        .transpose()?;
+    
+    conn.execute(
+        r#"INSERT INTO bookmark (
+            when_timestamp, entity_id, user_id, active, activity, contacted
+        ) VALUES (?, ?, ?, ?, ?, ?)"#,
+        params![
+            when_timestamp.to_string(),
+            bookmark.entity_ulid,
+            bookmark.user_ulid,
+            bookmark.active,
+            activity_timestamp.to_string(),
+            contacted_timestamp.map(|t| t.to_string())
+        ],
+    )?;
+    Ok(())
+}
+
+fn insert_join(conn: &Connection, join: &JoinData) -> Result<()> {
+    let when_timestamp = Timestamp::from_str(&join.when)?;
+    let activity_timestamp = Timestamp::from_str(&join.activity)?;
+    let consented_timestamp = join.consented.as_ref()
+        .map(|s| Timestamp::from_str(s))
+        .transpose()?;
+    let contacted_timestamp = join.contacted.as_ref()
+        .map(|s| Timestamp::from_str(s))
+        .transpose()?;
+    
+    conn.execute(
+        r#"INSERT INTO join_table (
+            when_timestamp, entity_id, user_id, active, consented, contacted,
+            explicit, notified, activity, reason
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        params![
+            when_timestamp.to_string(),
+            join.entity_ulid,
+            join.user_ulid,
+            join.active,
+            consented_timestamp.map(|t| t.to_string()),
+            contacted_timestamp.map(|t| t.to_string()),
+            join.explicit,
+            join.notified,
+            activity_timestamp.to_string(),
+            join.reason
+        ],
+    )?;
+    Ok(())
+}
+
+fn insert_join_as_clickthrough(conn: &Connection, join: &JoinData) -> Result<()> {
+    let when_timestamp = Timestamp::from_str(&join.when)?;
+    
+    conn.execute(
+        r#"INSERT INTO clickthroughs (
+            when_timestamp, ip_address, session_id, interaction_id, user_id,
+            from_path, to_url, link_type, program_id, geolocation
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        params![
+            when_timestamp.to_string(),
+            "0.0.0.0",
+            format!("join-{}", join.id),
+            format!("join-{}", join.id),  
+            join.user_ulid,
+            "join",
+            format!("entity/{}", join.entity_ulid),
+            "join",
+            join.entity_ulid,
+            "POINT(0 0)"
+        ],
+    )?;
+    Ok(())
 }
