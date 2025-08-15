@@ -1,6 +1,6 @@
 use anyhow::Error;
 use async_nats::service::Request;
-use common::{message::user::BasicInfo, shared::db, ulid::AsUlid, service::send, transaction::Immediate};
+use common::{message::user::BasicInfo, shared::{db, hash_identifier, hash_identifier_lower, hash_identifier_capfirst}, ulid::AsUlid, service::send, transaction::Immediate};
 
 #[derive(Debug)]
 struct BasicInfoDb {
@@ -111,7 +111,7 @@ pub async fn set_user_tags(req: &Request) -> Result<(), Error> {
     tx.commit().await?;
     
     // Notify log service of tag update
-    send("log.user_tags_update", (user_id.clone(), tags.clone())).await?;
+    send("log.cache.user_tags_update", (user_id.clone(), tags.clone())).await?;
     
     Ok(())
 }
@@ -137,7 +137,7 @@ pub async fn add_user_tag(req: &Request) -> Result<(), Error> {
     .fetch_all(db())
     .await?;
     
-    send("log.user_tags_update", (user_id, tags)).await?;
+    send("log.cache.user_tags_update", (user_id, tags)).await?;
     
     Ok(())
 }
@@ -163,7 +163,122 @@ pub async fn remove_user_tag(req: &Request) -> Result<(), Error> {
     .fetch_all(db())
     .await?;
     
-    send("log.user_tags_update", (user_id, tags)).await?;
+    send("log.cache.user_tags_update", (user_id, tags)).await?;
+    
+    Ok(())
+}
+
+/// Get all email addresses for a user
+pub async fn get_user_emails(req: &Request) -> Result<Vec<String>, Error> {
+    let user_id: String = flexbuffers::from_slice(&req.message.payload)?;
+    
+    let emails = sqlx::query_scalar!(
+        r#"SELECT "email" FROM "emails" WHERE "user_id" = ? ORDER BY "email""#,
+        user_id
+    )
+    .fetch_all(db())
+    .await?;
+    
+    Ok(emails)
+}
+
+/// Set user email addresses (replaces all existing emails)
+pub async fn set_user_emails(req: &Request) -> Result<(), Error> {
+    let (user_id, emails): (String, Vec<String>) = flexbuffers::from_slice(&req.message.payload)?;
+    
+    let mut tx = Immediate::begin_with_retry(db(), None, None).await?;
+    
+    // Remove all existing emails for this user
+    sqlx::query!(
+        r#"DELETE FROM "emails" WHERE "user_id" = ?"#,
+        user_id
+    )
+    .execute(&mut tx)
+    .await?;
+    
+    // Insert new emails with proper hashing
+    for email in &emails {
+        let hashed = hash_identifier(email);
+        let hashed_lower = hash_identifier_lower(email);
+        let hashed_capfirst = hash_identifier_capfirst(email);
+        
+        sqlx::query!(
+            r#"INSERT INTO "emails" ("user_id", "email", "verified", "hash", "hash_lower", "hash_capfirst") VALUES (?, ?, ?, ?, ?, ?)"#,
+            user_id,
+            email,
+            false, // verified - new emails are unverified by default
+            hashed,
+            hashed_lower,
+            hashed_capfirst
+        )
+        .execute(&mut tx)
+        .await?;
+    }
+    
+    tx.commit().await?;
+    
+    // Notify log service of email update
+    send("log.cache.user_emails_update", (user_id.clone(), emails.clone())).await?;
+    
+    Ok(())
+}
+
+/// Add an email address to a user
+pub async fn add_user_email(req: &Request) -> Result<(), Error> {
+    let (user_id, email): (String, String) = flexbuffers::from_slice(&req.message.payload)?;
+    
+    let hashed = hash_identifier(&email);
+    let hashed_lower = hash_identifier_lower(&email);
+    let hashed_capfirst = hash_identifier_capfirst(&email);
+    
+    // Insert the email (ignore if already exists)
+    sqlx::query!(
+        r#"INSERT OR IGNORE INTO "emails" ("user_id", "email", "verified", "hash", "hash_lower", "hash_capfirst") VALUES (?, ?, ?, ?, ?, ?)"#,
+        user_id,
+        email,
+        false, // verified - new emails are unverified by default
+        hashed,
+        hashed_lower,
+        hashed_capfirst
+    )
+    .execute(db())
+    .await?;
+    
+    // Get all current emails and notify log service
+    let emails = sqlx::query_scalar!(
+        r#"SELECT "email" FROM "emails" WHERE "user_id" = ? ORDER BY "email""#,
+        user_id
+    )
+    .fetch_all(db())
+    .await?;
+    
+    send("log.cache.user_emails_update", (user_id, emails)).await?;
+    
+    Ok(())
+}
+
+/// Remove an email address from a user
+pub async fn remove_user_email(req: &Request) -> Result<(), Error> {
+    let (user_id, email): (String, String) = flexbuffers::from_slice(&req.message.payload)?;
+    
+    // Remove the email
+    sqlx::query!(
+        r#"DELETE FROM "emails" WHERE "user_id" = ? AND "email" = ?"#,
+        user_id,
+        email
+    )
+    .execute(db())
+    .await?;
+    
+    // Get all current emails and notify log service
+    let emails = sqlx::query_scalar!(
+        r#"SELECT "email" FROM "emails" WHERE "user_id" = ? ORDER BY "email""#,
+        user_id
+    )
+    .fetch_all(db())
+    .await?;
+    
+    send("log.cache.user_emails_update", (user_id, emails)).await?;
     
     Ok(())
 }

@@ -762,6 +762,12 @@ async fn main() {
     toplevel.spawn(recv_handler!(tags, "add", users::add_user_tag));
     toplevel.spawn(recv_handler!(tags, "remove", users::remove_user_tag));
 
+    let emails = service.group("user.emails");
+    toplevel.spawn(handler!(emails, "get", users::get_user_emails));
+    toplevel.spawn(recv_handler!(emails, "set", users::set_user_emails));
+    toplevel.spawn(recv_handler!(emails, "add", users::add_user_email));
+    toplevel.spawn(recv_handler!(emails, "remove", users::remove_user_email));
+
     toplevel.join_all().await;
 
     cleanup_task.abort();
