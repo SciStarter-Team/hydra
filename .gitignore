@@ -1,4 +1,4 @@
-/*.md
+*.md
 !/README.md
 !/LICENSE.md
 .envrc

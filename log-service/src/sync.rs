@@ -1,14 +1,14 @@
 use anyhow::Result;
-use duckdb::{params, Connection};
-use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
-use std::{str::FromStr, time::Duration};
+use std::time::Duration;
 use tokio::time::sleep;
+use tokio_util::sync::CancellationToken;
 
-use crate::database::{create_connection, get_sync_bookmark, set_sync_bookmark, get_sync_last_id, set_sync_last_id};
+use log_service::database::{Database, get_sync_bookmark, set_sync_bookmark, get_sync_last_id, set_sync_last_id};
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AffiliateEventData {
+pub struct ParticipationEventData {
     pub id: i32,
     pub origin: i16,
     pub when: String, // ISO 8601 timestamp string
@@ -51,19 +51,25 @@ pub struct JoinData {
     pub reason: String,
 }
 
-// Affiliate sync functions
-pub async fn affiliate_synchronize() {
+// Participation sync functions  
+pub async fn participation_synchronize(database: Arc<Database>, cancellation_token: CancellationToken) {
     loop {
-        let last = get_sync_bookmark("affiliate-sync-bookmark").unwrap_or_else(|_| String::from("1900-01-01T00:00:00Z"));
-        let last_id = get_sync_last_id("affiliate-sync-last-id").unwrap_or_else(|_| 0);
+        // Check for cancellation at start of loop
+        if cancellation_token.is_cancelled() {
+            println!("Participation sync cancelled, exiting gracefully");
+            return;
+        }
+
+        let last = get_sync_bookmark(&database, "participation-sync-bookmark").await.unwrap_or_else(|_| String::from("1900-01-01T00:00:00Z"));
+        let last_id = get_sync_last_id(&database, "participation-sync-last-id").await.unwrap_or_else(|_| 0);
         
-        println!("Syncing affiliate events since {} with last_id {}", last, last_id);
+        println!("Syncing participation events since {} with last_id {}", last, last_id);
         
         let sync_token = std::env::var("SYNC_TOKEN").expect("SYNC_TOKEN environment variable must be set");
         
         let client = reqwest::Client::new();
         
-        let affiliate_events: Vec<AffiliateEventData> = match client
+        let participation_events: Vec<ParticipationEventData> = match client
             .get("https://scistarter.org/staff/sync/affiliate_events")
             .bearer_auth(sync_token)
             .query(&[("since", &last), ("last_id", &last_id.to_string())])
@@ -92,18 +98,17 @@ pub async fn affiliate_synchronize() {
             }
         };
         
-        let got_events = affiliate_events.len();
+        let got_events = participation_events.len();
         
         if got_events == 0 {
-            println!("No new affiliate events to sync");
+            println!("No new participation events to sync");
         } else {
-            let conn = create_connection().expect("Failed to connect to database");
             let mut bookmark = last.clone();
             let mut bookmark_id = last_id;
             
-            for event in affiliate_events {
-                if let Err(e) = insert_affiliate_event(&conn, &event) {
-                    eprintln!("Failed to insert affiliate event: {}", e);
+            for event in participation_events {
+                if let Err(e) = insert_participation(&database, &event).await {
+                    eprintln!("Failed to insert participation event: {}", e);
                     continue;
                 }
                 
@@ -113,26 +118,40 @@ pub async fn affiliate_synchronize() {
                     bookmark_id = event.id;
                 }
                 
-                println!("Inserted {} repetitions for affiliate event {}", event.repetitions, event.id);
+                println!("Inserted {} repetitions for participation event {}", event.repetitions, event.id);
             }
             
-            set_sync_bookmark("affiliate-sync-bookmark", &bookmark).expect("Failed to save sync bookmark");
-            set_sync_last_id("affiliate-sync-last-id", bookmark_id).expect("Failed to save sync last_id");
+            set_sync_bookmark(&database, "participation-sync-bookmark", &bookmark).await.expect("Failed to save sync bookmark");
+            set_sync_last_id(&database, "participation-sync-last-id", bookmark_id).await.expect("Failed to save sync last_id");
         }
         
         // If we got the full batch size, sync again quickly, otherwise wait longer
-        if got_events == 500 {
-            sleep(Duration::from_secs(60)).await;
+        let sleep_duration = if got_events == 500 {
+            Duration::from_secs(60)
         } else {
-            sleep(Duration::from_secs(60 * 60)).await;
+            Duration::from_secs(60 * 60)
+        };
+
+        // Use cancellation-aware sleep
+        tokio::select! {
+            _ = sleep(sleep_duration) => {}
+            _ = cancellation_token.cancelled() => {
+                println!("Participation sync cancelled during sleep, exiting gracefully");
+                return;
+            }
         }
     }
 }
 
-pub async fn bookmark_synchronize() {
+pub async fn bookmark_synchronize(database: Arc<Database>, cancellation_token: CancellationToken) {
     loop {
-        let last = get_sync_bookmark("bookmark-sync-bookmark").unwrap_or_else(|_| String::from("1900-01-01T00:00:00Z"));
-        let last_id = get_sync_last_id("bookmark-sync-last-id").unwrap_or_else(|_| 0);
+        // Check for cancellation at start of loop
+        if cancellation_token.is_cancelled() {
+            println!("Bookmark sync cancelled, exiting gracefully");
+            return;
+        }
+        let last = get_sync_bookmark(&database, "bookmark-sync-bookmark").await.unwrap_or_else(|_| String::from("1900-01-01T00:00:00Z"));
+        let last_id = get_sync_last_id(&database, "bookmark-sync-last-id").await.unwrap_or_else(|_| 0);
         
         println!("Syncing bookmarks since {} with last_id {}", last, last_id);
         
@@ -173,12 +192,11 @@ pub async fn bookmark_synchronize() {
         if got_bookmarks == 0 {
             println!("No new bookmarks to sync");
         } else {
-            let conn = create_connection().expect("Failed to connect to database");
             let mut bookmark = last.clone();
             let mut bookmark_id = last_id;
             
             for bm in bookmarks {
-                if let Err(e) = insert_bookmark(&conn, &bm) {
+                if let Err(e) = insert_bookmark(&database, &bm).await {
                     eprintln!("Failed to insert bookmark: {}", e);
                     continue;
                 }
@@ -191,22 +209,36 @@ pub async fn bookmark_synchronize() {
                 println!("Inserted bookmark {}", bm.id);
             }
             
-            set_sync_bookmark("bookmark-sync-bookmark", &bookmark).expect("Failed to save sync bookmark");
-            set_sync_last_id("bookmark-sync-last-id", bookmark_id).expect("Failed to save sync last_id");
+            set_sync_bookmark(&database, "bookmark-sync-bookmark", &bookmark).await.expect("Failed to save sync bookmark");
+            set_sync_last_id(&database, "bookmark-sync-last-id", bookmark_id).await.expect("Failed to save sync last_id");
         }
         
-        if got_bookmarks == 500 {
-            sleep(Duration::from_secs(60)).await;
+        let sleep_duration = if got_bookmarks == 500 {
+            Duration::from_secs(60)
         } else {
-            sleep(Duration::from_secs(60 * 60)).await;
+            Duration::from_secs(60 * 60)
+        };
+
+        // Use cancellation-aware sleep
+        tokio::select! {
+            _ = sleep(sleep_duration) => {}
+            _ = cancellation_token.cancelled() => {
+                println!("Bookmark sync cancelled during sleep, exiting gracefully");
+                return;
+            }
         }
     }
 }
 
-pub async fn join_synchronize() {
+pub async fn join_synchronize(database: Arc<Database>, cancellation_token: CancellationToken) {
     loop {
-        let last = get_sync_bookmark("join-sync-bookmark").unwrap_or_else(|_| String::from("1900-01-01T00:00:00Z"));
-        let last_id = get_sync_last_id("join-sync-last-id").unwrap_or_else(|_| 0);
+        // Check for cancellation at start of loop
+        if cancellation_token.is_cancelled() {
+            println!("Join sync cancelled, exiting gracefully");
+            return;
+        }
+        let last = get_sync_bookmark(&database, "join-sync-bookmark").await.unwrap_or_else(|_| String::from("1900-01-01T00:00:00Z"));
+        let last_id = get_sync_last_id(&database, "join-sync-last-id").await.unwrap_or_else(|_| 0);
         
         println!("Syncing joins since {} with last_id {}", last, last_id);
         
@@ -247,25 +279,24 @@ pub async fn join_synchronize() {
         if got_joins == 0 {
             println!("No new joins to sync");
         } else {
-            let conn = create_connection().expect("Failed to connect to database");
             let mut bookmark = last.clone();
             let mut bookmark_id = last_id;
             
             for join in joins {
                 match join.kind {
                     0 => {
-                        if let Err(e) = insert_join_as_clickthrough(&conn, &join) {
+                        if let Err(e) = insert_join_as_clickthrough(&database, &join).await {
                             eprintln!("Failed to insert join as clickthrough: {}", e);
                             continue;
                         }
                         println!("Inserted join {} as clickthrough", join.id);
                     },
                     1 => {
-                        if let Err(e) = insert_join_as_clickthrough(&conn, &join) {
+                        if let Err(e) = insert_join_as_clickthrough(&database, &join).await {
                             eprintln!("Failed to insert join as clickthrough: {}", e);
                             continue;
                         }
-                        if let Err(e) = insert_join(&conn, &join) {
+                        if let Err(e) = insert_join(&database, &join).await {
                             eprintln!("Failed to insert join: {}", e);
                             continue;
                         }
@@ -283,125 +314,106 @@ pub async fn join_synchronize() {
                 }
             }
             
-            set_sync_bookmark("join-sync-bookmark", &bookmark).expect("Failed to save sync bookmark");
-            set_sync_last_id("join-sync-last-id", bookmark_id).expect("Failed to save sync last_id");
+            set_sync_bookmark(&database, "join-sync-bookmark", &bookmark).await.expect("Failed to save sync bookmark");
+            set_sync_last_id(&database, "join-sync-last-id", bookmark_id).await.expect("Failed to save sync last_id");
         }
         
-        if got_joins == 500 {
-            sleep(Duration::from_secs(60)).await;
+        let sleep_duration = if got_joins == 500 {
+            Duration::from_secs(60)
         } else {
-            sleep(Duration::from_secs(60 * 60)).await;
+            Duration::from_secs(60 * 60)
+        };
+
+        // Use cancellation-aware sleep
+        tokio::select! {
+            _ = sleep(sleep_duration) => {}
+            _ = cancellation_token.cancelled() => {
+                println!("Join sync cancelled during sleep, exiting gracefully");
+                return;
+            }
         }
     }
 }
 
 
 
-fn insert_affiliate_event(conn: &Connection, event: &AffiliateEventData) -> Result<()> {
-    // Parse the timestamp - jiff can parse ISO 8601 directly
-    let timestamp = Timestamp::from_str(&event.when)?;
-    let timestamp_str = timestamp.to_string();
+async fn insert_participation(database: &Database, event: &ParticipationEventData) -> Result<()> {
+    use log_service::database::tables::ParticipationRow;
     
     // Insert one record for each repetition
     for _rep in 0..event.repetitions {
-        conn.execute(
-            r#"INSERT INTO affiliate (
-                origin, when_timestamp, duration, where_point, magnitude, 
-                authenticated, extra, fidelity, entity_id, user_id, task_name
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
-            params![
-                event.origin,
-                timestamp_str,
-                event.duration,
-                event.where_point,
-                event.magnitude,
-                event.authenticated,
-                event.extra,
-                event.fidelity,
-                event.entity_ulid,
-                event.profile_user_ulid,
-                event.task_name
-            ],
-        )?;
+        let row = ParticipationRow {
+            origin: event.origin,
+            when: event.when.clone(),
+            duration: event.duration,
+            where_point: event.where_point.clone(),
+            magnitude: event.magnitude,
+            authenticated: event.authenticated,
+            extra: event.extra.clone(),
+            fidelity: event.fidelity,
+            entity_id: event.entity_ulid.clone(),
+            user_id: event.profile_user_ulid.clone(),
+            task_name: event.task_name.clone(),
+        };
+        
+        database.participation.insert(row).await?;
     }
     
     Ok(())
 }
 
-fn insert_bookmark(conn: &Connection, bookmark: &BookmarkData) -> Result<()> {
-    let when_timestamp = Timestamp::from_str(&bookmark.when)?;
-    let activity_timestamp = Timestamp::from_str(&bookmark.activity)?;
-    let contacted_timestamp = bookmark.contacted.as_ref()
-        .map(|s| Timestamp::from_str(s))
-        .transpose()?;
+async fn insert_bookmark(database: &Database, bookmark: &BookmarkData) -> Result<()> {
+    use log_service::database::tables::BookmarkRow;
     
-    conn.execute(
-        r#"INSERT INTO bookmark (
-            when_timestamp, entity_id, user_id, active, activity, contacted
-        ) VALUES (?, ?, ?, ?, ?, ?)"#,
-        params![
-            when_timestamp.to_string(),
-            bookmark.entity_ulid,
-            bookmark.user_ulid,
-            bookmark.active,
-            activity_timestamp.to_string(),
-            contacted_timestamp.map(|t| t.to_string())
-        ],
-    )?;
+    let row = BookmarkRow {
+        when: bookmark.when.clone(),
+        entity_id: bookmark.entity_ulid.clone(),
+        user_id: bookmark.user_ulid.clone(),
+        active: bookmark.active,
+        activity: bookmark.activity.clone(),
+        contacted: bookmark.contacted.clone(),
+    };
+    
+    database.bookmark.insert(row).await?;
     Ok(())
 }
 
-fn insert_join(conn: &Connection, join: &JoinData) -> Result<()> {
-    let when_timestamp = Timestamp::from_str(&join.when)?;
-    let activity_timestamp = Timestamp::from_str(&join.activity)?;
-    let consented_timestamp = join.consented.as_ref()
-        .map(|s| Timestamp::from_str(s))
-        .transpose()?;
-    let contacted_timestamp = join.contacted.as_ref()
-        .map(|s| Timestamp::from_str(s))
-        .transpose()?;
+async fn insert_join(database: &Database, join: &JoinData) -> Result<()> {
+    use log_service::database::tables::JoinRow;
     
-    conn.execute(
-        r#"INSERT INTO join_table (
-            when_timestamp, entity_id, user_id, active, consented, contacted,
-            explicit, notified, activity, reason
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
-        params![
-            when_timestamp.to_string(),
-            join.entity_ulid,
-            join.user_ulid,
-            join.active,
-            consented_timestamp.map(|t| t.to_string()),
-            contacted_timestamp.map(|t| t.to_string()),
-            join.explicit,
-            join.notified,
-            activity_timestamp.to_string(),
-            join.reason
-        ],
-    )?;
+    let row = JoinRow {
+        when: join.when.clone(),
+        entity_id: join.entity_ulid.clone(),
+        user_id: join.user_ulid.clone(),
+        active: join.active,
+        consented: join.consented.clone(),
+        contacted: join.contacted.clone(),
+        explicit: join.explicit,
+        notified: join.notified,
+        activity: join.activity.clone(),
+        reason: join.reason.clone(),
+    };
+    
+    database.join_table.insert(row).await?;
     Ok(())
 }
 
-fn insert_join_as_clickthrough(conn: &Connection, join: &JoinData) -> Result<()> {
-    let when_timestamp = Timestamp::from_str(&join.when)?;
+async fn insert_join_as_clickthrough(database: &Database, join: &JoinData) -> Result<()> {
+    use log_service::database::tables::ClickthroughRow;
     
-    conn.execute(
-        r#"INSERT INTO clickthroughs (
-            when_timestamp, ip_address, session_id, interaction_id, user_id,
-            from_path, to_url, link_type, program_id, geolocation
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
-        params![
-            when_timestamp.to_string(),
-            "0.0.0.0",
-            format!("join-{}", join.id),
-            format!("join-{}", join.id),  
-            join.user_ulid,
-            "join",
-            format!("entity/{}", join.entity_ulid),
-            "join",
-            join.entity_ulid,
-            "POINT(0 0)"
-        ],
-    )?;
+    let row = ClickthroughRow {
+        when: join.when.clone(),
+        ip_address: "0.0.0.0".to_string(),
+        session_id: format!("join-{}", join.id),
+        interaction_id: format!("join-{}", join.id),
+        user_id: Some(join.user_ulid.clone()),
+        from_path: "join".to_string(),
+        to_url: format!("entity/{}", join.entity_ulid),
+        link_type: "join".to_string(),
+        program_id: Some(join.entity_ulid.clone()),
+        geolocation: "POINT(0 0)".to_string(),
+    };
+    
+    database.clickthroughs.insert(row).await?;
     Ok(())
 }
