@@ -18,7 +18,11 @@ pub struct Point {
 
 impl std::fmt::Display for Point {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, r#"{{"type":"Point","coordinates":[{},{}]}}"#, self.longitude, self.latitude)
+        write!(
+            f,
+            r#"{{"type":"Point","coordinates":[{},{}]}}"#,
+            self.longitude, self.latitude
+        )
     }
 }
 
@@ -44,10 +48,13 @@ impl LocationInfo {
         if self.latitude.is_empty() || self.longitude.is_empty() {
             return None;
         }
-        
+
         let latitude = self.latitude.parse().ok()?;
         let longitude = self.longitude.parse().ok()?;
-        
-        Some(Point { latitude, longitude })
+
+        Some(Point {
+            latitude,
+            longitude,
+        })
     }
 }

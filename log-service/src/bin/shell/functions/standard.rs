@@ -2,11 +2,11 @@ use super::convert_analytics_response_to_table;
 use crate::query_engine::functions::validate_analytics_params;
 use crate::query_engine::functions::{AnalyticsFunction, AnalyticsFunctionRegistration};
 use anyhow::Result;
-use std::collections::HashMap;
-use std::sync::Arc;
 use log_service::database::storage::Database;
-use std::pin::Pin;
+use std::collections::HashMap;
 use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
 
 /// Clickthrough analytics function
 pub struct ClickthroughAnalytics;
@@ -15,33 +15,43 @@ impl AnalyticsFunction for ClickthroughAnalytics {
     fn name(&self) -> &'static str {
         "clickthrough_analytics"
     }
-    
+
     fn description(&self) -> &'static str {
         "Get clickthrough analytics with weekly aggregation"
     }
-    
+
     fn usage_example(&self) -> &'static str {
         "clickthrough_analytics(start_date=\"2024-01-01\", end_date=\"2024-12-31\")"
     }
-    
-    fn execute(&self, database: Arc<Database>, parameters: HashMap<String, String>) -> Pin<Box<dyn Future<Output = Result<(Vec<String>, Vec<Vec<String>>)>> + Send + '_>> {
+
+    fn execute(
+        &self,
+        database: Arc<Database>,
+        parameters: HashMap<String, String>,
+        _progress: crate::query_engine::functions::ProgressCallback,
+    ) -> Pin<Box<dyn Future<Output = Result<(Vec<String>, Vec<Vec<String>>)>> + Send + '_>> {
         Box::pin(async move {
-            use log_service::analytics::get_clickthrough_analytics;
             use common::message::log::AnalyticsQuery;
-            
-            let start_date = parameters.get("start_date")
+            use log_service::analytics::get_clickthrough_analytics;
+
+            let start_date = parameters
+                .get("start_date")
                 .cloned()
                 .unwrap_or_else(|| "2024-01-01".to_string());
-            let end_date = parameters.get("end_date")
+            let end_date = parameters
+                .get("end_date")
                 .cloned()
                 .unwrap_or_else(|| "2024-12-31".to_string());
-            
-            let query = AnalyticsQuery { start_date, end_date };
+
+            let query = AnalyticsQuery {
+                start_date,
+                end_date,
+            };
             let response = get_clickthrough_analytics(database, query).await?;
             convert_analytics_response_to_table(response, "Clickthrough Analytics")
         })
     }
-    
+
     fn validate(&self, parameters: &HashMap<String, String>) -> Result<()> {
         validate_analytics_params(parameters)
     }
@@ -54,33 +64,43 @@ impl AnalyticsFunction for JoinAnalytics {
     fn name(&self) -> &'static str {
         "join_analytics"
     }
-    
+
     fn description(&self) -> &'static str {
         "Get join analytics with weekly aggregation"
     }
-    
+
     fn usage_example(&self) -> &'static str {
         "join_analytics(start_date=\"2024-01-01\", end_date=\"2024-12-31\")"
     }
-    
-    fn execute(&self, database: Arc<Database>, parameters: HashMap<String, String>) -> Pin<Box<dyn Future<Output = Result<(Vec<String>, Vec<Vec<String>>)>> + Send + '_>> {
+
+    fn execute(
+        &self,
+        database: Arc<Database>,
+        parameters: HashMap<String, String>,
+        _progress: crate::query_engine::functions::ProgressCallback,
+    ) -> Pin<Box<dyn Future<Output = Result<(Vec<String>, Vec<Vec<String>>)>> + Send + '_>> {
         Box::pin(async move {
-            use log_service::analytics::get_join_analytics;
             use common::message::log::AnalyticsQuery;
-            
-            let start_date = parameters.get("start_date")
+            use log_service::analytics::get_join_analytics;
+
+            let start_date = parameters
+                .get("start_date")
                 .cloned()
                 .unwrap_or_else(|| "2024-01-01".to_string());
-            let end_date = parameters.get("end_date")
+            let end_date = parameters
+                .get("end_date")
                 .cloned()
                 .unwrap_or_else(|| "2024-12-31".to_string());
-            
-            let query = AnalyticsQuery { start_date, end_date };
+
+            let query = AnalyticsQuery {
+                start_date,
+                end_date,
+            };
             let response = get_join_analytics(database, query).await?;
             convert_analytics_response_to_table(response, "Join Analytics")
         })
     }
-    
+
     fn validate(&self, parameters: &HashMap<String, String>) -> Result<()> {
         validate_analytics_params(parameters)
     }
@@ -93,8 +113,174 @@ inventory::submit! {
     }
 }
 
+/// Initialize cache function - clears and re-initializes cache tables
+pub struct InitializeCache;
+
+impl AnalyticsFunction for InitializeCache {
+    fn name(&self) -> &'static str {
+        "initialize_cache"
+    }
+
+    fn description(&self) -> &'static str {
+        "Clear and re-initialize cache tables with fresh data"
+    }
+
+    fn usage_example(&self) -> &'static str {
+        "initialize_cache"
+    }
+
+    fn execute(
+        &self,
+        _database: Arc<Database>,
+        _parameters: HashMap<String, String>,
+        progress: crate::query_engine::functions::ProgressCallback,
+    ) -> Pin<Box<dyn Future<Output = Result<(Vec<String>, Vec<Vec<String>>)>> + Send + '_>> {
+        Box::pin(async move {
+            use common::service::request;
+
+            let db = common::shared::db();
+
+            progress("Starting cache synchronization...".to_string());
+
+            // Clear both cache tables
+            progress("Clearing existing cache data...".to_string());
+
+            let tags_cleared = sqlx::query!(r#"DELETE FROM "user_tags_cache""#)
+                .execute(db)
+                .await?
+                .rows_affected();
+
+            let emails_cleared = sqlx::query!(r#"DELETE FROM "user_emails_cache""#)
+                .execute(db)
+                .await?
+                .rows_affected();
+
+            progress(format!(
+                "Cleared {} tags and {} emails from cache",
+                tags_cleared, emails_cleared
+            ));
+
+            let mut total_tags = 0u64;
+            let mut total_emails = 0u64;
+            let now = jiff::Timestamp::now().to_string();
+
+            // Sync tags with pagination
+            progress("Fetching user tags from user service...".to_string());
+
+            let mut offset = 0i64;
+            const BATCH_SIZE: i64 = 1000;
+
+            loop {
+                let sync_req = serde_json::json!({
+                    "offset": offset,
+                    "limit": BATCH_SIZE
+                });
+
+                let tags: Vec<(String, String)> = request("user.cache.user_tags", sync_req).await?;
+
+                if tags.is_empty() {
+                    break;
+                }
+
+                // Insert tags into cache
+                for (user_id, tag) in &tags {
+                    sqlx::query!(
+                        r#"INSERT INTO "user_tags_cache" ("user_id", "tag", "updated_at") VALUES (?, ?, ?)"#,
+                        user_id,
+                        tag,
+                        now
+                    )
+                    .execute(db)
+                    .await?;
+                }
+
+                total_tags += tags.len() as u64;
+                offset += BATCH_SIZE;
+
+                progress(format!("Loaded {} total tags so far", total_tags));
+            }
+
+            // Sync emails with pagination
+            progress("Fetching user emails from user service...".to_string());
+
+            offset = 0;
+
+            loop {
+                let sync_req = serde_json::json!({
+                    "offset": offset,
+                    "limit": BATCH_SIZE
+                });
+
+                let emails: Vec<(String, String)> =
+                    request("user.cache.user_emails", sync_req).await?;
+
+                if emails.is_empty() {
+                    break;
+                }
+
+                // Insert emails into cache
+                for (user_id, email) in &emails {
+                    sqlx::query!(
+                        r#"INSERT INTO "user_emails_cache" ("user_id", "email", "updated_at") VALUES (?, ?, ?)"#,
+                        user_id,
+                        email,
+                        now
+                    )
+                    .execute(db)
+                    .await?;
+                }
+
+                total_emails += emails.len() as u64;
+                offset += BATCH_SIZE;
+
+                progress(format!("Loaded {} total emails so far", total_emails));
+            }
+
+            progress("Cache synchronization completed!".to_string());
+
+            let headers = vec![
+                "Table".to_string(),
+                "Cleared".to_string(),
+                "Loaded".to_string(),
+                "Status".to_string(),
+            ];
+            let mut rows = Vec::new();
+
+            rows.push(vec![
+                "user_tags_cache".to_string(),
+                tags_cleared.to_string(),
+                total_tags.to_string(),
+                "Synced".to_string(),
+            ]);
+
+            rows.push(vec![
+                "user_emails_cache".to_string(),
+                emails_cleared.to_string(),
+                total_emails.to_string(),
+                "Synced".to_string(),
+            ]);
+
+            Ok((headers, rows))
+        })
+    }
+
+    fn validate(&self, parameters: &HashMap<String, String>) -> Result<()> {
+        // This function takes no parameters
+        if !parameters.is_empty() {
+            return Err(anyhow::anyhow!("initialize_cache takes no parameters"));
+        }
+        Ok(())
+    }
+}
+
 inventory::submit! {
     AnalyticsFunctionRegistration {
         function: &JoinAnalytics,
+    }
+}
+
+inventory::submit! {
+    AnalyticsFunctionRegistration {
+        function: &InitializeCache,
     }
 }

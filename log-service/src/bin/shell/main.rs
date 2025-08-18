@@ -4,7 +4,8 @@ use log_service::database::storage::Database;
 use ratatui::{
     crossterm::{
         ExecutableCommand,
-        event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
+        event::{self, Event, KeyCode, KeyEventKind, KeyModifiers, MouseEventKind},
+        event::{DisableMouseCapture, EnableMouseCapture},
         terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
     },
     prelude::*,
@@ -54,6 +55,10 @@ async fn main() -> Result<()> {
     // Initialize terminal
     enable_raw_mode()?;
     stdout().execute(EnterAlternateScreen)?;
+    stdout().execute(EnableMouseCapture)?;
+    stdout().execute(ratatui::crossterm::terminal::Clear(
+        ratatui::crossterm::terminal::ClearType::All,
+    ))?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
 
     // Create app
@@ -64,6 +69,7 @@ async fn main() -> Result<()> {
 
     // Cleanup
     disable_raw_mode()?;
+    stdout().execute(DisableMouseCapture)?;
     stdout().execute(LeaveAlternateScreen)?;
 
     match result {
@@ -76,41 +82,65 @@ async fn main() -> Result<()> {
 
 async fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<()> {
     loop {
+        // Process any pending async events first
+        app.process_async_events();
+
         terminal.draw(|f| app.render(f))?;
 
         if event::poll(std::time::Duration::from_millis(100))? {
-            if let Event::Key(key) = event::read()? {
-                if key.kind == KeyEventKind::Press {
-                    // Handle Ctrl-D (EOF) when input is empty - check modifiers
-                    if key.code == KeyCode::Char('d') && key.modifiers.contains(KeyModifiers::CONTROL) {
-                        if app.is_input_empty() {
-                            break; // Quit on Ctrl-D with empty input
+            match event::read()? {
+                Event::Key(key) => {
+                    if key.kind == KeyEventKind::Press {
+                        // Handle Ctrl-C for cancellation or input clearing
+                        if key.code == KeyCode::Char('c')
+                            && key.modifiers.contains(KeyModifiers::CONTROL)
+                        {
+                            app.handle_ctrl_c();
+                            continue;
                         }
-                        // If input is not empty, ignore Ctrl-D
-                        continue;
-                    }
 
-                    match key.code {
-                        KeyCode::Esc => app.handle_escape(),
-                        KeyCode::Enter => {
-                            if app.handle_enter().await? {
-                                break; // quit command was executed
+                        // Handle Ctrl-D (EOF) when input is empty - check modifiers
+                        if key.code == KeyCode::Char('d')
+                            && key.modifiers.contains(KeyModifiers::CONTROL)
+                        {
+                            if app.is_input_empty() {
+                                break; // Quit on Ctrl-D with empty input
                             }
-                        },
-                        KeyCode::Tab => app.handle_tab(),
-                        KeyCode::Up => app.handle_up(),
-                        KeyCode::Down => app.handle_down(),
-                        KeyCode::Left => app.handle_left(),
-                        KeyCode::Right => app.handle_right(),
-                        KeyCode::PageUp => app.handle_page_up(),
-                        KeyCode::PageDown => app.handle_page_down(),
-                        KeyCode::Home => app.handle_home(),
-                        KeyCode::End => app.handle_end(),
-                        KeyCode::Char(c) => app.handle_char(c),
-                        KeyCode::Backspace => app.handle_backspace(),
+                            // If input is not empty, ignore Ctrl-D
+                            continue;
+                        }
+
+                        match key.code {
+                            KeyCode::Esc => app.handle_escape(),
+                            KeyCode::Enter => {
+                                if app.handle_enter()? {
+                                    break; // quit command was executed
+                                }
+                            }
+                            KeyCode::Tab => app.handle_tab(),
+                            KeyCode::Up => app.handle_up(),
+                            KeyCode::Down => app.handle_down(),
+                            KeyCode::Left => app.handle_left(),
+                            KeyCode::Right => app.handle_right(),
+                            KeyCode::PageUp => app.handle_page_up(),
+                            KeyCode::PageDown => app.handle_page_down(),
+                            KeyCode::Home => app.handle_home(),
+                            KeyCode::End => app.handle_end(),
+                            KeyCode::Char(c) => app.handle_char(c),
+                            KeyCode::Backspace => app.handle_backspace(),
+                            _ => {}
+                        }
+                    }
+                }
+                Event::Mouse(mouse) => {
+                    match mouse.kind {
+                        MouseEventKind::ScrollUp => app.handle_mouse_scroll_up(),
+                        MouseEventKind::ScrollDown => app.handle_mouse_scroll_down(),
+                        // Let other mouse events (clicks, drags) pass through for text selection
                         _ => {}
                     }
                 }
+                _ => {}
             }
         }
     }

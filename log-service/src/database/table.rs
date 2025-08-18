@@ -1,4 +1,4 @@
-use anyhow::Result;
+use crate::error::Result;
 use arrow::datatypes::Schema;
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
@@ -30,9 +30,10 @@ impl<T: TableRow> Table<T> {
         let base_path = base_path.as_ref().to_path_buf();
 
         // Spawn the writer task for this specific table
-        let writer_handle = tokio::spawn(async move { table_writer_task::<T>(receiver, base_path).await });
+        let writer_handle =
+            tokio::spawn(async move { table_writer_task::<T>(receiver, base_path).await });
 
-        println!("Set up table: {}", T::TABLE_NAME);
+        // Table setup completed successfully
 
         Ok(Self {
             sender,
@@ -42,10 +43,7 @@ impl<T: TableRow> Table<T> {
 
     /// Insert a row into this table
     pub async fn insert(&self, row: T) -> Result<()> {
-        self.sender
-            .send(row)
-            .await
-            .map_err(|_| anyhow::anyhow!("Table writer channel closed for: {}", T::TABLE_NAME))?;
+        self.sender.send(row).await?;
         Ok(())
     }
 
@@ -62,9 +60,7 @@ impl<T: TableRow> Table<T> {
     /// Gracefully shutdown this table's writer
     pub async fn shutdown(self) -> Result<()> {
         drop(self.sender); // Close the channel to signal shutdown
-        self.writer_handle
-            .await
-            .map_err(|e| anyhow::anyhow!("Writer task panicked: {}", e))??;
+        self.writer_handle.await??;
         Ok(())
     }
 }
@@ -90,7 +86,7 @@ impl TableWriter {
         let today = Timestamp::now().strftime("%Y-%m-%d").to_string();
         if today != self.current_date {
             self.current_date = today;
-            println!("WAL writer for table {} updated to date: {}", self.table_name, self.current_date);
+            // Date update completed successfully
         }
     }
 
@@ -103,68 +99,71 @@ impl TableWriter {
     }
 
     /// Write a row directly to this table's WAL with per-write locking
-    fn write_row<T: Serialize>(&mut self, row: &T) -> Result<()> {
+    async fn write_row<T: Serialize>(&mut self, row: &T) -> Result<()> {
         self.update_current_date();
-        
+
         let wal_path = self.get_wal_file_path(&self.current_date);
         if let Some(parent) = Path::new(&wal_path).parent() {
-            std::fs::create_dir_all(parent)?;
+            tokio::fs::create_dir_all(parent).await?;
         }
 
         let line = format!("{}\n", serde_json::to_string(row)?);
 
-        // Retry with exponential backoff for lock acquisition (infinite retries for data integrity)
-        let mut retry_delay = tokio::time::Duration::from_millis(1);
-        let mut attempt = 0;
-        
-        loop {
-            // Open file fresh each time to ensure we see latest data from other processes
-            let file = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&wal_path)?;
-            
-            match file.try_lock() {
-                Ok(_) => {
-                    // Successfully acquired exclusive lock - write immediately
-                    use std::io::Write;
-                    file.sync_all()?; // Ensure we see all existing content
-                    
-                    // Create a new writer for this specific write operation
-                    let mut writer = BufWriter::new(&file);
-                    writer.write_all(line.as_bytes())?;
-                    writer.flush()?;
-                    
-                    // Lock automatically released when file goes out of scope
-                    return Ok(());
-                }
-                Err(e) => {
-                    attempt += 1;
-                    eprintln!("Failed to acquire exclusive lock on WAL file {} (attempt {}): {}, retrying in {:?}", 
-                             wal_path, attempt, e, retry_delay);
-                    // Use blocking sleep since we're in sync context within write_row
-                    std::thread::sleep(retry_delay.into());
-                    retry_delay = std::cmp::min(retry_delay * 2, tokio::time::Duration::from_millis(500));
+        // Move entire atomic write operation (including lock acquisition) to spawn_blocking
+        // to avoid blocking the async executor during disk I/O operations
+        tokio::task::spawn_blocking(move || -> Result<()> {
+            // Retry with exponential backoff for lock acquisition (infinite retries for data integrity)
+            let mut retry_delay = std::time::Duration::from_millis(1);
+
+            loop {
+                // Open file fresh each time to ensure we see latest data from other processes
+                let file = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&wal_path)?;
+
+                match file.try_lock() {
+                    Ok(_) => {
+                        // Successfully acquired exclusive lock - write immediately
+                        use std::io::Write;
+
+                        // Create a new writer for this specific write operation
+                        let mut writer = BufWriter::new(&file);
+                        writer.write_all(line.as_bytes())?;
+                        writer.flush()?;
+
+                        // Lock automatically released when file goes out of scope
+                        return Ok(());
+                    }
+                    Err(_) => {
+                        // Retry after delay - lock contention is expected
+                        std::thread::sleep(retry_delay);
+                        retry_delay =
+                            std::cmp::min(retry_delay * 2, std::time::Duration::from_millis(500));
+                    }
                 }
             }
-        }
+        })
+        .await?
     }
-
 }
 
 /// Generic writer task for any table type
-async fn table_writer_task<T: TableRow>(mut rx: mpsc::Receiver<T>, base_path: PathBuf) -> Result<()> {
+async fn table_writer_task<T: TableRow>(
+    mut rx: mpsc::Receiver<T>,
+    base_path: PathBuf,
+) -> Result<()> {
     let mut writer = TableWriter::new(T::TABLE_NAME, base_path);
 
-    println!("Started writer task for table: {}", T::TABLE_NAME);
+    // Writer task started successfully
 
     // Process rows until channel is closed
     while let Some(row) = rx.recv().await {
-        if let Err(e) = writer.write_row(&row) {
+        if let Err(e) = writer.write_row(&row).await {
             eprintln!("Failed to write row to {}: {}", T::TABLE_NAME, e);
         }
     }
 
-    println!("Writer task shutting down for table: {}", T::TABLE_NAME);
+    // Writer task shutting down normally
     Ok(())
 }

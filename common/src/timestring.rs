@@ -4,15 +4,7 @@ use jiff::Timestamp;
 
 #[cfg_attr(feature = "database", derive(sqlx::Type))]
 #[derive(
-    Debug,
-    Clone,
-    Default,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    serde::Serialize,
-    serde::Deserialize,
+    Debug, Clone, Default, Eq, PartialEq, Ord, PartialOrd, serde::Serialize, serde::Deserialize,
 )]
 #[cfg_attr(feature = "database", sqlx(transparent))]
 pub struct TimeString(String);

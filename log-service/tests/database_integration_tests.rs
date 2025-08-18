@@ -2,40 +2,47 @@ use anyhow::Result;
 use log_service::database::{
     storage::Database,
     tables::{
-        ActivityLogRow, PageViewRow, ClickthroughRow, UserTagsRow, 
-        JoinRow, ParticipationRow, BookmarkRow
-    }
+        ActivityLogRow, BookmarkRow, ClickthroughRow, JoinRow, PageViewRow, ParticipationRow,
+        UserTagsRow,
+    },
 };
+use std::sync::Arc;
 use tempfile::TempDir;
 use tokio::fs;
-use tokio::time::{sleep, Duration, timeout};
+use tokio::time::{Duration, sleep, timeout};
 use tokio_util::sync::CancellationToken;
-use std::sync::Arc;
 
 /// Complete database system setup: storage + tables + test data
 async fn setup_complete_database_system() -> Result<(TempDir, Arc<Database>)> {
     let temp_dir = TempDir::new()?;
     let db_path = temp_dir.path().to_string_lossy().to_string();
     let database = Arc::new(Database::new(db_path).await?);
-    
+
     Ok((temp_dir, database))
 }
 
 /// Helper to populate database with comprehensive test data
 async fn populate_test_data(database: &Arc<Database>) -> Result<()> {
-    
     // Insert activity log data
     for i in 0..5 {
         let activity = ActivityLogRow {
             when: format!("2024-01-15T10:{}:00Z", 30 + i),
             action: format!("test_action_{}", i),
-            user_id: if i % 2 == 0 { Some(format!("user-{}", i)) } else { None },
+            user_id: if i % 2 == 0 {
+                Some(format!("user-{}", i))
+            } else {
+                None
+            },
             target: Some(format!("target-{}", i)),
-            extra: if i % 3 == 0 { Some(format!("extra-{}", i)) } else { None },
+            extra: if i % 3 == 0 {
+                Some(format!("extra-{}", i))
+            } else {
+                None
+            },
         };
         database.activity_log.insert(activity).await?;
     }
-    
+
     // Insert page view data
     for i in 0..3 {
         let page_view = PageViewRow {
@@ -45,13 +52,21 @@ async fn populate_test_data(database: &Arc<Database>) -> Result<()> {
             interaction_id: format!("interaction-{}", i),
             user_id: Some(format!("user-{}", i)),
             path: format!("/page-{}", i),
-            referrer: if i > 0 { Some("https://example.com".to_string()) } else { None },
-            query: if i == 1 { Some("param=value".to_string()) } else { None },
+            referrer: if i > 0 {
+                Some("https://example.com".to_string())
+            } else {
+                None
+            },
+            query: if i == 1 {
+                Some("param=value".to_string())
+            } else {
+                None
+            },
             geolocation: format!("POINT({} {})", i as f64 * 10.0, i as f64 * 5.0),
         };
         database.page_views.insert(page_view).await?;
     }
-    
+
     // Insert clickthrough data
     for i in 0..4 {
         let clickthrough = ClickthroughRow {
@@ -62,27 +77,39 @@ async fn populate_test_data(database: &Arc<Database>) -> Result<()> {
             user_id: Some(format!("user-{}", i)),
             from_path: format!("/from-{}", i),
             to_url: format!("https://external-{}.com", i),
-            link_type: if i % 2 == 0 { "external".to_string() } else { "internal".to_string() },
-            program_id: if i < 2 { Some(format!("program-{}", i)) } else { None },
+            link_type: if i % 2 == 0 {
+                "external".to_string()
+            } else {
+                "internal".to_string()
+            },
+            program_id: if i < 2 {
+                Some(format!("program-{}", i))
+            } else {
+                None
+            },
             geolocation: "POINT(0 0)".to_string(),
         };
         database.clickthroughs.insert(clickthrough).await?;
     }
-    
+
     // Insert user tags data
     for i in 0..3 {
         let user_tags = UserTagsRow {
             user_id: format!("user-{}", i),
             tags: match i {
                 0 => vec!["scientist".to_string(), "educator".to_string()],
-                1 => vec!["volunteer".to_string(), "citizen_scientist".to_string(), "enthusiast".to_string()],
+                1 => vec![
+                    "volunteer".to_string(),
+                    "citizen_scientist".to_string(),
+                    "enthusiast".to_string(),
+                ],
                 2 => vec!["researcher".to_string()],
                 _ => vec![],
             },
         };
         database.user_tags.insert(user_tags).await?;
     }
-    
+
     // Insert join data
     for i in 0..2 {
         let join = JoinRow {
@@ -90,7 +117,11 @@ async fn populate_test_data(database: &Arc<Database>) -> Result<()> {
             entity_id: format!("entity-{}", i),
             user_id: format!("user-{}", i),
             active: i % 2 == 0,
-            consented: if i == 0 { Some(format!("2024-01-15T10:{}:00Z", 25 + i)) } else { None },
+            consented: if i == 0 {
+                Some(format!("2024-01-15T10:{}:00Z", 25 + i))
+            } else {
+                None
+            },
             contacted: None,
             explicit: true,
             notified: i == 1,
@@ -99,7 +130,7 @@ async fn populate_test_data(database: &Arc<Database>) -> Result<()> {
         };
         database.join_table.insert(join).await?;
     }
-    
+
     // Insert participation data
     for i in 0..3 {
         let participation = ParticipationRow {
@@ -113,11 +144,15 @@ async fn populate_test_data(database: &Arc<Database>) -> Result<()> {
             fidelity: 0.8 + (i as f64 * 0.05),
             entity_id: format!("entity-{}", i),
             user_id: format!("user-{}", i),
-            task_name: if i < 2 { Some(format!("Task {}", i)) } else { None },
+            task_name: if i < 2 {
+                Some(format!("Task {}", i))
+            } else {
+                None
+            },
         };
         database.participation.insert(participation).await?;
     }
-    
+
     // Insert bookmark data
     for i in 0..2 {
         let bookmark = BookmarkRow {
@@ -126,18 +161,22 @@ async fn populate_test_data(database: &Arc<Database>) -> Result<()> {
             user_id: format!("user-{}", i),
             active: true,
             activity: format!("2024-01-15T10:{}:00Z", 30 + i),
-            contacted: if i == 1 { Some(format!("2024-01-15T11:{}:00Z", i)) } else { None },
+            contacted: if i == 1 {
+                Some(format!("2024-01-15T11:{}:00Z", i))
+            } else {
+                None
+            },
         };
         database.bookmark.insert(bookmark).await?;
     }
-    
+
     Ok(())
 }
 
 #[tokio::test]
 async fn test_complete_database_lifecycle() -> Result<()> {
     let (_temp_dir, database) = setup_complete_database_system().await?;
-    
+
     // Test 1: Verify all components initialized correctly
     assert_eq!(database.activity_log.name(), "activity_log");
     assert_eq!(database.page_views.name(), "page_views");
@@ -146,16 +185,16 @@ async fn test_complete_database_lifecycle() -> Result<()> {
     assert_eq!(database.join_table.name(), "join_table");
     assert_eq!(database.participation.name(), "participation");
     assert_eq!(database.bookmark.name(), "bookmark");
-    
+
     // Test 2: Insert comprehensive test data
     populate_test_data(&database).await?;
-    
+
     // Test 3: Verify WAL files are created
     sleep(Duration::from_millis(200)).await;
-    
+
     let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
     let wal_dir = database.path().join("wal");
-    
+
     let expected_wal_files = [
         format!("activity_log_{}.jsonl", today),
         format!("page_views_{}.jsonl", today),
@@ -165,101 +204,128 @@ async fn test_complete_database_lifecycle() -> Result<()> {
         format!("participation_{}.jsonl", today),
         format!("bookmark_{}.jsonl", today),
     ];
-    
+
     for wal_file in expected_wal_files {
         let wal_path = wal_dir.join(&wal_file);
         assert!(wal_path.exists(), "WAL file should exist: {}", wal_file);
-        
+
         // Verify WAL file has content
         let content = fs::read_to_string(&wal_path).await?;
-        assert!(!content.trim().is_empty(), "WAL file should have content: {}", wal_file);
+        assert!(
+            !content.trim().is_empty(),
+            "WAL file should have content: {}",
+            wal_file
+        );
     }
-    
+
     // Test 4: Test bookmark functionality
-    use log_service::database::storage::{set_sync_bookmark, get_sync_bookmark};
+    use log_service::database::storage::{get_sync_bookmark, set_sync_bookmark};
     set_sync_bookmark(&database, "integration-test", "2024-01-15T10:30:45Z").await?;
     let bookmark = get_sync_bookmark(&database, "integration-test").await?;
     assert_eq!(bookmark, "2024-01-15T10:30:45Z");
-    
+
     // Test 5: Graceful shutdown
-    let db = Arc::try_unwrap(database).map_err(|_| anyhow::anyhow!("Database still has references"))?;
+    let db =
+        Arc::try_unwrap(database).map_err(|_| anyhow::anyhow!("Database still has references"))?;
     db.shutdown().await?;
-    
+
     Ok(())
 }
 
 #[tokio::test]
 async fn test_full_pipeline_with_compaction() -> Result<()> {
     let (_temp_dir, database) = setup_complete_database_system().await?;
-    
+
     // Step 1: Populate with test data
     populate_test_data(&database).await?;
     sleep(Duration::from_millis(200)).await;
-    
+
     // Step 2: Verify WAL files exist
     let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
     let wal_dir = database.path().join("wal");
-    
+
     let activity_wal = wal_dir.join(format!("activity_log_{}.jsonl", today));
     assert!(activity_wal.exists());
-    
+
     // Step 3: Run compactor to convert WAL to Parquet
     let cancellation_token = CancellationToken::new();
     use log_service::database::compactor::Compactor;
     let compactor = Compactor::with_config(database.path().clone(), Duration::from_millis(10), 30);
-    
+
     let compactor_task = {
         let token = cancellation_token.clone();
-        tokio::spawn(async move {
-            compactor.run(token).await
-        })
+        tokio::spawn(async move { compactor.run(token).await })
     };
-    
+
     // Allow compactor to run at least one cycle
     sleep(Duration::from_millis(100)).await;
-    
+
     // Cancel and wait for completion
     cancellation_token.cancel();
     let _ = timeout(Duration::from_secs(5), compactor_task).await;
-    
+
     // Step 4: Verify Parquet files were created
     let parquet_dir = database.path().join("parquet");
-    
+
     let table_dirs = [
-        "activity_log", "page_views", "clickthroughs", "user_tags",
-        "join_table", "participation", "bookmark"
+        "activity_log",
+        "page_views",
+        "clickthroughs",
+        "user_tags",
+        "join_table",
+        "participation",
+        "bookmark",
     ];
-    
+
     for table_dir in table_dirs {
         let table_parquet_dir = parquet_dir.join(table_dir);
-        assert!(table_parquet_dir.exists(), "Parquet directory should exist for: {}", table_dir);
-        
+        assert!(
+            table_parquet_dir.exists(),
+            "Parquet directory should exist for: {}",
+            table_dir
+        );
+
         let parquet_file = table_parquet_dir.join(format!("{}_{}.parquet", table_dir, today));
-        assert!(parquet_file.exists(), "Parquet file should exist for: {}", table_dir);
-        
+        assert!(
+            parquet_file.exists(),
+            "Parquet file should exist for: {}",
+            table_dir
+        );
+
         // Verify file is not empty
         let metadata = fs::metadata(&parquet_file).await?;
-        assert!(metadata.len() > 0, "Parquet file should not be empty for: {}", table_dir);
+        assert!(
+            metadata.len() > 0,
+            "Parquet file should not be empty for: {}",
+            table_dir
+        );
     }
-    
+
     // Step 5: Verify original WAL files have been moved to processed directory after compaction
-    assert!(!activity_wal.exists(), "Original WAL file should be moved after processing");
-    
+    assert!(
+        !activity_wal.exists(),
+        "Original WAL file should be moved after processing"
+    );
+
     // Verify WAL files are in processed directory
     let processed_dir = database.path().join("processed");
     let processed_wal = processed_dir.join(format!("activity_log_{}.jsonl", today));
-    assert!(processed_wal.exists(), "Processed WAL file should exist in processed directory");
-    
-    let db = Arc::try_unwrap(database).map_err(|_| anyhow::anyhow!("Database still has references"))?;
+    assert!(
+        processed_wal.exists(),
+        "Processed WAL file should exist in processed directory"
+    );
+
+    let db =
+        Arc::try_unwrap(database).map_err(|_| anyhow::anyhow!("Database still has references"))?;
     db.shutdown().await?;
-    
+
     Ok(())
 }
 
 #[tokio::test]
 async fn test_concurrent_operations_full_system() -> Result<()> {
     let (_temp_dir, database) = setup_complete_database_system().await?;
-    
+
     // Spawn multiple concurrent tasks performing different operations
     let activity_task = {
         let db = Arc::clone(&database);
@@ -276,7 +342,7 @@ async fn test_concurrent_operations_full_system() -> Result<()> {
             }
         })
     };
-    
+
     let page_view_task = {
         let db = Arc::clone(&database);
         tokio::spawn(async move {
@@ -296,7 +362,7 @@ async fn test_concurrent_operations_full_system() -> Result<()> {
             }
         })
     };
-    
+
     let user_tags_task = {
         let db = Arc::clone(&database);
         tokio::spawn(async move {
@@ -313,7 +379,7 @@ async fn test_concurrent_operations_full_system() -> Result<()> {
             }
         })
     };
-    
+
     let bookmark_task = {
         let db = Arc::clone(&database);
         tokio::spawn(async move {
@@ -330,12 +396,12 @@ async fn test_concurrent_operations_full_system() -> Result<()> {
             }
         })
     };
-    
+
     // Concurrent bookmark operations
     let bookmark_ops_task = {
         let db = Arc::clone(&database);
         tokio::spawn(async move {
-            use log_service::database::storage::{set_sync_bookmark};
+            use log_service::database::storage::set_sync_bookmark;
             for i in 0..5 {
                 let key = format!("concurrent-bookmark-{}", i);
                 let value = format!("2024-01-15T10:{}:00Z", 30 + i);
@@ -343,51 +409,60 @@ async fn test_concurrent_operations_full_system() -> Result<()> {
             }
         })
     };
-    
+
     // Wait for all concurrent operations to complete
     tokio::try_join!(
         activity_task,
-        page_view_task, 
+        page_view_task,
         user_tags_task,
         bookmark_task,
         bookmark_ops_task
     )?;
-    
+
     // Allow time for all writes to complete
     sleep(Duration::from_millis(300)).await;
-    
+
     // Verify data was written correctly
     let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
     let wal_dir = database.path().join("wal");
-    
+
     // Check activity log has 20 entries
     let activity_wal = wal_dir.join(format!("activity_log_{}.jsonl", today));
     let activity_content = fs::read_to_string(&activity_wal).await?;
-    let activity_lines: Vec<&str> = activity_content.lines()
+    let activity_lines: Vec<&str> = activity_content
+        .lines()
         .filter(|line| !line.trim().is_empty())
         .collect();
-    assert!(activity_lines.len() >= 20, "Should have at least 20 activity log entries");
-    
+    assert!(
+        activity_lines.len() >= 20,
+        "Should have at least 20 activity log entries"
+    );
+
     // Check page views has 15 entries
     let page_view_wal = wal_dir.join(format!("page_views_{}.jsonl", today));
     let page_view_content = fs::read_to_string(&page_view_wal).await?;
-    let page_view_lines: Vec<&str> = page_view_content.lines()
+    let page_view_lines: Vec<&str> = page_view_content
+        .lines()
         .filter(|line| !line.trim().is_empty())
         .collect();
-    assert!(page_view_lines.len() >= 15, "Should have at least 15 page view entries");
-    
+    assert!(
+        page_view_lines.len() >= 15,
+        "Should have at least 15 page view entries"
+    );
+
     // Verify bookmark operations
-    use log_service::database::storage::{get_sync_bookmark};
+    use log_service::database::storage::get_sync_bookmark;
     for i in 0..5 {
         let key = format!("concurrent-bookmark-{}", i);
         let expected_value = format!("2024-01-15T10:{}:00Z", 30 + i);
         let actual_value = get_sync_bookmark(&database, &key).await?;
         assert_eq!(actual_value, expected_value);
     }
-    
-    let db = Arc::try_unwrap(database).map_err(|_| anyhow::anyhow!("Database still has references"))?;
+
+    let db =
+        Arc::try_unwrap(database).map_err(|_| anyhow::anyhow!("Database still has references"))?;
     db.shutdown().await?;
-    
+
     Ok(())
 }
 
@@ -395,11 +470,11 @@ async fn test_concurrent_operations_full_system() -> Result<()> {
 async fn test_system_recovery_after_restart() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let db_path = temp_dir.path().to_string_lossy().to_string();
-    
+
     // Phase 1: Initialize system and add data
     {
         let database = Arc::new(Database::new(&db_path).await?);
-        
+
         // Add some test data
         let activity = ActivityLogRow {
             when: "2024-01-15T10:30:45Z".to_string(),
@@ -409,52 +484,55 @@ async fn test_system_recovery_after_restart() -> Result<()> {
             extra: Some("recovery-extra".to_string()),
         };
         database.activity_log.insert(activity).await?;
-        
+
         // Add bookmark data
-        use log_service::database::storage::{set_sync_bookmark};
+        use log_service::database::storage::set_sync_bookmark;
         set_sync_bookmark(&database, "recovery-test", "2024-01-15T10:30:45Z").await?;
-        
+
         sleep(Duration::from_millis(100)).await;
-        
-        let db = Arc::try_unwrap(database).map_err(|_| anyhow::anyhow!("Database still has references"))?;
+
+        let db = Arc::try_unwrap(database)
+            .map_err(|_| anyhow::anyhow!("Database still has references"))?;
         db.shutdown().await?;
     }
-    
+
     // Phase 2: Simulate restart by reinitializing
     {
         let database = Arc::new(Database::new(&db_path).await?);
-        
+
         // Verify files persist across "restart"
         let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
-        let activity_wal = database.path()
+        let activity_wal = database
+            .path()
             .join("wal")
             .join(format!("activity_log_{}.jsonl", today));
         assert!(activity_wal.exists(), "WAL file should persist");
-        
+
         let bookmark_file = database.path().join("sync_bookmarks.json");
         assert!(bookmark_file.exists(), "Bookmark file should persist");
-        
+
         // Verify bookmark data persists
-        use log_service::database::storage::{get_sync_bookmark};
+        use log_service::database::storage::get_sync_bookmark;
         let bookmark_value = get_sync_bookmark(&database, "recovery-test").await?;
         assert_eq!(bookmark_value, "2024-01-15T10:30:45Z");
-        
+
         // Verify WAL content persists
         let wal_content = fs::read_to_string(&activity_wal).await?;
         assert!(wal_content.contains("recovery_test"));
         assert!(wal_content.contains("recovery-user"));
-        
-        let db = Arc::try_unwrap(database).map_err(|_| anyhow::anyhow!("Database still has references"))?;
+
+        let db = Arc::try_unwrap(database)
+            .map_err(|_| anyhow::anyhow!("Database still has references"))?;
         db.shutdown().await?;
     }
-    
+
     Ok(())
 }
 
 #[tokio::test]
 async fn test_error_handling_and_resilience() -> Result<()> {
     let (_temp_dir, database) = setup_complete_database_system().await?;
-    
+
     // Test 1: Insert data with various edge cases
     let edge_case_activity = ActivityLogRow {
         when: "2024-01-15T10:30:45Z".to_string(),
@@ -464,7 +542,7 @@ async fn test_error_handling_and_resilience() -> Result<()> {
         extra: Some("Multi\nline\nextra\tdata".to_string()),
     };
     database.activity_log.insert(edge_case_activity).await?;
-    
+
     // Test 2: Insert data with very long strings
     let long_string = "x".repeat(5000);
     let large_activity = ActivityLogRow {
@@ -475,14 +553,14 @@ async fn test_error_handling_and_resilience() -> Result<()> {
         extra: Some(long_string),
     };
     database.activity_log.insert(large_activity).await?;
-    
+
     // Test 3: Insert data with empty arrays
     let empty_tags = UserTagsRow {
         user_id: "empty-tags-user".to_string(),
         tags: vec![],
     };
     database.user_tags.insert(empty_tags).await?;
-    
+
     // Test 4: Insert data with large arrays
     let many_tags: Vec<String> = (0..100).map(|i| format!("tag-{}", i)).collect();
     let many_tags_row = UserTagsRow {
@@ -490,42 +568,43 @@ async fn test_error_handling_and_resilience() -> Result<()> {
         tags: many_tags,
     };
     database.user_tags.insert(many_tags_row).await?;
-    
+
     // Test 5: Bookmark operations with edge cases
-    use log_service::database::storage::{set_sync_bookmark, get_sync_bookmark};
+    use log_service::database::storage::{get_sync_bookmark, set_sync_bookmark};
     set_sync_bookmark(&database, "", "empty-key-test").await?; // Empty key
     set_sync_bookmark(&database, "unicode-🦀", "unicode-value-🚀").await?; // Unicode
     set_sync_bookmark(&database, "large-value", &"y".repeat(10000)).await?; // Large value
-    
+
     sleep(Duration::from_millis(200)).await;
-    
+
     // Verify all operations succeeded
     let empty_key_value = get_sync_bookmark(&database, "").await?;
     assert_eq!(empty_key_value, "empty-key-test");
-    
+
     let unicode_value = get_sync_bookmark(&database, "unicode-🦀").await?;
     assert_eq!(unicode_value, "unicode-value-🚀");
-    
+
     let large_value = get_sync_bookmark(&database, "large-value").await?;
     assert_eq!(large_value.len(), 10000);
-    
-    let db = Arc::try_unwrap(database).map_err(|_| anyhow::anyhow!("Database still has references"))?;
+
+    let db =
+        Arc::try_unwrap(database).map_err(|_| anyhow::anyhow!("Database still has references"))?;
     db.shutdown().await?;
-    
+
     Ok(())
 }
 
 #[tokio::test]
 async fn test_performance_under_load() -> Result<()> {
     let (_temp_dir, database) = setup_complete_database_system().await?;
-    
+
     let start_time = std::time::Instant::now();
-    
+
     // Insert a large number of records quickly
     let num_records = 1000;
-    
+
     let mut tasks = Vec::new();
-    
+
     // Spawn multiple concurrent tasks
     for batch in 0..10 {
         let db = Arc::clone(&database);
@@ -533,7 +612,11 @@ async fn test_performance_under_load() -> Result<()> {
             for i in 0..100 {
                 let record_id = batch * 100 + i;
                 let activity = ActivityLogRow {
-                    when: format!("2024-01-15T10:{}:{}Z", 30 + record_id / 3600, (record_id % 3600) / 60),
+                    when: format!(
+                        "2024-01-15T10:{}:{}Z",
+                        30 + record_id / 3600,
+                        (record_id % 3600) / 60
+                    ),
                     action: format!("load_test_action_{}", record_id),
                     user_id: Some(format!("load-user-{}", record_id % 50)),
                     target: Some(format!("load-target-{}", record_id)),
@@ -544,31 +627,36 @@ async fn test_performance_under_load() -> Result<()> {
         });
         tasks.push(task);
     }
-    
+
     // Wait for all tasks to complete
     for task in tasks {
         task.await?;
     }
-    
+
     let insert_duration = start_time.elapsed();
     println!("Inserted {} records in {:?}", num_records, insert_duration);
-    
+
     // Verify performance is reasonable (should complete well under 10 seconds)
-    assert!(insert_duration.as_secs() < 10, "Performance test: inserts took too long: {:?}", insert_duration);
-    
+    assert!(
+        insert_duration.as_secs() < 10,
+        "Performance test: inserts took too long: {:?}",
+        insert_duration
+    );
+
     // Allow time for writes to complete
     sleep(Duration::from_millis(500)).await;
-    
-    let db = Arc::try_unwrap(database).map_err(|_| anyhow::anyhow!("Database still has references"))?;
+
+    let db =
+        Arc::try_unwrap(database).map_err(|_| anyhow::anyhow!("Database still has references"))?;
     db.shutdown().await?;
-    
+
     Ok(())
 }
 
 #[tokio::test]
 async fn test_compactor_integration_with_live_system() -> Result<()> {
     let (_temp_dir, database) = setup_complete_database_system().await?;
-    
+
     // Start compactor service
     let cancellation_token = CancellationToken::new();
     let compactor_database = Arc::clone(&database);
@@ -579,7 +667,7 @@ async fn test_compactor_integration_with_live_system() -> Result<()> {
             run_compactor_service(&compactor_database, token).await
         })
     };
-    
+
     // Insert data while compactor is running
     for i in 0..10 {
         let activity = ActivityLogRow {
@@ -590,23 +678,27 @@ async fn test_compactor_integration_with_live_system() -> Result<()> {
             extra: Some(format!("Live compactor test {}", i)),
         };
         database.activity_log.insert(activity).await?;
-        
+
         // Small delay between inserts
         sleep(Duration::from_millis(50)).await;
     }
-    
+
     // Allow time for data to be written
     sleep(Duration::from_millis(200)).await;
-    
+
     // Cancel compactor
     cancellation_token.cancel();
-    
+
     // Wait for compactor to shut down
     let compactor_result = timeout(Duration::from_secs(10), compactor_task).await;
-    assert!(compactor_result.is_ok(), "Compactor should shutdown gracefully");
-    
-    let db = Arc::try_unwrap(database).map_err(|_| anyhow::anyhow!("Database still has references"))?;
+    assert!(
+        compactor_result.is_ok(),
+        "Compactor should shutdown gracefully"
+    );
+
+    let db =
+        Arc::try_unwrap(database).map_err(|_| anyhow::anyhow!("Database still has references"))?;
     db.shutdown().await?;
-    
+
     Ok(())
 }

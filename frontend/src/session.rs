@@ -87,7 +87,7 @@ pub mod session_tags {
     pub fn add(session: &Session, tag: &str) {
         let mut tags = get_set(session);
         let tag_lower = tag.to_lowercase();
-        
+
         if tags.insert(tag_lower) {
             // Only update session if tag was actually added
             session.set("session_tags", tags);
@@ -110,13 +110,13 @@ pub mod session_tags {
     pub fn remove(session: &Session, tag: &str) {
         let mut tags = get_set(session);
         let tag_lower = tag.to_lowercase();
-        
+
         if tags.remove(&tag_lower) {
             // Only update session if tag was actually removed
             session.set("session_tags", tags);
         }
     }
-    
+
     /// Helper function to get tags as BTreeSet
     fn get_set(session: &Session) -> BTreeSet<String> {
         session

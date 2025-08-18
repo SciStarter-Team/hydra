@@ -44,11 +44,11 @@ pub fn hash_identifier_capfirst(ident: impl AsRef<str>) -> String {
 
 #[cfg(feature = "database")]
 mod database {
-    use std::{sync::OnceLock, time::Duration};
     use sqlx::{
         SqlitePool,
         sqlite::{SqliteConnectOptions, SqlitePoolOptions},
     };
+    use std::{sync::OnceLock, time::Duration};
 
     #[cfg(debug_assertions)]
     const STORAGE_PATH: &'static str = env!("LOCAL_STORAGE_PATH");
@@ -100,15 +100,22 @@ mod database {
         DB.set(conx)
             .expect("Unable to set shared database connection pool");
 
-        let nats = async_nats::connect_with_options(super::NATS_HOST, async_nats::ConnectOptions::default())
-            .await
-            .expect("Unable to connect to NATS");
+        let nats = async_nats::connect_with_options(
+            super::NATS_HOST,
+            async_nats::ConnectOptions::default(),
+        )
+        .await
+        .expect("Unable to connect to NATS");
 
-        super::NATS.set(nats)
+        super::NATS
+            .set(nats)
             .expect("Unable to set shared NATS connection");
     }
 
-    pub async fn extra_db(db_name: impl AsRef<str>, create: bool) -> Result<SqlitePool, sqlx::Error> {
+    pub async fn extra_db(
+        db_name: impl AsRef<str>,
+        create: bool,
+    ) -> Result<SqlitePool, sqlx::Error> {
         Ok(SqlitePool::connect_with(
             SqliteConnectOptions::new()
                 .filename(std::path::Path::join(

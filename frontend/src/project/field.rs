@@ -325,7 +325,9 @@ impl ProjectField {
             ProjectField::Tags(_) => ProjectFieldType::Tags,
             ProjectField::ParticipationDegree(_) => ProjectFieldType::ParticipationDegree,
             ProjectField::ParticipantInstructions(_) => ProjectFieldType::ParticipantInstructions,
-            ProjectField::ParticipantInstructionsEmail(_) => ProjectFieldType::ParticipantInstructionsEmail,
+            ProjectField::ParticipantInstructionsEmail(_) => {
+                ProjectFieldType::ParticipantInstructionsEmail
+            }
             ProjectField::ParticipantFiles(_) => ProjectFieldType::ParticipantFiles,
             ProjectField::UsFederallyFunded(_) => ProjectFieldType::UsFederallyFunded,
             ProjectField::Presenter(_) => ProjectFieldType::Presenter,
@@ -366,8 +368,12 @@ impl ProjectField {
             ProjectField::ConsentStatementDate(_) => ProjectFieldType::ConsentStatementDate,
             ProjectField::ParticipationTools(_) => ProjectFieldType::ParticipationTools,
             ProjectField::ParticipationPrompt(_) => ProjectFieldType::ParticipationPrompt,
-            ProjectField::ParticipationConfirmationMessage(_) => ProjectFieldType::ParticipationConfirmationMessage,
-            ProjectField::ParticipationNotificationEmail(_) => ProjectFieldType::ParticipationNotificationEmail,
+            ProjectField::ParticipationConfirmationMessage(_) => {
+                ProjectFieldType::ParticipationConfirmationMessage
+            }
+            ProjectField::ParticipationNotificationEmail(_) => {
+                ProjectFieldType::ParticipationNotificationEmail
+            }
             ProjectField::ParticipationUsage(_) => ProjectFieldType::ParticipationUsage,
             ProjectField::PartOf(_) => ProjectFieldType::PartOf,
             ProjectField::AssociatedProjects(_) => ProjectFieldType::AssociatedProjects,
@@ -423,7 +429,9 @@ impl ProjectField {
             ProjectField::Sponsors(_) => ProjectFieldType::Sponsors,
             ProjectField::Stakeholders(_) => ProjectFieldType::Stakeholders,
             ProjectField::CircuitId(_) => ProjectFieldType::CircuitId,
-            ProjectField::SustainableDevelopmentGoals(_) => ProjectFieldType::SustainableDevelopmentGoals,
+            ProjectField::SustainableDevelopmentGoals(_) => {
+                ProjectFieldType::SustainableDevelopmentGoals
+            }
         }
     }
 }

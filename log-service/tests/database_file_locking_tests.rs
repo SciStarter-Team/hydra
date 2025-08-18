@@ -1,9 +1,9 @@
 use anyhow::Result;
-use log_service::database::storage::{Database, set_sync_bookmark, get_sync_bookmark};
+use log_service::database::storage::{Database, get_sync_bookmark, set_sync_bookmark};
 use log_service::database::tables::ActivityLogRow;
-use tempfile::TempDir;
 use std::sync::Arc;
 use std::time::Duration;
+use tempfile::TempDir;
 use tokio::time::sleep;
 
 /// Test helper to create a temporary database instance
@@ -27,10 +27,10 @@ async fn shutdown_database(database: Arc<Database>) -> Result<()> {
 #[tokio::test]
 async fn test_concurrent_bookmark_reads() -> Result<()> {
     let (_temp_dir, database) = setup_temp_database().await?;
-    
+
     // Set initial bookmark data
     set_sync_bookmark(&database, "test-key", "test-value").await?;
-    
+
     // Spawn multiple concurrent read operations
     let mut handles = Vec::new();
     for i in 0..10 {
@@ -42,12 +42,12 @@ async fn test_concurrent_bookmark_reads() -> Result<()> {
         });
         handles.push(handle);
     }
-    
+
     // Wait for all reads to complete - they should all succeed with shared locks
     for handle in handles {
         handle.await?;
     }
-    
+
     shutdown_database(database).await?;
     Ok(())
 }
@@ -55,23 +55,25 @@ async fn test_concurrent_bookmark_reads() -> Result<()> {
 #[tokio::test]
 async fn test_concurrent_bookmark_read_write() -> Result<()> {
     let (_temp_dir, database) = setup_temp_database().await?;
-    
+
     // Set initial data
     set_sync_bookmark(&database, "read-write-test", "initial").await?;
-    
+
     let mut handles = Vec::new();
-    
+
     // Spawn a writer
     let db_writer = Arc::clone(&database);
     let writer_handle = tokio::spawn(async move {
         for i in 0..5 {
             let value = format!("updated-{}", i);
-            set_sync_bookmark(&db_writer, "read-write-test", &value).await.unwrap();
+            set_sync_bookmark(&db_writer, "read-write-test", &value)
+                .await
+                .unwrap();
             sleep(Duration::from_millis(10)).await;
         }
     });
     handles.push(writer_handle);
-    
+
     // Spawn multiple readers
     for _reader_id in 0..5 {
         let db = Arc::clone(&database);
@@ -85,16 +87,16 @@ async fn test_concurrent_bookmark_read_write() -> Result<()> {
         });
         handles.push(reader_handle);
     }
-    
+
     // Wait for all operations to complete
     for handle in handles {
         handle.await?;
     }
-    
+
     // Verify final state
     let final_value = get_sync_bookmark(&database, "read-write-test").await?;
     assert!(final_value.starts_with("updated-"));
-    
+
     shutdown_database(database).await?;
     Ok(())
 }
@@ -102,9 +104,9 @@ async fn test_concurrent_bookmark_read_write() -> Result<()> {
 #[tokio::test]
 async fn test_concurrent_wal_writes() -> Result<()> {
     let (_temp_dir, database) = setup_temp_database().await?;
-    
+
     let mut handles = Vec::new();
-    
+
     // Spawn multiple concurrent WAL writers
     for writer_id in 0..5 {
         let db = Arc::clone(&database);
@@ -123,15 +125,15 @@ async fn test_concurrent_wal_writes() -> Result<()> {
         });
         handles.push(handle);
     }
-    
+
     // Wait for all writes to complete
     for handle in handles {
         handle.await?;
     }
-    
+
     // Allow time for all writes to be flushed
     sleep(Duration::from_millis(200)).await;
-    
+
     shutdown_database(database).await?;
     Ok(())
 }
@@ -139,7 +141,7 @@ async fn test_concurrent_wal_writes() -> Result<()> {
 #[tokio::test]
 async fn test_wal_write_during_compaction() -> Result<()> {
     let (_temp_dir, database) = setup_temp_database().await?;
-    
+
     // Insert some initial data to create a WAL file
     for i in 0..10 {
         let activity = ActivityLogRow {
@@ -151,20 +153,21 @@ async fn test_wal_write_during_compaction() -> Result<()> {
         };
         database.activity_log.insert(activity).await?;
     }
-    
+
     sleep(Duration::from_millis(100)).await;
-    
+
     let mut handles = Vec::new();
-    
+
     // Spawn compactor (this will try to read with shared locks)
     let compactor_db = Arc::clone(&database);
     let compactor_handle = tokio::spawn(async move {
         use log_service::database::compactor::Compactor;
         use tokio_util::sync::CancellationToken;
-        
-        let compactor = Compactor::with_config(compactor_db.path().clone(), Duration::from_millis(50), 30);
+
+        let compactor =
+            Compactor::with_config(compactor_db.path().clone(), Duration::from_millis(50), 30);
         let token = CancellationToken::new();
-        
+
         // Run compactor briefly
         tokio::select! {
             result = compactor.run(token.clone()) => {
@@ -178,7 +181,7 @@ async fn test_wal_write_during_compaction() -> Result<()> {
         }
     });
     handles.push(compactor_handle);
-    
+
     // Continue writing while compactor runs (writers use exclusive locks)
     let writer_db = Arc::clone(&database);
     let writer_handle = tokio::spawn(async move {
@@ -195,12 +198,12 @@ async fn test_wal_write_during_compaction() -> Result<()> {
         }
     });
     handles.push(writer_handle);
-    
+
     // Wait for both to complete
     for handle in handles {
         let _ = handle.await;
     }
-    
+
     shutdown_database(database).await?;
     Ok(())
 }
@@ -208,23 +211,23 @@ async fn test_wal_write_during_compaction() -> Result<()> {
 #[tokio::test]
 async fn test_file_lock_error_handling() -> Result<()> {
     let (_temp_dir, database) = setup_temp_database().await?;
-    
+
     // Set a bookmark to create the file
     set_sync_bookmark(&database, "lock-test", "value").await?;
-    
+
     // Test that operations can handle lock contention gracefully
     // This test primarily verifies that lock errors are properly reported
     // rather than causing panics or deadlocks
-    
+
     let mut handles = Vec::new();
-    
+
     // Spawn rapid concurrent bookmark operations
     for i in 0..20 {
         let db = Arc::clone(&database);
         let handle = tokio::spawn(async move {
             let key = format!("rapid-test-{}", i % 5); // Use few keys to increase contention
             let value = format!("value-{}", i);
-            
+
             // Mix reads and writes to create lock contention
             if i % 2 == 0 {
                 let _ = set_sync_bookmark(&db, &key, &value).await;
@@ -234,13 +237,13 @@ async fn test_file_lock_error_handling() -> Result<()> {
         });
         handles.push(handle);
     }
-    
+
     // Wait for all operations - some may fail due to lock contention
     // but the system should remain stable
     for handle in handles {
         let _ = handle.await; // Don't fail the test if some operations fail due to lock contention
     }
-    
+
     shutdown_database(database).await?;
     Ok(())
 }
@@ -248,7 +251,7 @@ async fn test_file_lock_error_handling() -> Result<()> {
 #[tokio::test]
 async fn test_exclusive_lock_prevents_concurrent_writes() -> Result<()> {
     let (_temp_dir, database) = setup_temp_database().await?;
-    
+
     // Insert initial data to create WAL files
     for i in 0..5 {
         let activity = ActivityLogRow {
@@ -260,15 +263,15 @@ async fn test_exclusive_lock_prevents_concurrent_writes() -> Result<()> {
         };
         database.activity_log.insert(activity).await?;
     }
-    
+
     sleep(Duration::from_millis(100)).await;
-    
+
     // This test verifies that our locking is working by checking that
     // operations complete successfully without corruption
     // (If locks weren't working, we might see corrupted WAL files)
-    
+
     let mut handles = Vec::new();
-    
+
     // Spawn multiple writers for the same table
     for writer_id in 0..3 {
         let db = Arc::clone(&database);
@@ -282,40 +285,56 @@ async fn test_exclusive_lock_prevents_concurrent_writes() -> Result<()> {
                     extra: Some(format!("Extra data from writer {}", writer_id)),
                 };
                 db.activity_log.insert(activity).await.unwrap();
-                
+
                 // Small delay to increase chances of lock contention
                 sleep(Duration::from_millis(1)).await;
             }
         });
         handles.push(handle);
     }
-    
+
     // Wait for all writers to complete
     for handle in handles {
         handle.await?;
     }
-    
+
     // Allow time for all writes to be flushed
     sleep(Duration::from_millis(200)).await;
-    
+
     // Verify that WAL file is not corrupted (contains valid JSON lines)
     let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
-    let wal_file = database.path().join("wal").join(format!("activity_log_{}.jsonl", today));
-    
+    let wal_file = database
+        .path()
+        .join("wal")
+        .join(format!("activity_log_{}.jsonl", today));
+
     if wal_file.exists() {
         let content = tokio::fs::read_to_string(&wal_file).await?;
-        let lines: Vec<&str> = content.lines().filter(|line| !line.trim().is_empty()).collect();
-        
+        let lines: Vec<&str> = content
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .collect();
+
         // Should have 5 initial + 3 writers * 20 = 65 total records
-        assert!(lines.len() >= 60, "Should have at least 60 records, found {}", lines.len());
-        
+        assert!(
+            lines.len() >= 60,
+            "Should have at least 60 records, found {}",
+            lines.len()
+        );
+
         // Verify each line is valid JSON
         for (line_num, line) in lines.iter().enumerate() {
-            serde_json::from_str::<serde_json::Value>(line)
-                .map_err(|e| anyhow::anyhow!("Invalid JSON on line {}: {} - Error: {}", line_num + 1, line, e))?;
+            serde_json::from_str::<serde_json::Value>(line).map_err(|e| {
+                anyhow::anyhow!(
+                    "Invalid JSON on line {}: {} - Error: {}",
+                    line_num + 1,
+                    line,
+                    e
+                )
+            })?;
         }
     }
-    
+
     shutdown_database(database).await?;
     Ok(())
 }

@@ -217,7 +217,7 @@ pub async fn log_pageview(
     geolocation: impl Into<Option<String>>,
 ) -> Result<(), Error> {
     use crate::message::location::LocationInfo;
-    
+
     let when: String = when.into().unwrap_or_else(|| TimeString::now()).into();
     let ip_address: String = ip_address.into();
     let session_id: String = session_id.into();
@@ -229,19 +229,36 @@ pub async fn log_pageview(
     let path: String = path.into();
     let referrer: Option<String> = referrer.into();
     let query: Option<String> = query.into();
-    
+
     // Use provided geolocation or resolve from IP address
     let geolocation = match geolocation.into() {
         Some(geo) => geo,
         None => {
-            let location_info: LocationInfo = request("location.ip", &ip_address).await.unwrap_or_default();
-            location_info.as_point()
+            let location_info: LocationInfo = request("location.ip", &ip_address)
+                .await
+                .unwrap_or_default();
+            location_info
+                .as_point()
                 .map(|p| p.to_string())
                 .unwrap_or_else(|| r#"{"type":"Point","coordinates":[0.0,0.0]}"#.to_string())
         }
     };
-    
-    send("log.pageview", (when, ip_address, session_id, interaction_id, user_id, path, referrer, query, geolocation)).await
+
+    send(
+        "log.pageview",
+        (
+            when,
+            ip_address,
+            session_id,
+            interaction_id,
+            user_id,
+            path,
+            referrer,
+            query,
+            geolocation,
+        ),
+    )
+    .await
 }
 
 /// A convenience wrapper around [`common::service::send`] for sending
@@ -259,7 +276,7 @@ pub async fn log_clickthrough(
     geolocation: impl Into<Option<String>>,
 ) -> Result<(), Error> {
     use crate::message::location::LocationInfo;
-    
+
     let when: String = when.into().unwrap_or_else(|| TimeString::now()).into();
     let ip_address: String = ip_address.into();
     let session_id: String = session_id.into();
@@ -272,19 +289,37 @@ pub async fn log_clickthrough(
     let to_url: String = to_url.into();
     let link_type: String = link_type.into();
     let program_id: Option<String> = program_id.into();
-    
+
     // Use provided geolocation or resolve from IP address
     let geolocation = match geolocation.into() {
         Some(geo) => geo,
         None => {
-            let location_info: LocationInfo = request("location.ip", &ip_address).await.unwrap_or_default();
-            location_info.as_point()
+            let location_info: LocationInfo = request("location.ip", &ip_address)
+                .await
+                .unwrap_or_default();
+            location_info
+                .as_point()
                 .map(|p| p.to_string())
                 .unwrap_or_else(|| r#"{"type":"Point","coordinates":[0.0,0.0]}"#.to_string())
         }
     };
-    
-    send("log.clickthrough", (when, ip_address, session_id, interaction_id, user_id, from_path, to_url, link_type, program_id, geolocation)).await
+
+    send(
+        "log.clickthrough",
+        (
+            when,
+            ip_address,
+            session_id,
+            interaction_id,
+            user_id,
+            from_path,
+            to_url,
+            link_type,
+            program_id,
+            geolocation,
+        ),
+    )
+    .await
 }
 
 pub mod errors {

@@ -1,6 +1,5 @@
 use arrow::datatypes::{DataType, Field, Schema};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
 use super::table::TableRow;
 
@@ -87,27 +86,6 @@ impl TableRow for ClickthroughRow {
             Field::new("link_type", DataType::Utf8, false),
             Field::new("program_id", DataType::Utf8, true),
             Field::new("geolocation", DataType::Utf8, false),
-        ])
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UserTagsRow {
-    pub user_id: String,
-    pub tags: Vec<String>,
-}
-
-impl TableRow for UserTagsRow {
-    const TABLE_NAME: &'static str = "user_tags";
-
-    fn schema() -> Schema {
-        Schema::new(vec![
-            Field::new("user_id", DataType::Utf8, false),
-            Field::new(
-                "tags",
-                DataType::List(Arc::new(Field::new("item", DataType::Utf8, false))),
-                false,
-            ),
         ])
     }
 }
@@ -204,4 +182,3 @@ impl TableRow for BookmarkRow {
         ])
     }
 }
-

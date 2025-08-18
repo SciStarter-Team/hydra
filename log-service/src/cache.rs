@@ -1,4 +1,4 @@
-use anyhow::Result;
+use crate::error::Result;
 use common::{shared::db, transaction::Immediate};
 
 /// SQLite-based cache system for user data following user-service patterns
@@ -8,14 +8,13 @@ use common::{shared::db, transaction::Immediate};
 // USER TAGS CACHE
 // ================================
 
-
 /// Update user tags cache (replaces all existing tags for the user)
 /// Follows the same pattern as user-service set_user_tags
 pub async fn update_user_tags_cache(user_id: String, tags: Vec<String>) -> Result<()> {
     let updated_at = jiff::Timestamp::now().to_string();
-    
+
     let mut tx = Immediate::begin_with_retry(db(), None, None).await?;
-    
+
     // Remove all existing tags for this user
     sqlx::query!(
         r#"DELETE FROM "user_tags_cache" WHERE "user_id" = ?"#,
@@ -23,7 +22,7 @@ pub async fn update_user_tags_cache(user_id: String, tags: Vec<String>) -> Resul
     )
     .execute(&mut tx)
     .await?;
-    
+
     // Insert new tags
     for tag in &tags {
         sqlx::query!(
@@ -35,7 +34,7 @@ pub async fn update_user_tags_cache(user_id: String, tags: Vec<String>) -> Resul
         .execute(&mut tx)
         .await?;
     }
-    
+
     tx.commit().await?;
     Ok(())
 }
@@ -49,7 +48,7 @@ pub async fn get_user_tags_from_cache(user_id: &str) -> Result<Option<Vec<String
     )
     .fetch_all(db())
     .await?;
-    
+
     if tags.is_empty() {
         Ok(None) // No cache entry found
     } else {
@@ -60,7 +59,7 @@ pub async fn get_user_tags_from_cache(user_id: &str) -> Result<Option<Vec<String
 /// Fetch user tags from user-service via NATS
 pub async fn fetch_user_tags_from_service(user_id: &str) -> Result<Vec<String>> {
     use common::service::request;
-    
+
     // Call user service to get user tags
     let tags: Vec<String> = request("user.tags.get", user_id).await.unwrap_or_default();
     Ok(tags)
@@ -72,19 +71,22 @@ pub async fn get_user_tags(user_id: &str) -> Result<Vec<String>> {
     if let Some(tags) = get_user_tags_from_cache(user_id).await? {
         return Ok(tags);
     }
-    
+
     // Cache miss - fetch from user service and cache
     let tags = fetch_user_tags_from_service(user_id).await?;
     if !tags.is_empty() {
         // Use a retry mechanism for cache updates in case of conflicts
         for _attempt in 0..3 {
-            if update_user_tags_cache(user_id.to_string(), tags.clone()).await.is_ok() {
+            if update_user_tags_cache(user_id.to_string(), tags.clone())
+                .await
+                .is_ok()
+            {
                 break;
             }
             tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
         }
     }
-    
+
     Ok(tags)
 }
 
@@ -92,7 +94,7 @@ pub async fn get_user_tags(user_id: &str) -> Result<Vec<String>> {
 /// Follows the same pattern as user-service add_user_tag
 pub async fn add_user_tag(user_id: &str, tag: &str) -> Result<()> {
     let updated_at = jiff::Timestamp::now().to_string();
-    
+
     // Insert the tag (ignore if already exists)
     sqlx::query!(
         r#"INSERT OR IGNORE INTO "user_tags_cache" ("user_id", "tag", "updated_at") VALUES (?, ?, ?)"#,
@@ -102,7 +104,7 @@ pub async fn add_user_tag(user_id: &str, tag: &str) -> Result<()> {
     )
     .execute(db())
     .await?;
-    
+
     Ok(())
 }
 
@@ -117,7 +119,7 @@ pub async fn remove_user_tag(user_id: &str, tag: &str) -> Result<()> {
     )
     .execute(db())
     .await?;
-    
+
     Ok(())
 }
 
@@ -129,7 +131,7 @@ pub async fn remove_user_from_cache(user_id: &str) -> Result<()> {
     )
     .execute(db())
     .await?;
-    
+
     Ok(())
 }
 
@@ -141,7 +143,7 @@ pub async fn get_users_with_tag(tag: &str) -> Result<Vec<String>> {
     )
     .fetch_all(db())
     .await?;
-    
+
     Ok(users)
 }
 
@@ -152,7 +154,7 @@ pub async fn get_popular_tags(limit: i64) -> Result<Vec<(String, i64)>> {
         tag: String,
         count: i64,
     }
-    
+
     let tag_counts = sqlx::query_as!(
         TagCount,
         r#"SELECT "tag", COUNT(*) as "count" 
@@ -164,8 +166,11 @@ pub async fn get_popular_tags(limit: i64) -> Result<Vec<(String, i64)>> {
     )
     .fetch_all(db())
     .await?;
-    
-    Ok(tag_counts.into_iter().map(|tc| (tc.tag, tc.count)).collect())
+
+    Ok(tag_counts
+        .into_iter()
+        .map(|tc| (tc.tag, tc.count))
+        .collect())
 }
 
 // ================================
@@ -176,9 +181,9 @@ pub async fn get_popular_tags(limit: i64) -> Result<Vec<(String, i64)>> {
 /// Follows the same pattern as user-service set_user_emails
 pub async fn update_user_emails_cache(user_id: String, emails: Vec<String>) -> Result<()> {
     let updated_at = jiff::Timestamp::now().to_string();
-    
+
     let mut tx = Immediate::begin_with_retry(db(), None, None).await?;
-    
+
     // Remove all existing emails for this user
     sqlx::query!(
         r#"DELETE FROM "user_emails_cache" WHERE "user_id" = ?"#,
@@ -186,7 +191,7 @@ pub async fn update_user_emails_cache(user_id: String, emails: Vec<String>) -> R
     )
     .execute(&mut tx)
     .await?;
-    
+
     // Insert new emails
     for email in &emails {
         sqlx::query!(
@@ -198,7 +203,7 @@ pub async fn update_user_emails_cache(user_id: String, emails: Vec<String>) -> R
         .execute(&mut tx)
         .await?;
     }
-    
+
     tx.commit().await?;
     Ok(())
 }
@@ -212,7 +217,7 @@ pub async fn get_user_emails_from_cache(user_id: &str) -> Result<Option<Vec<Stri
     )
     .fetch_all(db())
     .await?;
-    
+
     if emails.is_empty() {
         Ok(None) // No cache entry found
     } else {
@@ -223,9 +228,11 @@ pub async fn get_user_emails_from_cache(user_id: &str) -> Result<Option<Vec<Stri
 /// Fetch user emails from user-service via NATS
 pub async fn fetch_user_emails_from_service(user_id: &str) -> Result<Vec<String>> {
     use common::service::request;
-    
+
     // Call user service to get user emails
-    let emails: Vec<String> = request("user.emails.get", user_id).await.unwrap_or_default();
+    let emails: Vec<String> = request("user.emails.get", user_id)
+        .await
+        .unwrap_or_default();
     Ok(emails)
 }
 
@@ -235,19 +242,22 @@ pub async fn get_user_emails(user_id: &str) -> Result<Vec<String>> {
     if let Some(emails) = get_user_emails_from_cache(user_id).await? {
         return Ok(emails);
     }
-    
+
     // Cache miss - fetch from user service and cache
     let emails = fetch_user_emails_from_service(user_id).await?;
     if !emails.is_empty() {
         // Use a retry mechanism for cache updates in case of conflicts
         for _attempt in 0..3 {
-            if update_user_emails_cache(user_id.to_string(), emails.clone()).await.is_ok() {
+            if update_user_emails_cache(user_id.to_string(), emails.clone())
+                .await
+                .is_ok()
+            {
                 break;
             }
             tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
         }
     }
-    
+
     Ok(emails)
 }
 
@@ -255,7 +265,7 @@ pub async fn get_user_emails(user_id: &str) -> Result<Vec<String>> {
 /// Follows the same pattern as user-service add_user_email
 pub async fn add_user_email(user_id: &str, email: &str) -> Result<()> {
     let updated_at = jiff::Timestamp::now().to_string();
-    
+
     // Insert the email (ignore if already exists)
     sqlx::query!(
         r#"INSERT OR IGNORE INTO "user_emails_cache" ("user_id", "email", "updated_at") VALUES (?, ?, ?)"#,
@@ -265,7 +275,7 @@ pub async fn add_user_email(user_id: &str, email: &str) -> Result<()> {
     )
     .execute(db())
     .await?;
-    
+
     Ok(())
 }
 
@@ -280,7 +290,7 @@ pub async fn remove_user_email(user_id: &str, email: &str) -> Result<()> {
     )
     .execute(db())
     .await?;
-    
+
     Ok(())
 }
 
@@ -292,7 +302,7 @@ pub async fn remove_user_emails_from_cache(user_id: &str) -> Result<()> {
     )
     .execute(db())
     .await?;
-    
+
     Ok(())
 }
 
@@ -301,11 +311,13 @@ pub async fn remove_user_emails_from_cache(user_id: &str) -> Result<()> {
 // ================================
 
 /// Bulk update multiple users' tags - useful for batch operations
-pub async fn bulk_update_user_tags(updates: std::collections::HashMap<String, Vec<String>>) -> Result<()> {
+pub async fn bulk_update_user_tags(
+    updates: std::collections::HashMap<String, Vec<String>>,
+) -> Result<()> {
     let updated_at = jiff::Timestamp::now().to_string();
-    
+
     let mut tx = Immediate::begin_with_retry(db(), None, None).await?;
-    
+
     for (user_id, tags) in updates {
         // Remove all existing tags for this user
         sqlx::query!(
@@ -314,7 +326,7 @@ pub async fn bulk_update_user_tags(updates: std::collections::HashMap<String, Ve
         )
         .execute(&mut tx)
         .await?;
-        
+
         // Insert new tags
         for tag in &tags {
             sqlx::query!(
@@ -327,17 +339,19 @@ pub async fn bulk_update_user_tags(updates: std::collections::HashMap<String, Ve
             .await?;
         }
     }
-    
+
     tx.commit().await?;
     Ok(())
 }
 
 /// Bulk update multiple users' emails
-pub async fn bulk_update_user_emails(updates: std::collections::HashMap<String, Vec<String>>) -> Result<()> {
+pub async fn bulk_update_user_emails(
+    updates: std::collections::HashMap<String, Vec<String>>,
+) -> Result<()> {
     let updated_at = jiff::Timestamp::now().to_string();
-    
+
     let mut tx = Immediate::begin_with_retry(db(), None, None).await?;
-    
+
     for (user_id, emails) in updates {
         // Remove all existing emails for this user
         sqlx::query!(
@@ -346,7 +360,7 @@ pub async fn bulk_update_user_emails(updates: std::collections::HashMap<String, 
         )
         .execute(&mut tx)
         .await?;
-        
+
         // Insert new emails
         for email in &emails {
             sqlx::query!(
@@ -359,7 +373,7 @@ pub async fn bulk_update_user_emails(updates: std::collections::HashMap<String, 
             .await?;
         }
     }
-    
+
     tx.commit().await?;
     Ok(())
 }
@@ -371,25 +385,21 @@ pub async fn bulk_update_user_emails(updates: std::collections::HashMap<String, 
 /// Cache statistics and health checks
 pub async fn get_cache_stats() -> Result<CacheStats> {
     // Get user_tags_cache stats
-    let total_users_with_tags = sqlx::query_scalar!(
-        r#"SELECT COUNT(DISTINCT "user_id") FROM "user_tags_cache""#
-    )
-    .fetch_one(db())
-    .await?;
-    
-    let total_tag_entries = sqlx::query_scalar!(
-        r#"SELECT COUNT(*) FROM "user_tags_cache""#
-    )
-    .fetch_one(db())
-    .await?;
-    
+    let total_users_with_tags =
+        sqlx::query_scalar!(r#"SELECT COUNT(DISTINCT "user_id") FROM "user_tags_cache""#)
+            .fetch_one(db())
+            .await?;
+
+    let total_tag_entries = sqlx::query_scalar!(r#"SELECT COUNT(*) FROM "user_tags_cache""#)
+        .fetch_one(db())
+        .await?;
+
     // Get user_emails_cache stats
-    let total_users_with_emails = sqlx::query_scalar!(
-        r#"SELECT COUNT(*) FROM "user_emails_cache""#
-    )
-    .fetch_one(db())
-    .await?;
-    
+    let total_users_with_emails =
+        sqlx::query_scalar!(r#"SELECT COUNT(*) FROM "user_emails_cache""#)
+            .fetch_one(db())
+            .await?;
+
     Ok(CacheStats {
         total_users_with_tags: total_users_with_tags as usize,
         total_tag_entries: total_tag_entries as usize,
@@ -409,27 +419,22 @@ pub struct CacheStats {
 /// Clean up old cache entries (optional maintenance function)
 pub async fn cleanup_old_cache_entries(days_old: i64) -> Result<()> {
     let cutoff_date = (jiff::Timestamp::now() - jiff::Span::new().days(days_old)).to_string();
-    
-    let tags_deleted = sqlx::query!(
+
+    sqlx::query!(
         r#"DELETE FROM "user_tags_cache" WHERE "updated_at" < ?"#,
         cutoff_date
     )
     .execute(db())
-    .await?
-    .rows_affected();
-    
-    let emails_deleted = sqlx::query!(
+    .await?;
+
+    sqlx::query!(
         r#"DELETE FROM "user_emails_cache" WHERE "updated_at" < ?"#,
         cutoff_date
     )
     .execute(db())
-    .await?
-    .rows_affected();
-    
-    println!(
-        "Cache cleanup: removed {} tag entries and {} email entries older than {} days",
-        tags_deleted, emails_deleted, days_old
-    );
-    
+    .await?;
+
+    // Cleanup completed successfully - no output needed for library function
+
     Ok(())
 }
