@@ -37,7 +37,7 @@ async fn test_individual_write_atomicity() -> Result<()> {
         let db = Arc::clone(&database);
         let counter = Arc::clone(&completion_counter);
 
-        let handle = tokio::spawn(async move {
+        let handle: tokio::task::JoinHandle<anyhow::Result<()>> = tokio::spawn(async move {
             let activity = ActivityLogRow {
                 when: format!("2024-01-15T10:30:{}Z", writer_id),
                 action: format!("atomic_log_entry_{}", writer_id),
@@ -53,7 +53,7 @@ async fn test_individual_write_atomicity() -> Result<()> {
             // Simulate work after write
             sleep(Duration::from_millis(50)).await;
 
-            Ok::<_, anyhow::Error>(())
+            Ok(())
         });
 
         test_handles.push(handle);
@@ -145,7 +145,7 @@ async fn test_concurrent_write_safety() -> Result<()> {
         let db = Arc::clone(&database);
         let counter = Arc::clone(&success_counter);
 
-        let handle = tokio::spawn(async move {
+        let handle: tokio::task::JoinHandle<anyhow::Result<()>> = tokio::spawn(async move {
             for record_id in 0..records_per_writer {
                 let activity = ActivityLogRow {
                     when: format!(
@@ -159,14 +159,11 @@ async fn test_concurrent_write_safety() -> Result<()> {
                     extra: Some(format!("DATA_W{:03}_R{:03}", writer_id, record_id)),
                 };
 
-                match db.activity_log.insert(activity).await {
-                    Ok(_) => {
-                        counter.fetch_add(1, Ordering::Relaxed);
-                    }
-                    Err(e) => {
-                        eprintln!("Writer {} record {} failed: {}", writer_id, record_id, e);
-                        return Err(e);
-                    }
+                if let Err(e) = db.activity_log.insert(activity).await {
+                    eprintln!("Writer {} record {} failed: {}", writer_id, record_id, e);
+                    return Err(e.into());
+                } else {
+                    counter.fetch_add(1, Ordering::Relaxed);
                 }
 
                 // Yield to increase contention
@@ -174,7 +171,7 @@ async fn test_concurrent_write_safety() -> Result<()> {
                     tokio::task::yield_now().await;
                 }
             }
-            Ok::<_, anyhow::Error>(())
+            Ok(())
         });
 
         handles.push(handle);
@@ -514,7 +511,7 @@ async fn test_log_system_performance_under_load() -> Result<()> {
         let db = Arc::clone(&database);
         let counter = Arc::clone(&completion_counter);
 
-        let handle = tokio::spawn(async move {
+        let handle: tokio::task::JoinHandle<anyhow::Result<()>> = tokio::spawn(async move {
             for record_id in 0..records_per_writer {
                 let activity = ActivityLogRow {
                     when: format!(
@@ -537,7 +534,7 @@ async fn test_log_system_performance_under_load() -> Result<()> {
                     tokio::task::yield_now().await;
                 }
             }
-            Ok::<_, anyhow::Error>(())
+            Ok(())
         });
 
         handles.push(handle);

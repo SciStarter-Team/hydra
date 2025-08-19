@@ -8,6 +8,19 @@ use tokio::sync::mpsc;
 
 use std::path::PathBuf;
 
+/// Registration for automatic table discovery
+pub struct TableRegistration {
+    pub name: &'static str,
+    pub schema: fn() -> Schema,
+}
+
+inventory::collect!(TableRegistration);
+
+/// Get all registered tables
+pub fn get_registered_tables() -> Vec<&'static TableRegistration> {
+    inventory::iter::<TableRegistration>().collect()
+}
+
 /// Trait for table row types - each table has its own implementing type
 pub trait TableRow: Clone + Serialize + for<'de> Deserialize<'de> + Send + Sync + 'static {
     /// The name of the table this row belongs to
@@ -93,6 +106,7 @@ impl TableWriter {
     fn get_wal_file_path(&self, date: &str) -> String {
         self.base_path
             .join("wal")
+            .join(&self.table_name)
             .join(format!("{}_{}.jsonl", self.table_name, date))
             .to_string_lossy()
             .to_string()

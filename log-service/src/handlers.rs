@@ -8,9 +8,6 @@ use log_service::{
 };
 use std::sync::Arc;
 
-// LogEntry and database_writer removed - migrated to new Table<T> system
-
-// Handler function that takes database parameter
 pub async fn handle_activity_log(
     database: Arc<Database>,
     req: &async_nats::service::Request,
@@ -23,7 +20,6 @@ pub async fn handle_activity_log(
         Option<String>,
     ) = decode_structured_message(req.message.clone())?;
 
-    // Use new table system
     use log_service::database::tables::ActivityLogRow;
 
     let row = ActivityLogRow {
@@ -45,7 +41,6 @@ pub async fn handle_page_view(
 ) -> Result<()> {
     let (when, ip_address, session_id, interaction_id, user_id, path, referrer, query, geolocation): (String, String, String, String, Option<String>, String, Option<String>, Option<String>, String) = decode_structured_message(req.message.clone())?;
 
-    // Use new table system
     use log_service::database::tables::PageViewRow;
 
     let row = PageViewRow {
@@ -93,7 +88,6 @@ pub async fn handle_clickthrough(
         String,
     ) = decode_structured_message(req.message.clone())?;
 
-    // Use new table system
     use log_service::database::tables::ClickthroughRow;
 
     let row = ClickthroughRow {
@@ -130,7 +124,6 @@ pub async fn handle_join(
         String,
     ) = decode_structured_message(req.message.clone())?;
 
-    // Use new table system
     use log_service::database::tables::JoinRow;
 
     let row = JoinRow {
@@ -157,7 +150,6 @@ pub async fn handle_clickthrough_analytics(
 ) -> Result<()> {
     let query: AnalyticsQuery = decode_structured_message(req.message.clone())?;
 
-    // Use the new DataFusion-based analytics
     match get_clickthrough_analytics(Arc::clone(&database), query).await {
         Ok(response) => {
             let response_data = flexbuffers::to_vec(&response)?;
@@ -180,7 +172,6 @@ pub async fn handle_join_analytics(
 ) -> Result<()> {
     let query: AnalyticsQuery = decode_structured_message(req.message.clone())?;
 
-    // Use the new DataFusion-based analytics
     match get_join_analytics(Arc::clone(&database), query).await {
         Ok(response) => {
             let response_data = flexbuffers::to_vec(&response)?;
@@ -203,7 +194,6 @@ pub async fn handle_user_tags_update(
 ) -> Result<()> {
     let (user_id, tags): (String, Vec<String>) = decode_structured_message(req.message.clone())?;
 
-    // Update cache using new SQLite-based cache system
     loop {
         if update_user_tags_cache(user_id.clone(), tags.clone())
             .await

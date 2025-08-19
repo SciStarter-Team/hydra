@@ -4,6 +4,7 @@ use datafusion::arrow::array::StringArray;
 use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::catalog::Session;
 use datafusion::datasource::file_format::parquet::ParquetFormat;
+use datafusion::datasource::file_format::json::JsonFormat;
 use datafusion::datasource::listing::{
     ListingOptions, ListingTable, ListingTableConfig, ListingTableUrl,
 };
@@ -26,6 +27,7 @@ use crate::database::tables::{
 };
 use std::path::PathBuf;
 use url::Url;
+
 
 /// SQLite table provider for DataFusion
 #[derive(Debug)]
@@ -313,24 +315,8 @@ impl Database {
     pub async fn new<P: Into<PathBuf>>(database_path: P) -> Result<Self> {
         let path = database_path.into();
 
-        // Create directory structure for parquet files
+        // Create base directory structure
         tokio::fs::create_dir_all(&path).await?;
-
-        // Create subdirectories for each table
-        for table_name in &[
-            "activity_log",
-            "page_views",
-            "clickthroughs",
-            "participation",
-            "bookmark",
-            "join_table",
-            "clickthrough_daily_summary",
-            "clickthrough_weekly_summary",
-            "join_daily_summary",
-            "join_weekly_summary",
-        ] {
-            tokio::fs::create_dir_all(path.join(table_name)).await?;
-        }
 
         // Create session context and register tables
         let session_context = SessionContext::new();
@@ -385,31 +371,33 @@ impl Database {
 
     /// Register all tables with DataFusion
     async fn register_all_tables(&self) -> Result<()> {
+        use crate::database::table::get_registered_tables;
+        
         // Register local file system with DataFusion
         let local_fs = Arc::new(LocalFileSystem::new());
         let file_url = Url::parse("file:///")?;
         self.session_context
             .register_object_store(&file_url, local_fs);
 
-        // Create/register all tables
-        self.register_activity_log_table().await?;
-        self.register_page_views_table().await?;
-        self.register_clickthroughs_table().await?;
-        self.register_participation_table().await?;
-        self.register_bookmark_table().await?;
-        self.register_join_table().await?;
+        // Automatically register all TableRow types from inventory
+        for table_registration in get_registered_tables() {
+            let schema = Arc::new((table_registration.schema)());
+            self.create_parquet_table(
+                table_registration.name,
+                schema,
+                &self.path.join("parquet").join(table_registration.name),
+            ).await?;
+        }
 
-        // Register summary tables
+        // Register summary and cache tables (these don't use TableRow trait)
         self.register_summary_tables().await?;
-
-        // Register SQLite cache tables
         self.register_sqlite_cache_tables().await?;
 
         // DataFusion database initialized successfully
         Ok(())
     }
 
-    /// Helper function to create a listing table for Parquet files
+    /// Create and register both parquet-only and realtime (parquet+WAL) tables
     async fn create_parquet_table(
         &self,
         table_name: &str,
@@ -418,203 +406,66 @@ impl Database {
     ) -> Result<()> {
         // Ensure the parquet directory exists
         tokio::fs::create_dir_all(table_path).await?;
-
-        // ListingTable expects a directory path that it will scan for files
-        // Convert to absolute path and use proper file:/// URL format
-        let absolute_path = table_path.canonicalize()?;
-        let table_url = format!("file:///{}/", absolute_path.to_string_lossy());
-
-        let listing_options =
-            ListingOptions::new(Arc::new(ParquetFormat::default())).with_file_extension(".parquet");
-
-        let config = ListingTableConfig::new(ListingTableUrl::parse(&table_url)?)
-            .with_listing_options(listing_options)
-            .with_schema(schema);
-
-        let table = ListingTable::try_new(config)?;
+        
+        // Create parquet-only table
+        let parquet_absolute_path = table_path.canonicalize()?;
+        let parquet_table_url = format!("file:///{}/", parquet_absolute_path.to_string_lossy());
+        
+        let parquet_listing_options = ListingOptions::new(Arc::new(ParquetFormat::default()))
+            .with_file_extension(".parquet");
+        
+        let parquet_config = ListingTableConfig::new(ListingTableUrl::parse(&parquet_table_url)?)
+            .with_listing_options(parquet_listing_options)
+            .with_schema(schema.clone());
+        
+        let parquet_table = ListingTable::try_new(parquet_config)?;
+        
+        // Register parquet-only table with original name
         self.session_context
-            .register_table(table_name, Arc::new(table))?;
-
+            .register_table(table_name, Arc::new(parquet_table.clone()))?;
+        
+        // Create WAL table (JSONL files) and union table
+        let wal_table_path = self.path.join("wal").join(table_name);
+        tokio::fs::create_dir_all(&wal_table_path).await?;
+        
+        if let Ok(wal_absolute_path) = wal_table_path.canonicalize() {
+            let wal_table_url = format!("file:///{}/", wal_absolute_path.to_string_lossy());
+            
+            let wal_listing_options = ListingOptions::new(Arc::new(JsonFormat::default()))
+                .with_file_extension(".jsonl");
+            
+            
+            let wal_config = ListingTableConfig::new(ListingTableUrl::parse(&wal_table_url)?)
+                .with_listing_options(wal_listing_options)
+                .with_schema(schema.clone());
+            
+            if let Ok(wal_table) = ListingTable::try_new(wal_config) {
+                // Register WAL table separately with "_wal" suffix
+                self.session_context
+                    .register_table(&format!("{}_wal", table_name), Arc::new(wal_table))?;
+                
+                // Create a SQL view that unions both tables for realtime queries
+                let realtime_view_sql = format!(
+                    "SELECT * FROM {} UNION ALL SELECT * FROM {}_wal", 
+                    table_name, table_name
+                );
+                
+                // Register the view - this gives us the "_realtime" table automatically
+                let _ = self.session_context.sql(&format!(
+                    "CREATE VIEW {}_realtime AS {}", 
+                    table_name, realtime_view_sql
+                )).await;
+                
+                // Available tables:
+                // - `table_name`: parquet only (fast historical queries)
+                // - `table_name_wal`: WAL only (fresh data)  
+                // - `table_name_realtime`: combined view (complete data)
+            }
+        }
+        
         Ok(())
     }
 
-    /// Activity log table
-    async fn register_activity_log_table(&self) -> Result<()> {
-        let schema = Arc::new(Schema::new(vec![
-            Field::new(
-                "when",
-                DataType::Timestamp(TimeUnit::Microsecond, None),
-                false,
-            ),
-            Field::new("action", DataType::Utf8, false),
-            Field::new("user_id", DataType::Utf8, true),
-            Field::new("target", DataType::Utf8, true),
-            Field::new("extra", DataType::Utf8, true),
-        ]));
-
-        self.create_parquet_table(
-            "activity_log",
-            schema,
-            &self.path.join("parquet").join("activity_log"),
-        )
-        .await
-    }
-
-    /// Page views table
-    async fn register_page_views_table(&self) -> Result<()> {
-        let schema = Arc::new(Schema::new(vec![
-            Field::new(
-                "when",
-                DataType::Timestamp(TimeUnit::Microsecond, None),
-                false,
-            ),
-            Field::new("ip_address", DataType::Utf8, false),
-            Field::new("session_id", DataType::Utf8, false),
-            Field::new("interaction_id", DataType::Utf8, false),
-            Field::new("user_id", DataType::Utf8, true),
-            Field::new("path", DataType::Utf8, false),
-            Field::new("referrer", DataType::Utf8, true),
-            Field::new("query", DataType::Utf8, true),
-            Field::new("geolocation", DataType::Utf8, false),
-        ]));
-
-        self.create_parquet_table(
-            "page_views",
-            schema,
-            &self.path.join("parquet").join("page_views"),
-        )
-        .await
-    }
-
-    /// Clickthroughs table
-    async fn register_clickthroughs_table(&self) -> Result<()> {
-        let schema = Arc::new(Schema::new(vec![
-            Field::new(
-                "when",
-                DataType::Timestamp(TimeUnit::Microsecond, None),
-                false,
-            ),
-            Field::new("ip_address", DataType::Utf8, false),
-            Field::new("session_id", DataType::Utf8, false),
-            Field::new("interaction_id", DataType::Utf8, false),
-            Field::new("user_id", DataType::Utf8, true),
-            Field::new("from_path", DataType::Utf8, false),
-            Field::new("to_url", DataType::Utf8, false),
-            Field::new("link_type", DataType::Utf8, false),
-            Field::new("program_id", DataType::Utf8, true),
-            Field::new("geolocation", DataType::Utf8, false),
-        ]));
-
-        self.create_parquet_table(
-            "clickthroughs",
-            schema,
-            &self.path.join("parquet").join("clickthroughs"),
-        )
-        .await
-    }
-
-    /// Participation table
-    async fn register_participation_table(&self) -> Result<()> {
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("id", DataType::Utf8, false),
-            Field::new("origin", DataType::Int16, false),
-            Field::new(
-                "when",
-                DataType::Timestamp(TimeUnit::Microsecond, None),
-                false,
-            ),
-            Field::new("duration", DataType::Float64, false),
-            Field::new("where_point", DataType::Utf8, true),
-            Field::new("magnitude", DataType::Int32, false),
-            Field::new("authenticated", DataType::Boolean, false),
-            Field::new("extra", DataType::Utf8, false),
-            Field::new("fidelity", DataType::Float64, false),
-            Field::new("entity_id", DataType::Utf8, false),
-            Field::new("user_id", DataType::Utf8, false),
-            Field::new("task_name", DataType::Utf8, true),
-        ]));
-
-        self.create_parquet_table(
-            "participation",
-            schema,
-            &self.path.join("parquet").join("participation"),
-        )
-        .await
-    }
-
-    /// Bookmark table
-    async fn register_bookmark_table(&self) -> Result<()> {
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("id", DataType::Utf8, false),
-            Field::new(
-                "when",
-                DataType::Timestamp(TimeUnit::Microsecond, None),
-                false,
-            ),
-            Field::new("entity_id", DataType::Utf8, false),
-            Field::new("user_id", DataType::Utf8, false),
-            Field::new("active", DataType::Boolean, false),
-            Field::new(
-                "activity",
-                DataType::Timestamp(TimeUnit::Microsecond, None),
-                false,
-            ),
-            Field::new(
-                "contacted",
-                DataType::Timestamp(TimeUnit::Microsecond, None),
-                true,
-            ),
-            Field::new("current", DataType::Boolean, false),
-        ]));
-
-        self.create_parquet_table(
-            "bookmark",
-            schema,
-            &self.path.join("parquet").join("bookmark"),
-        )
-        .await
-    }
-
-    /// Join table
-    async fn register_join_table(&self) -> Result<()> {
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("id", DataType::Utf8, false),
-            Field::new(
-                "when",
-                DataType::Timestamp(TimeUnit::Microsecond, None),
-                false,
-            ),
-            Field::new("entity_id", DataType::Utf8, false),
-            Field::new("user_id", DataType::Utf8, false),
-            Field::new("active", DataType::Boolean, false),
-            Field::new(
-                "consented",
-                DataType::Timestamp(TimeUnit::Microsecond, None),
-                true,
-            ),
-            Field::new(
-                "contacted",
-                DataType::Timestamp(TimeUnit::Microsecond, None),
-                true,
-            ),
-            Field::new("explicit", DataType::Boolean, false),
-            Field::new("notified", DataType::Boolean, false),
-            Field::new(
-                "activity",
-                DataType::Timestamp(TimeUnit::Microsecond, None),
-                false,
-            ),
-            Field::new("reason", DataType::Utf8, false),
-            Field::new("current", DataType::Boolean, false),
-        ]));
-
-        self.create_parquet_table(
-            "join_table",
-            schema,
-            &self.path.join("parquet").join("join_table"),
-        )
-        .await
-    }
 
     /// Summary tables
     async fn register_summary_tables(&self) -> Result<()> {
@@ -640,32 +491,61 @@ impl Database {
             ),
         ]));
 
-        // Register all summary tables
-        self.create_parquet_table(
+        // Register summary tables as parquet-only (no WAL variants)
+        self.create_summary_table(
             "clickthrough_daily_summary",
             daily_schema.clone(),
             &self.path.join("clickthrough_daily_summary"),
-        )
-        .await?;
-        self.create_parquet_table(
+        ).await?;
+        
+        self.create_summary_table(
             "clickthrough_weekly_summary",
             weekly_schema.clone(),
             &self.path.join("clickthrough_weekly_summary"),
-        )
-        .await?;
-        self.create_parquet_table(
+        ).await?;
+        
+        self.create_summary_table(
             "join_daily_summary",
             daily_schema,
             &self.path.join("join_daily_summary"),
-        )
-        .await?;
-        self.create_parquet_table(
+        ).await?;
+        
+        self.create_summary_table(
             "join_weekly_summary",
             weekly_schema,
             &self.path.join("join_weekly_summary"),
-        )
-        .await?;
+        ).await?;
 
+        Ok(())
+    }
+    
+    /// Create a summary table (parquet-only, no WAL variants)
+    async fn create_summary_table(
+        &self,
+        table_name: &str,
+        schema: Arc<Schema>,
+        table_path: &Path,
+    ) -> Result<()> {
+        // Ensure the summary table directory exists
+        tokio::fs::create_dir_all(table_path).await?;
+        
+        // Create parquet-only table (no WAL variants needed for summary tables)
+        let parquet_absolute_path = table_path.canonicalize()?;
+        let parquet_table_url = format!("file:///{}/", parquet_absolute_path.to_string_lossy());
+        
+        let parquet_listing_options = ListingOptions::new(Arc::new(ParquetFormat::default()))
+            .with_file_extension(".parquet");
+        
+        let parquet_config = ListingTableConfig::new(ListingTableUrl::parse(&parquet_table_url)?)
+            .with_listing_options(parquet_listing_options)
+            .with_schema(schema);
+        
+        let parquet_table = ListingTable::try_new(parquet_config)?;
+        
+        // Register summary table (parquet-only)
+        self.session_context
+            .register_table(table_name, Arc::new(parquet_table))?;
+        
         Ok(())
     }
 

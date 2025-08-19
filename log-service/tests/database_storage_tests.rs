@@ -27,7 +27,7 @@ async fn setup_temp_database() -> Result<(TempDir, Arc<Database>)> {
 /// Helper to cleanly shutdown a database for tests
 async fn shutdown_database(database: Arc<Database>) -> Result<()> {
     match Arc::try_unwrap(database) {
-        Ok(db) => db.shutdown().await,
+        Ok(db) => Ok(db.shutdown().await?),
         Err(_) => {
             // Database still has references, which shouldn't happen in tests
             // but let's handle it gracefully
@@ -58,34 +58,19 @@ async fn test_database_path_management() -> Result<()> {
 async fn test_database_initialization() -> Result<()> {
     let (_temp_dir, database) = setup_temp_database().await?;
 
-    // Verify that all expected directories were created by Database::new
+    // Verify that the base database directory was created
     let base_path = database.path();
-    let expected_dirs = [
-        "activity_log",
-        "page_views",
-        "clickthroughs",
-        "user_tags",
-        "participation",
-        "bookmark",
-        "join_table",
-        "clickthrough_daily_summary",
-        "clickthrough_weekly_summary",
-        "join_daily_summary",
-        "join_weekly_summary",
-    ];
+    assert!(
+        base_path.exists(),
+        "Base database directory should exist"
+    );
+    assert!(
+        base_path.is_dir(),
+        "Base database path should be a directory"
+    );
 
-    for dir in expected_dirs {
-        assert!(
-            base_path.join(dir).exists(),
-            "Directory {} should exist",
-            dir
-        );
-        assert!(
-            base_path.join(dir).is_dir(),
-            "Path {} should be a directory",
-            dir
-        );
-    }
+    // Parquet subdirectories are created on demand when tables are registered
+    // WAL subdirectories are created on demand when data is written
 
     // Verify that session context is available and properly initialized
     let ctx = database.context();
@@ -141,8 +126,6 @@ async fn test_database_initialization_nested_path() -> Result<()> {
     // Verify that the nested directory structure was created
     assert!(nested_path.exists());
     assert!(nested_path.is_dir());
-    assert!(nested_path.join("activity_log").exists());
-    assert!(nested_path.join("page_views").exists());
 
     // Proper cleanup
     let db =
@@ -161,10 +144,10 @@ async fn test_database_initialization_idempotent() -> Result<()> {
     let database1 = Arc::new(Database::new(&db_path).await?);
     let database2 = Arc::new(Database::new(&db_path).await?);
 
-    // Verify directories still exist and are correct
+    // Verify base directory exists and is correct
     let base_path = Path::new(&db_path);
-    assert!(base_path.join("activity_log").exists());
-    assert!(base_path.join("page_views").exists());
+    assert!(base_path.exists());
+    assert!(base_path.is_dir());
 
     // Proper cleanup for both databases
     let db1 = Arc::try_unwrap(database1)
@@ -186,20 +169,20 @@ async fn test_database_initialization_existing_directory() -> Result<()> {
     let base_path = Path::new(&db_path);
     fs::create_dir_all(&base_path).await?;
 
-    // Pre-create one of the expected subdirectories with some content
-    let activity_dir = base_path.join("activity_log");
-    fs::create_dir_all(&activity_dir).await?;
-    fs::write(activity_dir.join("existing_file.txt"), "test content").await?;
+    // Pre-create a parquet subdirectory with some content to test preservation
+    let parquet_dir = base_path.join("parquet");
+    fs::create_dir_all(&parquet_dir).await?;
+    fs::write(parquet_dir.join("existing_file.txt"), "test content").await?;
 
     // Initialize database - should work with existing directories
     let database = Arc::new(Database::new(&db_path).await?);
 
-    // Verify all directories exist
-    assert!(base_path.join("activity_log").exists());
-    assert!(base_path.join("page_views").exists());
+    // Verify base directory exists
+    assert!(base_path.exists());
+    assert!(base_path.is_dir());
 
     // Verify existing content is preserved
-    let existing_file = activity_dir.join("existing_file.txt");
+    let existing_file = parquet_dir.join("existing_file.txt");
     assert!(existing_file.exists());
     let content = fs::read_to_string(existing_file).await?;
     assert_eq!(content, "test content");
@@ -212,28 +195,6 @@ async fn test_database_initialization_existing_directory() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
-async fn test_database_initialization_file_conflict() -> Result<()> {
-    let temp_dir = TempDir::new()?;
-    let db_path = temp_dir.path().to_string_lossy().to_string();
-    let base_path = Path::new(&db_path);
-
-    // Create the base directory
-    fs::create_dir_all(&base_path).await?;
-
-    // Create a file where a directory should be
-    let conflict_path = base_path.join("activity_log");
-    fs::write(&conflict_path, "this is a file, not a directory").await?;
-
-    // Initialize database - should fail due to file conflict
-    let result = Database::new(&db_path).await;
-    assert!(
-        result.is_err(),
-        "Should fail when file exists where directory is expected"
-    );
-
-    Ok(())
-}
 
 #[tokio::test]
 async fn test_timestamp_conversion() -> Result<()> {
@@ -536,7 +497,6 @@ async fn test_datafusion_table_registration() -> Result<()> {
         "activity_log",
         "page_views",
         "clickthroughs",
-        "user_tags",
         "participation",
         "bookmark",
         "join_table",
@@ -553,6 +513,19 @@ async fn test_datafusion_table_registration() -> Result<()> {
             "Table {} should be registered with DataFusion",
             table_name
         );
+        
+        // Also check that WAL and realtime variants exist
+        let wal_table_exists = ctx.table_exist(&format!("{}_wal", table_name)).unwrap_or(false);
+        let realtime_table_exists = ctx.table_exist(&format!("{}_realtime", table_name)).unwrap_or(false);
+        
+        // WAL tables might not exist if no WAL directory exists yet, so we don't assert on these
+        // But we can log their status for debugging
+        if wal_table_exists {
+            println!("✓ {}_wal table is available", table_name);
+        }
+        if realtime_table_exists {
+            println!("✓ {}_realtime view is available", table_name);
+        }
     }
 
     Ok(())

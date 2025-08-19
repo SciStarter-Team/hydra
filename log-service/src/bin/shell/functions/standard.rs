@@ -284,3 +284,89 @@ inventory::submit! {
         function: &InitializeCache,
     }
 }
+
+/// Regenerate summaries function - rebuilds all summary tables from scratch
+pub struct RegenerateSummaries;
+
+impl AnalyticsFunction for RegenerateSummaries {
+    fn name(&self) -> &'static str {
+        "regenerate_summaries"
+    }
+
+    fn description(&self) -> &'static str {
+        "Regenerate all summary tables from scratch using all available parquet data"
+    }
+
+    fn usage_example(&self) -> &'static str {
+        "regenerate_summaries"
+    }
+
+    fn execute(
+        &self,
+        database: Arc<Database>,
+        _parameters: HashMap<String, String>,
+        progress: crate::query_engine::functions::ProgressCallback,
+    ) -> Pin<Box<dyn Future<Output = Result<(Vec<String>, Vec<Vec<String>>)>> + Send + '_>> {
+        Box::pin(async move {
+            use log_service::database::summaries::regenerate_all_summaries;
+
+            progress("Starting full regeneration of summary tables...".to_string());
+
+            let result = regenerate_all_summaries(database).await;
+
+            match result {
+                Ok(_) => {
+                    progress("Summary regeneration completed successfully!".to_string());
+                    
+                    let headers = vec![
+                        "Operation".to_string(),
+                        "Status".to_string(),
+                        "Details".to_string(),
+                    ];
+                    let rows = vec![
+                        vec![
+                            "Regenerate Summaries".to_string(),
+                            "Success".to_string(),
+                            "All summary tables rebuilt from scratch".to_string(),
+                        ]
+                    ];
+                    
+                    Ok((headers, rows))
+                }
+                Err(e) => {
+                    let error_msg = format!("Summary regeneration failed: {}", e);
+                    progress(error_msg.clone());
+                    
+                    let headers = vec![
+                        "Operation".to_string(),
+                        "Status".to_string(),
+                        "Error".to_string(),
+                    ];
+                    let rows = vec![
+                        vec![
+                            "Regenerate Summaries".to_string(),
+                            "Failed".to_string(),
+                            e.to_string(),
+                        ]
+                    ];
+                    
+                    Ok((headers, rows))
+                }
+            }
+        })
+    }
+
+    fn validate(&self, parameters: &HashMap<String, String>) -> Result<()> {
+        // This function takes no parameters
+        if !parameters.is_empty() {
+            return Err(anyhow::anyhow!("regenerate_summaries takes no parameters"));
+        }
+        Ok(())
+    }
+}
+
+inventory::submit! {
+    AnalyticsFunctionRegistration {
+        function: &RegenerateSummaries,
+    }
+}

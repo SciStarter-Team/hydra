@@ -3,6 +3,7 @@ name = "log-service"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.89"
+default-run = "log-service"
 
 [[bin]]
 name = "analytics-shell"

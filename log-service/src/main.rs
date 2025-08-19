@@ -19,9 +19,9 @@ use sync::{bookmark_synchronize, join_synchronize, participation_synchronize};
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize shared database connection (from common)
-    shared::init("log_cahe").await;
+    shared::init("log_cache").await;
 
-    let database_path = std::env::var("DATABASE_URL").expect("DATABASE_URL is not set");
+    let database_path = std::env::var("DATABASE_PATH").expect("DATABASE_PATH is not set");
 
     // Initialize database and table system
     let database = Arc::new(Database::new(database_path).await?);
@@ -39,7 +39,7 @@ async fn main() -> Result<()> {
     let compactor_cancel_clone = compactor_cancel.clone();
     let compactor_database = Arc::clone(&database);
     background_tasks.spawn(async move {
-        if let Err(e) = run_compactor_service(&compactor_database, compactor_cancel_clone).await {
+        if let Err(e) = run_compactor_service(compactor_database, compactor_cancel_clone).await {
             eprintln!("WAL compactor service error: {}", e);
         }
         Ok::<(), anyhow::Error>(())

@@ -10,7 +10,7 @@ use ratatui::{
     },
     prelude::*,
 };
-use std::{io::stdout, path::PathBuf, sync::Arc};
+use std::{io::stdout, sync::Arc};
 
 mod analytics;
 mod functions;
@@ -26,10 +26,6 @@ use self::ui::App;
 #[command(about = "Interactive analytics shell for querying log service data")]
 #[command(version)]
 struct Args {
-    /// Path to the database directory
-    #[arg(short = 'p', long, default_value = "./analytics_data")]
-    database_path: PathBuf,
-
     /// Enable debug mode
     #[arg(short, long)]
     debug: bool,
@@ -42,9 +38,10 @@ async fn main() -> Result<()> {
     // Initialize SQLite connection pool for cache tables (same as main log-service)
     common::shared::init("log_cache").await;
 
+    let database_path = std::env::var("DATABASE_PATH").expect("DATABASE_PATH is not set");
+
     // Initialize database
-    println!("Initializing database at: {}", args.database_path.display());
-    let database = Arc::new(Database::new(args.database_path).await?);
+    let database = Arc::new(Database::new(database_path).await?);
 
     // Initialize query engine
     let query_engine = QueryEngine::new(database.clone()).await?;

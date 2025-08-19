@@ -4,7 +4,6 @@ use log_service::database::{
     table::TableRow,
     tables::{
         ActivityLogRow, BookmarkRow, ClickthroughRow, JoinRow, PageViewRow, ParticipationRow,
-        UserTagsRow,
     },
 };
 use std::sync::Arc;
@@ -27,7 +26,6 @@ async fn test_table_system_initialization() -> Result<()> {
     assert_eq!(database.activity_log.name(), "activity_log");
     assert_eq!(database.page_views.name(), "page_views");
     assert_eq!(database.clickthroughs.name(), "clickthroughs");
-    assert_eq!(database.user_tags.name(), "user_tags");
     assert_eq!(database.join_table.name(), "join_table");
     assert_eq!(database.participation.name(), "participation");
     assert_eq!(database.bookmark.name(), "bookmark");
@@ -182,34 +180,46 @@ async fn test_clickthrough_table() -> Result<()> {
 }
 
 #[tokio::test]
-async fn test_user_tags_table() -> Result<()> {
+async fn test_boolean_and_optional_fields() -> Result<()> {
     let (_temp_dir, database) = setup_full_database().await?;
 
-    // Test UserTagsRow insertion with array field
-    let user_tags_row = UserTagsRow {
-        user_id: "user-tag-test".to_string(),
-        tags: vec![
-            "scientist".to_string(),
-            "educator".to_string(),
-            "volunteer".to_string(),
-        ],
+    // Test JoinRow insertion with all boolean combinations and optional fields
+    let join_row_full = JoinRow {
+        when: "2024-01-15T10:30:45Z".to_string(),
+        entity_id: "entity-full-test".to_string(),
+        user_id: "user-full-test".to_string(),
+        active: true,
+        consented: Some("2024-01-15T10:25:00Z".to_string()),
+        contacted: Some("2024-01-15T10:35:00Z".to_string()),
+        explicit: false,
+        notified: true,
+        activity: "2024-01-15T10:30:45Z".to_string(),
+        reason: "Full field test".to_string(),
     };
 
-    database.user_tags.insert(user_tags_row).await?;
+    database.join_table.insert(join_row_full).await?;
 
-    // Test schema with List type
-    let schema = database.user_tags.schema();
-    assert_eq!(schema.fields().len(), 2);
-    assert_eq!(schema.field(0).name(), "user_id");
-    assert_eq!(schema.field(1).name(), "tags");
+    // Test with minimal fields (None for optional fields)
+    let join_row_minimal = JoinRow {
+        when: "2024-01-15T10:30:46Z".to_string(),
+        entity_id: "entity-minimal-test".to_string(),
+        user_id: "user-minimal-test".to_string(),
+        active: false,
+        consented: None,
+        contacted: None,
+        explicit: false,
+        notified: false,
+        activity: "2024-01-15T10:30:46Z".to_string(),
+        reason: "Minimal field test".to_string(),
+    };
 
-    // Check that tags field is a List type
-    use arrow::datatypes::DataType;
-    if let DataType::List(_) = schema.field(1).data_type() {
-        // This is expected
-    } else {
-        panic!("tags field should be List type");
-    }
+    database.join_table.insert(join_row_minimal).await?;
+
+    // Test schema verification
+    let schema = database.join_table.schema();
+    assert_eq!(schema.fields().len(), 10);
+    assert_eq!(schema.field(0).name(), "when");
+    assert_eq!(schema.field(3).name(), "active");
 
     // Clean shutdown
     let db =
@@ -457,7 +467,6 @@ async fn test_table_system_schema_consistency() -> Result<()> {
     assert_eq!(database.activity_log.schema(), ActivityLogRow::schema());
     assert_eq!(database.page_views.schema(), PageViewRow::schema());
     assert_eq!(database.clickthroughs.schema(), ClickthroughRow::schema());
-    assert_eq!(database.user_tags.schema(), UserTagsRow::schema());
     assert_eq!(database.join_table.schema(), JoinRow::schema());
     assert_eq!(database.participation.schema(), ParticipationRow::schema());
     assert_eq!(database.bookmark.schema(), BookmarkRow::schema());
@@ -487,15 +496,24 @@ async fn test_table_row_serialization() -> Result<()> {
     assert_eq!(activity_row.when, deserialized.when);
     assert_eq!(activity_row.action, deserialized.action);
 
-    let user_tags_row = UserTagsRow {
-        user_id: "user-tags-test".to_string(),
-        tags: vec!["tag1".to_string(), "tag2".to_string()],
+    let join_row = JoinRow {
+        when: "2024-01-15T10:30:45Z".to_string(),
+        entity_id: "entity-serialization-test".to_string(),
+        user_id: "user-serialization-test".to_string(),
+        active: true,
+        consented: Some("2024-01-15T10:25:00Z".to_string()),
+        contacted: None,
+        explicit: false,
+        notified: true,
+        activity: "2024-01-15T10:30:45Z".to_string(),
+        reason: "Serialization test".to_string(),
     };
 
-    let json = serde_json::to_string(&user_tags_row)?;
-    let deserialized: UserTagsRow = serde_json::from_str(&json)?;
-    assert_eq!(user_tags_row.user_id, deserialized.user_id);
-    assert_eq!(user_tags_row.tags, deserialized.tags);
+    let json = serde_json::to_string(&join_row)?;
+    let deserialized: JoinRow = serde_json::from_str(&json)?;
+    assert_eq!(join_row.when, deserialized.when);
+    assert_eq!(join_row.active, deserialized.active);
+    assert_eq!(join_row.consented, deserialized.consented);
 
     Ok(())
 }
@@ -555,14 +573,22 @@ async fn test_table_system_large_data() -> Result<()> {
 
     database.activity_log.insert(large_activity).await?;
 
-    // Test with many tags
-    let many_tags: Vec<String> = (0..1000).map(|i| format!("tag-{}", i)).collect();
-    let large_tags = UserTagsRow {
-        user_id: "user-many-tags".to_string(),
-        tags: many_tags,
+    // Test with large reason field
+    let large_reason = "y".repeat(50000); // 50KB string
+    let large_join = JoinRow {
+        when: "2024-01-15T10:30:45Z".to_string(),
+        entity_id: "entity-large".to_string(),
+        user_id: "user-large-join".to_string(),
+        active: true,
+        consented: Some("2024-01-15T10:25:00Z".to_string()),
+        contacted: None,
+        explicit: true,
+        notified: false,
+        activity: "2024-01-15T10:30:45Z".to_string(),
+        reason: large_reason,
     };
 
-    database.user_tags.insert(large_tags).await?;
+    database.join_table.insert(large_join).await?;
 
     sleep(Duration::from_millis(200)).await;
     // Clean shutdown

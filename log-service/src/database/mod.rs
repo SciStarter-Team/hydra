@@ -1,5 +1,6 @@
 pub mod compactor;
 pub mod storage;
+pub mod summaries;
 pub mod table;
 pub mod tables;
 
@@ -9,3 +10,4 @@ pub use storage::{
 };
 
 pub use compactor::run_compactor_service;
+pub use summaries::update_summary_tables;

@@ -11,26 +11,22 @@ use parquet::file::properties::WriterProperties;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
 use std::sync::Arc;
 use tokio::time::{Duration, interval};
 use tokio_util::sync::CancellationToken;
 
 use crate::database::storage::Database;
-use crate::database::table::TableRow;
-use crate::database::tables::{
-    ActivityLogRow, BookmarkRow, ClickthroughRow, JoinRow, PageViewRow, ParticipationRow,
-};
 
 /// Background service that compacts WAL files to Parquet
 pub struct Compactor {
     base_path: std::path::PathBuf,
     cycle_interval: Duration,
     retention_days: u64,
+    database: Arc<Database>,
 }
 
 impl Compactor {
-    pub fn new(database: &Database) -> Self {
+    pub fn new(database: Arc<Database>) -> Self {
         // Load configuration from environment variables with defaults
         let cycle_seconds = std::env::var("COMPACTOR_CYCLE_SECONDS")
             .ok()
@@ -43,21 +39,22 @@ impl Compactor {
             .unwrap_or(30); // 30 days default
 
         Self::with_config(
-            database.path().clone(),
+            database.clone(),
             Duration::from_secs(cycle_seconds),
             retention_days,
         )
     }
 
     pub fn with_config(
-        base_path: impl AsRef<Path>,
+        database: Arc<Database>,
         cycle_interval: Duration,
         retention_days: u64,
     ) -> Self {
         Self {
-            base_path: base_path.as_ref().to_path_buf(),
+            base_path: database.path().clone(),
             cycle_interval,
             retention_days,
+            database,
         }
     }
 
@@ -76,8 +73,19 @@ impl Compactor {
                         return Ok(());
                     }
 
-                    if let Err(e) = self.compact_all_tables().await {
-                        eprintln!("Compaction error: {}", e);
+                    // Only run summary generation if compaction processed any files
+                    match self.compact_all_tables().await {
+                        Ok(files_processed) => {
+                            if files_processed {
+                                // Update summary tables after successful compaction of new data
+                                if let Err(e) = self.update_summary_tables().await {
+                                    eprintln!("Summary generation error: {}", e);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("Compaction error: {}", e);
+                        }
                     }
 
                     if let Err(e) = self.cleanup_old_processed_files().await {
@@ -92,45 +100,64 @@ impl Compactor {
         }
     }
 
-    /// Compact WAL files for all table types
-    async fn compact_all_tables(&self) -> Result<()> {
-        // Define table mappings
-        let tables = [
-            ("activity_log", ActivityLogRow::schema()),
-            ("page_views", PageViewRow::schema()),
-            ("clickthroughs", ClickthroughRow::schema()),
-            ("join_table", JoinRow::schema()),
-            ("participation", ParticipationRow::schema()),
-            ("bookmark", BookmarkRow::schema()),
-        ];
+    /// Update summary tables after compaction
+    async fn update_summary_tables(&self) -> Result<()> {
+        use crate::database::summaries::update_summary_tables;
 
-        for (table_name, schema) in tables {
-            if let Err(e) = self.compact_table(table_name, &schema).await {
-                eprintln!("Failed to compact table {}: {}", table_name, e);
+        update_summary_tables(self.database.clone()).await
+    }
+
+    /// Compact WAL files for all table types
+    /// Returns true if any table processed files, false otherwise
+    async fn compact_all_tables(&self) -> Result<bool> {
+        use crate::database::table::get_registered_tables;
+
+        let mut any_files_processed = false;
+
+        // Use inventory system to get all registered tables
+        for table_registration in get_registered_tables() {
+            let schema = (table_registration.schema)();
+            match self.compact_table(table_registration.name, &schema).await {
+                Ok(files_processed) => {
+                    if files_processed {
+                        any_files_processed = true;
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Failed to compact table {}: {}", table_registration.name, e);
+                }
             }
         }
 
-        Ok(())
+        Ok(any_files_processed)
     }
 
     /// Compact WAL files for a specific table
-    async fn compact_table(&self, table_name: &str, schema: &Schema) -> Result<()> {
+    /// Returns true if any files were processed, false otherwise  
+    async fn compact_table(&self, table_name: &str, schema: &Schema) -> Result<bool> {
         let wal_dir = self.base_path.join("wal");
         let parquet_dir = self.base_path.join("parquet").join(table_name);
 
         // Create parquet directory if it doesn't exist
         tokio::fs::create_dir_all(&parquet_dir).await?;
 
-        // Find WAL files for this table
+        // Find WAL files for this table in its specific subdirectory
+        let table_wal_dir = wal_dir.join(table_name);
         let wal_pattern = format!("{}_", table_name);
         let mut wal_files = Vec::new();
 
-        if wal_dir.exists() {
-            let mut read_dir = tokio::fs::read_dir(&wal_dir).await?;
+        if table_wal_dir.exists() {
+            let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
+            let mut read_dir = tokio::fs::read_dir(&table_wal_dir).await?;
             while let Some(entry) = read_dir.next_entry().await? {
                 let file_name = entry.file_name().to_string_lossy().to_string();
 
                 if file_name.starts_with(&wal_pattern) && file_name.ends_with(".jsonl") {
+                    // Skip today's WAL files - they may still be receiving writes
+                    if file_name.contains(&format!("_{}.jsonl", today)) {
+                        continue;
+                    }
+
                     // Check if this file has already been processed
                     let parquet_name = file_name.replace(".jsonl", ".parquet");
                     let parquet_path = parquet_dir.join(&parquet_name);
@@ -143,6 +170,7 @@ impl Compactor {
         }
 
         // Process each WAL file
+        let files_processed = !wal_files.is_empty();
         for wal_file in wal_files {
             if let Err(e) = self
                 .process_wal_file_atomically(&wal_file, &parquet_dir, schema)
@@ -152,7 +180,7 @@ impl Compactor {
             }
         }
 
-        Ok(())
+        Ok(files_processed)
     }
 
     /// Atomically process a WAL file: read, convert to Parquet, and move to processed
@@ -598,7 +626,7 @@ impl ArrayBuilder for ListBuilder<StringBuilder> {
 
 /// Run the compactor service
 pub async fn run_compactor_service(
-    database: &Database,
+    database: Arc<Database>,
     cancellation_token: CancellationToken,
 ) -> Result<()> {
     let compactor = Compactor::new(database);

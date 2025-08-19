@@ -167,6 +167,20 @@ impl QueryEngine {
             .collect()
     }
 
+    pub fn get_available_tables(&self) -> Option<Vec<String>> {
+        let ctx = self.database.context();
+        let catalog = ctx.catalog("datafusion")?;
+        let schema = catalog.schema("public")?;
+        
+        let mut table_names = Vec::new();
+        for name in schema.table_names() {
+            table_names.push(name);
+        }
+        
+        table_names.sort();
+        Some(table_names)
+    }
+
     pub fn get_context(&self) -> &datafusion::execution::context::SessionContext {
         self.database.context()
     }

@@ -3,7 +3,6 @@ use log_service::database::{
     storage::Database,
     tables::{
         ActivityLogRow, BookmarkRow, ClickthroughRow, JoinRow, PageViewRow, ParticipationRow,
-        UserTagsRow,
     },
 };
 use std::sync::Arc;
@@ -92,23 +91,6 @@ async fn populate_test_data(database: &Arc<Database>) -> Result<()> {
         database.clickthroughs.insert(clickthrough).await?;
     }
 
-    // Insert user tags data
-    for i in 0..3 {
-        let user_tags = UserTagsRow {
-            user_id: format!("user-{}", i),
-            tags: match i {
-                0 => vec!["scientist".to_string(), "educator".to_string()],
-                1 => vec![
-                    "volunteer".to_string(),
-                    "citizen_scientist".to_string(),
-                    "enthusiast".to_string(),
-                ],
-                2 => vec!["researcher".to_string()],
-                _ => vec![],
-            },
-        };
-        database.user_tags.insert(user_tags).await?;
-    }
 
     // Insert join data
     for i in 0..2 {
@@ -181,7 +163,6 @@ async fn test_complete_database_lifecycle() -> Result<()> {
     assert_eq!(database.activity_log.name(), "activity_log");
     assert_eq!(database.page_views.name(), "page_views");
     assert_eq!(database.clickthroughs.name(), "clickthroughs");
-    assert_eq!(database.user_tags.name(), "user_tags");
     assert_eq!(database.join_table.name(), "join_table");
     assert_eq!(database.participation.name(), "participation");
     assert_eq!(database.bookmark.name(), "bookmark");
@@ -199,7 +180,6 @@ async fn test_complete_database_lifecycle() -> Result<()> {
         format!("activity_log_{}.jsonl", today),
         format!("page_views_{}.jsonl", today),
         format!("clickthroughs_{}.jsonl", today),
-        format!("user_tags_{}.jsonl", today),
         format!("join_table_{}.jsonl", today),
         format!("participation_{}.jsonl", today),
         format!("bookmark_{}.jsonl", today),
@@ -236,18 +216,46 @@ async fn test_complete_database_lifecycle() -> Result<()> {
 async fn test_full_pipeline_with_compaction() -> Result<()> {
     let (_temp_dir, database) = setup_complete_database_system().await?;
 
-    // Step 1: Populate with test data
-    populate_test_data(&database).await?;
-    sleep(Duration::from_millis(200)).await;
-
-    // Step 2: Verify WAL files exist
-    let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
+    // Step 1: Create artificial "yesterday" WAL files with test data
+    let yesterday = "2024-01-14"; // Use a fixed date for deterministic testing
     let wal_dir = database.path().join("wal");
+    tokio::fs::create_dir_all(&wal_dir).await?;
 
-    let activity_wal = wal_dir.join(format!("activity_log_{}.jsonl", today));
-    assert!(activity_wal.exists());
+    // Create sample WAL data for each table type with yesterday's date
+    let sample_activity = serde_json::to_string(&ActivityLogRow {
+        when: "2024-01-15T10:30:00Z".to_string(),
+        action: "test_action".to_string(),
+        user_id: Some("user-123".to_string()),
+        target: Some("target".to_string()),
+        extra: Some("extra".to_string()),
+    })?;
 
-    // Step 3: Run compactor to convert WAL to Parquet
+    let sample_clickthrough = serde_json::to_string(&ClickthroughRow {
+        when: "2024-01-15T10:30:00Z".to_string(),
+        ip_address: "10.0.0.1".to_string(),
+        session_id: "session-123".to_string(),
+        interaction_id: "interaction-123".to_string(),
+        user_id: Some("user-123".to_string()),
+        from_path: "/test".to_string(),
+        to_url: "https://example.com".to_string(),
+        link_type: "external".to_string(),
+        program_id: Some("program-123".to_string()),
+        geolocation: "POINT(0 0)".to_string(),
+    })?;
+
+    // Write test WAL files with yesterday's date
+    let tables_data = [
+        ("activity_log", &sample_activity),
+        ("clickthroughs", &sample_clickthrough),
+    ];
+
+    for (table_name, sample_data) in tables_data {
+        let wal_file = wal_dir.join(format!("{}_{}.jsonl", table_name, yesterday));
+        fs::write(&wal_file, format!("{}
+", sample_data)).await?;
+    }
+
+    // Step 2: Run compactor to convert WAL to Parquet
     let cancellation_token = CancellationToken::new();
     use log_service::database::compactor::Compactor;
     let compactor = Compactor::with_config(database.path().clone(), Duration::from_millis(10), 30);
@@ -257,39 +265,31 @@ async fn test_full_pipeline_with_compaction() -> Result<()> {
         tokio::spawn(async move { compactor.run(token).await })
     };
 
-    // Allow compactor to run at least one cycle
-    sleep(Duration::from_millis(100)).await;
+    // Allow compactor to run several cycles
+    sleep(Duration::from_millis(200)).await;
 
     // Cancel and wait for completion
     cancellation_token.cancel();
     let _ = timeout(Duration::from_secs(5), compactor_task).await;
 
-    // Step 4: Verify Parquet files were created
+    // Step 3: Verify Parquet files were created for the tables we created WAL files for
     let parquet_dir = database.path().join("parquet");
 
-    let table_dirs = [
-        "activity_log",
-        "page_views",
-        "clickthroughs",
-        "user_tags",
-        "join_table",
-        "participation",
-        "bookmark",
-    ];
+    let expected_tables = ["activity_log", "clickthroughs"];
 
-    for table_dir in table_dirs {
-        let table_parquet_dir = parquet_dir.join(table_dir);
+    for table_name in expected_tables {
+        let table_parquet_dir = parquet_dir.join(table_name);
         assert!(
             table_parquet_dir.exists(),
             "Parquet directory should exist for: {}",
-            table_dir
+            table_name
         );
 
-        let parquet_file = table_parquet_dir.join(format!("{}_{}.parquet", table_dir, today));
+        let parquet_file = table_parquet_dir.join(format!("{}_{}.parquet", table_name, yesterday));
         assert!(
             parquet_file.exists(),
             "Parquet file should exist for: {}",
-            table_dir
+            table_name
         );
 
         // Verify file is not empty
@@ -297,23 +297,26 @@ async fn test_full_pipeline_with_compaction() -> Result<()> {
         assert!(
             metadata.len() > 0,
             "Parquet file should not be empty for: {}",
-            table_dir
+            table_name
+        );
+        
+        // Step 4: Verify original WAL file has been moved to processed directory
+        let original_wal = wal_dir.join(format!("{}_{}.jsonl", table_name, yesterday));
+        assert!(
+            !original_wal.exists(),
+            "Original WAL file should be moved after processing: {}",
+            table_name
+        );
+
+        // Verify WAL file is in processed directory
+        let processed_dir = database.path().join("processed");
+        let processed_wal = processed_dir.join(format!("{}_{}.jsonl", table_name, yesterday));
+        assert!(
+            processed_wal.exists(),
+            "Processed WAL file should exist in processed directory for: {}",
+            table_name
         );
     }
-
-    // Step 5: Verify original WAL files have been moved to processed directory after compaction
-    assert!(
-        !activity_wal.exists(),
-        "Original WAL file should be moved after processing"
-    );
-
-    // Verify WAL files are in processed directory
-    let processed_dir = database.path().join("processed");
-    let processed_wal = processed_dir.join(format!("activity_log_{}.jsonl", today));
-    assert!(
-        processed_wal.exists(),
-        "Processed WAL file should exist in processed directory"
-    );
 
     let db =
         Arc::try_unwrap(database).map_err(|_| anyhow::anyhow!("Database still has references"))?;
@@ -363,22 +366,6 @@ async fn test_concurrent_operations_full_system() -> Result<()> {
         })
     };
 
-    let user_tags_task = {
-        let db = Arc::clone(&database);
-        tokio::spawn(async move {
-            for i in 0..10 {
-                let user_tags = UserTagsRow {
-                    user_id: format!("concurrent-tags-user-{}", i),
-                    tags: vec![
-                        format!("tag-{}", i),
-                        format!("category-{}", i % 3),
-                        "concurrent".to_string(),
-                    ],
-                };
-                db.user_tags.insert(user_tags).await.unwrap();
-            }
-        })
-    };
 
     let bookmark_task = {
         let db = Arc::clone(&database);
@@ -414,7 +401,6 @@ async fn test_concurrent_operations_full_system() -> Result<()> {
     tokio::try_join!(
         activity_task,
         page_view_task,
-        user_tags_task,
         bookmark_task,
         bookmark_ops_task
     )?;
@@ -554,20 +540,31 @@ async fn test_error_handling_and_resilience() -> Result<()> {
     };
     database.activity_log.insert(large_activity).await?;
 
-    // Test 3: Insert data with empty arrays
-    let empty_tags = UserTagsRow {
-        user_id: "empty-tags-user".to_string(),
-        tags: vec![],
+    // Test 3: Insert data with empty optional fields
+    let empty_fields = ActivityLogRow {
+        when: "2024-01-15T10:30:45Z".to_string(),
+        action: "empty_fields_test".to_string(),
+        user_id: None,
+        target: None,
+        extra: None,
     };
-    database.user_tags.insert(empty_tags).await?;
+    database.activity_log.insert(empty_fields).await?;
 
-    // Test 4: Insert data with large arrays
-    let many_tags: Vec<String> = (0..100).map(|i| format!("tag-{}", i)).collect();
-    let many_tags_row = UserTagsRow {
-        user_id: "many-tags-user".to_string(),
-        tags: many_tags,
+    // Test 4: Insert data with very long reason field
+    let long_reason = "x".repeat(10000);
+    let long_reason_join = JoinRow {
+        when: "2024-01-15T10:30:45Z".to_string(),
+        entity_id: "long-reason-entity".to_string(),
+        user_id: "long-reason-user".to_string(),
+        active: true,
+        consented: Some("2024-01-15T10:30:45Z".to_string()),
+        contacted: None,
+        explicit: true,
+        notified: false,
+        activity: "2024-01-15T10:30:45Z".to_string(),
+        reason: long_reason,
     };
-    database.user_tags.insert(many_tags_row).await?;
+    database.join_table.insert(long_reason_join).await?;
 
     // Test 5: Bookmark operations with edge cases
     use log_service::database::storage::{get_sync_bookmark, set_sync_bookmark};
@@ -664,7 +661,7 @@ async fn test_compactor_integration_with_live_system() -> Result<()> {
         let token = cancellation_token.clone();
         tokio::spawn(async move {
             use log_service::run_compactor_service;
-            run_compactor_service(&compactor_database, token).await
+            run_compactor_service(compactor_database, token).await
         })
     };
 

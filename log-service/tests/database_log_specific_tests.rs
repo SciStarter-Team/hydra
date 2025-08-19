@@ -3,7 +3,7 @@ use arrow::array::Array;
 use log_service::database::{
     compactor::Compactor,
     storage::Database,
-    tables::{ActivityLogRow, PageViewRow, UserTagsRow},
+    tables::{ActivityLogRow, JoinRow, PageViewRow},
 };
 use std::collections::{HashMap, HashSet};
 use std::sync::{
@@ -279,7 +279,7 @@ async fn test_multi_table_independent_logging() -> Result<()> {
 
     let activity_counter = Arc::new(AtomicU64::new(0));
     let page_view_counter = Arc::new(AtomicU64::new(0));
-    let user_tags_counter = Arc::new(AtomicU64::new(0));
+    let join_counter = Arc::new(AtomicU64::new(0));
 
     // Independent log streams
     let activity_task = {
@@ -328,21 +328,30 @@ async fn test_multi_table_independent_logging() -> Result<()> {
         })
     };
 
-    let user_tags_task = {
+    let join_task = {
         let db = Arc::clone(&database);
-        let counter = Arc::clone(&user_tags_counter);
+        let counter = Arc::clone(&join_counter);
 
         tokio::spawn(async move {
             for i in 0..records_per_table {
-                let user_tags = UserTagsRow {
-                    user_id: format!("independent-tags-user-{}", i),
-                    tags: vec![
-                        format!("independent-tag-{}", i),
-                        "log_stream_test".to_string(),
-                    ],
+                let join = JoinRow {
+                    when: format!("2024-01-15T10:30:{:02}Z", i % 60),
+                    entity_id: format!("independent-entity-{}", i),
+                    user_id: format!("independent-join-user-{}", i),
+                    active: i % 2 == 0,
+                    consented: if i % 3 == 0 {
+                        Some(format!("2024-01-15T10:25:{:02}Z", i % 60))
+                    } else {
+                        None
+                    },
+                    contacted: None,
+                    explicit: true,
+                    notified: i % 5 == 0,
+                    activity: format!("2024-01-15T10:30:{:02}Z", i % 60),
+                    reason: format!("log_stream_test_{}", i),
                 };
 
-                if db.user_tags.insert(user_tags).await.is_ok() {
+                if db.join_table.insert(join).await.is_ok() {
                     counter.fetch_add(1, Ordering::Relaxed);
                 }
             }
@@ -351,18 +360,18 @@ async fn test_multi_table_independent_logging() -> Result<()> {
 
     // Run all log streams concurrently
     let start_time = std::time::Instant::now();
-    let (_activity_result, _page_view_result, _tags_result) =
-        tokio::join!(activity_task, page_view_task, user_tags_task);
+    let (_activity_result, _page_view_result, _join_result) =
+        tokio::join!(activity_task, page_view_task, join_task);
     let duration = start_time.elapsed();
 
     let activity_count = activity_counter.load(Ordering::Relaxed);
     let page_view_count = page_view_counter.load(Ordering::Relaxed);
-    let tags_count = user_tags_counter.load(Ordering::Relaxed);
+    let join_count = join_counter.load(Ordering::Relaxed);
 
     println!("Independent logging test completed in {:?}", duration);
     println!("Activity log entries: {}", activity_count);
     println!("Page view entries: {}", page_view_count);
-    println!("User tags entries: {}", tags_count);
+    println!("Join entries: {}", join_count);
 
     // Force flush all streams
     sleep(Duration::from_millis(6000)).await;
@@ -385,11 +394,11 @@ async fn test_multi_table_independent_logging() -> Result<()> {
             .join(format!("page_views_{}.jsonl", today)),
     )
     .await?;
-    let tags_wal = fs::read_to_string(
+    let join_wal = fs::read_to_string(
         database
             .path()
             .join("wal")
-            .join(format!("user_tags_{}.jsonl", today)),
+            .join(format!("join_table_{}.jsonl", today)),
     )
     .await?;
 
@@ -417,11 +426,11 @@ async fn test_multi_table_independent_logging() -> Result<()> {
     );
 
     assert!(
-        tags_wal.contains("independent-tags-user-"),
+        join_wal.contains("independent-join-user-"),
         "User tags log should contain user tags data"
     );
     assert!(
-        !tags_wal.contains("ACTIVITY_STREAM_DATA_"),
+        !join_wal.contains("ACTIVITY_STREAM_DATA_"),
         "User tags log should not contain activity data"
     );
 

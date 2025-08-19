@@ -17,7 +17,7 @@ async fn setup_temp_database() -> Result<(TempDir, Arc<Database>)> {
 /// Helper to cleanly shutdown a database for tests
 async fn shutdown_database(database: Arc<Database>) -> Result<()> {
     match Arc::try_unwrap(database) {
-        Ok(db) => db.shutdown().await,
+        Ok(db) => Ok(db.shutdown().await?),
         Err(_) => {
             anyhow::bail!("Database still has active references - cannot shutdown cleanly")
         }

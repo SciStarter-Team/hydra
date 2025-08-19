@@ -190,9 +190,6 @@ async fn test_compactor_basic_conversion() -> Result<()> {
     let page_views_parquet = parquet_dir
         .join("page_views")
         .join("page_views_2024-01-15.parquet");
-    let user_tags_parquet = parquet_dir
-        .join("user_tags")
-        .join("user_tags_2024-01-15.parquet");
 
     assert!(
         activity_parquet.exists(),
@@ -201,10 +198,6 @@ async fn test_compactor_basic_conversion() -> Result<()> {
     assert!(
         page_views_parquet.exists(),
         "Page views Parquet file should be created"
-    );
-    assert!(
-        user_tags_parquet.exists(),
-        "User tags Parquet file should be created"
     );
 
     let db =
@@ -486,17 +479,6 @@ async fn test_compactor_array_field_handling() -> Result<()> {
     cancellation_token.cancel();
     let _ = timeout(Duration::from_secs(2), compactor_task).await;
 
-    // Verify Parquet file was created for array data
-    let tags_parquet = database
-        .path()
-        .join("parquet")
-        .join("user_tags")
-        .join("user_tags_2024-01-15.parquet");
-
-    assert!(
-        tags_parquet.exists(),
-        "User tags Parquet file should be created"
-    );
 
     let db =
         Arc::try_unwrap(database).map_err(|_| anyhow::anyhow!("Database still has references"))?;
@@ -587,7 +569,7 @@ async fn test_compactor_graceful_cancellation() -> Result<()> {
     let compactor_task = {
         let token = cancellation_token.clone();
         let db = Arc::clone(&database);
-        tokio::spawn(async move { run_compactor_service(&db, token).await })
+        tokio::spawn(async move { run_compactor_service(db, token).await })
     };
 
     // Allow some time for initial processing
@@ -626,7 +608,7 @@ async fn test_compactor_periodic_processing() -> Result<()> {
     let compactor_task = {
         let token = cancellation_token.clone();
         let db = Arc::clone(&database);
-        tokio::spawn(async move { run_compactor_service(&db, token).await })
+        tokio::spawn(async move { run_compactor_service(db, token).await })
     };
 
     // Create WAL file after compactor is running
@@ -687,7 +669,6 @@ async fn test_compactor_multiple_table_types() -> Result<()> {
     let tables_to_check = [
         ("activity_log", "activity_log_2024-01-15.parquet"),
         ("page_views", "page_views_2024-01-15.parquet"),
-        ("user_tags", "user_tags_2024-01-15.parquet"),
     ];
 
     for (table_name, file_name) in tables_to_check {

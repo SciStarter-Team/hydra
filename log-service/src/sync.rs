@@ -441,8 +441,8 @@ async fn insert_join_as_clickthrough(database: &Database, join: &JoinData) -> Re
     let row = ClickthroughRow {
         when: join.when.clone(),
         ip_address: "0.0.0.0".to_string(),
-        session_id: format!("join-{}", join.id),
-        interaction_id: format!("join-{}", join.id),
+        session_id: "sync".to_string(),
+        interaction_id: "sync".to_string(),
         user_id: Some(join.user_ulid.clone()),
         from_path: "join".to_string(),
         to_url: format!("entity/{}", join.entity_ulid),

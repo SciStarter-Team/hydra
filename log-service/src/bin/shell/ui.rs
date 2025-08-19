@@ -129,8 +129,15 @@ impl App {
             }
         }
 
+        // Get an example table name dynamically
+        let example_table = if let Some(tables) = self.query_engine.get_available_tables() {
+            tables.first().unwrap_or(&"activity_log".to_string()).clone()
+        } else {
+            "activity_log".to_string()
+        };
+
         content.extend(vec![
-            "• SQL: SELECT * FROM activity_log LIMIT 10".to_string(),
+            format!("• SQL: SELECT * FROM {} LIMIT 10", example_table),
             "• Special: help, list, export filename.csv, describe table_name".to_string(),
             "".to_string(),
             "Tab completion is available for functions and SQL keywords.".to_string(),
@@ -194,17 +201,8 @@ impl App {
             "================".to_string(),
         ]);
 
-        // Get tables dynamically from DataFusion context
-        let ctx = self.query_engine.get_context();
-        let mut table_names: Vec<String> = Vec::new();
-
-        // Get table names from the default schema
-        if let Some(catalog) = ctx.catalog("datafusion") {
-            if let Some(schema) = catalog.schema("public") {
-                table_names = schema.table_names();
-                table_names.sort();
-            }
-        }
+        // Get tables dynamically using the QueryEngine method
+        let table_names = self.query_engine.get_available_tables().unwrap_or_default();
 
         if table_names.is_empty() {
             self.display_content.push("No tables available".to_string());
@@ -426,7 +424,7 @@ impl App {
                     Ok(query_result) => {
                         let formatted_result = self
                             .analytics_engine
-                            .format_result_for_display(&query_result, Some(100));
+                            .format_result_for_display(&query_result, Some(100), Some(self.current_terminal_width));
                         self.display_content.extend(formatted_result);
                         self.current_result = Some(query_result.clone());
                         self.status_message = format!(

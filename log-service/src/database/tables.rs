@@ -1,7 +1,7 @@
 use arrow::datatypes::{DataType, Field, Schema};
 use serde::{Deserialize, Serialize};
 
-use super::table::TableRow;
+use super::table::{TableRow, TableRegistration};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActivityLogRow {
@@ -23,6 +23,13 @@ impl TableRow for ActivityLogRow {
             Field::new("target", DataType::Utf8, true),
             Field::new("extra", DataType::Utf8, true),
         ])
+    }
+}
+
+inventory::submit! {
+    TableRegistration {
+        name: ActivityLogRow::TABLE_NAME,
+        schema: ActivityLogRow::schema,
     }
 }
 
@@ -54,6 +61,13 @@ impl TableRow for PageViewRow {
             Field::new("query", DataType::Utf8, true),
             Field::new("geolocation", DataType::Utf8, false),
         ])
+    }
+}
+
+inventory::submit! {
+    TableRegistration {
+        name: PageViewRow::TABLE_NAME,
+        schema: PageViewRow::schema,
     }
 }
 
@@ -90,6 +104,13 @@ impl TableRow for ClickthroughRow {
     }
 }
 
+inventory::submit! {
+    TableRegistration {
+        name: ClickthroughRow::TABLE_NAME,
+        schema: ClickthroughRow::schema,
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JoinRow {
     pub when: String,
@@ -120,6 +141,13 @@ impl TableRow for JoinRow {
             Field::new("activity", DataType::Utf8, false),
             Field::new("reason", DataType::Utf8, false),
         ])
+    }
+}
+
+inventory::submit! {
+    TableRegistration {
+        name: JoinRow::TABLE_NAME,
+        schema: JoinRow::schema,
     }
 }
 
@@ -158,6 +186,13 @@ impl TableRow for ParticipationRow {
     }
 }
 
+inventory::submit! {
+    TableRegistration {
+        name: ParticipationRow::TABLE_NAME,
+        schema: ParticipationRow::schema,
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BookmarkRow {
     pub when: String,
@@ -180,5 +215,12 @@ impl TableRow for BookmarkRow {
             Field::new("activity", DataType::Utf8, false),
             Field::new("contacted", DataType::Utf8, true),
         ])
+    }
+}
+
+inventory::submit! {
+    TableRegistration {
+        name: BookmarkRow::TABLE_NAME,
+        schema: BookmarkRow::schema,
     }
 }
