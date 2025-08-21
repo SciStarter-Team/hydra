@@ -51,6 +51,17 @@ pub struct JoinData {
     pub activity: String, // ISO 8601 timestamp string
     pub kind: i32,
     pub reason: String,
+    pub url: Option<String>,
+    pub slug: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GolinkData {
+    pub when: String,
+    pub slug: String,
+    pub target: String,
+    pub file: String,
+    pub user_ulid: Option<String>,
 }
 
 // Participation sync functions
@@ -374,6 +385,98 @@ pub async fn join_synchronize(database: Arc<Database>, cancellation_token: Cance
     }
 }
 
+pub async fn golink_synchronize(database: Arc<Database>, cancellation_token: CancellationToken) {
+    loop {
+        // Check for cancellation at start of loop
+        if cancellation_token.is_cancelled() {
+            println!("Golink sync cancelled, exiting gracefully");
+            return;
+        }
+        let last = get_sync_bookmark(&database, "golink-sync-bookmark")
+            .await
+            .unwrap_or_else(|_| String::from("1900-01-01T00:00:00Z"));
+        let last_id = get_sync_last_id(&database, "golink-sync-last-id")
+            .await
+            .unwrap_or_else(|_| 0);
+
+        println!("Syncing golinks since {} with last_id {}", last, last_id);
+
+        let sync_token =
+            std::env::var("SYNC_TOKEN").expect("SYNC_TOKEN environment variable must be set");
+        let client = reqwest::Client::new();
+
+        let golinks: Vec<GolinkData> = match client
+            .get("https://scistarter.org/staff/sync/golinks")
+            .bearer_auth(sync_token)
+            .query(&[("since", &last), ("last_id", &last_id.to_string())])
+            .send()
+            .await
+        {
+            Ok(response) => match response.error_for_status() {
+                Ok(resp) => match resp.json().await {
+                    Ok(events) => events,
+                    Err(e) => {
+                        eprintln!("JSON parsing error: {}", e);
+                        sleep(Duration::from_secs(60)).await;
+                        continue;
+                    }
+                },
+                Err(e) => {
+                    eprintln!("HTTP error: {}", e);
+                    sleep(Duration::from_secs(60)).await;
+                    continue;
+                }
+            },
+            Err(e) => {
+                eprintln!("Request error: {}", e);
+                sleep(Duration::from_secs(60)).await;
+                continue;
+            }
+        };
+
+        let got_golinks = golinks.len();
+
+        if got_golinks == 0 {
+            println!("No new golinks to sync");
+        } else {
+            let mut bookmark = last.clone();
+
+            for golink in golinks {
+                if let Err(e) = insert_golink_as_clickthrough(&database, &golink).await {
+                    eprintln!("Failed to insert golink as clickthrough: {}", e);
+                    continue;
+                }
+
+                // Update bookmark to the latest timestamp
+                if golink.when > bookmark {
+                    bookmark = golink.when.clone();
+                }
+
+                println!("Inserted golink {} as clickthrough", golink.slug);
+            }
+
+            set_sync_bookmark(&database, "golink-sync-bookmark", &bookmark)
+                .await
+                .expect("Failed to save sync bookmark");
+        }
+
+        let sleep_duration = if got_golinks == 500 {
+            Duration::from_secs(60)
+        } else {
+            Duration::from_secs(60 * 60)
+        };
+
+        // Use cancellation-aware sleep
+        tokio::select! {
+            _ = sleep(sleep_duration) => {}
+            _ = cancellation_token.cancelled() => {
+                println!("Golink sync cancelled during sleep, exiting gracefully");
+                return;
+            }
+        }
+    }
+}
+
 async fn insert_participation(database: &Database, event: &ParticipationEventData) -> Result<()> {
     use log_service::database::tables::ParticipationRow;
 
@@ -444,10 +547,33 @@ async fn insert_join_as_clickthrough(database: &Database, join: &JoinData) -> Re
         session_id: "sync".to_string(),
         interaction_id: "sync".to_string(),
         user_id: Some(join.user_ulid.clone()),
-        from_path: "join".to_string(),
-        to_url: format!("entity/{}", join.entity_ulid),
+        from_path: format!("/{}", join.slug),
+        to_url: join
+            .url
+            .clone()
+            .unwrap_or_else(|| format!("entity/{}", join.entity_ulid)),
         link_type: "join".to_string(),
         program_id: Some(join.entity_ulid.clone()),
+        geolocation: "POINT(0 0)".to_string(),
+    };
+
+    database.clickthroughs.insert(row).await?;
+    Ok(())
+}
+
+async fn insert_golink_as_clickthrough(database: &Database, golink: &GolinkData) -> Result<()> {
+    use log_service::database::tables::ClickthroughRow;
+
+    let row = ClickthroughRow {
+        when: golink.when.clone(),
+        ip_address: "0.0.0.0".to_string(),
+        session_id: "sync".to_string(),
+        interaction_id: "sync".to_string(),
+        user_id: golink.user_ulid.clone(),
+        from_path: format!("/go/{}", golink.slug),
+        to_url: golink.target.clone(),
+        link_type: "golink".to_string(),
+        program_id: None,
         geolocation: "POINT(0 0)".to_string(),
     };
 

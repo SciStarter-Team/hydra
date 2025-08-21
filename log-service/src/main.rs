@@ -14,7 +14,7 @@ use handlers::{
     handle_join_analytics, handle_page_view, handle_user_emails_update, handle_user_tags_update,
 };
 use log_service::{Database, run_compactor_service};
-use sync::{bookmark_synchronize, join_synchronize, participation_synchronize};
+use sync::{bookmark_synchronize, golink_synchronize, join_synchronize, participation_synchronize};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -33,6 +33,7 @@ async fn main() -> Result<()> {
     let participation_cancel = CancellationToken::new();
     let bookmark_cancel = CancellationToken::new();
     let join_cancel = CancellationToken::new();
+    let golink_cancel = CancellationToken::new();
     let compactor_cancel = CancellationToken::new();
 
     // Spawn WAL compactor service
@@ -66,6 +67,14 @@ async fn main() -> Result<()> {
     let join_database = Arc::clone(&database);
     background_tasks.spawn(async move {
         join_synchronize(join_database, join_cancel_clone).await;
+        Ok::<(), anyhow::Error>(())
+    });
+
+    // Spawn golink sync task
+    let golink_cancel_clone = golink_cancel.clone();
+    let golink_database = Arc::clone(&database);
+    background_tasks.spawn(async move {
+        golink_synchronize(golink_database, golink_cancel_clone).await;
         Ok::<(), anyhow::Error>(())
     });
 
@@ -253,6 +262,7 @@ async fn main() -> Result<()> {
     println!("  - participation sync running in background");
     println!("  - bookmark sync running in background");
     println!("  - join sync running in background");
+    println!("  - golink sync running in background");
     println!("  - WAL compactor running in background");
 
     // Set up signal handling
@@ -320,6 +330,7 @@ async fn main() -> Result<()> {
     participation_cancel.cancel();
     bookmark_cancel.cancel();
     join_cancel.cancel();
+    golink_cancel.cancel();
     compactor_cancel.cancel();
 
     // Wait for critical background tasks to finish gracefully (no force timeout for data safety)
