@@ -1,13 +1,13 @@
 use crate::error::{LogServiceError, Result};
 // Arrow array types imported only when needed for building
-use arrow::array::builder::{
+use datafusion::arrow::array::builder::{
     BooleanBuilder, Float64Builder, Int16Builder, Int32Builder, ListBuilder, StringBuilder,
 };
-use arrow::datatypes::{DataType, Schema};
-use arrow::record_batch::RecordBatch;
-use parquet::arrow::ArrowWriter;
-use parquet::basic::{Compression, ZstdLevel};
-use parquet::file::properties::WriterProperties;
+use datafusion::arrow::datatypes::{DataType, Schema};
+use datafusion::arrow::record_batch::RecordBatch;
+use datafusion::parquet::arrow::ArrowWriter;
+use datafusion::parquet::basic::{Compression, ZstdLevel};
+use datafusion::parquet::file::properties::WriterProperties;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
@@ -567,14 +567,14 @@ impl Compactor {
 /// Trait for dynamic array building
 trait ArrayBuilder: Send {
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
-    fn finish(self: Box<Self>) -> Arc<dyn arrow::array::Array>;
+    fn finish(self: Box<Self>) -> Arc<dyn datafusion::arrow::array::Array>;
 }
 
 impl ArrayBuilder for StringBuilder {
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }
-    fn finish(mut self: Box<Self>) -> Arc<dyn arrow::array::Array> {
+    fn finish(mut self: Box<Self>) -> Arc<dyn datafusion::arrow::array::Array> {
         Arc::new(StringBuilder::finish(&mut *self))
     }
 }
@@ -583,7 +583,7 @@ impl ArrayBuilder for BooleanBuilder {
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }
-    fn finish(mut self: Box<Self>) -> Arc<dyn arrow::array::Array> {
+    fn finish(mut self: Box<Self>) -> Arc<dyn datafusion::arrow::array::Array> {
         Arc::new(BooleanBuilder::finish(&mut *self))
     }
 }
@@ -592,7 +592,7 @@ impl ArrayBuilder for Int16Builder {
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }
-    fn finish(mut self: Box<Self>) -> Arc<dyn arrow::array::Array> {
+    fn finish(mut self: Box<Self>) -> Arc<dyn datafusion::arrow::array::Array> {
         Arc::new(Int16Builder::finish(&mut *self))
     }
 }
@@ -601,7 +601,7 @@ impl ArrayBuilder for Int32Builder {
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }
-    fn finish(mut self: Box<Self>) -> Arc<dyn arrow::array::Array> {
+    fn finish(mut self: Box<Self>) -> Arc<dyn datafusion::arrow::array::Array> {
         Arc::new(Int32Builder::finish(&mut *self))
     }
 }
@@ -610,7 +610,7 @@ impl ArrayBuilder for Float64Builder {
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }
-    fn finish(mut self: Box<Self>) -> Arc<dyn arrow::array::Array> {
+    fn finish(mut self: Box<Self>) -> Arc<dyn datafusion::arrow::array::Array> {
         Arc::new(Float64Builder::finish(&mut *self))
     }
 }
@@ -619,7 +619,7 @@ impl ArrayBuilder for ListBuilder<StringBuilder> {
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }
-    fn finish(mut self: Box<Self>) -> Arc<dyn arrow::array::Array> {
+    fn finish(mut self: Box<Self>) -> Arc<dyn datafusion::arrow::array::Array> {
         Arc::new(ListBuilder::finish(&mut *self))
     }
 }

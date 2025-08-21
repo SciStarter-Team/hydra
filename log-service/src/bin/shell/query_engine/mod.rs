@@ -109,35 +109,35 @@ impl QueryEngine {
         Ok((columns, rows))
     }
 
-    fn extract_value_from_array(&self, array: &dyn arrow::array::Array, row_idx: usize) -> String {
-        use arrow::array::*;
+    fn extract_value_from_array(&self, array: &dyn datafusion::arrow::array::Array, row_idx: usize) -> String {
+        use datafusion::arrow::array::*;
 
         if array.is_null(row_idx) {
             return "NULL".to_string();
         }
 
         match array.data_type() {
-            arrow::datatypes::DataType::Utf8 => {
+            datafusion::arrow::datatypes::DataType::Utf8 => {
                 let string_array = array.as_any().downcast_ref::<StringArray>().unwrap();
                 string_array.value(row_idx).to_string()
             }
-            arrow::datatypes::DataType::Int32 => {
+            datafusion::arrow::datatypes::DataType::Int32 => {
                 let int_array = array.as_any().downcast_ref::<Int32Array>().unwrap();
                 int_array.value(row_idx).to_string()
             }
-            arrow::datatypes::DataType::Int64 => {
+            datafusion::arrow::datatypes::DataType::Int64 => {
                 let int_array = array.as_any().downcast_ref::<Int64Array>().unwrap();
                 int_array.value(row_idx).to_string()
             }
-            arrow::datatypes::DataType::Float64 => {
+            datafusion::arrow::datatypes::DataType::Float64 => {
                 let float_array = array.as_any().downcast_ref::<Float64Array>().unwrap();
                 float_array.value(row_idx).to_string()
             }
-            arrow::datatypes::DataType::Boolean => {
+            datafusion::arrow::datatypes::DataType::Boolean => {
                 let bool_array = array.as_any().downcast_ref::<BooleanArray>().unwrap();
                 bool_array.value(row_idx).to_string()
             }
-            arrow::datatypes::DataType::Timestamp(_, _) => {
+            datafusion::arrow::datatypes::DataType::Timestamp(_, _) => {
                 let timestamp_array = array
                     .as_any()
                     .downcast_ref::<TimestampMicrosecondArray>()

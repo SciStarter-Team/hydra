@@ -1,5 +1,5 @@
 use crate::error::Result;
-use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
+use datafusion::arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use datafusion::arrow::array::StringArray;
 use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::catalog::Session;
@@ -278,7 +278,7 @@ impl SqliteTableProvider {
             .map_err(|e| DataFusionError::External(Box::new(e)))?;
 
         // Build column arrays dynamically based on schema
-        let mut column_arrays: Vec<Arc<dyn arrow::array::Array>> = Vec::new();
+        let mut column_arrays: Vec<Arc<dyn datafusion::arrow::array::Array>> = Vec::new();
 
         for field in self.schema.fields() {
             let mut column_data: Vec<String> = Vec::new();

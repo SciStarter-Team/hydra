@@ -1,12 +1,12 @@
 use crate::error::Result;
 use crate::database::storage::Database;
-use arrow::record_batch::RecordBatch;
+use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::functions::expr_fn::date_trunc;
 use datafusion::functions_aggregate::expr_fn::{count, min};
 use datafusion::prelude::*;
 use jiff::{civil::Date, Timestamp, Span, Zoned};
-use parquet::arrow::ArrowWriter;
-use parquet::file::properties::WriterProperties;
+use datafusion::parquet::arrow::ArrowWriter;
+use datafusion::parquet::file::properties::WriterProperties;
 use std::fs::File;
 use std::path::Path;
 use std::sync::Arc;
@@ -79,7 +79,7 @@ impl SummaryGenerator {
         if let Some(batch) = batches.first() {
             if batch.num_rows() > 0 {
                 if let Some(array) = batch.column_by_name("earliest_date") {
-                    if let Some(timestamp_array) = array.as_any().downcast_ref::<arrow::array::StringArray>() {
+                    if let Some(timestamp_array) = array.as_any().downcast_ref::<datafusion::arrow::array::StringArray>() {
                         if let Some(earliest_str) = timestamp_array.value(0).split('T').next() {
                             return Ok(earliest_str.parse().ok());
                         }
@@ -274,7 +274,7 @@ impl SummaryGenerator {
             for i in 0..batch.num_rows() {
                 // Extract week start date
                 let week_start_str = if let Some(string_array) =
-                    week_start_array.as_any().downcast_ref::<arrow::array::StringArray>()
+                    week_start_array.as_any().downcast_ref::<datafusion::arrow::array::StringArray>()
                 {
                     string_array.value(i).split('T').next().unwrap_or("").to_string()
                 } else {
@@ -347,7 +347,7 @@ impl SummaryGenerator {
         tokio::task::spawn_blocking(move || -> Result<()> {
             let file = File::create(&file_path_clone)?;
             let props = WriterProperties::builder()
-                .set_compression(parquet::basic::Compression::ZSTD(parquet::basic::ZstdLevel::default()))
+                .set_compression(datafusion::parquet::basic::Compression::ZSTD(datafusion::parquet::basic::ZstdLevel::default()))
                 .build();
                 
             let mut writer = ArrowWriter::try_new(file, schema, Some(props))?;

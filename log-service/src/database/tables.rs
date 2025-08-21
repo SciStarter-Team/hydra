@@ -1,4 +1,4 @@
-use arrow::datatypes::{DataType, Field, Schema};
+use datafusion::arrow::datatypes::{DataType, Field, Schema};
 use serde::{Deserialize, Serialize};
 
 use super::table::{TableRow, TableRegistration};

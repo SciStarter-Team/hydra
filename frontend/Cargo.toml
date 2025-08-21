@@ -5,23 +5,23 @@ edition = "2024"
 
 [dependencies]
 common = { version = "0.1.0", path = "../common" }
-async-nats = "0.41.0"
+async-nats = "0.42.0"
 flexbuffers = "25.2.10"
-jiff = { version = "0.2.14", features = ["serde"] }
-object_store = { version = "0.12.1", features = ["aws"] }
-poem = { version = "3.1.10", features = ["sse", "cookie", "csrf", "multipart", "rustls", "session", "static-files", "embed", "i18n", "anyhow"] }
-reqwest = { version = "0.12.15", features = ["json", "rustls-tls"] }
+jiff = { version = "0.2.15", features = ["serde"] }
+object_store = { version = "0.12.3", features = ["aws"] }
+poem = { version = "3.1.12", features = ["sse", "cookie", "csrf", "multipart", "rustls", "session", "static-files", "embed", "i18n", "anyhow"] }
+reqwest = { version = "0.12.23", features = ["json", "rustls-tls"] }
 rust-embed = "8.7.2"
-sailfish = "0.9.0"
+sailfish = "0.10.0"
 serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.140"
+serde_json = "1.0.143"
 #sqlx = { version = "0.8.3", features = ["runtime-tokio", "sqlite", "macros", "migrate", "sqlx-toml"] }
 sqlx = { features = ["runtime-tokio", "sqlite", "macros", "migrate", "sqlx-toml"], path = "/home/djarb/source/others/sqlx/" }
-thiserror = "2.0.12"
-tokio = { version = "1.45.0", features = ["full"] }
+thiserror = "2.0.16"
+tokio = { version = "1.47.1", features = ["full"] }
 ulid = { version = "1.2.1", features = ["serde"] }
 url = { version = "2.5.4", features = ["serde"] }
 base64 = "0.22.1"
 futures = "0.3.31"
-anyhow = "1.0.98"
+anyhow = "1.0.99"
 urlencoding = "2.1.3"

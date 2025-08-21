@@ -1,5 +1,5 @@
 use crate::error::Result;
-use arrow::datatypes::Schema;
+use datafusion::arrow::datatypes::Schema;
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use std::io::BufWriter;

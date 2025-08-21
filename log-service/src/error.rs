@@ -17,7 +17,7 @@ pub enum LogServiceError {
 
     /// Parquet file format errors
     #[error("Parquet error: {0}")]
-    Parquet(#[from] parquet::errors::ParquetError),
+    Parquet(#[from] datafusion::parquet::errors::ParquetError),
 
     /// Object store errors (for file access)
     #[error("Object store error: {0}")]
