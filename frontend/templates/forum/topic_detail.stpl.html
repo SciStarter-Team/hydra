@@ -1,0 +1,82 @@
+<div class="topic-detail">
+  <div class="topic-header">
+    <h4><%= self.topic.title %></h4>
+    <div class="topic-meta">
+      By <%= self.topic.author_handle %> | 
+      <%= self.topic.created_at|disp %>
+      <% if let Some(updated) = &self.topic.updated_at { %>
+        | Updated: <%= updated|disp %>
+      <% } %>
+      <% if let Some(category) = &self.topic.category { %>
+        | Category: <%= category %>
+      <% } %>
+    </div>
+    <% if !self.topic.tags.is_empty() { %>
+      <div class="topic-tags">
+        Tags: 
+        <% for tag in &self.topic.tags { %>
+          <span class="tag"><%= tag %></span>
+        <% } %>
+      </div>
+    <% } %>
+  </div>
+
+  <div class="topic-content">
+    <p><%= self.topic.content %></p>
+  </div>
+
+  <div class="posts-section">
+    <h5>Replies (<%= self.topic.post_count %>)</h5>
+    
+    <% if self.posts.is_empty() { %>
+      <p>No replies yet.</p>
+    <% } else { %>
+      <% for post in &self.posts { %>
+        <div class="post-item">
+          <div class="post-meta">
+            By <%= post.author_handle %> | <%= post.created_at|disp %>
+            <% if let Some(updated) = &post.updated_at { %>
+              | Updated: <%= updated|disp %>
+            <% } %>
+          </div>
+          <div class="post-content">
+            <%= post.content %>
+          </div>
+        </div>
+      <% } %>
+    <% } %>
+
+    <!-- Post pagination -->
+    <div class="pagination">
+      <% if self.has_prev_page { %>
+        <button hx-get="/-forum/topic/<%= self.topic.topic_id|disp %>/page?page=<%= self.page - 1 %>&per_page=<%= self.per_page %>" 
+                hx-target="#topic-<%= self.topic.topic_id|disp %>">Previous</button>
+      <% } %>
+      
+      <% if self.page > 0 || self.has_next_page { %>
+        <span>Page <%= self.page + 1 %></span>
+      <% } %>
+      
+      <% if self.has_next_page { %>
+        <button hx-get="/-forum/topic/<%= self.topic.topic_id|disp %>/page?page=<%= self.page + 1 %>&per_page=<%= self.per_page %>" 
+                hx-target="#topic-<%= self.topic.topic_id|disp %>">Next</button>
+      <% } %>
+    </div>
+
+    <% if self.can_reply { %>
+      <div class="reply-form">
+        <h6>Reply to this topic</h6>
+        <form hx-post="/-forum/create-post" hx-target="#topic-<%= self.topic.topic_id|disp %>">
+          <input type="hidden" name="topic_id" value="<%= self.topic.topic_id|disp %>">
+          
+          <div class="form-field">
+            <label for="content">Your reply:</label>
+            <textarea name="content" rows="3" required></textarea>
+          </div>
+          
+          <button type="submit">Post Reply</button>
+        </form>
+      </div>
+    <% } %>
+  </div>
+</div>

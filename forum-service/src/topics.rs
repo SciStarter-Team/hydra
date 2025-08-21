@@ -1,0 +1,311 @@
+use anyhow::Result;
+use async_nats::service::Request;
+use common::{
+    message::{forum::*, user::{BasicInfo, UserInfo}},
+    service::{log_activity, request},
+    shared::db,
+    ulid::AsUlid,
+};
+use common::timestring::TimeString;
+use sqlx::Row;
+use ulid::Ulid;
+
+pub async fn create_topic(req: &Request) -> Result<TopicInfo> {
+    let message: CreateTopic = flexbuffers::from_slice(&req.message.payload)?;
+    let user_id = message.user_id;
+    let topic_id = Ulid::new();
+    let now = TimeString::now();
+
+    // Check content for bad words
+    let filter_result: ContentFilterResult = 
+        crate::content_filter::check_content_internal(&format!("{}\n{}", message.title, message.content)).await?;
+    
+    if !filter_result.is_allowed {
+        return Err(anyhow::anyhow!("Content contains prohibited words: {:?}", filter_result.flagged_words));
+    }
+
+    let db = db();
+    let mut tx = db.begin().await?;
+
+    // Insert the topic
+    let topic_id_str = topic_id.to_string();
+    let user_id_str = user_id.to_string();
+    let forum_id_str = message.forum_id.to_string();
+    let now_str = now.to_string();
+    sqlx::query!(
+        r#"INSERT INTO "topics" ("topic_id", "forum_id", "title", "content", "author_id", "created_at", "category")
+           VALUES (?, ?, ?, ?, ?, ?, ?)"#,
+        topic_id_str,
+        forum_id_str,
+        message.title,
+        message.content,
+        user_id_str,
+        now_str,
+        message.category
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    // Insert tags
+    for tag in &message.tags {
+        sqlx::query!(
+            r#"INSERT INTO "topic_tags" ("topic_id", "tag") VALUES (?, ?)"#,
+            topic_id_str,
+            tag
+        )
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    tx.commit().await?;
+
+    // Log the activity
+    log_activity(
+        Some(now),
+        "topic_created",
+        Some(user_id),
+        Some(topic_id),
+        Some(serde_json::json!({
+            "title": message.title,
+            "category": message.category
+        }).to_string()),
+    )
+    .await?;
+
+    get_topic_internal(topic_id).await
+}
+
+pub async fn get_topic(req: &Request) -> Result<TopicInfo> {
+    let topic_id_str: String = flexbuffers::from_slice(&req.message.payload)?;
+    let topic_id = topic_id_str.as_ulid()?;
+    get_topic_internal(topic_id).await
+}
+
+async fn get_topic_internal(topic_id: Ulid) -> Result<TopicInfo> {
+    let db = db();
+    let topic_id_str = topic_id.to_string();
+
+    let row = sqlx::query!(
+        r#"SELECT topic_id, forum_id, title, content, author_id, created_at, updated_at, category,
+                  is_pinned, is_locked, is_deleted
+           FROM "topics"
+           WHERE topic_id = ?"#,
+        topic_id_str
+    )
+    .fetch_optional(db)
+    .await?
+    .ok_or_else(|| anyhow::anyhow!("Topic not found"))?;
+
+    // Get post count
+    let post_count = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) FROM "posts" WHERE "topic_id" = ? AND "is_deleted" = 0"#,
+        topic_id_str
+    )
+    .fetch_one(db)
+    .await?;
+
+    // Get tags
+    let tags: Vec<String> = sqlx::query_scalar!(
+        r#"SELECT "tag" FROM "topic_tags" WHERE "topic_id" = ?"#,
+        topic_id_str
+    )
+    .fetch_all(db)
+    .await?;
+
+    // Get user info from user-service
+    let author_info: BasicInfo = request("user.basic_info.by_user_id", row.author_id.clone()).await?;
+
+    Ok(TopicInfo {
+        topic_id,
+        forum_id: row.forum_id.ok_or_else(|| anyhow::anyhow!("Forum ID is null"))?.as_ulid()?,
+        title: row.title,
+        content: row.content,
+        author_id: author_info.user_id,
+        author_handle: author_info.handle,
+        author_is_public: true, // We'll need to extend BasicInfo or create a new message type for public flag
+        created_at: TimeString::try_from(row.created_at)?,
+        updated_at: row.updated_at.as_ref().map(|s| TimeString::try_from(s.clone())).transpose()?,
+        category: row.category,
+        tags,
+        post_count,
+        is_pinned: row.is_pinned == 1,
+        is_locked: row.is_locked == 1,
+        is_deleted: row.is_deleted == 1,
+    })
+}
+
+pub async fn list_topics(req: &Request) -> Result<Vec<TopicInfo>> {
+    let query: TopicListQuery = flexbuffers::from_slice(&req.message.payload)?;
+    let db = db();
+    let limit = query.limit.unwrap_or(50).min(100);
+    let offset = query.offset.unwrap_or(0);
+
+    let order_clause = match query.sort_by {
+        TopicSortBy::CreatedDesc => "ORDER BY created_at DESC",
+        TopicSortBy::CreatedAsc => "ORDER BY created_at ASC", 
+        TopicSortBy::UpdatedDesc => "ORDER BY COALESCE(updated_at, created_at) DESC",
+        TopicSortBy::UpdatedAsc => "ORDER BY COALESCE(updated_at, created_at) ASC",
+        TopicSortBy::PostCount => "ORDER BY created_at DESC", // We'll sort by post count after fetching
+    };
+
+    let mut sql = format!(
+        r#"SELECT topic_id, forum_id, title, content, author_id, created_at, updated_at, category,
+                  is_pinned, is_locked, is_deleted
+           FROM "topics"
+           WHERE is_deleted = 0"#
+    );
+
+    if let Some(category) = &query.category {
+        sql.push_str(&format!(" AND category = '{}'", category));
+    }
+
+    if let Some(search) = &query.search {
+        sql.push_str(&format!(" AND (title LIKE '%{}%' OR content LIKE '%{}%')", search, search));
+    }
+
+    sql.push_str(&format!(" {} LIMIT {} OFFSET {}", order_clause, limit, offset));
+
+    let rows = sqlx::query(&sql).fetch_all(db).await?;
+
+    let mut topics = Vec::new();
+    for row in rows {
+        let topic_id: String = row.get("topic_id");
+        let topic_id = topic_id.as_ulid()?;
+        let topic_id_str = topic_id.to_string();
+
+        // Get tags for this topic
+        let tags: Vec<String> = sqlx::query_scalar!(
+            r#"SELECT "tag" FROM "topic_tags" WHERE "topic_id" = ?"#,
+            topic_id_str
+        )
+        .fetch_all(db)
+        .await?;
+
+        // Filter by tags if specified
+        if !query.tags.is_empty() {
+            let has_matching_tag = query.tags.iter().any(|t| tags.contains(t));
+            if !has_matching_tag {
+                continue;
+            }
+        }
+
+        // Get post count
+        let post_count = sqlx::query_scalar!(
+            r#"SELECT COUNT(*) FROM "posts" WHERE "topic_id" = ? AND "is_deleted" = 0"#,
+            topic_id_str
+        )
+        .fetch_one(db)
+        .await?;
+
+        let author_id: String = row.get("author_id");
+        let author_id = author_id.as_ulid()?;
+
+        // Get user info from user-service
+        let author_info: BasicInfo = request("user.basic_info.by_user_id", author_id.to_string()).await?;
+
+        let forum_id: String = row.get("forum_id");
+        let forum_id = forum_id.as_ulid()?;
+
+        topics.push(TopicInfo {
+            topic_id,
+            forum_id,
+            title: row.get("title"),
+            content: row.get("content"),
+            author_id: author_info.user_id,
+            author_handle: author_info.handle,
+            author_is_public: true, // We'll need to extend BasicInfo or create a new message type for public flag
+            created_at: TimeString::try_from(row.get::<String, _>("created_at"))?,
+            updated_at: row.get::<Option<String>, _>("updated_at").as_ref().map(|s| TimeString::try_from(s.clone())).transpose()?,
+            category: row.get("category"),
+            tags,
+            post_count,
+            is_pinned: row.get::<i32, _>("is_pinned") == 1,
+            is_locked: row.get::<i32, _>("is_locked") == 1,
+            is_deleted: row.get::<i32, _>("is_deleted") == 1,
+        });
+    }
+
+    // Sort by post count if requested
+    if matches!(query.sort_by, TopicSortBy::PostCount) {
+        topics.sort_by(|a, b| b.post_count.cmp(&a.post_count));
+    }
+
+    Ok(topics)
+}
+
+pub async fn update_topic(req: &Request) -> Result<TopicInfo> {
+    let (topic_id_str, update_req): (String, CreateTopic) = flexbuffers::from_slice(&req.message.payload)?;
+    let topic_id = topic_id_str.as_ulid()?;
+    let user_id = update_req.user_id;
+
+    // Check if user owns the topic or has moderation permissions
+    let topic = get_topic_internal(topic_id).await?;
+    
+    // Get user info to check permissions
+    let user_info: BasicInfo = request("user.basic_info.by_user_id", user_id.to_string()).await?;
+    if topic.author_id != user_id && !user_info.is_staff() {
+        return Err(anyhow::anyhow!("Permission denied"));
+    }
+
+    // Check content for bad words
+    let filter_result: ContentFilterResult = 
+        crate::content_filter::check_content_internal(&format!("{}\n{}", update_req.title, update_req.content)).await?;
+    
+    if !filter_result.is_allowed {
+        return Err(anyhow::anyhow!("Content contains prohibited words: {:?}", filter_result.flagged_words));
+    }
+
+    let now = TimeString::now();
+    let now_str = now.to_string();
+    let topic_id_str = topic_id.to_string();
+    let db = db();
+    let mut tx = db.begin().await?;
+
+    // Update the topic
+    sqlx::query!(
+        r#"UPDATE "topics" SET "title" = ?, "content" = ?, "updated_at" = ?, "category" = ?
+           WHERE "topic_id" = ?"#,
+        update_req.title,
+        update_req.content,
+        now_str,
+        update_req.category,
+        topic_id_str
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    // Update tags - delete old ones and insert new ones
+    sqlx::query!(
+        r#"DELETE FROM "topic_tags" WHERE "topic_id" = ?"#,
+        topic_id_str
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    for tag in &update_req.tags {
+        sqlx::query!(
+            r#"INSERT INTO "topic_tags" ("topic_id", "tag") VALUES (?, ?)"#,
+            topic_id_str,
+            tag
+        )
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    tx.commit().await?;
+
+    // Log the activity
+    log_activity(
+        Some(now),
+        "topic_updated",
+        Some(user_id),
+        Some(topic_id),
+        Some(serde_json::json!({
+            "title": update_req.title,
+            "category": update_req.category
+        }).to_string()),
+    )
+    .await?;
+
+    get_topic_internal(topic_id).await
+}

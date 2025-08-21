@@ -125,6 +125,7 @@ fn dynamic() -> impl Endpoint {
         .nest("/-channel", channel::routes())
         .nest("/-ui", ui::routes())
         .nest("/-upload", upload::authenticated_routes())
+        .nest("/-forum", component::forum::forum_endpoints())
         .catch_all_error(error_dispatch)
         .with(middleware::authorization::AuthMiddleware)
         .with(ServerSession::new(

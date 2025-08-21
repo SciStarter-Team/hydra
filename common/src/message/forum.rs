@@ -1,0 +1,153 @@
+use serde::{Deserialize, Serialize};
+use ulid::Ulid;
+use crate::timestring::TimeString;
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CreateTopic {
+    pub user_id: Ulid,
+    pub forum_id: Ulid,
+    pub title: String,
+    pub content: String,
+    pub category: Option<String>,
+    pub tags: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CreatePost {
+    pub user_id: Ulid,
+    pub topic_id: Ulid,
+    pub content: String,
+    pub parent_post_id: Option<Ulid>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TopicInfo {
+    pub topic_id: Ulid,
+    pub forum_id: Ulid,
+    pub title: String,
+    pub content: String,
+    pub author_id: Ulid,
+    pub author_handle: String,
+    pub author_is_public: bool,
+    pub created_at: TimeString,
+    pub updated_at: Option<TimeString>,
+    pub category: Option<String>,
+    pub tags: Vec<String>,
+    pub post_count: i64,
+    pub is_pinned: bool,
+    pub is_locked: bool,
+    pub is_deleted: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PostInfo {
+    pub post_id: Ulid,
+    pub topic_id: Ulid,
+    pub content: String,
+    pub author_id: Ulid,
+    pub author_handle: String,
+    pub author_is_public: bool,
+    pub created_at: TimeString,
+    pub updated_at: Option<TimeString>,
+    pub parent_post_id: Option<Ulid>,
+    pub is_deleted: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TopicListQuery {
+    pub forum_id: Option<Ulid>,
+    pub category: Option<String>,
+    pub tags: Vec<String>,
+    pub search: Option<String>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+    pub sort_by: TopicSortBy,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum TopicSortBy {
+    CreatedDesc,
+    CreatedAsc,
+    UpdatedDesc,
+    UpdatedAsc,
+    PostCount,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PostListQuery {
+    pub topic_id: Ulid,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ModerationAction {
+    pub user_id: Ulid,
+    pub target_type: ModerationTarget,
+    pub target_id: Ulid,
+    pub action: ModerationActionType,
+    pub reason: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum ModerationTarget {
+    Topic,
+    Post,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum ModerationActionType {
+    Delete,
+    Pin,
+    Unpin,
+    Lock,
+    Unlock,
+    Flag,
+}
+
+// Forum management messages
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ForumInfo {
+    pub forum_id: Ulid,
+    pub slug: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub created_at: TimeString,
+    pub updated_at: Option<TimeString>,
+    pub is_active: bool,
+    pub display_order: i32,
+    pub topic_count: i64,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CreateForum {
+    pub user_id: Ulid,
+    pub slug: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub display_order: Option<i32>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct UpdateForum {
+    pub user_id: Ulid,
+    pub forum_id: Ulid,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub display_order: Option<i32>,
+    pub is_active: Option<bool>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ForumListQuery {
+    pub active_only: Option<bool>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ContentFilterResult {
+    pub is_allowed: bool,
+    pub flagged_words: Vec<String>,
+    pub suggested_content: Option<String>,
+}

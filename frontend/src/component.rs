@@ -1,4 +1,5 @@
 pub mod footer;
+pub mod forum;
 pub mod head;
 pub mod header;
 
@@ -6,6 +7,7 @@ use poem::{IntoResponse, Response, web::Html};
 use sailfish::TemplateOnce;
 
 pub use footer::Footer;
+pub use forum::{Forum, TopicDetail};
 pub use head::Head;
 pub use header::Header;
 
