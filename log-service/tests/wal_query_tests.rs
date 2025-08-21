@@ -40,7 +40,7 @@ async fn test_wal_data_queryable() -> Result<()> {
         batches[0]
             .column(0)
             .as_any()
-            .downcast_ref::<arrow::array::Int64Array>()
+            .downcast_ref::<datafusion::arrow::array::Int64Array>()
             .unwrap()
             .value(0)
     } else {
@@ -66,12 +66,12 @@ async fn test_wal_data_queryable() -> Result<()> {
     let action_array = detail_batches[0]
         .column(0)
         .as_any()
-        .downcast_ref::<arrow::array::StringArray>()
+        .downcast_ref::<datafusion::arrow::array::StringArray>()
         .unwrap();
     let extra_array = detail_batches[0]
         .column(1)
         .as_any()
-        .downcast_ref::<arrow::array::StringArray>()
+        .downcast_ref::<datafusion::arrow::array::StringArray>()
         .unwrap();
     
     assert_eq!(action_array.value(0), "test_wal_visibility");

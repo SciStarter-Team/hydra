@@ -208,7 +208,7 @@ pub fn log_activity(
 pub async fn log_pageview(
     when: impl Into<Option<TimeString>>,
     ip_address: impl Into<String>,
-    session_id: impl Into<String>,
+    device_id: impl Into<String>,
     interaction_id: impl Into<String>,
     user_id: impl Into<Option<Ulid>>,
     path: impl Into<String>,
@@ -220,7 +220,7 @@ pub async fn log_pageview(
 
     let when: String = when.into().unwrap_or_else(|| TimeString::now()).into();
     let ip_address: String = ip_address.into();
-    let session_id: String = session_id.into();
+    let device_id: String = device_id.into();
     let interaction_id: String = interaction_id.into();
     let user_id: Option<String> = user_id
         .into()
@@ -249,7 +249,7 @@ pub async fn log_pageview(
         (
             when,
             ip_address,
-            session_id,
+            device_id,
             interaction_id,
             user_id,
             path,
@@ -266,7 +266,7 @@ pub async fn log_pageview(
 pub async fn log_clickthrough(
     when: impl Into<Option<TimeString>>,
     ip_address: impl Into<String>,
-    session_id: impl Into<String>,
+    device_id: impl Into<String>,
     interaction_id: impl Into<String>,
     user_id: impl Into<Option<Ulid>>,
     from_path: impl Into<String>,
@@ -279,7 +279,7 @@ pub async fn log_clickthrough(
 
     let when: String = when.into().unwrap_or_else(|| TimeString::now()).into();
     let ip_address: String = ip_address.into();
-    let session_id: String = session_id.into();
+    let device_id: String = device_id.into();
     let interaction_id: String = interaction_id.into();
     let user_id: Option<String> = user_id
         .into()
@@ -309,7 +309,7 @@ pub async fn log_clickthrough(
         (
             when,
             ip_address,
-            session_id,
+            device_id,
             interaction_id,
             user_id,
             from_path,

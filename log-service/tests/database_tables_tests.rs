@@ -107,7 +107,7 @@ async fn test_page_view_table() -> Result<()> {
     let page_view_row = PageViewRow {
         when: "2024-01-15T10:30:45Z".to_string(),
         ip_address: "192.168.1.1".to_string(),
-        session_id: "session-123".to_string(),
+        device_id: "session-123".to_string(),
         interaction_id: "interaction-456".to_string(),
         user_id: Some("user-789".to_string()),
         path: "/dashboard".to_string(),
@@ -125,7 +125,7 @@ async fn test_page_view_table() -> Result<()> {
     // Test required vs optional fields
     assert!(!schema.field_with_name("when").unwrap().is_nullable());
     assert!(!schema.field_with_name("ip_address").unwrap().is_nullable());
-    assert!(!schema.field_with_name("session_id").unwrap().is_nullable());
+    assert!(!schema.field_with_name("device_id").unwrap().is_nullable());
     assert!(
         !schema
             .field_with_name("interaction_id")
@@ -154,7 +154,7 @@ async fn test_clickthrough_table() -> Result<()> {
     let clickthrough_row = ClickthroughRow {
         when: "2024-01-15T10:30:45Z".to_string(),
         ip_address: "10.0.0.1".to_string(),
-        session_id: "session-abc".to_string(),
+        device_id: "session-abc".to_string(),
         interaction_id: "interaction-def".to_string(),
         user_id: Some("user-xyz".to_string()),
         from_path: "/home".to_string(),
@@ -251,7 +251,7 @@ async fn test_join_table() -> Result<()> {
 
     // Test boolean fields in schema
     let schema = database.join_table.schema();
-    use arrow::datatypes::DataType;
+    use datafusion::arrow::datatypes::DataType;
     assert_eq!(
         schema.field_with_name("active").unwrap().data_type(),
         &DataType::Boolean
@@ -296,7 +296,7 @@ async fn test_participation_table() -> Result<()> {
 
     // Test numeric field types in schema
     let schema = database.participation.schema();
-    use arrow::datatypes::DataType;
+    use datafusion::arrow::datatypes::DataType;
     assert_eq!(
         schema.field_with_name("origin").unwrap().data_type(),
         &DataType::Int16
@@ -384,7 +384,7 @@ async fn test_all_tables_concurrent_inserts() -> Result<()> {
                 let row = PageViewRow {
                     when: format!("2024-01-15T10:{}:00Z", 30 + i),
                     ip_address: format!("192.168.1.{}", i + 1),
-                    session_id: format!("session-{}", i),
+                    device_id: format!("session-{}", i),
                     interaction_id: format!("interaction-{}", i),
                     user_id: Some(format!("user-{}", i)),
                     path: format!("/page-{}", i),
@@ -404,7 +404,7 @@ async fn test_all_tables_concurrent_inserts() -> Result<()> {
                 let row = ClickthroughRow {
                     when: format!("2024-01-15T10:{}:00Z", 30 + i),
                     ip_address: format!("10.0.0.{}", i + 1),
-                    session_id: format!("session-{}", i),
+                    device_id: format!("session-{}", i),
                     interaction_id: format!("interaction-{}", i),
                     user_id: Some(format!("user-{}", i)),
                     from_path: format!("/from-{}", i),
@@ -537,7 +537,7 @@ async fn test_table_row_with_nulls() -> Result<()> {
     let minimal_page_view = PageViewRow {
         when: "2024-01-15T10:30:45Z".to_string(),
         ip_address: "127.0.0.1".to_string(),
-        session_id: "minimal-session".to_string(),
+        device_id: "minimal-session".to_string(),
         interaction_id: "minimal-interaction".to_string(),
         user_id: None,
         path: "/minimal".to_string(),

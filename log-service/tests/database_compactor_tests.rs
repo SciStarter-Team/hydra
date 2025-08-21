@@ -3,7 +3,7 @@ use log_service::database::{
     compactor::{Compactor, run_compactor_service},
     storage::Database,
 };
-use parquet::file::reader::{FileReader, SerializedFileReader};
+use datafusion::parquet::file::reader::{FileReader, SerializedFileReader};
 use std::sync::Arc;
 use tempfile::TempDir;
 use tokio::fs;
@@ -35,8 +35,8 @@ async fn create_test_wal_files(database: &Arc<Database>) -> Result<()> {
     // Create page_views WAL file
     let page_views_wal = wal_dir.join("page_views_2024-01-15.jsonl");
     let page_views_data = vec![
-        r#"{"when":"2024-01-15T10:30:45Z","ip_address":"192.168.1.1","session_id":"session-1","interaction_id":"interaction-1","user_id":"user-1","path":"/home","referrer":"https://example.com","query":"param=value","geolocation":"POINT(-122.4194 37.7749)"}"#,
-        r#"{"when":"2024-01-15T10:31:00Z","ip_address":"192.168.1.2","session_id":"session-2","interaction_id":"interaction-2","user_id":null,"path":"/about","referrer":null,"query":null,"geolocation":"POINT(0 0)"}"#,
+        r#"{"when":"2024-01-15T10:30:45Z","ip_address":"192.168.1.1","device_id":"session-1","interaction_id":"interaction-1","user_id":"user-1","path":"/home","referrer":"https://example.com","query":"param=value","geolocation":"POINT(-122.4194 37.7749)"}"#,
+        r#"{"when":"2024-01-15T10:31:00Z","ip_address":"192.168.1.2","device_id":"session-2","interaction_id":"interaction-2","user_id":null,"path":"/about","referrer":null,"query":null,"geolocation":"POINT(0 0)"}"#,
     ];
     fs::write(&page_views_wal, page_views_data.join("\n")).await?;
 
@@ -57,11 +57,11 @@ async fn test_compactor_creation() -> Result<()> {
     let (_temp_dir, database) = setup_full_database().await?;
 
     // Create compactor instance with default configuration
-    let _compactor = Compactor::new(&database);
+    let _compactor = Compactor::new(database.clone());
 
     // Create compactor with custom configuration
     let _fast_compactor = Compactor::with_config(
-        database.path().clone(),
+        database.clone(),
         Duration::from_secs(1), // 1 second cycle for testing
         1,                      // 1 day retention for testing
     );
@@ -82,7 +82,7 @@ async fn test_compactor_configurable_timing() -> Result<()> {
 
     // Create fast compactor for testing (1 second cycle)
     let compactor = Compactor::with_config(
-        database.path().clone(),
+        database.clone(),
         Duration::from_millis(100), // Very fast cycle for testing
         0,                          // Immediate cleanup for testing
     );
@@ -133,7 +133,7 @@ async fn test_compactor_environment_variables() -> Result<()> {
     }
 
     // Create compactor - should pick up environment variables
-    let _compactor = Compactor::new(&database);
+    let _compactor = Compactor::new(database.clone());
 
     // Clean up environment variables
     unsafe {
@@ -162,7 +162,7 @@ async fn test_compactor_basic_conversion() -> Result<()> {
     let cancellation_token = CancellationToken::new();
 
     // Use a very fast compactor for testing - immediate processing
-    let compactor = Compactor::with_config(database.path().clone(), Duration::from_millis(10), 30);
+    let compactor = Compactor::with_config(database.clone(), Duration::from_millis(10), 30);
 
     // Start compactor and let it run at least one cycle
     let compactor_task = {
@@ -221,7 +221,7 @@ async fn test_compactor_parquet_content() -> Result<()> {
 
     // Run compactor with fast configuration for testing
     let cancellation_token = CancellationToken::new();
-    let compactor = Compactor::with_config(database.path().clone(), Duration::from_millis(10), 30);
+    let compactor = Compactor::with_config(database.clone(), Duration::from_millis(10), 30);
 
     let compactor_task = {
         let token = cancellation_token.clone();
@@ -289,7 +289,7 @@ async fn test_compactor_skips_already_processed() -> Result<()> {
 
     // Run compactor with fast configuration for testing
     let cancellation_token = CancellationToken::new();
-    let compactor = Compactor::with_config(database.path().clone(), Duration::from_millis(10), 30);
+    let compactor = Compactor::with_config(database.clone(), Duration::from_millis(10), 30);
 
     cancellation_token.cancel();
     let _ = timeout(Duration::from_secs(2), compactor.run(cancellation_token)).await;
@@ -321,7 +321,7 @@ async fn test_compactor_handles_empty_wal_files() -> Result<()> {
 
     // Run compactor with fast configuration for testing
     let cancellation_token = CancellationToken::new();
-    let compactor = Compactor::with_config(database.path().clone(), Duration::from_millis(10), 30);
+    let compactor = Compactor::with_config(database.clone(), Duration::from_millis(10), 30);
 
     cancellation_token.cancel();
     let _ = timeout(Duration::from_secs(2), compactor.run(cancellation_token)).await;
@@ -363,7 +363,7 @@ async fn test_compactor_handles_invalid_json() -> Result<()> {
 
     // Run compactor (should skip invalid lines but process valid ones)
     let cancellation_token = CancellationToken::new();
-    let compactor = Compactor::with_config(database.path().clone(), Duration::from_millis(10), 30);
+    let compactor = Compactor::with_config(database.clone(), Duration::from_millis(10), 30);
 
     let compactor_task = {
         let token = cancellation_token.clone();
@@ -416,7 +416,7 @@ async fn test_compactor_handles_whitespace_lines() -> Result<()> {
 
     // Run compactor with fast configuration for testing
     let cancellation_token = CancellationToken::new();
-    let compactor = Compactor::with_config(database.path().clone(), Duration::from_millis(10), 30);
+    let compactor = Compactor::with_config(database.clone(), Duration::from_millis(10), 30);
 
     let compactor_task = {
         let token = cancellation_token.clone();
@@ -464,7 +464,7 @@ async fn test_compactor_array_field_handling() -> Result<()> {
 
     // Run compactor with fast configuration for testing
     let cancellation_token = CancellationToken::new();
-    let compactor = Compactor::with_config(database.path().clone(), Duration::from_millis(10), 30);
+    let compactor = Compactor::with_config(database.clone(), Duration::from_millis(10), 30);
 
     // Start compactor and let it run at least one cycle
     let compactor_task = {
@@ -516,7 +516,7 @@ async fn test_compactor_compression() -> Result<()> {
 
     // Run compactor
     let cancellation_token = CancellationToken::new();
-    let compactor = Compactor::with_config(database.path().clone(), Duration::from_millis(50), 30);
+    let compactor = Compactor::with_config(database.clone(), Duration::from_millis(50), 30);
 
     let compactor_task = {
         let token = cancellation_token.clone();
@@ -649,7 +649,7 @@ async fn test_compactor_multiple_table_types() -> Result<()> {
 
     // Run compactor with fast configuration for testing
     let cancellation_token = CancellationToken::new();
-    let compactor = Compactor::with_config(database.path().clone(), Duration::from_millis(10), 30);
+    let compactor = Compactor::with_config(database.clone(), Duration::from_millis(10), 30);
 
     let compactor_task = {
         let token = cancellation_token.clone();
@@ -727,7 +727,7 @@ async fn test_compactor_directory_creation() -> Result<()> {
 
     // Run compactor for at least one cycle
     let cancellation_token = CancellationToken::new();
-    let compactor = Compactor::with_config(database.path().clone(), Duration::from_millis(100), 30);
+    let compactor = Compactor::with_config(database.clone(), Duration::from_millis(100), 30);
 
     let compactor_task = {
         let token = cancellation_token.clone();
@@ -791,7 +791,7 @@ async fn test_compactor_wal_cleanup_with_retention() -> Result<()> {
     // Run compactor with immediate cleanup
     let cancellation_token = CancellationToken::new();
     let compactor = Compactor::with_config(
-        database.path().clone(),
+        database.clone(),
         Duration::from_millis(100), // Fast cycle
         0,                          // 0 days retention - immediate cleanup
     );
@@ -819,7 +819,7 @@ async fn test_compactor_with_different_configurations() -> Result<()> {
 
     // Test compactor with very fast configuration
     let fast_compactor = log_service::database::compactor::Compactor::with_config(
-        database.path().clone(),
+        database.clone(),
         Duration::from_millis(10), // Very fast cycle
         1,                         // 1 day retention
     );
@@ -846,7 +846,7 @@ async fn test_compactor_with_different_configurations() -> Result<()> {
 
     // Test compactor with slow configuration
     let slow_compactor = log_service::database::compactor::Compactor::with_config(
-        database.path().clone(),
+        database.clone(),
         Duration::from_secs(3600), // 1 hour cycle
         365,                       // 1 year retention
     );

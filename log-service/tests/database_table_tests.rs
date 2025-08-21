@@ -1,5 +1,5 @@
 use anyhow::Result;
-use arrow::datatypes::{DataType, Field, Schema};
+use datafusion::arrow::datatypes::{DataType, Field, Schema};
 use log_service::database::table::{Table, TableRow};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;

@@ -37,7 +37,7 @@ inventory::submit! {
 pub struct PageViewRow {
     pub when: String,
     pub ip_address: String,
-    pub session_id: String,
+    pub device_id: String,
     pub interaction_id: String,
     pub user_id: Option<String>,
     pub path: String,
@@ -53,7 +53,7 @@ impl TableRow for PageViewRow {
         Schema::new(vec![
             Field::new("when", DataType::Utf8, false),
             Field::new("ip_address", DataType::Utf8, false),
-            Field::new("session_id", DataType::Utf8, false),
+            Field::new("device_id", DataType::Utf8, false),
             Field::new("interaction_id", DataType::Utf8, false),
             Field::new("user_id", DataType::Utf8, true),
             Field::new("path", DataType::Utf8, false),
@@ -75,7 +75,7 @@ inventory::submit! {
 pub struct ClickthroughRow {
     pub when: String,
     pub ip_address: String,
-    pub session_id: String,
+    pub device_id: String,
     pub interaction_id: String,
     pub user_id: Option<String>,
     pub from_path: String,
@@ -92,7 +92,7 @@ impl TableRow for ClickthroughRow {
         Schema::new(vec![
             Field::new("when", DataType::Utf8, false),
             Field::new("ip_address", DataType::Utf8, false),
-            Field::new("session_id", DataType::Utf8, false),
+            Field::new("device_id", DataType::Utf8, false),
             Field::new("interaction_id", DataType::Utf8, false),
             Field::new("user_id", DataType::Utf8, true),
             Field::new("from_path", DataType::Utf8, false),

@@ -544,7 +544,7 @@ async fn insert_join_as_clickthrough(database: &Database, join: &JoinData) -> Re
     let row = ClickthroughRow {
         when: join.when.clone(),
         ip_address: "0.0.0.0".to_string(),
-        session_id: "sync".to_string(),
+        device_id: "sync".to_string(),
         interaction_id: "sync".to_string(),
         user_id: Some(join.user_ulid.clone()),
         from_path: format!("/{}", join.slug),
@@ -567,7 +567,7 @@ async fn insert_golink_as_clickthrough(database: &Database, golink: &GolinkData)
     let row = ClickthroughRow {
         when: golink.when.clone(),
         ip_address: "0.0.0.0".to_string(),
-        session_id: "sync".to_string(),
+        device_id: "sync".to_string(),
         interaction_id: "sync".to_string(),
         user_id: golink.user_ulid.clone(),
         from_path: format!("/go/{}", golink.slug),

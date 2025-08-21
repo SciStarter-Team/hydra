@@ -47,7 +47,7 @@ async fn test_compaction_respects_date_boundaries() -> Result<()> {
     assert!(yesterday_wal.exists(), "Yesterday's WAL file should exist");
     
     // === Run compactor ===
-    let compactor = Compactor::with_config(database.path().clone(), Duration::from_millis(50), 30);
+    let compactor = Compactor::with_config(database.clone(), Duration::from_millis(50), 30);
     let cancel_token = CancellationToken::new();
     
     let compactor_task = {
@@ -93,7 +93,7 @@ async fn test_compaction_respects_date_boundaries() -> Result<()> {
         yesterday_batches[0]
             .column(0)
             .as_any()
-            .downcast_ref::<arrow::array::Int64Array>()
+            .downcast_ref::<datafusion::arrow::array::Int64Array>()
             .unwrap()
             .value(0)
     } else {
@@ -107,7 +107,7 @@ async fn test_compaction_respects_date_boundaries() -> Result<()> {
         today_parquet_batches[0]
             .column(0)
             .as_any()
-            .downcast_ref::<arrow::array::Int64Array>()
+            .downcast_ref::<datafusion::arrow::array::Int64Array>()
             .unwrap()
             .value(0)
     } else {
@@ -121,7 +121,7 @@ async fn test_compaction_respects_date_boundaries() -> Result<()> {
         today_realtime_batches[0]
             .column(0)
             .as_any()
-            .downcast_ref::<arrow::array::Int64Array>()
+            .downcast_ref::<datafusion::arrow::array::Int64Array>()
             .unwrap()
             .value(0)
     } else {

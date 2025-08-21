@@ -1,8 +1,11 @@
 use std::sync::Arc;
 
-use common::message::user::UserInfo;
+use common::{
+    message::user::UserInfo,
+    service::log_pageview,
+};
 use jiff::{ToSpan, Zoned};
-use poem::{Endpoint, FromRequest, Middleware, session::Session};
+use poem::{Endpoint, FromRequest, Middleware, session::Session, web::RealIp};
 use ulid::Ulid;
 
 use super::authorization::Authenticated;
@@ -89,29 +92,47 @@ impl<E: Endpoint> Endpoint for AnalyticsMiddlewareEndpoint<E> {
 
         let device = session_device(session);
         let interaction = session_interaction(session);
-
-        let method = req.method().to_string();
+        
         let uri = req.uri();
         let path = uri.path();
-        let query = uri.query();
+        let query = uri.query().map(|q| q.to_string());
         let user_info = req
             .extensions()
             .get::<Authenticated>()
             .cloned()
             .unwrap_or_default();
 
-        common::service::send(
-            "log.view",
-            (
-                method,
-                path,
-                query,
-                &interaction,
-                &device,
-                user_info.user_id(),
-            ),
-        )
-        .await?;
+        // Try to extract IP address - if it fails, we'll skip logging but continue
+        match RealIp::from_request_without_body(&req).await {
+            Ok(RealIp(client_ip)) => {
+                let ip_address = client_ip.map(|ip| ip.to_string()).unwrap_or_else(|| "0.0.0.0".to_string());
+                
+                // Extract referrer header
+                let referrer = req
+                    .headers()
+                    .get("referer")
+                    .and_then(|h| h.to_str().ok())
+                    .map(|s| s.to_string());
+
+                // Log the page view
+                if let Err(e) = log_pageview(
+                    None, // when - let it use current time
+                    ip_address,
+                    &device,
+                    &interaction,
+                    user_info.user_id(),
+                    path,
+                    referrer,
+                    query,
+                    None, // geolocation - let it resolve from IP
+                ).await {
+                    eprintln!("Failed to log page view: {}", e);
+                }
+            }
+            Err(e) => {
+                eprintln!("AnalyticsMiddleware: Failed to extract IP address: {}", e);
+            }
+        }
 
         let extensions = req.extensions_mut();
         extensions.insert(Device(Arc::new(device)));

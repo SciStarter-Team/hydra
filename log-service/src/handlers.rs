@@ -39,14 +39,14 @@ pub async fn handle_page_view(
     database: Arc<Database>,
     req: &async_nats::service::Request,
 ) -> Result<()> {
-    let (when, ip_address, session_id, interaction_id, user_id, path, referrer, query, geolocation): (String, String, String, String, Option<String>, String, Option<String>, Option<String>, String) = decode_structured_message(req.message.clone())?;
+    let (when, ip_address, device_id, interaction_id, user_id, path, referrer, query, geolocation): (String, String, String, String, Option<String>, String, Option<String>, Option<String>, String) = decode_structured_message(req.message.clone())?;
 
     use log_service::database::tables::PageViewRow;
 
     let row = PageViewRow {
         when,
         ip_address,
-        session_id,
+        device_id,
         interaction_id,
         user_id,
         path,
@@ -67,7 +67,7 @@ pub async fn handle_clickthrough(
     let (
         when,
         ip_address,
-        session_id,
+        device_id,
         interaction_id,
         user_id,
         from_path,
@@ -93,7 +93,7 @@ pub async fn handle_clickthrough(
     let row = ClickthroughRow {
         when,
         ip_address,
-        session_id,
+        device_id,
         interaction_id,
         user_id,
         from_path,

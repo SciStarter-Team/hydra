@@ -24,7 +24,7 @@ async fn test_wal_table_isolation() -> Result<()> {
     let clickthrough_data = ClickthroughRow {
         when: "2024-01-15T10:30:00Z".to_string(),
         ip_address: "10.0.0.1".to_string(),
-        session_id: "session-123".to_string(),
+        device_id: "session-123".to_string(),
         interaction_id: "interaction-123".to_string(),
         user_id: Some("user-123".to_string()),
         from_path: "/test".to_string(),
@@ -38,7 +38,7 @@ async fn test_wal_table_isolation() -> Result<()> {
     let page_view_data = PageViewRow {
         when: "2024-01-15T10:35:00Z".to_string(),
         ip_address: "192.168.1.1".to_string(),
-        session_id: "session-456".to_string(),
+        device_id: "session-456".to_string(),
         interaction_id: "interaction-456".to_string(),
         user_id: Some("user-789".to_string()),
         path: "/dashboard".to_string(),
@@ -69,11 +69,11 @@ async fn test_wal_table_isolation() -> Result<()> {
     
     // Verify it contains the expected clickthrough data
     let ip_column = clickthrough_batch.column_by_name("ip_address").unwrap();
-    let ip_array = ip_column.as_any().downcast_ref::<arrow::array::StringArray>().unwrap();
+    let ip_array = ip_column.as_any().downcast_ref::<datafusion::arrow::array::StringArray>().unwrap();
     assert_eq!(ip_array.value(0), "10.0.0.1", "Clickthroughs WAL should contain clickthrough IP");
     
-    let session_column = clickthrough_batch.column_by_name("session_id").unwrap();
-    let session_array = session_column.as_any().downcast_ref::<arrow::array::StringArray>().unwrap();
+    let session_column = clickthrough_batch.column_by_name("device_id").unwrap();
+    let session_array = session_column.as_any().downcast_ref::<datafusion::arrow::array::StringArray>().unwrap();
     assert_eq!(session_array.value(0), "session-123", "Clickthroughs WAL should contain clickthrough session");
     
     // Test that page_views_wal only contains page view data
@@ -90,15 +90,15 @@ async fn test_wal_table_isolation() -> Result<()> {
     
     // Verify it contains the expected page view data
     let ip_column = page_view_batch.column_by_name("ip_address").unwrap();
-    let ip_array = ip_column.as_any().downcast_ref::<arrow::array::StringArray>().unwrap();
+    let ip_array = ip_column.as_any().downcast_ref::<datafusion::arrow::array::StringArray>().unwrap();
     assert_eq!(ip_array.value(0), "192.168.1.1", "Page views WAL should contain page view IP");
     
-    let session_column = page_view_batch.column_by_name("session_id").unwrap();
-    let session_array = session_column.as_any().downcast_ref::<arrow::array::StringArray>().unwrap();
+    let session_column = page_view_batch.column_by_name("device_id").unwrap();
+    let session_array = session_column.as_any().downcast_ref::<datafusion::arrow::array::StringArray>().unwrap();
     assert_eq!(session_array.value(0), "session-456", "Page views WAL should contain page view session");
     
     let path_column = page_view_batch.column_by_name("path").unwrap();
-    let path_array = path_column.as_any().downcast_ref::<arrow::array::StringArray>().unwrap();
+    let path_array = path_column.as_any().downcast_ref::<datafusion::arrow::array::StringArray>().unwrap();
     assert_eq!(path_array.value(0), "/dashboard", "Page views WAL should contain page view path");
     
     println!("✓ WAL table isolation test passed - no data intermixing detected");
@@ -115,7 +115,7 @@ async fn test_realtime_table_isolation() -> Result<()> {
     let clickthrough_data = ClickthroughRow {
         when: "2024-01-15T11:00:00Z".to_string(),
         ip_address: "10.1.1.1".to_string(),
-        session_id: "click-session".to_string(),
+        device_id: "click-session".to_string(),
         interaction_id: "click-interaction".to_string(),
         user_id: Some("click-user".to_string()),
         from_path: "/click-from".to_string(),
@@ -128,7 +128,7 @@ async fn test_realtime_table_isolation() -> Result<()> {
     let page_view_data = PageViewRow {
         when: "2024-01-15T11:05:00Z".to_string(),
         ip_address: "10.2.2.2".to_string(),
-        session_id: "page-session".to_string(),
+        device_id: "page-session".to_string(),
         interaction_id: "page-interaction".to_string(),
         user_id: Some("page-user".to_string()),
         path: "/page-path".to_string(),
@@ -147,7 +147,7 @@ async fn test_realtime_table_isolation() -> Result<()> {
     
     // Test clickthroughs_realtime contains only clickthrough data
     let click_realtime = ctx
-        .sql("SELECT ip_address, session_id, from_path FROM clickthroughs_realtime")
+        .sql("SELECT ip_address, device_id, from_path FROM clickthroughs_realtime")
         .await?
         .collect()
         .await?;
@@ -156,12 +156,12 @@ async fn test_realtime_table_isolation() -> Result<()> {
     assert_eq!(click_realtime[0].num_rows(), 1);
     
     let ip_array = click_realtime[0].column_by_name("ip_address").unwrap()
-        .as_any().downcast_ref::<arrow::array::StringArray>().unwrap();
+        .as_any().downcast_ref::<datafusion::arrow::array::StringArray>().unwrap();
     assert_eq!(ip_array.value(0), "10.1.1.1");
     
     // Test page_views_realtime contains only page view data
     let page_realtime = ctx
-        .sql("SELECT ip_address, session_id, path FROM page_views_realtime")
+        .sql("SELECT ip_address, device_id, path FROM page_views_realtime")
         .await?
         .collect()
         .await?;
@@ -170,11 +170,11 @@ async fn test_realtime_table_isolation() -> Result<()> {
     assert_eq!(page_realtime[0].num_rows(), 1);
     
     let ip_array = page_realtime[0].column_by_name("ip_address").unwrap()
-        .as_any().downcast_ref::<arrow::array::StringArray>().unwrap();
+        .as_any().downcast_ref::<datafusion::arrow::array::StringArray>().unwrap();
     assert_eq!(ip_array.value(0), "10.2.2.2");
     
     let path_array = page_realtime[0].column_by_name("path").unwrap()
-        .as_any().downcast_ref::<arrow::array::StringArray>().unwrap();
+        .as_any().downcast_ref::<datafusion::arrow::array::StringArray>().unwrap();
     assert_eq!(path_array.value(0), "/page-path");
     
     println!("✓ Realtime table isolation test passed - union queries correctly isolated");

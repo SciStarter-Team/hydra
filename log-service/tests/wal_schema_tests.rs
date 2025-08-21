@@ -40,7 +40,7 @@ async fn test_wal_table_schema_alignment() -> Result<()> {
     let sample_clickthrough = serde_json::to_string(&ClickthroughRow {
         when: "2024-01-15T10:30:00Z".to_string(),
         ip_address: "10.0.0.1".to_string(),
-        session_id: "session-123".to_string(),
+        device_id: "session-123".to_string(),
         interaction_id: "interaction-123".to_string(),
         user_id: Some("user-123".to_string()),
         from_path: "/test".to_string(),
@@ -53,7 +53,7 @@ async fn test_wal_table_schema_alignment() -> Result<()> {
     let sample_page_view = serde_json::to_string(&PageViewRow {
         when: "2024-01-15T10:30:00Z".to_string(),
         ip_address: "192.168.1.1".to_string(),
-        session_id: "session-123".to_string(),
+        device_id: "session-123".to_string(),
         interaction_id: "interaction-456".to_string(),
         user_id: Some("user-789".to_string()),
         path: "/dashboard".to_string(),
@@ -187,7 +187,7 @@ async fn test_wal_nullable_fields() -> Result<()> {
     let clickthrough_with_nulls = serde_json::to_string(&ClickthroughRow {
         when: "2024-01-15T10:30:00Z".to_string(),
         ip_address: "0.0.0.0".to_string(),        // Use placeholder for required fields
-        session_id: "unknown".to_string(),         // Use placeholder for required fields  
+        device_id: "unknown".to_string(),         // Use placeholder for required fields  
         interaction_id: "unknown".to_string(),     // Use placeholder for required fields
         user_id: None,          // nullable
         from_path: "/unknown".to_string(),         // Use placeholder for required fields

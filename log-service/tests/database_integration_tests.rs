@@ -47,7 +47,7 @@ async fn populate_test_data(database: &Arc<Database>) -> Result<()> {
         let page_view = PageViewRow {
             when: format!("2024-01-15T10:{}:00Z", 30 + i),
             ip_address: format!("192.168.1.{}", i + 1),
-            session_id: format!("session-{}", i),
+            device_id: format!("session-{}", i),
             interaction_id: format!("interaction-{}", i),
             user_id: Some(format!("user-{}", i)),
             path: format!("/page-{}", i),
@@ -71,7 +71,7 @@ async fn populate_test_data(database: &Arc<Database>) -> Result<()> {
         let clickthrough = ClickthroughRow {
             when: format!("2024-01-15T10:{}:00Z", 30 + i),
             ip_address: format!("10.0.0.{}", i + 1),
-            session_id: format!("click-session-{}", i),
+            device_id: format!("click-session-{}", i),
             interaction_id: format!("click-interaction-{}", i),
             user_id: Some(format!("user-{}", i)),
             from_path: format!("/from-{}", i),
@@ -233,7 +233,7 @@ async fn test_full_pipeline_with_compaction() -> Result<()> {
     let sample_clickthrough = serde_json::to_string(&ClickthroughRow {
         when: "2024-01-15T10:30:00Z".to_string(),
         ip_address: "10.0.0.1".to_string(),
-        session_id: "session-123".to_string(),
+        device_id: "session-123".to_string(),
         interaction_id: "interaction-123".to_string(),
         user_id: Some("user-123".to_string()),
         from_path: "/test".to_string(),
@@ -258,7 +258,7 @@ async fn test_full_pipeline_with_compaction() -> Result<()> {
     // Step 2: Run compactor to convert WAL to Parquet
     let cancellation_token = CancellationToken::new();
     use log_service::database::compactor::Compactor;
-    let compactor = Compactor::with_config(database.path().clone(), Duration::from_millis(10), 30);
+    let compactor = Compactor::with_config(database.clone(), Duration::from_millis(10), 30);
 
     let compactor_task = {
         let token = cancellation_token.clone();
@@ -353,7 +353,7 @@ async fn test_concurrent_operations_full_system() -> Result<()> {
                 let page_view = PageViewRow {
                     when: format!("2024-01-15T10:{}:{}Z", 30 + i / 60, i % 60),
                     ip_address: format!("10.0.{}.{}", i / 10, i % 10),
-                    session_id: format!("concurrent-session-{}", i),
+                    device_id: format!("concurrent-session-{}", i),
                     interaction_id: format!("concurrent-interaction-{}", i),
                     user_id: Some(format!("concurrent-user-{}", i % 3)),
                     path: format!("/concurrent-page-{}", i),

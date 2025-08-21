@@ -1,5 +1,5 @@
 use anyhow::Result;
-use arrow::array::Array;
+use datafusion::arrow::array::Array;
 use log_service::database::{
     compactor::Compactor,
     storage::Database,
@@ -56,7 +56,7 @@ async fn test_wal_to_parquet_compaction_integrity() -> Result<()> {
             let page_view = PageViewRow {
                 when: format!("2024-01-15T10:{:02}:{:02}Z", (i / 60) % 60, i % 60),
                 ip_address: format!("192.168.1.{}", (i % 255) + 1),
-                session_id: format!("compaction-session-{}", i),
+                device_id: format!("compaction-session-{}", i),
                 interaction_id: format!("compaction-interaction-{}", i),
                 user_id: Some(format!("compaction-user-{}", i % 20)),
                 path: format!("/compaction/{}", i),
@@ -94,7 +94,7 @@ async fn test_wal_to_parquet_compaction_integrity() -> Result<()> {
     println!("WAL contains {} lines before compaction", wal_lines.len());
 
     // Start compactor with fast cycle time
-    let compactor = Compactor::with_config(database.path().clone(), Duration::from_millis(100), 1);
+    let compactor = Compactor::with_config(database.clone(), Duration::from_millis(100), 1);
 
     // Create cancellation token and run compactor in background
     let cancellation_token = CancellationToken::new();
@@ -136,7 +136,7 @@ async fn test_wal_to_parquet_compaction_integrity() -> Result<()> {
             let record_count = batches[0]
                 .column(0)
                 .as_any()
-                .downcast_ref::<arrow::array::Int64Array>()
+                .downcast_ref::<datafusion::arrow::array::Int64Array>()
                 .unwrap()
                 .value(0);
 
@@ -312,7 +312,7 @@ async fn test_multi_table_independent_logging() -> Result<()> {
                 let page_view = PageViewRow {
                     when: format!("2024-01-15T10:30:{:02}Z", i % 60),
                     ip_address: format!("192.168.2.{}", (i % 255) + 1),
-                    session_id: format!("independent-session-{}", i),
+                    device_id: format!("independent-session-{}", i),
                     interaction_id: format!("independent-interaction-{}", i),
                     user_id: Some(format!("pageview-user-{}", i)),
                     path: format!("/independent/{}", i),
@@ -483,7 +483,7 @@ async fn test_compaction_data_preservation() -> Result<()> {
     sleep(Duration::from_millis(6000)).await;
 
     // Start compactor with aggressive settings to force compaction
-    let compactor = Compactor::with_config(database.path().clone(), Duration::from_millis(50), 1); // Very aggressive
+    let compactor = Compactor::with_config(database.clone(), Duration::from_millis(50), 1); // Very aggressive
 
     // Create cancellation token and run compactor in background
     let cancellation_token = CancellationToken::new();
@@ -514,7 +514,7 @@ async fn test_compaction_data_preservation() -> Result<()> {
         let extra_array = batch
             .column(1)
             .as_any()
-            .downcast_ref::<arrow::array::StringArray>()
+            .downcast_ref::<datafusion::arrow::array::StringArray>()
             .unwrap();
 
         for i in 0..extra_array.len() {
