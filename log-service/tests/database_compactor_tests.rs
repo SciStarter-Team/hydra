@@ -1,9 +1,9 @@
 use anyhow::Result;
+use datafusion::parquet::file::reader::{FileReader, SerializedFileReader};
 use log_service::database::{
     compactor::{Compactor, run_compactor_service},
     storage::Database,
 };
-use datafusion::parquet::file::reader::{FileReader, SerializedFileReader};
 use std::sync::Arc;
 use tempfile::TempDir;
 use tokio::fs;
@@ -478,7 +478,6 @@ async fn test_compactor_array_field_handling() -> Result<()> {
     // Cancel after processing
     cancellation_token.cancel();
     let _ = timeout(Duration::from_secs(2), compactor_task).await;
-
 
     let db =
         Arc::try_unwrap(database).map_err(|_| anyhow::anyhow!("Database still has references"))?;

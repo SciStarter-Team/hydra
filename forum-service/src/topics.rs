@@ -1,14 +1,49 @@
 use anyhow::Result;
 use async_nats::service::Request;
+use common::timestring::TimeString;
 use common::{
-    message::{forum::*, user::{BasicInfo, UserInfo}},
+    message::{
+        forum::*,
+        user::{BasicInfo, UserInfo},
+    },
     service::{log_activity, request},
     shared::db,
     ulid::AsUlid,
 };
-use common::timestring::TimeString;
 use sqlx::Row;
+use std::collections::HashSet;
 use ulid::Ulid;
+
+fn normalize_title(title: &str) -> HashSet<String> {
+    let stop_words = [
+        "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by",
+        "is", "are", "was", "were", "be", "been", "have", "has", "had", "do", "does", "did",
+        "will", "would", "could", "should", "may", "might", "can", "what", "why", "how", "when",
+        "where", "who", "which",
+    ];
+
+    title
+        .to_lowercase()
+        .split_whitespace()
+        .map(|word| word.trim_matches(|c: char| !c.is_alphanumeric()))
+        .filter(|word| word.len() > 2 && !stop_words.contains(word))
+        .map(|word| word.to_string())
+        .collect()
+}
+
+fn titles_similar(title1: &str, title2: &str) -> bool {
+    let words1 = normalize_title(title1);
+    let words2 = normalize_title(title2);
+
+    if words1.is_empty() || words2.is_empty() {
+        return false;
+    }
+
+    let overlap = words1.intersection(&words2).count();
+    let min_words = words1.len().min(words2.len());
+
+    overlap as f32 / min_words as f32 >= 0.7
+}
 
 pub async fn create_topic(req: &Request) -> Result<TopicInfo> {
     let message: CreateTopic = flexbuffers::from_slice(&req.message.payload)?;
@@ -16,15 +51,40 @@ pub async fn create_topic(req: &Request) -> Result<TopicInfo> {
     let topic_id = Ulid::new();
     let now = TimeString::now();
 
-    // Check content for bad words
-    let filter_result: ContentFilterResult = 
-        crate::content_filter::check_content_internal(&format!("{}\n{}", message.title, message.content)).await?;
-    
-    if !filter_result.is_allowed {
-        return Err(anyhow::anyhow!("Content contains prohibited words: {:?}", filter_result.flagged_words));
+    // Check for similar topics in the same forum (last 100 topics for performance)
+    let db = db();
+    let forum_id_str = message.forum_id.to_string();
+    let recent_topics = sqlx::query!(
+        r#"SELECT "title" FROM "topics" 
+           WHERE "forum_id" = ? AND "is_deleted" = 0 
+           ORDER BY "created_at" DESC 
+           LIMIT 100"#,
+        forum_id_str
+    )
+    .fetch_all(db)
+    .await?;
+
+    for existing_topic in &recent_topics {
+        if titles_similar(&message.title, &existing_topic.title) {
+            return Err(anyhow::anyhow!(
+                "A similar topic already exists: '{}'",
+                existing_topic.title
+            ));
+        }
     }
 
-    let db = db();
+    // Check content for bad words
+    let filter_result: ContentFilterResult = crate::content_filter::check_content_internal(
+        &format!("{}\n{}", message.title, message.content),
+    )
+    .await?;
+
+    if !filter_result.is_allowed {
+        return Err(anyhow::anyhow!(
+            "Content contains prohibited words: {:?}",
+            filter_result.flagged_words
+        ));
+    }
     let mut tx = db.begin().await?;
 
     // Insert the topic
@@ -65,10 +125,13 @@ pub async fn create_topic(req: &Request) -> Result<TopicInfo> {
         "topic_created",
         Some(user_id),
         Some(topic_id),
-        Some(serde_json::json!({
-            "title": message.title,
-            "category": message.category
-        }).to_string()),
+        Some(
+            serde_json::json!({
+                "title": message.title,
+                "category": message.category
+            })
+            .to_string(),
+        ),
     )
     .await?;
 
@@ -113,18 +176,26 @@ async fn get_topic_internal(topic_id: Ulid) -> Result<TopicInfo> {
     .await?;
 
     // Get user info from user-service
-    let author_info: BasicInfo = request("user.basic_info.by_user_id", row.author_id.clone()).await?;
+    let author_info: BasicInfo =
+        request("user.basic_info.by_user_id", row.author_id.clone()).await?;
 
     Ok(TopicInfo {
         topic_id,
-        forum_id: row.forum_id.ok_or_else(|| anyhow::anyhow!("Forum ID is null"))?.as_ulid()?,
+        forum_id: row
+            .forum_id
+            .ok_or_else(|| anyhow::anyhow!("Forum ID is null"))?
+            .as_ulid()?,
         title: row.title,
         content: row.content,
         author_id: author_info.user_id,
-        author_handle: author_info.handle,
-        author_is_public: true, // We'll need to extend BasicInfo or create a new message type for public flag
+        author_handle: author_info.display_handle().to_string(),
+        author_is_public: !author_info.is_private(),
         created_at: TimeString::try_from(row.created_at)?,
-        updated_at: row.updated_at.as_ref().map(|s| TimeString::try_from(s.clone())).transpose()?,
+        updated_at: row
+            .updated_at
+            .as_ref()
+            .map(|s| TimeString::try_from(s.clone()))
+            .transpose()?,
         category: row.category,
         tags,
         post_count,
@@ -142,7 +213,7 @@ pub async fn list_topics(req: &Request) -> Result<Vec<TopicInfo>> {
 
     let order_clause = match query.sort_by {
         TopicSortBy::CreatedDesc => "ORDER BY created_at DESC",
-        TopicSortBy::CreatedAsc => "ORDER BY created_at ASC", 
+        TopicSortBy::CreatedAsc => "ORDER BY created_at ASC",
         TopicSortBy::UpdatedDesc => "ORDER BY COALESCE(updated_at, created_at) DESC",
         TopicSortBy::UpdatedAsc => "ORDER BY COALESCE(updated_at, created_at) ASC",
         TopicSortBy::PostCount => "ORDER BY created_at DESC", // We'll sort by post count after fetching
@@ -160,10 +231,16 @@ pub async fn list_topics(req: &Request) -> Result<Vec<TopicInfo>> {
     }
 
     if let Some(search) = &query.search {
-        sql.push_str(&format!(" AND (title LIKE '%{}%' OR content LIKE '%{}%')", search, search));
+        sql.push_str(&format!(
+            " AND (title LIKE '%{}%' OR content LIKE '%{}%')",
+            search, search
+        ));
     }
 
-    sql.push_str(&format!(" {} LIMIT {} OFFSET {}", order_clause, limit, offset));
+    sql.push_str(&format!(
+        " {} LIMIT {} OFFSET {}",
+        order_clause, limit, offset
+    ));
 
     let rows = sqlx::query(&sql).fetch_all(db).await?;
 
@@ -201,7 +278,8 @@ pub async fn list_topics(req: &Request) -> Result<Vec<TopicInfo>> {
         let author_id = author_id.as_ulid()?;
 
         // Get user info from user-service
-        let author_info: BasicInfo = request("user.basic_info.by_user_id", author_id.to_string()).await?;
+        let author_info: BasicInfo =
+            request("user.basic_info.by_user_id", author_id.to_string()).await?;
 
         let forum_id: String = row.get("forum_id");
         let forum_id = forum_id.as_ulid()?;
@@ -212,10 +290,14 @@ pub async fn list_topics(req: &Request) -> Result<Vec<TopicInfo>> {
             title: row.get("title"),
             content: row.get("content"),
             author_id: author_info.user_id,
-            author_handle: author_info.handle,
-            author_is_public: true, // We'll need to extend BasicInfo or create a new message type for public flag
+            author_handle: author_info.display_handle().to_string(),
+            author_is_public: !author_info.is_private(),
             created_at: TimeString::try_from(row.get::<String, _>("created_at"))?,
-            updated_at: row.get::<Option<String>, _>("updated_at").as_ref().map(|s| TimeString::try_from(s.clone())).transpose()?,
+            updated_at: row
+                .get::<Option<String>, _>("updated_at")
+                .as_ref()
+                .map(|s| TimeString::try_from(s.clone()))
+                .transpose()?,
             category: row.get("category"),
             tags,
             post_count,
@@ -234,13 +316,14 @@ pub async fn list_topics(req: &Request) -> Result<Vec<TopicInfo>> {
 }
 
 pub async fn update_topic(req: &Request) -> Result<TopicInfo> {
-    let (topic_id_str, update_req): (String, CreateTopic) = flexbuffers::from_slice(&req.message.payload)?;
+    let (topic_id_str, update_req): (String, CreateTopic) =
+        flexbuffers::from_slice(&req.message.payload)?;
     let topic_id = topic_id_str.as_ulid()?;
     let user_id = update_req.user_id;
 
     // Check if user owns the topic or has moderation permissions
     let topic = get_topic_internal(topic_id).await?;
-    
+
     // Get user info to check permissions
     let user_info: BasicInfo = request("user.basic_info.by_user_id", user_id.to_string()).await?;
     if topic.author_id != user_id && !user_info.is_staff() {
@@ -248,11 +331,16 @@ pub async fn update_topic(req: &Request) -> Result<TopicInfo> {
     }
 
     // Check content for bad words
-    let filter_result: ContentFilterResult = 
-        crate::content_filter::check_content_internal(&format!("{}\n{}", update_req.title, update_req.content)).await?;
-    
+    let filter_result: ContentFilterResult = crate::content_filter::check_content_internal(
+        &format!("{}\n{}", update_req.title, update_req.content),
+    )
+    .await?;
+
     if !filter_result.is_allowed {
-        return Err(anyhow::anyhow!("Content contains prohibited words: {:?}", filter_result.flagged_words));
+        return Err(anyhow::anyhow!(
+            "Content contains prohibited words: {:?}",
+            filter_result.flagged_words
+        ));
     }
 
     let now = TimeString::now();
@@ -300,12 +388,82 @@ pub async fn update_topic(req: &Request) -> Result<TopicInfo> {
         "topic_updated",
         Some(user_id),
         Some(topic_id),
-        Some(serde_json::json!({
-            "title": update_req.title,
-            "category": update_req.category
-        }).to_string()),
+        Some(
+            serde_json::json!({
+                "title": update_req.title,
+                "category": update_req.category
+            })
+            .to_string(),
+        ),
     )
     .await?;
 
     get_topic_internal(topic_id).await
+}
+
+pub async fn suggest_similar_topics(req: &Request) -> Result<Vec<TopicInfo>> {
+    let (forum_id_str, title): (String, String) = flexbuffers::from_slice(&req.message.payload)?;
+    let db = db();
+
+    let recent_topics = sqlx::query!(
+        r#"SELECT "topic_id", "title" FROM "topics" 
+           WHERE "forum_id" = ? AND "is_deleted" = 0 
+           ORDER BY "created_at" DESC 
+           LIMIT 100"#,
+        forum_id_str
+    )
+    .fetch_all(db)
+    .await?;
+
+    let mut similar_topics = Vec::new();
+
+    for topic_row in recent_topics {
+        if titles_similar(&title, &topic_row.title) {
+            if let Some(topic_id_str) = &topic_row.topic_id {
+                if let Ok(topic_id) = topic_id_str.as_ulid() {
+                    if let Ok(topic_info) = get_topic_internal(topic_id).await {
+                        similar_topics.push(topic_info);
+                        if similar_topics.len() >= 5 {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(similar_topics)
+}
+
+pub async fn get_user_topics(req: &Request) -> Result<Vec<TopicInfo>> {
+    let (user_id_str, limit, offset): (String, Option<i32>, Option<i32>) =
+        flexbuffers::from_slice(&req.message.payload)?;
+    let db = db();
+    let limit = limit.unwrap_or(20).min(50) as i64;
+    let offset = offset.unwrap_or(0) as i64;
+
+    let rows = sqlx::query!(
+        r#"SELECT topic_id FROM "topics" 
+           WHERE "author_id" = ? AND "is_deleted" = 0 
+           ORDER BY "created_at" DESC 
+           LIMIT ? OFFSET ?"#,
+        user_id_str,
+        limit,
+        offset
+    )
+    .fetch_all(db)
+    .await?;
+
+    let mut topics = Vec::new();
+    for row in rows {
+        if let Some(topic_id_str) = &row.topic_id {
+            if let Ok(topic_id) = topic_id_str.as_ulid() {
+                if let Ok(topic_info) = get_topic_internal(topic_id).await {
+                    topics.push(topic_info);
+                }
+            }
+        }
+    }
+
+    Ok(topics)
 }

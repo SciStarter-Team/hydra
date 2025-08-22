@@ -71,6 +71,8 @@ pub struct BasicInfo {
     pub handle: String,
     pub is_staff: bool,
     pub is_superuser: bool,
+    pub public: bool,
+    pub protected: bool,
 }
 
 impl UserInfo for Unauthenticated {
@@ -88,6 +90,22 @@ impl UserInfo for Unauthenticated {
 
     fn is_superuser(&self) -> bool {
         false
+    }
+}
+
+impl BasicInfo {
+    pub fn is_private(&self) -> bool {
+        !self.public || self.protected
+    }
+
+    pub fn display_handle(&self) -> &str {
+        if self.is_private() {
+            "Private"
+        } else if self.handle.trim().is_empty() {
+            "Nemo" // Maybe this should just be "No Handle", "Nemo" is kind of quirky
+        } else {
+            &self.handle
+        }
     }
 }
 

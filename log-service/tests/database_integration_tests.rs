@@ -91,7 +91,6 @@ async fn populate_test_data(database: &Arc<Database>) -> Result<()> {
         database.clickthroughs.insert(clickthrough).await?;
     }
 
-
     // Insert join data
     for i in 0..2 {
         let join = JoinRow {
@@ -251,8 +250,15 @@ async fn test_full_pipeline_with_compaction() -> Result<()> {
 
     for (table_name, sample_data) in tables_data {
         let wal_file = wal_dir.join(format!("{}_{}.jsonl", table_name, yesterday));
-        fs::write(&wal_file, format!("{}
-", sample_data)).await?;
+        fs::write(
+            &wal_file,
+            format!(
+                "{}
+",
+                sample_data
+            ),
+        )
+        .await?;
     }
 
     // Step 2: Run compactor to convert WAL to Parquet
@@ -299,7 +305,7 @@ async fn test_full_pipeline_with_compaction() -> Result<()> {
             "Parquet file should not be empty for: {}",
             table_name
         );
-        
+
         // Step 4: Verify original WAL file has been moved to processed directory
         let original_wal = wal_dir.join(format!("{}_{}.jsonl", table_name, yesterday));
         assert!(
@@ -365,7 +371,6 @@ async fn test_concurrent_operations_full_system() -> Result<()> {
             }
         })
     };
-
 
     let bookmark_task = {
         let db = Arc::clone(&database);

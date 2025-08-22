@@ -271,11 +271,11 @@ impl AnalyticsEngine {
 
         // Table is too wide - need to intelligently distribute space
         let target_content_width = available_width.saturating_sub(separator_width);
-        
+
         // Strategy: Proportional reduction with minimum widths
         let min_col_width = 8; // Minimum readable width
         let num_cols = col_widths.len();
-        
+
         // Ensure we can fit at least minimum widths
         if target_content_width < num_cols * min_col_width {
             // Terminal too narrow, fall back to minimum widths
@@ -288,14 +288,14 @@ impl AnalyticsEngine {
         // Proportional reduction while respecting minimums
         let reduction_factor = target_content_width as f64 / total_content_width as f64;
         let mut remaining_width = target_content_width;
-        
+
         // First pass: apply proportional reduction with minimum constraint
         for width in col_widths.iter_mut() {
             let proposed_width = (*width as f64 * reduction_factor).round() as usize;
             *width = proposed_width.max(min_col_width);
             remaining_width = remaining_width.saturating_sub(*width);
         }
-        
+
         // Second pass: distribute any remaining width to columns that aren't at minimum
         while remaining_width > 0 {
             let mut distributed = false;

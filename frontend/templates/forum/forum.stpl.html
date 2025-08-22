@@ -49,7 +49,11 @@
                hx-target="#topic-<%= topic.topic_id|disp %>" hx-trigger="click">
             <h4><%= topic.title %></h4>
             <div class="topic-meta">
-              By <%= topic.author_handle %> | 
+              By <% if topic.author_is_public { %>
+                <a href="/-forum/user/<%= topic.author_id|disp %>/profile" class="profile-link"><%= topic.author_handle %></a>
+              <% } else { %>
+                <%= topic.author_handle %>
+              <% } %> | 
               <%= topic.created_at|disp %> | 
               <%= topic.post_count %> posts
               <% if !topic.tags.is_empty() { %>

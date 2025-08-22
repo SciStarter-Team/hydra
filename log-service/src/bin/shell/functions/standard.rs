@@ -317,39 +317,35 @@ impl AnalyticsFunction for RegenerateSummaries {
             match result {
                 Ok(_) => {
                     progress("Summary regeneration completed successfully!".to_string());
-                    
+
                     let headers = vec![
                         "Operation".to_string(),
                         "Status".to_string(),
                         "Details".to_string(),
                     ];
-                    let rows = vec![
-                        vec![
-                            "Regenerate Summaries".to_string(),
-                            "Success".to_string(),
-                            "All summary tables rebuilt from scratch".to_string(),
-                        ]
-                    ];
-                    
+                    let rows = vec![vec![
+                        "Regenerate Summaries".to_string(),
+                        "Success".to_string(),
+                        "All summary tables rebuilt from scratch".to_string(),
+                    ]];
+
                     Ok((headers, rows))
                 }
                 Err(e) => {
                     let error_msg = format!("Summary regeneration failed: {}", e);
                     progress(error_msg.clone());
-                    
+
                     let headers = vec![
                         "Operation".to_string(),
                         "Status".to_string(),
                         "Error".to_string(),
                     ];
-                    let rows = vec![
-                        vec![
-                            "Regenerate Summaries".to_string(),
-                            "Failed".to_string(),
-                            e.to_string(),
-                        ]
-                    ];
-                    
+                    let rows = vec![vec![
+                        "Regenerate Summaries".to_string(),
+                        "Failed".to_string(),
+                        e.to_string(),
+                    ]];
+
                     Ok((headers, rows))
                 }
             }

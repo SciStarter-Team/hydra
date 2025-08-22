@@ -1,28 +1,84 @@
 use anyhow::Result;
 use async_nats::service::Request;
+use common::timestring::TimeString;
 use common::{
-    message::{forum::*, user::{BasicInfo, UserInfo}},
+    message::{
+        forum::*,
+        user::{BasicInfo, UserInfo},
+    },
     service::{log_activity, request},
     shared::db,
     ulid::AsUlid,
 };
-use common::timestring::TimeString;
 use ulid::Ulid;
+
+async fn check_moderation_permissions(user_id: Ulid, forum_id: &str) -> Result<bool> {
+    let user_info: BasicInfo = request("user.basic_info.by_user_id", user_id.to_string()).await?;
+
+    // Staff members can moderate any forum
+    if user_info.is_staff() {
+        return Ok(true);
+    }
+
+    // Users can moderate their own personal forum (where user_id == forum_id)
+    let user_id_str = user_id.to_string();
+    if forum_id == user_id_str {
+        return Ok(true);
+    }
+
+    // Check if user is a forum-specific moderator
+    let db = db();
+    let result = sqlx::query!(
+        r#"SELECT "forum_id" FROM "forum_moderators" WHERE "forum_id" = ? AND "user_id" = ?"#,
+        forum_id,
+        user_id_str
+    )
+    .fetch_optional(db)
+    .await?;
+
+    Ok(result.is_some())
+}
 
 pub async fn moderate_content(req: &Request) -> Result<()> {
     let action: ModerationAction = flexbuffers::from_slice(&req.message.payload)?;
     let user_id = action.user_id;
-    
-    // Get user info to check permissions
-    let user_info: BasicInfo = request("user.basic_info.by_user_id", user_id.to_string()).await?;
-    if !user_info.is_staff() {
+
+    let db = db();
+    let target_id_str = action.target_id.to_string();
+
+    // Get forum_id based on target type and ID
+    let forum_id = match action.target_type {
+        ModerationTarget::Topic => {
+            let row = sqlx::query!(
+                r#"SELECT "forum_id" FROM "topics" WHERE "topic_id" = ?"#,
+                target_id_str
+            )
+            .fetch_one(db)
+            .await?;
+            row.forum_id
+                .ok_or_else(|| anyhow::anyhow!("Topic has no associated forum"))?
+        }
+        ModerationTarget::Post => {
+            let row = sqlx::query!(
+                r#"SELECT t."forum_id" FROM "posts" p 
+                   JOIN "topics" t ON p."topic_id" = t."topic_id" 
+                   WHERE p."post_id" = ?"#,
+                target_id_str
+            )
+            .fetch_one(db)
+            .await?;
+            row.forum_id
+                .ok_or_else(|| anyhow::anyhow!("Post's topic has no associated forum"))?
+        }
+    };
+
+    // Check permissions for this specific forum
+    if !check_moderation_permissions(user_id, &forum_id).await? {
         return Err(anyhow::anyhow!("Permission denied"));
     }
 
     let now = TimeString::now();
     let log_id = Ulid::new();
-    let target_id_str = action.target_id.to_string();
-    let db = db();
 
     match action.target_type {
         ModerationTarget::Topic => {
@@ -34,7 +90,7 @@ pub async fn moderate_content(req: &Request) -> Result<()> {
                     )
                     .execute(db)
                     .await?;
-                },
+                }
                 ModerationActionType::Pin => {
                     sqlx::query!(
                         r#"UPDATE "topics" SET "is_pinned" = 1 WHERE "topic_id" = ?"#,
@@ -42,7 +98,7 @@ pub async fn moderate_content(req: &Request) -> Result<()> {
                     )
                     .execute(db)
                     .await?;
-                },
+                }
                 ModerationActionType::Unpin => {
                     sqlx::query!(
                         r#"UPDATE "topics" SET "is_pinned" = 0 WHERE "topic_id" = ?"#,
@@ -50,7 +106,7 @@ pub async fn moderate_content(req: &Request) -> Result<()> {
                     )
                     .execute(db)
                     .await?;
-                },
+                }
                 ModerationActionType::Lock => {
                     sqlx::query!(
                         r#"UPDATE "topics" SET "is_locked" = 1 WHERE "topic_id" = ?"#,
@@ -58,7 +114,7 @@ pub async fn moderate_content(req: &Request) -> Result<()> {
                     )
                     .execute(db)
                     .await?;
-                },
+                }
                 ModerationActionType::Unlock => {
                     sqlx::query!(
                         r#"UPDATE "topics" SET "is_locked" = 0 WHERE "topic_id" = ?"#,
@@ -66,27 +122,25 @@ pub async fn moderate_content(req: &Request) -> Result<()> {
                     )
                     .execute(db)
                     .await?;
-                },
+                }
                 ModerationActionType::Flag => {
                     // Flag doesn't change the topic state, just logs the action
-                },
-            }
-        },
-        ModerationTarget::Post => {
-            match action.action {
-                ModerationActionType::Delete => {
-                    sqlx::query!(
-                        r#"UPDATE "posts" SET "is_deleted" = 1 WHERE "post_id" = ?"#,
-                        target_id_str
-                    )
-                    .execute(db)
-                    .await?;
-                },
-                _ => {
-                    return Err(anyhow::anyhow!("Action not supported for posts"));
                 }
             }
         }
+        ModerationTarget::Post => match action.action {
+            ModerationActionType::Delete => {
+                sqlx::query!(
+                    r#"UPDATE "posts" SET "is_deleted" = 1 WHERE "post_id" = ?"#,
+                    target_id_str
+                )
+                .execute(db)
+                .await?;
+            }
+            _ => {
+                return Err(anyhow::anyhow!("Action not supported for posts"));
+            }
+        },
     }
 
     // Log the moderation action
@@ -107,7 +161,7 @@ pub async fn moderate_content(req: &Request) -> Result<()> {
     let log_id_str = log_id.to_string();
     let user_id_str = user_id.to_string();
     let now_str = now.to_string();
-    
+
     sqlx::query!(
         r#"INSERT INTO "moderation_log" ("log_id", "moderator_id", "target_type", "target_id", "action", "reason", "created_at")
            VALUES (?, ?, ?, ?, ?, ?, ?)"#,
@@ -128,11 +182,14 @@ pub async fn moderate_content(req: &Request) -> Result<()> {
         "moderation_action",
         Some(user_id),
         Some(action.target_id),
-        Some(serde_json::json!({
-            "target_type": target_type_str,
-            "action": action_str,
-            "reason": action.reason
-        }).to_string()),
+        Some(
+            serde_json::json!({
+                "target_type": target_type_str,
+                "action": action_str,
+                "reason": action.reason
+            })
+            .to_string(),
+        ),
     )
     .await?;
 
@@ -163,8 +220,9 @@ pub struct ModerationLogEntry {
 }
 
 pub async fn get_moderation_log(req: &Request) -> Result<Vec<ModerationLogEntry>> {
-    let (user_id, query): (Ulid, (Option<String>, Option<i64>, Option<i64>)) = flexbuffers::from_slice(&req.message.payload)?;
-    
+    let (user_id, query): (Ulid, (Option<String>, Option<i64>, Option<i64>)) =
+        flexbuffers::from_slice(&req.message.payload)?;
+
     // Get user info to check permissions
     let user_info: BasicInfo = request("user.basic_info.by_user_id", user_id.to_string()).await?;
     if !user_info.is_staff() {
@@ -208,20 +266,190 @@ pub async fn get_moderation_log(req: &Request) -> Result<Vec<ModerationLogEntry>
     let mut log_entries = Vec::new();
     for row in rows {
         // Get moderator info from user-service
-        let moderator_id_str = row.moderator_id.ok_or_else(|| anyhow::anyhow!("Missing moderator_id"))?;
-        let moderator_info: BasicInfo = request("user.basic_info.by_user_id", moderator_id_str).await?;
+        let moderator_id_str = row
+            .moderator_id
+            .ok_or_else(|| anyhow::anyhow!("Missing moderator_id"))?;
+        let moderator_info: BasicInfo =
+            request("user.basic_info.by_user_id", moderator_id_str).await?;
 
         log_entries.push(ModerationLogEntry {
-            log_id: row.log_id.ok_or_else(|| anyhow::anyhow!("Missing log_id"))?.as_ulid()?,
+            log_id: row
+                .log_id
+                .ok_or_else(|| anyhow::anyhow!("Missing log_id"))?
+                .as_ulid()?,
             moderator_id: moderator_info.user_id,
             moderator_handle: moderator_info.handle,
-            target_type: row.target_type.ok_or_else(|| anyhow::anyhow!("Missing target_type"))?,
-            target_id: row.target_id.ok_or_else(|| anyhow::anyhow!("Missing target_id"))?.as_ulid()?,
-            action: row.action.ok_or_else(|| anyhow::anyhow!("Missing action"))?,
+            target_type: row
+                .target_type
+                .ok_or_else(|| anyhow::anyhow!("Missing target_type"))?,
+            target_id: row
+                .target_id
+                .ok_or_else(|| anyhow::anyhow!("Missing target_id"))?
+                .as_ulid()?,
+            action: row
+                .action
+                .ok_or_else(|| anyhow::anyhow!("Missing action"))?,
             reason: row.reason,
-            created_at: TimeString::try_from(row.created_at.ok_or_else(|| anyhow::anyhow!("Missing created_at"))?)?,
+            created_at: TimeString::try_from(
+                row.created_at
+                    .ok_or_else(|| anyhow::anyhow!("Missing created_at"))?,
+            )?,
         });
     }
 
     Ok(log_entries)
+}
+
+pub async fn add_forum_moderator(req: &Request) -> Result<()> {
+    let action: AddForumModerator = flexbuffers::from_slice(&req.message.payload)?;
+
+    let requester_info: BasicInfo = request(
+        "user.basic_info.by_user_id",
+        action.requester_id.to_string(),
+    )
+    .await?;
+    if !requester_info.is_staff() {
+        return Err(anyhow::anyhow!(
+            "Permission denied: only staff can manage forum moderators"
+        ));
+    }
+
+    let user_info: BasicInfo =
+        request("user.basic_info.by_user_id", action.user_id.to_string()).await?;
+    if user_info.is_staff() {
+        return Err(anyhow::anyhow!(
+            "Staff members cannot be added as forum-specific moderators"
+        ));
+    }
+
+    let db = db();
+    let forum_id_str = action.forum_id.to_string();
+    let user_id_str = action.user_id.to_string();
+    let now = TimeString::now().to_string();
+
+    sqlx::query!(
+        r#"INSERT INTO "forum_moderators" ("forum_id", "user_id", "created_at") VALUES (?, ?, ?)"#,
+        forum_id_str,
+        user_id_str,
+        now
+    )
+    .execute(db)
+    .await?;
+
+    log_activity(
+        Some(TimeString::now()),
+        "forum_moderator_added",
+        Some(action.requester_id),
+        Some(action.forum_id),
+        Some(
+            serde_json::json!({
+                "moderator_user_id": action.user_id.to_string(),
+                "moderator_handle": user_info.handle
+            })
+            .to_string(),
+        ),
+    )
+    .await?;
+
+    Ok(())
+}
+
+pub async fn remove_forum_moderator(req: &Request) -> Result<()> {
+    let action: RemoveForumModerator = flexbuffers::from_slice(&req.message.payload)?;
+
+    let requester_info: BasicInfo = request(
+        "user.basic_info.by_user_id",
+        action.requester_id.to_string(),
+    )
+    .await?;
+    if !requester_info.is_staff() {
+        return Err(anyhow::anyhow!(
+            "Permission denied: only staff can manage forum moderators"
+        ));
+    }
+
+    let user_info: BasicInfo =
+        request("user.basic_info.by_user_id", action.user_id.to_string()).await?;
+
+    let db = db();
+    let forum_id_str = action.forum_id.to_string();
+    let user_id_str = action.user_id.to_string();
+
+    let result = sqlx::query!(
+        r#"DELETE FROM "forum_moderators" WHERE "forum_id" = ? AND "user_id" = ?"#,
+        forum_id_str,
+        user_id_str
+    )
+    .execute(db)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(anyhow::anyhow!("User is not a moderator of this forum"));
+    }
+
+    log_activity(
+        Some(TimeString::now()),
+        "forum_moderator_removed",
+        Some(action.requester_id),
+        Some(action.forum_id),
+        Some(
+            serde_json::json!({
+                "moderator_user_id": action.user_id.to_string(),
+                "moderator_handle": user_info.handle
+            })
+            .to_string(),
+        ),
+    )
+    .await?;
+
+    Ok(())
+}
+
+#[derive(Debug)]
+struct ForumModeratorRow {
+    user_id: Option<String>,
+    created_at: Option<String>,
+}
+
+pub async fn list_forum_moderators(req: &Request) -> Result<Vec<ForumModeratorInfo>> {
+    let (requester_id, forum_id): (Ulid, Ulid) = flexbuffers::from_slice(&req.message.payload)?;
+
+    let requester_info: BasicInfo =
+        request("user.basic_info.by_user_id", requester_id.to_string()).await?;
+    if !requester_info.is_staff() {
+        return Err(anyhow::anyhow!(
+            "Permission denied: only staff can view forum moderators"
+        ));
+    }
+
+    let db = db();
+    let forum_id_str = forum_id.to_string();
+
+    let rows = sqlx::query_as!(
+        ForumModeratorRow,
+        r#"SELECT "user_id", "created_at" FROM "forum_moderators" WHERE "forum_id" = ? ORDER BY "created_at" ASC"#,
+        forum_id_str
+    )
+    .fetch_all(db)
+    .await?;
+
+    let mut moderators = Vec::new();
+    for row in rows {
+        let user_id_str = row
+            .user_id
+            .ok_or_else(|| anyhow::anyhow!("Missing user_id"))?;
+        let user_info: BasicInfo = request("user.basic_info.by_user_id", user_id_str).await?;
+
+        moderators.push(ForumModeratorInfo {
+            forum_id,
+            user_id: user_info.user_id,
+            user_handle: user_info.handle,
+            created_at: TimeString::try_from(
+                row.created_at
+                    .ok_or_else(|| anyhow::anyhow!("Missing created_at"))?,
+            )?,
+        });
+    }
+
+    Ok(moderators)
 }

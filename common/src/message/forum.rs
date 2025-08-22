@@ -1,6 +1,6 @@
+use crate::timestring::TimeString;
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
-use crate::timestring::TimeString;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CreateTopic {
@@ -149,5 +149,27 @@ pub struct ForumListQuery {
 pub struct ContentFilterResult {
     pub is_allowed: bool,
     pub flagged_words: Vec<String>,
-    pub suggested_content: Option<String>,
+}
+
+// Forum moderator management messages
+#[derive(Serialize, Deserialize, Debug)]
+pub struct AddForumModerator {
+    pub requester_id: Ulid,
+    pub forum_id: Ulid,
+    pub user_id: Ulid,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct RemoveForumModerator {
+    pub requester_id: Ulid,
+    pub forum_id: Ulid,
+    pub user_id: Ulid,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ForumModeratorInfo {
+    pub forum_id: Ulid,
+    pub user_id: Ulid,
+    pub user_handle: String,
+    pub created_at: TimeString,
 }

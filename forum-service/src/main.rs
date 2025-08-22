@@ -37,6 +37,12 @@ async fn main() {
     toplevel.spawn(handler!(topics, "get", topics::get_topic));
     toplevel.spawn(handler!(topics, "list", topics::list_topics));
     toplevel.spawn(handler!(topics, "update", topics::update_topic));
+    toplevel.spawn(handler!(
+        topics,
+        "suggest_similar",
+        topics::suggest_similar_topics
+    ));
+    toplevel.spawn(handler!(topics, "user_topics", topics::get_user_topics));
 
     // Post management endpoints
     let posts = service.group("forum.posts");
@@ -49,14 +55,38 @@ async fn main() {
     let moderation = service.group("forum.moderation");
     toplevel.spawn(handler!(moderation, "action", moderation::moderate_content));
     toplevel.spawn(handler!(moderation, "log", moderation::get_moderation_log));
+    toplevel.spawn(recv_handler!(
+        moderation,
+        "add_moderator",
+        moderation::add_forum_moderator
+    ));
+    toplevel.spawn(recv_handler!(
+        moderation,
+        "remove_moderator",
+        moderation::remove_forum_moderator
+    ));
+    toplevel.spawn(handler!(
+        moderation,
+        "list_moderators",
+        moderation::list_forum_moderators
+    ));
 
     // Forum management endpoints
     let forum_mgmt = service.group("forum.management");
     toplevel.spawn(handler!(forum_mgmt, "create", forums::create_forum));
-    toplevel.spawn(handler!(forum_mgmt, "get_by_slug", forums::get_forum_by_slug));
+    toplevel.spawn(handler!(
+        forum_mgmt,
+        "get_by_slug",
+        forums::get_forum_by_slug
+    ));
     toplevel.spawn(handler!(forum_mgmt, "get_by_id", forums::get_forum_by_id));
     toplevel.spawn(handler!(forum_mgmt, "list", forums::list_forums));
     toplevel.spawn(handler!(forum_mgmt, "update", forums::update_forum));
+    toplevel.spawn(handler!(
+        forum_mgmt,
+        "get_personal",
+        forums::get_personal_forum
+    ));
 
     // Content filtering endpoints
     let filter = service.group("forum.filter");

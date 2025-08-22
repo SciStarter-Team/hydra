@@ -1,18 +1,21 @@
 use anyhow::Result;
 use async_nats::service::Request;
+use common::timestring::TimeString;
 use common::{
-    message::{forum::*, user::{BasicInfo, UserInfo}},
+    message::{
+        forum::*,
+        user::{BasicInfo, UserInfo},
+    },
     service::{log_activity, request},
     shared::db,
     ulid::AsUlid,
 };
-use common::timestring::TimeString;
 use ulid::Ulid;
 
 pub async fn create_forum(req: &Request) -> Result<ForumInfo> {
     let message: CreateForum = flexbuffers::from_slice(&req.message.payload)?;
     let user_id = message.user_id;
-    
+
     // Get user info to check permissions - only staff can create forums
     let user_info: BasicInfo = request("user.basic_info.by_user_id", user_id.to_string()).await?;
     if !user_info.is_staff() {
@@ -59,10 +62,13 @@ pub async fn create_forum(req: &Request) -> Result<ForumInfo> {
         "forum_created",
         Some(user_id),
         Some(forum_id),
-        Some(serde_json::json!({
-            "slug": message.slug,
-            "name": message.name
-        }).to_string()),
+        Some(
+            serde_json::json!({
+                "slug": message.slug,
+                "name": message.name
+            })
+            .to_string(),
+        ),
     )
     .await?;
 
@@ -71,7 +77,7 @@ pub async fn create_forum(req: &Request) -> Result<ForumInfo> {
 
 pub async fn get_forum_by_slug(req: &Request) -> Result<ForumInfo> {
     let slug: String = flexbuffers::from_slice(&req.message.payload)?;
-    
+
     let db = db();
     let row = sqlx::query!(
         r#"SELECT "forum_id" FROM "forums" WHERE "slug" = ? AND "is_active" = 1"#,
@@ -81,7 +87,10 @@ pub async fn get_forum_by_slug(req: &Request) -> Result<ForumInfo> {
     .await?
     .ok_or_else(|| anyhow::anyhow!("Forum not found"))?;
 
-    let forum_id = row.forum_id.ok_or_else(|| anyhow::anyhow!("Forum ID is null"))?.as_ulid()?;
+    let forum_id = row
+        .forum_id
+        .ok_or_else(|| anyhow::anyhow!("Forum ID is null"))?
+        .as_ulid()?;
     get_forum_internal(forum_id).await
 }
 
@@ -102,7 +111,7 @@ pub async fn list_forums(req: &Request) -> Result<Vec<ForumInfo>> {
         sqlx::query!(
             r#"SELECT forum_id, slug, name, description, created_at, updated_at, is_active, display_order
                FROM "forums"
-               WHERE is_active = 1
+               WHERE is_active = 1 AND slug NOT LIKE 'user-%'
                ORDER BY display_order ASC, created_at ASC
                LIMIT ? OFFSET ?"#,
             limit,
@@ -117,6 +126,7 @@ pub async fn list_forums(req: &Request) -> Result<Vec<ForumInfo>> {
         sqlx::query!(
             r#"SELECT forum_id, slug, name, description, created_at, updated_at, is_active, display_order
                FROM "forums"
+               WHERE slug NOT LIKE 'user-%'
                ORDER BY display_order ASC, created_at ASC
                LIMIT ? OFFSET ?"#,
             limit,
@@ -131,9 +141,12 @@ pub async fn list_forums(req: &Request) -> Result<Vec<ForumInfo>> {
 
     let mut forums = Vec::new();
     for row in rows {
-        let forum_id_str = row.0.clone().ok_or_else(|| anyhow::anyhow!("Forum ID is null"))?;
+        let forum_id_str = row
+            .0
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("Forum ID is null"))?;
         let forum_id = forum_id_str.as_ulid()?;
-        
+
         // Get topic count for this forum
         let topic_count = sqlx::query_scalar!(
             r#"SELECT COUNT(*) FROM "topics" WHERE "forum_id" = ? AND "is_deleted" = 0"#,
@@ -148,7 +161,11 @@ pub async fn list_forums(req: &Request) -> Result<Vec<ForumInfo>> {
             name: row.2,
             description: row.3,
             created_at: TimeString::try_from(row.4)?,
-            updated_at: row.5.as_ref().map(|s| TimeString::try_from(s.clone())).transpose()?,
+            updated_at: row
+                .5
+                .as_ref()
+                .map(|s| TimeString::try_from(s.clone()))
+                .transpose()?,
             is_active: row.6 == 1,
             display_order: row.7 as i32,
             topic_count,
@@ -161,7 +178,7 @@ pub async fn list_forums(req: &Request) -> Result<Vec<ForumInfo>> {
 pub async fn update_forum(req: &Request) -> Result<ForumInfo> {
     let message: UpdateForum = flexbuffers::from_slice(&req.message.payload)?;
     let user_id = message.user_id;
-    
+
     // Get user info to check permissions - only staff can update forums
     let user_info: BasicInfo = request("user.basic_info.by_user_id", user_id.to_string()).await?;
     if !user_info.is_staff() {
@@ -175,11 +192,15 @@ pub async fn update_forum(req: &Request) -> Result<ForumInfo> {
 
     // Get current forum to merge updates
     let current = get_forum_internal(message.forum_id).await?;
-    
+
     let new_name = message.name.unwrap_or(current.name);
     let new_description = message.description.or(current.description);
     let new_display_order = message.display_order.unwrap_or(current.display_order);
-    let new_is_active = if message.is_active.unwrap_or(current.is_active) { 1 } else { 0 };
+    let new_is_active = if message.is_active.unwrap_or(current.is_active) {
+        1
+    } else {
+        0
+    };
 
     // Update the forum with all fields
     sqlx::query!(
@@ -201,9 +222,12 @@ pub async fn update_forum(req: &Request) -> Result<ForumInfo> {
         "forum_updated",
         Some(user_id),
         Some(message.forum_id),
-        Some(serde_json::json!({
-            "forum_name": new_name
-        }).to_string()),
+        Some(
+            serde_json::json!({
+                "forum_name": new_name
+            })
+            .to_string(),
+        ),
     )
     .await?;
 
@@ -238,9 +262,79 @@ async fn get_forum_internal(forum_id: Ulid) -> Result<ForumInfo> {
         name: row.name,
         description: row.description,
         created_at: TimeString::try_from(row.created_at)?,
-        updated_at: row.updated_at.as_ref().map(|s| TimeString::try_from(s.clone())).transpose()?,
+        updated_at: row
+            .updated_at
+            .as_ref()
+            .map(|s| TimeString::try_from(s.clone()))
+            .transpose()?,
         is_active: row.is_active == 1,
         display_order: row.display_order as i32,
         topic_count,
     })
+}
+
+pub async fn get_personal_forum(req: &Request) -> Result<ForumInfo> {
+    let user_id: Ulid = flexbuffers::from_slice(&req.message.payload)?;
+
+    // Get user info to get their handle for the forum name
+    let user_info: BasicInfo = request("user.basic_info.by_user_id", user_id.to_string()).await?;
+
+    let db = db();
+    let user_id_str = user_id.to_string();
+
+    // Check if personal forum already exists (forum_id == user_id)
+    let existing = sqlx::query!(
+        r#"SELECT "forum_id" FROM "forums" WHERE "forum_id" = ?"#,
+        user_id_str
+    )
+    .fetch_optional(db)
+    .await?;
+
+    if existing.is_some() {
+        return get_forum_internal(user_id).await;
+    }
+
+    let now = TimeString::now();
+    let now_str = now.to_string();
+
+    // Create personal forum with user_id as forum_id
+    // Use user_id for slug since it's guaranteed unique
+    let slug = format!("user-{}", user_id_str);
+    let name = format!("{}'s Personal Forum", user_info.handle); // Use actual handle, not display_handle
+    let description = Some(format!(
+        "Personal discussion space for {}",
+        user_info.handle
+    ));
+
+    sqlx::query!(
+        r#"INSERT INTO "forums" ("forum_id", "slug", "name", "description", "created_at", "display_order", "is_active")
+           VALUES (?, ?, ?, ?, ?, ?, ?)"#,
+        user_id_str,
+        slug,
+        name,
+        description,
+        now_str,
+        1000000, // High display order to put personal forums at the end
+        1
+    )
+    .execute(db)
+    .await?;
+
+    // Log the activity
+    log_activity(
+        Some(now),
+        "personal_forum_created",
+        Some(user_id),
+        Some(user_id), // forum_id is same as user_id for personal forums
+        Some(
+            serde_json::json!({
+                "slug": slug,
+                "name": name
+            })
+            .to_string(),
+        ),
+    )
+    .await?;
+
+    get_forum_internal(user_id).await
 }

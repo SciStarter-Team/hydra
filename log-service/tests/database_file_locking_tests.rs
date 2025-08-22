@@ -164,8 +164,7 @@ async fn test_wal_write_during_compaction() -> Result<()> {
         use log_service::database::compactor::Compactor;
         use tokio_util::sync::CancellationToken;
 
-        let compactor =
-            Compactor::with_config(compactor_db.clone(), Duration::from_millis(50), 30);
+        let compactor = Compactor::with_config(compactor_db.clone(), Duration::from_millis(50), 30);
         let token = CancellationToken::new();
 
         // Run compactor briefly

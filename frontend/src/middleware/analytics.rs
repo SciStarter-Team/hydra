@@ -1,9 +1,6 @@
 use std::sync::Arc;
 
-use common::{
-    message::user::UserInfo,
-    service::log_pageview,
-};
+use common::{message::user::UserInfo, service::log_pageview};
 use jiff::{ToSpan, Zoned};
 use poem::{Endpoint, FromRequest, Middleware, session::Session, web::RealIp};
 use ulid::Ulid;
@@ -92,7 +89,7 @@ impl<E: Endpoint> Endpoint for AnalyticsMiddlewareEndpoint<E> {
 
         let device = session_device(session);
         let interaction = session_interaction(session);
-        
+
         let uri = req.uri();
         let path = uri.path();
         let query = uri.query().map(|q| q.to_string());
@@ -105,8 +102,10 @@ impl<E: Endpoint> Endpoint for AnalyticsMiddlewareEndpoint<E> {
         // Try to extract IP address - if it fails, we'll skip logging but continue
         match RealIp::from_request_without_body(&req).await {
             Ok(RealIp(client_ip)) => {
-                let ip_address = client_ip.map(|ip| ip.to_string()).unwrap_or_else(|| "0.0.0.0".to_string());
-                
+                let ip_address = client_ip
+                    .map(|ip| ip.to_string())
+                    .unwrap_or_else(|| "0.0.0.0".to_string());
+
                 // Extract referrer header
                 let referrer = req
                     .headers()
@@ -125,7 +124,9 @@ impl<E: Endpoint> Endpoint for AnalyticsMiddlewareEndpoint<E> {
                     referrer,
                     query,
                     None, // geolocation - let it resolve from IP
-                ).await {
+                )
+                .await
+                {
                     eprintln!("Failed to log page view: {}", e);
                 }
             }

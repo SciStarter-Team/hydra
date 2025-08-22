@@ -14,6 +14,8 @@ struct BasicInfoDb {
     handle: String,
     is_staff: bool,
     is_superuser: bool,
+    public: bool,
+    protected: bool,
 }
 
 impl TryFrom<BasicInfoDb> for BasicInfo {
@@ -25,6 +27,8 @@ impl TryFrom<BasicInfoDb> for BasicInfo {
             handle: db_info.handle,
             is_staff: db_info.is_staff,
             is_superuser: db_info.is_superuser,
+            public: db_info.public,
+            protected: db_info.protected,
         })
     }
 }
@@ -38,7 +42,9 @@ pub async fn basic_info_by_username(req: &Request) -> Result<Option<BasicInfo>, 
           "user_id",
           "handle",
           "is_staff" as "is_staff: bool",
-          "is_superuser" as "is_superuser: bool"
+          "is_superuser" as "is_superuser: bool",
+          "public" as "public: bool",
+          "protected" as "protected: bool"
         from "users"
         where "username" = ?"#,
         username,
@@ -61,7 +67,9 @@ pub async fn basic_info_by_user_id(req: &Request) -> Result<Option<BasicInfo>, E
           "user_id",
           "handle",
           "is_staff" as "is_staff: bool",
-          "is_superuser" as "is_superuser: bool"
+          "is_superuser" as "is_superuser: bool",
+          "public" as "public: bool",
+          "protected" as "protected: bool"
         from "users"
         where "user_id" = ?"#,
         user_id,

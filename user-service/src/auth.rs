@@ -15,6 +15,8 @@ struct UserWithPassword {
     password: String,
     is_staff: i64,
     is_superuser: i64,
+    public: i64,
+    protected: i64,
 }
 
 /// Sign the current session up for a new account
@@ -32,6 +34,16 @@ pub async fn signup(req: &Request) -> Result<Option<BasicInfo>, Error> {
     let point = form.point;
 
     let mut tx = db().begin().await?;
+
+    // We're letting users and emails start as verified, for now,
+    // unless some criteria are met which make them less trusted
+    // initially.
+
+    let mut verified = true;
+
+    if form.tags.iter().any(|s| s == "evolveme") {
+        verified = false;
+    }
 
     sqlx::query!(
         r#"insert into "users" (
@@ -51,7 +63,7 @@ pub async fn signup(req: &Request) -> Result<Option<BasicInfo>, Error> {
           ?2,
           ?3,
           ?2,
-          false,
+          ?9,
           ?4,
           ?5,
           ?6,
@@ -66,6 +78,7 @@ pub async fn signup(req: &Request) -> Result<Option<BasicInfo>, Error> {
         zipcode,
         protected,
         point,
+        verified,
     )
     .execute(&mut *tx)
     .await?;
@@ -86,13 +99,14 @@ pub async fn signup(req: &Request) -> Result<Option<BasicInfo>, Error> {
         values (
           ?,
           ?,
-          false,
+          ?,
           ?,
           ?,
           ?
         )"#,
         user_id_str,
         email,
+        verified,
         hashed,
         hashed_lower,
         hashed_capfirst,
@@ -129,6 +143,8 @@ pub async fn signup(req: &Request) -> Result<Option<BasicInfo>, Error> {
         handle,
         is_staff: false,
         is_superuser: false,
+        public: true,
+        protected,
     }))
 }
 
@@ -138,7 +154,7 @@ pub async fn login(req: &Request) -> Result<Option<BasicInfo>, Error> {
     // Look up user by email using query_as
     let user_record = sqlx::query_as!(
         UserWithPassword,
-        r#"select u.user_id, u.handle, u.password, u.is_staff, u.is_superuser
+        r#"select u.user_id, u.handle, u.password, u.is_staff, u.is_superuser, u.public, u.protected
            from users u
            join emails e on u.user_id = e.user_id
            where e.email = ?
@@ -161,6 +177,8 @@ pub async fn login(req: &Request) -> Result<Option<BasicInfo>, Error> {
                 handle: user.handle,
                 is_staff: user.is_staff != 0,
                 is_superuser: user.is_superuser != 0,
+                public: user.public != 0,
+                protected: user.protected != 0,
             }))
         } else {
             // Log failed login attempt

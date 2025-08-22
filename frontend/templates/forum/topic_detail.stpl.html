@@ -2,7 +2,11 @@
   <div class="topic-header">
     <h4><%= self.topic.title %></h4>
     <div class="topic-meta">
-      By <%= self.topic.author_handle %> | 
+      By <% if self.topic.author_is_public { %>
+        <a href="/-forum/user/<%= self.topic.author_id|disp %>/profile" class="profile-link"><%= self.topic.author_handle %></a>
+      <% } else { %>
+        <%= self.topic.author_handle %>
+      <% } %> | 
       <%= self.topic.created_at|disp %>
       <% if let Some(updated) = &self.topic.updated_at { %>
         | Updated: <%= updated|disp %>
@@ -34,7 +38,11 @@
       <% for post in &self.posts { %>
         <div class="post-item">
           <div class="post-meta">
-            By <%= post.author_handle %> | <%= post.created_at|disp %>
+            By <% if post.author_is_public { %>
+              <a href="/-forum/user/<%= post.author_id|disp %>/profile" class="profile-link"><%= post.author_handle %></a>
+            <% } else { %>
+              <%= post.author_handle %>
+            <% } %> | <%= post.created_at|disp %>
             <% if let Some(updated) = &post.updated_at { %>
               | Updated: <%= updated|disp %>
             <% } %>

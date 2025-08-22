@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 
 use jiff::Timestamp;
 
@@ -49,5 +49,11 @@ impl TryFrom<String> for TimeString {
 impl From<TimeString> for String {
     fn from(value: TimeString) -> Self {
         value.0
+    }
+}
+
+impl Display for TimeString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
     }
 }

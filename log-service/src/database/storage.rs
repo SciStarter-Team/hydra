@@ -1,10 +1,10 @@
 use crate::error::Result;
-use datafusion::arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use datafusion::arrow::array::StringArray;
+use datafusion::arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::catalog::Session;
-use datafusion::datasource::file_format::parquet::ParquetFormat;
 use datafusion::datasource::file_format::json::JsonFormat;
+use datafusion::datasource::file_format::parquet::ParquetFormat;
 use datafusion::datasource::listing::{
     ListingOptions, ListingTable, ListingTableConfig, ListingTableUrl,
 };
@@ -27,7 +27,6 @@ use crate::database::tables::{
 };
 use std::path::PathBuf;
 use url::Url;
-
 
 /// SQLite table provider for DataFusion
 #[derive(Debug)]
@@ -372,7 +371,7 @@ impl Database {
     /// Register all tables with DataFusion
     async fn register_all_tables(&self) -> Result<()> {
         use crate::database::table::get_registered_tables;
-        
+
         // Register local file system with DataFusion
         let local_fs = Arc::new(LocalFileSystem::new());
         let file_url = Url::parse("file:///")?;
@@ -386,7 +385,8 @@ impl Database {
                 table_registration.name,
                 schema,
                 &self.path.join("parquet").join(table_registration.name),
-            ).await?;
+            )
+            .await?;
         }
 
         // Register summary and cache tables (these don't use TableRow trait)
@@ -406,66 +406,67 @@ impl Database {
     ) -> Result<()> {
         // Ensure the parquet directory exists
         tokio::fs::create_dir_all(table_path).await?;
-        
+
         // Create parquet-only table
         let parquet_absolute_path = table_path.canonicalize()?;
         let parquet_table_url = format!("file:///{}/", parquet_absolute_path.to_string_lossy());
-        
-        let parquet_listing_options = ListingOptions::new(Arc::new(ParquetFormat::default()))
-            .with_file_extension(".parquet");
-        
+
+        let parquet_listing_options =
+            ListingOptions::new(Arc::new(ParquetFormat::default())).with_file_extension(".parquet");
+
         let parquet_config = ListingTableConfig::new(ListingTableUrl::parse(&parquet_table_url)?)
             .with_listing_options(parquet_listing_options)
             .with_schema(schema.clone());
-        
+
         let parquet_table = ListingTable::try_new(parquet_config)?;
-        
+
         // Register parquet-only table with original name
         self.session_context
             .register_table(table_name, Arc::new(parquet_table.clone()))?;
-        
+
         // Create WAL table (JSONL files) and union table
         let wal_table_path = self.path.join("wal").join(table_name);
         tokio::fs::create_dir_all(&wal_table_path).await?;
-        
+
         if let Ok(wal_absolute_path) = wal_table_path.canonicalize() {
             let wal_table_url = format!("file:///{}/", wal_absolute_path.to_string_lossy());
-            
-            let wal_listing_options = ListingOptions::new(Arc::new(JsonFormat::default()))
-                .with_file_extension(".jsonl");
-            
-            
+
+            let wal_listing_options =
+                ListingOptions::new(Arc::new(JsonFormat::default())).with_file_extension(".jsonl");
+
             let wal_config = ListingTableConfig::new(ListingTableUrl::parse(&wal_table_url)?)
                 .with_listing_options(wal_listing_options)
                 .with_schema(schema.clone());
-            
+
             if let Ok(wal_table) = ListingTable::try_new(wal_config) {
                 // Register WAL table separately with "_wal" suffix
                 self.session_context
                     .register_table(&format!("{}_wal", table_name), Arc::new(wal_table))?;
-                
+
                 // Create a SQL view that unions both tables for realtime queries
                 let realtime_view_sql = format!(
-                    "SELECT * FROM {} UNION ALL SELECT * FROM {}_wal", 
+                    "SELECT * FROM {} UNION ALL SELECT * FROM {}_wal",
                     table_name, table_name
                 );
-                
+
                 // Register the view - this gives us the "_realtime" table automatically
-                let _ = self.session_context.sql(&format!(
-                    "CREATE VIEW {}_realtime AS {}", 
-                    table_name, realtime_view_sql
-                )).await;
-                
+                let _ = self
+                    .session_context
+                    .sql(&format!(
+                        "CREATE VIEW {}_realtime AS {}",
+                        table_name, realtime_view_sql
+                    ))
+                    .await;
+
                 // Available tables:
                 // - `table_name`: parquet only (fast historical queries)
-                // - `table_name_wal`: WAL only (fresh data)  
+                // - `table_name_wal`: WAL only (fresh data)
                 // - `table_name_realtime`: combined view (complete data)
             }
         }
-        
+
         Ok(())
     }
-
 
     /// Summary tables
     async fn register_summary_tables(&self) -> Result<()> {
@@ -496,29 +497,33 @@ impl Database {
             "clickthrough_daily_summary",
             daily_schema.clone(),
             &self.path.join("clickthrough_daily_summary"),
-        ).await?;
-        
+        )
+        .await?;
+
         self.create_summary_table(
             "clickthrough_weekly_summary",
             weekly_schema.clone(),
             &self.path.join("clickthrough_weekly_summary"),
-        ).await?;
-        
+        )
+        .await?;
+
         self.create_summary_table(
             "join_daily_summary",
             daily_schema,
             &self.path.join("join_daily_summary"),
-        ).await?;
-        
+        )
+        .await?;
+
         self.create_summary_table(
             "join_weekly_summary",
             weekly_schema,
             &self.path.join("join_weekly_summary"),
-        ).await?;
+        )
+        .await?;
 
         Ok(())
     }
-    
+
     /// Create a summary table (parquet-only, no WAL variants)
     async fn create_summary_table(
         &self,
@@ -528,24 +533,24 @@ impl Database {
     ) -> Result<()> {
         // Ensure the summary table directory exists
         tokio::fs::create_dir_all(table_path).await?;
-        
+
         // Create parquet-only table (no WAL variants needed for summary tables)
         let parquet_absolute_path = table_path.canonicalize()?;
         let parquet_table_url = format!("file:///{}/", parquet_absolute_path.to_string_lossy());
-        
-        let parquet_listing_options = ListingOptions::new(Arc::new(ParquetFormat::default()))
-            .with_file_extension(".parquet");
-        
+
+        let parquet_listing_options =
+            ListingOptions::new(Arc::new(ParquetFormat::default())).with_file_extension(".parquet");
+
         let parquet_config = ListingTableConfig::new(ListingTableUrl::parse(&parquet_table_url)?)
             .with_listing_options(parquet_listing_options)
             .with_schema(schema);
-        
+
         let parquet_table = ListingTable::try_new(parquet_config)?;
-        
+
         // Register summary table (parquet-only)
         self.session_context
             .register_table(table_name, Arc::new(parquet_table))?;
-        
+
         Ok(())
     }
 

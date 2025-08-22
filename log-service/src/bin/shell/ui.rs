@@ -131,7 +131,10 @@ impl App {
 
         // Get an example table name dynamically
         let example_table = if let Some(tables) = self.query_engine.get_available_tables() {
-            tables.first().unwrap_or(&"activity_log".to_string()).clone()
+            tables
+                .first()
+                .unwrap_or(&"activity_log".to_string())
+                .clone()
         } else {
             "activity_log".to_string()
         };
@@ -422,9 +425,11 @@ impl App {
 
                 match result {
                     Ok(query_result) => {
-                        let formatted_result = self
-                            .analytics_engine
-                            .format_result_for_display(&query_result, Some(100), Some(self.current_terminal_width));
+                        let formatted_result = self.analytics_engine.format_result_for_display(
+                            &query_result,
+                            Some(100),
+                            Some(self.current_terminal_width),
+                        );
                         self.display_content.extend(formatted_result);
                         self.current_result = Some(query_result.clone());
                         self.status_message = format!(

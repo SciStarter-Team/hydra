@@ -1,12 +1,15 @@
 use anyhow::Result;
 use async_nats::service::Request;
+use common::timestring::TimeString;
 use common::{
-    message::{forum::*, user::{BasicInfo, UserInfo}},
+    message::{
+        forum::*,
+        user::{BasicInfo, UserInfo},
+    },
     service::{log_activity, request},
     shared::db,
     ulid::AsUlid,
 };
-use common::timestring::TimeString;
 use ulid::Ulid;
 
 pub async fn create_post(req: &Request) -> Result<PostInfo> {
@@ -37,11 +40,14 @@ pub async fn create_post(req: &Request) -> Result<PostInfo> {
     }
 
     // Check content for bad words
-    let filter_result: ContentFilterResult = 
+    let filter_result: ContentFilterResult =
         crate::content_filter::check_content_internal(&message.content).await?;
-    
+
     if !filter_result.is_allowed {
-        return Err(anyhow::anyhow!("Content contains prohibited words: {:?}", filter_result.flagged_words));
+        return Err(anyhow::anyhow!(
+            "Content contains prohibited words: {:?}",
+            filter_result.flagged_words
+        ));
     }
 
     // If replying to a post, check that parent post exists
@@ -93,10 +99,13 @@ pub async fn create_post(req: &Request) -> Result<PostInfo> {
         "post_created",
         Some(user_id),
         Some(post_id),
-        Some(serde_json::json!({
-            "topic_id": message.topic_id.to_string(),
-            "parent_post_id": message.parent_post_id.map(|id| id.to_string())
-        }).to_string()),
+        Some(
+            serde_json::json!({
+                "topic_id": message.topic_id.to_string(),
+                "parent_post_id": message.parent_post_id.map(|id| id.to_string())
+            })
+            .to_string(),
+        ),
     )
     .await?;
 
@@ -125,18 +134,27 @@ async fn get_post_internal(post_id: Ulid) -> Result<PostInfo> {
     .ok_or_else(|| anyhow::anyhow!("Post not found"))?;
 
     // Get user info from user-service
-    let author_info: BasicInfo = request("user.basic_info.by_user_id", row.author_id.clone()).await?;
+    let author_info: BasicInfo =
+        request("user.basic_info.by_user_id", row.author_id.clone()).await?;
 
     Ok(PostInfo {
         post_id,
         topic_id: row.topic_id.as_ulid()?,
         content: row.content,
         author_id: author_info.user_id,
-        author_handle: author_info.handle,
-        author_is_public: true, // We'll need to extend BasicInfo or create a new message type for public flag
+        author_handle: author_info.display_handle().to_string(),
+        author_is_public: !author_info.is_private(),
         created_at: TimeString::try_from(row.created_at)?,
-        updated_at: row.updated_at.as_ref().map(|s| TimeString::try_from(s.clone())).transpose()?,
-        parent_post_id: row.parent_post_id.as_ref().map(|s| s.as_ulid()).transpose()?,
+        updated_at: row
+            .updated_at
+            .as_ref()
+            .map(|s| TimeString::try_from(s.clone()))
+            .transpose()?,
+        parent_post_id: row
+            .parent_post_id
+            .as_ref()
+            .map(|s| s.as_ulid())
+            .transpose()?,
         is_deleted: row.is_deleted == 1,
     })
 }
@@ -164,22 +182,34 @@ pub async fn list_posts(req: &Request) -> Result<Vec<PostInfo>> {
 
     let mut posts = Vec::new();
     for row in rows {
-        let post_id = row.post_id.ok_or_else(|| anyhow::anyhow!("Post ID is null"))?.as_ulid()?;
+        let post_id = row
+            .post_id
+            .ok_or_else(|| anyhow::anyhow!("Post ID is null"))?
+            .as_ulid()?;
         let topic_id = row.topic_id.as_ulid()?;
 
         // Get user info from user-service
-        let author_info: BasicInfo = request("user.basic_info.by_user_id", row.author_id.clone()).await?;
+        let author_info: BasicInfo =
+            request("user.basic_info.by_user_id", row.author_id.clone()).await?;
 
         posts.push(PostInfo {
             post_id,
             topic_id,
             content: row.content,
             author_id: author_info.user_id,
-            author_handle: author_info.handle,
-            author_is_public: true, // We'll need to extend BasicInfo or create a new message type for public flag
+            author_handle: author_info.display_handle().to_string(),
+            author_is_public: !author_info.is_private(),
             created_at: TimeString::try_from(row.created_at)?,
-            updated_at: row.updated_at.as_ref().map(|s| TimeString::try_from(s.clone())).transpose()?,
-            parent_post_id: row.parent_post_id.as_ref().map(|s| s.as_ulid()).transpose()?,
+            updated_at: row
+                .updated_at
+                .as_ref()
+                .map(|s| TimeString::try_from(s.clone()))
+                .transpose()?,
+            parent_post_id: row
+                .parent_post_id
+                .as_ref()
+                .map(|s| s.as_ulid())
+                .transpose()?,
             is_deleted: row.is_deleted == 1,
         });
     }
@@ -188,12 +218,13 @@ pub async fn list_posts(req: &Request) -> Result<Vec<PostInfo>> {
 }
 
 pub async fn update_post(req: &Request) -> Result<PostInfo> {
-    let (post_id_str, new_content, user_id): (String, String, Ulid) = flexbuffers::from_slice(&req.message.payload)?;
+    let (post_id_str, new_content, user_id): (String, String, Ulid) =
+        flexbuffers::from_slice(&req.message.payload)?;
     let post_id = post_id_str.as_ulid()?;
 
     // Check if user owns the post or has moderation permissions
     let post = get_post_internal(post_id).await?;
-    
+
     // Get user info to check permissions
     let user_info: BasicInfo = request("user.basic_info.by_user_id", user_id.to_string()).await?;
     if post.author_id != user_id && !user_info.is_staff() {
@@ -201,11 +232,14 @@ pub async fn update_post(req: &Request) -> Result<PostInfo> {
     }
 
     // Check content for bad words
-    let filter_result: ContentFilterResult = 
+    let filter_result: ContentFilterResult =
         crate::content_filter::check_content_internal(&new_content).await?;
-    
+
     if !filter_result.is_allowed {
-        return Err(anyhow::anyhow!("Content contains prohibited words: {:?}", filter_result.flagged_words));
+        return Err(anyhow::anyhow!(
+            "Content contains prohibited words: {:?}",
+            filter_result.flagged_words
+        ));
     }
 
     let now = TimeString::now();
@@ -230,9 +264,12 @@ pub async fn update_post(req: &Request) -> Result<PostInfo> {
         "post_updated",
         Some(user_id),
         Some(post_id),
-        Some(serde_json::json!({
-            "topic_id": post.topic_id.to_string()
-        }).to_string()),
+        Some(
+            serde_json::json!({
+                "topic_id": post.topic_id.to_string()
+            })
+            .to_string(),
+        ),
     )
     .await?;
 

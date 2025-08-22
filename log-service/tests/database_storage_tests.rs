@@ -60,10 +60,7 @@ async fn test_database_initialization() -> Result<()> {
 
     // Verify that the base database directory was created
     let base_path = database.path();
-    assert!(
-        base_path.exists(),
-        "Base database directory should exist"
-    );
+    assert!(base_path.exists(), "Base database directory should exist");
     assert!(
         base_path.is_dir(),
         "Base database path should be a directory"
@@ -194,7 +191,6 @@ async fn test_database_initialization_existing_directory() -> Result<()> {
 
     Ok(())
 }
-
 
 #[tokio::test]
 async fn test_timestamp_conversion() -> Result<()> {
@@ -513,11 +509,15 @@ async fn test_datafusion_table_registration() -> Result<()> {
             "Table {} should be registered with DataFusion",
             table_name
         );
-        
+
         // Also check that WAL and realtime variants exist
-        let wal_table_exists = ctx.table_exist(&format!("{}_wal", table_name)).unwrap_or(false);
-        let realtime_table_exists = ctx.table_exist(&format!("{}_realtime", table_name)).unwrap_or(false);
-        
+        let wal_table_exists = ctx
+            .table_exist(&format!("{}_wal", table_name))
+            .unwrap_or(false);
+        let realtime_table_exists = ctx
+            .table_exist(&format!("{}_realtime", table_name))
+            .unwrap_or(false);
+
         // WAL tables might not exist if no WAL directory exists yet, so we don't assert on these
         // But we can log their status for debugging
         if wal_table_exists {

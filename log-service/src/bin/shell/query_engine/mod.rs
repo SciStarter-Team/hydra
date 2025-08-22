@@ -109,7 +109,11 @@ impl QueryEngine {
         Ok((columns, rows))
     }
 
-    fn extract_value_from_array(&self, array: &dyn datafusion::arrow::array::Array, row_idx: usize) -> String {
+    fn extract_value_from_array(
+        &self,
+        array: &dyn datafusion::arrow::array::Array,
+        row_idx: usize,
+    ) -> String {
         use datafusion::arrow::array::*;
 
         if array.is_null(row_idx) {
@@ -171,12 +175,12 @@ impl QueryEngine {
         let ctx = self.database.context();
         let catalog = ctx.catalog("datafusion")?;
         let schema = catalog.schema("public")?;
-        
+
         let mut table_names = Vec::new();
         for name in schema.table_names() {
             table_names.push(name);
         }
-        
+
         table_names.sort();
         Some(table_names)
     }

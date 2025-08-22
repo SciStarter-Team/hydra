@@ -1,7 +1,7 @@
 use datafusion::arrow::datatypes::{DataType, Field, Schema};
 use serde::{Deserialize, Serialize};
 
-use super::table::{TableRow, TableRegistration};
+use super::table::{TableRegistration, TableRow};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActivityLogRow {

@@ -8,7 +8,7 @@ use log_service::database::{
 use std::sync::Arc;
 use tempfile::TempDir;
 use tokio::fs;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 
 /// Helper to create a temporary database instance
 async fn setup_database() -> Result<(TempDir, Arc<Database>)> {
@@ -22,7 +22,7 @@ async fn setup_database() -> Result<(TempDir, Arc<Database>)> {
 #[tokio::test]
 async fn test_wal_table_schema_alignment() -> Result<()> {
     let (_temp_dir, database) = setup_database().await?;
-    
+
     // Create sample WAL data for each table type with today's date (so they appear in _wal tables)
     let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
     let wal_dir = database.path().join("wal");
@@ -120,46 +120,56 @@ async fn test_wal_table_schema_alignment() -> Result<()> {
 
     // Test querying each _wal table to ensure schema alignment
     let ctx = database.context();
-    
+
     for (table_name, _) in test_tables {
         let wal_table_name = format!("{}_wal", table_name);
-        
+
         // This query should succeed without schema errors
         let query = format!("SELECT * FROM {} LIMIT 1", wal_table_name);
-        
+
         let result = match ctx.sql(&query).await {
             Ok(df) => df.collect().await,
             Err(e) => Err(e),
         };
-        
+
         match result {
             Ok(result) => {
                 // Verify we got data back
-                assert!(!result.is_empty(), "Expected data from WAL table: {}", wal_table_name);
-                
+                assert!(
+                    !result.is_empty(),
+                    "Expected data from WAL table: {}",
+                    wal_table_name
+                );
+
                 // Log successful query for debugging
                 let total_rows: usize = result.iter().map(|batch| batch.num_rows()).sum();
-                println!("✓ Successfully queried {} - got {} records", wal_table_name, total_rows);
-            },
+                println!(
+                    "✓ Successfully queried {} - got {} records",
+                    wal_table_name, total_rows
+                );
+            }
             Err(e) => {
                 panic!("Schema alignment error for {}: {}", wal_table_name, e);
             }
         }
-        
+
         // Also test the realtime (union) table
         let realtime_table_name = format!("{}_realtime", table_name);
         let realtime_query = format!("SELECT * FROM {} LIMIT 1", realtime_table_name);
-        
+
         let realtime_result = match ctx.sql(&realtime_query).await {
             Ok(df) => df.collect().await,
             Err(e) => Err(e),
         };
-        
+
         match realtime_result {
             Ok(result) => {
                 let total_rows: usize = result.iter().map(|batch| batch.num_rows()).sum();
-                println!("✓ Successfully queried {} - got {} records", realtime_table_name, total_rows);
-            },
+                println!(
+                    "✓ Successfully queried {} - got {} records",
+                    realtime_table_name, total_rows
+                );
+            }
             Err(e) => {
                 panic!("Schema alignment error for {}: {}", realtime_table_name, e);
             }
@@ -167,8 +177,8 @@ async fn test_wal_table_schema_alignment() -> Result<()> {
     }
 
     // Clean shutdown
-    let db = Arc::try_unwrap(database)
-        .map_err(|_| anyhow::anyhow!("Database still has references"))?;
+    let db =
+        Arc::try_unwrap(database).map_err(|_| anyhow::anyhow!("Database still has references"))?;
     db.shutdown().await?;
 
     Ok(())
@@ -178,7 +188,7 @@ async fn test_wal_table_schema_alignment() -> Result<()> {
 #[tokio::test]
 async fn test_wal_nullable_fields() -> Result<()> {
     let (_temp_dir, database) = setup_database().await?;
-    
+
     let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
     let wal_dir = database.path().join("wal");
     tokio::fs::create_dir_all(&wal_dir).await?;
@@ -186,14 +196,14 @@ async fn test_wal_nullable_fields() -> Result<()> {
     // Create clickthrough data with null values for nullable fields
     let clickthrough_with_nulls = serde_json::to_string(&ClickthroughRow {
         when: "2024-01-15T10:30:00Z".to_string(),
-        ip_address: "0.0.0.0".to_string(),        // Use placeholder for required fields
-        device_id: "unknown".to_string(),         // Use placeholder for required fields  
-        interaction_id: "unknown".to_string(),     // Use placeholder for required fields
-        user_id: None,          // nullable
-        from_path: "/unknown".to_string(),         // Use placeholder for required fields
+        ip_address: "0.0.0.0".to_string(), // Use placeholder for required fields
+        device_id: "unknown".to_string(),  // Use placeholder for required fields
+        interaction_id: "unknown".to_string(), // Use placeholder for required fields
+        user_id: None,                     // nullable
+        from_path: "/unknown".to_string(), // Use placeholder for required fields
         to_url: "https://example.com".to_string(),
         link_type: "external".to_string(),
-        program_id: None,       // nullable
+        program_id: None, // nullable
         geolocation: "POINT(0 0)".to_string(),
     })?;
 
@@ -209,21 +219,24 @@ async fn test_wal_nullable_fields() -> Result<()> {
         Ok(df) => df.collect().await,
         Err(e) => Err(e),
     };
-    
+
     match result {
         Ok(data) => {
             assert!(!data.is_empty(), "Expected data from clickthroughs_wal");
             let total_rows: usize = data.iter().map(|batch| batch.num_rows()).sum();
-            println!("✓ Successfully queried clickthroughs with null fields - got {} records", total_rows);
-        },
+            println!(
+                "✓ Successfully queried clickthroughs with null fields - got {} records",
+                total_rows
+            );
+        }
         Err(e) => {
             panic!("Nullable field schema error: {}", e);
         }
     }
 
     // Clean shutdown
-    let db = Arc::try_unwrap(database)
-        .map_err(|_| anyhow::anyhow!("Database still has references"))?;
+    let db =
+        Arc::try_unwrap(database).map_err(|_| anyhow::anyhow!("Database still has references"))?;
     db.shutdown().await?;
 
     Ok(())
