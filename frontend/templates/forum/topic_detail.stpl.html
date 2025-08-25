@@ -1,4 +1,4 @@
-<div class="topic-detail">
+<div id="topic-<%= self.topic.topic_id|disp %>" class="topic-detail">
   <div class="topic-header">
     <h4><%= self.topic.title %></h4>
     <div class="topic-meta">
@@ -6,23 +6,22 @@
         <a href="/-forum/user/<%= self.topic.author_id|disp %>/profile" class="profile-link"><%= self.topic.author_handle %></a>
       <% } else { %>
         <%= self.topic.author_handle %>
-      <% } %> | 
-      <%= self.topic.created_at|disp %>
+      <% } %> <small>(ID: <%= self.topic.author_id|disp %>)</small> | 
+      <%= self.topic.created_at.format_display() %>
       <% if let Some(updated) = &self.topic.updated_at { %>
-        | Updated: <%= updated|disp %>
+        | Updated: <%= updated.format_display() %>
       <% } %>
+      | <%= self.topic.post_count %> posts
       <% if let Some(category) = &self.topic.category { %>
-        | Category: <%= category %>
+        | Category: <%= if category.len() > 20 { format!("{}...", &category[..17]) } else { category.clone() } %>
+      <% } %>
+      <% if !self.topic.tags.is_empty() { %>
+        | Tags: 
+        <% for tag in &self.topic.tags { %>
+          <span class="tag"><%= if tag.len() > 15 { format!("{}...", &tag[..12]) } else { tag.clone() } %></span>
+        <% } %>
       <% } %>
     </div>
-    <% if !self.topic.tags.is_empty() { %>
-      <div class="topic-tags">
-        Tags: 
-        <% for tag in &self.topic.tags { %>
-          <span class="tag"><%= tag %></span>
-        <% } %>
-      </div>
-    <% } %>
   </div>
 
   <div class="topic-content">
@@ -42,9 +41,9 @@
               <a href="/-forum/user/<%= post.author_id|disp %>/profile" class="profile-link"><%= post.author_handle %></a>
             <% } else { %>
               <%= post.author_handle %>
-            <% } %> | <%= post.created_at|disp %>
+            <% } %> <small>(ID: <%= post.author_id|disp %>)</small> | <%= post.created_at.format_display() %>
             <% if let Some(updated) = &post.updated_at { %>
-              | Updated: <%= updated|disp %>
+              | Updated: <%= updated.format_display() %>
             <% } %>
           </div>
           <div class="post-content">
@@ -74,7 +73,7 @@
     <% if self.can_reply { %>
       <div class="reply-form">
         <h6>Reply to this topic</h6>
-        <form hx-post="/-forum/create-post" hx-target="#topic-<%= self.topic.topic_id|disp %>">
+        <form hx-post="/-forum/post/new" hx-target="#topic-<%= self.topic.topic_id|disp %>">
           <input type="hidden" name="topic_id" value="<%= self.topic.topic_id|disp %>">
           
           <div class="form-field">

@@ -752,6 +752,9 @@ async fn main() {
     toplevel.spawn(handler!(info, "by_username", users::basic_info_by_username));
     toplevel.spawn(handler!(info, "by_user_id", users::basic_info_by_user_id));
 
+    let search = service.group("user.search");
+    toplevel.spawn(handler!(search, "by_handle", users::search_by_handle));
+
     let session = service.group("user.session");
     toplevel.spawn(recv_handler!(session, "store", sessions::store));
     toplevel.spawn(handler!(session, "retrieve", sessions::retrieve));

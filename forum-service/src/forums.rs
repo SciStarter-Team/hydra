@@ -12,11 +12,46 @@ use common::{
 };
 use ulid::Ulid;
 
+pub async fn check_forum_management_permission(
+    forum_id: Ulid,
+    user_id: Option<Ulid>,
+) -> Result<bool> {
+    let Some(user_id) = user_id else {
+        return Ok(false);
+    };
+
+    // Check if user is staff
+    let user_info: BasicInfo = request("user.basic_info.by_user_id", user_id.to_string()).await?;
+    if user_info.is_staff() {
+        return Ok(true);
+    }
+
+    // Check if forum_id equals user_id (personal forum)
+    if forum_id == user_id {
+        return Ok(true);
+    }
+
+    // Check if user is in the manager table for this forum
+    let db = db();
+    let user_id_str = user_id.to_string();
+    let forum_id_str = forum_id.to_string();
+
+    let manager_row = sqlx::query!(
+        r#"SELECT "user_id" FROM "forum_moderators" WHERE "forum_id" = ? AND "user_id" = ?"#,
+        forum_id_str,
+        user_id_str
+    )
+    .fetch_optional(db)
+    .await?;
+
+    Ok(manager_row.is_some())
+}
+
 pub async fn create_forum(req: &Request) -> Result<ForumInfo> {
     let message: CreateForum = flexbuffers::from_slice(&req.message.payload)?;
     let user_id = message.user_id;
 
-    // Get user info to check permissions - only staff can create forums
+    // Only staff can create forums (forum_id doesn't exist yet, so we check staff directly)
     let user_info: BasicInfo = request("user.basic_info.by_user_id", user_id.to_string()).await?;
     if !user_info.is_staff() {
         return Err(anyhow::anyhow!("Permission denied"));
@@ -72,16 +107,16 @@ pub async fn create_forum(req: &Request) -> Result<ForumInfo> {
     )
     .await?;
 
-    get_forum_internal(forum_id).await
+    get_forum_internal(forum_id, Some(user_id)).await
 }
 
 pub async fn get_forum_by_slug(req: &Request) -> Result<ForumInfo> {
-    let slug: String = flexbuffers::from_slice(&req.message.payload)?;
+    let message: GetForumBySlug = flexbuffers::from_slice(&req.message.payload)?;
 
     let db = db();
     let row = sqlx::query!(
         r#"SELECT "forum_id" FROM "forums" WHERE "slug" = ? AND "is_active" = 1"#,
-        slug
+        message.slug
     )
     .fetch_optional(db)
     .await?
@@ -91,13 +126,12 @@ pub async fn get_forum_by_slug(req: &Request) -> Result<ForumInfo> {
         .forum_id
         .ok_or_else(|| anyhow::anyhow!("Forum ID is null"))?
         .as_ulid()?;
-    get_forum_internal(forum_id).await
+    get_forum_internal(forum_id, message.user_id).await
 }
 
 pub async fn get_forum_by_id(req: &Request) -> Result<ForumInfo> {
-    let forum_id_str: String = flexbuffers::from_slice(&req.message.payload)?;
-    let forum_id = forum_id_str.as_ulid()?;
-    get_forum_internal(forum_id).await
+    let message: GetForumById = flexbuffers::from_slice(&req.message.payload)?;
+    get_forum_internal(message.forum_id, message.user_id).await
 }
 
 pub async fn list_forums(req: &Request) -> Result<Vec<ForumInfo>> {
@@ -169,6 +203,7 @@ pub async fn list_forums(req: &Request) -> Result<Vec<ForumInfo>> {
             is_active: row.6 == 1,
             display_order: row.7 as i32,
             topic_count,
+            can_manage: false, // list_forums doesn't support user_id currently
         });
     }
 
@@ -179,9 +214,8 @@ pub async fn update_forum(req: &Request) -> Result<ForumInfo> {
     let message: UpdateForum = flexbuffers::from_slice(&req.message.payload)?;
     let user_id = message.user_id;
 
-    // Get user info to check permissions - only staff can update forums
-    let user_info: BasicInfo = request("user.basic_info.by_user_id", user_id.to_string()).await?;
-    if !user_info.is_staff() {
+    // Check if user has management permission for this forum
+    if !check_forum_management_permission(message.forum_id, Some(user_id)).await? {
         return Err(anyhow::anyhow!("Permission denied"));
     }
 
@@ -191,7 +225,7 @@ pub async fn update_forum(req: &Request) -> Result<ForumInfo> {
     let db = db();
 
     // Get current forum to merge updates
-    let current = get_forum_internal(message.forum_id).await?;
+    let current = get_forum_internal(message.forum_id, Some(user_id)).await?;
 
     let new_name = message.name.unwrap_or(current.name);
     let new_description = message.description.or(current.description);
@@ -231,10 +265,10 @@ pub async fn update_forum(req: &Request) -> Result<ForumInfo> {
     )
     .await?;
 
-    get_forum_internal(message.forum_id).await
+    get_forum_internal(message.forum_id, Some(user_id)).await
 }
 
-async fn get_forum_internal(forum_id: Ulid) -> Result<ForumInfo> {
+async fn get_forum_internal(forum_id: Ulid, user_id: Option<Ulid>) -> Result<ForumInfo> {
     let db = db();
     let forum_id_str = forum_id.to_string();
 
@@ -256,6 +290,9 @@ async fn get_forum_internal(forum_id: Ulid) -> Result<ForumInfo> {
     .fetch_one(db)
     .await?;
 
+    // Check management permissions
+    let can_manage = check_forum_management_permission(forum_id, user_id).await?;
+
     Ok(ForumInfo {
         forum_id,
         slug: row.slug,
@@ -270,6 +307,7 @@ async fn get_forum_internal(forum_id: Ulid) -> Result<ForumInfo> {
         is_active: row.is_active == 1,
         display_order: row.display_order as i32,
         topic_count,
+        can_manage,
     })
 }
 
@@ -291,7 +329,7 @@ pub async fn get_personal_forum(req: &Request) -> Result<ForumInfo> {
     .await?;
 
     if existing.is_some() {
-        return get_forum_internal(user_id).await;
+        return get_forum_internal(user_id, Some(user_id)).await;
     }
 
     let now = TimeString::now();
@@ -336,5 +374,5 @@ pub async fn get_personal_forum(req: &Request) -> Result<ForumInfo> {
     )
     .await?;
 
-    get_forum_internal(user_id).await
+    get_forum_internal(user_id, Some(user_id)).await
 }

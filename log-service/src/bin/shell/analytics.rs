@@ -159,9 +159,8 @@ impl AnalyticsEngine {
 
         let input_lower = input.to_lowercase();
 
-        // SQL keyword suggestions
+        // SQL keyword suggestions (excluding shell commands and statement starters)
         let sql_keywords = vec![
-            "SELECT",
             "FROM",
             "WHERE",
             "GROUP BY",
@@ -183,12 +182,6 @@ impl AnalyticsEngine {
             "NOT",
             "LIKE",
             "IN",
-            "DESCRIBE",
-            "quit",
-            "exit",
-            "help",
-            "list",
-            "export",
         ];
 
         // Add SQL keyword suggestions
@@ -201,16 +194,9 @@ impl AnalyticsEngine {
         // Get table suggestions dynamically from DataFusion session context
         if let Some(tables) = self.query_engine.get_available_tables() {
             for table in tables {
-                if table.starts_with(&input_lower) {
+                if table.to_lowercase().starts_with(&input_lower) {
                     suggestions.push(table);
                 }
-            }
-        }
-
-        // Add function suggestions
-        for func in self.query_engine.get_available_functions() {
-            if func.starts_with(&input_lower) {
-                suggestions.push(func);
             }
         }
 

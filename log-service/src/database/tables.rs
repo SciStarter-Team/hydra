@@ -162,7 +162,7 @@ pub struct ParticipationRow {
     pub extra: String,
     pub fidelity: f64,
     pub entity_id: String,
-    pub user_id: String,
+    pub user_id: Option<String>,
     pub task_name: Option<String>,
 }
 
@@ -180,7 +180,7 @@ impl TableRow for ParticipationRow {
             Field::new("extra", DataType::Utf8, false),
             Field::new("fidelity", DataType::Float64, false),
             Field::new("entity_id", DataType::Utf8, false),
-            Field::new("user_id", DataType::Utf8, false),
+            Field::new("user_id", DataType::Utf8, true),
             Field::new("task_name", DataType::Utf8, true),
         ])
     }

@@ -5,17 +5,101 @@
       <% if let Some(description) = &forum.description { %>
         <p class="forum-description"><%= description %></p>
       <% } %>
+      
+      <% if self.can_manage_forum { %>
+        <div class="forum-management">
+          <h4>Forum Management</h4>
+          <div class="management-actions">
+            <button type="button" class="btn-secondary" 
+                    hx-on:click="document.getElementById('forum-edit-form').style.display = document.getElementById('forum-edit-form').style.display === 'none' ? 'block' : 'none'">Edit Forum</button>
+            <button type="button" class="btn-secondary"
+                    hx-on:click="document.getElementById('moderator-management').style.display = 'block'">Manage Moderators</button>
+          </div>
+          
+          <div id="forum-edit-form" class="forum-edit-form" style="display: none;">
+            <h5>Edit Forum Details</h5>
+            <form hx-post="/-forum/<%= self.slug %>/update" hx-target="#forum-<%= self.slug %>">
+              <div class="form-field">
+                <label for="name">Forum Name:</label>
+                <input type="text" name="name" value="<%= forum.name %>" required>
+              </div>
+              
+              <div class="form-field">
+                <label for="description">Description:</label>
+                <textarea name="description" rows="3"><%= forum.description.as_ref().unwrap_or(&"".to_string()) %></textarea>
+              </div>
+              
+              <div class="form-field">
+                <label>
+                  <input type="checkbox" name="is_active" <%= if forum.is_active { "checked" } else { "" } %>>
+                  Forum is active
+                </label>
+              </div>
+              
+              <div class="form-actions">
+                <button type="submit" class="btn-primary">Update Forum</button>
+                <button type="button" class="btn-secondary"
+                        hx-on:click="document.getElementById('forum-edit-form').style.display = 'none'">Cancel</button>
+              </div>
+            </form>
+          </div>
+          
+          <div id="moderator-management" class="moderator-management" style="display: none;">
+            <h5>Moderator Management</h5>
+            <div hx-get="/-forum/<%= self.slug %>/moderators" hx-target="#moderator-list" hx-trigger="load">
+              <div id="moderator-list">Loading moderators...</div>
+            </div>
+            
+            <form hx-post="/-forum/<%= self.slug %>/moderators/add" hx-target="#moderator-list">
+              <div class="form-field">
+                <label for="user_search">Add Moderator:</label>
+                <input type="text" 
+                       id="user_search" 
+                       name="q"
+                       placeholder="Search for user by handle" 
+                       autocomplete="off"
+                       hx-get="/-forum/<%= self.slug %>/users/search"
+                       hx-target="#user-search-results"
+                       hx-trigger="input changed delay:300ms"
+                       hx-include="this">
+                <input type="hidden" name="user_id" id="selected_user_id" required>
+                <input type="hidden" name="user_handle" id="selected_user_handle">
+                <div id="user-search-results"></div>
+              </div>
+              <button type="submit" class="btn-primary">Add Moderator</button>
+            </form>
+            
+            <script>
+              function selectUser(userId, userHandle) {
+                document.getElementById('selected_user_id').value = userId;
+                document.getElementById('selected_user_handle').value = userHandle;
+                document.getElementById('user_search').value = userHandle;
+                document.getElementById('user-search-results').innerHTML = '';
+              }
+            </script>
+            
+            <button type="button" class="btn-secondary"
+                    hx-on:click="document.getElementById('moderator-management').style.display = 'none'">Close</button>
+          </div>
+        </div>
+      <% } %>
     </div>
 
     <% if self.can_create_topic { %>
-      <div class="create-topic-form">
+      <div id="create-topic-form" class="create-topic-form">
         <h3>Create New Topic</h3>
-        <form hx-post="/-forum/create-topic" hx-target="#forum-<%= self.slug %>">
+        <form hx-post="/-forum/topic/new" hx-target="#forum-<%= self.slug %>">
           <input type="hidden" name="slug" value="<%= self.slug %>">
           
           <div class="form-field">
             <label for="title">Title:</label>
-            <input type="text" name="title" required>
+            <input type="text" name="title" required
+                   autocomplete="off"
+                   hx-get="/-forum/<%= self.slug %>/suggest"
+                   hx-target="#topic-suggestions"
+                   hx-trigger="input changed delay:500ms"
+                   hx-include="this">
+            <div id="topic-suggestions"></div>
           </div>
           
           <div class="form-field">
@@ -45,25 +129,32 @@
         <p>No topics yet. Be the first to start a discussion!</p>
       <% } else { %>
         <% for topic in &self.topics { %>
-          <div class="topic-item" hx-get="/-forum/topic/<%= topic.topic_id|disp %>/page?page=0" 
-               hx-target="#topic-<%= topic.topic_id|disp %>" hx-trigger="click">
-            <h4><%= topic.title %></h4>
-            <div class="topic-meta">
-              By <% if topic.author_is_public { %>
-                <a href="/-forum/user/<%= topic.author_id|disp %>/profile" class="profile-link"><%= topic.author_handle %></a>
-              <% } else { %>
-                <%= topic.author_handle %>
-              <% } %> | 
-              <%= topic.created_at|disp %> | 
-              <%= topic.post_count %> posts
-              <% if !topic.tags.is_empty() { %>
-                | Tags: 
-                <% for tag in &topic.tags { %>
-                  <span class="tag"><%= tag %></span>
+          <div class="topic-item">
+            <div id="topic-<%= topic.topic_id|disp %>" class="topic-container" 
+                 hx-get="/-forum/topic/<%= topic.topic_id|disp %>/page?page=0" 
+                 hx-trigger="click" 
+                 hx-swap="outerHTML"
+                 style="cursor: pointer;">
+              <h4><%= topic.title %> <small style="color: #666; font-weight: normal;">(click to expand)</small></h4>
+              <div class="topic-meta">
+                By <% if topic.author_is_public { %>
+                  <a href="/-forum/user/<%= topic.author_id|disp %>/profile" class="profile-link"><%= topic.author_handle %></a>
+                <% } else { %>
+                  <%= topic.author_handle %>
+                <% } %> | 
+                <%= topic.created_at.format_display() %> | 
+                <%= topic.post_count %> posts
+                <% if let Some(category) = &topic.category { %>
+                  | Category: <%= if category.len() > 20 { format!("{}...", &category[..17]) } else { category.clone() } %>
                 <% } %>
-              <% } %>
+                <% if !topic.tags.is_empty() { %>
+                  | Tags: 
+                  <% for tag in &topic.tags { %>
+                    <span class="tag"><%= if tag.len() > 15 { format!("{}...", &tag[..12]) } else { tag.clone() } %></span>
+                  <% } %>
+                <% } %>
+              </div>
             </div>
-            <div id="topic-<%= topic.topic_id|disp %>" class="topic-detail-container"></div>
           </div>
         <% } %>
       <% } %>

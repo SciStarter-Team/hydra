@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+  <head>
+    <% use component::Head; %>
+    <%+ Head::default() %>
+    <title>Demo Forum</title>
+  </head>
+  <body>
+    <%+ self.header %>
+
+    <ul>
+      <li><a href="/login?next=/demo-forum">Log in</a></li>
+      <li><a href="/logout?next=/demo-forum">Log out</a></li>
+    </ul>
+
+    <div id="everything-inside-of-this-is-rendered-by-the-forum" class="max-w-4xl mx-auto">
+      <%+ self.forum %>
+    </div>
+
+    <%+ self.footer %>
+  </body>
+</html>

@@ -12,32 +12,7 @@ use common::{
 };
 use ulid::Ulid;
 
-async fn check_moderation_permissions(user_id: Ulid, forum_id: &str) -> Result<bool> {
-    let user_info: BasicInfo = request("user.basic_info.by_user_id", user_id.to_string()).await?;
-
-    // Staff members can moderate any forum
-    if user_info.is_staff() {
-        return Ok(true);
-    }
-
-    // Users can moderate their own personal forum (where user_id == forum_id)
-    let user_id_str = user_id.to_string();
-    if forum_id == user_id_str {
-        return Ok(true);
-    }
-
-    // Check if user is a forum-specific moderator
-    let db = db();
-    let result = sqlx::query!(
-        r#"SELECT "forum_id" FROM "forum_moderators" WHERE "forum_id" = ? AND "user_id" = ?"#,
-        forum_id,
-        user_id_str
-    )
-    .fetch_optional(db)
-    .await?;
-
-    Ok(result.is_some())
-}
+use crate::forums::check_forum_management_permission;
 
 pub async fn moderate_content(req: &Request) -> Result<()> {
     let action: ModerationAction = flexbuffers::from_slice(&req.message.payload)?;
@@ -73,7 +48,8 @@ pub async fn moderate_content(req: &Request) -> Result<()> {
     };
 
     // Check permissions for this specific forum
-    if !check_moderation_permissions(user_id, &forum_id).await? {
+    let forum_id_ulid = forum_id.as_ulid()?;
+    if !check_forum_management_permission(forum_id_ulid, Some(user_id)).await? {
         return Err(anyhow::anyhow!("Permission denied"));
     }
 
@@ -303,19 +279,21 @@ pub async fn get_moderation_log(req: &Request) -> Result<Vec<ModerationLogEntry>
 pub async fn add_forum_moderator(req: &Request) -> Result<()> {
     let action: AddForumModerator = flexbuffers::from_slice(&req.message.payload)?;
 
-    let requester_info: BasicInfo = request(
+    let requester_info: Option<BasicInfo> = request(
         "user.basic_info.by_user_id",
         action.requester_id.to_string(),
     )
     .await?;
+    let requester_info = requester_info.ok_or_else(|| anyhow::anyhow!("Requester user not found"))?;
     if !requester_info.is_staff() {
         return Err(anyhow::anyhow!(
             "Permission denied: only staff can manage forum moderators"
         ));
     }
 
-    let user_info: BasicInfo =
+    let user_info: Option<BasicInfo> =
         request("user.basic_info.by_user_id", action.user_id.to_string()).await?;
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Target user not found"))?;
     if user_info.is_staff() {
         return Err(anyhow::anyhow!(
             "Staff members cannot be added as forum-specific moderators"
@@ -357,19 +335,21 @@ pub async fn add_forum_moderator(req: &Request) -> Result<()> {
 pub async fn remove_forum_moderator(req: &Request) -> Result<()> {
     let action: RemoveForumModerator = flexbuffers::from_slice(&req.message.payload)?;
 
-    let requester_info: BasicInfo = request(
+    let requester_info: Option<BasicInfo> = request(
         "user.basic_info.by_user_id",
         action.requester_id.to_string(),
     )
     .await?;
+    let requester_info = requester_info.ok_or_else(|| anyhow::anyhow!("Requester user not found"))?;
     if !requester_info.is_staff() {
         return Err(anyhow::anyhow!(
             "Permission denied: only staff can manage forum moderators"
         ));
     }
 
-    let user_info: BasicInfo =
+    let user_info: Option<BasicInfo> =
         request("user.basic_info.by_user_id", action.user_id.to_string()).await?;
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Target user not found"))?;
 
     let db = db();
     let forum_id_str = action.forum_id.to_string();

@@ -1015,16 +1015,39 @@ impl App {
         self.completion_prefix = current_word.to_string();
         let mut completions = Vec::new();
 
-        // Function completions
-        for func in self.query_engine.get_available_functions() {
-            if func.starts_with(current_word) {
-                completions.push(func);
-            }
-        }
+        // Check if we're completing the first word of the command
+        let is_first_word = last_word_start == 0;
 
-        // Use analytics engine for comprehensive suggestions (includes SQL keywords, commands, and tables)
-        let suggestions = self.analytics_engine.get_query_suggestions(current_word);
-        completions.extend(suggestions);
+        if is_first_word {
+            let current_word_lower = current_word.to_lowercase();
+
+            // For first word, suggest functions and shell commands
+            for func in self.query_engine.get_available_functions() {
+                if func.to_lowercase().starts_with(&current_word_lower) {
+                    completions.push(func);
+                }
+            }
+
+            // Add shell commands (lowercase) - excluding "describe" since we prefer "DESCRIBE"
+            let shell_commands = vec!["help", "list", "export", "quit", "exit"];
+            for cmd in shell_commands {
+                if cmd.starts_with(&current_word_lower) {
+                    completions.push(cmd.to_string());
+                }
+            }
+
+            // Add SQL keywords that can start a statement (uppercase)
+            let sql_starters = vec!["SELECT", "DESCRIBE"];
+            for keyword in sql_starters {
+                if keyword.to_lowercase().starts_with(&current_word_lower) {
+                    completions.push(keyword.to_string());
+                }
+            }
+        } else {
+            // For non-first words, use analytics engine for SQL keywords and table names
+            let suggestions = self.analytics_engine.get_query_suggestions(current_word);
+            completions.extend(suggestions);
+        }
 
         // Remove duplicates and sort
         completions.sort();

@@ -117,6 +117,7 @@ pub struct ForumInfo {
     pub is_active: bool,
     pub display_order: i32,
     pub topic_count: i64,
+    pub can_manage: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -172,4 +173,16 @@ pub struct ForumModeratorInfo {
     pub user_id: Ulid,
     pub user_handle: String,
     pub created_at: TimeString,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GetForumBySlug {
+    pub slug: String,
+    pub user_id: Option<Ulid>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GetForumById {
+    pub forum_id: Ulid,
+    pub user_id: Option<Ulid>,
 }

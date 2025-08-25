@@ -83,6 +83,36 @@ pub async fn basic_info_by_user_id(req: &Request) -> Result<Option<BasicInfo>, E
     }
 }
 
+pub async fn search_by_handle(req: &Request) -> Result<Vec<BasicInfo>, Error> {
+    let search_term: String = flexbuffers::from_slice(&req.message.payload)?;
+    
+    let results = sqlx::query_as!(
+        BasicInfoDb,
+        r#"select
+          "user_id",
+          "handle",
+          "is_staff" as "is_staff: bool",
+          "is_superuser" as "is_superuser: bool",
+          "public" as "public: bool",
+          "protected" as "protected: bool"
+        from "users"
+        where "handle" LIKE ? || '%' 
+          AND "public" = 1 
+          AND "protected" = 0
+        order by "handle""#,
+        search_term,
+    )
+    .fetch_all(db())
+    .await?;
+
+    let mut users = Vec::new();
+    for db_info in results {
+        users.push(db_info.try_into()?);
+    }
+    
+    Ok(users)
+}
+
 /// Get all tags for a user
 pub async fn get_user_tags(req: &Request) -> Result<Vec<String>, Error> {
     let user_id: String = flexbuffers::from_slice(&req.message.payload)?;

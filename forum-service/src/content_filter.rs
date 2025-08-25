@@ -7,6 +7,7 @@ use common::{
     },
     service::request,
     shared::db,
+    timestring::TimeString,
 };
 
 pub async fn check_content(req: &Request) -> Result<ContentFilterResult> {
@@ -53,10 +54,13 @@ pub async fn add_bad_word(req: &Request) -> Result<()> {
     }
 
     let db = db();
+    let now = TimeString::now();
+    let now_str = now.to_string();
 
     sqlx::query!(
-        r#"INSERT INTO "bad_words" ("word") VALUES (upper(?)) ON CONFLICT ("word") DO NOTHING"#,
-        word
+        r#"INSERT INTO "bad_words" ("word", "created_at") VALUES (upper(?), ?) ON CONFLICT ("word") DO NOTHING"#,
+        word,
+        now_str
     )
     .execute(db)
     .await?;

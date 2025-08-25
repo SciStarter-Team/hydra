@@ -204,7 +204,7 @@ impl SummaryGenerator {
                         .gt_eq(lit(current_date.to_string()))
                         .and(col("when").lt(lit(next_date.to_string()))),
                 )?
-                .aggregate(vec![], vec![count(col("*")).alias("count")])?
+                .aggregate(vec![], vec![count(lit(1)).alias("count")])?
                 .with_column("date", lit(current_date.to_string()))?
                 .with_column("updated_at", lit(Timestamp::now().as_microsecond()))?;
 
@@ -335,7 +335,7 @@ impl SummaryGenerator {
                                 .to_string())),
                         ),
                     )?
-                    .aggregate(vec![], vec![count(col("*")).alias("count")])?
+                    .aggregate(vec![], vec![count(lit(1)).alias("count")])?
                     .with_column("week_start", lit(week_start_str))?
                     .with_column("updated_at", lit(Timestamp::now().as_microsecond()))?;
 

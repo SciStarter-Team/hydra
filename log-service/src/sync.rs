@@ -22,7 +22,7 @@ pub struct ParticipationEventData {
     pub repetitions: i32,
     pub fidelity: f64,
     pub entity_ulid: String,
-    pub profile_user_ulid: String,
+    pub profile_user_ulid: Option<String>,
     pub task_name: Option<String>,
 }
 

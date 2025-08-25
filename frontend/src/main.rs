@@ -17,8 +17,9 @@ pub mod upload;
 
 use anyhow::Error;
 use common::{message::location::LocationInfo, shared::db};
+use component::Component;
 use entity::Entity;
-use middleware::authorization::{NotAuthorized, SessionSubject};
+use middleware::authorization::{Authenticated, NotAuthorized, SessionSubject};
 use peering::LoadStorePeered;
 use poem::{
     Endpoint, EndpointExt, IntoResponse, Response, Route, Server,
@@ -101,6 +102,28 @@ async fn error_dispatch(err: poem::Error) -> Response {
     }
 }
 
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "dev/demo_forum.stpl.html")]
+struct DemoForum {
+    header: <component::Header as Component>::Prepared,
+    forum: <component::Forum as Component>::Prepared,
+    footer: <component::Footer as Component>::Prepared,
+}
+
+#[handler]
+async fn demo_forum(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let prepared = DemoForum {
+        header: component::Header::default()
+            .prepare(user_info.clone())
+            .await?,
+        forum: component::Forum::new("general").prepare(user_info.clone()).await?,
+        footer: component::Footer::default().prepare(user_info).await?,
+    };
+    prepared.render(None).await
+}
+
 fn user_facing() -> impl Endpoint {
     Route::new()
         .at("/:slug", get(entity_page))
@@ -112,6 +135,7 @@ fn user_facing() -> impl Endpoint {
             get(auth::login_signup_page).post(auth::login_action),
         )
         .at("/logout", get(auth::logout_action))
+        .at("/demo-forum", get(demo_forum))
         .with(middleware::analytics::AnalyticsMiddleware)
 }
 

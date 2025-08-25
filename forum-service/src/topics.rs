@@ -51,27 +51,9 @@ pub async fn create_topic(req: &Request) -> Result<TopicInfo> {
     let topic_id = Ulid::new();
     let now = TimeString::now();
 
-    // Check for similar topics in the same forum (last 100 topics for performance)
+    // Note: Similar topic checking removed - users can create topics with similar titles
+    // The suggest_similar_topics function is still available for UI to show suggestions
     let db = db();
-    let forum_id_str = message.forum_id.to_string();
-    let recent_topics = sqlx::query!(
-        r#"SELECT "title" FROM "topics" 
-           WHERE "forum_id" = ? AND "is_deleted" = 0 
-           ORDER BY "created_at" DESC 
-           LIMIT 100"#,
-        forum_id_str
-    )
-    .fetch_all(db)
-    .await?;
-
-    for existing_topic in &recent_topics {
-        if titles_similar(&message.title, &existing_topic.title) {
-            return Err(anyhow::anyhow!(
-                "A similar topic already exists: '{}'",
-                existing_topic.title
-            ));
-        }
-    }
 
     // Check content for bad words
     let filter_result: ContentFilterResult = crate::content_filter::check_content_internal(
@@ -402,15 +384,16 @@ pub async fn update_topic(req: &Request) -> Result<TopicInfo> {
 }
 
 pub async fn suggest_similar_topics(req: &Request) -> Result<Vec<TopicInfo>> {
-    let (forum_id_str, title): (String, String) = flexbuffers::from_slice(&req.message.payload)?;
+    let (forum_slug, title): (String, String) = flexbuffers::from_slice(&req.message.payload)?;
     let db = db();
 
     let recent_topics = sqlx::query!(
-        r#"SELECT "topic_id", "title" FROM "topics" 
-           WHERE "forum_id" = ? AND "is_deleted" = 0 
-           ORDER BY "created_at" DESC 
+        r#"SELECT t."topic_id", t."title" FROM "topics" t
+           JOIN "forums" f ON t."forum_id" = f."forum_id"
+           WHERE f."slug" = ? AND f."is_active" = 1 AND t."is_deleted" = 0 
+           ORDER BY t."created_at" DESC 
            LIMIT 100"#,
-        forum_id_str
+        forum_slug
     )
     .fetch_all(db)
     .await?;
