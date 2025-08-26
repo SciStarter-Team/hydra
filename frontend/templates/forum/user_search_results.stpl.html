@@ -1,0 +1,14 @@
+<div class="user-search-results">
+    <% for user in users { %>
+        <div class="user-search-result" 
+             data-user-id="<%= user.user_id|disp %>"
+             data-user-handle="<%= user.handle %>"
+             hx-on:click="selectUser('<%= user.user_id|disp %>', '<%= user.handle %>')"
+             style="cursor: pointer;">
+            <div class="user-info">
+                <strong><%= user.display_handle() %></strong>
+                <small>ID: <%= user.user_id|disp %></small>
+            </div>
+        </div>
+    <% } %>
+</div>

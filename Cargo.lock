@@ -2235,6 +2235,7 @@ dependencies = [
  "flexbuffers",
  "futures",
  "jiff",
+ "regex",
  "serde",
  "serde_json",
  "sqlx",

@@ -6,6 +6,7 @@ use common::{
 use futures::StreamExt;
 use tokio::task::JoinSet;
 
+pub mod categories;
 pub mod content_filter;
 pub mod forums;
 pub mod moderation;
@@ -55,12 +56,12 @@ async fn main() {
     let moderation = service.group("forum.moderation");
     toplevel.spawn(handler!(moderation, "action", moderation::moderate_content));
     toplevel.spawn(handler!(moderation, "log", moderation::get_moderation_log));
-    toplevel.spawn(recv_handler!(
+    toplevel.spawn(handler!(
         moderation,
         "add_moderator",
         moderation::add_forum_moderator
     ));
-    toplevel.spawn(recv_handler!(
+    toplevel.spawn(handler!(
         moderation,
         "remove_moderator",
         moderation::remove_forum_moderator
@@ -87,6 +88,13 @@ async fn main() {
         "get_personal",
         forums::get_personal_forum
     ));
+
+    // Forum category management endpoints
+    let categories = service.group("forum.categories");
+    toplevel.spawn(handler!(categories, "create", categories::create_forum_category));
+    toplevel.spawn(handler!(categories, "list", categories::get_forum_categories));
+    toplevel.spawn(handler!(categories, "update", categories::update_forum_category));
+    toplevel.spawn(handler!(categories, "delete", categories::delete_forum_category));
 
     // Content filtering endpoints
     let filter = service.group("forum.filter");

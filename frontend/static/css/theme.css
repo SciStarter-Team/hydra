@@ -1,6 +1,6 @@
 @import "tailwindcss";
 @theme static  {
-  --color-*: initial;
+/*  --color-*: initial; */ /* Disabled because it throws off the tailwind compiler */
   --color-orange: #f26100;
   --color-orange-hover: #c45306;
   --color-action-blue: #0071c2;

@@ -1,44 +1,47 @@
-<div id="forum-<%= self.slug %>" class="forum-component">
+<div id="forum-<%= self.slug %>" class="max-w-4xl mx-auto p-6 bg-white shadow-xs rounded-lg">
   <% if let Some(forum) = &self.forum { %>
-    <div class="forum-header">
-      <h2><%= forum.name %></h2>
+    <div class="mb-8">
+      <h2 class="text-3xl font-bold text-gray-900 mb-2"><%= forum.name %></h2>
       <% if let Some(description) = &forum.description { %>
-        <p class="forum-description"><%= description %></p>
+        <p class="text-gray-600 text-lg"><%= description %></p>
       <% } %>
       
       <% if self.can_manage_forum { %>
-        <div class="forum-management">
-          <h4>Forum Management</h4>
-          <div class="management-actions">
-            <button type="button" class="btn-secondary" 
+        <div class="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+          <h4 class="text-lg font-semibold text-amber-800 mb-3">Forum Management</h4>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" class="px-3 py-1 text-sm bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-md transition-colors" 
                     hx-on:click="document.getElementById('forum-edit-form').style.display = document.getElementById('forum-edit-form').style.display === 'none' ? 'block' : 'none'">Edit Forum</button>
-            <button type="button" class="btn-secondary"
+            <button type="button" class="px-3 py-1 text-sm bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-md transition-colors"
                     hx-on:click="document.getElementById('moderator-management').style.display = 'block'">Manage Moderators</button>
+            <button type="button" class="px-3 py-1 text-sm bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-md transition-colors"
+                    hx-on:click="document.getElementById('category-management').style.display = 'block'">Manage Categories</button>
           </div>
           
-          <div id="forum-edit-form" class="forum-edit-form" style="display: none;">
-            <h5>Edit Forum Details</h5>
-            <form hx-post="/-forum/<%= self.slug %>/update" hx-target="#forum-<%= self.slug %>">
-              <div class="form-field">
-                <label for="name">Forum Name:</label>
-                <input type="text" name="name" value="<%= forum.name %>" required>
+          <div id="forum-edit-form" class="mt-4 p-4 bg-white border border-gray-200 rounded-md" style="display: none;">
+            <h5 class="text-md font-medium text-gray-900 mb-4">Edit Forum Details</h5>
+            <form hx-post="/-forum/<%= self.slug %>/update" hx-target="#forum-<%= self.slug %>" class="space-y-4">
+              <div>
+                <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Forum Name:</label>
+                <input type="text" name="name" value="<%= forum.name %>" required 
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent">
               </div>
               
-              <div class="form-field">
-                <label for="description">Description:</label>
-                <textarea name="description" rows="3"><%= forum.description.as_ref().unwrap_or(&"".to_string()) %></textarea>
+              <div>
+                <label for="description" class="block text-sm font-medium text-gray-700 mb-1">Description:</label>
+                <textarea name="description" rows="3" 
+                          class="bg-white w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent"><%= forum.description.as_ref().unwrap_or(&"".to_string()) %></textarea>
               </div>
               
-              <div class="form-field">
-                <label>
-                  <input type="checkbox" name="is_active" <%= if forum.is_active { "checked" } else { "" } %>>
-                  Forum is active
-                </label>
+              <div class="flex items-center">
+                <input type="checkbox" name="is_active" <%= if forum.is_active { "checked" } else { "" } %>
+                       class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                <label class="ml-2 text-sm text-gray-700">Forum is active</label>
               </div>
               
-              <div class="form-actions">
-                <button type="submit" class="btn-primary">Update Forum</button>
-                <button type="button" class="btn-secondary"
+              <div class="flex gap-2 pt-2">
+                <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors">Update Forum</button>
+                <button type="button" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md transition-colors"
                         hx-on:click="document.getElementById('forum-edit-form').style.display = 'none'">Cancel</button>
               </div>
             </form>
@@ -81,100 +84,155 @@
             <button type="button" class="btn-secondary"
                     hx-on:click="document.getElementById('moderator-management').style.display = 'none'">Close</button>
           </div>
+
+          <div id="category-management" class="category-management" style="display: none;">
+            <h5>Category Management</h5>
+            <div hx-get="/-forum/<%= self.slug %>/categories" hx-target="#category-list" hx-trigger="load">
+              <div id="category-list">Loading categories...</div>
+            </div>
+            
+            <form hx-post="/-forum/<%= self.slug %>/categories/add" hx-target="#category-list">
+              <input type="hidden" name="slug" value="<%= self.slug %>">
+              <div class="form-field">
+                <label for="category_name">Add Category:</label>
+                <input type="text" name="category_name" placeholder="Category name" required>
+              </div>
+              <button type="submit" class="btn-primary">Add Category</button>
+            </form>
+            
+            <button type="button" class="btn-secondary"
+                    hx-on:click="document.getElementById('category-management').style.display = 'none'">Close</button>
+          </div>
         </div>
       <% } %>
     </div>
 
     <% if self.can_create_topic { %>
-      <div id="create-topic-form" class="create-topic-form">
-        <h3>Create New Topic</h3>
-        <form hx-post="/-forum/topic/new" hx-target="#forum-<%= self.slug %>">
+      <div id="create-topic-form" class="mb-8 p-6 bg-blue-50 border border-blue-200 rounded-lg">
+        <h3 class="text-xl font-semibold text-blue-900 mb-4">Create New Topic</h3>
+        <form hx-post="/-forum/topic/new" hx-target="#forum-<%= self.slug %>" class="space-y-4">
           <input type="hidden" name="slug" value="<%= self.slug %>">
           
-          <div class="form-field">
-            <label for="title">Title:</label>
-            <input type="text" name="title" required
+          <div>
+            <label for="title" class="block text-sm font-medium text-gray-700 mb-1">Title:</label>
+            <input type="text" name="title" required autofocus
                    autocomplete="off"
                    hx-get="/-forum/<%= self.slug %>/suggest"
                    hx-target="#topic-suggestions"
                    hx-trigger="input changed delay:500ms"
-                   hx-include="this">
-            <div id="topic-suggestions"></div>
+                   hx-include="this"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+            <div id="topic-suggestions" class="mt-2"></div>
           </div>
           
-          <div class="form-field">
-            <label for="content">Content:</label>
-            <textarea name="content" rows="4" required></textarea>
+          <div>
+            <label for="content" class="block text-sm font-medium text-gray-700 mb-1">Content:</label>
+            <textarea name="content" rows="4" required 
+                      class="bg-white w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent"></textarea>
+          </div>
+
+          <%+ CategoryDropdown { categories: &self.categories, oob: false} %>
+          
+          <div>
+            <label for="tags" class="block text-sm font-medium text-gray-700 mb-1">Tags (comma-separated):</label>
+            <input type="text" name="tags" placeholder="tag1, tag2, tag3"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent">
           </div>
           
-          <div class="form-field">
-            <label for="category">Category (optional):</label>
-            <input type="text" name="category">
-          </div>
-          
-          <div class="form-field">
-            <label for="tags">Tags (comma-separated):</label>
-            <input type="text" name="tags" placeholder="tag1, tag2, tag3">
-          </div>
-          
-          <button type="submit">Create Topic</button>
+          <button type="submit" class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md transition-colors">
+            Create Topic
+            <span class="htmx-indicator ml-2">...</span>
+          </button>
         </form>
       </div>
     <% } %>
 
-    <div class="topics-list">
-      <h3>Topics</h3>
+    <div>
+      <h3 class="text-2xl font-bold text-gray-900 mb-6">Topics</h3>
       
       <% if self.topics.is_empty() { %>
-        <p>No topics yet. Be the first to start a discussion!</p>
+        <div class="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+          <p class="text-gray-600 text-lg">No topics yet. Be the first to start a discussion!</p>
+        </div>
       <% } else { %>
-        <% for topic in &self.topics { %>
-          <div class="topic-item">
-            <div id="topic-<%= topic.topic_id|disp %>" class="topic-container" 
-                 hx-get="/-forum/topic/<%= topic.topic_id|disp %>/page?page=0" 
-                 hx-trigger="click" 
-                 hx-swap="outerHTML"
-                 style="cursor: pointer;">
-              <h4><%= topic.title %> <small style="color: #666; font-weight: normal;">(click to expand)</small></h4>
-              <div class="topic-meta">
-                By <% if topic.author_is_public { %>
-                  <a href="/-forum/user/<%= topic.author_id|disp %>/profile" class="profile-link"><%= topic.author_handle %></a>
-                <% } else { %>
-                  <%= topic.author_handle %>
-                <% } %> | 
-                <%= topic.created_at.format_display() %> | 
-                <%= topic.post_count %> posts
-                <% if let Some(category) = &topic.category { %>
-                  | Category: <%= if category.len() > 20 { format!("{}...", &category[..17]) } else { category.clone() } %>
-                <% } %>
-                <% if !topic.tags.is_empty() { %>
-                  | Tags: 
-                  <% for tag in &topic.tags { %>
-                    <span class="tag"><%= if tag.len() > 15 { format!("{}...", &tag[..12]) } else { tag.clone() } %></span>
+        <div class="space-y-3">
+          <% for topic in &self.topics { %>
+            <div class="bg-white border border-gray-200 rounded-lg shadow-xs hover:shadow-md transition-shadow">
+              <div id="topic-<%= topic.topic_id|disp %>" class="p-4 cursor-pointer hover:bg-gray-50 transition-colors" 
+                   hx-get="/-forum/topic/<%= topic.topic_id|disp %>/page?page=0" 
+                   hx-trigger="click" 
+                   hx-swap="outerHTML">
+                <h4 class="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                  <% if topic.is_pinned { %>
+                    <span class="text-yellow-600" title="Pinned">📌</span>
                   <% } %>
+                  <% if topic.is_locked { %>
+                    <span class="text-gray-600" title="Locked">🔒</span>
+                  <% } %>
+                  <span class="flex-1"><%= topic.title %></span>
+                  <small class="text-gray-500 font-normal text-sm">(click to expand)</small>
+                </h4>
+                <div class="text-sm text-gray-600 flex flex-wrap items-center gap-1">
+                  <span>By</span>
+                  <% if topic.author_is_public { %>
+                    <a href="/-forum/user/<%= topic.author_id|disp %>/profile" class="text-blue-600 hover:text-blue-800 font-medium"><%= topic.author_handle %></a>
+                  <% } else { %>
+                    <span class="font-medium text-gray-700"><%= topic.author_handle %></span>
+                  <% } %>
+                  <span class="text-gray-400">•</span>
+                  <span><%= topic.created_at.format_display() %></span>
+                  <span class="text-gray-400">•</span>
+                  <span class="font-medium"><%= topic.post_count %> posts</span>
+                  <% if let Some(category) = &topic.category { %>
+                    <% if !category.trim().is_empty() { %>
+                      <span class="text-gray-400">•</span>
+                      <span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                        <%= if category.is_empty() { category.clone() } else if category.len() > 20 { format!("{}...", &category[..17]) } else { category.clone() } %>
+                      </span>
+                    <% } %>
+                  <% } %>
+                </div>
+                <% if !topic.tags.is_empty() { %>
+                  <div class="mt-2 flex flex-wrap gap-1">
+                    <% for tag in &topic.tags { %>
+                      <span class="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                        <%= if tag.len() > 15 { format!("{}...", &tag[..12]) } else { tag.clone() } %>
+                      </span>
+                    <% } %>
+                  </div>
                 <% } %>
               </div>
             </div>
-          </div>
-        <% } %>
+          <% } %>
+        </div>
       <% } %>
       
       <!-- Pagination -->
-      <div class="pagination">
+      <div class="mt-8 flex items-center justify-center gap-4">
         <% if self.has_prev_page { %>
           <button hx-get="/-forum/<%= self.slug %>/page?page=<%= self.page - 1 %>&per_page=<%= self.per_page %>" 
-                  hx-target="#forum-<%= self.slug %>">Previous</button>
+                  hx-target="#forum-<%= self.slug %>"
+                  class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors">
+            ← Previous
+          </button>
         <% } %>
         
-        <span>Page <%= self.page + 1 %></span>
+        <span class="px-4 py-2 bg-blue-100 text-blue-800 rounded-md font-medium">
+          Page <%= self.page + 1 %>
+        </span>
         
         <% if self.has_next_page { %>
           <button hx-get="/-forum/<%= self.slug %>/page?page=<%= self.page + 1 %>&per_page=<%= self.per_page %>" 
-                  hx-target="#forum-<%= self.slug %>">Next</button>
+                  hx-target="#forum-<%= self.slug %>"
+                  class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors">
+            Next →
+          </button>
         <% } %>
       </div>
     </div>
   <% } else { %>
-    <p>Forum not found.</p>
+    <div class="text-center py-12">
+      <p class="text-gray-600 text-lg">Forum not found.</p>
+    </div>
   <% } %>
 </div>

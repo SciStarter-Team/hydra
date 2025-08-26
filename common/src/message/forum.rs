@@ -37,6 +37,7 @@ pub struct TopicInfo {
     pub is_pinned: bool,
     pub is_locked: bool,
     pub is_deleted: bool,
+    pub is_flagged: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -51,6 +52,7 @@ pub struct PostInfo {
     pub updated_at: Option<TimeString>,
     pub parent_post_id: Option<Ulid>,
     pub is_deleted: bool,
+    pub is_flagged: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -103,6 +105,7 @@ pub enum ModerationActionType {
     Lock,
     Unlock,
     Flag,
+    Unflag,
 }
 
 // Forum management messages
@@ -185,4 +188,42 @@ pub struct GetForumBySlug {
 pub struct GetForumById {
     pub forum_id: Ulid,
     pub user_id: Option<Ulid>,
+}
+
+// Forum category management messages
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ForumCategoryInfo {
+    pub category_id: Ulid,
+    pub forum_id: Ulid,
+    pub category_name: String,
+    pub is_active: bool,
+    pub created_at: TimeString,
+    pub updated_at: Option<TimeString>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CreateForumCategory {
+    pub user_id: Ulid,
+    pub forum_id: Ulid,
+    pub category_name: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct UpdateForumCategory {
+    pub user_id: Ulid,
+    pub category_id: Ulid,
+    pub category_name: Option<String>,
+    pub is_active: Option<bool>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DeleteForumCategory {
+    pub user_id: Ulid,
+    pub category_id: Ulid,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GetForumCategories {
+    pub forum_id: Ulid,
+    pub active_only: Option<bool>,
 }

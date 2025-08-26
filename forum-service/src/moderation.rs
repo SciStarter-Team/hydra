@@ -100,7 +100,20 @@ pub async fn moderate_content(req: &Request) -> Result<()> {
                     .await?;
                 }
                 ModerationActionType::Flag => {
-                    // Flag doesn't change the topic state, just logs the action
+                    sqlx::query!(
+                        r#"UPDATE "topics" SET "is_flagged" = 1 WHERE "topic_id" = ?"#,
+                        target_id_str
+                    )
+                    .execute(db)
+                    .await?;
+                }
+                ModerationActionType::Unflag => {
+                    sqlx::query!(
+                        r#"UPDATE "topics" SET "is_flagged" = 0 WHERE "topic_id" = ?"#,
+                        target_id_str
+                    )
+                    .execute(db)
+                    .await?;
                 }
             }
         }
@@ -108,6 +121,22 @@ pub async fn moderate_content(req: &Request) -> Result<()> {
             ModerationActionType::Delete => {
                 sqlx::query!(
                     r#"UPDATE "posts" SET "is_deleted" = 1 WHERE "post_id" = ?"#,
+                    target_id_str
+                )
+                .execute(db)
+                .await?;
+            }
+            ModerationActionType::Flag => {
+                sqlx::query!(
+                    r#"UPDATE "posts" SET "is_flagged" = 1 WHERE "post_id" = ?"#,
+                    target_id_str
+                )
+                .execute(db)
+                .await?;
+            }
+            ModerationActionType::Unflag => {
+                sqlx::query!(
+                    r#"UPDATE "posts" SET "is_flagged" = 0 WHERE "post_id" = ?"#,
                     target_id_str
                 )
                 .execute(db)
@@ -132,6 +161,7 @@ pub async fn moderate_content(req: &Request) -> Result<()> {
         ModerationActionType::Lock => "lock",
         ModerationActionType::Unlock => "unlock",
         ModerationActionType::Flag => "flag",
+        ModerationActionType::Unflag => "unflag",
     };
 
     let log_id_str = log_id.to_string();

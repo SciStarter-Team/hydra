@@ -124,7 +124,7 @@ async fn get_post_internal(post_id: Ulid) -> Result<PostInfo> {
 
     let row = sqlx::query!(
         r#"SELECT post_id, topic_id, content, author_id, parent_post_id,
-                  created_at, updated_at, is_deleted
+                  created_at, updated_at, is_deleted, is_flagged
            FROM "posts"
            WHERE post_id = ?"#,
         post_id_str
@@ -156,6 +156,7 @@ async fn get_post_internal(post_id: Ulid) -> Result<PostInfo> {
             .map(|s| s.as_ulid())
             .transpose()?,
         is_deleted: row.is_deleted == 1,
+        is_flagged: row.is_flagged == 1,
     })
 }
 
@@ -168,7 +169,7 @@ pub async fn list_posts(req: &Request) -> Result<Vec<PostInfo>> {
     let topic_id_str = query.topic_id.to_string();
     let rows = sqlx::query!(
         r#"SELECT post_id, topic_id, content, author_id, parent_post_id,
-                  created_at, updated_at, is_deleted
+                  created_at, updated_at, is_deleted, is_flagged
            FROM "posts"
            WHERE topic_id = ? AND is_deleted = 0
            ORDER BY created_at ASC
@@ -211,6 +212,7 @@ pub async fn list_posts(req: &Request) -> Result<Vec<PostInfo>> {
                 .map(|s| s.as_ulid())
                 .transpose()?,
             is_deleted: row.is_deleted == 1,
+        is_flagged: row.is_flagged == 1,
         });
     }
 

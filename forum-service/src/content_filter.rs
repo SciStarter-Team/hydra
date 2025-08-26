@@ -26,13 +26,19 @@ pub async fn check_content_internal(content: &str) -> Result<ContentFilterResult
         .flatten()
         .collect();
 
-    let content_upper = content.to_uppercase();
     let mut flagged_words = Vec::new();
 
-    // Check for bad words
+    // Check for bad words (whole word matches only)
     for bad_word in &bad_words {
-        if content_upper.contains(&*bad_word) {
-            flagged_words.push(bad_word.clone());
+        let bad_word = bad_word.to_uppercase();
+        let regex_pattern = format!(r"\b{}\b", regex::escape(&bad_word));
+        if let Ok(re) = regex::RegexBuilder::new(&regex_pattern)
+            .case_insensitive(true)
+            .build()
+        {
+            if re.is_match(content) {
+                flagged_words.push(bad_word.clone());
+            }
         }
     }
 

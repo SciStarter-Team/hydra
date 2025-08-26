@@ -91,6 +91,9 @@ pub async fn create_forum(req: &Request) -> Result<ForumInfo> {
     .execute(db)
     .await?;
 
+    // Copy categories from general forum to new forum
+    copy_general_forum_categories_to_new_forum(forum_id, user_id).await?;
+
     // Log the activity
     log_activity(
         Some(now),
@@ -375,4 +378,41 @@ pub async fn get_personal_forum(req: &Request) -> Result<ForumInfo> {
     .await?;
 
     get_forum_internal(user_id, Some(user_id)).await
+}
+
+async fn copy_general_forum_categories_to_new_forum(new_forum_id: Ulid, _user_id: Ulid) -> Result<()> {
+    let db = db();
+    let now = TimeString::now();
+    let now_str = now.to_string();
+    let new_forum_id_str = new_forum_id.to_string();
+
+    // Get general forum categories
+    let general_categories = sqlx::query!(
+        r#"SELECT fc.category_name 
+           FROM "forum_categories" fc
+           JOIN "forums" f ON fc.forum_id = f.forum_id
+           WHERE f.slug = 'general' AND fc.is_active = 1
+           ORDER BY fc.category_name ASC"#
+    )
+    .fetch_all(db)
+    .await?;
+
+    // Copy each category to the new forum
+    for category_row in general_categories {
+        let category_id = Ulid::new();
+        let category_id_str = category_id.to_string();
+
+        sqlx::query!(
+            r#"INSERT INTO "forum_categories" ("category_id", "forum_id", "category_name", "created_at")
+               VALUES (?, ?, ?, ?)"#,
+            category_id_str,
+            new_forum_id_str,
+            category_row.category_name,
+            now_str
+        )
+        .execute(db)
+        .await?;
+    }
+
+    Ok(())
 }

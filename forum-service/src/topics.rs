@@ -14,6 +14,7 @@ use sqlx::Row;
 use std::collections::HashSet;
 use ulid::Ulid;
 
+
 fn normalize_title(title: &str) -> HashSet<String> {
     let stop_words = [
         "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by",
@@ -132,7 +133,7 @@ async fn get_topic_internal(topic_id: Ulid) -> Result<TopicInfo> {
 
     let row = sqlx::query!(
         r#"SELECT topic_id, forum_id, title, content, author_id, created_at, updated_at, category,
-                  is_pinned, is_locked, is_deleted
+                  is_pinned, is_locked, is_deleted, is_flagged
            FROM "topics"
            WHERE topic_id = ?"#,
         topic_id_str
@@ -184,6 +185,7 @@ async fn get_topic_internal(topic_id: Ulid) -> Result<TopicInfo> {
         is_pinned: row.is_pinned == 1,
         is_locked: row.is_locked == 1,
         is_deleted: row.is_deleted == 1,
+        is_flagged: row.is_flagged == 1,
     })
 }
 
@@ -193,38 +195,46 @@ pub async fn list_topics(req: &Request) -> Result<Vec<TopicInfo>> {
     let limit = query.limit.unwrap_or(50).min(100);
     let offset = query.offset.unwrap_or(0);
 
-    let order_clause = match query.sort_by {
-        TopicSortBy::CreatedDesc => "ORDER BY created_at DESC",
-        TopicSortBy::CreatedAsc => "ORDER BY created_at ASC",
-        TopicSortBy::UpdatedDesc => "ORDER BY COALESCE(updated_at, created_at) DESC",
-        TopicSortBy::UpdatedAsc => "ORDER BY COALESCE(updated_at, created_at) ASC",
-        TopicSortBy::PostCount => "ORDER BY created_at DESC", // We'll sort by post count after fetching
-    };
-
-    let mut sql = format!(
+    // Use QueryBuilder for dynamic query construction
+    let mut query_builder = sqlx::QueryBuilder::new(
         r#"SELECT topic_id, forum_id, title, content, author_id, created_at, updated_at, category,
-                  is_pinned, is_locked, is_deleted
-           FROM "topics"
-           WHERE is_deleted = 0"#
+                  is_pinned, is_locked, is_deleted, is_flagged
+           FROM topics WHERE is_deleted = 0"#
     );
 
+    // Add category filter if specified
     if let Some(category) = &query.category {
-        sql.push_str(&format!(" AND category = '{}'", category));
+        query_builder.push(" AND category = ");
+        query_builder.push_bind(category);
     }
 
-    if let Some(search) = &query.search {
-        sql.push_str(&format!(
-            " AND (title LIKE '%{}%' OR content LIKE '%{}%')",
-            search, search
-        ));
+    // Add search filter if specified
+    let search_pattern = query.search.as_ref().map(|search| format!("%{}%", search));
+    if let Some(pattern) = &search_pattern {
+        query_builder.push(" AND (title LIKE ");
+        query_builder.push_bind(pattern);
+        query_builder.push(" OR content LIKE ");
+        query_builder.push_bind(pattern);
+        query_builder.push(")");
     }
 
-    sql.push_str(&format!(
-        " {} LIMIT {} OFFSET {}",
-        order_clause, limit, offset
-    ));
+    // Add ordering
+    let order_clause = match query.sort_by {
+        TopicSortBy::CreatedDesc => " ORDER BY is_pinned DESC, created_at DESC",
+        TopicSortBy::CreatedAsc => " ORDER BY is_pinned DESC, created_at ASC",
+        TopicSortBy::UpdatedDesc => " ORDER BY is_pinned DESC, COALESCE(updated_at, created_at) DESC",
+        TopicSortBy::UpdatedAsc => " ORDER BY is_pinned DESC, COALESCE(updated_at, created_at) ASC",
+        TopicSortBy::PostCount => " ORDER BY is_pinned DESC, created_at DESC", // We'll sort by post count after fetching
+    };
+    query_builder.push(order_clause);
 
-    let rows = sqlx::query(&sql).fetch_all(db).await?;
+    // Add pagination
+    query_builder.push(" LIMIT ");
+    query_builder.push_bind(limit);
+    query_builder.push(" OFFSET ");
+    query_builder.push_bind(offset);
+
+    let rows = query_builder.build().fetch_all(db).await?;
 
     let mut topics = Vec::new();
     for row in rows {
@@ -286,6 +296,7 @@ pub async fn list_topics(req: &Request) -> Result<Vec<TopicInfo>> {
             is_pinned: row.get::<i32, _>("is_pinned") == 1,
             is_locked: row.get::<i32, _>("is_locked") == 1,
             is_deleted: row.get::<i32, _>("is_deleted") == 1,
+            is_flagged: row.get::<i32, _>("is_flagged") == 1,
         });
     }
 

@@ -1,0 +1,15 @@
+<div class="similar-topics-suggestions">
+    <h5>Similar topics found:</h5>
+    <div class="suggested-topics">
+        <% for topic in topics.iter().take(3) { %>
+            <div class="suggested-topic" 
+                 hx-get="/-forum/topic/<%= topic.topic_id|disp %>/page?page=0" 
+                 hx-target="#topic-<%= topic.topic_id|disp %>" 
+                 hx-trigger="click"
+                 style="cursor: pointer;">
+                <div class="topic-title"><%= topic.title %></div>
+                <small>by <%= topic.author_handle %> • <%= topic.post_count %> posts</small>
+            </div>
+        <% } %>
+    </div>
+</div>
