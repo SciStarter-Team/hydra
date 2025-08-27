@@ -10,7 +10,7 @@ use poem::{
     session::Session,
     web::{Form, Html, Path, Query},
 };
-use sailfish::{TemplateOnce, TemplateSimple};
+use sailfish::TemplateOnce;
 use serde::Deserialize;
 use ulid::Ulid;
 
@@ -81,7 +81,9 @@ impl Component for Forum {
             forum_id: forum.forum_id,
             active_only: Some(true),
         };
-        let categories: Vec<ForumCategoryInfo> = request("forum.categories.list", categories_query).await.unwrap_or_else(|_| vec![]);
+        let categories: Vec<ForumCategoryInfo> = request("forum.categories.list", categories_query)
+            .await
+            .unwrap_or_else(|_| vec![]);
 
         let can_create_topic = user_info.is_some();
         let can_manage_forum = forum.can_manage;
@@ -161,7 +163,7 @@ impl Component for TopicDetail {
         let can_reply = user_info.is_some();
         let has_next_page = posts.len() as i64 == self.per_page;
         let has_prev_page = self.page > 0;
-        
+
         // Check if user can moderate this topic by checking forum management permission
         let can_moderate = if let Some(ref user) = user_info {
             // Get the forum info to check permissions
@@ -169,14 +171,15 @@ impl Component for TopicDetail {
                 forum_id: self.topic.forum_id,
                 user_id: Some(user.user_id),
             };
-            let forum_info: Result<ForumInfo, _> = request("forum.management.get_by_id", forum_request).await;
+            let forum_info: Result<ForumInfo, _> =
+                request("forum.management.get_by_id", forum_request).await;
             forum_info.map_or(false, |forum| forum.can_manage)
         } else {
             false
         };
 
         let threaded_posts = ThreadedPost::build_thread(posts);
-        
+
         Ok(TopicDetailPrepared {
             topic: self.topic,
             threaded_posts,
@@ -213,10 +216,15 @@ impl ThreadedPost {
         }
 
         // Build threaded structure starting from root posts
-        fn build_threaded(post: PostInfo, children: &HashMap<Ulid, Vec<PostInfo>>, depth: usize) -> ThreadedPost {
+        fn build_threaded(
+            post: PostInfo,
+            children: &HashMap<Ulid, Vec<PostInfo>>,
+            depth: usize,
+        ) -> ThreadedPost {
             let post_id = post.post_id;
             let replies = if let Some(child_posts) = children.get(&post_id) {
-                child_posts.iter()
+                child_posts
+                    .iter()
                     .map(|child| build_threaded(child.clone(), children, depth + 1))
                     .collect()
             } else {
@@ -230,7 +238,8 @@ impl ThreadedPost {
             }
         }
 
-        root_posts.into_iter()
+        root_posts
+            .into_iter()
             .map(|post| build_threaded(post, &children, 0))
             .collect()
     }
@@ -251,7 +260,7 @@ pub struct TopicDetailPrepared {
 }
 
 // Template structs for HTML fragments
-#[derive(TemplateSimple)]
+#[derive(TemplateOnce)]
 #[template(path = "forum/threaded_post.stpl.html")]
 pub struct ThreadedPostDisplay<'a> {
     pub post: &'a ThreadedPost,
@@ -260,14 +269,14 @@ pub struct ThreadedPostDisplay<'a> {
     pub can_moderate: bool,
 }
 
-#[derive(TemplateSimple)]
+#[derive(TemplateOnce)]
 #[template(path = "forum/htmx_reload.stpl.html")]
 pub struct HtmxReload<'a> {
     pub target_url: &'a str,
     pub target_selector: &'a str,
 }
 
-#[derive(TemplateSimple)]
+#[derive(TemplateOnce)]
 #[template(path = "forum/error_message.stpl.html")]
 pub struct ErrorMessage<'a> {
     pub title: &'a str,
@@ -276,40 +285,40 @@ pub struct ErrorMessage<'a> {
     pub button_action: Option<&'a str>,
 }
 
-#[derive(TemplateSimple)]
+#[derive(TemplateOnce)]
 #[template(path = "forum/moderator_list.stpl.html")]
 pub struct ModeratorList<'a> {
     pub slug: &'a str,
     pub moderators: &'a [ForumModeratorInfo],
 }
 
-#[derive(TemplateSimple)]
+#[derive(TemplateOnce)]
 #[template(path = "forum/user_search_results.stpl.html")]
 pub struct UserSearchResults<'a> {
     pub users: &'a [BasicInfo],
 }
 
-#[derive(TemplateSimple)]
+#[derive(TemplateOnce)]
 #[template(path = "forum/category_list.stpl.html")]
 pub struct CategoryList<'a> {
     pub slug: &'a str,
     pub categories: &'a [ForumCategoryInfo],
 }
 
-#[derive(TemplateSimple)]
+#[derive(TemplateOnce)]
 #[template(path = "forum/category_dropdown.stpl.html")]
 pub struct CategoryDropdown<'a> {
     pub categories: &'a [ForumCategoryInfo],
     pub oob: bool,
 }
 
-#[derive(TemplateSimple)]
+#[derive(TemplateOnce)]
 #[template(path = "forum/similar_topics.stpl.html")]
 pub struct SimilarTopics<'a> {
     pub topics: &'a [TopicInfo],
 }
 
-#[derive(TemplateSimple)]
+#[derive(TemplateOnce)]
 #[template(path = "forum/user_profile.stpl.html")]
 pub struct UserProfile<'a> {
     pub user_id: &'a str,
@@ -317,7 +326,7 @@ pub struct UserProfile<'a> {
     pub is_private: bool,
 }
 
-#[derive(TemplateSimple)]
+#[derive(TemplateOnce)]
 #[template(path = "forum/moderation_actions.stpl.html")]
 pub struct ModerationActions<'a> {
     pub target_type: &'a str,
@@ -412,8 +421,14 @@ pub fn forum_endpoints() -> impl poem::Endpoint {
         )
         .at("/:slug/categories", get(list_forum_categories_action))
         .at("/:slug/categories/add", post(create_forum_category_action))
-        .at("/:slug/categories/:category_id/update", post(update_forum_category_action))
-        .at("/:slug/categories/:category_id/delete", post(delete_forum_category_action))
+        .at(
+            "/:slug/categories/:category_id/update",
+            post(update_forum_category_action),
+        )
+        .at(
+            "/:slug/categories/:category_id/delete",
+            post(delete_forum_category_action),
+        )
         .at("/moderate", post(moderate_content_action))
 }
 
@@ -495,7 +510,8 @@ async fn create_topic_action(
         Err(error) => {
             // Show error message for any other issues (content filter, etc.)
             let message = error.to_string().replace('"', "&quot;");
-            let button_action = "document.getElementById('create-topic-form').style.display='block'";
+            let button_action =
+                "document.getElementById('create-topic-form').style.display='block'";
             let error_message = ErrorMessage {
                 title: "Error creating topic",
                 message: &message,
@@ -556,14 +572,14 @@ async fn create_post_action(
             } else {
                 error_str
             };
-            
+
             // Use htmx utilities to find and restore the reply form
             let form_id = if let Some(parent_id) = parent_post_id {
                 format!("reply-form-{}", parent_id)
             } else {
                 "reply-form-topic".to_string()
             };
-            
+
             let button_action = format!(
                 "let form = htmx.find('#{}'); \
                  if (form) {{ \
@@ -574,26 +590,34 @@ async fn create_post_action(
                          textarea.value = '{}'; \
                      }} \
                  }}",
-                 form_id,
-                 form.content.replace('\'', "\\'").replace('\n', "\\n").replace('\r', "")
+                form_id,
+                form.content
+                    .replace('\'', "\\'")
+                    .replace('\n', "\\n")
+                    .replace('\r', "")
             );
-            
+
             let error_message = ErrorMessage {
                 title: "Error creating post",
                 message: &message,
                 button_text: Some("Try Again"),
                 button_action: Some(&button_action),
             };
-            
+
             // Use HTMX headers to show error after the form instead of replacing content
             let mut response = Html(error_message.render_once()?).into_response();
-            response.headers_mut().insert("HX-Reswap", "afterend".parse().unwrap());
-            response.headers_mut().insert("HX-Retarget", 
+            response
+                .headers_mut()
+                .insert("HX-Reswap", "afterend".parse().unwrap());
+            response.headers_mut().insert(
+                "HX-Retarget",
                 if let Some(_) = parent_post_id {
-                    format!("#reply-form-{}", parent_post_id.unwrap()).parse().unwrap()
+                    format!("#reply-form-{}", parent_post_id.unwrap())
+                        .parse()
+                        .unwrap()
                 } else {
                     "#reply-form-topic".parse().unwrap()
-                }
+                },
             );
             Ok(response)
         }
@@ -793,7 +817,7 @@ async fn suggest_similar_topics_action(
     if user_info.is_none() {
         return Ok(Html("".to_string()).into_response());
     }
-    
+
     // Only show suggestions if title is long enough to be meaningful
     if query.title.trim().len() < 3 {
         return Ok(Html("".to_string()).into_response());
@@ -802,15 +826,16 @@ async fn suggest_similar_topics_action(
     // Get similar topics suggestions using slug directly
     let similar_topics: Result<Vec<TopicInfo>, _> = request(
         "forum.topics.suggest_similar",
-        (slug.clone(), query.title.trim().to_string())
-    ).await;
+        (slug.clone(), query.title.trim().to_string()),
+    )
+    .await;
 
     match similar_topics {
         Ok(topics) if !topics.is_empty() => {
             let similar = SimilarTopics { topics: &topics };
             Ok(Html(similar.render_once()?).into_response())
         }
-        _ => Ok(Html("".to_string()).into_response())
+        _ => Ok(Html("".to_string()).into_response()),
     }
 }
 
@@ -831,17 +856,15 @@ async fn search_users_action(
     }
 
     // Search for users by handle using the user service
-    let search_results: Result<Vec<BasicInfo>, _> = request(
-        "user.search.by_handle", 
-        query.q.trim().to_string()
-    ).await;
+    let search_results: Result<Vec<BasicInfo>, _> =
+        request("user.search.by_handle", query.q.trim().to_string()).await;
 
     match search_results {
         Ok(users) if !users.is_empty() => {
             let search_results = UserSearchResults { users: &users };
             Ok(Html(search_results.render_once()?).into_response())
         }
-        _ => Ok(Html("".to_string()).into_response())
+        _ => Ok(Html("".to_string()).into_response()),
     }
 }
 
@@ -863,7 +886,9 @@ async fn generate_category_list_html(slug: &str, user_info: &BasicInfo) -> Resul
         forum_id: forum.forum_id,
         active_only: Some(false), // Show all categories for management
     };
-    let categories: Vec<ForumCategoryInfo> = request("forum.categories.list", categories_query).await.unwrap_or_else(|_| vec![]);
+    let categories: Vec<ForumCategoryInfo> = request("forum.categories.list", categories_query)
+        .await
+        .unwrap_or_else(|_| vec![]);
 
     let category_list = CategoryList {
         slug,
@@ -885,7 +910,9 @@ async fn generate_category_dropdown_oob(slug: &str, user_info: &BasicInfo) -> Re
         forum_id: forum.forum_id,
         active_only: Some(true),
     };
-    let categories: Vec<ForumCategoryInfo> = request("forum.categories.list", categories_query).await.unwrap_or_else(|_| vec![]);
+    let categories: Vec<ForumCategoryInfo> = request("forum.categories.list", categories_query)
+        .await
+        .unwrap_or_else(|_| vec![]);
 
     let dropdown = CategoryDropdown {
         categories: &categories,
@@ -961,7 +988,10 @@ async fn update_forum_category_action(
     let update_category = UpdateForumCategory {
         user_id: user_info.user_id,
         category_id,
-        category_name: form.category_name.as_ref().map(|name| name.trim().to_string()),
+        category_name: form
+            .category_name
+            .as_ref()
+            .map(|name| name.trim().to_string()),
         is_active: form.is_active.as_ref().and_then(|v| match v.as_str() {
             "true" => Some(true),
             "false" => Some(false),
@@ -1028,9 +1058,9 @@ async fn moderate_content_action(
     Authenticated(user_info): Authenticated,
 ) -> Result<Response> {
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Must be logged in"))?;
-    
+
     let target_id = form.target_id.parse::<Ulid>()?;
-    
+
     // Convert form action to ModerationActionType
     let action = match form.action.as_str() {
         "delete" => ModerationActionType::Delete,
@@ -1042,14 +1072,14 @@ async fn moderate_content_action(
         "unflag" => ModerationActionType::Unflag,
         _ => return Err(anyhow::anyhow!("Invalid moderation action")),
     };
-    
+
     // Convert form target_type to ModerationTarget
     let target_type = match form.target_type.as_str() {
         "topic" => ModerationTarget::Topic,
         "post" => ModerationTarget::Post,
         _ => return Err(anyhow::anyhow!("Invalid moderation target")),
     };
-    
+
     let moderation_action = ModerationAction {
         user_id: user_info.user_id,
         target_type,
@@ -1057,7 +1087,7 @@ async fn moderate_content_action(
         action,
         reason: form.reason,
     };
-    
+
     match request::<()>("forum.moderation.action", moderation_action).await {
         Ok(_) => {
             // Success - return the updated topic content directly
@@ -1070,7 +1100,7 @@ async fn moderate_content_action(
                 }
                 _ => return Err(anyhow::anyhow!("Invalid target type")),
             };
-            
+
             let topic: TopicInfo = request("forum.topics.get", topic_id.to_string()).await?;
             let topic_detail = TopicDetail::with_pagination(topic, 0, 20);
             let prepared = topic_detail.prepare(Some(user_info)).await?;

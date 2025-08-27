@@ -1,21 +1,21 @@
 <div class="category-list">
     <h6>Forum Categories:</h6>
-    <% if categories.is_empty() { %>
+    <% if self.categories.is_empty() { %>
         <p>No categories defined for this forum.</p>
     <% } else { %>
         <ul>
-            <% for category in categories { %>
+            <% for category in self.categories { %>
                 <% let toggle_action = if category.is_active { "Deactivate" } else { "Activate" }; %>
                 <% let toggle_class = if category.is_active { "btn-secondary" } else { "btn-primary" }; %>
                 <li>
                     <strong><%= category.category_name %></strong>
                     <form style="display: inline;" 
-                          hx-post="/-forum/<%= slug %>/categories/<%= category.category_id|disp %>/update" 
+                          hx-post="/-forum/<%= self.slug %>/categories/<%= category.category_id|disp %>/update" 
                           hx-target="closest .category-list">
                         <input type="hidden" name="is_active" value="<%= if category.is_active { "false" } else { "true" } %>">
                         <button type="submit" class="<%= toggle_class %> btn-small"><%= toggle_action %></button>
                     </form>
-                    <button hx-post="/-forum/<%= slug %>/categories/<%= category.category_id|disp %>/delete" 
+                    <button hx-post="/-forum/<%= self.slug %>/categories/<%= category.category_id|disp %>/delete" 
                             hx-target="closest .category-list" 
                             hx-confirm="Delete category '<%= category.category_name %>'?" 
                             class="btn-danger btn-small">Delete</button>

@@ -1,5 +1,5 @@
 <div class="user-search-results">
-    <% for user in users { %>
+    <% for user in self.users { %>
         <div class="user-search-result" 
              data-user-id="<%= user.user_id|disp %>"
              data-user-handle="<%= user.handle %>"

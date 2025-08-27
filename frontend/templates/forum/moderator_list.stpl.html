@@ -1,13 +1,13 @@
 <div class='moderator-list'>
     <h6>Current Moderators:</h6>
-    <% if moderators.is_empty() { %>
+    <% if self.moderators.is_empty() { %>
         <p>No moderators assigned to this forum.</p>
     <% } else { %>
         <ul>
-            <% for moderator in moderators { %>
+            <% for moderator in self.moderators { %>
                 <li>
                     <%= moderator.user_handle %>
-                    <button hx-post="/-forum/<%= slug %>/moderators/<%= moderator.user_id|disp %>/remove" 
+                    <button hx-post="/-forum/<%= self.slug %>/moderators/<%= moderator.user_id|disp %>/remove" 
                             hx-target="closest .moderator-list" 
                             class="btn-danger btn-small">Remove</button>
                 </li>

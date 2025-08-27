@@ -1,11 +1,12 @@
+<%# Temporary placeholder. The real profile page will not be part of the forum interface. %>
 <div class="user-profile">
-    <% if is_private { %>
+    <% if self.is_private { %>
         <h2>Private Profile</h2>
         <p>This user has chosen to keep their profile private.</p>
     <% } else { %>
-        <h2><%= user_handle %>'s Profile</h2>
+        <h2><%= self.user_handle %>'s Profile</h2>
         <div class="profile-actions">
-            <a href="/-forum/user/<%= user_id %>/contact" class="btn contact-btn">Contact <%= user_handle %></a>
+            <a href="/-forum/user/<%= self.user_id %>/contact" class="btn contact-btn">Contact <%= self.user_handle %></a>
         </div>
     <% } %>
 </div>

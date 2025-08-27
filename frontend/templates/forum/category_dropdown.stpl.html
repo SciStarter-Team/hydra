@@ -1,8 +1,8 @@
-<div class="form-field category-dropdown-container"<% if oob { %> hx-swap-oob="outerHTML:.category-dropdown-container"<% } %><% if categories.is_empty() { %> style="display: none;"<% } %>>
+<div class="form-field category-dropdown-container"<% if self.oob { %> hx-swap-oob="outerHTML:.category-dropdown-container"<% } %><% if self.categories.is_empty() { %> style="display: none;"<% } %>>
     <label for="category">Category (optional):</label>
     <select name="category" class="category-dropdown">
         <option value="">-- No Category --</option>
-        <% for category in categories { %>
+        <% for category in self.categories { %>
             <option value="<%= category.category_name %>"><%= category.category_name %></option>
         <% } %>
     </select>

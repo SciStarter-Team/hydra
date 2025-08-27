@@ -1,45 +1,45 @@
 <div class="moderation-actions mt-4 mx-2 p-4 bg-red-50 border border-red-200 rounded-lg">
     <h6 class="text-sm font-medium text-red-800 mb-2">Moderation Actions</h6>
     <div class="flex flex-wrap gap-2">
-        <% if target_type == "topic" { %>
-            <% if !is_pinned { %>
+        <% if self.target_type == "topic" { %>
+            <% if !self.is_pinned { %>
                 <button class="px-2 py-1 text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-800 rounded transition-colors" 
-                        hx-on:click="let container = htmx.closest(this, '.moderation-actions'); let form = htmx.find(container, '#moderation-form-<%= target_id|disp %>'); form.style.display='block'; htmx.find(form, '[name=action]').value='pin'; htmx.find(form, '.submit-btn').textContent='Pin Topic'; let desc = htmx.find(form, '.description'); desc.textContent='Pin this topic to the top of the forum for increased visibility.'; desc.style.display='block'">Pin Topic</button>
+                        hx-on:click="let container = htmx.closest(this, '.moderation-actions'); let form = htmx.find(container, '#moderation-form-<%= self.target_id|disp %>'); form.style.display='block'; htmx.find(form, '[name=action]').value='pin'; htmx.find(form, '.submit-btn').textContent='Pin Topic'; let desc = htmx.find(form, '.description'); desc.textContent='Pin this topic to the top of the forum for increased visibility.'; desc.style.display='block'">Pin Topic</button>
             <% } else { %>
                 <button class="px-2 py-1 text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-800 rounded transition-colors" 
-                        hx-on:click="let container = htmx.closest(this, '.moderation-actions'); let form = htmx.find(container, '#moderation-form-<%= target_id|disp %>'); form.style.display='block'; htmx.find(form, '[name=action]').value='unpin'; htmx.find(form, '.submit-btn').textContent='Unpin Topic'; let desc = htmx.find(form, '.description'); desc.textContent='Remove the pin from this topic, allowing it to sort normally by activity.'; desc.style.display='block'">Unpin Topic</button>
+                        hx-on:click="let container = htmx.closest(this, '.moderation-actions'); let form = htmx.find(container, '#moderation-form-<%= self.target_id|disp %>'); form.style.display='block'; htmx.find(form, '[name=action]').value='unpin'; htmx.find(form, '.submit-btn').textContent='Unpin Topic'; let desc = htmx.find(form, '.description'); desc.textContent='Remove the pin from this topic, allowing it to sort normally by activity.'; desc.style.display='block'">Unpin Topic</button>
             <% } %>
             
-            <% if !is_locked { %>
+            <% if !self.is_locked { %>
                 <button class="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-800 rounded transition-colors" 
-                        hx-on:click="let container = htmx.closest(this, '.moderation-actions'); let form = htmx.find(container, '#moderation-form-<%= target_id|disp %>'); form.style.display='block'; htmx.find(form, '[name=action]').value='lock'; htmx.find(form, '.submit-btn').textContent='Lock Topic'; let desc = htmx.find(form, '.description'); desc.textContent='Lock this topic to prevent new replies while keeping it visible.'; desc.style.display='block'">Lock Topic</button>
+                        hx-on:click="let container = htmx.closest(this, '.moderation-actions'); let form = htmx.find(container, '#moderation-form-<%= self.target_id|disp %>'); form.style.display='block'; htmx.find(form, '[name=action]').value='lock'; htmx.find(form, '.submit-btn').textContent='Lock Topic'; let desc = htmx.find(form, '.description'); desc.textContent='Lock this topic to prevent new replies while keeping it visible.'; desc.style.display='block'">Lock Topic</button>
             <% } else { %>
                 <button class="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-800 rounded transition-colors" 
-                        hx-on:click="let container = htmx.closest(this, '.moderation-actions'); let form = htmx.find(container, '#moderation-form-<%= target_id|disp %>'); form.style.display='block'; htmx.find(form, '[name=action]').value='unlock'; htmx.find(form, '.submit-btn').textContent='Unlock Topic'; let desc = htmx.find(form, '.description'); desc.textContent='Unlock this topic to allow new replies.'; desc.style.display='block'">Unlock Topic</button>
+                        hx-on:click="let container = htmx.closest(this, '.moderation-actions'); let form = htmx.find(container, '#moderation-form-<%= self.target_id|disp %>'); form.style.display='block'; htmx.find(form, '[name=action]').value='unlock'; htmx.find(form, '.submit-btn').textContent='Unlock Topic'; let desc = htmx.find(form, '.description'); desc.textContent='Unlock this topic to allow new replies.'; desc.style.display='block'">Unlock Topic</button>
             <% } %>
         <% } %>
         
-        <% if !is_flagged { %>
+        <% if !self.is_flagged { %>
             <button class="px-2 py-1 text-xs bg-orange-100 hover:bg-orange-200 text-orange-800 rounded transition-colors" 
-                    hx-on:click="let container = htmx.closest(this, '.moderation-actions'); let form = htmx.find(container, '#moderation-form-<%= target_id|disp %>'); form.style.display='block'; htmx.find(form, '[name=action]').value='flag'; htmx.find(form, '.submit-btn').textContent='Flag <%= target_type %>'; let desc = htmx.find(form, '.description'); desc.textContent='Flag this <%= target_type %> for administrator review due to inappropriate content, spam, or policy violations. The content will remain visible but will be marked for review.'; desc.style.display='block'">Flag</button>
+                    hx-on:click="let container = htmx.closest(this, '.moderation-actions'); let form = htmx.find(container, '#moderation-form-<%= self.target_id|disp %>'); form.style.display='block'; htmx.find(form, '[name=action]').value='flag'; htmx.find(form, '.submit-btn').textContent='Flag <%= self.target_type %>'; let desc = htmx.find(form, '.description'); desc.textContent='Flag this <%= self.target_type %> for administrator review due to inappropriate content, spam, or policy violations. The content will remain visible but will be marked for review.'; desc.style.display='block'">Flag</button>
         <% } else { %>
             <button class="px-2 py-1 text-xs bg-green-100 hover:bg-green-200 text-green-800 rounded transition-colors" 
-                    hx-on:click="let container = htmx.closest(this, '.moderation-actions'); let form = htmx.find(container, '#moderation-form-<%= target_id|disp %>'); form.style.display='block'; htmx.find(form, '[name=action]').value='unflag'; htmx.find(form, '.submit-btn').textContent='Unflag <%= target_type %>'; let desc = htmx.find(form, '.description'); desc.textContent='Remove the flag from this <%= target_type %>. This item has been reviewed and found to be acceptable.'; desc.style.display='block'">Unflag</button>
+                    hx-on:click="let container = htmx.closest(this, '.moderation-actions'); let form = htmx.find(container, '#moderation-form-<%= self.target_id|disp %>'); form.style.display='block'; htmx.find(form, '[name=action]').value='unflag'; htmx.find(form, '.submit-btn').textContent='Unflag <%= self.target_type %>'; let desc = htmx.find(form, '.description'); desc.textContent='Remove the flag from this <%= self.target_type %>. This item has been reviewed and found to be acceptable.'; desc.style.display='block'">Unflag</button>
         <% } %>
                 
         <button class="px-2 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-800 rounded transition-colors" 
-                hx-on:click="let container = htmx.closest(this, '.moderation-actions'); let form = htmx.find(container, '#moderation-form-<%= target_id|disp %>'); form.style.display='block'; htmx.find(form, '[name=action]').value='delete'; htmx.find(form, '.submit-btn').textContent='Delete <%= target_type %>'; let desc = htmx.find(form, '.description'); desc.textContent='Permanently delete this <%= target_type %> and all its content. This action cannot be undone.'; desc.style.display='block'">Delete</button>
+                hx-on:click="let container = htmx.closest(this, '.moderation-actions'); let form = htmx.find(container, '#moderation-form-<%= self.target_id|disp %>'); form.style.display='block'; htmx.find(form, '[name=action]').value='delete'; htmx.find(form, '.submit-btn').textContent='Delete <%= self.target_type %>'; let desc = htmx.find(form, '.description'); desc.textContent='Permanently delete this <%= self.target_type %> and all its content. This action cannot be undone.'; desc.style.display='block'">Delete</button>
     </div>
     
-    <div id="moderation-form-<%= target_id|disp %>" class="mt-3 p-3 bg-white border border-red-300 rounded-md" style="display: none;">
-        <div id="moderation-description-<%= target_id|disp %>" class="description mb-3 p-2 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800" style="display: none;">
+    <div id="moderation-form-<%= self.target_id|disp %>" class="mt-3 p-3 bg-white border border-red-300 rounded-md" style="display: none;">
+        <div id="moderation-description-<%= self.target_id|disp %>" class="description mb-3 p-2 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800" style="display: none;">
             <!-- Description will be filled by JavaScript based on action -->
         </div>
         
-        <form hx-post="/-forum/moderate" hx-target="#topic-<%= topic_id|disp %>" class="space-y-3">
-            <input type="hidden" name="target_type" value="<%= target_type %>">
-            <input type="hidden" name="target_id" value="<%= target_id|disp %>">
-            <input type="hidden" name="action" id="moderation-action-<%= target_id|disp %>">
+        <form hx-post="/-forum/moderate" hx-target="#topic-<%= self.topic_id|disp %>" class="space-y-3">
+            <input type="hidden" name="target_type" value="<%= self.target_type %>">
+            <input type="hidden" name="target_id" value="<%= self.target_id|disp %>">
+            <input type="hidden" name="action" id="moderation-action-<%= self.target_id|disp %>">
             
             <div>
                 <label for="reason" class="block text-sm font-medium text-gray-700 mb-1">Reason (optional):</label>
@@ -48,12 +48,12 @@
             </div>
             
             <div class="flex gap-2">
-                <button type="submit" class="submit-btn px-3 py-1 text-xs bg-red-600 hover:bg-red-700 text-white rounded transition-colors" id="moderation-submit-<%= target_id|disp %>">
+                <button type="submit" class="submit-btn px-3 py-1 text-xs bg-red-600 hover:bg-red-700 text-white rounded transition-colors" id="moderation-submit-<%= self.target_id|disp %>">
                     Confirm Action
                     <span class="htmx-indicator ml-1">...</span>
                 </button>
                 <button type="button" class="px-3 py-1 text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 rounded transition-colors" 
-                        hx-on:click="document.getElementById('moderation-form-<%= target_id|disp %>').style.display='none'">Cancel</button>
+                        hx-on:click="document.getElementById('moderation-form-<%= self.target_id|disp %>').style.display='none'">Cancel</button>
             </div>
         </form>
     </div>
