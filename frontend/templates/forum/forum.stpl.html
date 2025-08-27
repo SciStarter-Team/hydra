@@ -1,4 +1,4 @@
-<div id="forum-<%= self.slug %>" class="max-w-4xl mx-auto p-6 bg-white shadow-xs rounded-lg">
+<div id="forum-<%= self.slug %>" class="forum max-w-4xl mx-auto p-6 bg-white shadow-xs rounded-lg">
   <% if let Some(forum) = &self.forum { %>
     <div class="mb-8">
       <h2 class="text-3xl font-bold text-gray-900 mb-2"><%= forum.name %></h2>
@@ -55,9 +55,9 @@
             
             <form hx-post="/-forum/<%= self.slug %>/moderators/add" hx-target="#moderator-list">
               <div class="form-field">
-                <label for="user_search">Add Moderator:</label>
+                <label for="user-search">Add Moderator:</label>
                 <input type="text" 
-                       id="user_search" 
+                       id="user-search" 
                        name="q"
                        placeholder="Search for user by handle" 
                        autocomplete="off"
@@ -65,21 +65,11 @@
                        hx-target="#user-search-results"
                        hx-trigger="input changed delay:300ms"
                        hx-include="this">
-                <input type="hidden" name="user_id" id="selected_user_id" required>
-                <input type="hidden" name="user_handle" id="selected_user_handle">
+                <input type="hidden" name="user_id" id="selected-user-id" required>
                 <div id="user-search-results"></div>
               </div>
               <button type="submit" class="btn-primary">Add Moderator</button>
             </form>
-            
-            <script>
-              function selectUser(userId, userHandle) {
-                document.getElementById('selected_user_id').value = userId;
-                document.getElementById('selected_user_handle').value = userHandle;
-                document.getElementById('user_search').value = userHandle;
-                document.getElementById('user-search-results').innerHTML = '';
-              }
-            </script>
             
             <button type="button" class="btn-secondary"
                     hx-on:click="document.getElementById('moderator-management').style.display = 'none'">Close</button>

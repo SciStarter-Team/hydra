@@ -19,13 +19,15 @@
     </div>
     
     <div class="text-gray-700 leading-relaxed mb-4">
-      <%= self.post.post.content %>
+      <% for para in self.post.post.paragraphs() { %>
+        <p><%= para %></p>
+      <% } %>
     </div>
   
     <div class="flex items-center gap-2 border-t border-gray-100 pt-3">
       <% if self.can_reply { %>
         <button class="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors reply-btn" 
-                hx-on:click="let container = htmx.closest(this, '.threaded-post'); let form = htmx.find(container, '#reply-form-<%= self.post.post.post_id|disp %>'); form.style.display='block'; this.style.display='none'; htmx.find(form, 'textarea[name=content]').focus()">
+                hx-on:click="let form = htmx.find('#reply-form-<%= self.post.post.post_id|disp %>'); form.style.display='block'; this.style.display='none'; htmx.find(form, 'textarea[name=content]').focus()">
           Reply
         </button>
         

@@ -16,21 +16,20 @@ pub mod ui;
 pub mod upload;
 
 use anyhow::Error;
-use common::{message::location::LocationInfo, shared::db};
+use common::shared::db;
 use component::Component;
 use entity::Entity;
-use middleware::authorization::{Authenticated, NotAuthorized, SessionSubject};
+use middleware::authorization::{Authenticated, NotAuthorized};
 use peering::LoadStorePeered;
 use poem::{
     Endpoint, EndpointExt, IntoResponse, Response, Route, Server,
     endpoint::{EmbeddedFileEndpoint, EmbeddedFilesEndpoint},
     get, handler,
-    http::HeaderMap,
     listener::TcpListener,
     middleware::{ForceHttps, NormalizePath, SetHeader, TrailingSlash},
     post,
-    session::{CookieConfig, ServerSession, Session},
-    web::{Html, Path, RealIp, Redirect, cookie::SameSite},
+    session::{CookieConfig, ServerSession},
+    web::{Path, Redirect, cookie::SameSite},
 };
 use project::{all::ProjectAll, field::ProjectField};
 use rust_embed::Embed;
@@ -118,7 +117,9 @@ async fn demo_forum(
         header: component::Header::default()
             .prepare(user_info.clone())
             .await?,
-        forum: component::Forum::new("general").prepare(user_info.clone()).await?,
+        forum: component::Forum::new("general")
+            .prepare(user_info.clone())
+            .await?,
         footer: component::Footer::default().prepare(user_info).await?,
     };
     prepared.render(None).await

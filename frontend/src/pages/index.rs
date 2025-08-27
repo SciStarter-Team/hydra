@@ -1,16 +1,5 @@
-use common::{
-    message::{
-        location::LocationInfo,
-        user::{BasicInfo, Login, Signup},
-    },
-    service::{log_activity, request},
-};
-use poem::{
-    IntoResponse, Response, handler,
-    http::HeaderMap,
-    session::Session,
-    web::{Form, Query, RealIp, Redirect},
-};
+use common::message::location::LocationInfo;
+use poem::{Response, handler, http::HeaderMap, session::Session, web::RealIp};
 
 use crate::{
     component::{Component, Footer, Head, Header},

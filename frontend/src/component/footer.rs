@@ -21,6 +21,7 @@ impl Component for Footer {
 
 #[derive(TemplateOnce)]
 #[template(path = "site/footer.stpl.html")]
+#[allow(dead_code)]
 pub struct FooterTpl {
     basic_info: Option<Arc<BasicInfo>>,
 }

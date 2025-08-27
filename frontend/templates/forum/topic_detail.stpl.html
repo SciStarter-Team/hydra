@@ -46,7 +46,9 @@
     <% } %>
 
     <div class="text-gray-700 leading-relaxed">
-      <p><%= self.topic.content %></p>
+      <% for para in self.topic.paragraphs() { %>
+        <p><%= para %></p>
+      <% } %>
     </div>
   </div>
   

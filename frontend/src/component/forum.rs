@@ -7,7 +7,6 @@ use common::{
 };
 use poem::{
     IntoResponse, Response, get, handler, post,
-    session::Session,
     web::{Form, Html, Path, Query},
 };
 use sailfish::TemplateOnce;
@@ -15,6 +14,36 @@ use serde::Deserialize;
 use ulid::Ulid;
 
 use crate::{component::Component, middleware::authorization::Authenticated};
+
+pub fn forum_endpoints() -> impl poem::Endpoint {
+    poem::Route::new()
+        .at("/topic/new", post(create_topic_action))
+        .at("/topic/:topic_id/page", get(topic_page_htmx))
+        .at("/post/new", post(create_post_action))
+        .at("/user/:user_id/contact", get(user_personal_forum)) // Placeholder, user forums will be accessed via the profile page, which will not be part of the forum system
+        .at("/user/:user_id/profile", get(user_profile_page)) // Placeholder, proper profile pages will not be part of the forum system
+        .at("/:slug/page", get(forum_page_htmx))
+        .at("/:slug/suggest", get(suggest_similar_topics_action))
+        .at("/:slug/update", post(update_forum_action))
+        .at("/:slug/moderators", get(list_forum_moderators_action))
+        .at("/:slug/users/search", get(search_users_action))
+        .at("/:slug/moderators/add", post(add_forum_moderator_action))
+        .at(
+            "/:slug/moderators/:user_id/remove",
+            post(remove_forum_moderator_action),
+        )
+        .at("/:slug/categories", get(list_forum_categories_action))
+        .at("/:slug/categories/add", post(create_forum_category_action))
+        .at(
+            "/:slug/categories/:category_id/update",
+            post(update_forum_category_action),
+        )
+        .at(
+            "/:slug/categories/:category_id/delete",
+            post(delete_forum_category_action),
+        )
+        .at("/moderate", post(moderate_content_action))
+}
 
 pub struct Forum {
     pub slug: String,
@@ -369,7 +398,6 @@ struct UpdateForumForm {
 #[derive(Deserialize)]
 struct AddModeratorForm {
     user_id: String,
-    user_handle: String, // For display purposes
 }
 
 #[derive(Deserialize)]
@@ -400,36 +428,6 @@ struct ModerationForm {
     target_id: String,
     action: String,
     reason: Option<String>,
-}
-
-pub fn forum_endpoints() -> impl poem::Endpoint {
-    poem::Route::new()
-        .at("/topic/new", post(create_topic_action))
-        .at("/topic/:topic_id/page", get(topic_page_htmx))
-        .at("/post/new", post(create_post_action))
-        .at("/user/:user_id/contact", get(user_personal_forum)) // Placeholder, user forums will be accessed via the profile page, which will not be part of the forum system
-        .at("/user/:user_id/profile", get(user_profile_page)) // Placeholder, proper profile pages will not be part of the forum system
-        .at("/:slug/page", get(forum_page_htmx))
-        .at("/:slug/suggest", get(suggest_similar_topics_action))
-        .at("/:slug/update", post(update_forum_action))
-        .at("/:slug/moderators", get(list_forum_moderators_action))
-        .at("/:slug/users/search", get(search_users_action))
-        .at("/:slug/moderators/add", post(add_forum_moderator_action))
-        .at(
-            "/:slug/moderators/:user_id/remove",
-            post(remove_forum_moderator_action),
-        )
-        .at("/:slug/categories", get(list_forum_categories_action))
-        .at("/:slug/categories/add", post(create_forum_category_action))
-        .at(
-            "/:slug/categories/:category_id/update",
-            post(update_forum_category_action),
-        )
-        .at(
-            "/:slug/categories/:category_id/delete",
-            post(delete_forum_category_action),
-        )
-        .at("/moderate", post(moderate_content_action))
 }
 
 #[handler]
@@ -468,7 +466,6 @@ async fn topic_page_htmx(
 #[handler]
 async fn create_topic_action(
     Form(form): Form<CreateTopicForm>,
-    session: &Session,
     Authenticated(user_info): Authenticated,
 ) -> Result<Response> {
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Must be logged in"))?;
@@ -526,7 +523,6 @@ async fn create_topic_action(
 #[handler]
 async fn create_post_action(
     Form(form): Form<CreatePostForm>,
-    session: &Session,
     Authenticated(user_info): Authenticated,
 ) -> Result<Response> {
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Must be logged in"))?;
@@ -652,7 +648,7 @@ async fn user_personal_forum(
 #[handler]
 async fn user_profile_page(
     Path(user_id): Path<String>,
-    Authenticated(viewer_info): Authenticated,
+    Authenticated(_viewer_info): Authenticated,
 ) -> Result<Response> {
     let target_user: BasicInfo = request("user.basic_info.by_user_id", user_id.clone()).await?;
 
