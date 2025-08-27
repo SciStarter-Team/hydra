@@ -61,6 +61,7 @@ impl LoadStorePeered for EventAll {
     const GROUP: &str = "event";
     const SPECIFIC: &str = "all";
 
+    #[tracing::instrument]
     async fn save_to_database(&self) -> Result<(), anyhow::Error> {
         let event_id = self.event_id.to_string();
         let part_of = self.part_of.map(|u| u.to_string());
@@ -331,6 +332,7 @@ impl LoadStorePeered for EventAll {
         Ok(())
     }
 
+    #[tracing::instrument]
     async fn read_from_database(_key: Self::DatabaseKey) -> Result<Self, anyhow::Error> {
         unimplemented!("Implementation deferred until needed")
     }

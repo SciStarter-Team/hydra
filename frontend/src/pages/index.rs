@@ -15,6 +15,7 @@ struct IndexPage {
 }
 
 #[handler]
+#[tracing::instrument]
 pub async fn index_page(
     _session: &Session,
     _headers: &HeaderMap,

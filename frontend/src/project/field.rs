@@ -8,7 +8,7 @@ use crate::{contact::Contact, peering::LoadStorePeered};
 
 use super::{ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus};
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum ProjectFieldType {
     ProjectId,
     LegacyV1ProjectId,
@@ -287,6 +287,7 @@ pub enum ProjectField {
 }
 
 impl ProjectField {
+    #[tracing::instrument]
     pub fn field_type(&self) -> ProjectFieldType {
         match self {
             ProjectField::ProjectId(_) => ProjectFieldType::ProjectId,
@@ -443,10 +444,12 @@ impl LoadStorePeered for ProjectField {
     const GROUP: &str = "project";
     const SPECIFIC: &str = "field";
 
+    #[tracing::instrument]
     async fn save_to_database(&self) -> Result<(), Error> {
         todo!()
     }
 
+    #[tracing::instrument]
     //async fn read_from_database<'k>(key: Self::DatabaseKey<'k>) -> Result<Self, Error> {
     async fn read_from_database(key: Self::DatabaseKey) -> Result<Self, Error> {
         todo!()

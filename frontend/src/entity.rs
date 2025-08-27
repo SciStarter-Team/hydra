@@ -5,7 +5,7 @@ use ulid::Ulid;
 
 use crate::peering::LoadStorePeered;
 
-#[derive(Copy, Clone, sqlx::Type, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Copy, Clone, sqlx::Type, serde::Serialize, serde::Deserialize)]
 pub enum EntityKind {
     Proxied, // Used for publishing WordPress pages and the like
     Redirect,
@@ -19,7 +19,7 @@ pub enum EntityKind {
     Placeholder,
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Entity {
     slug: String,
     kind: EntityKind,
@@ -45,6 +45,7 @@ impl TryFrom<EntityDB> for Entity {
 }
 
 impl Entity {
+    #[tracing::instrument(skip(slug))]
     pub fn new(slug: impl Into<String>, kind: EntityKind, target: Ulid) -> Entity {
         Entity {
             slug: slug.into(),
@@ -53,6 +54,7 @@ impl Entity {
         }
     }
 
+    #[tracing::instrument(skip(name))]
     pub async fn new_by_name(
         name: impl AsRef<str>,
         kind: EntityKind,
@@ -110,10 +112,12 @@ impl Entity {
         Ok(Entity::new(slug, kind, target))
     }
 
+    #[tracing::instrument]
     pub async fn response(&self) -> poem::Result<poem::Response> {
         Ok(Html(format!("Viewing entity `{}`", &self.slug)).into_response())
     }
 
+    #[tracing::instrument(skip(slug))]
     pub async fn response_for_slug(slug: impl AsRef<str>) -> poem::Result<poem::Response> {
         // This as_ref().to_string() silliness is due to the issue
         // mentioned in peering.rs forcing us to use String instead of
@@ -124,6 +128,7 @@ impl Entity {
             .await
     }
 
+    #[tracing::instrument]
     pub fn slug(&self) -> &str {
         &self.slug
     }
@@ -136,6 +141,7 @@ impl LoadStorePeered for Entity {
     const GROUP: &str = "entity";
 
     //async fn read_from_database<'k>(slug: Self::DatabaseKey<'k>) -> Result<Self, Error> {
+    #[tracing::instrument]
     async fn read_from_database(slug: Self::DatabaseKey) -> Result<Self, Error> {
         Ok(sqlx::query_as!(
             EntityDB,
@@ -152,6 +158,7 @@ impl LoadStorePeered for Entity {
         .try_into()?)
     }
 
+    #[tracing::instrument]
     async fn save_to_database(&self) -> Result<(), Error> {
         let target = self.target.to_string();
 

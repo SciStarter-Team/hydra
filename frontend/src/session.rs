@@ -9,9 +9,11 @@ use poem::{
 };
 use sqlx::types::JsonValue;
 
+#[derive(Debug)]
 pub struct UserServiceSessionStorage;
 
 impl SessionStorage for UserServiceSessionStorage {
+    #[tracing::instrument]
     async fn load_session<'a>(
         &'a self,
         session_id: &'a str,
@@ -43,6 +45,7 @@ impl SessionStorage for UserServiceSessionStorage {
         }
     }
 
+    #[tracing::instrument]
     async fn update_session<'a>(
         &'a self,
         session_id: &'a str,
@@ -66,6 +69,7 @@ impl SessionStorage for UserServiceSessionStorage {
         Ok(())
     }
 
+    #[tracing::instrument]
     async fn remove_session<'a>(&'a self, session_id: &'a str) -> Result<()> {
         let session_id = flexbuffers::to_vec(session_id.to_owned()).map_err(BadRequest)?;
         let nats = nats();

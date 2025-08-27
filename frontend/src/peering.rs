@@ -12,7 +12,9 @@ pub static SERVER_ID_STR: LazyLock<String> = LazyLock::new(|| SERVER_ID.to_strin
 /// Implementors of this trait support peer-to-peer synchronization of
 /// stored instances.
 #[allow(async_fn_in_trait)]
-pub trait LoadStorePeered: serde::Serialize + for<'d> serde::Deserialize<'d> {
+pub trait LoadStorePeered:
+    std::fmt::Debug + serde::Serialize + for<'d> serde::Deserialize<'d>
+{
     //type DatabaseKey<'k>;
     type DatabaseKey; // Should be DatabaseKey<'k> but as of Rust 1.87 that triggers https://github.com/rust-lang/rust/issues/100013
 
@@ -32,6 +34,7 @@ pub trait LoadStorePeered: serde::Serialize + for<'d> serde::Deserialize<'d> {
     /// Signals are a wrapper around standard NATS messaging, with
     /// automatic message scoping, and the the sender of a message
     /// exempted from receiving it.
+    #[tracing::instrument]
     async fn receive(
         _signal: String,
         _specific: Option<String>,
@@ -45,6 +48,7 @@ pub trait LoadStorePeered: serde::Serialize + for<'d> serde::Deserialize<'d> {
     /// Signal names should consist of alphanumeric characters,
     /// dashes, and underscores only. Particularly, do not use period
     /// (.) characters.
+    #[tracing::instrument(skip(signal, msg))]
     async fn transmit(signal: impl AsRef<str>, msg: impl serde::Serialize) -> Result<(), Error> {
         send_with_headers(
             peering_subject_signal::<Self>(signal),
@@ -59,6 +63,7 @@ pub trait LoadStorePeered: serde::Serialize + for<'d> serde::Deserialize<'d> {
     }
 
     /// Loads the Self with the given id
+    #[tracing::instrument(skip(key))]
     //async fn load<'k>(key: Self::DatabaseKey<'k>) -> Result<Self, Error> {
     async fn load(key: Self::DatabaseKey) -> Result<Self, Error> {
         Self::read_from_database(key).await
@@ -69,6 +74,7 @@ pub trait LoadStorePeered: serde::Serialize + for<'d> serde::Deserialize<'d> {
     /// Overriding the default implementation is not recommended. This
     /// method should be the normal entry point for storing types
     /// which implement the LoadLocalStorePeered trait.
+    #[tracing::instrument]
     async fn store(&self) -> Result<(), Error> {
         self.save_to_database().await?;
         send_with_headers(
@@ -86,6 +92,7 @@ pub trait LoadStorePeered: serde::Serialize + for<'d> serde::Deserialize<'d> {
     /// peering for this type.
     ///
     /// Overriding the default implementation is not recommended.
+    #[tracing::instrument]
     async fn peering_task() -> Result<(), Error> {
         let client = nats();
 
@@ -165,6 +172,7 @@ pub trait LoadStorePeered: serde::Serialize + for<'d> serde::Deserialize<'d> {
 // but the compiler complains. There's probably a way.
 
 /// Returns the NATS subject used for peering stores on Y.
+#[tracing::instrument]
 fn peering_subject_store<T: LoadStorePeered>() -> String {
     if T::SPECIFIC.is_empty() {
         format!("frontend.{}.store", T::GROUP)
@@ -174,6 +182,7 @@ fn peering_subject_store<T: LoadStorePeered>() -> String {
 }
 
 /// Returns the NATS subject used for peering loads on T.
+#[tracing::instrument]
 fn peering_subject_load<T: LoadStorePeered>() -> String {
     if T::SPECIFIC.is_empty() {
         format!("frontend.{}.load", T::GROUP)
@@ -183,11 +192,13 @@ fn peering_subject_load<T: LoadStorePeered>() -> String {
 }
 
 /// Returns the NATS subject used for listening for peering messages
+#[tracing::instrument]
 fn peering_subject_listen<T: LoadStorePeered>() -> String {
     format!("frontend.{}.>", T::GROUP)
 }
 
 /// Returns the NATS subject used for peering the custom signal on T.
+#[tracing::instrument(skip(signal))]
 fn peering_subject_signal<T: LoadStorePeered>(signal: impl AsRef<str>) -> String {
     if T::SPECIFIC.is_empty() {
         format!("frontend.{}.signal.{}", T::GROUP, signal.as_ref())

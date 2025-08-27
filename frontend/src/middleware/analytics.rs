@@ -127,11 +127,11 @@ impl<E: Endpoint> Endpoint for AnalyticsMiddlewareEndpoint<E> {
                 )
                 .await
                 {
-                    eprintln!("Failed to log page view: {}", e);
+                    tracing::warn!("Failed to log page view: {}", e);
                 }
             }
             Err(e) => {
-                eprintln!("AnalyticsMiddleware: Failed to extract IP address: {}", e);
+                tracing::warn!("AnalyticsMiddleware: Failed to extract IP address: {}", e);
             }
         }
 
@@ -145,6 +145,7 @@ impl<E: Endpoint> Endpoint for AnalyticsMiddlewareEndpoint<E> {
 
 /// Ensures that the session contains a unique interaction id, and
 /// returns it
+#[tracing::instrument]
 fn session_interaction(session: &Session) -> String {
     fn new(session: &Session) -> String {
         let interaction = Ulid::new().to_string();
@@ -173,6 +174,7 @@ fn session_interaction(session: &Session) -> String {
 
 /// Ensures that the session contains a unique device id, and
 /// returns it
+#[tracing::instrument]
 fn session_device(session: &Session) -> String {
     if let Some(device) = session.get::<String>("device") {
         device

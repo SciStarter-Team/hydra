@@ -18,6 +18,7 @@ pub fn routes() -> Route {
 }
 
 #[handler]
+#[tracing::instrument]
 pub async fn listen(subject: SessionSubject, Path(channel): Path<String>) -> poem::Result<SSE> {
     let subject = format!("{}.{}", subject.as_ref(), URL_SAFE_NO_PAD.encode(channel),);
 
@@ -35,6 +36,7 @@ pub async fn listen(subject: SessionSubject, Path(channel): Path<String>) -> poe
     .keep_alive(std::time::Duration::from_secs(300)))
 }
 
+#[tracing::instrument(skip(to_session_subject, to_channel))]
 pub async fn send(
     to_session_subject: impl AsRef<str>,
     to_channel: impl AsRef<str>,
@@ -53,7 +55,7 @@ pub async fn send(
     Ok(())
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Event {
     pub event: String,
     pub data: String,

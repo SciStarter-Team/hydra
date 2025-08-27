@@ -192,6 +192,7 @@ impl LoadStorePeered for ProjectAll {
     const GROUP: &str = "project";
     const SPECIFIC: &str = "all";
 
+    #[tracing::instrument]
     async fn save_to_database(&self) -> Result<(), Error> {
         let mut tx = Immediate::begin_with_retry(db(), None, None).await?;
 
@@ -1067,6 +1068,7 @@ impl LoadStorePeered for ProjectAll {
         Ok(())
     }
 
+    #[tracing::instrument]
     //async fn read_from_database<'k>(_key: Self::DatabaseKey<'k>) -> Result<Self, Error> {
     async fn read_from_database(_key: Self::DatabaseKey) -> Result<Self, Error> {
         unimplemented!(

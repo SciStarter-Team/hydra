@@ -6,7 +6,7 @@ use ulid::Ulid;
 
 use crate::peering::LoadStorePeered;
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Redirect {
     redirect_id: Ulid,
     target: String,
@@ -34,6 +34,7 @@ impl LoadStorePeered for Redirect {
 
     const GROUP: &str = "redirect";
 
+    #[tracing::instrument]
     async fn save_to_database(&self) -> Result<(), anyhow::Error> {
         let redirect_id = self.redirect_id.to_string();
 
@@ -49,6 +50,7 @@ impl LoadStorePeered for Redirect {
         Ok(())
     }
 
+    #[tracing::instrument]
     async fn read_from_database(key: Self::DatabaseKey) -> Result<Self, anyhow::Error> {
         let redirect_id = key.to_string();
 
@@ -77,7 +79,7 @@ impl LoadStorePeered for Redirect {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Html {
     pub html_id: Ulid,
     pub stylesheet_urls: Box<[String]>,
@@ -86,6 +88,7 @@ pub struct Html {
 }
 
 impl Html {
+    #[tracing::instrument(skip(stylesheet_urls, script_urls, content))]
     pub fn new(
         stylesheet_urls: impl IntoIterator<Item = impl AsRef<str>>,
         script_urls: impl IntoIterator<Item = impl AsRef<str>>,
@@ -117,14 +120,17 @@ impl Html {
         !self.script_urls.is_empty()
     }
 
+    #[tracing::instrument]
     pub fn stylesheets(&self) -> impl Iterator<Item = &str> {
         self.stylesheet_urls.iter().map(|s| s.as_str())
     }
 
+    #[tracing::instrument]
     pub fn scripts(&self) -> impl Iterator<Item = &str> {
         self.script_urls.iter().map(|s| s.as_str())
     }
 
+    #[tracing::instrument]
     pub fn content(&self) -> &str {
         self.content.as_str()
     }
@@ -135,6 +141,7 @@ impl LoadStorePeered for Html {
 
     const GROUP: &str = "html";
 
+    #[tracing::instrument]
     async fn save_to_database(&self) -> Result<(), anyhow::Error> {
         let html_id = self.html_id.to_string();
 
@@ -188,6 +195,7 @@ impl LoadStorePeered for Html {
         Ok(())
     }
 
+    #[tracing::instrument]
     async fn read_from_database(key: Self::DatabaseKey) -> Result<Self, anyhow::Error> {
         let html_id = key.to_string();
 

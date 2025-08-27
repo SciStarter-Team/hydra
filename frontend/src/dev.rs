@@ -17,18 +17,21 @@ pub fn routes() -> impl Endpoint {
 }
 
 #[handler]
+#[tracing::instrument]
 pub async fn background_processing(
     Authenticated(basic_info): Authenticated,
 ) -> poem::Result<poem::Response> {
     Ok(BackgroundProcessing.render(basic_info).await?)
 }
 
+#[derive(Debug)]
 pub struct BackgroundProcessing;
 
 impl Component for BackgroundProcessing {
     type Param = Option<Arc<BasicInfo>>;
     type Prepared = BackgroundProcessingTpl;
 
+    #[tracing::instrument]
     async fn prepare(self, param: Self::Param) -> Result<Self::Prepared, anyhow::Error> {
         let header = Header::default().prepare(param.clone()).await?;
         let footer = Footer::default().prepare(param).await?;

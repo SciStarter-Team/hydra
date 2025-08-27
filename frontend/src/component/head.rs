@@ -1,6 +1,6 @@
 use sailfish::TemplateOnce;
 
-#[derive(TemplateOnce)]
+#[derive(Debug, TemplateOnce)]
 #[template(path = "site/head.stpl.html")]
 pub struct Head {
     enable_webawesome: bool,
@@ -19,31 +19,37 @@ impl Default for Head {
 }
 
 impl Head {
+    #[tracing::instrument]
     pub fn with_webawesome(mut self) -> Self {
         self.enable_webawesome = true;
         self
     }
 
+    #[tracing::instrument]
     pub fn with_sse(mut self) -> Self {
         self.enable_sse = true;
         self
     }
 
+    #[tracing::instrument]
     pub fn with_alpine(mut self) -> Self {
         self.enable_alpine = true;
         self
     }
 
+    #[tracing::instrument]
     pub fn without_webawesome(mut self) -> Self {
         self.enable_webawesome = false;
         self
     }
 
+    #[tracing::instrument]
     pub fn without_sse(mut self) -> Self {
         self.enable_sse = false;
         self
     }
 
+    #[tracing::instrument]
     pub fn without_alpine(mut self) -> Self {
         self.enable_alpine = false;
         self

@@ -75,6 +75,7 @@ impl std::fmt::Display for EventType {
 impl FromStr for EventType {
     type Err = EventError;
 
+    #[tracing::instrument]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "BioBlitz" => Ok(EventType::BioBlitz),

@@ -34,6 +34,7 @@ use poem::{
 use project::{all::ProjectAll, field::ProjectField};
 use rust_embed::Embed;
 use session::UserServiceSessionStorage;
+use tracing::Level;
 
 #[cfg(debug_assertions)]
 pub const SESSION_COOKIE: &'static str = "session-id";
@@ -57,16 +58,19 @@ type StaticFiles = EmbeddedFilesEndpoint<Static>;
 type StaticFile = EmbeddedFileEndpoint<Static>;
 
 #[handler]
+#[tracing::instrument]
 async fn entity_page(Path(slug): Path<String>) -> poem::Result<poem::Response> {
     Entity::response_for_slug(slug).await
 }
 
+#[tracing::instrument]
 async fn not_found(_err: poem::Error) -> Response {
     Response::builder()
         .content_type("text/html")
         .body("Not Found") // Render 'not found' error page template
 }
 
+#[tracing::instrument]
 async fn not_authorized(err: poem::Error) -> Response {
     if let Ok(err) = err.downcast::<NotAuthorized>() {
         // The NotAuthorized type handles URL-encoding the target
@@ -77,20 +81,23 @@ async fn not_authorized(err: poem::Error) -> Response {
     }
 }
 
+#[tracing::instrument]
 async fn forbidden(_err: poem::Error) -> Response {
     Response::builder()
         .content_type("text/html")
         .body("Not Allowed") // Render 'forbidden' error page template
 }
 
+#[tracing::instrument]
 async fn internal_server_error(err: poem::Error) -> Response {
-    eprintln!("{}", err);
+    tracing::error!(?err);
 
     Response::builder()
         .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
         .body("Internal Server Error") // Render error page template
 }
 
+#[tracing::instrument]
 async fn error_dispatch(err: poem::Error) -> Response {
     match err.status() {
         poem::http::StatusCode::NOT_FOUND => not_found(err).await,
@@ -110,6 +117,7 @@ struct DemoForum {
 }
 
 #[handler]
+#[tracing::instrument]
 async fn demo_forum(
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
@@ -169,6 +177,24 @@ fn dynamic() -> impl Endpoint {
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
+    // might want a 'verbose' command line option for setting the it up with pretty and max level TRACE
+    if cfg!(debug_assertions) {
+        let subscriber = tracing_subscriber::FmtSubscriber::builder()
+            .pretty()
+            .with_max_level(Level::INFO)
+            .finish();
+
+        tracing::subscriber::set_global_default(subscriber)
+            .expect("setting default tracing subscriber failed");
+    } else {
+        let subscriber = tracing_subscriber::FmtSubscriber::builder()
+            .with_max_level(Level::WARN)
+            .finish();
+
+        tracing::subscriber::set_global_default(subscriber)
+            .expect("setting default tracing subscriber failed");
+    }
+
     common::shared::init("frontend").await;
 
     sqlx::migrate!("./migrations").run(db()).await?;
@@ -414,6 +440,7 @@ mod sync {
         sustainable_development_goals: String,
     }
 
+    #[tracing::instrument]
     pub async fn synchronize_projects() -> Result<(), anyhow::Error> {
         loop {
             let last_update = misc::get("project-sync-bookmark-update")
@@ -428,7 +455,7 @@ mod sync {
 
             let client = reqwest::Client::new();
 
-            println!("Retrieving projects since {} {}...", &last_update, last_id);
+            tracing::info!("Retrieving projects since {} {}...", &last_update, last_id);
 
             let projects: Vec<ProjectData> = client
                 .get("https://scistarter.org/staff/sync/projects")
@@ -446,7 +473,7 @@ mod sync {
             let mut bookmark = (last_update.clone(), last_id);
 
             let got_projects = projects.len();
-            println!("Synchronization received {} projects", got_projects);
+            tracing::info!("Synchronization received {} projects", got_projects);
 
             for data in projects {
                 let updated = data.updated.to_string(); //.strftime("%Y-%m-%d %H:%M:%S+00").to_string();
@@ -457,7 +484,7 @@ mod sync {
                 proj.project_id = match data.id.parse() {
                     Ok(ulid) => ulid,
                     Err(err) => {
-                        eprintln!("Error parsing ULID {:?}: {}", data.id, err);
+                        tracing::error!("Error parsing ULID {:?}: {}", data.id, err);
                         continue;
                     }
                 };
@@ -478,9 +505,10 @@ mod sync {
                     "Complete" => ProjectStatus::Complete,
                     "Hidden" => ProjectStatus::Hidden,
                     s => {
-                        eprintln!(
+                        tracing::error!(
                             "Unknown project status `{}` in {}, setting to Hidden",
-                            s, &data.name,
+                            s,
+                            &data.name,
                         );
                         ProjectStatus::Hidden
                     }
@@ -492,9 +520,10 @@ mod sync {
                         ProjectPromotionTime::PreferOnTargetDate
                     }
                     s => {
-                        eprintln!(
+                        tracing::error!(
                             "Unknown project protion time `{}` in {}, setting to PromoteAtAnyTime ",
-                            s, &data.name,
+                            s,
+                            &data.name,
                         );
                         ProjectPromotionTime::PromoteAtAnyTime
                     }
@@ -546,9 +575,10 @@ mod sync {
                     "Contributory" => ProjectParticipationDegree::Contributory,
                     "Contractual" => ProjectParticipationDegree::Contractual,
                     s => {
-                        eprintln!(
+                        tracing::error!(
                             "Unknown participation degree `{}` in {}, defaulting to Collegial",
-                            s, &proj.name
+                            s,
+                            &proj.name
                         );
                         ProjectParticipationDegree::Collegial
                     }
@@ -808,14 +838,14 @@ mod sync {
                 proj.sustainable_development_goals = data.sustainable_development_goals;
 
                 if let Err(err) = proj.store().await {
-                    eprintln!("Error saving {}: {}", &proj.name, err);
+                    tracing::error!("Error saving {}: {}", &proj.name, err);
                     continue;
                 }
 
                 let entity = Entity::new(data.slug, EntityKind::Project, proj.project_id);
 
                 if let Err(err) = entity.store().await {
-                    eprintln!(
+                    tracing::error!(
                         "Error creating entity for {} ({}): {}",
                         &proj.name,
                         &entity.slug(),
@@ -944,6 +974,7 @@ mod sync {
         end19: Option<Timestamp>,
     }
 
+    #[tracing::instrument]
     pub async fn synchronize_events() -> Result<(), anyhow::Error> {
         loop {
             let last_update = misc::get("event-sync-bookmark-update")
@@ -958,7 +989,7 @@ mod sync {
 
             let client = reqwest::Client::new();
 
-            println!("Retrieving events since {} {}...", &last_update, last_id);
+            tracing::info!("Retrieving events since {} {}...", &last_update, last_id);
 
             let events: Vec<EventData> = client
                 .get("https://scistarter.org/staff/sync/events")
@@ -976,7 +1007,7 @@ mod sync {
             let mut bookmark = (last_update.clone(), last_id);
 
             let got_events = events.len();
-            println!("Synchronization received {} events", got_events);
+            tracing::info!("Synchronization received {} events", got_events);
 
             for data in events {
                 let updated = data
@@ -991,7 +1022,7 @@ mod sync {
                 evt.event_id = match data.event_id.parse() {
                     Ok(ulid) => ulid,
                     Err(err) => {
-                        eprintln!("Error parsing ULID {:?}: {}", data.event_id, err);
+                        tracing::error!("Error parsing ULID {:?}: {}", data.event_id, err);
                         continue;
                     }
                 };
@@ -1005,7 +1036,7 @@ mod sync {
                 evt.page_creator_id = match data.page_creator_id.parse() {
                     Ok(ulid) => ulid,
                     Err(err) => {
-                        eprintln!("Error parsing ULID {:?}: {}", data.event_id, err);
+                        tracing::error!("Error parsing ULID {:?}: {}", data.event_id, err);
                         continue;
                     }
                 };
@@ -1105,14 +1136,14 @@ mod sync {
                 evt.instances = instances.into_boxed_slice();
 
                 if let Err(err) = evt.store().await {
-                    eprintln!("Error saving {}: {}", &evt.name, err);
+                    tracing::error!("Error saving {}: {}", &evt.name, err);
                     continue;
                 }
 
                 let entity = Entity::new(data.slug, EntityKind::Event, evt.event_id);
 
                 if let Err(err) = entity.store().await {
-                    eprintln!(
+                    tracing::error!(
                         "Error creating entity for {} ({}): {}",
                         &evt.name,
                         &entity.slug(),

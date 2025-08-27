@@ -162,6 +162,7 @@ impl ResponseError for NotAuthorized {
 
 /// Ensures that the session contains a unique NATS subject, and
 /// returns it
+#[tracing::instrument]
 fn session_subject(session: &Session) -> String {
     if let Some(subj) = session.get::<String>("subject") {
         subj
@@ -203,6 +204,7 @@ impl<E: Endpoint> Endpoint for StaffOnlyEndpoint<E> {
 /// StaffOnly enforces the same rule, so the normal use case for
 /// calling this directly is when the handler logic has both
 /// staff-only and non-staff code paths.
+#[tracing::instrument]
 pub fn staff_only(req: &poem::Request) -> Result<(), NotAuthorized> {
     let Some(user_info) = req.extensions().get::<Authenticated>() else {
         let uri = req.uri();
@@ -252,6 +254,7 @@ impl<E: Endpoint> Endpoint for AuthOnlyEndpoint<E> {
 
 /// Use auth_only()? as a quick way to enfore logged-in-only access
 /// restrictions in handlers.
+#[tracing::instrument]
 pub fn auth_only(req: &poem::Request) -> Result<(), NotAuthorized> {
     let Some(_user_info) = req.extensions().get::<Authenticated>() else {
         let uri = req.uri();

@@ -17,7 +17,7 @@ use crate::{
     session::session_tags,
 };
 
-#[derive(serde::Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 struct LoginPageParameters {
     system: Option<bool>,
     password: Option<bool>,
@@ -37,6 +37,7 @@ struct LoginSignupPage {
 }
 
 #[handler]
+#[tracing::instrument]
 pub async fn login_signup_page(
     session: &Session,
     Authenticated(user_info): Authenticated,
@@ -61,7 +62,7 @@ pub async fn login_signup_page(
     .await
 }
 
-#[derive(serde::Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 struct SignupForm {
     handle: String,
     email: String,
@@ -72,6 +73,7 @@ struct SignupForm {
 }
 
 #[handler]
+#[tracing::instrument]
 pub async fn signup_action(
     session: &Session,
     RealIp(client_ip): RealIp,
@@ -138,13 +140,14 @@ pub async fn signup_action(
     }
 }
 
-#[derive(serde::Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 struct LoginForm {
     email: String,
     password: String,
 }
 
 #[handler]
+#[tracing::instrument]
 pub async fn login_action(session: &Session, Form(form): Form<LoginForm>) -> Response {
     let next: Option<String> = session.get("auth_next");
 
@@ -192,6 +195,7 @@ pub async fn login_action(session: &Session, Form(form): Form<LoginForm>) -> Res
 }
 
 #[handler]
+#[tracing::instrument]
 pub async fn logout_action(session: &Session) -> impl IntoResponse {
     let Some(info): Option<BasicInfo> = session.get("basic_info") else {
         return Redirect::see_other("/");

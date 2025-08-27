@@ -45,6 +45,7 @@ pub fn forum_endpoints() -> impl poem::Endpoint {
         .at("/moderate", post(moderate_content_action))
 }
 
+#[derive(Debug)]
 pub struct Forum {
     pub slug: String,
     pub page: i64,
@@ -83,6 +84,7 @@ impl Component for Forum {
     type Param = Option<Arc<BasicInfo>>;
     type Prepared = ForumPrepared;
 
+    #[tracing::instrument]
     async fn prepare(self, user_info: Self::Param) -> Result<Self::Prepared> {
         // Get forum by slug with user_id for permission checking
         let get_forum_request = GetForumBySlug {
@@ -151,6 +153,7 @@ pub struct ForumPrepared {
     pub has_prev_page: bool,
 }
 
+#[derive(Debug)]
 pub struct TopicDetail {
     pub topic: TopicInfo,
     pub page: i64,
@@ -179,6 +182,7 @@ impl Component for TopicDetail {
     type Param = Option<Arc<BasicInfo>>;
     type Prepared = TopicDetailPrepared;
 
+    #[tracing::instrument]
     async fn prepare(self, user_info: Self::Param) -> Result<Self::Prepared> {
         // Get posts for this topic with pagination
         let offset = self.page * self.per_page;
@@ -223,7 +227,7 @@ impl Component for TopicDetail {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ThreadedPost {
     pub post: PostInfo,
     pub replies: Vec<ThreadedPost>,
@@ -231,6 +235,7 @@ pub struct ThreadedPost {
 }
 
 impl ThreadedPost {
+    #[tracing::instrument]
     fn build_thread(posts: Vec<PostInfo>) -> Vec<ThreadedPost> {
         let mut children: HashMap<Ulid, Vec<PostInfo>> = HashMap::new();
         let mut root_posts = Vec::new();
@@ -245,6 +250,7 @@ impl ThreadedPost {
         }
 
         // Build threaded structure starting from root posts
+        #[tracing::instrument]
         fn build_threaded(
             post: PostInfo,
             children: &HashMap<Ulid, Vec<PostInfo>>,
@@ -366,7 +372,7 @@ pub struct ModerationActions<'a> {
     pub is_flagged: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct CreateTopicForm {
     slug: String,
     title: String,
@@ -375,54 +381,54 @@ struct CreateTopicForm {
     tags: String, // Comma-separated tags
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct CreatePostForm {
     topic_id: String,
     content: String,
     parent_post_id: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct PaginationQuery {
     page: Option<i64>,
     per_page: Option<i64>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct UpdateForumForm {
     name: String,
     description: String,
     is_active: Option<String>, // HTML checkbox sends value or nothing
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct AddModeratorForm {
     user_id: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct SuggestQuery {
     title: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct UserSearchQuery {
     q: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct CreateCategoryForm {
     slug: String,
     category_name: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct UpdateCategoryForm {
     category_name: Option<String>,
     is_active: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct ModerationForm {
     target_type: String,
     target_id: String,
@@ -431,6 +437,7 @@ struct ModerationForm {
 }
 
 #[handler]
+#[tracing::instrument]
 async fn forum_page_htmx(
     Path(slug): Path<String>,
     Query(query): Query<PaginationQuery>,
@@ -446,6 +453,7 @@ async fn forum_page_htmx(
 }
 
 #[handler]
+#[tracing::instrument]
 async fn topic_page_htmx(
     Path(topic_id): Path<String>,
     Query(query): Query<PaginationQuery>,
@@ -464,6 +472,7 @@ async fn topic_page_htmx(
 }
 
 #[handler]
+#[tracing::instrument]
 async fn create_topic_action(
     Form(form): Form<CreateTopicForm>,
     Authenticated(user_info): Authenticated,
@@ -521,6 +530,7 @@ async fn create_topic_action(
 }
 
 #[handler]
+#[tracing::instrument]
 async fn create_post_action(
     Form(form): Form<CreatePostForm>,
     Authenticated(user_info): Authenticated,
@@ -621,6 +631,7 @@ async fn create_post_action(
 }
 
 #[handler]
+#[tracing::instrument]
 async fn user_personal_forum(
     Path(user_id): Path<String>,
     Authenticated(viewer_info): Authenticated,
@@ -646,6 +657,7 @@ async fn user_personal_forum(
 }
 
 #[handler]
+#[tracing::instrument]
 async fn user_profile_page(
     Path(user_id): Path<String>,
     Authenticated(_viewer_info): Authenticated,
@@ -661,6 +673,7 @@ async fn user_profile_page(
 }
 
 #[handler]
+#[tracing::instrument]
 async fn update_forum_action(
     Path(slug): Path<String>,
     Form(form): Form<UpdateForumForm>,
@@ -701,6 +714,7 @@ async fn update_forum_action(
     Ok(Html(reload.render_once()?).into_response())
 }
 
+#[tracing::instrument]
 async fn list_forum_moderators_impl(slug: &str, user_info: &BasicInfo) -> Result<Response> {
     // Get forum by slug to get forum_id
     let get_forum_request = GetForumBySlug {
@@ -728,6 +742,7 @@ async fn list_forum_moderators_impl(slug: &str, user_info: &BasicInfo) -> Result
 }
 
 #[handler]
+#[tracing::instrument]
 async fn list_forum_moderators_action(
     Path(slug): Path<String>,
     Authenticated(user_info): Authenticated,
@@ -737,6 +752,7 @@ async fn list_forum_moderators_action(
 }
 
 #[handler]
+#[tracing::instrument]
 async fn add_forum_moderator_action(
     Path(slug): Path<String>,
     Form(form): Form<AddModeratorForm>,
@@ -772,6 +788,7 @@ async fn add_forum_moderator_action(
 }
 
 #[handler]
+#[tracing::instrument]
 async fn remove_forum_moderator_action(
     Path((slug, user_id_str)): Path<(String, String)>,
     Authenticated(user_info): Authenticated,
@@ -804,6 +821,7 @@ async fn remove_forum_moderator_action(
 }
 
 #[handler]
+#[tracing::instrument]
 async fn suggest_similar_topics_action(
     Path(slug): Path<String>,
     Query(query): Query<SuggestQuery>,
@@ -836,6 +854,7 @@ async fn suggest_similar_topics_action(
 }
 
 #[handler]
+#[tracing::instrument]
 async fn search_users_action(
     Path(_slug): Path<String>,
     Query(query): Query<UserSearchQuery>,
@@ -864,6 +883,7 @@ async fn search_users_action(
     }
 }
 
+#[tracing::instrument]
 async fn generate_category_list_html(slug: &str, user_info: &BasicInfo) -> Result<String> {
     // Get forum by slug to get forum_id
     let get_forum_request = GetForumBySlug {
@@ -893,6 +913,7 @@ async fn generate_category_list_html(slug: &str, user_info: &BasicInfo) -> Resul
     Ok(category_list.render_once()?)
 }
 
+#[tracing::instrument]
 async fn generate_category_dropdown_oob(slug: &str, user_info: &BasicInfo) -> Result<String> {
     // Get forum by slug to get forum_id
     let get_forum_request = GetForumBySlug {
@@ -918,6 +939,7 @@ async fn generate_category_dropdown_oob(slug: &str, user_info: &BasicInfo) -> Re
 }
 
 #[handler]
+#[tracing::instrument]
 async fn list_forum_categories_action(
     Path(slug): Path<String>,
     Authenticated(user_info): Authenticated,
@@ -928,6 +950,7 @@ async fn list_forum_categories_action(
 }
 
 #[handler]
+#[tracing::instrument]
 async fn create_forum_category_action(
     Form(form): Form<CreateCategoryForm>,
     Authenticated(user_info): Authenticated,
@@ -973,6 +996,7 @@ async fn create_forum_category_action(
 }
 
 #[handler]
+#[tracing::instrument]
 async fn update_forum_category_action(
     Path((slug, category_id_str)): Path<(String, String)>,
     Form(form): Form<UpdateCategoryForm>,
@@ -1016,6 +1040,7 @@ async fn update_forum_category_action(
 }
 
 #[handler]
+#[tracing::instrument]
 async fn delete_forum_category_action(
     Path((slug, category_id_str)): Path<(String, String)>,
     Authenticated(user_info): Authenticated,
@@ -1049,6 +1074,7 @@ async fn delete_forum_category_action(
 }
 
 #[handler]
+#[tracing::instrument]
 async fn moderate_content_action(
     Form(form): Form<ModerationForm>,
     Authenticated(user_info): Authenticated,
