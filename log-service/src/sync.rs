@@ -101,12 +101,24 @@ pub async fn participation_synchronize(
             .await
         {
             Ok(response) => match response.error_for_status() {
-                Ok(resp) => match resp.json().await {
-                    Ok(events) => events,
-                    Err(e) => {
-                        eprintln!("JSON parsing error: {}", e);
-                        sleep(Duration::from_secs(60)).await;
-                        continue;
+                Ok(resp) => {
+                    let response_text = match resp.text().await {
+                        Ok(text) => text,
+                        Err(e) => {
+                            eprintln!("Failed to read response body: {}", e);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    };
+                    
+                    match serde_json::from_str(&response_text) {
+                        Ok(events) => events,
+                        Err(e) => {
+                            eprintln!("JSON parsing error: {}", e);
+                            eprintln!("Response body: {}", response_text);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
                     }
                 },
                 Err(e) => {
@@ -202,12 +214,24 @@ pub async fn bookmark_synchronize(database: Arc<Database>, cancellation_token: C
             .await
         {
             Ok(response) => match response.error_for_status() {
-                Ok(resp) => match resp.json().await {
-                    Ok(events) => events,
-                    Err(e) => {
-                        eprintln!("JSON parsing error: {}", e);
-                        sleep(Duration::from_secs(60)).await;
-                        continue;
+                Ok(resp) => {
+                    let response_text = match resp.text().await {
+                        Ok(text) => text,
+                        Err(e) => {
+                            eprintln!("Failed to read response body: {}", e);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    };
+                    
+                    match serde_json::from_str(&response_text) {
+                        Ok(events) => events,
+                        Err(e) => {
+                            eprintln!("JSON parsing error: {}", e);
+                            eprintln!("Response body: {}", response_text);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
                     }
                 },
                 Err(e) => {
@@ -298,12 +322,24 @@ pub async fn join_synchronize(database: Arc<Database>, cancellation_token: Cance
             .await
         {
             Ok(response) => match response.error_for_status() {
-                Ok(resp) => match resp.json().await {
-                    Ok(events) => events,
-                    Err(e) => {
-                        eprintln!("JSON parsing error: {}", e);
-                        sleep(Duration::from_secs(60)).await;
-                        continue;
+                Ok(resp) => {
+                    let response_text = match resp.text().await {
+                        Ok(text) => text,
+                        Err(e) => {
+                            eprintln!("Failed to read response body: {}", e);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    };
+                    
+                    match serde_json::from_str(&response_text) {
+                        Ok(events) => events,
+                        Err(e) => {
+                            eprintln!("JSON parsing error: {}", e);
+                            eprintln!("Response body: {}", response_text);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
                     }
                 },
                 Err(e) => {
@@ -413,12 +449,24 @@ pub async fn golink_synchronize(database: Arc<Database>, cancellation_token: Can
             .await
         {
             Ok(response) => match response.error_for_status() {
-                Ok(resp) => match resp.json().await {
-                    Ok(events) => events,
-                    Err(e) => {
-                        eprintln!("JSON parsing error: {}", e);
-                        sleep(Duration::from_secs(60)).await;
-                        continue;
+                Ok(resp) => {
+                    let response_text = match resp.text().await {
+                        Ok(text) => text,
+                        Err(e) => {
+                            eprintln!("Failed to read response body: {}", e);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    };
+                    
+                    match serde_json::from_str(&response_text) {
+                        Ok(events) => events,
+                        Err(e) => {
+                            eprintln!("JSON parsing error: {}", e);
+                            eprintln!("Response body: {}", response_text);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
                     }
                 },
                 Err(e) => {
