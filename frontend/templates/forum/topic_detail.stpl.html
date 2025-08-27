@@ -109,7 +109,7 @@
     </div>
 
     <% if self.can_reply && !self.topic.is_locked { %>
-      <div id="reply-form-topic" class="mt-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+      <div class="reply-form-topic mt-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
         <h6 class="text-lg font-medium text-blue-900 mb-3">Reply to this topic</h6>
         <form hx-post="/-forum/post/new" hx-target="#topic-<%= self.topic.topic_id|disp %>" hx-swap="outerHTML" class="space-y-3">
           <input type="hidden" name="topic_id" value="<%= self.topic.topic_id|disp %>">

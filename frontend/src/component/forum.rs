@@ -93,7 +93,7 @@ impl Component for Forum {
         };
         let forum: ForumInfo = request("forum.management.get_by_slug", get_forum_request).await?;
 
-        // Get topics for this forum with pagination
+        // Parallelize topics and categories queries since they both depend on forum_id
         let offset = self.page * self.per_page;
         let topic_query = TopicListQuery {
             forum_id: Some(forum.forum_id),
@@ -105,19 +105,22 @@ impl Component for Forum {
             sort_by: TopicSortBy::UpdatedDesc,
         };
 
-        let topics: Vec<TopicInfo> = request("forum.topics.list", topic_query).await?;
-
-        // Get forum categories for category management and topic creation
         let categories_query = GetForumCategories {
             forum_id: forum.forum_id,
             active_only: Some(true),
         };
-        let categories: Vec<ForumCategoryInfo> = request("forum.categories.list", categories_query)
-            .await
-            .unwrap_or_else(|_| vec![]);
+
+        let (topics_result, categories_result) = tokio::join!(
+            request::<Vec<TopicInfo>>("forum.topics.list", topic_query),
+            request::<Vec<ForumCategoryInfo>>("forum.categories.list", categories_query)
+        );
+
+        let topics = topics_result?;
+        let categories = categories_result.unwrap_or_else(|_| vec![]);
 
         let can_create_topic = user_info.is_some();
         let can_manage_forum = forum.can_manage;
+        let can_manage_moderators = user_info.as_ref().map_or(false, |user| user.is_staff);
         let has_next_page = topics.len() as i64 == self.per_page;
         let has_prev_page = self.page > 0;
 
@@ -129,6 +132,7 @@ impl Component for Forum {
             user_info,
             can_create_topic,
             can_manage_forum,
+            can_manage_moderators,
             page: self.page,
             per_page: self.per_page,
             has_next_page,
@@ -147,6 +151,7 @@ pub struct ForumPrepared {
     pub user_info: Option<Arc<BasicInfo>>,
     pub can_create_topic: bool,
     pub can_manage_forum: bool,
+    pub can_manage_moderators: bool,
     pub page: i64,
     pub per_page: i64,
     pub has_next_page: bool,
@@ -504,14 +509,10 @@ async fn create_topic_action(
 
     match request::<TopicInfo>("forum.topics.create", create_topic).await {
         Ok(_topic) => {
-            // Success - reload the forum component at page 0
-            let target_url = format!("/-forum/{}/page?page=0", form.slug);
-            let target_selector = format!("#forum-{}", form.slug);
-            let reload = HtmxReload {
-                target_url: &target_url,
-                target_selector: &target_selector,
-            };
-            Ok(Html(reload.render_once()?).into_response())
+            // Success - directly render the updated forum component
+            let forum_component = Forum::with_pagination(form.slug, 0, 20);
+            let prepared = forum_component.prepare(Some(user_info)).await?;
+            Ok(Html(prepared.render_once()?).into_response())
         }
         Err(error) => {
             // Show error message for any other issues (content filter, etc.)
@@ -760,6 +761,23 @@ async fn add_forum_moderator_action(
 ) -> Result<Response> {
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Must be logged in"))?;
 
+    // Validate that a user was selected
+    if form.user_id.trim().is_empty() {
+        let error_message = ErrorMessage {
+            title: "No User Selected",
+            message: "Please select a user from the search results before adding them as a moderator.",
+            button_text: None,
+            button_action: None,
+        };
+        
+        let mut response = Html(error_message.render_once()?).into_response();
+        response.headers_mut().insert(
+            "HX-Retarget", 
+            format!("#forum-{} .moderator-errors", slug).parse().unwrap()
+        );
+        return Ok(response);
+    }
+
     // Get forum by slug to get forum_id
     let get_forum_request = GetForumBySlug {
         slug: slug.clone(),
@@ -772,8 +790,25 @@ async fn add_forum_moderator_action(
         return Err(anyhow::anyhow!("Permission denied"));
     }
 
-    // Parse user_id from form (already validated by autocomplete selection)
-    let target_user_id = form.user_id.parse::<Ulid>()?;
+    // Parse user_id from form - now we know it's not empty
+    let target_user_id = match form.user_id.parse::<Ulid>() {
+        Ok(id) => id,
+        Err(_) => {
+            let error_message = ErrorMessage {
+                title: "Invalid User Selection",
+                message: "Please select a valid user from the search results.",
+                button_text: None,
+                button_action: None,
+            };
+            
+            let mut response = Html(error_message.render_once()?).into_response();
+            response.headers_mut().insert(
+                "HX-Retarget", 
+                format!("#forum-{} .moderator-errors", slug).parse().unwrap()
+            );
+            return Ok(response);
+        }
+    };
 
     let add_moderator = AddForumModerator {
         requester_id: user_info.user_id,
@@ -781,10 +816,46 @@ async fn add_forum_moderator_action(
         user_id: target_user_id,
     };
 
-    request::<()>("forum.moderation.add_moderator", add_moderator).await?;
-
-    // Return updated moderator list
-    list_forum_moderators_impl(&slug, &user_info).await
+    match request::<()>("forum.moderation.add_moderator", add_moderator).await {
+        Ok(_) => {
+            // Return updated moderator list
+            list_forum_moderators_impl(&slug, &user_info).await
+        }
+        Err(error) => {
+            // Create user-friendly error message based on actual backend responses
+            let error_str = error.to_string();
+            let message = match error_str.as_str() {
+                msg if msg.contains("Target user not found") => 
+                    "User not found. Please check the username and try again.",
+                msg if msg.contains("Staff members cannot be added as forum-specific moderators") => 
+                    "Staff members and administrators cannot be added as moderators.",
+                msg if msg.contains("Permission denied: only staff can manage forum moderators") => 
+                    "You don't have permission to add moderators to this forum.",
+                // Database constraint error for duplicate moderator
+                msg if msg.contains("UNIQUE constraint failed") || msg.contains("duplicate") => 
+                    "This user is already a moderator of this forum.",
+                _ => {
+                    tracing::warn!("Unhandled add moderator error: {}", error_str);
+                    "Failed to add moderator. Please try again."
+                },
+            };
+            
+            let error_message = ErrorMessage {
+                title: "Cannot Add Moderator",
+                message,
+                button_text: None,
+                button_action: None,
+            };
+            
+            // Use HX-Retarget to target the specific forum's moderator error container
+            let mut response = Html(error_message.render_once()?).into_response();
+            response.headers_mut().insert(
+                "HX-Retarget", 
+                format!("#forum-{} .moderator-errors", slug).parse().unwrap()
+            );
+            Ok(response)
+        }
+    }
 }
 
 #[handler]
@@ -983,14 +1054,33 @@ async fn create_forum_category_action(
             Ok(Html(format!("{}{}", list_html, dropdown_oob)).into_response())
         }
         Err(error) => {
-            let message = error.to_string().replace('"', "&quot;");
+            // Create user-friendly error message based on actual backend responses
+            let error_str = error.to_string();
+            let message = match error_str.as_str() {
+                msg if msg.contains("Category already exists for this forum") => 
+                    "A category with this name already exists.",
+                msg if msg.contains("Permission denied") => 
+                    "You don't have permission to create categories in this forum.",
+                _ => {
+                    tracing::warn!("Unhandled create category error: {}", error_str);
+                    "Failed to create category. Please try again."
+                },
+            };
+            
             let error_message = ErrorMessage {
-                title: "Error creating category",
-                message: &message,
-                button_text: Some("OK"),
+                title: "Cannot Create Category",
+                message,
+                button_text: None,
                 button_action: None,
             };
-            Ok(Html(error_message.render_once()?).into_response())
+            
+            // Use HX-Retarget to target the specific forum's category error container
+            let mut response = Html(error_message.render_once()?).into_response();
+            response.headers_mut().insert(
+                "HX-Retarget", 
+                format!("#forum-{} .category-errors", form.slug).parse().unwrap()
+            );
+            Ok(response)
         }
     }
 }
@@ -1027,14 +1117,29 @@ async fn update_forum_category_action(
             Ok(Html(format!("{}{}", list_html, dropdown_oob)).into_response())
         }
         Err(error) => {
-            let message = error.to_string().replace('"', "&quot;");
+            // Create user-friendly error message
+            let message = match error.to_string().as_str() {
+                msg if msg.contains("not found") => "Category not found. It may have been deleted by another user.",
+                msg if msg.contains("already exists") => "A category with this name already exists.",
+                msg if msg.contains("invalid name") => "Category name is invalid. Please use only letters, numbers, and spaces.",
+                msg if msg.contains("permission denied") => "You don't have permission to modify categories in this forum.",
+                _ => "Failed to update category. Please try again.",
+            };
+            
             let error_message = ErrorMessage {
-                title: "Error updating category",
-                message: &message,
-                button_text: Some("OK"),
+                title: "Cannot Update Category",
+                message,
+                button_text: None,
                 button_action: None,
             };
-            Ok(Html(error_message.render_once()?).into_response())
+            
+            // Use HX-Retarget to target the specific forum's error container
+            let mut response = Html(error_message.render_once()?).into_response();
+            response.headers_mut().insert(
+                "HX-Retarget", 
+                format!("#forum-{} .category-errors", slug).parse().unwrap()
+            );
+            Ok(response)
         }
     }
 }
@@ -1061,14 +1166,28 @@ async fn delete_forum_category_action(
             Ok(Html(format!("{}{}", list_html, dropdown_oob)).into_response())
         }
         Err(error) => {
-            let message = error.to_string().replace('"', "&quot;");
+            // Create user-friendly error message
+            let message = match error.to_string().as_str() {
+                msg if msg.contains("not found") => "Category not found. It may have been deleted by another user.",
+                msg if msg.contains("has topics") => "Cannot delete category because it contains topics. Move or delete topics first.",
+                msg if msg.contains("permission denied") => "You don't have permission to delete categories in this forum.",
+                _ => "Failed to delete category. Please try again.",
+            };
+            
             let error_message = ErrorMessage {
-                title: "Error deleting category",
-                message: &message,
-                button_text: Some("OK"),
+                title: "Cannot Delete Category",
+                message,
+                button_text: None,
                 button_action: None,
             };
-            Ok(Html(error_message.render_once()?).into_response())
+            
+            // Use HX-Retarget to target the specific forum's error container
+            let mut response = Html(error_message.render_once()?).into_response();
+            response.headers_mut().insert(
+                "HX-Retarget", 
+                format!("#forum-{} .category-errors", slug).parse().unwrap()
+            );
+            Ok(response)
         }
     }
 }

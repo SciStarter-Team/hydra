@@ -1,14 +1,16 @@
-<div class="my-4 p-4 bg-red-50 border border-red-200 rounded-lg shadow-xs">
+<div class="error-message my-4 p-4 bg-red-50 border border-red-200 rounded-lg shadow-xs">
     <h4 class="text-lg font-semibold text-red-800 mb-2"><%= self.title %></h4>
     <p class="text-red-700 mb-3"><%= self.message %></p>
-    <% if let Some(ref button_text) = self.button_text { %>
-        <div class="flex gap-2">
+    <div class="mt-3">
+        <% if let Some(ref button_text) = self.button_text { %>
             <% if let Some(ref button_action) = self.button_action { %>
-                <button hx-on:click="<%= button_action %>; this.parentElement.parentElement.remove();" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors"><%= button_text %></button>
+                <button hx-on:click="<%= button_action %>; 
+                                     htmx.closest(this, '.error-message').remove();" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors"><%= button_text %></button>
             <% } else { %>
-                <button hx-on:click="this.parentElement.parentElement.remove();" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors"><%= button_text %></button>
+                <button hx-on:click="htmx.closest(this, '.error-message').remove();" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors"><%= button_text %></button>
             <% } %>
-            <button hx-on:click="this.parentElement.parentElement.remove();" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md transition-colors">Dismiss</button>
-        </div>
-    <% } %>
+        <% } else { %>
+            <button hx-on:click="htmx.closest(this, '.error-message').remove();" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors">OK</button>
+        <% } %>
+    </div>
 </div>

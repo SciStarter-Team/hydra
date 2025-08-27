@@ -5,6 +5,7 @@ use common::{
 };
 use futures::StreamExt;
 use tokio::task::JoinSet;
+use tracing::Level;
 
 pub mod categories;
 pub mod content_filter;
@@ -15,12 +16,32 @@ pub mod topics;
 
 #[tokio::main]
 async fn main() {
+    // Set up tracing
+    if cfg!(debug_assertions) {
+        let subscriber = tracing_subscriber::FmtSubscriber::builder()
+            .pretty()
+            .with_max_level(Level::INFO)
+            .finish();
+        tracing::subscriber::set_global_default(subscriber)
+            .expect("setting default tracing subscriber failed");
+    } else {
+        let subscriber = tracing_subscriber::FmtSubscriber::builder()
+            .with_max_level(Level::WARN)
+            .finish();
+        tracing::subscriber::set_global_default(subscriber)
+            .expect("setting default tracing subscriber failed");
+    }
+
     common::shared::init("forum").await;
 
     sqlx::migrate!("./migrations")
         .run(db())
         .await
         .expect("Unable to run migrations");
+
+    // Initialize the bad words filter
+    content_filter::initialize_filter().await
+        .expect("Failed to initialize content filter");
 
     let nats = nats();
 
@@ -109,6 +130,7 @@ async fn main() {
         "remove_bad_word",
         content_filter::remove_bad_word
     ));
+    toplevel.spawn(handler!(filter, "reload", content_filter::reload_filter));
 
     toplevel.join_all().await;
 }
