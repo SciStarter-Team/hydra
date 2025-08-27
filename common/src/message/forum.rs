@@ -40,6 +40,12 @@ pub struct TopicInfo {
     pub is_flagged: bool,
 }
 
+impl TopicInfo {
+    pub fn paragraphs(&self) -> impl IntoIterator<Item = &str> {
+        self.content.split("\n\n")
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PostInfo {
     pub post_id: Ulid,
@@ -53,6 +59,12 @@ pub struct PostInfo {
     pub parent_post_id: Option<Ulid>,
     pub is_deleted: bool,
     pub is_flagged: bool,
+}
+
+impl PostInfo {
+    pub fn paragraphs(&self) -> impl IntoIterator<Item = &str> {
+        self.content.split("\n\n")
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
