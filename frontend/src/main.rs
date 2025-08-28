@@ -211,7 +211,17 @@ async fn main() -> Result<(), Error> {
                 "max-age=31536000; includeSubDomains",
             ),
         )
-        .with_if(cfg!(not(debug_assertions)), ForceHttps::new());
+        .with_if(
+            cfg!(not(debug_assertions)),
+            ForceHttps::new().filter(|req| {
+                // Only redirect if the original request was HTTP
+                // Check X-Forwarded-Proto header set by reverse proxy
+                match req.headers().get("X-Forwarded-Proto") {
+                    Some(proto) => proto != "https",
+                    None => req.uri().scheme_str() != Some("https"),
+                }
+            })
+        );
 
     let _project_all_updates = tokio::spawn(ProjectAll::peering_task());
     let _project_field_updates = tokio::spawn(ProjectField::peering_task());

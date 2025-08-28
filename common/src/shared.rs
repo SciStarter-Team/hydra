@@ -66,6 +66,8 @@ mod database {
     }
 
     pub async fn init(db_name: impl AsRef<str>) {
+        println!("Storage directory: {}", STORAGE_PATH);
+
         let conx = SqlitePoolOptions::new()
             .max_connections(100)
             .max_lifetime(Duration::from_secs(MAX_CONNECTION_LIFETIME))
