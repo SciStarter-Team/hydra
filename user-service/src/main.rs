@@ -50,18 +50,46 @@ async fn sessions_synchronize() {
 
         let client = reqwest::Client::new();
 
-        let sessions: Vec<SessionDataImport> = client
+        let sessions: Vec<SessionDataImport> = match client
             .get("https://scistarter.org/staff/sync/sessions")
             .bearer_auth(env!("SYNC_TOKEN"))
             .query(&[("since", &last)])
             .send()
             .await
-            .expect("Retrieving session data failed")
-            .error_for_status()
-            .expect("Retrieving session data produced an error")
-            .json()
-            .await
-            .expect("JSON decoding of session data failed");
+        {
+            Ok(response) => match response.error_for_status() {
+                Ok(resp) => {
+                    let response_text = match resp.text().await {
+                        Ok(text) => text,
+                        Err(e) => {
+                            eprintln!("Failed to read response body: {}", e);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    };
+
+                    match serde_json::from_str(&response_text) {
+                        Ok(sessions) => sessions,
+                        Err(e) => {
+                            eprintln!("JSON parsing error: {}", e);
+                            eprintln!("Response body: {}", response_text);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("HTTP error: {}", e);
+                    sleep(Duration::from_secs(60)).await;
+                    continue;
+                }
+            },
+            Err(e) => {
+                eprintln!("Request error: {}", e);
+                sleep(Duration::from_secs(60)).await;
+                continue;
+            }
+        };
 
         let db = db();
         let mut bookmark = last.clone();
@@ -207,21 +235,45 @@ async fn users_synchronize() {
 
         let client = reqwest::Client::new();
 
-        let Some(users): Option<Vec<UserDataImport>> = client
+        let users: Vec<UserDataImport> = match client
             .get("https://scistarter.org/staff/sync/users")
             .bearer_auth(env!("SYNC_TOKEN"))
             .query(&[("since", &last)])
             .send()
             .await
-            .expect("Retrieving user data failed")
-            .error_for_status()
-            .expect("Retrieving user data produced an error")
-            .json()
-            .await
-            .ok()
-        else {
-            println!("JSON parsing error, retrying...");
-            continue;
+        {
+            Ok(response) => match response.error_for_status() {
+                Ok(resp) => {
+                    let response_text = match resp.text().await {
+                        Ok(text) => text,
+                        Err(e) => {
+                            eprintln!("Failed to read response body: {}", e);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    };
+
+                    match serde_json::from_str(&response_text) {
+                        Ok(users) => users,
+                        Err(e) => {
+                            eprintln!("JSON parsing error: {}", e);
+                            eprintln!("Response body: {}", response_text);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("HTTP error: {}", e);
+                    sleep(Duration::from_secs(60)).await;
+                    continue;
+                }
+            },
+            Err(e) => {
+                eprintln!("Request error: {}", e);
+                sleep(Duration::from_secs(60)).await;
+                continue;
+            }
         };
 
         let db = db();

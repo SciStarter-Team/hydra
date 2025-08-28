@@ -467,18 +467,46 @@ mod sync {
 
             tracing::info!("Retrieving projects since {} {}...", &last_update, last_id);
 
-            let projects: Vec<ProjectData> = client
+            let projects: Vec<ProjectData> = match client
                 .get("https://scistarter.org/staff/sync/projects")
                 .bearer_auth(env!("SYNC_TOKEN"))
                 .query(&[("since", &last_update), ("last_id", &last_id.to_string())])
                 .send()
                 .await
-                .expect("Retrieving project data failed")
-                .error_for_status()
-                .expect("Retrieving project data produced an error")
-                .json()
-                .await
-                .expect("JSON decoding of project data failed");
+            {
+                Ok(response) => match response.error_for_status() {
+                    Ok(resp) => {
+                        let response_text = match resp.text().await {
+                            Ok(text) => text,
+                            Err(e) => {
+                                eprintln!("Failed to read response body: {}", e);
+                                sleep(Duration::from_secs(60)).await;
+                                continue;
+                            }
+                        };
+
+                        match serde_json::from_str(&response_text) {
+                            Ok(projects) => projects,
+                            Err(e) => {
+                                eprintln!("JSON parsing error: {}", e);
+                                eprintln!("Response body: {}", response_text);
+                                sleep(Duration::from_secs(60)).await;
+                                continue;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("HTTP error: {}", e);
+                        sleep(Duration::from_secs(60)).await;
+                        continue;
+                    }
+                },
+                Err(e) => {
+                    eprintln!("Request error: {}", e);
+                    sleep(Duration::from_secs(60)).await;
+                    continue;
+                }
+            };
 
             let mut bookmark = (last_update.clone(), last_id);
 
@@ -1001,18 +1029,46 @@ mod sync {
 
             tracing::info!("Retrieving events since {} {}...", &last_update, last_id);
 
-            let events: Vec<EventData> = client
+            let events: Vec<EventData> = match client
                 .get("https://scistarter.org/staff/sync/events")
                 .bearer_auth(env!("SYNC_TOKEN"))
                 .query(&[("since", &last_update), ("last_id", &last_id.to_string())])
                 .send()
                 .await
-                .expect("Retrieving event data failed")
-                .error_for_status()
-                .expect("Retrieving event data produced an error")
-                .json()
-                .await
-                .expect("JSON decoding of event data failed");
+            {
+                Ok(response) => match response.error_for_status() {
+                    Ok(resp) => {
+                        let response_text = match resp.text().await {
+                            Ok(text) => text,
+                            Err(e) => {
+                                eprintln!("Failed to read response body: {}", e);
+                                sleep(Duration::from_secs(60)).await;
+                                continue;
+                            }
+                        };
+
+                        match serde_json::from_str(&response_text) {
+                            Ok(events) => events,
+                            Err(e) => {
+                                eprintln!("JSON parsing error: {}", e);
+                                eprintln!("Response body: {}", response_text);
+                                sleep(Duration::from_secs(60)).await;
+                                continue;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("HTTP error: {}", e);
+                        sleep(Duration::from_secs(60)).await;
+                        continue;
+                    }
+                },
+                Err(e) => {
+                    eprintln!("Request error: {}", e);
+                    sleep(Duration::from_secs(60)).await;
+                    continue;
+                }
+            };
 
             let mut bookmark = (last_update.clone(), last_id);
 
