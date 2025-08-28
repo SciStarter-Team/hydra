@@ -88,8 +88,7 @@ pub async fn participation_synchronize(
             last, last_id
         );
 
-        let sync_token =
-            std::env::var("SYNC_TOKEN").expect("SYNC_TOKEN environment variable must be set");
+        let sync_token = env!("SYNC_TOKEN");
 
         let client = reqwest::Client::new();
 
@@ -202,8 +201,7 @@ pub async fn bookmark_synchronize(database: Arc<Database>, cancellation_token: C
 
         println!("Syncing bookmarks since {} with last_id {}", last, last_id);
 
-        let sync_token =
-            std::env::var("SYNC_TOKEN").expect("SYNC_TOKEN environment variable must be set");
+        let sync_token = env!("SYNC_TOKEN");
         let client = reqwest::Client::new();
 
         let bookmarks: Vec<BookmarkData> = match client
@@ -310,8 +308,7 @@ pub async fn join_synchronize(database: Arc<Database>, cancellation_token: Cance
 
         println!("Syncing joins since {} with last_id {}", last, last_id);
 
-        let sync_token =
-            std::env::var("SYNC_TOKEN").expect("SYNC_TOKEN environment variable must be set");
+        let sync_token = env!("SYNC_TOKEN");
         let client = reqwest::Client::new();
 
         let joins: Vec<JoinData> = match client
@@ -437,8 +434,7 @@ pub async fn golink_synchronize(database: Arc<Database>, cancellation_token: Can
 
         println!("Syncing golinks since {} with last_id {}", last, last_id);
 
-        let sync_token =
-            std::env::var("SYNC_TOKEN").expect("SYNC_TOKEN environment variable must be set");
+        let sync_token = env!("SYNC_TOKEN");
         let client = reqwest::Client::new();
 
         let golinks: Vec<GolinkData> = match client

@@ -21,7 +21,7 @@ async fn main() -> Result<()> {
     // Initialize shared database connection (from common)
     shared::init("log_cache").await;
 
-    let database_path = std::env::var("DATABASE_PATH").expect("DATABASE_PATH is not set");
+    let database_path = env!("DATABASE_PATH");
 
     // Initialize database and table system
     let database = Arc::new(Database::new(database_path).await?);

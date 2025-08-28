@@ -38,7 +38,7 @@ async fn main() -> Result<()> {
     // Initialize SQLite connection pool for cache tables (same as main log-service)
     common::shared::init("log_cache").await;
 
-    let database_path = std::env::var("DATABASE_PATH").expect("DATABASE_PATH is not set");
+    let database_path = env!("DATABASE_PATH");
 
     // Initialize database
     let database = Arc::new(Database::new(database_path).await?);
