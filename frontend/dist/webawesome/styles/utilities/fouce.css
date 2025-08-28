@@ -1,1 +1,0 @@
-@layer wa-utilities{.wa-cloak:has(:not(:defined)){animation:2s step-end wa-fouce-cloak}@keyframes wa-fouce-cloak{0%{opacity:0}to{opacity:1}}}
