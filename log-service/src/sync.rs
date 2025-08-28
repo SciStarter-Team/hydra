@@ -14,13 +14,13 @@ pub struct ParticipationEventData {
     pub id: i32,
     pub origin: i16,
     pub when: String, // ISO 8601 timestamp string
-    pub duration: f64,
+    pub duration: Option<f64>,
     pub where_point: Option<String>,
-    pub magnitude: i32,
-    pub authenticated: bool,
-    pub extra: String,
+    pub magnitude: Option<i32>,
+    pub authenticated: Option<bool>,
+    pub extra: Option<String>,
     pub repetitions: i32,
-    pub fidelity: f64,
+    pub fidelity: Option<f64>,
     pub entity_ulid: String,
     pub profile_user_ulid: Option<String>,
     pub task_name: Option<String>,
@@ -110,7 +110,7 @@ pub async fn participation_synchronize(
                             continue;
                         }
                     };
-                    
+
                     match serde_json::from_str(&response_text) {
                         Ok(events) => events,
                         Err(e) => {
@@ -120,7 +120,7 @@ pub async fn participation_synchronize(
                             continue;
                         }
                     }
-                },
+                }
                 Err(e) => {
                     eprintln!("HTTP error: {}", e);
                     sleep(Duration::from_secs(60)).await;
@@ -223,7 +223,7 @@ pub async fn bookmark_synchronize(database: Arc<Database>, cancellation_token: C
                             continue;
                         }
                     };
-                    
+
                     match serde_json::from_str(&response_text) {
                         Ok(events) => events,
                         Err(e) => {
@@ -233,7 +233,7 @@ pub async fn bookmark_synchronize(database: Arc<Database>, cancellation_token: C
                             continue;
                         }
                     }
-                },
+                }
                 Err(e) => {
                     eprintln!("HTTP error: {}", e);
                     sleep(Duration::from_secs(60)).await;
@@ -331,7 +331,7 @@ pub async fn join_synchronize(database: Arc<Database>, cancellation_token: Cance
                             continue;
                         }
                     };
-                    
+
                     match serde_json::from_str(&response_text) {
                         Ok(events) => events,
                         Err(e) => {
@@ -341,7 +341,7 @@ pub async fn join_synchronize(database: Arc<Database>, cancellation_token: Cance
                             continue;
                         }
                     }
-                },
+                }
                 Err(e) => {
                     eprintln!("HTTP error: {}", e);
                     sleep(Duration::from_secs(60)).await;
@@ -458,7 +458,7 @@ pub async fn golink_synchronize(database: Arc<Database>, cancellation_token: Can
                             continue;
                         }
                     };
-                    
+
                     match serde_json::from_str(&response_text) {
                         Ok(events) => events,
                         Err(e) => {
@@ -468,7 +468,7 @@ pub async fn golink_synchronize(database: Arc<Database>, cancellation_token: Can
                             continue;
                         }
                     }
-                },
+                }
                 Err(e) => {
                     eprintln!("HTTP error: {}", e);
                     sleep(Duration::from_secs(60)).await;
@@ -533,12 +533,12 @@ async fn insert_participation(database: &Database, event: &ParticipationEventDat
         let row = ParticipationRow {
             origin: event.origin,
             when: event.when.clone(),
-            duration: event.duration,
+            duration: event.duration.unwrap_or(1.0),
             where_point: event.where_point.clone(),
-            magnitude: event.magnitude,
-            authenticated: event.authenticated,
-            extra: event.extra.clone(),
-            fidelity: event.fidelity,
+            magnitude: event.magnitude.unwrap_or(1),
+            authenticated: event.authenticated.unwrap_or(false),
+            extra: event.extra.clone().unwrap_or_default(),
+            fidelity: event.fidelity.unwrap_or(0.5),
             entity_id: event.entity_ulid.clone(),
             user_id: event.profile_user_ulid.clone(),
             task_name: event.task_name.clone(),
