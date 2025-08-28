@@ -21,7 +21,10 @@ async fn main() -> Result<()> {
     // Initialize shared database connection (from common)
     shared::init("log_cache").await;
 
+    #[cfg(not(debug_assertions))]
     let database_path = env!("DATABASE_PATH");
+    #[cfg(debug_assertions)]
+    let database_path = env!("LOCAL_DATABASE_PATH");
 
     // Initialize database and table system
     let database = Arc::new(Database::new(database_path).await?);

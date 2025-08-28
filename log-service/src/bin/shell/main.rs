@@ -38,7 +38,10 @@ async fn main() -> Result<()> {
     // Initialize SQLite connection pool for cache tables (same as main log-service)
     common::shared::init("log_cache").await;
 
+    #[cfg(not(debug_assertions))]
     let database_path = env!("DATABASE_PATH");
+    #[cfg(debug_assertions)]
+    let database_path = env!("LOCAL_DATABASE_PATH");
 
     // Initialize database
     let database = Arc::new(Database::new(database_path).await?);
