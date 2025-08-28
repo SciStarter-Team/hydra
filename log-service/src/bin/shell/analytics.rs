@@ -92,51 +92,18 @@ impl AnalyticsEngine {
             }
         }
 
-        // Apply intelligent width constraints based on terminal width
-        self.apply_width_constraints(&mut col_widths, terminal_width);
+        // Check if we should use row-per-column mode
+        let available_width = terminal_width.unwrap_or(80).saturating_sub(4); // Account for borders
+        let separator_width = (col_widths.len().saturating_sub(1)) * 3; // " | " between columns
+        let total_content_width: usize = col_widths.iter().sum();
+        let total_table_width = total_content_width + separator_width;
 
-        // Create header row using disambiguated columns with truncation
-        let header = disambiguated_columns
-            .iter()
-            .enumerate()
-            .map(|(i, h)| {
-                let width = col_widths.get(i).copied().unwrap_or(20);
-                let truncated = if h.len() > width {
-                    format!("{}...", &h[..width.saturating_sub(3)])
-                } else {
-                    h.clone()
-                };
-                format!("{:width$}", truncated, width = width)
-            })
-            .collect::<Vec<_>>()
-            .join(" | ");
-        output.push(header);
-
-        // Create separator
-        let separator = col_widths
-            .iter()
-            .map(|&w| "-".repeat(w))
-            .collect::<Vec<_>>()
-            .join("-|-");
-        output.push(separator);
-
-        // Add data rows
-        for row in display_rows {
-            let formatted_row = row
-                .iter()
-                .enumerate()
-                .map(|(i, cell)| {
-                    let width = col_widths.get(i).copied().unwrap_or(20);
-                    let truncated = if cell.len() > width {
-                        format!("{}...", &cell[..width.saturating_sub(3)])
-                    } else {
-                        cell.clone()
-                    };
-                    format!("{:width$}", truncated, width = width)
-                })
-                .collect::<Vec<_>>()
-                .join(" | ");
-            output.push(formatted_row);
+        if total_table_width > available_width && col_widths.len() > 1 {
+            // Switch to row-per-column mode - no truncation needed
+            output.extend(self.format_as_row_per_column(&disambiguated_columns, display_rows));
+        } else {
+            // Use traditional column mode without width constraints (no truncation)
+            output.extend(self.format_as_columns(&disambiguated_columns, display_rows, &col_widths));
         }
 
         // Add truncation notice if needed
@@ -234,67 +201,65 @@ impl AnalyticsEngine {
         disambiguated
     }
 
-    fn apply_width_constraints(&self, col_widths: &mut [usize], terminal_width: Option<usize>) {
-        if col_widths.is_empty() {
-            return;
-        }
+    fn format_as_row_per_column(&self, columns: &[String], rows: &[Vec<String>]) -> Vec<String> {
+        let mut output = Vec::new();
 
-        // Default fallback if no terminal width provided
-        let available_width = terminal_width.unwrap_or(80).saturating_sub(4); // Account for borders
+        // Find the maximum column name width for consistent alignment
+        let max_col_name_width = columns.iter().map(|name| name.len()).max().unwrap_or(10);
 
-        // Calculate total width needed with separators
-        let separator_width = (col_widths.len().saturating_sub(1)) * 3; // " | " between columns
-        let total_content_width: usize = col_widths.iter().sum();
-        let total_table_width = total_content_width + separator_width;
-
-        if total_table_width <= available_width {
-            // Table fits comfortably, just apply reasonable max limits
-            for width in col_widths {
-                *width = (*width).min(50);
+        for (row_idx, row) in rows.iter().enumerate() {
+            if row_idx > 0 {
+                output.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".to_string());
             }
-            return;
-        }
 
-        // Table is too wide - need to intelligently distribute space
-        let target_content_width = available_width.saturating_sub(separator_width);
-
-        // Strategy: Proportional reduction with minimum widths
-        let min_col_width = 8; // Minimum readable width
-        let num_cols = col_widths.len();
-
-        // Ensure we can fit at least minimum widths
-        if target_content_width < num_cols * min_col_width {
-            // Terminal too narrow, fall back to minimum widths
-            for width in col_widths {
-                *width = min_col_width;
-            }
-            return;
-        }
-
-        // Proportional reduction while respecting minimums
-        let reduction_factor = target_content_width as f64 / total_content_width as f64;
-        let mut remaining_width = target_content_width;
-
-        // First pass: apply proportional reduction with minimum constraint
-        for width in col_widths.iter_mut() {
-            let proposed_width = (*width as f64 * reduction_factor).round() as usize;
-            *width = proposed_width.max(min_col_width);
-            remaining_width = remaining_width.saturating_sub(*width);
-        }
-
-        // Second pass: distribute any remaining width to columns that aren't at minimum
-        while remaining_width > 0 {
-            let mut distributed = false;
-            for width in col_widths.iter_mut() {
-                if *width > min_col_width && remaining_width > 0 {
-                    *width += 1;
-                    remaining_width -= 1;
-                    distributed = true;
-                }
-            }
-            if !distributed {
-                break; // All columns at minimum, can't distribute more
+            for (col_idx, column_name) in columns.iter().enumerate() {
+                let cell_value = row.get(col_idx).map(|s| s.as_str()).unwrap_or("");
+                // No truncation - show full values
+                output.push(format!("{:>width$}: {}", column_name, cell_value, width = max_col_name_width));
             }
         }
+
+        output
     }
+
+    fn format_as_columns(&self, columns: &[String], rows: &[Vec<String>], col_widths: &[usize]) -> Vec<String> {
+        let mut output = Vec::new();
+
+        // Create header row without truncation
+        let header = columns
+            .iter()
+            .enumerate()
+            .map(|(i, h)| {
+                let width = col_widths.get(i).copied().unwrap_or(h.len());
+                format!("{:width$}", h, width = width)
+            })
+            .collect::<Vec<_>>()
+            .join(" | ");
+        output.push(header);
+
+        // Create separator
+        let separator = col_widths
+            .iter()
+            .map(|&w| "-".repeat(w))
+            .collect::<Vec<_>>()
+            .join("-|-");
+        output.push(separator);
+
+        // Add data rows without truncation
+        for row in rows {
+            let formatted_row = row
+                .iter()
+                .enumerate()
+                .map(|(i, cell)| {
+                    let width = col_widths.get(i).copied().unwrap_or(cell.len());
+                    format!("{:width$}", cell, width = width)
+                })
+                .collect::<Vec<_>>()
+                .join(" | ");
+            output.push(formatted_row);
+        }
+
+        output
+    }
+
 }
