@@ -1,3 +1,4 @@
+pub mod badge;
 pub mod insensitivestring;
 pub mod message;
 #[cfg(feature = "database")]

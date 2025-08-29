@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use crate::badge::Badge;
+use crate::timestring::TimeString;
 use anyhow::Error;
 use serde_json::Value as JsonValue;
 use ulid::Ulid;
@@ -185,4 +187,17 @@ impl UserInfo for Option<&BasicInfo> {
             None => Unauthenticated.is_superuser(),
         }
     }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserBadge {
+    pub badge: Badge,
+    pub when: TimeString, // Timestamp when badge was earned
+    pub image: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserAndBadge {
+    pub user_id: Ulid,
+    pub badge: Badge,
 }

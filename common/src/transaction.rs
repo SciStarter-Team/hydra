@@ -19,7 +19,7 @@ use std::pin::Pin;
 /// # Example
 ///
 /// ```rust
-/// # use sqlx::SqlitePool;
+/// # use sqlx::{SqlitePool, Executor};
 /// # use common::transaction::Immediate;
 /// # async fn example(pool: &SqlitePool) -> Result<(), sqlx::Error> {
 /// // Simple transaction with automatic rollback

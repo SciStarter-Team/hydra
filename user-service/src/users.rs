@@ -1,12 +1,15 @@
 use anyhow::Error;
 use async_nats::service::Request;
 use common::{
-    message::user::BasicInfo,
-    service::send,
+    badge::Badge,
+    message::user::{BasicInfo, UserAndBadge, UserBadge},
+    service::{log_activity, send},
     shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower},
+    timestring::TimeString,
     transaction::Immediate,
     ulid::AsUlid,
 };
+use ulid::Ulid;
 
 #[derive(Debug)]
 struct BasicInfoDb {
@@ -85,7 +88,7 @@ pub async fn basic_info_by_user_id(req: &Request) -> Result<Option<BasicInfo>, E
 
 pub async fn search_by_handle(req: &Request) -> Result<Vec<BasicInfo>, Error> {
     let search_term: String = flexbuffers::from_slice(&req.message.payload)?;
-    
+
     let results = sqlx::query_as!(
         BasicInfoDb,
         r#"select
@@ -109,7 +112,7 @@ pub async fn search_by_handle(req: &Request) -> Result<Vec<BasicInfo>, Error> {
     for db_info in results {
         users.push(db_info.try_into()?);
     }
-    
+
     Ok(users)
 }
 
@@ -392,4 +395,89 @@ pub async fn user_emails(req: &Request) -> Result<Vec<(String, String)>, Error> 
         .into_iter()
         .map(|row| (row.user_id, row.email))
         .collect())
+}
+
+pub async fn get_user_badges(req: &Request) -> Result<Vec<UserBadge>, Error> {
+    let user_id: Ulid = flexbuffers::from_slice(&req.message.payload)?;
+    let user_id_str = user_id.to_string();
+
+    let badges = sqlx::query!(
+        r#"SELECT "badgeclass", "when", "image" FROM "user_badges" WHERE "user_id" = ? ORDER BY "when" DESC"#,
+        user_id_str
+    )
+    .fetch_all(db())
+    .await?;
+
+    let mut result = Vec::new();
+    for row in badges {
+        if let Some(badge) = Badge::from_badgeclass(&row.badgeclass) {
+            let timestamp = row.when.clone();
+            match TimeString::try_from(row.when) {
+                Ok(when) => result.push(UserBadge {
+                    badge,
+                    when,
+                    image: row.image,
+                }),
+                Err(e) => {
+                    eprintln!("Failed to parse badge timestamp '{}': {}", timestamp, e);
+                    // Skip this badge if timestamp parsing fails
+                    continue;
+                }
+            }
+        } else {
+            eprintln!("Unknown badgeclass '{}' found in database", row.badgeclass);
+            // Skip this badge if badgeclass is unknown
+            continue;
+        }
+    }
+
+    Ok(result)
+}
+
+pub async fn grant_user_badge(req: &Request) -> Result<(), Error> {
+    let params: UserAndBadge = flexbuffers::from_slice(&req.message.payload)?;
+
+    let now = TimeString::now();
+    let badgeclass = params.badge.badgeclass();
+    let user_id_str = params.user_id.to_string();
+
+    sqlx::query!(
+        r#"insert into "user_badges" ("user_id", "badgeclass", "when", "image")
+           values (?, ?, ?, ?)
+           on conflict ("user_id", "badgeclass") do nothing"#,
+        user_id_str,
+        badgeclass,
+        now,
+        None::<String>,
+    )
+    .execute(db())
+    .await?;
+
+    // Log the badge granting activity
+    log_activity(
+        Some(now),
+        "badge_earned",
+        Some(params.user_id),
+        None::<Ulid>,
+        Some(badgeclass.to_string()),
+    )
+    .await?;
+
+    Ok(())
+}
+
+pub async fn has_user_badge(req: &Request) -> Result<bool, Error> {
+    let params: UserAndBadge = flexbuffers::from_slice(&req.message.payload)?;
+
+    let badgeclass = params.badge.badgeclass();
+    let user_id_str = params.user_id.to_string();
+    let result = sqlx::query!(
+        r#"SELECT "badgeclass" FROM "user_badges" WHERE "user_id" = ? AND "badgeclass" = ? LIMIT 1"#,
+        user_id_str,
+        badgeclass
+    )
+    .fetch_optional(db())
+    .await?;
+
+    Ok(result.is_some())
 }

@@ -10,6 +10,7 @@ use common::{
 };
 use futures::StreamExt;
 use tokio::{spawn, task::JoinSet, time::sleep};
+use ulid::Ulid;
 
 pub mod auth;
 pub mod sessions;
@@ -775,6 +776,153 @@ async fn users_synchronize() {
     }
 }
 
+async fn userbadges_synchronize() {
+    #[derive(serde::Deserialize)]
+    #[allow(dead_code)]
+    struct UserbadgeDataImport {
+        id: i32,
+        badgeclass: String,
+        when: String, // ISO 8601 timestamp string
+        image: String,
+        user_ulid: String,
+        name: String,
+    }
+
+    loop {
+        let last = misc::get("userbadge-sync-bookmark")
+            .await
+            .expect("Retrieving sync bookmark failed")
+            .unwrap_or_else(|| String::from("1900-01-01T00:00:00Z"));
+        let last_id = misc::get("userbadge-sync-last-id")
+            .await
+            .expect("Retrieving sync last_id failed")
+            .unwrap_or_else(|| 0);
+
+        println!("Syncing userbadges since {} with last_id {}", last, last_id);
+
+        let client = reqwest::Client::new();
+
+        let userbadges: Vec<UserbadgeDataImport> = match client
+            .get("https://scistarter.org/staff/sync/userbadges")
+            .bearer_auth(env!("SYNC_TOKEN"))
+            .query(&[("since", &last), ("last_id", &last_id.to_string())])
+            .send()
+            .await
+        {
+            Ok(response) => match response.error_for_status() {
+                Ok(resp) => {
+                    let response_text = match resp.text().await {
+                        Ok(text) => text,
+                        Err(e) => {
+                            eprintln!("Failed to read response body: {}", e);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    };
+
+                    match serde_json::from_str(&response_text) {
+                        Ok(badges) => badges,
+                        Err(e) => {
+                            eprintln!("JSON parsing error: {}", e);
+                            eprintln!("Response body: {}", response_text);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("HTTP error: {}", e);
+                    sleep(Duration::from_secs(60)).await;
+                    continue;
+                }
+            },
+            Err(e) => {
+                eprintln!("Request error: {}", e);
+                sleep(Duration::from_secs(60)).await;
+                continue;
+            }
+        };
+
+        let db = db();
+        let mut bookmark = last.clone();
+        let mut bookmark_id = last_id;
+
+        let got_userbadges = userbadges.len();
+
+        for badge in userbadges {
+            println!(
+                "Saving userbadge {} for user {}",
+                &badge.badgeclass, &badge.user_ulid
+            );
+
+            // Update bookmark to the latest timestamp and id
+            if badge.when > bookmark || (badge.when == bookmark && badge.id > bookmark_id) {
+                bookmark = badge.when.clone();
+                bookmark_id = badge.id;
+            }
+
+            // Parse the timestamp through TimeString
+            let badge_when = match TimeString::try_from(badge.when.clone()) {
+                Ok(ts) => ts,
+                Err(e) => {
+                    eprintln!("Failed to parse timestamp '{}': {}", badge.when, e);
+                    continue;
+                }
+            };
+
+            // Handle empty image as null
+            let image_value = if badge.image.is_empty() {
+                None
+            } else {
+                Some(badge.image.clone())
+            };
+
+            // Insert the badge into the database
+            sqlx::query!(
+                r#"insert into "user_badges" ("user_id", "badgeclass", "when", "image")
+                   values (?, ?, ?, ?)
+                   on conflict ("user_id", "badgeclass") do nothing"#,
+                badge.user_ulid,
+                badge.badgeclass,
+                badge_when,
+                image_value,
+            )
+            .execute(db)
+            .await
+            .expect("Saving user badge failed");
+
+            // Log the badge earning activity
+            log_activity(
+                Some(badge_when),
+                "badge_earned",
+                badge.user_ulid.as_ulid().ok(),
+                None::<Ulid>,
+                Some(badge.badgeclass.clone()),
+            )
+            .await
+            .expect("Error logging badge activity");
+
+            println!(
+                "Saved badge {} for user {}",
+                badge.badgeclass, badge.user_ulid
+            );
+        }
+
+        misc::set("userbadge-sync-bookmark", bookmark)
+            .await
+            .expect("Saving sync bookmark failed");
+        misc::set("userbadge-sync-last-id", bookmark_id)
+            .await
+            .expect("Saving sync last_id failed");
+
+        if got_userbadges == 500 {
+            sleep(Duration::from_secs(60)).await;
+        } else {
+            sleep(Duration::from_secs(60 * 60)).await;
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() {
     common::shared::init("user").await;
@@ -789,6 +937,8 @@ async fn main() {
     let sessions_sync_task = spawn(sessions_synchronize());
 
     let users_sync_task = spawn(users_synchronize());
+
+    let userbadges_sync_task = spawn(userbadges_synchronize());
 
     let nats = nats();
 
@@ -828,6 +978,11 @@ async fn main() {
     toplevel.spawn(recv_handler!(emails, "add", users::add_user_email));
     toplevel.spawn(recv_handler!(emails, "remove", users::remove_user_email));
 
+    let badges = service.group("user.badges");
+    toplevel.spawn(handler!(badges, "get", users::get_user_badges));
+    toplevel.spawn(recv_handler!(badges, "grant", users::grant_user_badge));
+    toplevel.spawn(handler!(badges, "has", users::has_user_badge));
+
     let cache = service.group("user.cache");
     toplevel.spawn(handler!(cache, "user_tags", users::user_tags));
     toplevel.spawn(handler!(cache, "user_emails", users::user_emails));
@@ -838,4 +993,5 @@ async fn main() {
 
     sessions_sync_task.abort();
     users_sync_task.abort();
+    userbadges_sync_task.abort();
 }
