@@ -2,16 +2,19 @@ use anyhow::Result;
 use common::{message::log::AnalyticsQuery, service::decode_structured_message};
 
 use log_service::{
-    Database,
     analytics::{get_clickthrough_analytics, get_join_analytics},
     cache::{update_user_emails_cache, update_user_tags_cache},
+    health::{HealthResponse},
 };
 use std::sync::Arc;
 
+// Import the global database instance from main
+use crate::DATABASE;
+
 pub async fn handle_activity_log(
-    database: Arc<Database>,
     req: &async_nats::service::Request,
 ) -> Result<()> {
+    let database = DATABASE.get().expect("Database not initialized");
     let (when, action, user_id, target, extra): (
         String,
         String,
@@ -36,9 +39,9 @@ pub async fn handle_activity_log(
 }
 
 pub async fn handle_page_view(
-    database: Arc<Database>,
     req: &async_nats::service::Request,
 ) -> Result<()> {
+    let database = DATABASE.get().expect("Database not initialized");
     let (when, ip_address, device_id, interaction_id, user_id, path, referrer, query, geolocation): (String, String, String, String, Option<String>, String, Option<String>, Option<String>, String) = decode_structured_message(req.message.clone())?;
 
     use log_service::database::tables::PageViewRow;
@@ -61,9 +64,9 @@ pub async fn handle_page_view(
 }
 
 pub async fn handle_clickthrough(
-    database: Arc<Database>,
     req: &async_nats::service::Request,
 ) -> Result<()> {
+    let database = DATABASE.get().expect("Database not initialized");
     let (
         when,
         ip_address,
@@ -109,9 +112,9 @@ pub async fn handle_clickthrough(
 }
 
 pub async fn handle_join(
-    database: Arc<Database>,
     req: &async_nats::service::Request,
 ) -> Result<()> {
+    let database = DATABASE.get().expect("Database not initialized");
     let (when, entity_id, user_id, active, consented, contacted, notified, activity, reason): (
         String,
         String,
@@ -145,12 +148,12 @@ pub async fn handle_join(
 }
 
 pub async fn handle_clickthrough_analytics(
-    database: Arc<Database>,
     req: &async_nats::service::Request,
 ) -> Result<()> {
+    let database = DATABASE.get().expect("Database not initialized");
     let query: AnalyticsQuery = decode_structured_message(req.message.clone())?;
 
-    match get_clickthrough_analytics(Arc::clone(&database), query).await {
+    match get_clickthrough_analytics(Arc::clone(database), query).await {
         Ok(response) => {
             let response_data = flexbuffers::to_vec(&response)?;
             req.respond(Ok(response_data.into())).await?;
@@ -167,12 +170,12 @@ pub async fn handle_clickthrough_analytics(
 }
 
 pub async fn handle_join_analytics(
-    database: Arc<Database>,
     req: &async_nats::service::Request,
 ) -> Result<()> {
+    let database = DATABASE.get().expect("Database not initialized");
     let query: AnalyticsQuery = decode_structured_message(req.message.clone())?;
 
-    match get_join_analytics(Arc::clone(&database), query).await {
+    match get_join_analytics(Arc::clone(database), query).await {
         Ok(response) => {
             let response_data = flexbuffers::to_vec(&response)?;
             req.respond(Ok(response_data.into())).await?;
@@ -189,7 +192,6 @@ pub async fn handle_join_analytics(
 }
 
 pub async fn handle_user_tags_update(
-    _database: Arc<Database>,
     req: &async_nats::service::Request,
 ) -> Result<()> {
     let (user_id, tags): (String, Vec<String>) = decode_structured_message(req.message.clone())?;
@@ -208,7 +210,6 @@ pub async fn handle_user_tags_update(
 }
 
 pub async fn handle_user_emails_update(
-    _database: Arc<Database>,
     req: &async_nats::service::Request,
 ) -> Result<()> {
     let (user_id, emails): (String, Vec<String>) = decode_structured_message(req.message.clone())?;
@@ -225,4 +226,9 @@ pub async fn handle_user_emails_update(
     }
 
     Ok(())
+}
+
+pub async fn handle_health_check(req: &async_nats::service::Request) -> Result<HealthResponse, anyhow::Error> {
+    let database = DATABASE.get().expect("Database not initialized");
+    log_service::health::health_check(Arc::clone(database), req).await
 }

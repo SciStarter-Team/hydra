@@ -1,0 +1,123 @@
+<!-- Analytics Overview -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <!-- Key Metrics -->
+    <div class="bg-white rounded-lg shadow border border-gray-200 p-6">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <wa-icon name="users" class="w-8 h-8 text-blue-600"></wa-icon>
+            </div>
+            <div class="ml-5 w-0 flex-1">
+                <dl>
+                    <dt class="text-sm font-medium text-gray-500 truncate">Total Users</dt>
+                    <dd class="text-2xl font-semibold text-gray-900"><%= self.total_users %></dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bg-white rounded-lg shadow border border-gray-200 p-6">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <wa-icon name="folder-open" class="w-8 h-8 text-green-600"></wa-icon>
+            </div>
+            <div class="ml-5 w-0 flex-1">
+                <dl>
+                    <dt class="text-sm font-medium text-gray-500 truncate">Total Projects</dt>
+                    <dd class="text-2xl font-semibold text-gray-900"><%= self.total_projects %></dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bg-white rounded-lg shadow border border-gray-200 p-6">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <wa-icon name="calendar" class="w-8 h-8 text-purple-600"></wa-icon>
+            </div>
+            <div class="ml-5 w-0 flex-1">
+                <dl>
+                    <dt class="text-sm font-medium text-gray-500 truncate">Total Events</dt>
+                    <dd class="text-2xl font-semibold text-gray-900"><%= self.total_events %></dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bg-white rounded-lg shadow border border-gray-200 p-6">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <wa-icon name="chart-line" class="w-8 h-8 text-indigo-600"></wa-icon>
+            </div>
+            <div class="ml-5 w-0 flex-1">
+                <dl>
+                    <dt class="text-sm font-medium text-gray-500 truncate">Monthly Signups</dt>
+                    <dd class="text-2xl font-semibold text-gray-900"><%= self.monthly_signups %></dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <!-- User Growth Chart -->
+    <div class="bg-white rounded-lg shadow border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">User Growth</h3>
+        </div>
+        <div class="p-6">
+            <div class="h-64 flex items-center justify-center bg-gray-50 rounded-lg">
+                <div class="text-center">
+                    <wa-icon name="chart-bar" class="w-12 h-12 text-gray-400 mx-auto mb-2"></wa-icon>
+                    <p class="text-gray-500">Chart placeholder</p>
+                    <p class="text-sm text-gray-400">Data: <%= self.user_growth_data %></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Projects -->
+    <div class="bg-white rounded-lg shadow border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Top Projects</h3>
+        </div>
+        <div class="p-6">
+            <div class="space-y-4">
+                <% for project in &self.top_projects { %>
+                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                        <div>
+                            <h4 class="font-medium text-gray-900"><%= project.title %></h4>
+                            <p class="text-sm text-gray-500"><%= project.category %></p>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-lg font-semibold text-gray-900"><%= project.participants %></div>
+                            <div class="text-sm text-gray-500">participants</div>
+                        </div>
+                    </div>
+                <% } %>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Export Options -->
+<div class="mt-8 bg-white rounded-lg shadow border border-gray-200">
+    <div class="px-6 py-4 border-b border-gray-200">
+        <h3 class="text-lg font-medium text-gray-900">Export Data</h3>
+    </div>
+    <div class="p-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <button hx-get="/-admin/analytics/export/users" class="inline-flex items-center justify-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
+                <wa-icon name="users" class="w-4 h-4 mr-2"></wa-icon>
+                Export Users
+            </button>
+            <button hx-get="/-admin/analytics/export/projects" class="inline-flex items-center justify-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
+                <wa-icon name="folder-open" class="w-4 h-4 mr-2"></wa-icon>
+                Export Projects
+            </button>
+            <button hx-get="/-admin/analytics/export/events" class="inline-flex items-center justify-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
+                <wa-icon name="calendar" class="w-4 h-4 mr-2"></wa-icon>
+                Export Events
+            </button>
+        </div>
+    </div>
+</div>

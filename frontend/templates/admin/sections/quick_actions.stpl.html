@@ -1,0 +1,13 @@
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <% for action in &self.actions { %>
+        <button 
+            hx-<%= action.method.to_lowercase() %>="<%= action.url %>"
+            hx-target="<%= action.target %>"
+            hx-swap="<%= action.swap %>"
+            class="flex flex-col items-center p-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors duration-200 border border-gray-200 hover:border-gray-300"
+        >
+            <wa-icon name="<%= action.icon %>" class="w-6 h-6 text-gray-600 mb-2"></wa-icon>
+            <span class="text-sm font-medium text-gray-900"><%= action.label %></span>
+        </button>
+    <% } %>
+</div>

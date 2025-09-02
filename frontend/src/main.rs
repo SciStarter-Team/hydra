@@ -6,6 +6,7 @@ pub mod contact;
 pub mod dev;
 pub mod entity;
 pub mod event;
+pub mod health;
 pub mod middleware;
 pub mod misc;
 pub mod pages;
@@ -16,9 +17,11 @@ pub mod ui;
 pub mod upload;
 
 use anyhow::Error;
+use async_nats::service::ServiceExt;
 use common::shared::db;
 use component::Component;
 use entity::Entity;
+use futures::StreamExt;
 use middleware::authorization::{Authenticated, NotAuthorized};
 use peering::LoadStorePeered;
 use poem::{
@@ -220,7 +223,7 @@ async fn main() -> Result<(), Error> {
                     Some(proto) => proto != "https",
                     None => req.uri().scheme_str() != Some("https"),
                 }
-            })
+            }),
         );
 
     let _project_all_updates = tokio::spawn(ProjectAll::peering_task());
@@ -229,7 +232,24 @@ async fn main() -> Result<(), Error> {
     let _synchronize_projects = tokio::spawn(sync::synchronize_projects());
     let _synchronize_events = tokio::spawn(sync::synchronize_events());
 
+    // Start NATS service
+    let nats = common::shared::nats();
+    let service = nats
+        .service_builder()
+        .start("frontend", env!("CARGO_PKG_VERSION"))
+        .await
+        .expect("Unable to start frontend NATS service");
+
+    let health_group = service.group("frontend.health");
+    tokio::spawn(async move {
+        use common::handler;
+        let mut tasks = tokio::task::JoinSet::new();
+        tasks.spawn(handler!(health_group, "check", health::health_check));
+        tasks.join_all().await;
+    });
+
     println!("Listening on {}", env!("LISTEN_ON"));
+    println!("Frontend NATS service started: frontend.health.check");
 
     Server::new(TcpListener::bind(env!("LISTEN_ON")))
         .run(routes)

@@ -10,6 +10,7 @@ use tracing::Level;
 pub mod categories;
 pub mod content_filter;
 pub mod forums;
+pub mod health;
 pub mod moderation;
 pub mod posts;
 pub mod topics;
@@ -131,6 +132,10 @@ async fn main() {
         content_filter::remove_bad_word
     ));
     toplevel.spawn(handler!(filter, "reload", content_filter::reload_filter));
+
+    // Health check endpoint
+    let health = service.group("forum.health");
+    toplevel.spawn(handler!(health, "check", health::health_check));
 
     toplevel.join_all().await;
 }

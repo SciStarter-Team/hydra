@@ -1,6 +1,6 @@
 use anyhow::Result;
 use async_nats::service::ServiceExt;
-use common::shared;
+use common::{shared, handler, recv_handler};
 use futures::StreamExt;
 use std::sync::Arc;
 use tokio::{signal, task::JoinSet};
@@ -12,9 +12,15 @@ mod sync;
 use handlers::{
     handle_activity_log, handle_clickthrough, handle_clickthrough_analytics, handle_join,
     handle_join_analytics, handle_page_view, handle_user_emails_update, handle_user_tags_update,
+    handle_health_check,
 };
 use log_service::{Database, run_compactor_service};
 use sync::{bookmark_synchronize, golink_synchronize, join_synchronize, participation_synchronize};
+use std::sync::OnceLock;
+
+// Global database instance for handler access
+pub static DATABASE: OnceLock<Arc<Database>> = OnceLock::new();
+
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -28,9 +34,11 @@ async fn main() -> Result<()> {
 
     // Initialize database and table system
     let database = Arc::new(Database::new(database_path).await?);
+    
+    // Set global database for handler access
+    DATABASE.set(Arc::clone(&database)).map_err(|_| anyhow::anyhow!("Failed to set global database"))?;
 
     let mut background_tasks = JoinSet::new();
-    let mut nats_handler_tasks = JoinSet::new();
 
     // Create cancellation tokens for graceful shutdown
     let participation_cancel = CancellationToken::new();
@@ -87,171 +95,26 @@ async fn main() -> Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("Failed to start service: {}", e))?;
 
+    // Use handler! and recv_handler! macros for clean endpoint management
+    let mut toplevel = JoinSet::new();
+
+    // Log endpoints
     let log_group = svc.group("log");
+    toplevel.spawn(recv_handler!(log_group, "activity", handle_activity_log));
+    toplevel.spawn(recv_handler!(log_group, "pageview", handle_page_view));
+    toplevel.spawn(recv_handler!(log_group, "clickthrough", handle_clickthrough));
+    toplevel.spawn(recv_handler!(log_group, "join", handle_join));
+    toplevel.spawn(handler!(log_group, "clickthrough_analytics", handle_clickthrough_analytics));
+    toplevel.spawn(handler!(log_group, "join_analytics", handle_join_analytics));
 
-    // Create all endpoints first
-    let activity_endpoint = log_group
-        .endpoint("activity")
-        .await
-        .expect("Unable to create activity endpoint");
-
-    let pageview_endpoint = log_group
-        .endpoint("pageview")
-        .await
-        .expect("Unable to create pageview endpoint");
-
-    let clickthrough_endpoint = log_group
-        .endpoint("clickthrough")
-        .await
-        .expect("Unable to create clickthrough endpoint");
-
-    let join_endpoint = log_group
-        .endpoint("join")
-        .await
-        .expect("Unable to create join endpoint");
-
-    let clickthrough_analytics_endpoint = log_group
-        .endpoint("clickthrough_analytics")
-        .await
-        .expect("Unable to create clickthrough_analytics endpoint");
-
-    let join_analytics_endpoint = log_group
-        .endpoint("join_analytics")
-        .await
-        .expect("Unable to create join_analytics endpoint");
-
+    // Cache endpoints
     let cache_group = svc.group("log.cache");
+    toplevel.spawn(recv_handler!(cache_group, "user_tags_update", handle_user_tags_update));
+    toplevel.spawn(recv_handler!(cache_group, "user_emails_update", handle_user_emails_update));
 
-    let user_tags_endpoint = cache_group
-        .endpoint("user_tags_update")
-        .await
-        .expect("Unable to create user_tags_update endpoint");
-
-    let user_emails_endpoint = cache_group
-        .endpoint("user_emails_update")
-        .await
-        .expect("Unable to create user_emails_update endpoint");
-
-    // Spawn handlers for each endpoint
-    let activity_database = Arc::clone(&database);
-    nats_handler_tasks.spawn(async move {
-        let db = Arc::clone(&activity_database);
-        let handler = activity_endpoint.for_each_concurrent(None, move |req| {
-            let db = Arc::clone(&db);
-            async move {
-                if let Err(e) = handle_activity_log(db, &req).await {
-                    eprintln!("Error handling activity log: {}", e);
-                }
-            }
-        });
-        handler.await;
-        Ok::<(), anyhow::Error>(())
-    });
-
-    let pageview_database = Arc::clone(&database);
-    nats_handler_tasks.spawn(async move {
-        let db = Arc::clone(&pageview_database);
-        let handler = pageview_endpoint.for_each_concurrent(None, move |req| {
-            let db = Arc::clone(&db);
-            async move {
-                if let Err(e) = handle_page_view(db, &req).await {
-                    eprintln!("Error handling page view: {}", e);
-                }
-            }
-        });
-        handler.await;
-        Ok::<(), anyhow::Error>(())
-    });
-
-    let clickthrough_database = Arc::clone(&database);
-    nats_handler_tasks.spawn(async move {
-        let db = Arc::clone(&clickthrough_database);
-        let handler = clickthrough_endpoint.for_each_concurrent(None, move |req| {
-            let db = Arc::clone(&db);
-            async move {
-                if let Err(e) = handle_clickthrough(db, &req).await {
-                    eprintln!("Error handling clickthrough: {}", e);
-                }
-            }
-        });
-        handler.await;
-        Ok::<(), anyhow::Error>(())
-    });
-
-    let user_tags_database = Arc::clone(&database);
-    nats_handler_tasks.spawn(async move {
-        let db = Arc::clone(&user_tags_database);
-        let handler = user_tags_endpoint.for_each_concurrent(None, move |req| {
-            let db = Arc::clone(&db);
-            async move {
-                if let Err(e) = handle_user_tags_update(db, &req).await {
-                    eprintln!("Error handling user tags update: {}", e);
-                }
-            }
-        });
-        handler.await;
-        Ok::<(), anyhow::Error>(())
-    });
-
-    let join_database = Arc::clone(&database);
-    nats_handler_tasks.spawn(async move {
-        let db = Arc::clone(&join_database);
-        let handler = join_endpoint.for_each_concurrent(None, move |req| {
-            let db = Arc::clone(&db);
-            async move {
-                if let Err(e) = handle_join(db, &req).await {
-                    eprintln!("Error handling join: {}", e);
-                }
-            }
-        });
-        handler.await;
-        Ok::<(), anyhow::Error>(())
-    });
-
-    let clickthrough_analytics_database = Arc::clone(&database);
-    nats_handler_tasks.spawn(async move {
-        let db = Arc::clone(&clickthrough_analytics_database);
-        let handler = clickthrough_analytics_endpoint.for_each_concurrent(None, move |req| {
-            let db = Arc::clone(&db);
-            async move {
-                if let Err(e) = handle_clickthrough_analytics(db, &req).await {
-                    eprintln!("Error handling clickthrough analytics: {}", e);
-                }
-            }
-        });
-        handler.await;
-        Ok::<(), anyhow::Error>(())
-    });
-
-    let join_analytics_database = Arc::clone(&database);
-    nats_handler_tasks.spawn(async move {
-        let db = Arc::clone(&join_analytics_database);
-        let handler = join_analytics_endpoint.for_each_concurrent(None, move |req| {
-            let db = Arc::clone(&db);
-            async move {
-                if let Err(e) = handle_join_analytics(db, &req).await {
-                    eprintln!("Error handling join analytics: {}", e);
-                }
-            }
-        });
-        handler.await;
-        Ok::<(), anyhow::Error>(())
-    });
-
-    let user_emails_database = Arc::clone(&database);
-    nats_handler_tasks.spawn(async move {
-        let db = Arc::clone(&user_emails_database);
-        let handler = user_emails_endpoint.for_each_concurrent(None, move |req| {
-            let db = Arc::clone(&db);
-            async move {
-                if let Err(e) = handle_user_emails_update(db, &req).await {
-                    eprintln!("Error handling user emails update: {}", e);
-                }
-            }
-        });
-        handler.await;
-        Ok::<(), anyhow::Error>(())
-    });
+    // Health endpoint
+    let health_group = svc.group("log.health");
+    toplevel.spawn(handler!(health_group, "check", handle_health_check));
 
     println!("Log service started and listening for messages on:");
     println!("  - log.activity");
@@ -262,6 +125,7 @@ async fn main() -> Result<()> {
     println!("  - log.join_analytics");
     println!("  - log.cache.user_tags_update");
     println!("  - log.cache.user_emails_update");
+    println!("  - log.health.check");
     println!("  - participation sync running in background");
     println!("  - bookmark sync running in background");
     println!("  - join sync running in background");
@@ -298,13 +162,11 @@ async fn main() -> Result<()> {
             }
         }
         // Wait for any NATS handler to complete (which would indicate an error)
-        result = nats_handler_tasks.join_next() => {
+        result = toplevel.join_next() => {
             if let Some(result) = result {
                 match result {
-                    Ok(task_result) => {
-                        if let Err(e) = task_result {
-                            eprintln!("NATS handler completed with error: {}", e);
-                        }
+                    Ok(_) => {
+                        eprintln!("NATS handler completed unexpectedly");
                     }
                     Err(e) => {
                         eprintln!("NATS handler panicked: {}", e);
@@ -317,12 +179,12 @@ async fn main() -> Result<()> {
 
     // First, stop accepting new work by terminating NATS handlers
     println!("Terminating NATS handlers to stop accepting new requests...");
-    nats_handler_tasks.abort_all();
+    toplevel.abort_all();
 
     // Wait for NATS handlers to be aborted with short timeout
     let nats_timeout = tokio::time::Duration::from_secs(5);
     let _ = tokio::time::timeout(nats_timeout, async {
-        while let Some(_) = nats_handler_tasks.join_next().await {
+        while let Some(_) = toplevel.join_next().await {
             // Wait for NATS handlers to be aborted
         }
     })

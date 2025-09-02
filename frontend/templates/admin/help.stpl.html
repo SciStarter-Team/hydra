@@ -1,0 +1,21 @@
+<div class="p-6">
+    <div class="mb-4">
+        <h4 class="text-lg font-medium text-gray-900 capitalize"><%= self.section %> Help</h4>
+        <div class="mt-1 h-px bg-gradient-to-r from-indigo-500 to-transparent"></div>
+    </div>
+    
+    <div class="prose prose-sm max-w-none">
+        <p class="text-gray-700 leading-relaxed"><%= self.content %></p>
+    </div>
+    
+    <div class="mt-6 pt-4 border-t border-gray-200">
+        <div class="flex items-center space-x-4 text-sm text-gray-500">
+            <div class="flex items-center space-x-2">
+                <wa-icon name="lightbulb" class="w-4 h-4"></wa-icon>
+                <span>Need more help?</span>
+            </div>
+            <a href="/docs" class="text-indigo-600 hover:text-indigo-500 font-medium">View Documentation</a>
+            <a href="/support" class="text-indigo-600 hover:text-indigo-500 font-medium">Contact Support</a>
+        </div>
+    </div>
+</div>

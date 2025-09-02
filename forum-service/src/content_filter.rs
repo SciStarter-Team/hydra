@@ -54,6 +54,12 @@ pub async fn initialize_filter() -> Result<()> {
     Ok(())
 }
 
+/// Check if the content filter has been initialized
+pub async fn is_initialized() -> bool {
+    let regex_guard = FILTER_REGEX.read().await;
+    regex_guard.is_some()
+}
+
 // Reload the filter (for NATS endpoint)
 pub async fn reload_filter(req: &Request) -> Result<()> {
     let user_id: ulid::Ulid = flexbuffers::from_slice(&req.message.payload)?;

@@ -1,0 +1,18 @@
+<div class="flow-root">
+    <ul class="-my-5 divide-y divide-gray-200">
+        <% for activity in &self.activities { %>
+            <li class="py-4">
+                <div class="flex items-center space-x-4">
+                    <div class="flex-shrink-0">
+                        <wa-icon name="<%= activity.icon %>" class="w-5 h-5 text-gray-400"></wa-icon>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium text-gray-900"><%= activity.title %></p>
+                        <p class="text-sm text-gray-500"><%= activity.description %></p>
+                    </div>
+                    <div class="flex-shrink-0 text-sm text-gray-500"><%= activity.time_ago %></div>
+                </div>
+            </li>
+        <% } %>
+    </ul>
+</div>

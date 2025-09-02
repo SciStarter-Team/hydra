@@ -20,7 +20,7 @@ impl Component for Header {
     }
 }
 
-#[derive(TemplateOnce)]
+#[derive(Debug, TemplateOnce)]
 #[template(path = "site/header.stpl.html")]
 pub struct HeaderTpl {
     basic_info: Option<Arc<BasicInfo>>,

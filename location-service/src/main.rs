@@ -1,3 +1,4 @@
+pub mod health;
 pub mod ip;
 
 use async_nats::service::ServiceExt;
@@ -24,6 +25,9 @@ async fn main() {
     toplevel.spawn(handler!(session, "ip", ip::ip));
     toplevel.spawn(handler!(session, "ipv4", ip::ipv4));
     toplevel.spawn(handler!(session, "ipv6", ip::ipv6));
+
+    let health = service.group("location.health");
+    toplevel.spawn(handler!(health, "check", health::health_check));
 
     toplevel.join_all().await;
 }

@@ -10,8 +10,8 @@
 <% if self.enable_sse { %><script src="/-static/hx-sse.js"></script><% } %>
 <% if self.enable_alpine { %>
   <script src="/-static/hx-alpine-morph.js"></script>
-  <script src="/-static/alpine-morph.js"></script>
-  <script src="/-static/alpine.js"></script>
+  <script src="/-static/alpine-morph.js" defer></script>
+  <script src="/-static/alpine.js" defer></script>
 <% } %>
 <% if self.enable_webawesome { %>
   <script type="module" src="/-static/webawesome/webawesome.loader.js"></script>

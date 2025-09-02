@@ -180,6 +180,35 @@ where
     decode_structured_message(msg)
 }
 
+/// Publish a structured data message through NATS, wait for a reply with timeout,
+/// and decode it into structured data.
+///
+/// This uses the [NATS Service API] mechanism and is meant for
+/// bidirectional communication with services where you need timeout control.
+///
+/// [NATS Service API]: https://docs.rs/async-nats/latest/async_nats/service/struct.Service.html
+pub async fn request_timeout<R>(
+    subject: impl ToSubject,
+    message: impl serde::Serialize,
+    timeout: std::time::Duration,
+) -> Result<R, anyhow::Error>
+where
+    R: DeserializeOwned,
+{
+    let payload = flexbuffers::to_vec(message)?;
+
+    let msg = tokio::time::timeout(
+        timeout,
+        nats().request(subject, payload.into())
+    )
+    .await
+    .map_err(|_| anyhow!("Request timeout"))?
+    .map_err(|e| anyhow!("NATS request failed: {}", e))?
+    .decode_error()?;
+
+    decode_structured_message(msg)
+}
+
 /// A convenience wrapper around [`common::service::send`] for sending
 /// activity logging messages.
 pub fn log_activity(

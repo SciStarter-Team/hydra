@@ -13,7 +13,9 @@ use tokio::{spawn, task::JoinSet, time::sleep};
 use ulid::Ulid;
 
 pub mod auth;
+pub mod health;
 pub mod sessions;
+pub mod stats;
 pub mod users;
 
 async fn cleanup() {
@@ -952,6 +954,10 @@ async fn main() {
     toplevel.spawn(handler!(info, "by_username", users::basic_info_by_username));
     toplevel.spawn(handler!(info, "by_user_id", users::basic_info_by_user_id));
 
+    let stats = service.group("user.stats");
+    toplevel.spawn(handler!(stats, "total_count", stats::total_count));
+    toplevel.spawn(handler!(stats, "verified_count", stats::verified_count));
+
     let search = service.group("user.search");
     toplevel.spawn(handler!(search, "by_handle", users::search_by_handle));
 
@@ -984,6 +990,9 @@ async fn main() {
     let cache = service.group("user.cache");
     toplevel.spawn(handler!(cache, "user_tags", users::user_tags));
     toplevel.spawn(handler!(cache, "user_emails", users::user_emails));
+
+    let health = service.group("user.health");
+    toplevel.spawn(handler!(health, "check", health::health_check));
 
     toplevel.join_all().await;
 

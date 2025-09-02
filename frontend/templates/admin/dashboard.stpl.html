@@ -1,0 +1,58 @@
+<!-- Stats Cards -->
+<% if !self.stats.is_empty() { %>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <% for stat in &self.stats { %>
+        <div class="bg-white rounded-lg shadow border border-gray-200 p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <wa-icon name="<%= stat.icon %>" class="w-8 h-8 text-<%= stat.color %>-600"></wa-icon>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                    <dl>
+                        <dt class="text-sm font-medium text-gray-500 truncate"><%= stat.label %></dt>
+                        <dd class="text-lg font-medium text-gray-900"><%= stat.value %></dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+    <% } %>
+</div>
+<% } %>
+
+<!-- Dynamic Sections -->
+<% for section in &self.sections { %>
+    <% if section.width == "full" { %>
+        <div class="mb-8">
+            <div class="bg-white rounded-lg shadow border border-gray-200">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900"><%= section.title %></h3>
+                </div>
+                <div class="p-6">
+                    <%- section.content_html %>
+                </div>
+            </div>
+        </div>
+    <% } else if section.width == "half" { %>
+        <div class="mb-8 lg:w-1/2">
+            <div class="bg-white rounded-lg shadow border border-gray-200">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900"><%= section.title %></h3>
+                </div>
+                <div class="p-6">
+                    <%- section.content_html %>
+                </div>
+            </div>
+        </div>
+    <% } else { %>
+        <div class="mb-8">
+            <div class="bg-white rounded-lg shadow border border-gray-200">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900"><%= section.title %></h3>
+                </div>
+                <div class="p-6">
+                    <%- section.content_html %>
+                </div>
+            </div>
+        </div>
+    <% } %>
+<% } %>

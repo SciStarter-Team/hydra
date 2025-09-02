@@ -201,3 +201,8 @@ pub struct UserAndBadge {
     pub user_id: Ulid,
     pub badge: Badge,
 }
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserCountResponse {
+    pub count: u64,
+}

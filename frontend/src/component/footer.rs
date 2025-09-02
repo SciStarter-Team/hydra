@@ -20,7 +20,7 @@ impl Component for Footer {
     }
 }
 
-#[derive(TemplateOnce)]
+#[derive(Debug, TemplateOnce)]
 #[template(path = "site/footer.stpl.html")]
 #[allow(dead_code)]
 pub struct FooterTpl {

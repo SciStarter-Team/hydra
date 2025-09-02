@@ -603,6 +603,35 @@ impl Database {
         // SQLite cache tables registered successfully
         Ok(())
     }
+
+    /// Health check for the database and WAL systems
+    pub async fn health_check(&self) -> Result<(String, String)> {
+        // Check if we can query the session context (basic health)
+        let database_status = match self.session_context.sql("SELECT 1").await {
+            Ok(_) => "healthy".to_string(),
+            Err(e) => {
+                eprintln!("Database session context health check failed: {}", e);
+                "unhealthy".to_string()
+            }
+        };
+
+        // Check WAL directory accessibility 
+        let wal_path = self.path.join("wal");
+        let wal_status = if wal_path.exists() && wal_path.is_dir() {
+            // Try to read the WAL directory
+            match tokio::fs::read_dir(&wal_path).await {
+                Ok(_) => "healthy".to_string(),
+                Err(e) => {
+                    eprintln!("WAL directory health check failed: {}", e);
+                    "degraded".to_string()
+                }
+            }
+        } else {
+            "initializing".to_string()
+        };
+
+        Ok((database_status, wal_status))
+    }
 }
 
 // Bookmark storage functions (store in simple JSON file for now)

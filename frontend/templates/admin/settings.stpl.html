@@ -1,0 +1,124 @@
+<!-- Settings Form -->
+<form hx-post="/-admin/settings" hx-target="#main-content" hx-swap="innerHTML">
+    <!-- Site Configuration -->
+    <div class="bg-white rounded-lg shadow border border-gray-200 mb-8">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Site Configuration</h3>
+        </div>
+        <div class="p-6 space-y-6">
+            <div>
+                <label for="site_name" class="block text-sm font-medium text-gray-700">Site Name</label>
+                <input type="text" id="site_name" name="site_name" value="<%= self.site_name %>" 
+                       class="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+            </div>
+            
+            <div>
+                <label for="site_description" class="block text-sm font-medium text-gray-700">Site Description</label>
+                <textarea id="site_description" name="site_description" rows="3" 
+                          class="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"><%= self.site_description %></textarea>
+            </div>
+        </div>
+    </div>
+
+    <!-- System Settings -->
+    <div class="bg-white rounded-lg shadow border border-gray-200 mb-8">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">System Settings</h3>
+        </div>
+        <div class="p-6 space-y-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h4 class="text-sm font-medium text-gray-900">Maintenance Mode</h4>
+                    <p class="text-sm text-gray-500">Temporarily disable public access to the site</p>
+                </div>
+                <label class="inline-flex items-center">
+                    <input type="checkbox" name="maintenance_mode" value="true" <% if self.maintenance_mode { %>checked<% } %>
+                           class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500">
+                    <span class="ml-2 text-sm text-gray-700">Enabled</span>
+                </label>
+            </div>
+            
+            <div class="flex items-center justify-between">
+                <div>
+                    <h4 class="text-sm font-medium text-gray-900">User Registration</h4>
+                    <p class="text-sm text-gray-500">Allow new users to register accounts</p>
+                </div>
+                <label class="inline-flex items-center">
+                    <input type="checkbox" name="registration_enabled" value="true" <% if self.registration_enabled { %>checked<% } %>
+                           class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500">
+                    <span class="ml-2 text-sm text-gray-700">Enabled</span>
+                </label>
+            </div>
+            
+            <div class="flex items-center justify-between">
+                <div>
+                    <h4 class="text-sm font-medium text-gray-900">Email Notifications</h4>
+                    <p class="text-sm text-gray-500">Send system notifications via email</p>
+                </div>
+                <label class="inline-flex items-center">
+                    <input type="checkbox" name="email_notifications" value="true" <% if self.email_notifications { %>checked<% } %>
+                           class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500">
+                    <span class="ml-2 text-sm text-gray-700">Enabled</span>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- Database Management -->
+    <div class="bg-white rounded-lg shadow border border-gray-200 mb-8">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Database Management</h3>
+        </div>
+        <div class="p-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <button type="button" hx-post="/-admin/settings/backup" hx-confirm="Create database backup?" 
+                        class="inline-flex items-center justify-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors duration-200">
+                    <wa-icon name="download" class="w-4 h-4 mr-2"></wa-icon>
+                    Create Backup
+                </button>
+                <button type="button" hx-post="/-admin/settings/optimize" hx-confirm="Optimize database?" 
+                        class="inline-flex items-center justify-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors duration-200">
+                    <wa-icon name="gear" class="w-4 h-4 mr-2"></wa-icon>
+                    Optimize DB
+                </button>
+                <button type="button" hx-post="/-admin/settings/cleanup" hx-confirm="Clean up temporary data?" 
+                        class="inline-flex items-center justify-center px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium rounded-lg transition-colors duration-200">
+                    <wa-icon name="trash" class="w-4 h-4 mr-2"></wa-icon>
+                    Cleanup
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cache Settings -->
+    <div class="bg-white rounded-lg shadow border border-gray-200 mb-8">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Cache Management</h3>
+        </div>
+        <div class="p-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <button type="button" hx-post="/-admin/settings/clear-cache" hx-confirm="Clear all caches?" 
+                        class="inline-flex items-center justify-center px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors duration-200">
+                    <wa-icon name="trash" class="w-4 h-4 mr-2"></wa-icon>
+                    Clear All Cache
+                </button>
+                <button type="button" hx-get="/-admin/settings/cache-status" hx-target="#cache-status" 
+                        class="inline-flex items-center justify-center px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium rounded-lg transition-colors duration-200">
+                    <wa-icon name="refresh" class="w-4 h-4 mr-2"></wa-icon>
+                    Check Status
+                </button>
+            </div>
+            <div id="cache-status" class="mt-4">
+                <!-- Cache status will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Save Button -->
+    <div class="flex justify-end">
+        <button type="submit" class="inline-flex items-center px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors duration-200">
+            <wa-icon name="check" class="w-4 h-4 mr-2"></wa-icon>
+            Save Settings
+        </button>
+    </div>
+</form>
