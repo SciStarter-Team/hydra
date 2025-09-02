@@ -283,11 +283,6 @@ async fn users_synchronize() {
         let got_users = users.len();
 
         for user in users {
-            println!(
-                "Saving user {} {} {}",
-                &user.username, &user.updated, &user.ulid
-            );
-
             if user.updated > bookmark {
                 bookmark = user.updated.clone();
             }
@@ -761,7 +756,10 @@ async fn users_synchronize() {
                 .ok();
             }
 
-            println!("Saved user {}", user.username);
+            println!(
+                "Saved user {} {} {}",
+                &user.username, &user.updated, &user.ulid
+            );
         }
 
         misc::set("user-sync-bookmark", bookmark)
