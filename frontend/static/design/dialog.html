@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+
+     <link rel="preconnect" href="https://fonts.googleapis.com">
+     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+     <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="https://early.webawesome.com/webawesome@3.0.0-beta.4/dist/styles/webawesome.css" />
+    <script type="module" src="https://early.webawesome.com/webawesome@3.0.0-beta.4/dist/webawesome.loader.js"></script>
+
+    <link rel="stylesheet" href="/-static/css/style.css">
+
+</head>
+<body>
+    <wa-dialog light-dismiss without-header id="dialog">
+    <h2 class="mb-0">asf</h2>
+    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p> 
+</wa-dialog>
+
+<wa-button>Open Dialog</wa-button>
+<p>asdfas</p>
+
+<script>
+  const dialog = document.querySelector('#dialog');
+  const openButton = dialog.nextElementSibling;
+
+  openButton.addEventListener('click', () => (dialog.open = true));
+</script>
+
+</body>
+</html>

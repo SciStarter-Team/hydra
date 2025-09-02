@@ -1,14 +1,8 @@
-@reference "tailwindcss";
-@reference "../theme.css";
-
-@import "../theme.css";
-
-@layer utilities {
+@layer base {
 
   /* Apply to base elements */
   html {
     font-size: 16px;
-    color: var(--color-black);
     @apply text-neutral-dark;
     line-height: 1.6;
   }
@@ -24,10 +18,16 @@
   max-width: 30ch; 
 }
 
- .text-3xl, h1 { 
-  @apply text-3xl font-header-lg font-bold  mb-4;
+.text-3xl { 
+  @apply font-header-lg font-bold  mb-4;
   line-height: 1.2; 
   max-width: 35ch; 
+}
+
+h1 {
+  @apply text-3xl font-header-lg font-bold  mb-4;
+  line-height: 1.2; 
+  max-width: 35ch;
 }
 
 .text-2xl, h2 {

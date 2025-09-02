@@ -1,7 +1,6 @@
+@import "tailwindcss";
+@import "./theme.css";
 
-@import 'tailwindcss';
-@reference "tailwindcss";
-@reference "./theme.css";
 
 /*
   The default border color has changed to `currentcolor` in Tailwind CSS v4,
@@ -13,8 +12,6 @@
 */
 @layer base {
 
-
-
   input[type=text],textarea {
     background-color: #fff;
   }
@@ -24,11 +21,9 @@
   ::before,
   ::backdrop,
   ::file-selector-button {
-    border-color: var(--color-gray-200, currentcolor);
+    border-color: var(--color-neutral-dark, currentcolor);
   }
 }
-
-
 
 /** Load Elements **/
 @import "./elements/typography.css";
@@ -49,6 +44,7 @@
 @import "./components/tags.css";
 @import "./components/breadcrumbs.css";
 @import "./components/project-card.css";
+@import "./components/wa-dialog.css";
 
 
 /** Load Templates (page patterns) **/
@@ -56,7 +52,7 @@
 
 
 /** Load Page Specific **/
-@import "./components/home.css";
+ @import "./components/home.css";
 
 
 
@@ -64,16 +60,6 @@
 
 
 
-
-
-
-
-
 @custom-variant dark (&:is(.dark *));
 
 
-
-.gradient-bg {
-    background: -webkit-linear-gradient(to bottom, #f64f59, #c471ed, #12c2e9);  /* Chrome 10-25, Safari 5.1-6 */
-    background: linear-gradient(to bottom, #f64f59, #c471ed, #12c2e9); /* W3C, IE 10+/ Edge, Firefox 16+, Chrome 26+, Opera 12+, Safari 7+ */
-}

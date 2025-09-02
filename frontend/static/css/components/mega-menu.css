@@ -1,5 +1,20 @@
-@reference "tailwindcss";
-@reference "../theme.css";
+header nav a {
+  text-decoration: none;
+}
+#nav--users a {
+  font-size: 18.66px;
+  font-weight: bold;
+  @apply font-header-lg;
+  letter-spacing: 0.02em;
+}
+
+#nav--users a::before {
+  content: "|";
+  margin-right: 1rem;
+}
+#nav--users li:first-child a::before {
+  display:none;
+}
 
 /* https://codepen.io/cuonoj/pen/abogzwP */
 .mega-menu {
@@ -91,7 +106,7 @@
   .toggle-input + label {
     display: flex;
     gap:0.3rem;
-    @apply transition-all;
+    @apply transition-all text-base font-bold md:text-lg;
   }
 
   .toggle-input + label > svg {

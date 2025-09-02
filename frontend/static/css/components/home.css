@@ -1,6 +1,3 @@
-@reference "tailwindcss";
-@reference "../theme.css";
-
 /* VARIABLES */
   :root {
     --orange: #F26100;
@@ -496,7 +493,7 @@ div.ctct-form-embed form.ctct-form-custom label.ctct-form-label  {
     color: #fff!important;
 }
 
- div.ctct-form-success h2.ctct-form-header, div.ctct-form-embed div.ctct-form-defaults div.ctct-form-success  {
-    /* display: block!important; */
-}
+ /* div.ctct-form-success h2.ctct-form-header, div.ctct-form-embed div.ctct-form-defaults div.ctct-form-success  {
+    display: block!important;
+} */
 

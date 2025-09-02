@@ -1,6 +1,3 @@
-@reference "tailwindcss";
-@reference "../theme.css";
-
 .ss-accordion-wrapper {
     @apply mx-auto my-8 space-y-4;
 }

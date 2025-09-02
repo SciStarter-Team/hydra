@@ -1,6 +1,5 @@
-@import "tailwindcss";
-@theme static  {
-/*  --color-*: initial; */ /* Disabled because it throws off the tailwind compiler */
+@theme  {
+/*  --color-*: initial; */ /** Disabled because it throws off the tailwind compiler */
   --color-orange: #f26100;
   --color-orange-hover: #c45306;
   --color-action-blue: #0071c2;
@@ -21,31 +20,30 @@
   --color-bg-cool: #f3f7fd;
 
   /** NEW COLOR SCHEME ***/
-   /** NEW COLOR SCHEME ***/
-    /* --color-primary: #04B2D9; */
-    --color-primary: #04A0C3;
-    /* --color-primary-dark: #050067; */
-    --color-primary-dark: #24284E;
-    /* --color-primary-dark: #14115b; */
-    --color-primary-action: #037F9B;
-    --color-primary-action-dark: #004B5C;
-    /* 0579CC */
-    --color-primary-light: #E8F7FF;
-    --color-accent1: #F54017;
-    --color-accent1-dark: #B92D0E;
-    --color-accent2: #ADBD49;
-    --color-accent2-dark: #76801a;
-    /* --color-black: #1C1C1C; */
-    --color-black: #000;
-    --color-white: #fff;
-    --color-linework: #d7eeff;
-    --color-neutral-xlight: #F8F8F8;
-    --color-neutral-light: #D9D9D9;
-    --color-neutral-mid: #757575;
-    --color-neutral-dark: #404040;
-    --color-alert: #B92D0E;
+  /* --color-primary: #04B2D9; */
+  --color-primary: #04A0C3;
+  /* --color-primary-dark: #050067; */
+  --color-primary-dark: #24284E;
+  /* --color-primary-dark: #14115b; */
+  --color-primary-action: #0071B8;
+  --color-primary-action-dark: #004B5C;
+  /* 0579CC */
+  --color-primary-light: #E8F7FF;
+  --color-accent1: #F54017;
+  --color-accent1-dark: #B92D0E;
+  --color-accent2: #ADBD49;
+  --color-accent2-dark: #76801a;
+  /* --color-black: #1C1C1C; */
+  --color-black: #000;
+  --color-white: #fff;
+  --color-linework: #d7eeff;
+  --color-neutral-xlight: #F8F8F8;
+  --color-neutral-light: #D9D9D9;
+  --color-neutral-mid: #757575;
+  --color-neutral-dark: #404040;
+  --color-alert: #B92D0E;
 
-  --font-*: initial;
+  /* --font-*: initial; */
   --font-sans: Inter, Roboto, 'Helvetica Neue', 'Arial Nova', 'Nimbus Sans', Arial, ui-sans-serif, system-ui, sans-serif;
   --font-header-lg: Barlow, Inter, Roboto, 'Helvetica Neue', 'Arial Nova', 'Nimbus Sans', Arial, ui-sans-serif, system-ui, sans-serif;
   --font-header: Inter, Roboto, 'Helvetica Neue', 'Arial Nova', 'Nimbus Sans', Arial, ui-sans-serif, system-ui, sans-serif;
@@ -56,7 +54,7 @@
   --text-2xs: 0.65rem;  /* ~10.4px */
   --text-xs: 0.78125rem;  /* 12.5x */
   --text-sm: 0.9375rem; /* 15px */
-  --text-base: 1.125rem; /* 18px */ 
+  --text-base: 1.125rem; /* 18px */
   --text-lg:  1.406rem; /* 22.5px */
   --text-xl: 1.758rem; /* 28.13px */
   --text-2xl:  2.197rem; /* 35.16px */
@@ -65,12 +63,11 @@
 
 
 
-   /** custom text adjustments for small screens ~1.17x scale **/
-   --text-lg-mobile: 1.32rem; /* ~21px */
-   --text-xl-mobile: 1.5rem; /* 24px -- this keeps this accessible */
-   --text-2xl-mobile: 1.755rem; /* 28.08px */
-   --text-3xl-mobile:  2.05rem; /* 32.85px	*/
-   --text-4xl-mobile:  2.4rem /* 38.44px	*/
-  
+  /** custom text adjustments for small screens ~1.17x scale **/
+  --text-lg-mobile: 1.32rem; /* ~21px */
+  --text-xl-mobile: 1.5rem; /* 24px -- this keeps this accessible */
+  --text-2xl-mobile: 1.755rem; /* 28.08px */
+  --text-3xl-mobile:  2.05rem; /* 32.85px	*/
+  --text-4xl-mobile:  2.4rem /* 38.44px	*/
 
 }

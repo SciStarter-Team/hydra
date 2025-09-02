@@ -1,8 +1,4 @@
-@reference "tailwindcss";
-@reference "../theme.css";
-@import "../theme.css";
-
-@layer utilities {
+@layer base {
     button,a,.btn {
         cursor: pointer;
     }
