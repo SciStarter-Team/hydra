@@ -1,8 +1,33 @@
--- Disable foreign key constraints during migration
-PRAGMA foreign_keys = OFF;
+-- Note: Cannot disable foreign keys inside transaction, so we'll recreate referencing tables
+
+-- Disable spatial indexes first to avoid conflicts during table operations
+SELECT DisableSpatialIndex('users', 'point');
+SELECT DisableSpatialIndex('users', 'regions');
+
+-- Drop the actual spatial index tables (DisableSpatialIndex only disables triggers)
+DROP TABLE IF EXISTS idx_users_point;
+DROP TABLE IF EXISTS idx_users_point_node;
+DROP TABLE IF EXISTS idx_users_point_parent;
+DROP TABLE IF EXISTS idx_users_point_rowid;
+DROP TABLE IF EXISTS idx_users_regions;
+DROP TABLE IF EXISTS idx_users_regions_node;
+DROP TABLE IF EXISTS idx_users_regions_parent; 
+DROP TABLE IF EXISTS idx_users_regions_rowid;
+
+-- Discard geometry columns to clean up all spatial metadata, triggers, and constraints
+SELECT DiscardGeometryColumn('users', 'point');
+SELECT DiscardGeometryColumn('users', 'regions');
 
 -- Remove the unique index on username first
 DROP INDEX IF EXISTS "users_by_username";
+
+-- Backup referencing tables to avoid foreign key constraint issues
+CREATE TABLE "emails_backup" AS SELECT * FROM "emails";
+CREATE TABLE "user_tags_backup" AS SELECT * FROM "user_tags";
+
+-- Drop the referencing tables temporarily
+DROP TABLE "emails";
+DROP TABLE "user_tags";
 
 -- Create new table structure without username column directly
 CREATE TABLE "users_new" (
@@ -72,10 +97,13 @@ CREATE TABLE "users_new" (
        "circuit_id" text,
        "home_page" text,
        "constant_contact_id" text,
-       "ambassador" text -- datetime
+       "ambassador" text, -- datetime
+       "is_page_manager" integer NOT NULL DEFAULT 0,
+       "point" BLOB,
+       "regions" BLOB
 );
 
--- Copy data from old table to new table (excluding the username column)
+-- Copy data from old table to new table (excluding the username column but preserving geometry)
 INSERT INTO users_new SELECT 
     user_id, legacy_v2_id, legacy_v2_userdata_id, legacy_v3_id, legacy_v2_profile_id, 
     legacy_v3_alias_id, legacy_v3_profile_id, date_joined, updated, password, 
@@ -88,16 +116,18 @@ INSERT INTO users_new SELECT
     protected, extra_skills, extra_tools, api_key, site_dressing, country_code, 
     needs_inat_username, opaque_id, zooniverse_username, degree, ethnicity, 
     income, ai_opt_out, ai_opt_out_at, umbrella_project_id, automatic_affiliate, 
-    circuit_id, home_page, constant_contact_id, ambassador
+    circuit_id, home_page, constant_contact_id, ambassador, is_page_manager, point, regions
 FROM users;
 
--- Drop old table and rename new table
-DROP TABLE users;
-ALTER TABLE users_new RENAME TO users;
+-- Drop the original table using standard SQL (spatial metadata already cleaned up)
+DROP TABLE "users";
 
--- Recreate spatial metadata and geometry columns
-SELECT AddGeometryColumn('users', 'point', 4326, 'POINT', 'XY');
-SELECT AddGeometryColumn('users', 'regions', 4326, 'MULTIPOLYGON', 'XY');
+-- Rename the new table using standard SQL
+ALTER TABLE "users_new" RENAME TO "users";
+
+-- Register the geometry columns with SpatiaLite (this recreates the spatial metadata and triggers)
+SELECT RecoverGeometryColumn('users', 'point', 4326, 'POINT', 'XY');
+SELECT RecoverGeometryColumn('users', 'regions', 4326, 'MULTIPOLYGON', 'XY');
 
 -- Recreate spatial indexes
 SELECT CreateSpatialIndex('users', 'point');
@@ -106,5 +136,35 @@ SELECT CreateSpatialIndex('users', 'regions');
 -- Create the user_id index (but not the username index)
 CREATE UNIQUE INDEX "users_by_user_id" ON "users" ("user_id");
 
--- Re-enable foreign key constraints
-PRAGMA foreign_keys = ON;
+-- Recreate the referencing tables with their original structure and data
+CREATE TABLE "emails" (
+       "user_id" text not null references "users" ("user_id") on delete cascade,
+       "email" text not null,
+       "verified" boolean not null,
+       "hash" text not null,
+       "hash_lower" text not null,
+       "hash_capfirst" text not null
+);
+
+CREATE TABLE "user_tags" (
+       "user_id" text not null references "users" ("user_id") on delete cascade,
+       "tag" text not null
+);
+
+-- Restore the data from backup tables
+INSERT INTO "emails" SELECT * FROM "emails_backup";
+INSERT INTO "user_tags" SELECT * FROM "user_tags_backup";
+
+-- Drop the backup tables
+DROP TABLE "emails_backup";
+DROP TABLE "user_tags_backup";
+
+-- Recreate indexes for the restored tables
+CREATE UNIQUE INDEX "emails_by_email" ON "emails" ("email");
+CREATE UNIQUE INDEX "emails_by_hash" ON "emails" ("hash");
+CREATE UNIQUE INDEX "emails_by_hash_lower" ON "emails" ("hash_lower");
+CREATE UNIQUE INDEX "emails_by_hash_capfirst" ON "emails" ("hash_capfirst");
+
+CREATE UNIQUE INDEX "user_tags_by_user_id_and_tag" ON "user_tags" ("user_id", "tag");
+CREATE INDEX "user_tags_by_user_id" ON "user_tags" ("user_id");
+CREATE INDEX "user_tags_by_tag" ON "user_tags" ("tag");

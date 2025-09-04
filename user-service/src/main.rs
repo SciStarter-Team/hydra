@@ -995,6 +995,11 @@ async fn main() {
     toplevel.spawn(handler!(admin, "user_create", users::admin_user_create));
     toplevel.spawn(handler!(admin, "user_update", users::admin_user_update));
     toplevel.spawn(handler!(admin, "user_delete", users::admin_user_delete));
+    toplevel.spawn(handler!(admin, "password_reset", users::admin_password_reset));
+    toplevel.spawn(handler!(admin, "email_add", users::admin_email_add));
+    toplevel.spawn(handler!(admin, "email_update", users::admin_email_update));
+    toplevel.spawn(handler!(admin, "email_delete", users::admin_email_delete));
+    toplevel.spawn(handler!(admin, "email_toggle_verified", users::admin_email_toggle_verified));
 
     // Page manager endpoints
     let page_manager = service.group("user.page_manager");

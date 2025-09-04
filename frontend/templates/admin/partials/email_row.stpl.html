@@ -1,0 +1,54 @@
+<div class="flex items-center space-x-2 p-2 border border-gray-200 rounded-md" id="email-row-<%= self.index %>">
+    <input 
+        type="email" 
+        value="<%= self.email.email %>"
+        class="flex-1 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+        data-original="<%= self.email.email %>"
+        name="email"
+    >
+    <button 
+        type="button"
+        class="px-2 py-1 text-xs rounded <% if self.email.verified { %>bg-green-100 text-green-800<% } else { %>bg-yellow-100 text-yellow-800<% } %>"
+        hx-post="/-admin/users/<%= self.user_id %>/emails/<%= self.email.email %>/toggle-verified"
+        hx-target="#email-row-<%= self.index %>"
+        hx-swap="outerHTML"
+    >
+        <% if self.email.verified { %>Verified<% } else { %>Unverified<% } %>
+    </button>
+    <button 
+        type="button"
+        class="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded hover:bg-blue-200"
+        hx-put="/-admin/users/<%= self.user_id %>/emails/<%= self.email.email %>"
+        hx-target="#email-row-<%= self.index %>"
+        hx-swap="outerHTML"
+        hx-on:click="
+            const emailInput = this.parentElement.querySelector('input[name=email]');
+            const oldEmail = emailInput.getAttribute('data-original');
+            const newEmail = emailInput.value;
+            htmx.values(this, {old_email: oldEmail, new_email: newEmail});
+        "
+    >
+        Save
+    </button>
+    <button 
+        type="button"
+        class="px-2 py-1 bg-red-100 text-red-800 text-xs rounded hover:bg-red-200"
+        hx-delete="/-admin/users/<%= self.user_id %>/emails/<%= self.email.email %>"
+        hx-target="#email-row-<%= self.index %>"
+        hx-swap="outerHTML"
+        hx-confirm="Delete this email address?"
+    >
+        Delete
+    </button>
+    <button 
+        type="button"
+        class="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded hover:bg-gray-200"
+        hx-post="/-admin/users/<%= self.user_id %>/send-password-reset"
+        hx-vals='{"reset_email": "<%= self.email.email %>"}'
+        hx-target="#modal-container"
+        hx-swap="innerHTML"
+        hx-confirm="Send a password reset email to <%= self.email.email %>?"
+    >
+        Reset Password
+    </button>
+</div>

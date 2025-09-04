@@ -75,6 +75,7 @@ pub struct BasicInfo {
     pub is_superuser: bool,
     pub public: bool,
     pub protected: bool,
+    pub needs_point: bool,
 }
 
 impl UserInfo for Unauthenticated {
@@ -226,6 +227,43 @@ pub struct AdminUser {
     pub is_page_manager: bool,
     pub verified: bool,
     pub date_joined: String,
+    pub emails: Vec<UserEmail>,
+}
+
+impl AdminUser {
+    /// Returns the display name, preferring first/last name over handle
+    pub fn display_name(&self) -> String {
+        if self.first_name.is_empty() && self.last_name.is_empty() {
+            self.handle.clone()
+        } else {
+            format!("{} {}", self.first_name, self.last_name).trim().to_string()
+        }
+    }
+
+    /// Returns the user role as a display string
+    /// Note: superuser is displayed as "staff" in the UI
+    pub fn display_role(&self) -> &'static str {
+        if self.is_superuser || self.is_staff {
+            "staff"
+        } else if self.is_page_manager {
+            "page_manager"
+        } else {
+            "user"
+        }
+    }
+
+    /// Returns the user role for form values (distinguishes superuser from staff)
+    pub fn form_role(&self) -> &'static str {
+        if self.is_superuser {
+            "superuser"
+        } else if self.is_staff {
+            "staff"
+        } else if self.is_page_manager {
+            "page_manager"
+        } else {
+            "user"
+        }
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -251,6 +289,7 @@ pub struct AdminUserCreateRequest {
     pub first_name: String,
     pub last_name: String,
     pub primary_email: String,
+    pub password: String,
     pub role: String, // user, page_manager, staff
     pub verified: bool,
 }
@@ -262,6 +301,7 @@ pub struct AdminUserUpdateRequest {
     pub first_name: String,
     pub last_name: String,
     pub primary_email: String,
+    pub new_password: Option<String>, // None means don't change password
     pub role: String, // user, page_manager, staff
     pub verified: bool,
     pub is_active: bool,
@@ -306,4 +346,64 @@ pub struct PageManagerUpdateRequest {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PageManagerUpdateResponse {
     pub success: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AdminPasswordResetRequest {
+    pub user_id: Ulid,
+    pub email: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AdminPasswordResetResponse {
+    pub success: bool,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserEmailsRequest {
+    pub user_id: Ulid,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserEmail {
+    pub email: String,
+    pub verified: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserEmailsResponse {
+    pub emails: Vec<UserEmail>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserEmailAddRequest {
+    pub user_id: Ulid,
+    pub email: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserEmailUpdateRequest {
+    pub user_id: Ulid,
+    pub old_email: String,
+    pub new_email: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserEmailDeleteRequest {
+    pub user_id: Ulid,
+    pub email: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserEmailToggleVerifiedRequest {
+    pub user_id: Ulid,
+    pub email: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserEmailResponse {
+    pub success: bool,
+    pub message: String,
+    pub emails: Vec<UserEmail>, // Return updated emails list
 }

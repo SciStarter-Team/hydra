@@ -82,3 +82,4 @@ impl Component for AdminLayout {
         })
     }
 }
+

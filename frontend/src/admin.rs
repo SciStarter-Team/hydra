@@ -1,15 +1,23 @@
 use crate::component::{AdminLayout, Component, admin_layout::AdminLayoutPrepared};
 use crate::middleware::authorization::{Authenticated, StaffOnly};
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/partials/email_row.stpl.html")]
+struct EmailRow {
+    user_id: String,
+    email: UserEmail,
+    index: usize,
+}
+
 use common::{
     message::health::{
         ForumServiceHealthResponse, FrontendServiceHealthResponse, LocationServiceHealthResponse,
         LogServiceHealthResponse, UserServiceHealthResponse,
     },
     message::log::{RecentActivityRequest, RecentActivityResponse},
-    message::user::{AdminUserListRequest, AdminUserListResponse, AdminUserSearchRequest, AdminUserCreateRequest, AdminUserUpdateRequest, AdminUserDeleteRequest, AdminUserGetRequest, AdminUserResponse, AdminUserDeleteResponse, BasicInfo},
+    message::user::{AdminUser, AdminUserListRequest, AdminUserListResponse, AdminUserSearchRequest, AdminUserCreateRequest, AdminUserUpdateRequest, AdminUserDeleteRequest, AdminUserGetRequest, AdminUserResponse, AdminUserDeleteResponse, BasicInfo, UserEmail, AdminPasswordResetRequest, AdminPasswordResetResponse, UserEmailAddRequest, UserEmailUpdateRequest, UserEmailDeleteRequest, UserEmailToggleVerifiedRequest, UserEmailResponse},
     service::{request, request_timeout},
 };
-use poem::{Endpoint, EndpointExt, Route, get, post, put, delete, handler, web::{Query, Path, Form}};
+use poem::{Endpoint, EndpointExt, Route, get, post, put, handler, web::{Query, Path, Form}};
 use sailfish::TemplateOnce;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -342,16 +350,6 @@ pub struct DashboardContent {
     pub sections: Vec<DashboardSection>,
 }
 
-#[derive(Debug, Clone)]
-pub struct AdminUser {
-    pub id: ulid::Ulid,
-    pub name: String,
-    pub email: String,
-    pub handle: String,
-    pub role: String,
-    pub joined_date: String,
-    pub verified: bool,
-}
 
 #[derive(Debug, TemplateOnce)]
 #[template(path = "admin/partials/user_row.stpl.html")]
@@ -609,6 +607,7 @@ pub struct UsersPagePrepared {
     pub total_users: u64,
     pub has_previous: bool,
     pub has_next: bool,
+    pub per_page: u32,
     pub start_item: u32,
     pub end_item: u32,
     pub pagination_url: String,
@@ -636,32 +635,7 @@ impl Component for UsersPage {
             .await
             .map_err(|e| anyhow::anyhow!("Failed to fetch users: {}", e))?;
 
-        // Convert service AdminUser to frontend AdminUser
-        let users_list: Vec<AdminUser> = response.users.into_iter().map(|service_user| {
-            let name = if service_user.first_name.is_empty() && service_user.last_name.is_empty() {
-                service_user.handle.clone()
-            } else {
-                format!("{} {}", service_user.first_name, service_user.last_name).trim().to_string()
-            };
-
-            let role = if service_user.is_superuser || service_user.is_staff {
-                "Staff".to_string()
-            } else if service_user.is_page_manager {
-                "Page Manager".to_string()
-            } else {
-                "User".to_string()
-            };
-
-            AdminUser {
-                id: service_user.user_id,
-                name,
-                email: service_user.primary_email,
-                handle: service_user.handle,
-                role,
-                joined_date: service_user.date_joined,
-                verified: service_user.verified,
-            }
-        }).collect();
+        let users_list = response.users;
 
         let users_content = UsersContent {
             users: users_list,
@@ -669,6 +643,7 @@ impl Component for UsersPage {
             total_users: response.total_count,
             has_previous: response.page > 1,
             has_next: (response.page * response.limit) < response.total_count as u32,
+            per_page: response.limit,
             start_item: ((response.page - 1) * response.limit) + 1,
             end_item: std::cmp::min(response.page * response.limit, response.total_count as u32),
             pagination_url: "/-admin/users".to_string(),
@@ -681,6 +656,7 @@ impl Component for UsersPage {
             total_users: users_content.total_users,
             has_previous: users_content.has_previous,
             has_next: users_content.has_next,
+            per_page: users_content.per_page,
             start_item: users_content.start_item,
             end_item: users_content.end_item,
             pagination_url: users_content.pagination_url,
@@ -816,7 +792,7 @@ struct UserSearchQuery {
 
 #[derive(Debug, TemplateOnce)]
 #[template(path = "admin/users_table_body.stpl.html")]
-struct UsersTableBody {
+pub struct UsersTableBody {
     users: Vec<AdminUser>,
 }
 
@@ -828,11 +804,13 @@ pub struct UsersContent {
     pub total_users: u64,
     pub has_previous: bool,
     pub has_next: bool,
+    pub per_page: u32,
     pub start_item: u32,
     pub end_item: u32,
     pub pagination_url: String,
     pub pagination_include: String,
 }
+
 
 #[handler]
 async fn users_search(
@@ -852,32 +830,7 @@ async fn users_search(
         .await
         .map_err(|e| anyhow::anyhow!("Failed to search users: {}", e))?;
 
-    // Convert service AdminUser to frontend AdminUser
-    let users_list: Vec<AdminUser> = response.users.into_iter().map(|service_user| {
-        let name = if service_user.first_name.is_empty() && service_user.last_name.is_empty() {
-            service_user.handle.clone()
-        } else {
-            format!("{} {}", service_user.first_name, service_user.last_name).trim().to_string()
-        };
-
-        let role = if service_user.is_superuser || service_user.is_staff {
-            "Staff".to_string()
-        } else if service_user.is_page_manager {
-            "Page Manager".to_string()
-        } else {
-            "User".to_string()
-        };
-
-        AdminUser {
-            id: service_user.user_id,
-            name,
-            email: service_user.primary_email,
-            handle: service_user.handle,
-            role,
-            joined_date: service_user.date_joined,
-            verified: service_user.verified,
-        }
-    }).collect();
+    let users_list = response.users;
 
     // Calculate pagination info
     let total_pages = (response.total_count + 24) / 25;  // Round up
@@ -892,6 +845,7 @@ async fn users_search(
         total_users: response.total_count,
         has_previous,
         has_next,
+        per_page: response.limit,
         start_item,
         end_item,
         pagination_url: "/-admin/users/search".to_string(),
@@ -990,6 +944,7 @@ struct NewUserForm {
     title: String,
 }
 
+
 #[derive(Debug, TemplateOnce)]
 #[template(path = "admin/modals/edit_user.stpl.html")]
 struct EditUserForm {
@@ -1002,6 +957,7 @@ struct EditUserForm {
     role: String,
     verified: bool,
     active: bool,
+    emails: Vec<UserEmail>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1010,6 +966,7 @@ struct CreateUserForm {
     last_name: String,
     email: String,
     handle: String,
+    password: String,
     role: String,
     #[serde(default)]
     verified: bool,
@@ -1021,6 +978,7 @@ struct UpdateUserForm {
     last_name: String,
     email: String,
     handle: String,
+    new_password: Option<String>,
     role: String,
     #[serde(default)]
     verified: bool,
@@ -1064,7 +1022,7 @@ async fn users_edit(
                 user_id,
                 first_name: admin_user.first_name,
                 last_name: admin_user.last_name,
-                email: admin_user.primary_email,
+                email: admin_user.primary_email.clone(),
                 handle: admin_user.handle,
                 role: if admin_user.is_superuser {
                     "staff".to_string()
@@ -1075,6 +1033,7 @@ async fn users_edit(
                 },
                 verified: admin_user.verified,
                 active: admin_user.is_active,
+                emails: admin_user.emails,
             };
             
             Ok(edit_user_form.into_response(None).await?)
@@ -1091,6 +1050,7 @@ async fn users_edit(
                 role: "user".to_string(),
                 verified: false,
                 active: true,
+                emails: vec![],
             };
             Ok(edit_user_form.into_response(None).await?)
         }
@@ -1135,6 +1095,68 @@ async fn users_delete(
     }
 }
 
+#[derive(Debug, Deserialize)]
+struct PasswordResetForm {
+    reset_email: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct AddEmailForm {
+    new_email: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateEmailForm {
+    old_email: String,
+    new_email: String,
+}
+
+#[handler]
+async fn users_password_reset(
+    Path(user_id): Path<String>,
+    Form(form): Form<PasswordResetForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    // Parse user ID
+    let parsed_user_id = user_id.parse::<ulid::Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid user ID format"))?;
+
+    let reset_request = AdminPasswordResetRequest {
+        user_id: parsed_user_id,
+        email: form.reset_email,
+    };
+
+    match request::<AdminPasswordResetResponse>("user.admin.password_reset", reset_request).await {
+        Ok(response) => {
+            if response.success {
+                // Success - show success message via out-of-band update
+                let success_message = format!(
+                    r#"<div class="mb-4 p-3 text-sm text-green-700 bg-green-100 rounded-lg border border-green-200" hx-swap-oob="innerHTML:#modal-message-container">
+                        <strong>Success:</strong> Password reset email sent successfully: {}
+                    </div>"#,
+                    response.message
+                );
+                Ok(poem::Response::builder()
+                    .content_type("text/html")
+                    .body(success_message))
+            } else {
+                // Return error message
+                Ok(poem::Response::builder()
+                    .status(poem::http::StatusCode::BAD_REQUEST)
+                    .content_type("text/html")
+                    .body(format!("Failed to send password reset email: {}", response.message)))
+            }
+        }
+        Err(e) => {
+            // Return error response
+            Ok(poem::Response::builder()
+                .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+                .content_type("text/html")
+                .body(format!("Error: {}", e)))
+        }
+    }
+}
+
 #[handler]
 async fn users_create(
     Form(form): Form<CreateUserForm>,
@@ -1152,18 +1174,55 @@ async fn users_create(
         first_name: form.first_name,
         last_name: form.last_name,
         primary_email: form.email,
+        password: form.password,
         role: form.role,
         verified: form.verified,
     };
 
     match request::<AdminUserResponse>("user.admin.user_create", create_request).await {
         Ok(_response) => {
-            // Success - close modal and refresh users table
-            // We could also return a success message or refresh the table
-            Ok(poem::Response::builder()
-                .header("HX-Trigger", "refresh-users")
-                .content_type("text/html")
-                .body(""))
+            // Success - close modal and refresh users table with updated data
+            match request::<AdminUserListResponse>("user.admin.user_list", AdminUserListRequest {
+                page: Some(1),
+                limit: Some(25),
+            }).await {
+                Ok(users_response) => {
+                    let start_item = if users_response.total_count == 0 { 0 } else { (users_response.page - 1) * users_response.limit + 1 };
+                    let end_item = std::cmp::min(users_response.page * users_response.limit, users_response.total_count as u32);
+                    
+                    let users_content = UsersContent {
+                        users: users_response.users,
+                        current_page: users_response.page,
+                        total_users: users_response.total_count,
+                        has_previous: users_response.page > 1,
+                        has_next: u64::from(users_response.page * users_response.limit) < users_response.total_count,
+                        per_page: users_response.limit,
+                        start_item,
+                        end_item,
+                        pagination_url: "/-admin/users".to_string(),
+                        pagination_include: "#user-search-form".to_string(),
+                    };
+                    
+                    let users_html = users_content.render_once()?;
+                    let response_html = format!(
+                        r#"
+                        <div hx-swap-oob="innerHTML:#modal-container"></div>
+                        <div hx-swap-oob="innerHTML:#users-content">{}</div>
+                        "#,
+                        users_html
+                    );
+                    
+                    Ok(poem::Response::builder()
+                        .content_type("text/html")
+                        .body(response_html))
+                }
+                Err(_) => {
+                    // Fallback - just close modal if we can't refresh the list
+                    Ok(poem::Response::builder()
+                        .content_type("text/html")
+                        .body(r#"<div hx-swap-oob="innerHTML:#modal-container"></div>"#))
+                }
+            }
         }
         Err(e) => {
             // Show error in modal
@@ -1196,6 +1255,7 @@ async fn users_update(
         first_name: form.first_name,
         last_name: form.last_name,
         primary_email: form.email,
+        new_password: form.new_password.filter(|p| !p.trim().is_empty()),
         role: form.role,
         verified: form.verified,
         is_active: form.active,
@@ -1205,24 +1265,8 @@ async fn users_update(
         Ok(response) => {
             // Success - close modal and update the specific user row with OOB
             let updated_user = &response.user;
-            let admin_user = AdminUser {
-                id: updated_user.user_id,
-                name: format!("{} {}", updated_user.first_name, updated_user.last_name),
-                email: updated_user.primary_email.clone(),
-                handle: updated_user.handle.clone(),
-                role: if updated_user.is_superuser {
-                    "Staff".to_string()
-                } else if updated_user.is_page_manager {
-                    "Page Manager".to_string()
-                } else {
-                    "User".to_string()
-                },
-                joined_date: updated_user.date_joined.clone(),
-                verified: updated_user.verified,
-            };
-            
             let user_row = UserRow {
-                user: admin_user,
+                user: updated_user.clone(),
                 oob: true,
                 oob_swap: "true".to_string(), // Replace existing row
             };
@@ -1338,6 +1382,193 @@ async fn engine_room_sync_page_managers(
     }
 }
 
+#[handler]
+async fn users_emails_add(
+    Path(user_id): Path<String>,
+    Form(form): Form<AddEmailForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let parsed_user_id = user_id.parse::<ulid::Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid user ID format"))?;
+
+    let email_request = UserEmailAddRequest {
+        user_id: parsed_user_id,
+        email: form.new_email,
+    };
+
+    match request::<UserEmailResponse>("user.admin.email_add", email_request).await {
+        Ok(response) => {
+            if response.success {
+                // Render updated emails list (full refresh needed for add operation)
+                let emails_html = response.emails.into_iter().enumerate()
+                    .map(|(index, email)| {
+                        EmailRow { 
+                            user_id: user_id.clone(), 
+                            email, 
+                            index 
+                        }.render_once().unwrap_or_default()
+                    })
+                    .collect::<Vec<_>>()
+                    .join("");
+                
+                Ok(poem::Response::builder()
+                    .content_type("text/html")
+                    .body(emails_html))
+            } else {
+                Ok(poem::Response::builder()
+                    .status(poem::http::StatusCode::BAD_REQUEST)
+                    .content_type("text/html")
+                    .body(format!("Error: {}", response.message)))
+            }
+        }
+        Err(e) => {
+            Ok(poem::Response::builder()
+                .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+                .content_type("text/html")
+                .body(format!("Error: {}", e)))
+        }
+    }
+}
+
+#[handler]
+async fn users_emails_update(
+    Path((user_id, _email)): Path<(String, String)>,
+    Form(form): Form<UpdateEmailForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let parsed_user_id = user_id.parse::<ulid::Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid user ID format"))?;
+
+    let new_email_clone = form.new_email.clone();
+    let email_request = UserEmailUpdateRequest {
+        user_id: parsed_user_id,
+        old_email: form.old_email,
+        new_email: form.new_email,
+    };
+
+    match request::<UserEmailResponse>("user.admin.email_update", email_request).await {
+        Ok(response) => {
+            if response.success {
+                // Find the updated email and render just that row
+                if let Some((index, updated_email)) = response.emails.into_iter().enumerate()
+                    .find(|(_, email)| email.email == new_email_clone) {
+                    let row_html = EmailRow { 
+                        user_id: user_id.clone(), 
+                        email: updated_email, 
+                        index 
+                    }.render_once().unwrap_or_default();
+                    
+                    Ok(poem::Response::builder()
+                        .content_type("text/html")
+                        .body(row_html))
+                } else {
+                    Ok(poem::Response::builder()
+                        .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+                        .content_type("text/html")
+                        .body("Error: Updated email not found in response".to_string()))
+                }
+            } else {
+                Ok(poem::Response::builder()
+                    .status(poem::http::StatusCode::BAD_REQUEST)
+                    .content_type("text/html")
+                    .body(format!("Error: {}", response.message)))
+            }
+        }
+        Err(e) => {
+            Ok(poem::Response::builder()
+                .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+                .content_type("text/html")
+                .body(format!("Error: {}", e)))
+        }
+    }
+}
+
+#[handler]
+async fn users_emails_delete(
+    Path((user_id, email)): Path<(String, String)>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let parsed_user_id = user_id.parse::<ulid::Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid user ID format"))?;
+
+    let email_request = UserEmailDeleteRequest {
+        user_id: parsed_user_id,
+        email: email.clone(),
+    };
+
+    match request::<UserEmailResponse>("user.admin.email_delete", email_request).await {
+        Ok(response) => {
+            if response.success {
+                // Return empty content to remove the row
+                Ok(poem::Response::builder()
+                    .content_type("text/html")
+                    .body("".to_string()))
+            } else {
+                Ok(poem::Response::builder()
+                    .status(poem::http::StatusCode::BAD_REQUEST)
+                    .content_type("text/html")
+                    .body(format!("Error: {}", response.message)))
+            }
+        }
+        Err(e) => {
+            Ok(poem::Response::builder()
+                .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+                .content_type("text/html")
+                .body(format!("Error: {}", e)))
+        }
+    }
+}
+
+#[handler]
+async fn users_emails_toggle_verified(
+    Path((user_id, email)): Path<(String, String)>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let parsed_user_id = user_id.parse::<ulid::Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid user ID format"))?;
+
+    let email_request = UserEmailToggleVerifiedRequest {
+        user_id: parsed_user_id,
+        email: email.clone(),
+    };
+
+    match request::<UserEmailResponse>("user.admin.email_toggle_verified", email_request).await {
+        Ok(response) => {
+            if response.success {
+                // Find the toggled email and render just that row
+                if let Some((index, updated_email)) = response.emails.into_iter().enumerate()
+                    .find(|(_, e)| e.email == email) {
+                    let row_html = EmailRow { 
+                        user_id: user_id.clone(), 
+                        email: updated_email, 
+                        index 
+                    }.render_once().unwrap_or_default();
+                    
+                    Ok(poem::Response::builder()
+                        .content_type("text/html")
+                        .body(row_html))
+                } else {
+                    Ok(poem::Response::builder()
+                        .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+                        .content_type("text/html")
+                        .body("Error: Toggled email not found in response".to_string()))
+                }
+            } else {
+                Ok(poem::Response::builder()
+                    .status(poem::http::StatusCode::BAD_REQUEST)
+                    .content_type("text/html")
+                    .body(format!("Error: {}", response.message)))
+            }
+        }
+        Err(e) => {
+            Ok(poem::Response::builder()
+                .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+                .content_type("text/html")
+                .body(format!("Error: {}", e)))
+        }
+    }
+}
+
 pub fn routes() -> impl Endpoint {
     Route::new()
         .at("/", get(dashboard))
@@ -1345,6 +1576,10 @@ pub fn routes() -> impl Endpoint {
         .at("/users/search", get(users_search))
         .at("/users/new", get(users_new).post(users_create))
         .at("/users/:id", get(users_edit).put(users_update).delete(users_delete))
+        .at("/users/:id/send-password-reset", post(users_password_reset))
+        .at("/users/:id/emails", post(users_emails_add))
+        .at("/users/:id/emails/:email", put(users_emails_update).delete(users_emails_delete))
+        .at("/users/:id/emails/:email/toggle-verified", post(users_emails_toggle_verified))
         .at("/projects", get(projects))
         .at("/events", get(events))
         .at("/analytics", get(analytics))

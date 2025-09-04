@@ -17,6 +17,7 @@ struct UserWithPassword {
     is_superuser: i64,
     public: i64,
     protected: i64,
+    point: Option<String>,
 }
 
 /// Sign the current session up for a new account
@@ -143,6 +144,7 @@ pub async fn signup(req: &Request) -> Result<Option<BasicInfo>, Error> {
         is_superuser: false,
         public: true,
         protected,
+        needs_point: point.is_none(),
     }))
 }
 
@@ -152,7 +154,8 @@ pub async fn login(req: &Request) -> Result<Option<BasicInfo>, Error> {
     // Look up user by email using query_as
     let user_record = sqlx::query_as!(
         UserWithPassword,
-        r#"select u.user_id, u.handle, u.password, u.is_staff, u.is_superuser, u.public, u.protected
+        r#"select u.user_id, u.handle, u.password, u.is_staff, u.is_superuser, u.public, u.protected,
+           AsText(u.point) as "point: String"
            from users u
            join emails e on u.user_id = e.user_id
            where e.email = ?
@@ -177,6 +180,7 @@ pub async fn login(req: &Request) -> Result<Option<BasicInfo>, Error> {
                 is_superuser: user.is_superuser != 0,
                 public: user.public != 0,
                 protected: user.protected != 0,
+                needs_point: user.point.as_ref().map_or(true, |p| p.trim().is_empty()),
             }))
         } else {
             // Log failed login attempt

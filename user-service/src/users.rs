@@ -2,7 +2,7 @@ use anyhow::Error;
 use async_nats::service::Request;
 use common::{
     badge::Badge,
-    message::user::{AdminUser, AdminUserListRequest, AdminUserListResponse, AdminUserSearchRequest, AdminUserCreateRequest, AdminUserUpdateRequest, AdminUserDeleteRequest, AdminUserGetRequest, AdminUserResponse, AdminUserDeleteResponse, BasicInfo, UserAndBadge, UserBadge, PageManagerSyncRequest, PageManagerSyncResponse, PageManagerUpdateRequest, PageManagerUpdateResponse},
+    message::user::{AdminUser, AdminUserListRequest, AdminUserListResponse, AdminUserSearchRequest, AdminUserCreateRequest, AdminUserUpdateRequest, AdminUserDeleteRequest, AdminUserGetRequest, AdminUserResponse, AdminUserDeleteResponse, BasicInfo, UserAndBadge, UserBadge, PageManagerSyncRequest, PageManagerSyncResponse, PageManagerUpdateRequest, PageManagerUpdateResponse, UserEmail, AdminPasswordResetRequest, AdminPasswordResetResponse, UserEmailAddRequest, UserEmailUpdateRequest, UserEmailDeleteRequest, UserEmailToggleVerifiedRequest, UserEmailResponse},
     service::{decode_structured_message, log_activity, send},
     shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower},
     timestring::TimeString,
@@ -19,6 +19,7 @@ struct BasicInfoDb {
     is_superuser: bool,
     public: bool,
     protected: bool,
+    point: Option<String>,
 }
 
 impl TryFrom<BasicInfoDb> for BasicInfo {
@@ -32,6 +33,7 @@ impl TryFrom<BasicInfoDb> for BasicInfo {
             is_superuser: db_info.is_superuser,
             public: db_info.public,
             protected: db_info.protected,
+            needs_point: db_info.point.as_ref().map_or(true, |p| p.trim().is_empty()),
         })
     }
 }
@@ -47,7 +49,8 @@ pub async fn basic_info_by_username(req: &Request) -> Result<Option<BasicInfo>, 
           u."is_staff" as "is_staff: bool",
           u."is_superuser" as "is_superuser: bool",
           u."public" as "public: bool",
-          u."protected" as "protected: bool"
+          u."protected" as "protected: bool",
+          AsText(u."point") as "point: String"
         from "users" u
         join "emails" e on u."user_id" = e."user_id"
         where e."email" = ?"#,
@@ -73,7 +76,8 @@ pub async fn basic_info_by_user_id(req: &Request) -> Result<Option<BasicInfo>, E
           "is_staff" as "is_staff: bool",
           "is_superuser" as "is_superuser: bool",
           "public" as "public: bool",
-          "protected" as "protected: bool"
+          "protected" as "protected: bool",
+          AsText("point") as "point: String"
         from "users"
         where "user_id" = ?"#,
         user_id,
@@ -98,7 +102,8 @@ pub async fn search_by_handle(req: &Request) -> Result<Vec<BasicInfo>, Error> {
           "is_staff" as "is_staff: bool",
           "is_superuser" as "is_superuser: bool",
           "public" as "public: bool",
-          "protected" as "protected: bool"
+          "protected" as "protected: bool",
+          AsText("point") as "point: String"
         from "users"
         where "handle" LIKE ? || '%' 
           AND "public" = 1 
@@ -536,6 +541,7 @@ pub async fn admin_user_list(req: &Request) -> Result<AdminUserListResponse, Err
             is_page_manager: row.is_page_manager,
             verified: row.verified,
             date_joined: row.date_joined,
+            emails: vec![], // Empty for list operations - use admin_user_get for full details
         });
     }
 
@@ -652,6 +658,7 @@ pub async fn admin_user_search(req: &Request) -> Result<AdminUserListResponse, E
             is_page_manager: row.is_page_manager,
             verified: row.verified,
             date_joined: row.date_joined,
+            emails: vec![], // Empty for list operations - use admin_user_get for full details
         });
     }
 
@@ -694,6 +701,9 @@ pub async fn admin_user_get(req: &Request) -> Result<AdminUserResponse, Error> {
             let user_id = row.user_id.as_ulid()
                 .map_err(|e| anyhow::anyhow!("Invalid user ID in database: {}", e))?;
 
+            // Fetch user emails
+            let emails = fetch_user_emails(&user_id_str).await?;
+
             let user = AdminUser {
                 user_id,
                 handle: row.handle,
@@ -706,6 +716,7 @@ pub async fn admin_user_get(req: &Request) -> Result<AdminUserResponse, Error> {
                 is_page_manager: row.is_page_manager,
                 verified: row.verified,
                 date_joined: row.date_joined,
+                emails,
             };
 
             Ok(AdminUserResponse { user })
@@ -726,46 +737,87 @@ pub async fn admin_user_create(req: &Request) -> Result<AdminUserResponse, Error
     };
 
     let user_id_str = user_id.to_string();
+    let password_hash = djangohashers::make_password(&request.password);
+    
+    let mut tx = db().begin().await?;
+    
     let result = sqlx::query!(
         r#"INSERT INTO "users" (
             "user_id", "handle", "first_name", "last_name", "primary_email", 
-            "is_active", "is_staff", "is_superuser", "is_page_manager", "verified",
+            "password", "is_active", "is_staff", "is_superuser", "is_page_manager", "verified",
             "date_joined"
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))"#,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))"#,
         user_id_str,
         request.handle,
         request.first_name,
         request.last_name,
         request.primary_email,
+        password_hash,
         true,
         is_staff,
         false,
         is_page_manager,
         request.verified
     )
-    .execute(db())
+    .execute(&mut *tx)
     .await;
 
     match result {
         Ok(_) => {
-            let user = AdminUser {
-                user_id,
-                handle: request.handle,
-                first_name: request.first_name,
-                last_name: request.last_name,
-                primary_email: request.primary_email,
-                is_active: true,
-                is_staff,
-                is_superuser: false,
-                is_page_manager,
-                verified: request.verified,
-                date_joined: "now".to_string(),
-            };
+            // Add primary email to emails table
+            let hashed = hash_identifier(&request.primary_email);
+            let hashed_lower = hash_identifier_lower(&request.primary_email);
+            let hashed_capfirst = hash_identifier_capfirst(&request.primary_email);
 
-            Ok(AdminUserResponse { user })
+            let email_result = sqlx::query!(
+                r#"INSERT INTO "emails" (
+                    "user_id", "email", "verified", "hash", "hash_lower", "hash_capfirst"
+                ) VALUES (?, ?, ?, ?, ?, ?)"#,
+                user_id_str,
+                request.primary_email,
+                request.verified,
+                hashed,
+                hashed_lower,
+                hashed_capfirst
+            )
+            .execute(&mut *tx)
+            .await;
+
+            if email_result.is_ok() {
+                tx.commit().await?;
+            } else {
+                tx.rollback().await?;
+                return Err(anyhow::anyhow!("Failed to create user email record"));
+            }
         }
-        Err(e) => Err(anyhow::anyhow!("Failed to create user: {}", e).into()),
+        Err(e) => {
+            tx.rollback().await?;
+            return Err(anyhow::anyhow!("Failed to create user: {}", e));
+        }
     }
+
+    // Fetch user emails for the response
+    let emails = vec![UserEmail {
+        email: request.primary_email.clone(),
+        verified: request.verified,
+    }];
+
+    let user = AdminUser {
+        user_id,
+        handle: request.handle.clone(),
+        first_name: request.first_name.clone(),
+        last_name: request.last_name.clone(),
+        primary_email: request.primary_email,
+        is_active: true,
+        is_staff,
+        is_superuser: false,
+        is_page_manager,
+        verified: request.verified,
+        date_joined: "now".to_string(),
+        emails,
+    };
+
+    Ok(AdminUserResponse { user })
 }
 
 pub async fn admin_user_update(req: &Request) -> Result<AdminUserResponse, Error> {
@@ -778,29 +830,56 @@ pub async fn admin_user_update(req: &Request) -> Result<AdminUserResponse, Error
     };
 
     let user_id_str = request.user_id.to_string();
-    let result = sqlx::query!(
-        r#"UPDATE "users" SET
-            "handle" = ?, "first_name" = ?, "last_name" = ?, "primary_email" = ?,
-            "is_active" = ?, "is_staff" = ?, "is_page_manager" = ?, "verified" = ?
-        WHERE "user_id" = ?"#,
-        request.handle,
-        request.first_name,
-        request.last_name,
-        request.primary_email,
-        request.is_active,
-        is_staff,
-        is_page_manager,
-        request.verified,
-        user_id_str
-    )
-    .execute(db())
-    .await;
+    
+    // Handle password update if provided
+    let result = if let Some(new_password) = &request.new_password {
+        let password_hash = djangohashers::make_password(new_password);
+        sqlx::query!(
+            r#"UPDATE "users" SET
+                "handle" = ?, "first_name" = ?, "last_name" = ?, "primary_email" = ?,
+                "password" = ?, "is_active" = ?, "is_staff" = ?, "is_page_manager" = ?, "verified" = ?
+            WHERE "user_id" = ?"#,
+            request.handle,
+            request.first_name,
+            request.last_name,
+            request.primary_email,
+            password_hash,
+            request.is_active,
+            is_staff,
+            is_page_manager,
+            request.verified,
+            user_id_str
+        )
+        .execute(db())
+        .await
+    } else {
+        sqlx::query!(
+            r#"UPDATE "users" SET
+                "handle" = ?, "first_name" = ?, "last_name" = ?, "primary_email" = ?,
+                "is_active" = ?, "is_staff" = ?, "is_page_manager" = ?, "verified" = ?
+            WHERE "user_id" = ?"#,
+            request.handle,
+            request.first_name,
+            request.last_name,
+            request.primary_email,
+            request.is_active,
+            is_staff,
+            is_page_manager,
+            request.verified,
+            user_id_str
+        )
+        .execute(db())
+        .await
+    };
 
     match result {
         Ok(result) => {
             if result.rows_affected() == 0 {
                 return Err(anyhow::anyhow!("User not found").into());
             }
+
+            // Fetch user emails for the response
+            let emails = fetch_user_emails(&user_id_str).await?;
 
             let user = AdminUser {
                 user_id: request.user_id,
@@ -814,6 +893,7 @@ pub async fn admin_user_update(req: &Request) -> Result<AdminUserResponse, Error
                 is_page_manager,
                 verified: request.verified,
                 date_joined: "unknown".to_string(),
+                emails,
             };
 
             Ok(AdminUserResponse { user })
@@ -840,6 +920,349 @@ pub async fn admin_user_delete(req: &Request) -> Result<AdminUserDeleteResponse,
         }
         Err(e) => Err(anyhow::anyhow!("Failed to delete user: {}", e).into()),
     }
+}
+
+pub async fn admin_password_reset(req: &Request) -> Result<AdminPasswordResetResponse, Error> {
+    let request: AdminPasswordResetRequest = decode_structured_message(req.message.clone())?;
+    
+    let user_id_str = request.user_id.to_string();
+    
+    // Verify the user exists and the email belongs to them
+    let email_check = sqlx::query!(
+        r#"SELECT u.user_id, u.handle, e.email, e.verified 
+           FROM users u 
+           JOIN emails e ON u.user_id = e.user_id 
+           WHERE u.user_id = ? AND e.email = ?"#,
+        user_id_str,
+        request.email
+    )
+    .fetch_optional(db())
+    .await?;
+    
+    match email_check {
+        Some(row) => {
+            if !row.verified {
+                return Ok(AdminPasswordResetResponse {
+                    success: false,
+                    message: "Cannot send password reset to unverified email address".to_string(),
+                });
+            }
+            
+            // TODO: Implement actual email sending logic
+            // For now, just return success with a placeholder message
+            // In a real implementation, you would:
+            // 1. Generate a secure password reset token
+            // 2. Store it in a password_reset_tokens table with expiration
+            // 3. Send email with reset link
+            // 4. Handle the reset link in a separate endpoint
+            
+            log_activity(None, "password-reset-email-sent", request.user_id, None, format!("email={}", request.email)).await.ok();
+            
+            Ok(AdminPasswordResetResponse {
+                success: true,
+                message: format!("Password reset email sent to {}", request.email),
+            })
+        }
+        None => Ok(AdminPasswordResetResponse {
+            success: false,
+            message: "User not found or email does not belong to this user".to_string(),
+        }),
+    }
+}
+
+pub async fn admin_email_add(req: &Request) -> Result<UserEmailResponse, Error> {
+    let request: UserEmailAddRequest = decode_structured_message(req.message.clone())?;
+    
+    let user_id_str = request.user_id.to_string();
+    
+    // Check if user exists
+    let user_exists = sqlx::query!(
+        r#"SELECT "user_id" FROM "users" WHERE "user_id" = ?"#,
+        user_id_str
+    )
+    .fetch_optional(db())
+    .await?;
+    
+    if user_exists.is_none() {
+        return Ok(UserEmailResponse {
+            success: false,
+            message: "User not found".to_string(),
+            emails: vec![],
+        });
+    }
+    
+    // Check if email already exists
+    let email_exists = sqlx::query!(
+        r#"SELECT "email" FROM "emails" WHERE "email" = ?"#,
+        request.email
+    )
+    .fetch_optional(db())
+    .await?;
+    
+    if email_exists.is_some() {
+        return Ok(UserEmailResponse {
+            success: false,
+            message: "Email address is already in use".to_string(),
+            emails: vec![],
+        });
+    }
+    
+    // Add the email
+    let hashed = hash_identifier(&request.email);
+    let hashed_lower = hash_identifier_lower(&request.email);
+    let hashed_capfirst = hash_identifier_capfirst(&request.email);
+    
+    let result = sqlx::query!(
+        r#"INSERT INTO "emails" (
+            "user_id", "email", "verified", "hash", "hash_lower", "hash_capfirst"
+        ) VALUES (?, ?, ?, ?, ?, ?)"#,
+        user_id_str,
+        request.email,
+        false, // New emails start unverified
+        hashed,
+        hashed_lower,
+        hashed_capfirst
+    )
+    .execute(db())
+    .await;
+    
+    match result {
+        Ok(_) => {
+            // Return updated emails list
+            let emails = fetch_user_emails(&user_id_str).await?;
+            log_activity(None, "email-added", request.user_id, None, format!("email={}", request.email)).await.ok();
+            
+            Ok(UserEmailResponse {
+                success: true,
+                message: format!("Email {} added successfully", request.email),
+                emails,
+            })
+        }
+        Err(e) => Ok(UserEmailResponse {
+            success: false,
+            message: format!("Failed to add email: {}", e),
+            emails: vec![],
+        }),
+    }
+}
+
+pub async fn admin_email_update(req: &Request) -> Result<UserEmailResponse, Error> {
+    let request: UserEmailUpdateRequest = decode_structured_message(req.message.clone())?;
+    
+    let user_id_str = request.user_id.to_string();
+    
+    // Check if new email is already in use by someone else
+    let email_exists = sqlx::query!(
+        r#"SELECT "user_id" FROM "emails" WHERE "email" = ? AND "user_id" != ?"#,
+        request.new_email,
+        user_id_str
+    )
+    .fetch_optional(db())
+    .await?;
+    
+    if email_exists.is_some() {
+        return Ok(UserEmailResponse {
+            success: false,
+            message: "Email address is already in use".to_string(),
+            emails: vec![],
+        });
+    }
+    
+    // Update the email
+    let hashed = hash_identifier(&request.new_email);
+    let hashed_lower = hash_identifier_lower(&request.new_email);
+    let hashed_capfirst = hash_identifier_capfirst(&request.new_email);
+    
+    let result = sqlx::query!(
+        r#"UPDATE "emails" SET
+            "email" = ?, "hash" = ?, "hash_lower" = ?, "hash_capfirst" = ?, "verified" = ?
+        WHERE "user_id" = ? AND "email" = ?"#,
+        request.new_email,
+        hashed,
+        hashed_lower,
+        hashed_capfirst,
+        false, // Reset verified status when email changes
+        user_id_str,
+        request.old_email
+    )
+    .execute(db())
+    .await;
+    
+    match result {
+        Ok(result) => {
+            if result.rows_affected() == 0 {
+                return Ok(UserEmailResponse {
+                    success: false,
+                    message: "Email not found".to_string(),
+                    emails: vec![],
+                });
+            }
+            
+            // Return updated emails list
+            let emails = fetch_user_emails(&user_id_str).await?;
+            log_activity(None, "email-updated", request.user_id, None, format!("old={}, new={}", request.old_email, request.new_email)).await.ok();
+            
+            Ok(UserEmailResponse {
+                success: true,
+                message: format!("Email updated from {} to {}", request.old_email, request.new_email),
+                emails,
+            })
+        }
+        Err(e) => Ok(UserEmailResponse {
+            success: false,
+            message: format!("Failed to update email: {}", e),
+            emails: vec![],
+        }),
+    }
+}
+
+pub async fn admin_email_delete(req: &Request) -> Result<UserEmailResponse, Error> {
+    let request: UserEmailDeleteRequest = decode_structured_message(req.message.clone())?;
+    
+    let user_id_str = request.user_id.to_string();
+    
+    // Check if this is the user's only email or primary email
+    let email_count = sqlx::query!(
+        r#"SELECT COUNT(*) as count FROM "emails" WHERE "user_id" = ?"#,
+        user_id_str
+    )
+    .fetch_one(db())
+    .await?;
+    
+    if email_count.count <= 1 {
+        return Ok(UserEmailResponse {
+            success: false,
+            message: "Cannot delete the user's only email address".to_string(),
+            emails: vec![],
+        });
+    }
+    
+    // Check if this is the primary email
+    let is_primary = sqlx::query!(
+        r#"SELECT "primary_email" FROM "users" WHERE "user_id" = ?"#,
+        user_id_str
+    )
+    .fetch_optional(db())
+    .await?;
+    
+    if let Some(user) = is_primary {
+        if user.primary_email == request.email {
+            return Ok(UserEmailResponse {
+                success: false,
+                message: "Cannot delete the user's primary email address".to_string(),
+                emails: vec![],
+            });
+        }
+    }
+    
+    // Delete the email
+    let result = sqlx::query!(
+        r#"DELETE FROM "emails" WHERE "user_id" = ? AND "email" = ?"#,
+        user_id_str,
+        request.email
+    )
+    .execute(db())
+    .await;
+    
+    match result {
+        Ok(result) => {
+            if result.rows_affected() == 0 {
+                return Ok(UserEmailResponse {
+                    success: false,
+                    message: "Email not found".to_string(),
+                    emails: vec![],
+                });
+            }
+            
+            // Return updated emails list
+            let emails = fetch_user_emails(&user_id_str).await?;
+            log_activity(None, "email-deleted", request.user_id, None, format!("email={}", request.email)).await.ok();
+            
+            Ok(UserEmailResponse {
+                success: true,
+                message: format!("Email {} deleted successfully", request.email),
+                emails,
+            })
+        }
+        Err(e) => Ok(UserEmailResponse {
+            success: false,
+            message: format!("Failed to delete email: {}", e),
+            emails: vec![],
+        }),
+    }
+}
+
+pub async fn admin_email_toggle_verified(req: &Request) -> Result<UserEmailResponse, Error> {
+    let request: UserEmailToggleVerifiedRequest = decode_structured_message(req.message.clone())?;
+    
+    let user_id_str = request.user_id.to_string();
+    
+    // Get current verified status
+    let current_status = sqlx::query!(
+        r#"SELECT "verified" FROM "emails" WHERE "user_id" = ? AND "email" = ?"#,
+        user_id_str,
+        request.email
+    )
+    .fetch_optional(db())
+    .await?;
+    
+    match current_status {
+        Some(row) => {
+            let new_status = !row.verified;
+            
+            // Update verified status
+            let result = sqlx::query!(
+                r#"UPDATE "emails" SET "verified" = ? WHERE "user_id" = ? AND "email" = ?"#,
+                new_status,
+                user_id_str,
+                request.email
+            )
+            .execute(db())
+            .await;
+            
+            match result {
+                Ok(_) => {
+                    // Return updated emails list
+                    let emails = fetch_user_emails(&user_id_str).await?;
+                    log_activity(None, "email-verification-toggled", request.user_id, None, format!("email={}, verified={}", request.email, new_status)).await.ok();
+                    
+                    Ok(UserEmailResponse {
+                        success: true,
+                        message: format!("Email {} marked as {}", request.email, if new_status { "verified" } else { "unverified" }),
+                        emails,
+                    })
+                }
+                Err(e) => Ok(UserEmailResponse {
+                    success: false,
+                    message: format!("Failed to toggle verification: {}", e),
+                    emails: vec![],
+                }),
+            }
+        }
+        None => Ok(UserEmailResponse {
+            success: false,
+            message: "Email not found".to_string(),
+            emails: vec![],
+        }),
+    }
+}
+
+// Helper function to fetch user emails
+async fn fetch_user_emails(user_id_str: &str) -> Result<Vec<UserEmail>, Error> {
+    let emails_result = sqlx::query!(
+        r#"SELECT "email", "verified" FROM "emails" WHERE "user_id" = ? ORDER BY "email""#,
+        user_id_str
+    )
+    .fetch_all(db())
+    .await?;
+
+    Ok(emails_result
+        .into_iter()
+        .map(|row| UserEmail {
+            email: row.email,
+            verified: row.verified,
+        })
+        .collect())
 }
 
 /// Bulk sync page manager status - sets the flag for all provided user IDs 

@@ -1,15 +1,15 @@
-<tr id="user-<%= self.user.id |disp %>" class="hover:bg-gray-50"<% if self.oob { %> hx-swap-oob="<%= self.oob_swap %>"<% } %>>
+<tr id="user-<%= self.user.user_id |disp %>" class="hover:bg-gray-50"<% if self.oob { %> hx-swap-oob="<%= self.oob_swap %>"<% } %>>
     <td class="px-6 py-4 whitespace-nowrap">
         <div class="flex items-center">
             <div class="ml-4">
-                <div class="text-sm font-medium text-gray-900"><%= self.user.name %></div>
-                <div class="text-sm text-gray-500"><%= self.user.email %></div>
+                <div class="text-sm font-medium text-gray-900"><%= self.user.display_name() %></div>
+                <div class="text-sm text-gray-500"><%= self.user.primary_email %></div>
                 <div class="text-xs text-gray-400">@<%= self.user.handle %></div>
             </div>
         </div>
     </td>
-    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><%= self.user.role %></td>
-    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><%= self.user.joined_date %></td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><%= self.user.display_role() %></td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><%= self.user.date_joined %></td>
     <td class="px-6 py-4 whitespace-nowrap">
         <% let verification_class = if self.user.verified {
             "bg-green-100 text-green-800"
@@ -27,7 +27,7 @@
     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
         <div class="flex space-x-2">
             <button
-                hx-get="/-admin/users/<%= self.user.id |disp %>"
+                hx-get="/-admin/users/<%= self.user.user_id |disp %>"
                 hx-target="#modal-container"
                 hx-swap="innerHTML"
                 class="text-indigo-600 hover:text-indigo-900 transition-colors duration-200"
@@ -35,7 +35,7 @@
                 Edit
             </button>
             <button
-                hx-delete="/-admin/users/<%= self.user.id |disp %>"
+                hx-delete="/-admin/users/<%= self.user.user_id |disp %>"
                 hx-confirm="Are you sure you want to delete this user?"
                 hx-target="closest tr"
                 hx-swap="outerHTML swap:1s"
