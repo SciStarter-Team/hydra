@@ -58,7 +58,7 @@ pub async fn login_signup_page(
         header: Header::default().prepare(user_info.clone()).await?,
         footer: Footer::default().prepare(user_info).await?,
     }
-    .render(None)
+    .into_response(None)
     .await
 }
 
@@ -121,6 +121,10 @@ pub async fn signup_action(
             session.remove("signup_protected");
             session_tags::clear(session);
 
+            log_activity(None, "user_signup", basic_info.user_id, None, next.clone())
+                .await
+                .ok();
+
             // Redirect to intended page or home
             if let Some(next) = next {
                 session.remove("auth_next");
@@ -175,6 +179,10 @@ pub async fn login_action(session: &Session, Form(form): Form<LoginForm>) -> Res
             // Store user info in session
             session.set("basic_info", &basic_info);
 
+            log_activity(None, "user_login", basic_info.user_id, None, next.clone())
+                .await
+                .ok();
+
             // Redirect to intended page or home
             if let Some(next) = next {
                 session.remove("auth_next");
@@ -185,11 +193,19 @@ pub async fn login_action(session: &Session, Form(form): Form<LoginForm>) -> Res
         }
         Ok(None) => {
             // Login failed - redirect back with error
-            Redirect::see_other("/login?password=true").into_response()
+            if let Some(next) = next {
+                Redirect::see_other(format!("/login?password=true&next={next}")).into_response()
+            } else {
+                Redirect::see_other("/login?password=true").into_response()
+            }
         }
         Err(_) => {
             // Service error
-            Redirect::see_other("/login?system=true").into_response()
+            if let Some(next) = next {
+                Redirect::see_other(format!("/login?system=true&next={next}")).into_response()
+            } else {
+                Redirect::see_other("/login?system=true").into_response()
+            }
         }
     }
 }

@@ -289,10 +289,6 @@ async fn users_synchronize() {
                 bookmark = user.updated.clone();
             }
 
-            // These bindings to user_* are because SQLx macros don't
-            // like having complex expressions for parameter values.
-            let user_username = user.username.clone();
-
             let user_primary_email = match user.primary_email {
                 1 => user.email.clone(),
                 2 => user.additional_email.clone(),
@@ -407,13 +403,13 @@ async fn users_synchronize() {
                      "legacy_v3_profile_id",
                      "date_joined",
                      "updated",
-                     "username",
                      "password",
                      "handle",
                      "primary_email",
                      "verified",
                      "is_superuser",
                      "is_staff",
+                     "is_page_manager",
                      "is_test",
                      "is_active",
                      "public",
@@ -550,13 +546,13 @@ async fn users_synchronize() {
                 user.profile_id,
                 user_date_joined,
                 user.updated,
-                user_username,
                 user.password,
                 user.handle,
                 user_primary_email,
                 user.verified,
                 user_is_superuser,
                 user_is_staff,
+                0, // is_page_manager defaults to false for sync
                 user_is_test,
                 user_is_active,
                 user_is_public,
@@ -990,6 +986,20 @@ async fn main() {
     let cache = service.group("user.cache");
     toplevel.spawn(handler!(cache, "user_tags", users::user_tags));
     toplevel.spawn(handler!(cache, "user_emails", users::user_emails));
+
+    // Admin endpoints
+    let admin = service.group("user.admin");
+    toplevel.spawn(handler!(admin, "user_list", users::admin_user_list));
+    toplevel.spawn(handler!(admin, "user_search", users::admin_user_search));
+    toplevel.spawn(handler!(admin, "user_get", users::admin_user_get));
+    toplevel.spawn(handler!(admin, "user_create", users::admin_user_create));
+    toplevel.spawn(handler!(admin, "user_update", users::admin_user_update));
+    toplevel.spawn(handler!(admin, "user_delete", users::admin_user_delete));
+
+    // Page manager endpoints
+    let page_manager = service.group("user.page_manager");
+    toplevel.spawn(handler!(page_manager, "sync", users::page_manager_sync));
+    toplevel.spawn(handler!(page_manager, "update", users::page_manager_update));
 
     let health = service.group("user.health");
     toplevel.spawn(handler!(health, "check", health::health_check));

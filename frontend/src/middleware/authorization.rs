@@ -33,7 +33,7 @@ impl From<SessionSubject> for String {
 }
 
 /// Extractor for the current authenticated user
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Authenticated(pub Option<Arc<BasicInfo>>);
 
 impl Default for Authenticated {

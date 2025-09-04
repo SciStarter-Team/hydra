@@ -1,0 +1,42 @@
+<!-- Operations Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <% for operation in &self.operations { %>
+    <div class="bg-white overflow-hidden shadow rounded-lg">
+        <div class="px-4 py-5 sm:p-6">
+            <div class="flex items-start">
+                <div class="flex-shrink-0">
+                    <div class="flex items-center justify-center h-12 w-12 rounded-md bg-<%= operation.color %>-500 text-white">
+                        <%- operation.icon %>
+                    </div>
+                </div>
+                <div class="ml-4 flex-1">
+                    <h3 class="text-lg font-medium text-gray-900"><%= operation.title %></h3>
+                    <p class="mt-2 text-sm text-gray-600">
+                        <%= operation.description %>
+                    </p>
+                    <div class="mt-4">
+                        <button
+                            hx-post="<%= operation.endpoint %>"
+                            hx-target="#<%= operation.id %>-result"
+                            hx-indicator="#<%= operation.id %>-spinner"
+                            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-<%= operation.color %>-600 hover:bg-<%= operation.color %>-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-<%= operation.color %>-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <span id="<%= operation.id %>-spinner" class="htmx-indicator">
+                                <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                            </span>
+                            <%= operation.button_text %>
+                        </button>
+                    </div>
+                    <div id="<%= operation.id %>-result" class="mt-3"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <% } %>
+</div>
+
+<!-- Status Messages -->
+<div id="status-messages" class="mt-8"></div>

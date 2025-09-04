@@ -21,7 +21,7 @@ pub fn routes() -> impl Endpoint {
 pub async fn background_processing(
     Authenticated(basic_info): Authenticated,
 ) -> poem::Result<poem::Response> {
-    Ok(BackgroundProcessing.render(basic_info).await?)
+    Ok(BackgroundProcessing.into_response(basic_info).await?)
 }
 
 #[derive(Debug)]

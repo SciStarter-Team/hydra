@@ -2,8 +2,8 @@ use anyhow::Error;
 use async_nats::service::Request;
 use common::{
     badge::Badge,
-    message::user::{BasicInfo, UserAndBadge, UserBadge},
-    service::{log_activity, send},
+    message::user::{AdminUser, AdminUserListRequest, AdminUserListResponse, AdminUserSearchRequest, AdminUserCreateRequest, AdminUserUpdateRequest, AdminUserDeleteRequest, AdminUserGetRequest, AdminUserResponse, AdminUserDeleteResponse, BasicInfo, UserAndBadge, UserBadge, PageManagerSyncRequest, PageManagerSyncResponse, PageManagerUpdateRequest, PageManagerUpdateResponse},
+    service::{decode_structured_message, log_activity, send},
     shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower},
     timestring::TimeString,
     transaction::Immediate,
@@ -37,20 +37,21 @@ impl TryFrom<BasicInfoDb> for BasicInfo {
 }
 
 pub async fn basic_info_by_username(req: &Request) -> Result<Option<BasicInfo>, Error> {
-    let username: String = flexbuffers::from_slice(&req.message.payload)?;
+    let email: String = flexbuffers::from_slice(&req.message.payload)?;
 
     let result = sqlx::query_as!(
         BasicInfoDb,
         r#"select
-          "user_id",
-          "handle",
-          "is_staff" as "is_staff: bool",
-          "is_superuser" as "is_superuser: bool",
-          "public" as "public: bool",
-          "protected" as "protected: bool"
-        from "users"
-        where "username" = ?"#,
-        username,
+          u."user_id",
+          u."handle",
+          u."is_staff" as "is_staff: bool",
+          u."is_superuser" as "is_superuser: bool",
+          u."public" as "public: bool",
+          u."protected" as "protected: bool"
+        from "users" u
+        join "emails" e on u."user_id" = e."user_id"
+        where e."email" = ?"#,
+        email,
     )
     .fetch_optional(db())
     .await?;
@@ -480,4 +481,417 @@ pub async fn has_user_badge(req: &Request) -> Result<bool, Error> {
     .await?;
 
     Ok(result.is_some())
+}
+
+pub async fn admin_user_list(req: &Request) -> Result<AdminUserListResponse, Error> {
+    let request: AdminUserListRequest = decode_structured_message(req.message.clone())?;
+    
+    let page = request.page.unwrap_or(1);
+    let limit = request.limit.unwrap_or(25);
+    let offset = (page - 1) * limit;
+
+    let users_result = sqlx::query!(
+        r#"
+        SELECT 
+            "user_id",
+            "handle",
+            "first_name",
+            "last_name", 
+            "primary_email",
+            "is_active" as "is_active: bool",
+            "is_staff" as "is_staff: bool",
+            "is_superuser" as "is_superuser: bool",
+            "is_page_manager" as "is_page_manager: bool",
+            "verified" as "verified: bool",
+            "date_joined"
+        FROM "users"
+        ORDER BY "date_joined" DESC
+        LIMIT ? OFFSET ?
+        "#,
+        limit,
+        offset
+    )
+    .fetch_all(db())
+    .await?;
+
+    let total_count_result = sqlx::query!("SELECT COUNT(*) as count FROM users")
+        .fetch_one(db())
+        .await?;
+    let total_count = total_count_result.count as u64;
+
+    let mut users = Vec::new();
+    for row in users_result {
+        let user_id = row.user_id.as_ulid()
+            .map_err(|e| anyhow::anyhow!("Invalid user ID in database: {}", e))?;
+
+        users.push(AdminUser {
+            user_id,
+            handle: row.handle,
+            first_name: row.first_name,
+            last_name: row.last_name,
+            primary_email: row.primary_email,
+            is_active: row.is_active,
+            is_staff: row.is_staff,
+            is_superuser: row.is_superuser,
+            is_page_manager: row.is_page_manager,
+            verified: row.verified,
+            date_joined: row.date_joined,
+        });
+    }
+
+    Ok(AdminUserListResponse {
+        users,
+        total_count,
+        page,
+        limit,
+    })
+}
+
+pub async fn admin_user_search(req: &Request) -> Result<AdminUserListResponse, Error> {
+    let request: AdminUserSearchRequest = decode_structured_message(req.message.clone())?;
+    
+    let page = request.page.unwrap_or(1);
+    let limit = request.limit.unwrap_or(25);
+    let offset = (page - 1) * limit;
+
+    let search_pattern = request.search.as_deref().unwrap_or("");
+    let search_like = format!("%{}%", search_pattern);
+    
+    let (role_staff_filter, role_page_manager_filter) = match request.role.as_deref() {
+        Some("staff") => (Some(true), None),
+        Some("page_manager") => (None, Some(true)),
+        Some("user") => (Some(false), Some(false)),
+        _ => (None, None),
+    };
+    
+    let email_verified_filter = match request.email_status.as_deref() {
+        Some("verified") => Some(true),
+        Some("unverified") => Some(false),
+        _ => None,
+    };
+
+    let users_result = sqlx::query!(
+        r#"
+        SELECT 
+            "user_id",
+            "handle",
+            "first_name",
+            "last_name", 
+            "primary_email",
+            "is_active" as "is_active: bool",
+            "is_staff" as "is_staff: bool",
+            "is_superuser" as "is_superuser: bool",
+            "is_page_manager" as "is_page_manager: bool",
+            "verified" as "verified: bool",
+            "date_joined"
+        FROM "users"
+        WHERE 
+            (? = '' OR "first_name" LIKE ? OR "last_name" LIKE ? OR "handle" LIKE ? OR "primary_email" LIKE ?)
+            AND (? IS NULL OR "is_staff" = ?)
+            AND (? IS NULL OR "is_page_manager" = ?)
+            AND (? IS NULL OR "verified" = ?)
+        ORDER BY "date_joined" DESC
+        LIMIT ? OFFSET ?
+        "#,
+        search_pattern,
+        search_like,
+        search_like, 
+        search_like,
+        search_like,
+        role_staff_filter,
+        role_staff_filter,
+        role_page_manager_filter,
+        role_page_manager_filter,
+        email_verified_filter,
+        email_verified_filter,
+        limit,
+        offset
+    )
+    .fetch_all(db())
+    .await?;
+
+    let total_count_result = sqlx::query!(
+        r#"
+        SELECT COUNT(*) as count FROM "users"
+        WHERE 
+            (? = '' OR "first_name" LIKE ? OR "last_name" LIKE ? OR "handle" LIKE ? OR "primary_email" LIKE ?)
+            AND (? IS NULL OR "is_staff" = ?)
+            AND (? IS NULL OR "is_page_manager" = ?)
+            AND (? IS NULL OR "verified" = ?)
+        "#,
+        search_pattern,
+        search_like,
+        search_like, 
+        search_like,
+        search_like,
+        role_staff_filter,
+        role_staff_filter,
+        role_page_manager_filter,
+        role_page_manager_filter,
+        email_verified_filter,
+        email_verified_filter
+    )
+    .fetch_one(db())
+    .await?;
+    let total_count = total_count_result.count as u64;
+
+    let mut users = Vec::new();
+    for row in users_result {
+        let user_id = row.user_id.as_ulid()
+            .map_err(|e| anyhow::anyhow!("Invalid user ID in database: {}", e))?;
+
+        users.push(AdminUser {
+            user_id,
+            handle: row.handle,
+            first_name: row.first_name,
+            last_name: row.last_name,
+            primary_email: row.primary_email,
+            is_active: row.is_active,
+            is_staff: row.is_staff,
+            is_superuser: row.is_superuser,
+            is_page_manager: row.is_page_manager,
+            verified: row.verified,
+            date_joined: row.date_joined,
+        });
+    }
+
+    Ok(AdminUserListResponse {
+        users,
+        total_count,
+        page,
+        limit,
+    })
+}
+
+pub async fn admin_user_get(req: &Request) -> Result<AdminUserResponse, Error> {
+    let request: AdminUserGetRequest = decode_structured_message(req.message.clone())?;
+
+    let user_id_str = request.user_id.to_string();
+    let user_result = sqlx::query!(
+        r#"
+        SELECT 
+            "user_id",
+            "handle",
+            "first_name",
+            "last_name", 
+            "primary_email",
+            "is_active" as "is_active: bool",
+            "is_staff" as "is_staff: bool",
+            "is_superuser" as "is_superuser: bool",
+            "is_page_manager" as "is_page_manager: bool",
+            "verified" as "verified: bool",
+            "date_joined"
+        FROM "users"
+        WHERE "user_id" = ?
+        "#,
+        user_id_str
+    )
+    .fetch_optional(db())
+    .await?;
+
+    match user_result {
+        Some(row) => {
+            let user_id = row.user_id.as_ulid()
+                .map_err(|e| anyhow::anyhow!("Invalid user ID in database: {}", e))?;
+
+            let user = AdminUser {
+                user_id,
+                handle: row.handle,
+                first_name: row.first_name,
+                last_name: row.last_name,
+                primary_email: row.primary_email,
+                is_active: row.is_active,
+                is_staff: row.is_staff,
+                is_superuser: row.is_superuser,
+                is_page_manager: row.is_page_manager,
+                verified: row.verified,
+                date_joined: row.date_joined,
+            };
+
+            Ok(AdminUserResponse { user })
+        }
+        None => Err(anyhow::anyhow!("User not found").into()),
+    }
+}
+
+pub async fn admin_user_create(req: &Request) -> Result<AdminUserResponse, Error> {
+    let request: AdminUserCreateRequest = decode_structured_message(req.message.clone())?;
+    
+    let user_id = ulid::Ulid::new();
+    
+    let (is_staff, is_page_manager) = match request.role.as_str() {
+        "staff" => (true, false),
+        "page_manager" => (false, true),
+        "user" | _ => (false, false),
+    };
+
+    let user_id_str = user_id.to_string();
+    let result = sqlx::query!(
+        r#"INSERT INTO "users" (
+            "user_id", "handle", "first_name", "last_name", "primary_email", 
+            "is_active", "is_staff", "is_superuser", "is_page_manager", "verified",
+            "date_joined"
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))"#,
+        user_id_str,
+        request.handle,
+        request.first_name,
+        request.last_name,
+        request.primary_email,
+        true,
+        is_staff,
+        false,
+        is_page_manager,
+        request.verified
+    )
+    .execute(db())
+    .await;
+
+    match result {
+        Ok(_) => {
+            let user = AdminUser {
+                user_id,
+                handle: request.handle,
+                first_name: request.first_name,
+                last_name: request.last_name,
+                primary_email: request.primary_email,
+                is_active: true,
+                is_staff,
+                is_superuser: false,
+                is_page_manager,
+                verified: request.verified,
+                date_joined: "now".to_string(),
+            };
+
+            Ok(AdminUserResponse { user })
+        }
+        Err(e) => Err(anyhow::anyhow!("Failed to create user: {}", e).into()),
+    }
+}
+
+pub async fn admin_user_update(req: &Request) -> Result<AdminUserResponse, Error> {
+    let request: AdminUserUpdateRequest = decode_structured_message(req.message.clone())?;
+    
+    let (is_staff, is_page_manager) = match request.role.as_str() {
+        "staff" => (true, false),
+        "page_manager" => (false, true),
+        "user" | _ => (false, false),
+    };
+
+    let user_id_str = request.user_id.to_string();
+    let result = sqlx::query!(
+        r#"UPDATE "users" SET
+            "handle" = ?, "first_name" = ?, "last_name" = ?, "primary_email" = ?,
+            "is_active" = ?, "is_staff" = ?, "is_page_manager" = ?, "verified" = ?
+        WHERE "user_id" = ?"#,
+        request.handle,
+        request.first_name,
+        request.last_name,
+        request.primary_email,
+        request.is_active,
+        is_staff,
+        is_page_manager,
+        request.verified,
+        user_id_str
+    )
+    .execute(db())
+    .await;
+
+    match result {
+        Ok(result) => {
+            if result.rows_affected() == 0 {
+                return Err(anyhow::anyhow!("User not found").into());
+            }
+
+            let user = AdminUser {
+                user_id: request.user_id,
+                handle: request.handle,
+                first_name: request.first_name,
+                last_name: request.last_name,
+                primary_email: request.primary_email,
+                is_active: request.is_active,
+                is_staff,
+                is_superuser: false,
+                is_page_manager,
+                verified: request.verified,
+                date_joined: "unknown".to_string(),
+            };
+
+            Ok(AdminUserResponse { user })
+        }
+        Err(e) => Err(anyhow::anyhow!("Failed to update user: {}", e).into()),
+    }
+}
+
+pub async fn admin_user_delete(req: &Request) -> Result<AdminUserDeleteResponse, Error> {
+    let request: AdminUserDeleteRequest = decode_structured_message(req.message.clone())?;
+
+    let user_id_str = request.user_id.to_string();
+    let result = sqlx::query!(
+        r#"DELETE FROM "users" WHERE "user_id" = ?"#,
+        user_id_str
+    )
+    .execute(db())
+    .await;
+
+    match result {
+        Ok(result) => {
+            let success = result.rows_affected() > 0;
+            Ok(AdminUserDeleteResponse { success })
+        }
+        Err(e) => Err(anyhow::anyhow!("Failed to delete user: {}", e).into()),
+    }
+}
+
+/// Bulk sync page manager status - sets the flag for all provided user IDs 
+/// and clears it for everyone else
+pub async fn page_manager_sync(req: &Request) -> Result<PageManagerSyncResponse, Error> {
+    let request: PageManagerSyncRequest = decode_structured_message(req.message.clone())?;
+    
+    // First, clear all page manager flags
+    sqlx::query!(r#"UPDATE "users" SET "is_page_manager" = 0"#)
+        .execute(db())
+        .await?;
+    
+    let mut updated_count = 0u64;
+    
+    // Set page manager flag for the provided user IDs
+    if !request.user_ids.is_empty() {
+        for user_id in request.user_ids {
+            let user_id_str = user_id.to_string();
+            let result = sqlx::query!(
+                r#"UPDATE "users" SET "is_page_manager" = 1 WHERE "user_id" = ?"#,
+                user_id_str
+            )
+            .execute(db())
+            .await?;
+            
+            updated_count += result.rows_affected();
+        }
+    }
+    
+    Ok(PageManagerSyncResponse { updated_count })
+}
+
+/// Update page manager status for a single user
+pub async fn page_manager_update(req: &Request) -> Result<PageManagerUpdateResponse, Error> {
+    let request: PageManagerUpdateRequest = decode_structured_message(req.message.clone())?;
+    
+    let user_id_str = request.user_id.to_string();
+    let is_page_manager = if request.is_page_manager { 1 } else { 0 };
+    
+    let result = sqlx::query!(
+        r#"UPDATE "users" SET "is_page_manager" = ? WHERE "user_id" = ?"#,
+        is_page_manager,
+        user_id_str
+    )
+    .execute(db())
+    .await;
+    
+    match result {
+        Ok(result) => {
+            let success = result.rows_affected() > 0;
+            Ok(PageManagerUpdateResponse { success })
+        }
+        Err(e) => Err(anyhow::anyhow!("Failed to update page manager status: {}", e).into()),
+    }
 }

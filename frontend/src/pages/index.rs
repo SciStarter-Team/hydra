@@ -35,6 +35,6 @@ pub async fn index_page(
         header: Header::default().prepare(user_info.clone()).await?,
         footer: Footer::default().prepare(user_info).await?,
     }
-    .render(None)
+    .into_response(None)
     .await
 }

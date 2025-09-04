@@ -26,7 +26,11 @@ pub trait Component: Sized {
     /// returned TemplateOnce value fur use during rendering.
     async fn prepare(self, param: Self::Param) -> Result<Self::Prepared, anyhow::Error>;
 
-    async fn render(self, param: Self::Param) -> Result<Response, anyhow::Error> {
+    async fn into_string(self, param: Self::Param) -> Result<String, anyhow::Error> {
+        Ok(self.prepare(param).await?.render_once()?)
+    }
+
+    async fn into_response(self, param: Self::Param) -> Result<Response, anyhow::Error> {
         Ok(Html(self.prepare(param).await?.render_once()?).into_response())
     }
 }
@@ -50,7 +54,7 @@ where
     // Optimization: We can skip calling prepare, since a TemplateOnce
     // must by definition be able to render without asynchronous
     // processing.
-    async fn render(self, _param: Self::Param) -> Result<Response, anyhow::Error> {
+    async fn into_response(self, _param: Self::Param) -> Result<Response, anyhow::Error> {
         Ok(Html(self.render_once()?).into_response())
     }
 }

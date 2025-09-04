@@ -1,6 +1,6 @@
 use anyhow::Result;
 use async_nats::service::ServiceExt;
-use common::{shared, handler, recv_handler};
+use common::{handler, recv_handler, shared};
 use futures::StreamExt;
 use std::sync::Arc;
 use tokio::{signal, task::JoinSet};
@@ -10,17 +10,16 @@ mod handlers;
 mod sync;
 
 use handlers::{
-    handle_activity_log, handle_clickthrough, handle_clickthrough_analytics, handle_join,
-    handle_join_analytics, handle_page_view, handle_user_emails_update, handle_user_tags_update,
-    handle_health_check,
+    handle_activity_log, handle_clickthrough, handle_clickthrough_analytics, handle_health_check,
+    handle_join, handle_join_analytics, handle_page_view, handle_recent_activity,
+    handle_user_emails_update, handle_user_tags_update,
 };
 use log_service::{Database, run_compactor_service};
+use parking_lot::RwLock;
 use sync::{bookmark_synchronize, golink_synchronize, join_synchronize, participation_synchronize};
-use std::sync::OnceLock;
 
-// Global database instance for handler access
-pub static DATABASE: OnceLock<Arc<Database>> = OnceLock::new();
-
+// Global database instance for handler access - using RwLock<Option<>> so we can take ownership for shutdown
+pub static DATABASE: RwLock<Option<Arc<Database>>> = RwLock::new(None);
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -34,9 +33,9 @@ async fn main() -> Result<()> {
 
     // Initialize database and table system
     let database = Arc::new(Database::new(database_path).await?);
-    
+
     // Set global database for handler access
-    DATABASE.set(Arc::clone(&database)).map_err(|_| anyhow::anyhow!("Failed to set global database"))?;
+    *DATABASE.write() = Some(Arc::clone(&database));
 
     let mut background_tasks = JoinSet::new();
 
@@ -89,6 +88,12 @@ async fn main() -> Result<()> {
         Ok::<(), anyhow::Error>(())
     });
 
+    // The DATABASE global and the background task references should
+    // be the only references to the DatFusion database that we need
+    // from here on, and holding this until the end of scope would
+    // prevent the shutdown code from working properly.
+    drop(database);
+
     let svc = shared::nats()
         .service_builder()
         .start("log", "0.1.0")
@@ -102,15 +107,36 @@ async fn main() -> Result<()> {
     let log_group = svc.group("log");
     toplevel.spawn(recv_handler!(log_group, "activity", handle_activity_log));
     toplevel.spawn(recv_handler!(log_group, "pageview", handle_page_view));
-    toplevel.spawn(recv_handler!(log_group, "clickthrough", handle_clickthrough));
+    toplevel.spawn(recv_handler!(
+        log_group,
+        "clickthrough",
+        handle_clickthrough
+    ));
     toplevel.spawn(recv_handler!(log_group, "join", handle_join));
-    toplevel.spawn(handler!(log_group, "clickthrough_analytics", handle_clickthrough_analytics));
+    toplevel.spawn(handler!(
+        log_group,
+        "clickthrough_analytics",
+        handle_clickthrough_analytics
+    ));
     toplevel.spawn(handler!(log_group, "join_analytics", handle_join_analytics));
+    toplevel.spawn(handler!(
+        log_group,
+        "recent_activity",
+        handle_recent_activity
+    ));
 
     // Cache endpoints
     let cache_group = svc.group("log.cache");
-    toplevel.spawn(recv_handler!(cache_group, "user_tags_update", handle_user_tags_update));
-    toplevel.spawn(recv_handler!(cache_group, "user_emails_update", handle_user_emails_update));
+    toplevel.spawn(recv_handler!(
+        cache_group,
+        "user_tags_update",
+        handle_user_tags_update
+    ));
+    toplevel.spawn(recv_handler!(
+        cache_group,
+        "user_emails_update",
+        handle_user_emails_update
+    ));
 
     // Health endpoint
     let health_group = svc.group("log.health");
@@ -123,6 +149,7 @@ async fn main() -> Result<()> {
     println!("  - log.join");
     println!("  - log.clickthrough_analytics");
     println!("  - log.join_analytics");
+    println!("  - log.recent_activity");
     println!("  - log.cache.user_tags_update");
     println!("  - log.cache.user_emails_update");
     println!("  - log.health.check");
@@ -235,17 +262,60 @@ async fn main() -> Result<()> {
 
     // Perform graceful shutdown of database and table system
     println!("Shutting down database and table system...");
-    match Arc::try_unwrap(database) {
-        Ok(database) => {
-            if let Err(e) = database.shutdown().await {
-                eprintln!("Error during database shutdown: {}", e);
+
+    // Take ownership of the database from the global
+    let database = DATABASE.write().take();
+
+    if let Some(mut database) = database {
+        // Wait up to 5 minutes for all other references to be dropped
+        let shutdown_timeout = std::time::Duration::from_secs(5 * 60);
+        let start_time = std::time::Instant::now();
+
+        println!("Waiting for handler tasks to release database references...");
+
+        let mut last_log_time = 0u64;
+
+        loop {
+            match Arc::try_unwrap(database) {
+                Ok(database) => {
+                    println!("All database references released, performing clean shutdown");
+                    if let Err(e) = database.shutdown().await {
+                        eprintln!("Error during database shutdown: {}", e);
+                    }
+                    break;
+                }
+                Err(arc_db) => {
+                    database = arc_db;
+                    let elapsed = start_time.elapsed();
+
+                    if elapsed >= shutdown_timeout {
+                        eprintln!(
+                            "Timeout waiting for database references to be released after {:?}",
+                            elapsed
+                        );
+                        eprintln!(
+                            "Warning: Could not shutdown database cleanly - {} references still exist",
+                            Arc::strong_count(&database)
+                        );
+                        break;
+                    }
+
+                    let elapsed_secs = elapsed.as_secs();
+                    if elapsed_secs > 0 && elapsed_secs % 10 == 0 && elapsed_secs != last_log_time {
+                        println!(
+                            "Still waiting for database references to be released... ({} references, {:?} elapsed)",
+                            Arc::strong_count(&database),
+                            elapsed
+                        );
+                        last_log_time = elapsed_secs;
+                    }
+
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                }
             }
         }
-        Err(_) => {
-            eprintln!(
-                "Warning: Could not shutdown database cleanly - other references still exist"
-            );
-        }
+    } else {
+        eprintln!("Warning: Database was already taken for shutdown");
     }
 
     println!("Graceful shutdown complete.");

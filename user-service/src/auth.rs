@@ -48,7 +48,6 @@ pub async fn signup(req: &Request) -> Result<Option<BasicInfo>, Error> {
     sqlx::query!(
         r#"insert into "users" (
           "user_id",
-          "username",
           "handle",
           "primary_email",
           "verified",
@@ -60,7 +59,6 @@ pub async fn signup(req: &Request) -> Result<Option<BasicInfo>, Error> {
         )
         values (
           ?1,
-          ?2,
           ?3,
           ?2,
           ?9,

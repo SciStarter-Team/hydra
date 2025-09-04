@@ -1,0 +1,3 @@
+<% for user in &self.users { %>
+    <%+ UserRow { user: user.clone(), oob: false, oob_swap: "".to_string() } %>
+<% } %>

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{net::IpAddr, sync::Arc};
 
 use common::{message::user::UserInfo, service::log_pageview};
 use jiff::{ToSpan, Zoned};
@@ -83,7 +83,7 @@ impl<E: Endpoint> Endpoint for AnalyticsMiddlewareEndpoint<E> {
 
     async fn call(&self, mut req: poem::Request) -> poem::Result<Self::Output> {
         let Some(session) = req.extensions().get::<Session>() else {
-            eprintln!("AnalyticsMiddleware: Session not found in request");
+            tracing::error!("AnalyticsMiddleware: Session not found in request");
             return self.wrapped.call(req).await;
         };
 
@@ -99,40 +99,35 @@ impl<E: Endpoint> Endpoint for AnalyticsMiddlewareEndpoint<E> {
             .cloned()
             .unwrap_or_default();
 
-        // Try to extract IP address - if it fails, we'll skip logging but continue
-        match RealIp::from_request_without_body(&req).await {
-            Ok(RealIp(client_ip)) => {
-                let ip_address = client_ip
-                    .map(|ip| ip.to_string())
-                    .unwrap_or_else(|| "0.0.0.0".to_string());
+        let ip_address = RealIp::from_request_without_body(&req)
+            .await
+            .map(|RealIp(ip)| ip)
+            .unwrap_or_default()
+            .unwrap_or_else(|| IpAddr::from([0, 0, 0, 0]))
+            .to_string();
 
-                // Extract referrer header
-                let referrer = req
-                    .headers()
-                    .get("referer")
-                    .and_then(|h| h.to_str().ok())
-                    .map(|s| s.to_string());
+        // Extract referrer header
+        let referrer = req
+            .headers()
+            .get("referer")
+            .and_then(|h| h.to_str().ok())
+            .map(|s| s.to_string());
 
-                // Log the page view
-                if let Err(e) = log_pageview(
-                    None, // when - let it use current time
-                    ip_address,
-                    &device,
-                    &interaction,
-                    user_info.user_id(),
-                    path,
-                    referrer,
-                    query,
-                    None, // geolocation - let it resolve from IP
-                )
-                .await
-                {
-                    tracing::warn!("Failed to log page view: {}", e);
-                }
-            }
-            Err(e) => {
-                tracing::warn!("AnalyticsMiddleware: Failed to extract IP address: {}", e);
-            }
+        // Log the page view
+        if let Err(e) = log_pageview(
+            None, // when - let it use current time
+            ip_address,
+            &device,
+            &interaction,
+            user_info.user_id(),
+            path,
+            referrer,
+            query,
+            None, // geolocation - let it resolve from IP
+        )
+        .await
+        {
+            tracing::warn!("Failed to log page view: {}", e);
         }
 
         let extensions = req.extensions_mut();

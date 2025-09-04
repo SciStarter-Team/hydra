@@ -47,3 +47,25 @@ pub enum AnalyticsResponse {
     // GeographicBreakdown(Vec<LocationCount>),
     // etc.
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecentActivityRequest {
+    pub limit: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecentActivityItem {
+    pub when: String,
+    pub action: String,
+    pub user_id: Option<String>,
+    pub target: Option<String>,
+    pub extra: Option<String>,
+    pub formatted_description: String,
+    pub time_ago: String,
+    pub icon: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecentActivityResponse {
+    pub activities: Vec<RecentActivityItem>,
+}

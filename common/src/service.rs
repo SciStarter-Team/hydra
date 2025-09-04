@@ -197,14 +197,11 @@ where
 {
     let payload = flexbuffers::to_vec(message)?;
 
-    let msg = tokio::time::timeout(
-        timeout,
-        nats().request(subject, payload.into())
-    )
-    .await
-    .map_err(|_| anyhow!("Request timeout"))?
-    .map_err(|e| anyhow!("NATS request failed: {}", e))?
-    .decode_error()?;
+    let msg = tokio::time::timeout(timeout, nats().request(subject, payload.into()))
+        .await
+        .map_err(|_| anyhow!("Request timeout"))?
+        .map_err(|e| anyhow!("NATS request failed: {}", e))?
+        .decode_error()?;
 
     decode_structured_message(msg)
 }

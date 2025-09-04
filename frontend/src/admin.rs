@@ -5,10 +5,11 @@ use common::{
         ForumServiceHealthResponse, FrontendServiceHealthResponse, LocationServiceHealthResponse,
         LogServiceHealthResponse, UserServiceHealthResponse,
     },
-    message::user::BasicInfo,
-    service::request_timeout,
+    message::log::{RecentActivityRequest, RecentActivityResponse},
+    message::user::{AdminUserListRequest, AdminUserListResponse, AdminUserSearchRequest, AdminUserCreateRequest, AdminUserUpdateRequest, AdminUserDeleteRequest, AdminUserGetRequest, AdminUserResponse, AdminUserDeleteResponse, BasicInfo},
+    service::{request, request_timeout},
 };
-use poem::{Endpoint, EndpointExt, Route, get, handler, web::Query};
+use poem::{Endpoint, EndpointExt, Route, get, post, put, delete, handler, web::{Query, Path, Form}};
 use sailfish::TemplateOnce;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -103,21 +104,39 @@ impl Component for RecentActivitySection {
     type Prepared = RecentActivitySectionPrepared;
 
     async fn prepare(self, _param: Self::Param) -> Result<Self::Prepared, anyhow::Error> {
-        // TODO: Replace with actual async data fetching
-        let activities = vec![
-            RecentActivity {
-                icon: "user-plus".to_string(),
-                title: "New user registration".to_string(),
-                description: "john.doe@example.com joined".to_string(),
-                time_ago: "2 minutes ago".to_string(),
-            },
-            RecentActivity {
-                icon: "folder-plus".to_string(),
-                title: "New project created".to_string(),
-                description: "\"Marine Life Survey\" was published".to_string(),
-                time_ago: "1 hour ago".to_string(),
-            },
-        ];
+        let request = RecentActivityRequest { limit: Some(10) };
+
+        let response = match common::service::request::<RecentActivityResponse>(
+            "log.recent_activity",
+            request,
+        )
+        .await
+        {
+            Ok(response) => response,
+            Err(e) => {
+                eprintln!("Failed to fetch recent activity: {}", e);
+                // Return fallback data on error
+                return Ok(RecentActivitySectionPrepared {
+                    activities: vec![RecentActivity {
+                        icon: "alert-circle".to_string(),
+                        title: "Unable to load recent activity".to_string(),
+                        description: "Service temporarily unavailable".to_string(),
+                        time_ago: "now".to_string(),
+                    }],
+                });
+            }
+        };
+
+        let activities = response
+            .activities
+            .into_iter()
+            .map(|item| RecentActivity {
+                icon: item.icon,
+                title: item.action,
+                description: item.formatted_description,
+                time_ago: item.time_ago,
+            })
+            .collect();
 
         Ok(RecentActivitySectionPrepared { activities })
     }
@@ -325,26 +344,24 @@ pub struct DashboardContent {
 
 #[derive(Debug, Clone)]
 pub struct AdminUser {
-    pub id: String,
+    pub id: ulid::Ulid,
     pub name: String,
     pub email: String,
-    pub status: String,
+    pub handle: String,
     pub role: String,
     pub joined_date: String,
-    pub last_login: Option<String>,
+    pub verified: bool,
 }
 
 #[derive(Debug, TemplateOnce)]
-#[template(path = "admin/users.stpl.html")]
-pub struct UsersContent {
-    pub users: Vec<AdminUser>,
-    pub current_page: u32,
-    pub total_users: u32,
-    pub has_previous: bool,
-    pub has_next: bool,
-    pub start_item: u32,
-    pub end_item: u32,
+#[template(path = "admin/partials/user_row.stpl.html")]
+pub struct UserRow {
+    pub user: AdminUser,
+    pub oob: bool,
+    pub oob_swap: String,
 }
+
+
 
 #[derive(Debug, Clone)]
 pub struct AdminProject {
@@ -584,47 +601,93 @@ impl Component for SettingsPage {
     }
 }
 
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/users.stpl.html")]
+pub struct UsersPagePrepared {
+    pub users: Vec<AdminUser>,
+    pub current_page: u32,
+    pub total_users: u64,
+    pub has_previous: bool,
+    pub has_next: bool,
+    pub start_item: u32,
+    pub end_item: u32,
+    pub pagination_url: String,
+    pub pagination_include: String,
+}
+
 #[derive(Debug)]
-pub struct UsersPage;
+pub struct UsersPage {
+    page: Option<u32>,
+}
 
 impl Component for UsersPage {
     type Param = Option<Arc<BasicInfo>>;
     type Prepared = AdminLayoutPrepared;
 
     async fn prepare(self, param: Self::Param) -> Result<Self::Prepared, anyhow::Error> {
-        // TODO: Replace with actual async data fetching from database
-        let users_list = vec![
+        // Fetch real user data from user service
+        let page = self.page.unwrap_or(1);
+        let user_request = AdminUserListRequest {
+            page: Some(page),
+            limit: Some(25),
+        };
+
+        let response: AdminUserListResponse = request("user.admin.user_list", user_request)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to fetch users: {}", e))?;
+
+        // Convert service AdminUser to frontend AdminUser
+        let users_list: Vec<AdminUser> = response.users.into_iter().map(|service_user| {
+            let name = if service_user.first_name.is_empty() && service_user.last_name.is_empty() {
+                service_user.handle.clone()
+            } else {
+                format!("{} {}", service_user.first_name, service_user.last_name).trim().to_string()
+            };
+
+            let role = if service_user.is_superuser || service_user.is_staff {
+                "Staff".to_string()
+            } else if service_user.is_page_manager {
+                "Page Manager".to_string()
+            } else {
+                "User".to_string()
+            };
+
             AdminUser {
-                id: "01234567890123456789012345".to_string(),
-                name: "John Doe".to_string(),
-                email: "john.doe@example.com".to_string(),
-                status: "active".to_string(),
-                role: "User".to_string(),
-                joined_date: "Mar 12, 2024".to_string(),
-                last_login: Some("2 hours ago".to_string()),
-            },
-            AdminUser {
-                id: "01234567890123456789012346".to_string(),
-                name: "Jane Smith".to_string(),
-                email: "jane.smith@example.com".to_string(),
-                status: "inactive".to_string(),
-                role: "Staff".to_string(),
-                joined_date: "Feb 28, 2024".to_string(),
-                last_login: Some("1 week ago".to_string()),
-            },
-        ];
+                id: service_user.user_id,
+                name,
+                email: service_user.primary_email,
+                handle: service_user.handle,
+                role,
+                joined_date: service_user.date_joined,
+                verified: service_user.verified,
+            }
+        }).collect();
 
         let users_content = UsersContent {
             users: users_list,
-            current_page: 1,
-            total_users: 2,
-            has_previous: false,
-            has_next: false,
-            start_item: 1,
-            end_item: 2,
+            current_page: response.page,
+            total_users: response.total_count,
+            has_previous: response.page > 1,
+            has_next: (response.page * response.limit) < response.total_count as u32,
+            start_item: ((response.page - 1) * response.limit) + 1,
+            end_item: std::cmp::min(response.page * response.limit, response.total_count as u32),
+            pagination_url: "/-admin/users".to_string(),
+            pagination_include: "".to_string(),
         };
 
-        let content = users_content.render_once()?;
+        let users_page = UsersPagePrepared {
+            users: users_content.users,
+            current_page: users_content.current_page,
+            total_users: users_content.total_users,
+            has_previous: users_content.has_previous,
+            has_next: users_content.has_next,
+            start_item: users_content.start_item,
+            end_item: users_content.end_item,
+            pagination_url: users_content.pagination_url,
+            pagination_include: users_content.pagination_include,
+        };
+        
+        let content = users_page.render_once()?;
 
         AdminLayout::new("Users")
             .with_breadcrumb("Users", None)
@@ -686,47 +749,10 @@ impl Component for DashboardPage {
         let system_health = fetch_service_health().await;
         let system_health_content = build_system_health_section(system_health)?;
 
-        // Example: Adding quick actions section
-        let quick_actions = vec![
-            QuickAction {
-                label: "Sync Users".to_string(),
-                icon: "refresh".to_string(),
-                method: "POST".to_string(),
-                url: "/-admin/actions/sync-users".to_string(),
-                target: "#main-content".to_string(),
-                swap: "afterbegin".to_string(),
-            },
-            QuickAction {
-                label: "Clear Cache".to_string(),
-                icon: "trash".to_string(),
-                method: "POST".to_string(),
-                url: "/-admin/actions/clear-cache".to_string(),
-                target: "#main-content".to_string(),
-                swap: "afterbegin".to_string(),
-            },
-            QuickAction {
-                label: "Export Data".to_string(),
-                icon: "download".to_string(),
-                method: "GET".to_string(),
-                url: "/-admin/actions/export".to_string(),
-                target: "#main-content".to_string(),
-                swap: "afterbegin".to_string(),
-            },
-            QuickAction {
-                label: "View Logs".to_string(),
-                icon: "file-text".to_string(),
-                method: "GET".to_string(),
-                url: "/-admin/logs".to_string(),
-                target: "#main-content".to_string(),
-                swap: "innerHTML".to_string(),
-            },
-        ];
-        let quick_actions_content = build_quick_actions_section(quick_actions)?;
+        // Quick actions - currently empty but infrastructure preserved for future use
+        let quick_actions = vec![];
 
-        let sections = vec![
-            DashboardSection::new("quick_actions", "Quick Actions")
-                .with_content(quick_actions_content)
-                .with_width("full"),
+        let mut sections = vec![
             DashboardSection::new("system_health", "System Health")
                 .with_content(system_health_content)
                 .with_width("half"),
@@ -739,6 +765,14 @@ impl Component for DashboardPage {
             .await?
             .with_width("full"),
         ];
+
+        // Only add quick actions section if there are actions to display
+        if !quick_actions.is_empty() {
+            let quick_actions_content = build_quick_actions_section(quick_actions)?;
+            sections.insert(0, DashboardSection::new("quick_actions", "Quick Actions")
+                .with_content(quick_actions_content)
+                .with_width("full"));
+        }
 
         let dashboard_content = DashboardContent { stats, sections };
 
@@ -756,12 +790,119 @@ impl Component for DashboardPage {
 async fn dashboard(
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    DashboardPage.render(user_info).await
+    DashboardPage.into_response(user_info).await
 }
 
 #[handler]
-async fn users(Authenticated(user_info): Authenticated) -> Result<poem::Response, anyhow::Error> {
-    UsersPage.render(user_info).await
+async fn users(
+    Query(query): Query<UserPageQuery>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    UsersPage { page: query.page }.into_response(user_info).await
+}
+
+#[derive(Debug, Deserialize)]
+struct UserPageQuery {
+    page: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UserSearchQuery {
+    search: Option<String>,
+    role: Option<String>,
+    email_status: Option<String>,
+    page: Option<u32>,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/users_table_body.stpl.html")]
+struct UsersTableBody {
+    users: Vec<AdminUser>,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/users_content.stpl.html")]
+pub struct UsersContent {
+    pub users: Vec<AdminUser>,
+    pub current_page: u32,
+    pub total_users: u64,
+    pub has_previous: bool,
+    pub has_next: bool,
+    pub start_item: u32,
+    pub end_item: u32,
+    pub pagination_url: String,
+    pub pagination_include: String,
+}
+
+#[handler]
+async fn users_search(
+    Query(query): Query<UserSearchQuery>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let page = query.page.unwrap_or(1);
+    let search_request = AdminUserSearchRequest {
+        search: query.search,
+        role: query.role,
+        email_status: query.email_status,
+        page: Some(page),
+        limit: Some(25),
+    };
+
+    let response: AdminUserListResponse = request("user.admin.user_search", search_request)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to search users: {}", e))?;
+
+    // Convert service AdminUser to frontend AdminUser
+    let users_list: Vec<AdminUser> = response.users.into_iter().map(|service_user| {
+        let name = if service_user.first_name.is_empty() && service_user.last_name.is_empty() {
+            service_user.handle.clone()
+        } else {
+            format!("{} {}", service_user.first_name, service_user.last_name).trim().to_string()
+        };
+
+        let role = if service_user.is_superuser || service_user.is_staff {
+            "Staff".to_string()
+        } else if service_user.is_page_manager {
+            "Page Manager".to_string()
+        } else {
+            "User".to_string()
+        };
+
+        AdminUser {
+            id: service_user.user_id,
+            name,
+            email: service_user.primary_email,
+            handle: service_user.handle,
+            role,
+            joined_date: service_user.date_joined,
+            verified: service_user.verified,
+        }
+    }).collect();
+
+    // Calculate pagination info
+    let total_pages = (response.total_count + 24) / 25;  // Round up
+    let has_previous = page > 1;
+    let has_next = page < total_pages as u32;
+    let start_item = if response.total_count == 0 { 0 } else { ((page - 1) * 25) + 1 };
+    let end_item = std::cmp::min(page * 25, response.total_count as u32);
+
+    let search_results = UsersContent {
+        users: users_list,
+        current_page: page,
+        total_users: response.total_count,
+        has_previous,
+        has_next,
+        start_item,
+        end_item,
+        pagination_url: "/-admin/users/search".to_string(),
+        pagination_include: "[name='search'], [name='role'], [name='email_status']".to_string(),
+    };
+    
+    let html = search_results.render_once()?;
+    
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(html))
 }
 
 #[derive(Debug, Deserialize)]
@@ -821,36 +962,395 @@ async fn help(
 async fn projects(
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    ProjectsPage.render(user_info).await
+    ProjectsPage.into_response(user_info).await
 }
 
 #[handler]
 async fn events(Authenticated(user_info): Authenticated) -> Result<poem::Response, anyhow::Error> {
-    EventsPage.render(user_info).await
+    EventsPage.into_response(user_info).await
 }
 
 #[handler]
 async fn analytics(
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    AnalyticsPage.render(user_info).await
+    AnalyticsPage.into_response(user_info).await
 }
 
 #[handler]
 async fn settings(
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    SettingsPage.render(user_info).await
+    SettingsPage.into_response(user_info).await
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/modals/new_user.stpl.html")]
+struct NewUserForm {
+    title: String,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/modals/edit_user.stpl.html")]
+struct EditUserForm {
+    title: String,
+    user_id: String,
+    first_name: String,
+    last_name: String,
+    email: String,
+    handle: String,
+    role: String,
+    verified: bool,
+    active: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateUserForm {
+    first_name: String,
+    last_name: String,
+    email: String,
+    handle: String,
+    role: String,
+    #[serde(default)]
+    verified: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateUserForm {
+    first_name: String,
+    last_name: String,
+    email: String,
+    handle: String,
+    role: String,
+    #[serde(default)]
+    verified: bool,
+    #[serde(default)]
+    active: bool,
+}
+
+
+#[handler]
+async fn users_new(Authenticated(_user_info): Authenticated) -> Result<poem::Response, anyhow::Error> {
+    let new_user_form = NewUserForm {
+        title: "Add New User".to_string(),
+    };
+    
+    let html = new_user_form.render_once()?;
+    
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(html))
+}
+
+#[handler]
+async fn users_edit(
+    Path(user_id): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    // Parse user ID
+    let parsed_user_id = user_id.parse::<ulid::Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid user ID format"))?;
+    
+    // Fetch user data from user service
+    let get_request = AdminUserGetRequest {
+        user_id: parsed_user_id,
+    };
+    
+    match request::<AdminUserResponse>("user.admin.user_get", get_request).await {
+        Ok(response) => {
+            let admin_user = response.user;
+            let edit_user_form = EditUserForm {
+                title: "Edit User".to_string(),
+                user_id,
+                first_name: admin_user.first_name,
+                last_name: admin_user.last_name,
+                email: admin_user.primary_email,
+                handle: admin_user.handle,
+                role: if admin_user.is_superuser {
+                    "staff".to_string()
+                } else if admin_user.is_page_manager {
+                    "page_manager".to_string()
+                } else {
+                    "user".to_string()
+                },
+                verified: admin_user.verified,
+                active: admin_user.is_active,
+            };
+            
+            Ok(edit_user_form.into_response(None).await?)
+        },
+        Err(_e) => {
+            // If user not found, return empty form with error state
+            let edit_user_form = EditUserForm {
+                title: "Edit User - Not Found".to_string(),
+                user_id,
+                first_name: "".to_string(),
+                last_name: "".to_string(),
+                email: "".to_string(),
+                handle: "".to_string(),
+                role: "user".to_string(),
+                verified: false,
+                active: true,
+            };
+            Ok(edit_user_form.into_response(None).await?)
+        }
+    }
+}
+
+#[handler]
+async fn users_delete(
+    Path(user_id): Path<String>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    // Parse user ID
+    let parsed_user_id = user_id.parse::<ulid::Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid user ID format"))?;
+
+    let delete_request = AdminUserDeleteRequest {
+        user_id: parsed_user_id,
+    };
+
+    match request::<AdminUserDeleteResponse>("user.admin.user_delete", delete_request).await {
+        Ok(response) => {
+            if response.success {
+                // Success - return empty response to remove the table row
+                Ok(poem::Response::builder()
+                    .content_type("text/html")
+                    .body(""))
+            } else {
+                // Return error message
+                Ok(poem::Response::builder()
+                    .status(poem::http::StatusCode::BAD_REQUEST)
+                    .content_type("text/html")
+                    .body("Failed to delete user"))
+            }
+        }
+        Err(e) => {
+            // Return error response
+            Ok(poem::Response::builder()
+                .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+                .content_type("text/html")
+                .body(format!("Error: {}", e)))
+        }
+    }
+}
+
+#[handler]
+async fn users_create(
+    Form(form): Form<CreateUserForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    // Map role string to boolean flags
+    let (is_staff, is_page_manager) = match form.role.as_str() {
+        "staff" => (true, false),
+        "page_manager" => (false, true),
+        "user" | _ => (false, false),
+    };
+
+    let create_request = AdminUserCreateRequest {
+        handle: form.handle,
+        first_name: form.first_name,
+        last_name: form.last_name,
+        primary_email: form.email,
+        role: form.role,
+        verified: form.verified,
+    };
+
+    match request::<AdminUserResponse>("user.admin.user_create", create_request).await {
+        Ok(_response) => {
+            // Success - close modal and refresh users table
+            // We could also return a success message or refresh the table
+            Ok(poem::Response::builder()
+                .header("HX-Trigger", "refresh-users")
+                .content_type("text/html")
+                .body(""))
+        }
+        Err(e) => {
+            // Show error in modal
+            let error_html = format!(
+                r#"<div class="p-4 mb-4 text-sm text-red-700 bg-red-100 rounded-lg border border-red-200">
+                    <strong>Error:</strong> Failed to create user: {}
+                </div>"#,
+                e
+            );
+            Ok(poem::Response::builder()
+                .content_type("text/html")
+                .body(error_html))
+        }
+    }
+}
+
+#[handler]
+async fn users_update(
+    Path(user_id): Path<String>,
+    Form(form): Form<UpdateUserForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    // Parse user ID
+    let parsed_user_id = user_id.parse::<ulid::Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid user ID format"))?;
+
+    let update_request = AdminUserUpdateRequest {
+        user_id: parsed_user_id,
+        handle: form.handle,
+        first_name: form.first_name,
+        last_name: form.last_name,
+        primary_email: form.email,
+        role: form.role,
+        verified: form.verified,
+        is_active: form.active,
+    };
+
+    match request::<AdminUserResponse>("user.admin.user_update", update_request).await {
+        Ok(response) => {
+            // Success - close modal and update the specific user row with OOB
+            let updated_user = &response.user;
+            let admin_user = AdminUser {
+                id: updated_user.user_id,
+                name: format!("{} {}", updated_user.first_name, updated_user.last_name),
+                email: updated_user.primary_email.clone(),
+                handle: updated_user.handle.clone(),
+                role: if updated_user.is_superuser {
+                    "Staff".to_string()
+                } else if updated_user.is_page_manager {
+                    "Page Manager".to_string()
+                } else {
+                    "User".to_string()
+                },
+                joined_date: updated_user.date_joined.clone(),
+                verified: updated_user.verified,
+            };
+            
+            let user_row = UserRow {
+                user: admin_user,
+                oob: true,
+                oob_swap: "true".to_string(), // Replace existing row
+            };
+            
+            let html = user_row.render_once()?;
+            Ok(poem::Response::builder()
+                .content_type("text/html")
+                .body(html))
+        }
+        Err(e) => {
+            // Show error in modal
+            let error_html = format!(
+                r#"<div class="p-4 mb-4 text-sm text-red-700 bg-red-100 rounded-lg border border-red-200">
+                    <strong>Error:</strong> Failed to update user: {}
+                </div>"#,
+                e
+            );
+            Ok(poem::Response::builder()
+                .content_type("text/html")
+                .body(error_html))
+        }
+    }
+}
+
+// Engine Room structures
+#[derive(Debug, Clone)]
+pub struct EngineOperation {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub endpoint: String,
+    pub button_text: String,
+    pub icon: String,
+    pub color: String,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/engine_room.stpl.html")]
+struct EngineRoomPrepared {
+    operations: Vec<EngineOperation>,
+}
+
+#[derive(Debug, Clone)]
+pub struct EngineRoomPage;
+
+impl Component for EngineRoomPage {
+    type Param = Option<Arc<BasicInfo>>;
+    type Prepared = AdminLayoutPrepared;
+
+    async fn prepare(self, param: Self::Param) -> Result<Self::Prepared, anyhow::Error> {
+        let operations = vec![
+            EngineOperation {
+                id: "sync-page-managers".to_string(),
+                title: "Page Manager Sync".to_string(),
+                description: "Synchronize page manager flags for all users based on current project and event editors.".to_string(),
+                endpoint: "/-admin/engine-room/sync-page-managers".to_string(),
+                button_text: "Run Bulk Sync".to_string(),
+                icon: r#"<svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                </svg>"#.to_string(),
+                color: "blue".to_string(),
+            },
+        ];
+
+        let engine_room_content = EngineRoomPrepared { operations };
+        let content = engine_room_content.render_once()?;
+
+        AdminLayout::new("Engine Room")
+            .with_breadcrumb("Engine Room", None)
+            .with_sidebar_active("engine-room")
+            .with_content(content)
+            .prepare(param)
+            .await
+    }
+}
+
+#[handler]
+#[tracing::instrument]
+async fn engine_room(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    EngineRoomPage.into_response(user_info).await
+}
+
+#[handler]
+#[tracing::instrument]
+async fn engine_room_sync_page_managers(
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    match crate::page_manager::full_page_manager_sync().await {
+        Ok(count) => {
+            let success_html = format!(
+                r#"<div class="p-3 text-sm text-green-700 bg-green-100 rounded-lg border border-green-200">
+                    <strong>Success:</strong> Updated {} user page manager statuses
+                </div>"#,
+                count
+            );
+            Ok(poem::Response::builder()
+                .content_type("text/html")
+                .body(success_html))
+        }
+        Err(e) => {
+            let error_html = format!(
+                r#"<div class="p-3 text-sm text-red-700 bg-red-100 rounded-lg border border-red-200">
+                    <strong>Error:</strong> Failed to sync page managers: {}
+                </div>"#,
+                e
+            );
+            Ok(poem::Response::builder()
+                .content_type("text/html")
+                .body(error_html))
+        }
+    }
 }
 
 pub fn routes() -> impl Endpoint {
     Route::new()
         .at("/", get(dashboard))
         .at("/users", get(users))
+        .at("/users/search", get(users_search))
+        .at("/users/new", get(users_new).post(users_create))
+        .at("/users/:id", get(users_edit).put(users_update).delete(users_delete))
         .at("/projects", get(projects))
         .at("/events", get(events))
         .at("/analytics", get(analytics))
         .at("/settings", get(settings))
         .at("/help", get(help))
+        .at("/engine-room", get(engine_room))
+        .at("/engine-room/sync-page-managers", post(engine_room_sync_page_managers))
         .with(StaffOnly)
 }

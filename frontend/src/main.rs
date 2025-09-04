@@ -9,6 +9,7 @@ pub mod event;
 pub mod health;
 pub mod middleware;
 pub mod misc;
+pub mod page_manager;
 pub mod pages;
 pub mod peering;
 pub mod project;
@@ -133,7 +134,7 @@ async fn demo_forum(
             .await?,
         footer: component::Footer::default().prepare(user_info).await?,
     };
-    prepared.render(None).await
+    prepared.into_response(None).await
 }
 
 fn user_facing() -> impl Endpoint {
@@ -153,6 +154,14 @@ fn user_facing() -> impl Endpoint {
 
 fn dynamic() -> impl Endpoint {
     let session_storage = UserServiceSessionStorage;
+
+    // IMPORTANT: When adding project/event creation, editing, or page editor management endpoints,
+    // remember to call the appropriate page_manager sync functions:
+    // - page_manager::after_project_added() when projects are created
+    // - page_manager::after_event_added() when events are created  
+    // - page_manager::after_project_editor_added/removed() when editors are modified
+    // - page_manager::after_event_editor_added/removed() when editors are modified
+    // This ensures user page manager status stays synchronized with the user service.
 
     Route::new()
         .nest_no_strip("/", user_facing())
@@ -270,6 +279,7 @@ mod sync {
         contact::{Contact, ContactRole},
         entity::{Entity, EntityKind},
         event::{EventInstance, all::EventAll},
+        page_manager,
         peering::LoadStorePeered,
         project::{
             ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus, all::ProjectAll,
@@ -900,6 +910,14 @@ mod sync {
                     continue;
                 }
 
+                // Update page manager status for users associated with this project
+                let creator_id = if proj.page_creator_id != Ulid::nil() { Some(proj.page_creator_id) } else { None };
+                let editor_ids: Vec<Ulid> = proj.page_editor_ids.iter().copied().collect();
+                if let Err(err) = page_manager::after_project_added(creator_id, &editor_ids).await {
+                    tracing::error!("Error updating page manager status for project {}: {}", &proj.name, err);
+                    // Continue processing - don't fail the sync for this
+                }
+
                 let entity = Entity::new(data.slug, EntityKind::Project, proj.project_id);
 
                 if let Err(err) = entity.store().await {
@@ -1224,6 +1242,14 @@ mod sync {
                 if let Err(err) = evt.store().await {
                     tracing::error!("Error saving {}: {}", &evt.name, err);
                     continue;
+                }
+
+                // Update page manager status for users associated with this event
+                let creator_id = if evt.page_creator_id != Ulid::nil() { Some(evt.page_creator_id) } else { None };
+                let editor_ids: Vec<Ulid> = evt.page_editor_ids.iter().copied().collect();
+                if let Err(err) = page_manager::after_event_added(creator_id, &editor_ids).await {
+                    tracing::error!("Error updating page manager status for event {}: {}", &evt.name, err);
+                    // Continue processing - don't fail the sync for this
                 }
 
                 let entity = Entity::new(data.slug, EntityKind::Event, evt.event_id);

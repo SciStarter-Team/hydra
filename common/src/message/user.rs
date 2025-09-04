@@ -206,3 +206,104 @@ pub struct UserAndBadge {
 pub struct UserCountResponse {
     pub count: u64,
 }
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AdminUserListRequest {
+    pub page: Option<u32>,
+    pub limit: Option<u32>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AdminUser {
+    pub user_id: Ulid,
+    pub handle: String,
+    pub first_name: String,
+    pub last_name: String,
+    pub primary_email: String,
+    pub is_active: bool,
+    pub is_staff: bool,
+    pub is_superuser: bool,
+    pub is_page_manager: bool,
+    pub verified: bool,
+    pub date_joined: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AdminUserListResponse {
+    pub users: Vec<AdminUser>,
+    pub total_count: u64,
+    pub page: u32,
+    pub limit: u32,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AdminUserSearchRequest {
+    pub search: Option<String>,
+    pub role: Option<String>, // user, page_manager, staff
+    pub email_status: Option<String>, // verified, unverified
+    pub page: Option<u32>,
+    pub limit: Option<u32>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AdminUserCreateRequest {
+    pub handle: String,
+    pub first_name: String,
+    pub last_name: String,
+    pub primary_email: String,
+    pub role: String, // user, page_manager, staff
+    pub verified: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AdminUserUpdateRequest {
+    pub user_id: Ulid,
+    pub handle: String,
+    pub first_name: String,
+    pub last_name: String,
+    pub primary_email: String,
+    pub role: String, // user, page_manager, staff
+    pub verified: bool,
+    pub is_active: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AdminUserDeleteRequest {
+    pub user_id: Ulid,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AdminUserResponse {
+    pub user: AdminUser,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AdminUserDeleteResponse {
+    pub success: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AdminUserGetRequest {
+    pub user_id: Ulid,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PageManagerSyncRequest {
+    pub user_ids: Vec<Ulid>, // All user IDs that should be page managers
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PageManagerSyncResponse {
+    pub updated_count: u64,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PageManagerUpdateRequest {
+    pub user_id: Ulid,
+    pub is_page_manager: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PageManagerUpdateResponse {
+    pub success: bool,
+}
