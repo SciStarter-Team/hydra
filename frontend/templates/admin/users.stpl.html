@@ -5,10 +5,14 @@
             hx-get="/-admin/users/new"
             hx-target="#modal-container"
             hx-swap="innerHTML"
-            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
+            hx-indicator="#new-user-loading"
+            class="relative inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
         >
-            <wa-icon name="plus" class="w-4 h-4 mr-2"></wa-icon>
-            Add User
+            <span class="htmx-indicator absolute inset-0 flex items-center justify-center bg-black bg-opacity-75 text-white rounded-md" id="new-user-loading">⏳</span>
+            <span class="inline-flex items-center">
+                <wa-icon name="plus" class="w-4 h-4 mr-2"></wa-icon>
+                Add User
+            </span>
         </button>
     </div>
     

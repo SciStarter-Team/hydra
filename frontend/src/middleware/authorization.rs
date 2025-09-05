@@ -207,7 +207,7 @@ impl<E: Endpoint> Endpoint for StaffOnlyEndpoint<E> {
 #[tracing::instrument]
 pub fn staff_only(req: &poem::Request) -> Result<(), NotAuthorized> {
     let Some(user_info) = req.extensions().get::<Authenticated>() else {
-        let uri = req.uri();
+        let uri = req.original_uri();
         if let Some(query) = uri.query() {
             return Err(NotAuthorized::with_path_and_query(uri.path(), query));
         } else {
@@ -216,7 +216,7 @@ pub fn staff_only(req: &poem::Request) -> Result<(), NotAuthorized> {
     };
 
     if !user_info.is_staff() {
-        let uri = req.uri();
+        let uri = req.original_uri();
         if let Some(query) = uri.query() {
             return Err(NotAuthorized::with_path_and_query(uri.path(), query));
         } else {
@@ -257,7 +257,7 @@ impl<E: Endpoint> Endpoint for AuthOnlyEndpoint<E> {
 #[tracing::instrument]
 pub fn auth_only(req: &poem::Request) -> Result<(), NotAuthorized> {
     let Some(_user_info) = req.extensions().get::<Authenticated>() else {
-        let uri = req.uri();
+        let uri = req.original_uri();
         if let Some(query) = uri.query() {
             return Err(NotAuthorized::with_path_and_query(uri.path(), query));
         } else {

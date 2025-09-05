@@ -35,7 +35,6 @@
                             type="text" 
                             id="first_name" 
                             name="first_name" 
-                            required
                             value="<%= self.first_name %>"
                             class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                             placeholder="Enter first name"
@@ -51,7 +50,6 @@
                             type="text" 
                             id="last_name" 
                             name="last_name" 
-                            required
                             value="<%= self.last_name %>"
                             class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                             placeholder="Enter last name"
@@ -61,7 +59,7 @@
                     <!-- Email -->
                     <div>
                         <label for="email" class="block text-sm font-medium text-gray-700 mb-2">
-                            Email Address
+                            Contact Email Address
                         </label>
                         <input 
                             type="email" 
@@ -77,16 +75,15 @@
                     <!-- Handle -->
                     <div>
                         <label for="handle" class="block text-sm font-medium text-gray-700 mb-2">
-                            Username/Handle
+                            Handle
                         </label>
                         <input 
                             type="text" 
                             id="handle" 
                             name="handle" 
-                            required
                             value="<%= self.handle %>"
                             class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                            placeholder="Enter username"
+                            placeholder="Enter handle"
                         >
                     </div>
 
@@ -109,19 +106,6 @@
 
                     <!-- Status checkboxes -->
                     <div class="space-y-2">
-                        <div class="flex items-center">
-                            <input 
-                                type="checkbox" 
-                                id="verified" 
-                                name="verified" 
-                                value="true"
-                                <% if self.verified { %>checked<% } %>
-                                class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                            >
-                            <label for="verified" class="ml-2 block text-sm text-gray-900">
-                                Email Verified
-                            </label>
-                        </div>
                         <div class="flex items-center">
                             <input 
                                 type="checkbox" 
@@ -157,58 +141,76 @@
                             <p class="mt-1 text-xs text-gray-500">Leave blank to keep the user's current password</p>
                         </div>
                         
-                        <!-- Email Management -->
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">
-                                Email Addresses
-                            </label>
-                            <div id="emails-list" class="space-y-2">
-                                <% for (index, email) in self.emails.iter().enumerate() { %>
-                                    <%+ EmailRow { user_id: self.user_id.clone(), email: email.clone(), index } %>
-                                <% } %>
-                                
-                                <!-- Add New Email Row -->
-                                <div class="flex items-center space-x-2 p-2 border border-dashed border-gray-300 rounded-md">
-                                    <input 
-                                        type="email" 
-                                        placeholder="Enter new email address"
-                                        id="new-email-input"
-                                        name="new_email"
-                                        class="flex-1 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                    >
-                                    <button 
-                                        type="button"
-                                        class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded hover:bg-green-200"
-                                        hx-post="/-admin/users/<%= self.user_id %>/emails"
-                                        hx-include="#new-email-input"
-                                        hx-target="#emails-list"
-                                        hx-swap="innerHTML"
-                                    >
-                                        Add Email
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
                     </div>
                 </div>
 
-                <!-- Modal Footer -->
-                <div class="flex items-center justify-end pt-6 space-x-2">
-                    <button 
-                        type="button"
-                        class="px-4 py-2 bg-gray-300 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300"
-                        hx-on:click="document.getElementById('modal-container').innerHTML = ''"
-                    >
-                        Cancel
-                    </button>
-                    <button 
-                        type="submit"
-                        class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    >
-                        Update User
-                    </button>
+                <!-- Form Footer -->
+                <div class="flex items-center justify-between pt-4 border-t border-gray-200">
+                    <div class="text-sm text-gray-600">
+                        Basic user information
+                    </div>
+                    <div class="space-x-2">
+                        <button 
+                            type="submit"
+                            class="relative px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            hx-indicator="#save-loading"
+                        >
+                            <span class="htmx-indicator absolute inset-0 flex items-center justify-center bg-black bg-opacity-75 text-white rounded-md" id="save-loading">⏳</span>
+                            <span>Save Changes</span>
+                        </button>
+                    </div>
                 </div>
             </form>
+
+            <!-- Email Management Section -->
+            <div class="mt-6 pt-6 border-t border-gray-200">
+                <div class="flex items-center justify-between mb-4">
+                    <h4 class="text-md font-semibold text-gray-900">Email Addresses</h4>
+                    <div class="text-sm text-gray-600">
+                        Changes save automatically
+                    </div>
+                </div>
+                <div id="emails-list" class="space-y-2">
+                    <% for (index, email) in self.emails.iter().enumerate() { %>
+                        <%+ EmailRow { user_id: self.user_id.clone(), email: email.clone(), index } %>
+                    <% } %>
+                    
+                    <!-- Add New Email Row -->
+                    <div class="flex items-center space-x-2 p-2 border border-dashed border-gray-300 rounded-md">
+                        <input 
+                            type="email" 
+                            placeholder="Enter new email address"
+                            id="new-email-input"
+                            name="new_email"
+                            class="flex-1 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        >
+                        <button 
+                            type="button"
+                            class="relative px-2 py-1 bg-green-100 text-green-800 text-xs rounded hover:bg-green-200"
+                            hx-post="/-admin/users/<%= self.user_id %>/emails"
+                            hx-include="#new-email-input"
+                            hx-target="closest div"
+                            hx-swap="beforebegin"
+                            hx-on:htmx:after-request="if(event.detail.successful) this.parentElement.querySelector('input[type=email]').value = ''"
+                            hx-indicator="#add-email-loading"
+                        >
+                            <span class="htmx-indicator absolute inset-0 flex items-center justify-center bg-black bg-opacity-75 text-white rounded" id="add-email-loading">⏳</span>
+                            <span>Add Email</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="flex items-center justify-end pt-6 border-t border-gray-200">
+                <button 
+                    type="button"
+                    class="px-4 py-2 bg-gray-300 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300"
+                    hx-on:click="document.getElementById('modal-container').innerHTML = ''"
+                >
+                    Close
+                </button>
+            </div>
         </div>
     </div>
 </div>

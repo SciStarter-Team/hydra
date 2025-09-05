@@ -1,54 +1,51 @@
 <div class="flex items-center space-x-2 p-2 border border-gray-200 rounded-md" id="email-row-<%= self.index %>">
+    <input type="hidden" name="old_email" value="<%= self.email.email %>">
     <input 
         type="email" 
         value="<%= self.email.email %>"
         class="flex-1 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-        data-original="<%= self.email.email %>"
-        name="email"
-    >
-    <button 
-        type="button"
-        class="px-2 py-1 text-xs rounded <% if self.email.verified { %>bg-green-100 text-green-800<% } else { %>bg-yellow-100 text-yellow-800<% } %>"
-        hx-post="/-admin/users/<%= self.user_id %>/emails/<%= self.email.email %>/toggle-verified"
-        hx-target="#email-row-<%= self.index %>"
-        hx-swap="outerHTML"
-    >
-        <% if self.email.verified { %>Verified<% } else { %>Unverified<% } %>
-    </button>
-    <button 
-        type="button"
-        class="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded hover:bg-blue-200"
+        name="new_email"
         hx-put="/-admin/users/<%= self.user_id %>/emails/<%= self.email.email %>"
         hx-target="#email-row-<%= self.index %>"
         hx-swap="outerHTML"
-        hx-on:click="
-            const emailInput = this.parentElement.querySelector('input[name=email]');
-            const oldEmail = emailInput.getAttribute('data-original');
-            const newEmail = emailInput.value;
-            htmx.values(this, {old_email: oldEmail, new_email: newEmail});
-        "
+        hx-trigger="input changed delay:500ms"
+        hx-include="previous input[name='old_email']"
     >
-        Save
-    </button>
     <button 
         type="button"
-        class="px-2 py-1 bg-red-100 text-red-800 text-xs rounded hover:bg-red-200"
-        hx-delete="/-admin/users/<%= self.user_id %>/emails/<%= self.email.email %>"
+        class="relative px-2 py-1 text-xs rounded <% if self.email.verified { %>bg-green-100 text-green-800<% } else { %>bg-gray-100 text-gray-600<% } %>"
+        hx-post="/-admin/users/<%= self.user_id %>/emails/<%= self.email.email %>/toggle-verified"
         hx-target="#email-row-<%= self.index %>"
         hx-swap="outerHTML"
-        hx-confirm="Delete this email address?"
+        hx-indicator="#toggle-loading-<%= self.index %>"
+        title="<% if self.email.verified { %>Email is verified - click to mark unverified<% } else { %>Email is unverified - click to mark verified<% } %>"
     >
-        Delete
+        <span class="htmx-indicator absolute inset-0 flex items-center justify-center bg-black bg-opacity-75 text-white rounded" id="toggle-loading-<%= self.index %>">⏳</span>
+        <span><% if self.email.verified { %>✓<% } else { %>✗<% } %></span>
     </button>
     <button 
         type="button"
-        class="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded hover:bg-gray-200"
+        class="relative px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded hover:bg-gray-200"
         hx-post="/-admin/users/<%= self.user_id %>/send-password-reset"
         hx-vals='{"reset_email": "<%= self.email.email %>"}'
         hx-target="#modal-container"
         hx-swap="innerHTML"
         hx-confirm="Send a password reset email to <%= self.email.email %>?"
+        hx-indicator="#reset-loading-<%= self.index %>"
     >
-        Reset Password
+        <span class="htmx-indicator absolute inset-0 flex items-center justify-center bg-black bg-opacity-75 text-white rounded" id="reset-loading-<%= self.index %>">⏳</span>
+        <span>Send Password Reset</span>
+    </button>
+    <button 
+        type="button"
+        class="relative px-2 py-1 bg-red-100 text-red-800 text-xs rounded hover:bg-red-200 ml-2"
+        hx-delete="/-admin/users/<%= self.user_id %>/emails/<%= self.email.email %>"
+        hx-target="#email-row-<%= self.index %>"
+        hx-swap="outerHTML"
+        hx-confirm="Delete this email address?"
+        hx-indicator="#delete-loading-<%= self.index %>"
+    >
+        <span class="htmx-indicator absolute inset-0 flex items-center justify-center bg-black bg-opacity-75 text-white rounded" id="delete-loading-<%= self.index %>">⏳</span>
+        <span>Delete</span>
     </button>
 </div>

@@ -106,17 +106,26 @@
     </div>
     <div class="p-6">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <button hx-get="/-admin/analytics/export/users" class="inline-flex items-center justify-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
-                <wa-icon name="users" class="w-4 h-4 mr-2"></wa-icon>
-                Export Users
+            <button hx-get="/-admin/analytics/export/users" hx-indicator="#export-users-loading" class="relative inline-flex items-center justify-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
+                <span class="htmx-indicator absolute inset-0 flex items-center justify-center bg-black bg-opacity-75 text-white rounded-lg" id="export-users-loading">⏳</span>
+                <span class="inline-flex items-center">
+                    <wa-icon name="users" class="w-4 h-4 mr-2"></wa-icon>
+                    Export Users
+                </span>
             </button>
-            <button hx-get="/-admin/analytics/export/projects" class="inline-flex items-center justify-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
-                <wa-icon name="folder-open" class="w-4 h-4 mr-2"></wa-icon>
-                Export Projects
+            <button hx-get="/-admin/analytics/export/projects" hx-indicator="#export-projects-loading" class="relative inline-flex items-center justify-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
+                <span class="htmx-indicator absolute inset-0 flex items-center justify-center bg-black bg-opacity-75 text-white rounded-lg" id="export-projects-loading">⏳</span>
+                <span class="inline-flex items-center">
+                    <wa-icon name="folder-open" class="w-4 h-4 mr-2"></wa-icon>
+                    Export Projects
+                </span>
             </button>
-            <button hx-get="/-admin/analytics/export/events" class="inline-flex items-center justify-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
-                <wa-icon name="calendar" class="w-4 h-4 mr-2"></wa-icon>
-                Export Events
+            <button hx-get="/-admin/analytics/export/events" hx-indicator="#export-events-loading" class="relative inline-flex items-center justify-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
+                <span class="htmx-indicator absolute inset-0 flex items-center justify-center bg-black bg-opacity-75 text-white rounded-lg" id="export-events-loading">⏳</span>
+                <span class="inline-flex items-center">
+                    <wa-icon name="calendar" class="w-4 h-4 mr-2"></wa-icon>
+                    Export Events
+                </span>
             </button>
         </div>
     </div>

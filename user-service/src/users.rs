@@ -38,6 +38,35 @@ impl TryFrom<BasicInfoDb> for BasicInfo {
     }
 }
 
+/// Calculate user's verified status based on their email records
+async fn calculate_user_verified_status(user_id: Ulid) -> Result<bool, Error> {
+    let user_id_str = user_id.to_string();
+    let verified_count = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) > 0 FROM "emails" WHERE "user_id" = ? AND "verified" = 1"#,
+        user_id_str
+    )
+    .fetch_one(db())
+    .await?;
+    
+    Ok(verified_count != 0)
+}
+
+/// Update user's verified status in the database based on their email records
+async fn update_user_verified_status(user_id: Ulid) -> Result<(), Error> {
+    let calculated_verified = calculate_user_verified_status(user_id).await?;
+    let user_id_str = user_id.to_string();
+    
+    sqlx::query!(
+        r#"UPDATE "users" SET "verified" = ? WHERE "user_id" = ?"#,
+        calculated_verified,
+        user_id_str
+    )
+    .execute(db())
+    .await?;
+    
+    Ok(())
+}
+
 pub async fn basic_info_by_username(req: &Request) -> Result<Option<BasicInfo>, Error> {
     let email: String = flexbuffers::from_slice(&req.message.payload)?;
 
@@ -831,6 +860,9 @@ pub async fn admin_user_update(req: &Request) -> Result<AdminUserResponse, Error
 
     let user_id_str = request.user_id.to_string();
     
+    // Calculate verified status based on email records
+    let calculated_verified = calculate_user_verified_status(request.user_id).await?;
+    
     // Handle password update if provided
     let result = if let Some(new_password) = &request.new_password {
         let password_hash = djangohashers::make_password(new_password);
@@ -847,7 +879,7 @@ pub async fn admin_user_update(req: &Request) -> Result<AdminUserResponse, Error
             request.is_active,
             is_staff,
             is_page_manager,
-            request.verified,
+            calculated_verified,
             user_id_str
         )
         .execute(db())
@@ -865,7 +897,7 @@ pub async fn admin_user_update(req: &Request) -> Result<AdminUserResponse, Error
             request.is_active,
             is_staff,
             is_page_manager,
-            request.verified,
+            calculated_verified,
             user_id_str
         )
         .execute(db())
@@ -878,6 +910,14 @@ pub async fn admin_user_update(req: &Request) -> Result<AdminUserResponse, Error
                 return Err(anyhow::anyhow!("User not found").into());
             }
 
+            // Fetch the updated user data from database
+            let updated_user = sqlx::query!(
+                r#"SELECT "date_joined", "is_superuser" FROM "users" WHERE "user_id" = ?"#,
+                user_id_str
+            )
+            .fetch_one(db())
+            .await?;
+
             // Fetch user emails for the response
             let emails = fetch_user_emails(&user_id_str).await?;
 
@@ -889,10 +929,10 @@ pub async fn admin_user_update(req: &Request) -> Result<AdminUserResponse, Error
                 primary_email: request.primary_email,
                 is_active: request.is_active,
                 is_staff,
-                is_superuser: false,
+                is_superuser: updated_user.is_superuser != 0,
                 is_page_manager,
-                verified: request.verified,
-                date_joined: "unknown".to_string(),
+                verified: calculated_verified,
+                date_joined: updated_user.date_joined,
                 emails,
             };
 
@@ -1174,6 +1214,9 @@ pub async fn admin_email_delete(req: &Request) -> Result<UserEmailResponse, Erro
                 });
             }
             
+            // Update user's overall verified status based on remaining email records
+            update_user_verified_status(request.user_id).await.ok(); // Ignore errors for backwards compatibility
+            
             // Return updated emails list
             let emails = fetch_user_emails(&user_id_str).await?;
             log_activity(None, "email-deleted", request.user_id, None, format!("email={}", request.email)).await.ok();
@@ -1192,7 +1235,7 @@ pub async fn admin_email_delete(req: &Request) -> Result<UserEmailResponse, Erro
     }
 }
 
-pub async fn admin_email_toggle_verified(req: &Request) -> Result<UserEmailResponse, Error> {
+pub async fn admin_email_toggle_verified(req: &Request) -> Result<AdminUserResponse, Error> {
     let request: UserEmailToggleVerifiedRequest = decode_structured_message(req.message.clone())?;
     
     let user_id_str = request.user_id.to_string();
@@ -1222,28 +1265,61 @@ pub async fn admin_email_toggle_verified(req: &Request) -> Result<UserEmailRespo
             
             match result {
                 Ok(_) => {
-                    // Return updated emails list
-                    let emails = fetch_user_emails(&user_id_str).await?;
+                    // Update user's overall verified status based on email records
+                    update_user_verified_status(request.user_id).await.ok(); // Ignore errors for backwards compatibility
+                    
                     log_activity(None, "email-verification-toggled", request.user_id, None, format!("email={}, verified={}", request.email, new_status)).await.ok();
                     
-                    Ok(UserEmailResponse {
-                        success: true,
-                        message: format!("Email {} marked as {}", request.email, if new_status { "verified" } else { "unverified" }),
+                    // Fetch complete user data (similar to admin_user_get but without separate email fetch)
+                    let user_result = sqlx::query!(
+                        r#"
+                        SELECT 
+                            "user_id",
+                            "handle",
+                            "first_name",
+                            "last_name", 
+                            "primary_email",
+                            "is_active" as "is_active: bool",
+                            "is_staff" as "is_staff: bool",
+                            "is_superuser" as "is_superuser: bool",
+                            "is_page_manager" as "is_page_manager: bool",
+                            "verified" as "verified: bool",
+                            "date_joined"
+                        FROM "users"
+                        WHERE "user_id" = ?
+                        "#,
+                        user_id_str
+                    )
+                    .fetch_one(db())
+                    .await?;
+
+                    let user_id = user_result.user_id.as_ulid()
+                        .map_err(|e| anyhow::anyhow!("Invalid user ID in database: {}", e))?;
+
+                    // Fetch updated emails list
+                    let emails = fetch_user_emails(&user_id_str).await?;
+
+                    let user = AdminUser {
+                        user_id,
+                        handle: user_result.handle,
+                        first_name: user_result.first_name,
+                        last_name: user_result.last_name,
+                        primary_email: user_result.primary_email,
+                        is_active: user_result.is_active,
+                        is_staff: user_result.is_staff,
+                        is_superuser: user_result.is_superuser,
+                        is_page_manager: user_result.is_page_manager,
+                        verified: user_result.verified,
+                        date_joined: user_result.date_joined,
                         emails,
-                    })
+                    };
+
+                    Ok(AdminUserResponse { user })
                 }
-                Err(e) => Ok(UserEmailResponse {
-                    success: false,
-                    message: format!("Failed to toggle verification: {}", e),
-                    emails: vec![],
-                }),
+                Err(e) => Err(anyhow::anyhow!("Failed to toggle verification: {}", e).into()),
             }
         }
-        None => Ok(UserEmailResponse {
-            success: false,
-            message: "Email not found".to_string(),
-            emails: vec![],
-        }),
+        None => Err(anyhow::anyhow!("Email not found").into()),
     }
 }
 
