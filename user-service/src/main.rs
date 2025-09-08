@@ -32,6 +32,32 @@ async fn cleanup() {
     }
 }
 
+async fn analyze_tables() {
+    loop {
+        // Wait 7 days between runs
+        sleep(Duration::from_secs(60 * 60 * 24 * 7)).await;
+        
+        println!("Running weekly ANALYZE on database tables...");
+        
+        // Update statistics for the users table and its indexes
+        if let Err(err) = sqlx::query!("ANALYZE users").execute(db()).await {
+            eprintln!("Error while running ANALYZE on users table: {:?}", err);
+        }
+        
+        // Update statistics for the emails table (used in joins)
+        if let Err(err) = sqlx::query!("ANALYZE emails").execute(db()).await {
+            eprintln!("Error while running ANALYZE on emails table: {:?}", err);
+        }
+        
+        // Update statistics for the user_tags table
+        if let Err(err) = sqlx::query!("ANALYZE user_tags").execute(db()).await {
+            eprintln!("Error while running ANALYZE on user_tags table: {:?}", err);
+        }
+        
+        println!("Weekly ANALYZE completed for all tables");
+    }
+}
+
 // dev feature, remove when this codebase becomes the primary version
 async fn sessions_synchronize() {
     if cfg!(debug_assertions) {
@@ -929,6 +955,8 @@ async fn main() {
         .expect("Unable to run migrations");
 
     let cleanup_task = spawn(cleanup());
+    
+    let analyze_task = spawn(analyze_tables());
 
     let sessions_sync_task = spawn(sessions_synchronize());
 
@@ -1012,6 +1040,7 @@ async fn main() {
     toplevel.join_all().await;
 
     cleanup_task.abort();
+    analyze_task.abort();
 
     sessions_sync_task.abort();
     users_sync_task.abort();

@@ -5,7 +5,6 @@
             hx-get="/-admin/users/new"
             hx-target="#modal-container"
             hx-swap="innerHTML"
-            hx-indicator="#new-user-loading"
             class="relative inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
         >
             <span class="htmx-indicator absolute inset-0 flex items-center justify-center bg-black bg-opacity-75 text-white rounded-md" id="new-user-loading">⏳</span>
@@ -17,8 +16,16 @@
     </div>
     
     <!-- Search and Filters -->
-    <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
-        <form id="user-search-form">
+    <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 relative">
+        <form id="user-search-form" class="relative">
+            <!-- Loading overlay -->
+            <div class="htmx-indicator absolute inset-0 flex items-center justify-center bg-gray-50 bg-opacity-90 rounded-md z-10 pointer-events-none" id="search-loading">
+                <div class="flex items-center space-x-2 text-gray-600">
+                    <span class="text-xl">⏳</span>
+                    <span class="text-sm font-medium">Searching...</span>
+                </div>
+            </div>
+            
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0 sm:space-x-4">
                 <div class="flex-1 min-w-0">
                     <input 
@@ -29,7 +36,9 @@
                         hx-target="#users-content"
                         hx-trigger="keyup changed delay:300ms"
                         hx-include="#user-search-form"
+                        hx-indicator="#search-loading"
                         name="search"
+                        value="<%= self.search_term %>"
                     >
                     <input type="hidden" name="page" value="1">
                 </div>
@@ -41,11 +50,12 @@
                         hx-target="#users-content"
                         hx-trigger="change"
                         hx-include="#user-search-form"
+                        hx-indicator="#search-loading"
                     >
-                        <option value="">All Roles</option>
-                        <option value="user">User</option>
-                        <option value="page_manager">Page Manager</option>
-                        <option value="staff">Staff</option>
+                        <option value=""<% if self.selected_role.is_empty() { %> selected<% } %>>All Roles</option>
+                        <option value="user"<% if self.selected_role == "user" { %> selected<% } %>>User</option>
+                        <option value="page_manager"<% if self.selected_role == "page_manager" { %> selected<% } %>>Page Manager</option>
+                        <option value="staff"<% if self.selected_role == "staff" { %> selected<% } %>>Staff</option>
                     </select>
                     <select 
                         name="email_status"
@@ -54,10 +64,11 @@
                         hx-target="#users-content"
                         hx-trigger="change"
                         hx-include="#user-search-form"
+                        hx-indicator="#search-loading"
                     >
-                        <option value="">All Email Status</option>
-                        <option value="verified">Verified</option>
-                        <option value="unverified">Unverified</option>
+                        <option value=""<% if self.selected_email_status.is_empty() { %> selected<% } %>>All Email Status</option>
+                        <option value="verified"<% if self.selected_email_status == "verified" { %> selected<% } %>>Verified</option>
+                        <option value="unverified"<% if self.selected_email_status == "unverified" { %> selected<% } %>>Unverified</option>
                     </select>
                 </div>
             </div>

@@ -651,11 +651,17 @@ pub struct UsersPagePrepared {
     pub end_item: u32,
     pub pagination_url: String,
     pub pagination_include: String,
+    pub search_term: String,
+    pub selected_role: String,
+    pub selected_email_status: String,
 }
 
 #[derive(Debug)]
 pub struct UsersPage {
     page: Option<u32>,
+    search: Option<String>,
+    role: Option<String>,
+    email_status: Option<String>,
 }
 
 impl Component for UsersPage {
@@ -701,6 +707,9 @@ impl Component for UsersPage {
             end_item: users_content.end_item,
             pagination_url: users_content.pagination_url,
             pagination_include: users_content.pagination_include,
+            search_term: self.search.unwrap_or_default(),
+            selected_role: self.role.unwrap_or_default(),
+            selected_email_status: self.email_status.unwrap_or_default(),
         };
 
         let content = users_page.render_once()?;
@@ -817,17 +826,44 @@ async fn users(
     Query(query): Query<UserPageQuery>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    UsersPage { page: query.page }
-        .into_response(user_info)
-        .await
+    // If any search parameters are provided, perform a search instead of the default list
+    if query.search.is_some() || query.role.is_some() || query.email_status.is_some() {
+        let search_query = UserSearchQuery {
+            search: query.search,
+            role: query.role,
+            email_status: query.email_status,
+            page: query.page,
+        };
+        let users_page = users_search_internal(search_query).await?;
+        let content = users_page.render_once()?;
+
+        return AdminLayout::new("Users")
+            .with_breadcrumb("Users", None)
+            .with_sidebar_active("users")
+            .with_content(content)
+            .into_response(user_info)
+            .await;
+    }
+
+    UsersPage { 
+        page: query.page,
+        search: query.search,
+        role: query.role,
+        email_status: query.email_status,
+    }
+    .into_response(user_info)
+    .await
 }
 
 #[derive(Debug, Deserialize)]
 struct UserPageQuery {
     page: Option<u32>,
+    search: Option<String>,
+    role: Option<String>,
+    email_status: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct UserSearchQuery {
     search: Option<String>,
     role: Option<String>,
@@ -856,16 +892,14 @@ pub struct UsersContent {
     pub pagination_include: String,
 }
 
-#[handler]
-async fn users_search(
-    Query(query): Query<UserSearchQuery>,
-    Authenticated(_user_info): Authenticated,
-) -> Result<poem::Response, anyhow::Error> {
+async fn users_search_internal(
+    query: UserSearchQuery,
+) -> Result<UsersPagePrepared, anyhow::Error> {
     let page = query.page.unwrap_or(1);
     let search_request = AdminUserSearchRequest {
-        search: query.search,
-        role: query.role,
-        email_status: query.email_status,
+        search: query.search.clone(),
+        role: query.role.clone(),
+        email_status: query.email_status.clone(),
         page: Some(page),
         limit: Some(25),
     };
@@ -888,7 +922,7 @@ async fn users_search(
     };
     let end_item = std::cmp::min(page * 25, response.total_count as u32);
 
-    let search_results = UsersContent {
+    Ok(UsersPagePrepared {
         users: users_list,
         current_page: page,
         total_users: response.total_count,
@@ -897,14 +931,68 @@ async fn users_search(
         per_page: response.limit,
         start_item,
         end_item,
-        pagination_url: "/-admin/users/search".to_string(),
+        pagination_url: "/-admin/users".to_string(),
         pagination_include: "[name='search'], [name='role'], [name='email_status']".to_string(),
+        search_term: query.search.unwrap_or_default(),
+        selected_role: query.role.unwrap_or_default(),
+        selected_email_status: query.email_status.unwrap_or_default(),
+    })
+}
+
+#[handler]
+async fn users_search(
+    Query(query): Query<UserSearchQuery>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let users_page = users_search_internal(query.clone()).await?;
+    
+    // For HTMX requests, render just the users content and set URL push header
+    let users_content = UsersContent {
+        users: users_page.users,
+        current_page: users_page.current_page,
+        total_users: users_page.total_users,
+        has_previous: users_page.has_previous,
+        has_next: users_page.has_next,
+        per_page: users_page.per_page,
+        start_item: users_page.start_item,
+        end_item: users_page.end_item,
+        pagination_url: users_page.pagination_url,
+        pagination_include: users_page.pagination_include,
     };
 
-    let html = search_results.render_once()?;
+    let html = users_content.render_once()?;
+
+    // Build URL parameters for HX-Push-Url
+    let mut url_params = vec![];
+    if let Some(search) = &query.search {
+        if !search.trim().is_empty() {
+            url_params.push(format!("search={}", urlencoding::encode(search)));
+        }
+    }
+    if let Some(role) = &query.role {
+        if !role.trim().is_empty() {
+            url_params.push(format!("role={}", urlencoding::encode(role)));
+        }
+    }
+    if let Some(email_status) = &query.email_status {
+        if !email_status.trim().is_empty() {
+            url_params.push(format!("email_status={}", urlencoding::encode(email_status)));
+        }
+    }
+    let page = query.page.unwrap_or(1);
+    if page > 1 {
+        url_params.push(format!("page={}", page));
+    }
+
+    let url = if url_params.is_empty() {
+        "/-admin/users".to_string()
+    } else {
+        format!("/-admin/users?{}", url_params.join("&"))
+    };
 
     Ok(poem::Response::builder()
         .content_type("text/html")
+        .header("HX-Push-Url", url)
         .body(html))
 }
 
