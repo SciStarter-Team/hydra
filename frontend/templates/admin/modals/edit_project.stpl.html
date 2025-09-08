@@ -1,0 +1,361 @@
+<!-- Edit Project Modal -->
+<div class="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-screen overflow-y-auto">
+        <!-- Modal Header -->
+        <div class="px-6 py-4 border-b border-gray-200 bg-white sticky top-0 z-10">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-medium text-gray-900"><%= self.title %></h3>
+                <button 
+                    onclick="document.getElementById('modal-container').innerHTML = ''"
+                    class="text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded-md p-1"
+                >
+                    <wa-icon name="x" class="w-6 h-6"></wa-icon>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Modal Body -->
+        <div class="px-6 py-4 space-y-6">
+            <div id="modal-message-container"></div>
+            
+            <!-- Basic Information Section -->
+            <div class="bg-gray-50 rounded-lg p-4">
+                <h4 class="text-md font-medium text-gray-900 mb-4">Basic Information</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="project-name" class="block text-sm font-medium text-gray-700">Project Name</label>
+                        <div class="mt-1 flex">
+                            <input 
+                                type="text" 
+                                id="project-name"
+                                value="<%= self.project.title %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                hx-put="/-admin/projects/<%= self.project.id %>/field/name"
+                                hx-vals="js:{value: document.getElementById('project-name').value}"
+                                hx-target="#project-name-<%= self.project.id %>"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label for="project-presenter" class="block text-sm font-medium text-gray-700">Presenter</label>
+                        <div class="mt-1 flex">
+                            <input 
+                                type="text" 
+                                id="project-presenter"
+                                value="<%= self.project.presenter %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                hx-put="/-admin/projects/<%= self.project.id %>/field/presenter"
+                                hx-vals="js:{value: document.getElementById('project-presenter').value}"
+                                hx-target="#modal-message-container"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="project-description" class="block text-sm font-medium text-gray-700">Description</label>
+                        <div class="mt-1">
+                            <textarea 
+                                id="project-description" 
+                                rows="3"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            ><%= self.project.description %></textarea>
+                            <button 
+                                hx-put="/-admin/projects/<%= self.project.id %>/field/description"
+                                hx-vals="js:{value: document.getElementById('project-description').value}"
+                                hx-target="#modal-message-container"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save Description
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Status and Settings Section -->
+            <div class="bg-gray-50 rounded-lg p-4">
+                <h4 class="text-md font-medium text-gray-900 mb-4">Status & Settings</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="project-status" class="block text-sm font-medium text-gray-700">Status</label>
+                        <div class="mt-1 flex">
+                            <select 
+                                id="project-status"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                                <option value="active"<% if self.project.status == "active" { %> selected<% } %>>Active</option>
+                                <option value="pending"<% if self.project.status == "pending" { %> selected<% } %>>Pending</option>
+                                <option value="hiatus"<% if self.project.status == "hiatus" { %> selected<% } %>>Hiatus</option>
+                                <option value="complete"<% if self.project.status == "complete" { %> selected<% } %>>Complete</option>
+                                <option value="hidden"<% if self.project.status == "hidden" { %> selected<% } %>>Hidden</option>
+                            </select>
+                            <button 
+                                hx-put="/-admin/projects/<%= self.project.id %>/field/status"
+                                hx-vals="js:{value: document.getElementById('project-status').value}"
+                                hx-target="#project-status-<%= self.project.id %>"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="space-y-3">
+                        <div class="flex items-center">
+                            <input 
+                                id="project-publish" 
+                                type="checkbox"
+                                <% if self.project.publish { %>checked<% } %>
+                                class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                            >
+                            <label for="project-publish" class="ml-2 block text-sm text-gray-900">Published</label>
+                            <button 
+                                hx-put="/-admin/projects/<%= self.project.id %>/field/publish"
+                                hx-vals="js:{value: document.getElementById('project-publish').checked}"
+                                hx-target="#project-publish-<%= self.project.id %>"
+                                class="ml-2 inline-flex items-center px-2 py-1 border border-gray-300 rounded text-xs text-gray-700 bg-gray-50 hover:bg-gray-100"
+                            >
+                                Save
+                            </button>
+                        </div>
+                        
+                        <div class="flex items-center">
+                            <input 
+                                id="project-flagged" 
+                                type="checkbox"
+                                <% if self.project.flagged { %>checked<% } %>
+                                class="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
+                            >
+                            <label for="project-flagged" class="ml-2 block text-sm text-gray-900">Flagged</label>
+                            <button 
+                                hx-put="/-admin/projects/<%= self.project.id %>/field/flagged"
+                                hx-vals="js:{value: document.getElementById('project-flagged').checked}"
+                                hx-target="#project-row-<%= self.project.id %>"
+                                hx-swap="outerHTML"
+                                class="ml-2 inline-flex items-center px-2 py-1 border border-gray-300 rounded text-xs text-gray-700 bg-gray-50 hover:bg-gray-100"
+                            >
+                                Save
+                            </button>
+                        </div>
+                        
+                        <div class="flex items-center">
+                            <input 
+                                id="project-test" 
+                                type="checkbox"
+                                <% if self.project.is_test { %>checked<% } %>
+                                class="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
+                            >
+                            <label for="project-test" class="ml-2 block text-sm text-gray-900">Test Project</label>
+                            <button 
+                                hx-put="/-admin/projects/<%= self.project.id %>/field/is_test"
+                                hx-vals="js:{value: document.getElementById('project-test').checked}"
+                                hx-target="#project-row-<%= self.project.id %>"
+                                hx-swap="outerHTML"
+                                class="ml-2 inline-flex items-center px-2 py-1 border border-gray-300 rounded text-xs text-gray-700 bg-gray-50 hover:bg-gray-100"
+                            >
+                                Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Web & Social Section -->
+            <div class="bg-gray-50 rounded-lg p-4">
+                <h4 class="text-md font-medium text-gray-900 mb-4">Web & Social Media</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="project-url" class="block text-sm font-medium text-gray-700">Project URL</label>
+                        <div class="mt-1 flex">
+                            <input 
+                                type="url" 
+                                id="project-url"
+                                value="<%= self.project.url %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                hx-put="/-admin/projects/<%= self.project.id %>/field/url"
+                                hx-vals="js:{value: document.getElementById('project-url').value}"
+                                hx-target="#modal-message-container"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label for="project-image" class="block text-sm font-medium text-gray-700">Image URL</label>
+                        <div class="mt-1 flex">
+                            <input 
+                                type="url" 
+                                id="project-image"
+                                value="<%= self.project.image %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                hx-put="/-admin/projects/<%= self.project.id %>/field/image"
+                                hx-vals="js:{value: document.getElementById('project-image').value}"
+                                hx-target="#modal-message-container"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Project Goals Section -->
+            <div class="bg-gray-50 rounded-lg p-4">
+                <h4 class="text-md font-medium text-gray-900 mb-4">Project Goals & Tasks</h4>
+                <div class="grid grid-cols-1 gap-4">
+                    <div>
+                        <label for="project-goal" class="block text-sm font-medium text-gray-700">Scientific Goal</label>
+                        <div class="mt-1">
+                            <textarea 
+                                id="project-goal" 
+                                rows="3"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            ><%= self.project.goal %></textarea>
+                            <button 
+                                hx-put="/-admin/projects/<%= self.project.id %>/field/goal"
+                                hx-vals="js:{value: document.getElementById('project-goal').value}"
+                                hx-target="#modal-message-container"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save Goal
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label for="project-task" class="block text-sm font-medium text-gray-700">Participant Task</label>
+                        <div class="mt-1">
+                            <textarea 
+                                id="project-task" 
+                                rows="3"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            ><%= self.project.task %></textarea>
+                            <button 
+                                hx-put="/-admin/projects/<%= self.project.id %>/field/task"
+                                hx-vals="js:{value: document.getElementById('project-task').value}"
+                                hx-target="#modal-message-container"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save Task
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Admin Section -->
+            <div class="bg-red-50 rounded-lg p-4 border border-red-200">
+                <h4 class="text-md font-medium text-red-900 mb-4">Administrative Settings</h4>
+                <div class="grid grid-cols-1 gap-4">
+                    <div>
+                        <label for="admin-notes" class="block text-sm font-medium text-red-700">Admin Notes (Internal Only)</label>
+                        <div class="mt-1">
+                            <textarea 
+                                id="admin-notes" 
+                                rows="3"
+                                class="block w-full px-3 py-2 border border-red-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm bg-red-50"
+                            ><%= self.project.admin_notes %></textarea>
+                            <button 
+                                hx-put="/-admin/projects/<%= self.project.id %>/field/admin_notes"
+                                hx-vals="js:{value: document.getElementById('admin-notes').value}"
+                                hx-target="#modal-message-container"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-red-300 rounded-md bg-red-100 hover:bg-red-200 text-sm text-red-700"
+                            >
+                                Save Admin Notes
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center">
+                        <input 
+                            id="project-draft" 
+                            type="checkbox"
+                            <% if self.project.draft { %>checked<% } %>
+                            class="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
+                        >
+                        <label for="project-draft" class="ml-2 block text-sm text-red-900">Draft Status</label>
+                        <button 
+                            hx-put="/-admin/projects/<%= self.project.id %>/field/draft"
+                            hx-vals="js:{value: document.getElementById('project-draft').checked}"
+                            hx-target="#project-row-<%= self.project.id %>"
+                            hx-swap="outerHTML"
+                            class="ml-2 inline-flex items-center px-2 py-1 border border-red-300 rounded text-xs text-red-700 bg-red-100 hover:bg-red-200"
+                        >
+                            Save
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Metadata Section -->
+            <div class="bg-gray-50 rounded-lg p-4">
+                <h4 class="text-md font-medium text-gray-900 mb-4">Metadata</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <span class="font-medium text-gray-700">Project ID:</span>
+                        <span class="ml-2 text-gray-600 font-mono"><%= self.project.id %></span>
+                    </div>
+                    <div>
+                        <span class="font-medium text-gray-700">Creator:</span>
+                        <span class="ml-2 text-gray-600"><%= self.project.page_creator_id %></span>
+                    </div>
+                    <div>
+                        <span class="font-medium text-gray-700">Participants:</span>
+                        <span class="ml-2 text-gray-600"><%= self.project.participants %></span>
+                    </div>
+                    <div>
+                        <span class="font-medium text-gray-700">Origin:</span>
+                        <span class="ml-2 text-gray-600"><%= self.project.origin %></span>
+                    </div>
+                    <div>
+                        <span class="font-medium text-gray-700">Created:</span>
+                        <span class="ml-2 text-gray-600"><%= self.project.created_date %></span>
+                    </div>
+                    <div>
+                        <span class="font-medium text-gray-700">Last Updated:</span>
+                        <span class="ml-2 text-gray-600"><%= self.project.last_updated %></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Modal Footer -->
+        <div class="px-6 py-4 border-t border-gray-200 bg-gray-50 sticky bottom-0">
+            <div class="flex justify-end space-x-3">
+                <button 
+                    onclick="document.getElementById('modal-container').innerHTML = ''"
+                    class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                >
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Click outside to close -->
+<script>
+document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('bg-opacity-75')) {
+        document.getElementById('modal-container').innerHTML = '';
+    }
+});
+</script>

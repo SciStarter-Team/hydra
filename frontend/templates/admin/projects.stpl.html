@@ -1,95 +1,98 @@
-<!-- Projects Header -->
+<!-- Projects Management -->
 <div class="bg-white rounded-lg shadow border border-gray-200">
-    <div class="px-6 py-4 border-b border-gray-200">
-        <div class="flex items-center justify-between">
-            <h3 class="text-lg font-medium text-gray-900">Projects Management</h3>
-            <button hx-get="/-admin/projects/new" hx-target="#main-content" hx-swap="innerHTML" class="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors duration-200">
+    <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+        <h3 class="text-lg font-medium text-gray-900">Project Management</h3>
+        <button 
+            hx-get="/-admin/projects/new"
+            hx-target="#modal-container"
+            hx-swap="innerHTML"
+            class="relative inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
+        >
+            <span class="htmx-indicator absolute inset-0 flex items-center justify-center bg-black bg-opacity-75 text-white rounded-md" id="new-project-loading">⏳</span>
+            <span class="inline-flex items-center">
                 <wa-icon name="plus" class="w-4 h-4 mr-2"></wa-icon>
-                New Project
-            </button>
-        </div>
+                Add Project
+            </span>
+        </button>
     </div>
-
-    <!-- Projects Table -->
-    <div class="overflow-x-auto">
-        <table class="w-full">
-            <thead class="bg-gray-50">
-                <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Project</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Participants</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Updated</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
-                <% for project in &self.projects { %>
-                    <tr class="hover:bg-gray-50">
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <div>
-                                <div class="text-sm font-medium text-gray-900"><%= project.title %></div>
-                                <div class="text-sm text-gray-500">Created <%= project.created_date %></div>
-                            </div>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <% if project.status == "active" { %>
-                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                                    <%= project.status %>
-                                </span>
-                            <% } else if project.status == "draft" { %>
-                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                                    <%= project.status %>
-                                </span>
-                            <% } else { %>
-                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
-                                    <%= project.status %>
-                                </span>
-                            <% } %>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            <%= project.participants %>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            <%= project.category %>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            <%= project.last_updated %>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <div class="flex items-center space-x-2">
-                                <button hx-get="/-admin/projects/<%= project.id %>/edit" hx-target="#main-content" hx-swap="innerHTML" class="text-indigo-600 hover:text-indigo-900">
-                                    <wa-icon name="pencil" class="w-4 h-4"></wa-icon>
-                                </button>
-                                <button hx-delete="/-admin/projects/<%= project.id %>" hx-confirm="Are you sure?" class="text-red-600 hover:text-red-900">
-                                    <wa-icon name="trash" class="w-4 h-4"></wa-icon>
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                <% } %>
-            </tbody>
-        </table>
+    
+    <!-- Search and Filters -->
+    <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 relative">
+        <form id="project-search-form" class="relative">
+            <!-- Loading overlay -->
+            <div class="htmx-indicator absolute inset-0 flex items-center justify-center bg-gray-50 bg-opacity-90 rounded-md z-10 pointer-events-none" id="search-loading">
+                <div class="flex items-center space-x-2 text-gray-600">
+                    <span class="text-xl">⏳</span>
+                    <span class="text-sm font-medium">Searching...</span>
+                </div>
+            </div>
+            
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0 sm:space-x-4">
+                <div class="flex-1 min-w-0">
+                    <input 
+                        type="search" 
+                        placeholder="Search projects..."
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        hx-get="/-admin/projects/search"
+                        hx-target="#projects-content"
+                        hx-trigger="keyup changed delay:300ms"
+                        hx-include="#project-search-form"
+                        hx-indicator="#search-loading"
+                        name="search"
+                        value="<%= self.search_term %>"
+                    >
+                    <input type="hidden" name="page" value="1">
+                </div>
+                <div class="flex space-x-3">
+                    <select 
+                        name="status"
+                        class="block px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        hx-get="/-admin/projects/search"
+                        hx-target="#projects-content"
+                        hx-trigger="change"
+                        hx-include="#project-search-form"
+                        hx-indicator="#search-loading"
+                    >
+                        <option value=""<% if self.selected_status.is_empty() { %> selected<% } %>>All Status</option>
+                        <option value="active"<% if self.selected_status == "active" { %> selected<% } %>>Active</option>
+                        <option value="pending"<% if self.selected_status == "pending" { %> selected<% } %>>Pending</option>
+                        <option value="hiatus"<% if self.selected_status == "hiatus" { %> selected<% } %>>Hiatus</option>
+                        <option value="complete"<% if self.selected_status == "complete" { %> selected<% } %>>Complete</option>
+                        <option value="hidden"<% if self.selected_status == "hidden" { %> selected<% } %>>Hidden</option>
+                    </select>
+                    <select 
+                        name="publish"
+                        class="block px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        hx-get="/-admin/projects/search"
+                        hx-target="#projects-content"
+                        hx-trigger="change"
+                        hx-include="#project-search-form"
+                        hx-indicator="#search-loading"
+                    >
+                        <option value=""<% if self.selected_publish.is_empty() { %> selected<% } %>>All Publish Status</option>
+                        <option value="true"<% if self.selected_publish == "true" { %> selected<% } %>>Published</option>
+                        <option value="false"<% if self.selected_publish == "false" { %> selected<% } %>>Unpublished</option>
+                    </select>
+                </div>
+            </div>
+        </form>
     </div>
-
-    <!-- Pagination -->
-    <div class="px-6 py-3 bg-gray-50 border-t border-gray-200">
-        <div class="flex items-center justify-between">
-            <div class="text-sm text-gray-700">
-                Showing <span class="font-medium"><%= self.start_item %></span> to <span class="font-medium"><%= self.end_item %></span> of <span class="font-medium"><%= self.total_projects %></span> results
-            </div>
-            <div class="flex space-x-2">
-                <% if self.has_previous { %>
-                    <button hx-get="/-admin/projects?page=<%= self.current_page - 1 %>" hx-target="#main-content" hx-swap="innerHTML" class="px-3 py-1 bg-white border border-gray-300 text-sm rounded-md hover:bg-gray-50">
-                        Previous
-                    </button>
-                <% } %>
-                <% if self.has_next { %>
-                    <button hx-get="/-admin/projects?page=<%= self.current_page + 1 %>" hx-target="#main-content" hx-swap="innerHTML" class="px-3 py-1 bg-white border border-gray-300 text-sm rounded-md hover:bg-gray-50">
-                        Next
-                    </button>
-                <% } %>
-            </div>
-        </div>
+    
+    <div id="projects-content">
+        <%+ ProjectsContent { 
+            projects: self.projects.clone(), 
+            current_page: self.current_page, 
+            total_projects: self.total_projects, 
+            has_previous: self.has_previous, 
+            has_next: self.has_next, 
+            per_page: self.per_page,
+            start_item: self.start_item, 
+            end_item: self.end_item, 
+            pagination_url: self.pagination_url.clone(), 
+            pagination_include: self.pagination_include.clone() 
+        } %>
     </div>
 </div>
+
+<!-- Modal Container -->
+<div id="modal-container"></div>

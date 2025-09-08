@@ -1,0 +1,192 @@
+<!-- Add Project Modal -->
+<div class="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-screen overflow-y-auto">
+        <!-- Modal Header -->
+        <div class="px-6 py-4 border-b border-gray-200 bg-white sticky top-0 z-10">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-medium text-gray-900"><%= self.title %></h3>
+                <button 
+                    onclick="document.getElementById('modal-container').innerHTML = ''"
+                    class="text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded-md p-1"
+                >
+                    <wa-icon name="x" class="w-6 h-6"></wa-icon>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Modal Body -->
+        <form id="add-project-form" hx-post="/-admin/projects" hx-target="#modal-message-container">
+            <div class="px-6 py-4 space-y-6">
+                <div id="modal-message-container"></div>
+                
+                <!-- Basic Information Section -->
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <h4 class="text-md font-medium text-gray-900 mb-4">Basic Information</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="md:col-span-2">
+                            <label for="name" class="block text-sm font-medium text-gray-700">Project Name <span class="text-red-500">*</span></label>
+                            <input 
+                                type="text" 
+                                id="name"
+                                name="name"
+                                required
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                placeholder="Enter project name"
+                            >
+                        </div>
+                        
+                        <div>
+                            <label for="presenter" class="block text-sm font-medium text-gray-700">Presenter/Organization <span class="text-red-500">*</span></label>
+                            <input 
+                                type="text" 
+                                id="presenter"
+                                name="presenter"
+                                required
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                placeholder="Who is presenting this project?"
+                            >
+                        </div>
+                        
+                        <div>
+                            <label for="url" class="block text-sm font-medium text-gray-700">Project URL</label>
+                            <input 
+                                type="url" 
+                                id="url"
+                                name="url"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                placeholder="https://example.com/project"
+                            >
+                        </div>
+                        
+                        <div class="md:col-span-2">
+                            <label for="description" class="block text-sm font-medium text-gray-700">Description <span class="text-red-500">*</span></label>
+                            <textarea 
+                                id="description" 
+                                name="description"
+                                required
+                                rows="3"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                placeholder="Describe what this project is about"
+                            ></textarea>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Project Goals Section -->
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <h4 class="text-md font-medium text-gray-900 mb-4">Project Goals & Tasks</h4>
+                    <div class="grid grid-cols-1 gap-4">
+                        <div>
+                            <label for="goal" class="block text-sm font-medium text-gray-700">Scientific Goal</label>
+                            <textarea 
+                                id="goal" 
+                                name="goal"
+                                rows="2"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                placeholder="What is the scientific goal of this project?"
+                            ></textarea>
+                        </div>
+                        
+                        <div>
+                            <label for="task" class="block text-sm font-medium text-gray-700">Participant Task</label>
+                            <textarea 
+                                id="task" 
+                                name="task"
+                                rows="2"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                placeholder="What will participants do in this project?"
+                            ></textarea>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Media & Assets Section -->
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <h4 class="text-md font-medium text-gray-900 mb-4">Media & Assets</h4>
+                    <div class="grid grid-cols-1 gap-4">
+                        <div>
+                            <label for="image" class="block text-sm font-medium text-gray-700">Project Image URL</label>
+                            <input 
+                                type="url" 
+                                id="image"
+                                name="image"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                placeholder="https://example.com/project-image.jpg"
+                            >
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Status & Settings Section -->
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <h4 class="text-md font-medium text-gray-900 mb-4">Status & Settings</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="space-y-3">
+                            <div class="flex items-center">
+                                <input 
+                                    id="draft" 
+                                    name="draft"
+                                    type="checkbox"
+                                    checked
+                                    class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                >
+                                <label for="draft" class="ml-2 block text-sm text-gray-900">Save as Draft</label>
+                                <span class="ml-2 text-xs text-gray-500">(unchecked = active)</span>
+                            </div>
+                            
+                            <div class="flex items-center">
+                                <input 
+                                    id="publish" 
+                                    name="publish"
+                                    type="checkbox"
+                                    class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                >
+                                <label for="publish" class="ml-2 block text-sm text-gray-900">Publish Immediately</label>
+                                <span class="ml-2 text-xs text-gray-500">(make visible to public)</span>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label for="admin_notes" class="block text-sm font-medium text-gray-700">Admin Notes</label>
+                            <textarea 
+                                id="admin_notes" 
+                                name="admin_notes"
+                                rows="3"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                placeholder="Internal notes for administrators..."
+                            ></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Modal Footer -->
+            <div class="px-6 py-4 border-t border-gray-200 bg-gray-50 sticky bottom-0">
+                <div class="flex justify-end space-x-3">
+                    <button 
+                        type="button"
+                        onclick="document.getElementById('modal-container').innerHTML = ''"
+                        class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                    >
+                        Cancel
+                    </button>
+                    <button 
+                        type="submit"
+                        class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                    >
+                        Create Project
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Click outside to close -->
+<script>
+document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('bg-opacity-75')) {
+        document.getElementById('modal-container').innerHTML = '';
+    }
+});
+</script>

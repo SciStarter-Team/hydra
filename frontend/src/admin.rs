@@ -8,6 +8,7 @@ struct EmailRow {
     index: usize,
 }
 
+use crate::peering::LoadStorePeered;
 use common::{
     message::health::{
         ForumServiceHealthResponse, FrontendServiceHealthResponse, LocationServiceHealthResponse,
@@ -52,7 +53,11 @@ pub fn routes() -> impl Endpoint {
             "/users/:id/emails/:email/toggle-verified",
             post(users_emails_toggle_verified),
         )
-        .at("/projects", get(projects))
+        .at("/projects", get(projects).post(projects_create))
+        .at("/projects/search", get(projects_search))
+        .at("/projects/new", get(projects_new))
+        .at("/projects/:id", get(projects_edit))
+        .at("/projects/:id/field/:field_type", put(projects_update_field))
         .at("/events", get(events))
         .at("/analytics", get(analytics))
         .at("/settings", get(settings))
@@ -405,25 +410,50 @@ pub struct AdminProject {
     pub id: String,
     pub title: String,
     pub status: String,
+    pub publish: bool,
     pub participants: u32,
     pub created_date: String,
     pub last_updated: String,
     pub category: String,
+    pub page_creator_id: String,
+    pub description: String,
+    pub presenter: String,
+    pub origin: String,
+    pub flagged: bool,
+    pub duplicate: bool,
+    pub is_test: bool,
+    pub goal: String,
+    pub task: String,
+    pub image: String,
+    pub url: String,
+    pub admin_notes: String,
+    pub draft: bool,
 }
 
 #[derive(Debug)]
-pub struct ProjectsPage;
+pub struct ProjectsPage {
+    page: Option<u32>,
+    search: Option<String>,
+    status: Option<String>,
+    publish: Option<String>,
+}
 
 #[derive(Debug, TemplateOnce)]
 #[template(path = "admin/projects.stpl.html")]
 pub struct ProjectsPagePrepared {
     projects: Vec<AdminProject>,
     current_page: u32,
-    total_projects: u32,
+    total_projects: u64,
     has_previous: bool,
     has_next: bool,
+    per_page: u32,
     start_item: u32,
     end_item: u32,
+    pagination_url: String,
+    pagination_include: String,
+    search_term: String,
+    selected_status: String,
+    selected_publish: String,
 }
 
 impl Component for ProjectsPage {
@@ -437,30 +467,66 @@ impl Component for ProjectsPage {
                 id: "01234567890123456789012345".to_string(),
                 title: "Marine Life Survey".to_string(),
                 status: "active".to_string(),
+                publish: true,
                 participants: 1250,
                 created_date: "Mar 15, 2024".to_string(),
                 last_updated: "2 hours ago".to_string(),
                 category: "Biology".to_string(),
+                page_creator_id: "01234567890123456789012300".to_string(),
+                description: "A comprehensive survey of marine life in coastal waters".to_string(),
+                presenter: "Marine Research Institute".to_string(),
+                origin: "scistarter".to_string(),
+                flagged: false,
+                duplicate: false,
+                is_test: false,
+                goal: "To understand marine biodiversity patterns".to_string(),
+                task: "Identify and count marine species".to_string(),
+                image: "https://example.com/marine-survey.jpg".to_string(),
+                url: "https://example.com/marine-life-survey".to_string(),
+                admin_notes: "".to_string(),
+                draft: false,
             },
             AdminProject {
                 id: "01234567890123456789012346".to_string(),
                 title: "Urban Wildlife Tracking".to_string(),
-                status: "draft".to_string(),
+                status: "pending".to_string(),
+                publish: false,
                 participants: 89,
                 created_date: "Apr 02, 2024".to_string(),
                 last_updated: "1 day ago".to_string(),
                 category: "Ecology".to_string(),
+                page_creator_id: "01234567890123456789012301".to_string(),
+                description: "Track wildlife movement patterns in urban environments".to_string(),
+                presenter: "Urban Ecology Lab".to_string(),
+                origin: "external".to_string(),
+                flagged: false,
+                duplicate: false,
+                is_test: true,
+                goal: "Monitor urban wildlife population changes".to_string(),
+                task: "Track and photograph wildlife in urban areas".to_string(),
+                image: "https://example.com/urban-wildlife.jpg".to_string(),
+                url: "https://example.com/urban-wildlife-tracking".to_string(),
+                admin_notes: "This is a test project for development purposes".to_string(),
+                draft: true,
             },
         ];
 
+        let page = self.page.unwrap_or(1);
+        
         let projects_content = ProjectsPagePrepared {
             projects: projects_list,
-            current_page: 1,
+            current_page: page,
             total_projects: 2,
-            has_previous: false,
+            has_previous: page > 1,
             has_next: false,
-            start_item: 1,
+            per_page: 25,
+            start_item: ((page - 1) * 25) + 1,
             end_item: 2,
+            pagination_url: "/-admin/projects".to_string(),
+            pagination_include: "[name='search'], [name='status'], [name='publish']".to_string(),
+            search_term: self.search.unwrap_or_default(),
+            selected_status: self.status.unwrap_or_default(),
+            selected_publish: self.publish.unwrap_or_default(),
         };
 
         let content = projects_content.render_once()?;
@@ -572,10 +638,24 @@ impl Component for AnalyticsPage {
             id: "01234567890123456789012345".to_string(),
             title: "Marine Life Survey".to_string(),
             status: "active".to_string(),
+            publish: true,
             participants: 1250,
             created_date: "Mar 15, 2024".to_string(),
             last_updated: "2 hours ago".to_string(),
             category: "Biology".to_string(),
+            page_creator_id: "01234567890123456789012300".to_string(),
+            description: "A comprehensive survey of marine life in coastal waters".to_string(),
+            presenter: "Marine Research Institute".to_string(),
+            origin: "scistarter".to_string(),
+            flagged: false,
+            duplicate: false,
+            is_test: false,
+            goal: "To understand marine biodiversity patterns".to_string(),
+            task: "Identify and count marine species".to_string(),
+            image: "https://example.com/marine-survey.jpg".to_string(),
+            url: "https://example.com/marine-life-survey".to_string(),
+            admin_notes: "".to_string(),
+            draft: false,
         }];
 
         let analytics_content = AnalyticsPagePrepared {
@@ -1051,9 +1131,36 @@ async fn help(
 
 #[handler]
 async fn projects(
+    Query(query): Query<ProjectPageQuery>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    ProjectsPage.into_response(user_info).await
+    // If any search parameters are provided, perform a search instead of the default list
+    if query.search.is_some() || query.status.is_some() || query.publish.is_some() {
+        let search_query = ProjectSearchQuery {
+            search: query.search,
+            status: query.status,
+            publish: query.publish,
+            page: query.page,
+        };
+        let projects_page = projects_search_internal(search_query).await?;
+        let content = projects_page.render_once()?;
+
+        return AdminLayout::new("Projects")
+            .with_breadcrumb("Projects", None)
+            .with_sidebar_active("projects")
+            .with_content(content)
+            .into_response(user_info)
+            .await;
+    }
+
+    ProjectsPage { 
+        page: query.page,
+        search: query.search,
+        status: query.status,
+        publish: query.publish,
+    }
+    .into_response(user_info)
+    .await
 }
 
 #[handler]
@@ -1299,7 +1406,7 @@ async fn users_create(
     Authenticated(_user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     // Map role string to boolean flags
-    let (is_staff, is_page_manager) = match form.role.as_str() {
+    let (_is_staff, _is_page_manager) = match form.role.as_str() {
         "staff" => (true, false),
         "page_manager" => (false, true),
         "user" | _ => (false, false),
@@ -1737,4 +1844,464 @@ async fn users_emails_toggle_verified(
             .content_type("text/html")
             .body(format!("Error: {}", e))),
     }
+}
+
+// Project search and management structures and handlers
+
+#[derive(Debug, Deserialize)]
+struct ProjectPageQuery {
+    page: Option<u32>,
+    search: Option<String>,
+    status: Option<String>,
+    publish: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+struct ProjectSearchQuery {
+    search: Option<String>,
+    status: Option<String>,
+    publish: Option<String>,
+    page: Option<u32>,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/projects_content.stpl.html")]
+pub struct ProjectsContent {
+    pub projects: Vec<AdminProject>,
+    pub current_page: u32,
+    pub total_projects: u64,
+    pub has_previous: bool,
+    pub has_next: bool,
+    pub per_page: u32,
+    pub start_item: u32,
+    pub end_item: u32,
+    pub pagination_url: String,
+    pub pagination_include: String,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/partials/project_row.stpl.html")]
+pub struct ProjectRow {
+    pub project: AdminProject,
+    pub oob: bool,
+    pub oob_swap: String,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/modals/edit_project.stpl.html")]
+struct EditProjectForm {
+    title: String,
+    project: AdminProject,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/modals/add_project.stpl.html")]
+struct AddProjectForm {
+    title: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateProjectFieldForm {
+    value: String,
+}
+
+async fn projects_search_internal(
+    query: ProjectSearchQuery,
+) -> Result<ProjectsPagePrepared, anyhow::Error> {
+    let page = query.page.unwrap_or(1);
+    
+    // TODO: Replace with real database query based on search parameters
+    // For now, use the mock data but filter based on search criteria
+    let all_projects = vec![
+        AdminProject {
+            id: "01234567890123456789012345".to_string(),
+            title: "Marine Life Survey".to_string(),
+            status: "active".to_string(),
+            publish: true,
+            participants: 1250,
+            created_date: "Mar 15, 2024".to_string(),
+            last_updated: "2 hours ago".to_string(),
+            category: "Biology".to_string(),
+            page_creator_id: "01234567890123456789012300".to_string(),
+            description: "A comprehensive survey of marine life in coastal waters".to_string(),
+            presenter: "Marine Research Institute".to_string(),
+            origin: "scistarter".to_string(),
+            flagged: false,
+            duplicate: false,
+            is_test: false,
+            goal: "To understand marine biodiversity patterns".to_string(),
+            task: "Identify and count marine species".to_string(),
+            image: "https://example.com/marine-survey.jpg".to_string(),
+            url: "https://example.com/marine-life-survey".to_string(),
+            admin_notes: "".to_string(),
+            draft: false,
+        },
+        AdminProject {
+            id: "01234567890123456789012346".to_string(),
+            title: "Urban Wildlife Tracking".to_string(),
+            status: "pending".to_string(),
+            publish: false,
+            participants: 89,
+            created_date: "Apr 02, 2024".to_string(),
+            last_updated: "1 day ago".to_string(),
+            category: "Ecology".to_string(),
+            page_creator_id: "01234567890123456789012301".to_string(),
+            description: "Track wildlife movement patterns in urban environments".to_string(),
+            presenter: "Urban Ecology Lab".to_string(),
+            origin: "external".to_string(),
+            flagged: false,
+            duplicate: false,
+            is_test: true,
+            goal: "Monitor urban wildlife population changes".to_string(),
+            task: "Track and photograph wildlife in urban areas".to_string(),
+            image: "https://example.com/urban-wildlife.jpg".to_string(),
+            url: "https://example.com/urban-wildlife-tracking".to_string(),
+            admin_notes: "This is a test project for development purposes".to_string(),
+            draft: true,
+        },
+    ];
+
+    // Apply search filters
+    let mut filtered_projects = all_projects;
+    
+    if let Some(search) = &query.search {
+        if !search.trim().is_empty() {
+            let search_lower = search.to_lowercase();
+            filtered_projects.retain(|p| {
+                p.title.to_lowercase().contains(&search_lower) ||
+                p.description.to_lowercase().contains(&search_lower) ||
+                p.presenter.to_lowercase().contains(&search_lower)
+            });
+        }
+    }
+    
+    if let Some(status) = &query.status {
+        if !status.trim().is_empty() {
+            filtered_projects.retain(|p| p.status == *status);
+        }
+    }
+    
+    if let Some(publish) = &query.publish {
+        match publish.as_str() {
+            "true" => filtered_projects.retain(|p| p.publish),
+            "false" => filtered_projects.retain(|p| !p.publish),
+            _ => {}
+        }
+    }
+
+    let total_count = filtered_projects.len() as u64;
+    let total_pages = (total_count + 24) / 25; // Round up
+    let has_previous = page > 1;
+    let has_next = page < total_pages as u32;
+    let start_item = if total_count == 0 {
+        0
+    } else {
+        ((page - 1) * 25) + 1
+    };
+    let end_item = std::cmp::min(page * 25, total_count as u32);
+
+    Ok(ProjectsPagePrepared {
+        projects: filtered_projects,
+        current_page: page,
+        total_projects: total_count,
+        has_previous,
+        has_next,
+        per_page: 25,
+        start_item,
+        end_item,
+        pagination_url: "/-admin/projects".to_string(),
+        pagination_include: "[name='search'], [name='status'], [name='publish']".to_string(),
+        search_term: query.search.unwrap_or_default(),
+        selected_status: query.status.unwrap_or_default(),
+        selected_publish: query.publish.unwrap_or_default(),
+    })
+}
+
+#[handler]
+async fn projects_search(
+    Query(query): Query<ProjectSearchQuery>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let projects_page = projects_search_internal(query.clone()).await?;
+    
+    // For HTMX requests, render just the projects content and set URL push header
+    let projects_content = ProjectsContent {
+        projects: projects_page.projects,
+        current_page: projects_page.current_page,
+        total_projects: projects_page.total_projects,
+        has_previous: projects_page.has_previous,
+        has_next: projects_page.has_next,
+        per_page: projects_page.per_page,
+        start_item: projects_page.start_item,
+        end_item: projects_page.end_item,
+        pagination_url: projects_page.pagination_url,
+        pagination_include: projects_page.pagination_include,
+    };
+
+    let html = projects_content.render_once()?;
+
+    // Build URL parameters for HX-Push-Url
+    let mut url_params = vec![];
+    if let Some(search) = &query.search {
+        if !search.trim().is_empty() {
+            url_params.push(format!("search={}", urlencoding::encode(search)));
+        }
+    }
+    if let Some(status) = &query.status {
+        if !status.trim().is_empty() {
+            url_params.push(format!("status={}", urlencoding::encode(status)));
+        }
+    }
+    if let Some(publish) = &query.publish {
+        if !publish.trim().is_empty() {
+            url_params.push(format!("publish={}", urlencoding::encode(publish)));
+        }
+    }
+    let page = query.page.unwrap_or(1);
+    if page > 1 {
+        url_params.push(format!("page={}", page));
+    }
+
+    let url = if url_params.is_empty() {
+        "/-admin/projects".to_string()
+    } else {
+        format!("/-admin/projects?{}", url_params.join("&"))
+    };
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .header("HX-Push-Url", url)
+        .body(html))
+}
+
+#[handler]
+async fn projects_edit(
+    Path(project_id): Path<String>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    // TODO: Fetch actual project data from database
+    // For now, use mock data
+    let project = AdminProject {
+        id: project_id.clone(),
+        title: "Marine Life Survey".to_string(),
+        status: "active".to_string(),
+        publish: true,
+        participants: 1250,
+        created_date: "Mar 15, 2024".to_string(),
+        last_updated: "2 hours ago".to_string(),
+        category: "Biology".to_string(),
+        page_creator_id: "01234567890123456789012300".to_string(),
+        description: "A comprehensive survey of marine life in coastal waters".to_string(),
+        presenter: "Marine Research Institute".to_string(),
+        origin: "scistarter".to_string(),
+        flagged: false,
+        duplicate: false,
+        is_test: false,
+        goal: "To understand marine biodiversity patterns".to_string(),
+        task: "Identify and count marine species".to_string(),
+        image: "https://example.com/marine-survey.jpg".to_string(),
+        url: "https://example.com/marine-life-survey".to_string(),
+        admin_notes: "".to_string(),
+        draft: false,
+    };
+
+    let edit_project_form = EditProjectForm {
+        title: format!("Edit Project: {}", project.title),
+        project,
+    };
+
+    Ok(edit_project_form.into_response(None).await?)
+}
+
+#[handler]
+async fn projects_update_field(
+    Path((project_id, field_type)): Path<(String, String)>,
+    Form(form): Form<UpdateProjectFieldForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    // Parse project ID
+    let parsed_project_id = project_id
+        .parse::<ulid::Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid project ID format"))?;
+
+    // Parse field type from string
+    let field_type_enum = match field_type.as_str() {
+        "publish" => crate::project::field::ProjectFieldType::Publish,
+        "name" => crate::project::field::ProjectFieldType::Name,
+        "description" => crate::project::field::ProjectFieldType::Description,
+        "presenter" => crate::project::field::ProjectFieldType::Presenter,
+        "status" => crate::project::field::ProjectFieldType::Status,
+        "flagged" => crate::project::field::ProjectFieldType::Flagged,
+        "duplicate" => crate::project::field::ProjectFieldType::Duplicate,
+        "is_test" => crate::project::field::ProjectFieldType::IsTest,
+        "goal" => crate::project::field::ProjectFieldType::Goal,
+        "task" => crate::project::field::ProjectFieldType::Task,
+        "image" => crate::project::field::ProjectFieldType::Image,
+        "url" => crate::project::field::ProjectFieldType::Url,
+        "admin_notes" => crate::project::field::ProjectFieldType::AdminNotes,
+        "draft" => crate::project::field::ProjectFieldType::Draft,
+        _ => return Ok(poem::Response::builder()
+            .status(poem::http::StatusCode::BAD_REQUEST)
+            .content_type("text/html")
+            .body("Invalid field type")),
+    };
+
+    // Create the appropriate ProjectField enum variant based on field type and value
+    let project_field = match field_type_enum {
+        crate::project::field::ProjectFieldType::Publish => {
+            let bool_value = form.value.parse::<bool>()
+                .unwrap_or_else(|_| form.value.to_lowercase() == "true" || form.value == "1");
+            crate::project::field::ProjectField::Publish(bool_value)
+        }
+        crate::project::field::ProjectFieldType::Name => {
+            crate::project::field::ProjectField::Name(form.value)
+        }
+        crate::project::field::ProjectFieldType::Description => {
+            crate::project::field::ProjectField::Description(form.value)
+        }
+        crate::project::field::ProjectFieldType::Presenter => {
+            crate::project::field::ProjectField::Presenter(form.value)
+        }
+        crate::project::field::ProjectFieldType::Status => {
+            // Parse status enum
+            let status_enum = match form.value.as_str() {
+                "active" => crate::project::ProjectStatus::Active,
+                "hiatus" => crate::project::ProjectStatus::Hiatus,
+                "complete" => crate::project::ProjectStatus::Complete,
+                "hidden" => crate::project::ProjectStatus::Hidden,
+                "pending" => crate::project::ProjectStatus::Pending,
+                _ => crate::project::ProjectStatus::Active,
+            };
+            crate::project::field::ProjectField::Status(status_enum)
+        }
+        crate::project::field::ProjectFieldType::Flagged => {
+            let bool_value = form.value.parse::<bool>()
+                .unwrap_or_else(|_| form.value.to_lowercase() == "true" || form.value == "1");
+            crate::project::field::ProjectField::Flagged(bool_value)
+        }
+        crate::project::field::ProjectFieldType::Duplicate => {
+            let bool_value = form.value.parse::<bool>()
+                .unwrap_or_else(|_| form.value.to_lowercase() == "true" || form.value == "1");
+            crate::project::field::ProjectField::Duplicate(bool_value)
+        }
+        crate::project::field::ProjectFieldType::IsTest => {
+            let bool_value = form.value.parse::<bool>()
+                .unwrap_or_else(|_| form.value.to_lowercase() == "true" || form.value == "1");
+            crate::project::field::ProjectField::IsTest(bool_value)
+        }
+        crate::project::field::ProjectFieldType::Goal => {
+            crate::project::field::ProjectField::Goal(form.value)
+        }
+        crate::project::field::ProjectFieldType::Task => {
+            crate::project::field::ProjectField::Task(form.value)
+        }
+        crate::project::field::ProjectFieldType::Image => {
+            crate::project::field::ProjectField::Image(form.value)
+        }
+        crate::project::field::ProjectFieldType::Url => {
+            crate::project::field::ProjectField::Url(form.value)
+        }
+        crate::project::field::ProjectFieldType::AdminNotes => {
+            crate::project::field::ProjectField::AdminNotes(form.value)
+        }
+        crate::project::field::ProjectFieldType::Draft => {
+            let bool_value = form.value.parse::<bool>()
+                .unwrap_or_else(|_| form.value.to_lowercase() == "true" || form.value == "1");
+            crate::project::field::ProjectField::Draft(bool_value)
+        }
+        _ => return Ok(poem::Response::builder()
+            .status(poem::http::StatusCode::BAD_REQUEST)
+            .content_type("text/html")
+            .body("Unsupported field type")),
+    };
+
+    // Store the field using the LoadStorePeered implementation
+    match project_field.store().await {
+        Ok(_) => {
+            // Success - return updated project row with OOB
+            // TODO: Fetch updated project from database
+            // For now, return success message
+            let success_html = format!(
+                r#"<div class="p-3 text-sm text-green-700 bg-green-100 rounded-lg border border-green-200">
+                    <strong>Success:</strong> Updated {} for project {}
+                </div>"#,
+                field_type, project_id
+            );
+            Ok(poem::Response::builder()
+                .content_type("text/html")
+                .body(success_html))
+        }
+        Err(e) => {
+            // Return error response
+            let error_html = format!(
+                r#"<div class="p-3 text-sm text-red-700 bg-red-100 rounded-lg border border-red-200">
+                    <strong>Error:</strong> Failed to update {}: {}
+                </div>"#,
+                field_type, e
+            );
+            Ok(poem::Response::builder()
+                .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+                .content_type("text/html")
+                .body(error_html))
+        }
+    }
+}
+
+#[handler]
+async fn projects_new(
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let add_project_form = AddProjectForm {
+        title: "Add New Project".to_string(),
+    };
+
+    Ok(add_project_form.into_response(None).await?)
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateProjectForm {
+    name: String,
+    description: String,
+    presenter: String,
+    goal: String,
+    task: String,
+    url: String,
+    image: String,
+    admin_notes: String,
+    draft: bool,
+    publish: bool,
+}
+
+#[handler]
+async fn projects_create(
+    Form(form): Form<CreateProjectForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    // TODO: Create actual project in database using ProjectField enum
+    // For now, just return a success message
+    
+    // Create success message
+    let success_html = format!(
+        r#"<div class="p-3 text-sm text-green-700 bg-green-100 rounded-lg border border-green-200">
+            <strong>Success:</strong> Project "{}" has been created successfully!
+        </div>"#,
+        form.name
+    );
+
+    // TODO: Add OOB update to refresh the projects list
+    // For now, just return the success message with instructions to refresh
+    let combined_html = format!(
+        r#"{}
+        <div class="mt-3 text-sm text-blue-700">
+            <button onclick="document.getElementById('modal-container').innerHTML = ''; window.location.reload();" 
+                    class="text-indigo-600 hover:text-indigo-800 underline">
+                Close and refresh page
+            </button>
+        </div>"#,
+        success_html
+    );
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(combined_html))
 }
