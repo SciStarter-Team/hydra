@@ -2146,21 +2146,23 @@ async fn projects_update_field(
             .body("Invalid field type")),
     };
 
-    // Create the appropriate ProjectField enum variant based on field type and value
-    let project_field = match field_type_enum {
+    // Create the appropriate ProjectField struct based on field type and value
+    let project_field = crate::project::field::ProjectField::new(
+        parsed_project_id,
+        match field_type_enum {
         crate::project::field::ProjectFieldType::Publish => {
             let bool_value = form.value.parse::<bool>()
                 .unwrap_or_else(|_| form.value.to_lowercase() == "true" || form.value == "1");
-            crate::project::field::ProjectField::Publish(bool_value)
+            crate::project::field::ProjectFieldValue::Publish(bool_value)
         }
         crate::project::field::ProjectFieldType::Name => {
-            crate::project::field::ProjectField::Name(form.value)
+            crate::project::field::ProjectFieldValue::Name(form.value)
         }
         crate::project::field::ProjectFieldType::Description => {
-            crate::project::field::ProjectField::Description(form.value)
+            crate::project::field::ProjectFieldValue::Description(form.value)
         }
         crate::project::field::ProjectFieldType::Presenter => {
-            crate::project::field::ProjectField::Presenter(form.value)
+            crate::project::field::ProjectFieldValue::Presenter(form.value)
         }
         crate::project::field::ProjectFieldType::Status => {
             // Parse status enum
@@ -2172,48 +2174,48 @@ async fn projects_update_field(
                 "pending" => crate::project::ProjectStatus::Pending,
                 _ => crate::project::ProjectStatus::Active,
             };
-            crate::project::field::ProjectField::Status(status_enum)
+            crate::project::field::ProjectFieldValue::Status(status_enum)
         }
         crate::project::field::ProjectFieldType::Flagged => {
             let bool_value = form.value.parse::<bool>()
                 .unwrap_or_else(|_| form.value.to_lowercase() == "true" || form.value == "1");
-            crate::project::field::ProjectField::Flagged(bool_value)
+            crate::project::field::ProjectFieldValue::Flagged(bool_value)
         }
         crate::project::field::ProjectFieldType::Duplicate => {
             let bool_value = form.value.parse::<bool>()
                 .unwrap_or_else(|_| form.value.to_lowercase() == "true" || form.value == "1");
-            crate::project::field::ProjectField::Duplicate(bool_value)
+            crate::project::field::ProjectFieldValue::Duplicate(bool_value)
         }
         crate::project::field::ProjectFieldType::IsTest => {
             let bool_value = form.value.parse::<bool>()
                 .unwrap_or_else(|_| form.value.to_lowercase() == "true" || form.value == "1");
-            crate::project::field::ProjectField::IsTest(bool_value)
+            crate::project::field::ProjectFieldValue::IsTest(bool_value)
         }
         crate::project::field::ProjectFieldType::Goal => {
-            crate::project::field::ProjectField::Goal(form.value)
+            crate::project::field::ProjectFieldValue::Goal(form.value)
         }
         crate::project::field::ProjectFieldType::Task => {
-            crate::project::field::ProjectField::Task(form.value)
+            crate::project::field::ProjectFieldValue::Task(form.value)
         }
         crate::project::field::ProjectFieldType::Image => {
-            crate::project::field::ProjectField::Image(form.value)
+            crate::project::field::ProjectFieldValue::Image(form.value)
         }
         crate::project::field::ProjectFieldType::Url => {
-            crate::project::field::ProjectField::Url(form.value)
+            crate::project::field::ProjectFieldValue::Url(form.value)
         }
         crate::project::field::ProjectFieldType::AdminNotes => {
-            crate::project::field::ProjectField::AdminNotes(form.value)
+            crate::project::field::ProjectFieldValue::AdminNotes(form.value)
         }
         crate::project::field::ProjectFieldType::Draft => {
             let bool_value = form.value.parse::<bool>()
                 .unwrap_or_else(|_| form.value.to_lowercase() == "true" || form.value == "1");
-            crate::project::field::ProjectField::Draft(bool_value)
+            crate::project::field::ProjectFieldValue::Draft(bool_value)
         }
         _ => return Ok(poem::Response::builder()
             .status(poem::http::StatusCode::BAD_REQUEST)
             .content_type("text/html")
             .body("Unsupported field type")),
-    };
+        });
 
     // Store the field using the LoadStorePeered implementation
     match project_field.store().await {

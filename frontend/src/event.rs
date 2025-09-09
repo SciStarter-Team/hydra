@@ -3,6 +3,7 @@ use std::str::FromStr;
 use common::timestring::TimeString;
 
 pub mod all;
+pub mod field;
 
 #[derive(Debug, thiserror::Error)]
 pub enum EventError {
@@ -14,6 +15,14 @@ pub enum EventError {
 pub struct EventInstance {
     pub begin: TimeString,
     pub end: TimeString,
+}
+
+#[derive(Clone, Copy, Default, Debug, sqlx::Type, serde::Serialize, serde::Deserialize)]
+pub enum EventStatus {
+    #[default]
+    Active,
+    Cancelled,
+    Expired,
 }
 
 #[derive(Clone, Copy, Default, Debug, sqlx::Type, serde::Serialize, serde::Deserialize)]

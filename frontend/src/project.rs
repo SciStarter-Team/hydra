@@ -11,6 +11,7 @@ pub enum ProjectStatus {
     Hiatus,
     Complete,
     Hidden,
+    Expired,
 }
 
 #[derive(Clone, Copy, Default, Debug, sqlx::Type, serde::Serialize, serde::Deserialize)]

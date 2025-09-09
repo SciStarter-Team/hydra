@@ -22,6 +22,7 @@ use async_nats::service::ServiceExt;
 use common::shared::db;
 use component::Component;
 use entity::Entity;
+use event::{all::EventAll, field::EventField};
 use futures::StreamExt;
 use middleware::authorization::{Authenticated, NotAuthorized};
 use peering::LoadStorePeered;
@@ -158,7 +159,7 @@ fn dynamic() -> impl Endpoint {
     // IMPORTANT: When adding project/event creation, editing, or page editor management endpoints,
     // remember to call the appropriate page_manager sync functions:
     // - page_manager::after_project_added() when projects are created
-    // - page_manager::after_event_added() when events are created  
+    // - page_manager::after_event_added() when events are created
     // - page_manager::after_project_editor_added/removed() when editors are modified
     // - page_manager::after_event_editor_added/removed() when editors are modified
     // This ensures user page manager status stays synchronized with the user service.
@@ -237,9 +238,12 @@ async fn main() -> Result<(), Error> {
 
     let _project_all_updates = tokio::spawn(ProjectAll::peering_task());
     let _project_field_updates = tokio::spawn(ProjectField::peering_task());
+    let _event_all_updates = tokio::spawn(EventAll::peering_task());
+    let _event_field_updates = tokio::spawn(EventField::peering_task());
 
     let _synchronize_projects = tokio::spawn(sync::synchronize_projects());
     let _synchronize_events = tokio::spawn(sync::synchronize_events());
+    let _update_expired_statuses = tokio::spawn(sync::update_expired_statuses());
 
     // Start NATS service
     let nats = common::shared::nats();
@@ -911,10 +915,18 @@ mod sync {
                 }
 
                 // Update page manager status for users associated with this project
-                let creator_id = if proj.page_creator_id != Ulid::nil() { Some(proj.page_creator_id) } else { None };
+                let creator_id = if proj.page_creator_id != Ulid::nil() {
+                    Some(proj.page_creator_id)
+                } else {
+                    None
+                };
                 let editor_ids: Vec<Ulid> = proj.page_editor_ids.iter().copied().collect();
                 if let Err(err) = page_manager::after_project_added(creator_id, &editor_ids).await {
-                    tracing::error!("Error updating page manager status for project {}: {}", &proj.name, err);
+                    tracing::error!(
+                        "Error updating page manager status for project {}: {}",
+                        &proj.name,
+                        err
+                    );
                     // Continue processing - don't fail the sync for this
                 }
 
@@ -1245,10 +1257,18 @@ mod sync {
                 }
 
                 // Update page manager status for users associated with this event
-                let creator_id = if evt.page_creator_id != Ulid::nil() { Some(evt.page_creator_id) } else { None };
+                let creator_id = if evt.page_creator_id != Ulid::nil() {
+                    Some(evt.page_creator_id)
+                } else {
+                    None
+                };
                 let editor_ids: Vec<Ulid> = evt.page_editor_ids.iter().copied().collect();
                 if let Err(err) = page_manager::after_event_added(creator_id, &editor_ids).await {
-                    tracing::error!("Error updating page manager status for event {}: {}", &evt.name, err);
+                    tracing::error!(
+                        "Error updating page manager status for event {}: {}",
+                        &evt.name,
+                        err
+                    );
                     // Continue processing - don't fail the sync for this
                 }
 
@@ -1282,6 +1302,151 @@ mod sync {
                 sleep(Duration::from_secs(60)).await;
             } else {
                 sleep(Duration::from_secs(60 * 60)).await;
+            }
+        }
+    }
+
+    #[tracing::instrument]
+    pub async fn update_expired_statuses() -> Result<(), anyhow::Error> {
+        use crate::event::{EventStatus, field::EventField};
+        use crate::peering::LoadStorePeered;
+        use crate::project::{ProjectStatus, field::ProjectField};
+        use common::{
+            elect,
+            shared::{db, nats},
+        };
+        use jiff::{Timestamp, tz::TimeZone};
+        use std::time::Duration as StdDuration;
+
+        loop {
+            let now = Timestamp::now();
+            let today = now.to_zoned(TimeZone::UTC).date();
+            let tomorrow = today.tomorrow()?;
+            let midnight_tomorrow = tomorrow.at(0, 0, 0, 0).to_zoned(TimeZone::UTC)?;
+
+            // Calculate seconds until next midnight UTC
+            let sleep_duration =
+                (midnight_tomorrow.timestamp() - now).total(jiff::Unit::Second)? as u64;
+
+            // Sleep until next midnight UTC
+            sleep(Duration::from_secs(sleep_duration)).await;
+
+            // Get fresh timestamp after sleep
+            let execution_time = Timestamp::now();
+            let today_str = execution_time.to_zoned(TimeZone::UTC).date().to_string();
+            let subject = format!("tasks.expired-status.claim.{}", today_str);
+            let instance_id = ulid::Ulid::new().to_string();
+
+            // Use elect function to determine if we should run the task
+            let elected = elect::elect_instance(
+                "TASK_CLAIMS",
+                &subject,
+                &instance_id,
+                StdDuration::from_secs(25 * 60 * 60), // 25 hours to handle timezone edge cases
+            )
+            .await?;
+
+            if elected {
+                tracing::info!("Elected to run expired status task for {}", today_str);
+
+                // Publish notification that this instance is running the task
+                let notification = format!("running:{}:{}", instance_id, today_str);
+                if let Err(err) = nats()
+                    .publish(
+                        "frontend.tasks.expired-status.status",
+                        notification.into_bytes().into(),
+                    )
+                    .await
+                {
+                    tracing::warn!("Failed to publish task notification: {}", err);
+                }
+
+                let now_str = execution_time.to_string();
+
+                // Find and update expired projects using ProjectField and peering
+                let expired_projects = sqlx::query!(
+                    r#"SELECT project_id FROM projects 
+                       WHERE status IN ('Active', 'Periodically Active') 
+                       AND end IS NOT NULL 
+                       AND end < ?"#,
+                    now_str
+                )
+                .fetch_all(db())
+                .await?;
+
+                let mut projects_updated = 0;
+                for project in expired_projects {
+                    let project_id: ulid::Ulid = project.project_id.parse()?;
+                    let status_field = ProjectField {
+                        project_id,
+                        field: crate::project::field::ProjectFieldValue::Status(
+                            ProjectStatus::Expired,
+                        ),
+                    };
+
+                    // Use the peering system to update the status
+                    if let Err(err) = status_field.store().await {
+                        tracing::error!("Failed to update project {} status: {}", project_id, err);
+                    } else {
+                        projects_updated += 1;
+                    }
+                }
+
+                // Find and update expired events using EventField and peering
+                let expired_events = sqlx::query!(
+                    r#"SELECT DISTINCT e.event_id 
+                       FROM events e
+                       INNER JOIN event_instances ei ON e.event_id = ei.event_id
+                       WHERE e.status = 'Active'
+                       GROUP BY e.event_id
+                       HAVING MAX(ei.end) < ?"#,
+                    now_str
+                )
+                .fetch_all(db())
+                .await?;
+
+                let mut events_updated = 0;
+                for event in expired_events {
+                    let event_id: ulid::Ulid = event
+                        .event_id
+                        .ok_or_else(|| anyhow::anyhow!("Event has no event_id"))?
+                        .parse()?;
+                    let status_field = EventField {
+                        event_id,
+                        field: crate::event::field::EventFieldValue::Status(EventStatus::Expired),
+                    };
+
+                    // Use the peering system to update the status
+                    if let Err(err) = status_field.store().await {
+                        tracing::error!("Failed to update event {} status: {}", event_id, err);
+                    } else {
+                        events_updated += 1;
+                    }
+                }
+
+                tracing::info!(
+                    "Updated {} projects and {} events to expired status for {}",
+                    projects_updated,
+                    events_updated,
+                    today_str
+                );
+
+                // Publish completion notification
+                let completion = format!(
+                    "completed:{}:{}:projects={}:events={}",
+                    instance_id, today_str, projects_updated, events_updated
+                );
+                if let Err(err) = nats()
+                    .publish(
+                        "frontend.tasks.expired-status.status",
+                        completion.into_bytes().into(),
+                    )
+                    .await
+                {
+                    tracing::warn!("Failed to publish completion notification: {}", err);
+                }
+            } else {
+                tracing::debug!("Not elected to run expired status task for {}", today_str);
             }
         }
     }
