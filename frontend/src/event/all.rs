@@ -217,9 +217,12 @@ impl LoadStorePeered for EventAll {
         // "event_last_editor",
         // "event_last_edited",
         if let Some(last_editor) = self.event_last_editor {
-            common::service::send(
-                "log.event.user-edit",
-                (last_editor, self.event_last_edited.to_owned(), "all"),
+            common::service::log_activity(
+                self.event_last_edited.clone(),
+                "user-edit",
+                last_editor,
+                self.event_id,
+                Some("all".to_string()),
             )
             .await?;
         }
@@ -227,9 +230,12 @@ impl LoadStorePeered for EventAll {
         // "scistarter_last_editor",
         // "scistarter_last_edited",
         if let Some(last_editor) = self.scistarter_last_editor {
-            common::service::send(
-                "log.event.staff-edit",
-                (last_editor, self.scistarter_last_edited.to_owned(), "all"),
+            common::service::log_activity(
+                self.scistarter_last_edited.clone(),
+                "staff-edit",
+                last_editor,
+                self.event_id,
+                Some("all".to_string()),
             )
             .await?;
         }

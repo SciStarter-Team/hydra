@@ -32,7 +32,7 @@
 
 
 /** Load Components **/
-@import "./components/mega-menu.css";
+@import "./components/mega-menu-accessible.css";
 @import "./components/accordion.css";
 @import "./components/ribbons.css";
 @import "./components/glide.core.css";
@@ -43,8 +43,8 @@
 @import "./components/self-tooltip.css";
 @import "./components/tags.css";
 @import "./components/breadcrumbs.css";
+@import "./components/dialog.css";
 @import "./components/project-card.css";
-@import "./components/wa-dialog.css";
 
 
 /** Load Templates (page patterns) **/
@@ -59,7 +59,9 @@
 @import "./main.css";
 
 
-
 @custom-variant dark (&:is(.dark *));
 
-
+@utility ghost {
+    opacity: 0.5;
+    pointer-events: none;
+}

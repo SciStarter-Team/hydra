@@ -7,7 +7,7 @@ use common::{
 };
 use ulid::Ulid;
 
-use crate::{contact::Contact, peering::LoadStorePeered};
+use crate::{contact::{Contact, ContactRole}, peering::LoadStorePeered};
 
 use super::{ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus};
 
@@ -599,9 +599,12 @@ impl LoadStorePeered for ProjectAll {
         // "project_last_editor",
         // "project_last_edited",
         if let Some(last_editor) = self.project_last_editor {
-            common::service::send(
-                "log.project.user-edit",
-                (last_editor, self.project_last_edited.to_owned(), "all"),
+            common::service::log_activity(
+                self.project_last_edited.clone(),
+                "user-edit",
+                last_editor,
+                self.project_id,
+                Some("all".to_string()),
             )
             .await?;
         }
@@ -609,9 +612,12 @@ impl LoadStorePeered for ProjectAll {
         // "scistarter_last_editor",
         // "scistarter_last_edited",
         if let Some(last_editor) = self.scistarter_last_editor {
-            common::service::send(
-                "log.project.staff-edit",
-                (last_editor, self.scistarter_last_edited.to_owned(), "all"),
+            common::service::log_activity(
+                self.scistarter_last_edited.clone(),
+                "staff-edit",
+                last_editor,
+                self.project_id,
+                Some("all".to_string()),
             )
             .await?;
         }
@@ -1070,9 +1076,487 @@ impl LoadStorePeered for ProjectAll {
 
     #[tracing::instrument]
     //async fn read_from_database<'k>(_key: Self::DatabaseKey<'k>) -> Result<Self, Error> {
-    async fn read_from_database(_key: Self::DatabaseKey) -> Result<Self, Error> {
-        unimplemented!(
-            "Loading ProjectAll from the database has been deferred until a need is demonstrated"
+    async fn read_from_database(project_id: Self::DatabaseKey) -> Result<Self, Error> {
+        let project_id_str = project_id.to_string();
+        
+        // Read main project data from projects table
+        let project_row = sqlx::query!(
+            r#"SELECT
+                project_id, legacy_v1_project_id, legacy_v2_project_id, foreign_id,
+                publish, duplicate, authoritative, flagged, is_test, status,
+                promotion_time, promotion_target, admin_notes, created, wild_hope,
+                exchange, origin, suborigin, guid, opengraph_description,
+                is_affiliate, is_inaturalist, inat_project_id, welcomed,
+                page_creator_id, extra, draft, name, participation_degree,
+                participant_instructions, participant_instructions_email,
+                us_federally_funded, presenter, goal, task, description,
+                image, image_credit, connect_opaque_url, connect_opaque_url1,
+                connect_opaque_url2, url, video_url, blog_url, twitter_name,
+                facebook_page, instagram_page, practices_how, search_terms,
+                difficulty, diy, signup_url, prefix_how_to_logged_in,
+                prefix_how_to_logged_out, how_to_join, howto_video,
+                outcomes_label, outcomes_link, time_required, training_materials,
+                classroom_materials, consent_statement, consent_statement_date,
+                participation_tools, participation_prompt,
+                participation_confirmation_message, participation_notification_email,
+                participation_usage, part_of, total_expense, materials, gear,
+                mobile_app_url_android, mobile_app_url_ios, mobile_app_url,
+                location_type, entirely_online, on_demand, in_person,
+                indoors, outdoors, regions_description, address, city, state,
+                zip, country, other, location_name, location_landuse,
+                location_description, united_nations_region, begin, end,
+                project_timing, participation_schedule, time_per_participation,
+                year_started, year_completed, month_completed, special_skills,
+                data_results, data_visualization, data_quality,
+                metadata_publication_url, data_publication_url, data_license,
+                outcome_other, university_affiliation, circuit_id,
+                sustainable_development_goals,
+                AsGeoJSON(regions) as "regions: Option<String>", AsGeoJSON(point) as "point: Option<String>"
+            FROM projects WHERE project_id = ?"#,
+            project_id_str
         )
+        .fetch_one(db())
+        .await?;
+        
+        // Read array fields from separate tables
+        let topics = sqlx::query!(
+            "SELECT topic FROM project_topics WHERE project_id = ? ORDER BY topic",
+            project_id_str
+        )
+        .fetch_all(db())
+        .await?
+        .into_iter()
+        .map(|row| row.topic)
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+        
+        let fields_of_science = sqlx::query!(
+            "SELECT field_of_science FROM project_fields_of_science WHERE project_id = ? ORDER BY field_of_science",
+            project_id_str
+        )
+        .fetch_all(db())
+        .await?
+        .into_iter()
+        .map(|row| row.field_of_science)
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+        
+        let practices = sqlx::query!(
+            "SELECT practice FROM project_practices WHERE project_id = ? ORDER BY practice",
+            project_id_str
+        )
+        .fetch_all(db())
+        .await?
+        .into_iter()
+        .map(|row| row.practice)
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+        
+        let audience = sqlx::query!(
+            "SELECT audience FROM project_audiences WHERE project_id = ? ORDER BY audience",
+            project_id_str
+        )
+        .fetch_all(db())
+        .await?
+        .into_iter()
+        .map(|row| row.audience)
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+        
+        // Read contacts
+        let contact_rows = sqlx::query!(
+            "SELECT contact_id, role, name, affiliation, email, phone, address FROM project_contacts WHERE project_id = ?",
+            project_id_str
+        )
+        .fetch_all(db())
+        .await?;
+        
+        let mut contacts = Vec::new();
+        for contact_row in contact_rows {
+            let contact_id = contact_row.contact_id.parse::<Ulid>()
+                .map_err(|e| anyhow::anyhow!("Invalid contact ULID: {}", e))?;
+            let role = match contact_row.role.as_str() {
+                "Manager" => ContactRole::Manager,
+                "ContactPerson" => ContactRole::ContactPerson,
+                "Technical" => ContactRole::Technical,
+                "Notification" => ContactRole::Notification,
+                _ => ContactRole::ContactPerson,
+            };
+            contacts.push(Contact {
+                contact_id,
+                role,
+                name: contact_row.name,
+                affiliation: contact_row.affiliation,
+                email: contact_row.email,
+                phone: contact_row.phone,
+                address: contact_row.address,
+            });
+        }
+        
+        // Read tags
+        let tags = sqlx::query!(
+            "SELECT tag FROM project_tags WHERE project_id = ?",
+            project_id_str
+        )
+        .fetch_all(db())
+        .await?
+        .into_iter()
+        .map(|row| InsensitiveString::from(row.tag))
+        .collect::<HashSet<_>>();
+        
+        // Read participant files
+        let participant_files = sqlx::query!(
+            "SELECT url FROM project_participant_files WHERE project_id = ?",
+            project_id_str
+        )
+        .fetch_all(db())
+        .await?
+        .into_iter()
+        .map(|row| row.url)
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+        
+        // Parse main project fields
+        let status = match project_row.status.as_str() {
+            "Pending" => ProjectStatus::Pending,
+            "Active" => ProjectStatus::Active,
+            "Periodically Active" => ProjectStatus::PeriodicallyActive,
+            "Hiatus" => ProjectStatus::Hiatus,
+            "Complete" => ProjectStatus::Complete,
+            "Hidden" => ProjectStatus::Hidden,
+            "Expired" => ProjectStatus::Expired,
+            _ => ProjectStatus::Active,
+        };
+        
+        let promotion_time = match project_row.promotion_time.as_str() {
+            "Promote at any time" => ProjectPromotionTime::PromoteAtAnyTime,
+            "Do not promote" => ProjectPromotionTime::DoNotPromote,
+            "Prefer promotion on the target date" => ProjectPromotionTime::PreferOnTargetDate,
+            _ => ProjectPromotionTime::PromoteAtAnyTime,
+        };
+        
+        let participation_degree = match project_row.participation_degree.as_str() {
+            "Collegial" => ProjectParticipationDegree::Collegial,
+            "Co-Created" => ProjectParticipationDegree::CoCreated,
+            "Collaborative" => ProjectParticipationDegree::Collaborative,
+            "Contributory" => ProjectParticipationDegree::Contributory,
+            "Contractual" => ProjectParticipationDegree::Contractual,
+            _ => ProjectParticipationDegree::Collegial,
+        };
+        
+        Ok(ProjectAll {
+            project_id,
+            legacy_v1_project_id: project_row.legacy_v1_project_id,
+            legacy_v2_project_id: project_row.legacy_v2_project_id,
+            foreign_id: project_row.foreign_id,
+            
+            // Admin section
+            publish: project_row.publish.unwrap_or(false),
+            duplicate: project_row.duplicate,
+            authoritative: project_row.authoritative,
+            flagged: project_row.flagged,
+            is_test: project_row.is_test,
+            status,
+            promotion_time,
+            promotion_target: project_row.promotion_target
+                .map(|s| TimeString::try_from(s))
+                .transpose()
+                .map_err(|e| anyhow::anyhow!("Invalid promotion_target TimeString: {}", e))?,
+            admin_notes: project_row.admin_notes,
+            created: TimeString::try_from(project_row.created)
+                .map_err(|e| anyhow::anyhow!("Invalid created TimeString: {}", e))?,
+            wild_hope: project_row.wild_hope,
+            exchange: project_row.exchange,
+            origin: project_row.origin,
+            suborigin: project_row.suborigin,
+            guid: project_row.guid,
+            opengraph_description: project_row.opengraph_description,
+            is_affiliate: project_row.is_affiliate,
+            is_inaturalist: project_row.is_inaturalist,
+            inat_project_id: project_row.inat_project_id.map(|i| i as i32),
+            welcomed: project_row.welcomed,
+            page_creator_id: project_row.page_creator_id.parse::<Ulid>()
+                .map_err(|e| anyhow::anyhow!("Invalid page_creator_id ULID: {}", e))?,
+            page_editor_ids: {
+                let editor_rows = sqlx::query!(
+                    "SELECT user_id FROM project_page_editors WHERE project_id = ?",
+                    project_id_str
+                )
+                .fetch_all(db())
+                .await?;
+                
+                let mut editor_ids = Vec::new();
+                for row in editor_rows {
+                    let editor_id = row.user_id.parse::<Ulid>()
+                        .map_err(|e| anyhow::anyhow!("Invalid editor ULID: {}", e))?;
+                    editor_ids.push(editor_id);
+                }
+                editor_ids.into_boxed_slice()
+            },
+            extra: project_row.extra,
+            // TODO: Fix field access - these fields may not exist in database schema yet
+            project_last_editor: None, // TODO: Read from actual column
+            project_last_edited: None, // TODO: Read from actual column  
+            scistarter_last_editor: None, // TODO: Read from actual column
+            scistarter_last_edited: None, // TODO: Read from actual column
+            
+            // Project section
+            draft: project_row.draft,
+            name: project_row.name,
+            tags,
+            participation_degree,
+            participant_instructions: project_row.participant_instructions,
+            participant_instructions_email: project_row.participant_instructions_email,
+            participant_files,
+            us_federally_funded: project_row.us_federally_funded,
+            presenter: project_row.presenter,
+            goal: project_row.goal,
+            task: project_row.task,
+            description: project_row.description,
+            image: project_row.image,
+            image_credit: project_row.image_credit,
+            connect_opaque_url: project_row.connect_opaque_url,
+            connect_opaque_url1: project_row.connect_opaque_url1,
+            connect_opaque_url2: project_row.connect_opaque_url2,
+            
+            // Contact section
+            contacts: contacts.into_boxed_slice(),
+            
+            // Web section
+            url: project_row.url,
+            video_url: project_row.video_url,
+            blog_url: project_row.blog_url,
+            twitter_name: project_row.twitter_name,
+            facebook_page: project_row.facebook_page,
+            instagram_page: project_row.instagram_page,
+            
+            // Categorization section
+            topics,
+            fields_of_science,
+            practices,
+            practices_how: project_row.practices_how,
+            search_terms: project_row.search_terms,
+            difficulty: project_row.difficulty,
+            diy: project_row.diy,
+            
+            // Joining section
+            audience,
+            signup_url: project_row.signup_url,
+            prefix_how_to_logged_in: project_row.prefix_how_to_logged_in,
+            prefix_how_to_logged_out: project_row.prefix_how_to_logged_out,
+            how_to_join: project_row.how_to_join,
+            howto_video: project_row.howto_video,
+            outcomes_label: project_row.outcomes_label,
+            outcomes_link: project_row.outcomes_link,
+            time_required: project_row.time_required,
+            training_materials: project_row.training_materials,
+            classroom_materials: project_row.classroom_materials,
+            consent_statement: project_row.consent_statement,
+            consent_statement_date: project_row.consent_statement_date
+                .map(|s| TimeString::try_from(s))
+                .transpose()
+                .map_err(|e| anyhow::anyhow!("Invalid consent_statement_date TimeString: {}", e))?,
+            participation_tools: project_row.participation_tools,
+            participation_prompt: project_row.participation_prompt,
+            participation_confirmation_message: project_row.participation_confirmation_message,
+            participation_notification_email: project_row.participation_notification_email,
+            participation_usage: project_row.participation_usage,
+            
+            // Relations section  
+            part_of: project_row.part_of
+                .map(|s| s.parse::<Ulid>())
+                .transpose()
+                .map_err(|e| anyhow::anyhow!("Invalid part_of ULID: {}", e))?,
+            associated_projects: {
+                let associated = sqlx::query!(
+                    "SELECT associated_project_id FROM project_associated_projects WHERE project_id = ?",
+                    project_id_str
+                )
+                .fetch_all(db())
+                .await?;
+                
+                let mut project_ids = Vec::new();
+                for row in associated {
+                    let associated_id = row.associated_project_id.parse::<Ulid>()
+                        .map_err(|e| anyhow::anyhow!("Invalid associated_project_id ULID: {}", e))?;
+                    project_ids.push(associated_id);
+                }
+                project_ids.into_boxed_slice()
+            },
+            
+            // Participants Need section
+            total_expense: project_row.total_expense.map(|f| f as f32),
+            materials: project_row.materials,
+            gear: project_row.gear,
+            mobile_app_url_android: project_row.mobile_app_url_android,
+            mobile_app_url_ios: project_row.mobile_app_url_ios,
+            mobile_app_url: project_row.mobile_app_url,
+            
+            // Where section
+            location_type: project_row.location_type,
+            entirely_online: project_row.entirely_online,
+            on_demand: project_row.on_demand,
+            in_person: project_row.in_person,
+            indoors: project_row.indoors,
+            outdoors: project_row.outdoors,
+            regions_description: project_row.regions_description,
+            address: project_row.address,
+            city: project_row.city,
+            state: project_row.state,
+            zip: project_row.zip,
+            country: project_row.country,
+            other: project_row.other,
+            location_name: project_row.location_name,
+            location_landuse: project_row.location_landuse,
+            location_description: project_row.location_description,
+            united_nations_region: project_row.united_nations_region,
+            point: project_row.point.flatten(),
+            regions: project_row.regions.flatten(),
+            
+            // When section
+            begin: project_row.begin
+                .map(|s| TimeString::try_from(s))
+                .transpose()
+                .map_err(|e| anyhow::anyhow!("Invalid begin TimeString: {}", e))?,
+            end: project_row.end
+                .map(|s| TimeString::try_from(s))
+                .transpose()
+                .map_err(|e| anyhow::anyhow!("Invalid end TimeString: {}", e))?,
+            project_timing: project_row.project_timing,
+            participation_schedule: project_row.participation_schedule,
+            time_per_participation: project_row.time_per_participation,
+            year_started: project_row.year_started.map(|i| i as i32),
+            year_completed: project_row.year_completed.map(|i| i as i32),
+            month_completed: project_row.month_completed.map(|i| i as i32),
+            
+            // Skills section
+            special_skills: project_row.special_skills,
+            
+            // Data section
+            data_results: project_row.data_results,
+            data_visualization: project_row.data_visualization,
+            data_quality: project_row.data_quality,
+            metadata_publication_url: project_row.metadata_publication_url,
+            data_publication_url: project_row.data_publication_url,
+            data_license: project_row.data_license,
+            
+            // Read remaining array fields
+            participation_tasks: {
+                let tasks = sqlx::query!(
+                    "SELECT participation_task FROM project_participation_tasks WHERE project_id = ?",
+                    project_id_str
+                )
+                .fetch_all(db())
+                .await?
+                .into_iter()
+                .map(|row| row.participation_task)
+                .collect::<Vec<_>>();
+                tasks.into_boxed_slice()
+            },
+            activities: {
+                let activities = sqlx::query!(
+                    "SELECT activity FROM project_activities WHERE project_id = ?",
+                    project_id_str
+                )
+                .fetch_all(db())
+                .await?
+                .into_iter()
+                .map(|row| row.activity)
+                .collect::<Vec<_>>();
+                activities.into_boxed_slice()
+            },
+            geographic_scope: {
+                let scopes = sqlx::query!(
+                    "SELECT geographic_scope FROM project_geographic_scopes WHERE project_id = ?",
+                    project_id_str
+                )
+                .fetch_all(db())
+                .await?
+                .into_iter()
+                .map(|row| row.geographic_scope)
+                .collect::<Vec<_>>();
+                scopes.into_boxed_slice()
+            },
+            data_aggregation: {
+                let aggregations = sqlx::query!(
+                    "SELECT data_aggregation FROM project_data_aggregations WHERE project_id = ?",
+                    project_id_str
+                )
+                .fetch_all(db())
+                .await?
+                .into_iter()
+                .map(|row| row.data_aggregation)
+                .collect::<Vec<_>>();
+                aggregations.into_boxed_slice()
+            },
+            data_consent: {
+                let consents = sqlx::query!(
+                    "SELECT data_consent FROM project_data_consents WHERE project_id = ?",
+                    project_id_str
+                )
+                .fetch_all(db())
+                .await?
+                .into_iter()
+                .map(|row| row.data_consent)
+                .collect::<Vec<_>>();
+                consents.into_boxed_slice()
+            },
+            data_access: {
+                let access = sqlx::query!(
+                    "SELECT data_access FROM project_data_access WHERE project_id = ?",
+                    project_id_str
+                )
+                .fetch_all(db())
+                .await?
+                .into_iter()
+                .map(|row| row.data_access)
+                .collect::<Vec<_>>();
+                access.into_boxed_slice()
+            },
+            intended_outcomes: {
+                let outcomes = sqlx::query!(
+                    "SELECT intended_outcome FROM project_intended_outcomes WHERE project_id = ?",
+                    project_id_str
+                )
+                .fetch_all(db())
+                .await?
+                .into_iter()
+                .map(|row| row.intended_outcome)
+                .collect::<Vec<_>>();
+                outcomes.into_boxed_slice()
+            },
+            sponsors: {
+                let sponsors = sqlx::query!(
+                    "SELECT sponsor FROM project_sponsors WHERE project_id = ?",
+                    project_id_str
+                )
+                .fetch_all(db())
+                .await?
+                .into_iter()
+                .map(|row| row.sponsor)
+                .collect::<Vec<_>>();
+                sponsors.into_boxed_slice()
+            },
+            stakeholders: {
+                let stakeholders = sqlx::query!(
+                    "SELECT stakeholder FROM project_stakeholders WHERE project_id = ?",
+                    project_id_str
+                )
+                .fetch_all(db())
+                .await?
+                .into_iter()
+                .map(|row| row.stakeholder)
+                .collect::<Vec<_>>();
+                stakeholders.into_boxed_slice()
+            },
+            
+            // Outcomes section
+            outcome_other: project_row.outcome_other,
+            
+            // Sponsors section (additional fields)
+            university_affiliation: project_row.university_affiliation,
+            circuit_id: project_row.circuit_id,
+            sustainable_development_goals: project_row.sustainable_development_goals,
+        })
     }
 }

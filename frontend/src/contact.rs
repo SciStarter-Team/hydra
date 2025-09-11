@@ -1,6 +1,6 @@
 use ulid::Ulid;
 
-#[derive(Debug, sqlx::Type, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, sqlx::Type, serde::Serialize, serde::Deserialize)]
 pub enum ContactRole {
     Manager,
     ContactPerson,
@@ -8,7 +8,7 @@ pub enum ContactRole {
     Notification,
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Contact {
     pub contact_id: Ulid,
     pub role: ContactRole,

@@ -18,67 +18,67 @@
         <div class="px-6 py-4 space-y-6">
             <div id="modal-message-container"></div>
             
+            <!-- TODO: Create "Required Fields" section at top with: title, goal, task, description, image, image_credit, and other non-nullable fields with no defaults -->
+            <!-- These critical fields should be prominently displayed before optional fields for better UX -->
+            
             <!-- Basic Information Section -->
             <div class="bg-gray-50 rounded-lg p-4">
                 <h4 class="text-md font-medium text-gray-900 mb-4">Basic Information</h4>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label for="project-name" class="block text-sm font-medium text-gray-700">Project Name</label>
-                        <div class="mt-1 flex">
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/name" hx-target="#project-name-<%= self.project.id %>">
                             <input 
                                 type="text" 
+                                name="value"
                                 id="project-name"
                                 value="<%= self.project.title %>"
                                 class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                             >
                             <button 
-                                hx-put="/-admin/projects/<%= self.project.id %>/field/name"
-                                hx-vals="js:{value: document.getElementById('project-name').value}"
-                                hx-target="#project-name-<%= self.project.id %>"
+                                type="submit"
                                 class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
                             >
                                 Save
                             </button>
-                        </div>
+                        </form>
                     </div>
                     
                     <div>
                         <label for="project-presenter" class="block text-sm font-medium text-gray-700">Presenter</label>
-                        <div class="mt-1 flex">
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/presenter" hx-target="#modal-message-container">
                             <input 
                                 type="text" 
+                                name="value"
                                 id="project-presenter"
                                 value="<%= self.project.presenter %>"
                                 class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                             >
                             <button 
-                                hx-put="/-admin/projects/<%= self.project.id %>/field/presenter"
-                                hx-vals="js:{value: document.getElementById('project-presenter').value}"
-                                hx-target="#modal-message-container"
+                                type="submit"
                                 class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
                             >
                                 Save
                             </button>
-                        </div>
+                        </form>
                     </div>
                     
                     <div class="md:col-span-2">
                         <label for="project-description" class="block text-sm font-medium text-gray-700">Description</label>
-                        <div class="mt-1">
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/description" hx-target="#modal-message-container">
                             <textarea 
+                                name="value"
                                 id="project-description" 
                                 rows="3"
                                 class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                             ><%= self.project.description %></textarea>
                             <button 
-                                hx-put="/-admin/projects/<%= self.project.id %>/field/description"
-                                hx-vals="js:{value: document.getElementById('project-description').value}"
-                                hx-target="#modal-message-container"
+                                type="submit"
                                 class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
                             >
                                 Save Description
                             </button>
-                        </div>
+                        </form>
                     </div>
                 </div>
             </div>
@@ -89,8 +89,9 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label for="project-status" class="block text-sm font-medium text-gray-700">Status</label>
-                        <div class="mt-1 flex">
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/status" hx-target="#project-status-<%= self.project.id %>">
                             <select 
+                                name="value"
                                 id="project-status"
                                 class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                             >
@@ -101,52 +102,74 @@
                                 <option value="hidden"<% if self.project.status == "hidden" { %> selected<% } %>>Hidden</option>
                             </select>
                             <button 
-                                hx-put="/-admin/projects/<%= self.project.id %>/field/status"
-                                hx-vals="js:{value: document.getElementById('project-status').value}"
-                                hx-target="#project-status-<%= self.project.id %>"
+                                type="submit"
                                 class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
                             >
                                 Save
                             </button>
-                        </div>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="promotion-time" class="block text-sm font-medium text-gray-700">Promotion Time</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/promotion_time" hx-target="#modal-message-container">
+                            <select 
+                                name="value"
+                                id="promotion-time"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                                <option value="Promote at any time"<% if self.project.promotion_time == "Promote at any time" { %> selected<% } %>>Promote at any time</option>
+                                <option value="Do not promote"<% if self.project.promotion_time == "Do not promote" { %> selected<% } %>>Do not promote</option>
+                                <option value="Prefer promotion on the target date"<% if self.project.promotion_time == "Prefer promotion on the target date" { %> selected<% } %>>Prefer promotion on the target date</option>
+                            </select>
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
                     </div>
                     
                     <div class="space-y-3">
                         <div class="flex items-center">
-                            <input 
-                                id="project-publish" 
-                                type="checkbox"
-                                <% if self.project.publish { %>checked<% } %>
-                                class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                            >
-                            <label for="project-publish" class="ml-2 block text-sm text-gray-900">Published</label>
-                            <button 
-                                hx-put="/-admin/projects/<%= self.project.id %>/field/publish"
-                                hx-vals="js:{value: document.getElementById('project-publish').checked}"
-                                hx-target="#project-publish-<%= self.project.id %>"
-                                class="ml-2 inline-flex items-center px-2 py-1 border border-gray-300 rounded text-xs text-gray-700 bg-gray-50 hover:bg-gray-100"
-                            >
-                                Save
-                            </button>
+                            <form class="flex items-center" hx-put="/-admin/projects/<%= self.project.id %>/field/publish" hx-target="#project-publish-<%= self.project.id %>">
+                                <input 
+                                    name="value"
+                                    value="true"
+                                    id="project-publish" 
+                                    type="checkbox"
+                                    <% if self.project.publish { %>checked<% } %>
+                                    class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                >
+                                <label for="project-publish" class="ml-2 block text-sm text-gray-900">Published</label>
+                                <button 
+                                    type="submit"
+                                    class="ml-2 inline-flex items-center px-2 py-1 border border-gray-300 rounded text-xs text-gray-700 bg-gray-50 hover:bg-gray-100"
+                                >
+                                    Save
+                                </button>
+                            </form>
                         </div>
                         
                         <div class="flex items-center">
-                            <input 
-                                id="project-flagged" 
-                                type="checkbox"
-                                <% if self.project.flagged { %>checked<% } %>
-                                class="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
-                            >
-                            <label for="project-flagged" class="ml-2 block text-sm text-gray-900">Flagged</label>
-                            <button 
-                                hx-put="/-admin/projects/<%= self.project.id %>/field/flagged"
-                                hx-vals="js:{value: document.getElementById('project-flagged').checked}"
-                                hx-target="#project-row-<%= self.project.id %>"
-                                hx-swap="outerHTML"
-                                class="ml-2 inline-flex items-center px-2 py-1 border border-gray-300 rounded text-xs text-gray-700 bg-gray-50 hover:bg-gray-100"
-                            >
-                                Save
-                            </button>
+                            <form class="flex items-center" hx-put="/-admin/projects/<%= self.project.id %>/field/flagged" hx-target="#project-row-<%= self.project.id %>" hx-swap="outerHTML">
+                                <input 
+                                    name="value"
+                                    value="true"
+                                    id="project-flagged" 
+                                    type="checkbox"
+                                    <% if self.project.flagged { %>checked<% } %>
+                                    class="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
+                                >
+                                <label for="project-flagged" class="ml-2 block text-sm text-gray-900">Flagged</label>
+                                <button 
+                                    type="submit"
+                                    class="ml-2 inline-flex items-center px-2 py-1 border border-gray-300 rounded text-xs text-gray-700 bg-gray-50 hover:bg-gray-100"
+                                >
+                                    Save
+                                </button>
+                            </form>
                         </div>
                         
                         <div class="flex items-center">
@@ -157,16 +180,175 @@
                                 class="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
                             >
                             <label for="project-test" class="ml-2 block text-sm text-gray-900">Test Project</label>
+                            <form class="ml-2 inline-flex" hx-put="/-admin/projects/<%= self.project.id %>/field/is_test" hx-target="#project-row-<%= self.project.id %>" hx-swap="outerHTML">
+                                <input type="hidden" name="value" value="false">
+                                <input type="checkbox" name="value" value="true" <% if self.project.is_test { %>checked<% } %> style="display:none;">
+                                <button 
+                                    type="submit"
+                                    onclick="this.previousElementSibling.checked = document.getElementById('project-test').checked"
+                                    class="inline-flex items-center px-2 py-1 border border-gray-300 rounded text-xs text-gray-700 bg-gray-50 hover:bg-gray-100"
+                                >
+                                    Save
+                                </button>
+                            </form>
+                        </div>
+                        
+                        <div class="flex items-center">
+                            <input 
+                                id="project-duplicate" 
+                                type="checkbox"
+                                <% if self.project.duplicate { %>checked<% } %>
+                                class="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 rounded"
+                            >
+                            <label for="project-duplicate" class="ml-2 block text-sm text-gray-900">Duplicate</label>
+                            <form class="ml-2 inline-flex" hx-put="/-admin/projects/<%= self.project.id %>/field/duplicate" hx-target="#modal-message-container">
+                                <input type="hidden" name="value" value="false">
+                                <input type="checkbox" name="value" value="true" <% if self.project.duplicate { %>checked<% } %> style="display:none;">
+                                <button 
+                                    type="submit"
+                                    onclick="this.previousElementSibling.checked = document.getElementById('project-duplicate').checked"
+                                    class="inline-flex items-center px-2 py-1 border border-gray-300 rounded text-xs text-gray-700 bg-gray-50 hover:bg-gray-100"
+                                >
+                                    Save
+                                </button>
+                            </form>
+                        </div>
+                        
+                        <div class="flex items-center">
+                            <input 
+                                id="project-authoritative" 
+                                type="checkbox"
+                                <% if self.project.authoritative { %>checked<% } %>
+                                class="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                            >
+                            <label for="project-authoritative" class="ml-2 block text-sm text-gray-900">Authoritative</label>
+                            <form class="ml-2 inline-flex" hx-put="/-admin/projects/<%= self.project.id %>/field/authoritative" hx-target="#modal-message-container">
+                                <input type="hidden" name="value" value="false">
+                                <input type="checkbox" name="value" value="true" <% if self.project.authoritative { %>checked<% } %> style="display:none;">
+                                <button 
+                                    type="submit"
+                                    onclick="this.previousElementSibling.checked = document.getElementById('project-authoritative').checked"
+                                    class="inline-flex items-center px-2 py-1 border border-gray-300 rounded text-xs text-gray-700 bg-gray-50 hover:bg-gray-100"
+                                >
+                                    Save
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="promotion-target" class="block text-sm font-medium text-gray-700">Promotion Target Date</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/promotion_target" hx-target="#modal-message-container">
+                            <input 
+                                type="datetime-local" 
+                                name="value"
+                                id="promotion-target"
+                                value="<% if let Some(target) = &self.project.promotion_target { %><%= target %><% } %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
                             <button 
-                                hx-put="/-admin/projects/<%= self.project.id %>/field/is_test"
-                                hx-vals="js:{value: document.getElementById('project-test').checked}"
-                                hx-target="#project-row-<%= self.project.id %>"
-                                hx-swap="outerHTML"
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="flex items-center">
+                        <form class="flex items-center" hx-put="/-admin/projects/<%= self.project.id %>/field/wild_hope" hx-target="#modal-message-container">
+                            <input 
+                                name="value"
+                                value="true"
+                                id="project-wild-hope" 
+                                type="checkbox"
+                                <% if self.project.wild_hope { %>checked<% } %>
+                                class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                            >
+                            <label for="project-wild-hope" class="ml-2 block text-sm text-gray-900">Wild Hope Project</label>
+                            <button 
+                                type="submit"
                                 class="ml-2 inline-flex items-center px-2 py-1 border border-gray-300 rounded text-xs text-gray-700 bg-gray-50 hover:bg-gray-100"
                             >
                                 Save
                             </button>
-                        </div>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="exchange" class="block text-sm font-medium text-gray-700">Exchange Platform</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/exchange" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="exchange"
+                                value="<% if let Some(exchange) = &self.project.exchange { %><%= exchange %><% } %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="origin" class="block text-sm font-medium text-gray-700">Origin</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/origin" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="origin"
+                                value="<%= self.project.origin %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="suborigin" class="block text-sm font-medium text-gray-700">Suborigin</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/suborigin" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="suborigin"
+                                value="<%= self.project.suborigin %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="guid" class="block text-sm font-medium text-gray-700">GUID</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/guid" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="guid"
+                                value="<%= self.project.guid %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
                     </div>
                 </div>
             </div>
@@ -177,42 +359,155 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label for="project-url" class="block text-sm font-medium text-gray-700">Project URL</label>
-                        <div class="mt-1 flex">
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/url" hx-target="#modal-message-container">
                             <input 
                                 type="url" 
+                                name="value"
                                 id="project-url"
                                 value="<%= self.project.url %>"
                                 class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                             >
                             <button 
-                                hx-put="/-admin/projects/<%= self.project.id %>/field/url"
-                                hx-vals="js:{value: document.getElementById('project-url').value}"
-                                hx-target="#modal-message-container"
+                                type="submit"
                                 class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
                             >
                                 Save
                             </button>
-                        </div>
+                        </form>
                     </div>
                     
                     <div>
                         <label for="project-image" class="block text-sm font-medium text-gray-700">Image URL</label>
-                        <div class="mt-1 flex">
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/image" hx-target="#modal-message-container">
                             <input 
                                 type="url" 
+                                name="value"
                                 id="project-image"
                                 value="<%= self.project.image %>"
                                 class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                             >
                             <button 
-                                hx-put="/-admin/projects/<%= self.project.id %>/field/image"
-                                hx-vals="js:{value: document.getElementById('project-image').value}"
-                                hx-target="#modal-message-container"
+                                type="submit"
                                 class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
                             >
                                 Save
                             </button>
-                        </div>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="video-url" class="block text-sm font-medium text-gray-700">Video URL</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/video_url" hx-target="#modal-message-container">
+                            <input 
+                                type="url" 
+                                name="value"
+                                id="video-url"
+                                value="<%= self.project.video_url %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="blog-url" class="block text-sm font-medium text-gray-700">Blog URL</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/blog_url" hx-target="#modal-message-container">
+                            <input 
+                                type="url" 
+                                name="value"
+                                id="blog-url"
+                                value="<%= self.project.blog_url %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="twitter-name" class="block text-sm font-medium text-gray-700">Twitter Handle</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/twitter_name" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="twitter-name"
+                                value="<%= self.project.twitter_name %>"
+                                placeholder="@username"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="facebook-page" class="block text-sm font-medium text-gray-700">Facebook Page</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/facebook_page" hx-target="#modal-message-container">
+                            <input 
+                                type="url" 
+                                name="value"
+                                id="facebook-page"
+                                value="<%= self.project.facebook_page %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="instagram-page" class="block text-sm font-medium text-gray-700">Instagram Page</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/instagram_page" hx-target="#modal-message-container">
+                            <input 
+                                type="url" 
+                                name="value"
+                                id="instagram-page"
+                                value="<%= self.project.instagram_page %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="image-credit" class="block text-sm font-medium text-gray-700">Image Credit</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/image_credit" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="image-credit"
+                                value="<%= self.project.image_credit %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
                     </div>
                 </div>
             </div>
@@ -223,40 +518,38 @@
                 <div class="grid grid-cols-1 gap-4">
                     <div>
                         <label for="project-goal" class="block text-sm font-medium text-gray-700">Scientific Goal</label>
-                        <div class="mt-1">
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/goal" hx-target="#modal-message-container">
                             <textarea 
+                                name="value"
                                 id="project-goal" 
                                 rows="3"
                                 class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                             ><%= self.project.goal %></textarea>
                             <button 
-                                hx-put="/-admin/projects/<%= self.project.id %>/field/goal"
-                                hx-vals="js:{value: document.getElementById('project-goal').value}"
-                                hx-target="#modal-message-container"
+                                type="submit"
                                 class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
                             >
                                 Save Goal
                             </button>
-                        </div>
+                        </form>
                     </div>
                     
                     <div>
                         <label for="project-task" class="block text-sm font-medium text-gray-700">Participant Task</label>
-                        <div class="mt-1">
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/task" hx-target="#modal-message-container">
                             <textarea 
+                                name="value"
                                 id="project-task" 
                                 rows="3"
                                 class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                             ><%= self.project.task %></textarea>
                             <button 
-                                hx-put="/-admin/projects/<%= self.project.id %>/field/task"
-                                hx-vals="js:{value: document.getElementById('project-task').value}"
-                                hx-target="#modal-message-container"
+                                type="submit"
                                 class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
                             >
                                 Save Task
                             </button>
-                        </div>
+                        </form>
                     </div>
                 </div>
             </div>
@@ -267,44 +560,2091 @@
                 <div class="grid grid-cols-1 gap-4">
                     <div>
                         <label for="admin-notes" class="block text-sm font-medium text-red-700">Admin Notes (Internal Only)</label>
-                        <div class="mt-1">
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/admin_notes" hx-target="#modal-message-container">
                             <textarea 
+                                name="value"
                                 id="admin-notes" 
                                 rows="3"
                                 class="block w-full px-3 py-2 border border-red-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm bg-red-50"
                             ><%= self.project.admin_notes %></textarea>
                             <button 
-                                hx-put="/-admin/projects/<%= self.project.id %>/field/admin_notes"
-                                hx-vals="js:{value: document.getElementById('admin-notes').value}"
-                                hx-target="#modal-message-container"
+                                type="submit"
                                 class="mt-2 inline-flex items-center px-3 py-2 border border-red-300 rounded-md bg-red-100 hover:bg-red-200 text-sm text-red-700"
                             >
                                 Save Admin Notes
                             </button>
-                        </div>
+                        </form>
                     </div>
                     
                     <div class="flex items-center">
-                        <input 
-                            id="project-draft" 
-                            type="checkbox"
-                            <% if self.project.draft { %>checked<% } %>
-                            class="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
-                        >
-                        <label for="project-draft" class="ml-2 block text-sm text-red-900">Draft Status</label>
-                        <button 
-                            hx-put="/-admin/projects/<%= self.project.id %>/field/draft"
-                            hx-vals="js:{value: document.getElementById('project-draft').checked}"
-                            hx-target="#project-row-<%= self.project.id %>"
-                            hx-swap="outerHTML"
-                            class="ml-2 inline-flex items-center px-2 py-1 border border-red-300 rounded text-xs text-red-700 bg-red-100 hover:bg-red-200"
-                        >
-                            Save
-                        </button>
+                        <form class="flex items-center" hx-put="/-admin/projects/<%= self.project.id %>/field/draft" hx-target="#project-row-<%= self.project.id %>" hx-swap="outerHTML">
+                            <input 
+                                name="value"
+                                value="true"
+                                id="project-draft" 
+                                type="checkbox"
+                                <% if self.project.draft { %>checked<% } %>
+                                class="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
+                            >
+                            <label for="project-draft" class="ml-2 block text-sm text-red-900">Draft Status</label>
+                            <button 
+                                type="submit"
+                                class="ml-2 inline-flex items-center px-2 py-1 border border-red-300 rounded text-xs text-red-700 bg-red-100 hover:bg-red-200"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="created" class="block text-sm font-medium text-red-700">Created Date</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/created" hx-target="#modal-message-container">
+                            <input 
+                                type="datetime-local" 
+                                name="value"
+                                id="created"
+                                value="<%= self.project.created_date %>"
+                                class="block w-full px-3 py-2 border border-red-300 rounded-l-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm bg-red-50"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-red-300 rounded-r-md bg-red-100 hover:bg-red-200 text-sm text-red-700"
+                            >
+                                Save
+                            </button>
+                        </form>
                     </div>
                 </div>
             </div>
             
+            <!-- Participation & Instructions Section -->
+            <div class="bg-blue-50 rounded-lg p-4">
+                <h4 class="text-md font-medium text-gray-900 mb-4">Participation & Instructions</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="participation-degree" class="block text-sm font-medium text-gray-700">Participation Degree</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/participation_degree" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="participation-degree"
+                                value="<%= self.project.participation_degree %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="how-to-join" class="block text-sm font-medium text-gray-700">How to Join</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/how_to_join" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="how-to-join"
+                                value="<%= self.project.how_to_join %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="participant-instructions" class="block text-sm font-medium text-gray-700">Participant Instructions</label>
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/participant_instructions" hx-target="#modal-message-container">
+                            <textarea 
+                                name="value"
+                                id="participant-instructions" 
+                                rows="4"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            ><%= self.project.participant_instructions %></textarea>
+                            <button 
+                                type="submit"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save Instructions
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="participant-instructions-email" class="block text-sm font-medium text-gray-700">Participant Instructions Email</label>
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/participant_instructions_email" hx-target="#modal-message-container">
+                            <textarea 
+                                name="value"
+                                id="participant-instructions-email" 
+                                rows="3"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            ><%= self.project.participant_instructions_email %></textarea>
+                            <button 
+                                type="submit"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save Email Instructions
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="prefix-how-to-logged-in" class="block text-sm font-medium text-gray-700">Prefix How-to (Logged In)</label>
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/prefix_how_to_logged_in" hx-target="#modal-message-container">
+                            <textarea 
+                                name="value"
+                                id="prefix-how-to-logged-in" 
+                                rows="3"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            ><%= self.project.prefix_how_to_logged_in %></textarea>
+                            <button 
+                                type="submit"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save Logged In Prefix
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="prefix-how-to-logged-out" class="block text-sm font-medium text-gray-700">Prefix How-to (Logged Out)</label>
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/prefix_how_to_logged_out" hx-target="#modal-message-container">
+                            <textarea 
+                                name="value"
+                                id="prefix-how-to-logged-out" 
+                                rows="3"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            ><%= self.project.prefix_how_to_logged_out %></textarea>
+                            <button 
+                                type="submit"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save Logged Out Prefix
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="howto-video" class="block text-sm font-medium text-gray-700">How-to Video URL</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/howto_video" hx-target="#modal-message-container">
+                            <input 
+                                type="url" 
+                                name="value"
+                                id="howto-video"
+                                value="<%= self.project.howto_video %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="training-materials" class="block text-sm font-medium text-gray-700">Training Materials</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/training_materials" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="training-materials"
+                                value="<%= self.project.training_materials %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="classroom-materials" class="block text-sm font-medium text-gray-700">Classroom Materials</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/classroom_materials" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="classroom-materials"
+                                value="<%= self.project.classroom_materials %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="consent-statement" class="block text-sm font-medium text-gray-700">Consent Statement</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/consent_statement" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="consent-statement"
+                                value="<%= self.project.consent_statement %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="consent-statement-date" class="block text-sm font-medium text-gray-700">Consent Statement Date</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/consent_statement_date" hx-target="#modal-message-container">
+                            <input 
+                                type="date" 
+                                name="value"
+                                id="consent-statement-date"
+                                value="<% if let Some(date) = &self.project.consent_statement_date { %><%= date %><% } %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="flex items-center">
+                        <form class="flex items-center" hx-put="/-admin/projects/<%= self.project.id %>/field/us_federally_funded" hx-target="#modal-message-container">
+                            <input 
+                                name="value"
+                                value="true"
+                                id="us-federally-funded" 
+                                type="checkbox"
+                                <% if self.project.us_federally_funded { %>checked<% } %>
+                                class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                            >
+                            <label for="us-federally-funded" class="ml-2 block text-sm text-gray-900">US Federally Funded</label>
+                            <button 
+                                type="submit"
+                                class="ml-2 inline-flex items-center px-2 py-1 border border-gray-300 rounded text-xs text-gray-700 bg-gray-50 hover:bg-gray-100"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="flex items-center">
+                        <form class="flex items-center" hx-put="/-admin/projects/<%= self.project.id %>/field/participation_tools" hx-target="#modal-message-container">
+                            <input 
+                                name="value"
+                                value="true"
+                                id="participation-tools" 
+                                type="checkbox"
+                                <% if self.project.participation_tools { %>checked<% } %>
+                                class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                            >
+                            <label for="participation-tools" class="ml-2 block text-sm text-gray-900">Participation Tools</label>
+                            <button 
+                                type="submit"
+                                class="ml-2 inline-flex items-center px-2 py-1 border border-gray-300 rounded text-xs text-gray-700 bg-gray-50 hover:bg-gray-100"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="participation-prompt" class="block text-sm font-medium text-gray-700">Participation Prompt</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/participation_prompt" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="participation-prompt"
+                                value="<%= self.project.participation_prompt %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="participation-confirmation-message" class="block text-sm font-medium text-gray-700">Confirmation Message</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/participation_confirmation_message" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="participation-confirmation-message"
+                                value="<%= self.project.participation_confirmation_message %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="participation-notification-email" class="block text-sm font-medium text-gray-700">Notification Email</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/participation_notification_email" hx-target="#modal-message-container">
+                            <input 
+                                type="email" 
+                                name="value"
+                                id="participation-notification-email"
+                                value="<%= self.project.participation_notification_email %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="participation-usage" class="block text-sm font-medium text-gray-700">Participation Usage</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/participation_usage" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="participation-usage"
+                                value="<%= self.project.participation_usage %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Classification & Content Section -->
+            <div class="bg-green-50 rounded-lg p-4">
+                <h4 class="text-md font-medium text-gray-900 mb-4">Classification & Content</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="project-category" class="block text-sm font-medium text-gray-700">Category</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/category" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="project-category"
+                                value=""
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <form hx-put="/-admin/projects/<%= self.project.id %>/field/difficulty" hx-target="#modal-message-container">
+                            <wa-select name="value" label="Difficulty" with-clear>
+                                <wa-option value="Beginner"<% if self.project.difficulty == "Beginner" { %> selected<% } %>>Beginner</wa-option>
+                                <wa-option value="Intermediate"<% if self.project.difficulty == "Intermediate" { %> selected<% } %>>Intermediate</wa-option>
+                                <wa-option value="Advanced"<% if self.project.difficulty == "Advanced" { %> selected<% } %>>Advanced</wa-option>
+                                <wa-option value="Expert"<% if self.project.difficulty == "Expert" { %> selected<% } %>>Expert</wa-option>
+                            </wa-select>
+                            <button type="submit" class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700">Save</button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="opengraph-description" class="block text-sm font-medium text-gray-700">OpenGraph Description</label>
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/opengraph_description" hx-target="#modal-message-container">
+                            <textarea 
+                                name="value"
+                                id="opengraph-description" 
+                                rows="3"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            ><%= self.project.opengraph_description %></textarea>
+                            <button 
+                                type="submit"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save Description
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <form hx-put="/-admin/projects/<%= self.project.id %>/field/topics" hx-target="#modal-message-container">
+                            <wa-select name="value" label="Topics" multiple with-clear>
+                                <wa-option value="Agriculture"<% if self.project.topics.contains(&"Agriculture".to_string()) { %> selected<% } %>>Agriculture</wa-option>
+                                <wa-option value="Animals"<% if self.project.topics.contains(&"Animals".to_string()) { %> selected<% } %>>Animals</wa-option>
+                                <wa-option value="Astronomy & Space"<% if self.project.topics.contains(&"Astronomy & Space".to_string()) { %> selected<% } %>>Astronomy & Space</wa-option>
+                                <wa-option value="Awards"<% if self.project.topics.contains(&"Awards".to_string()) { %> selected<% } %>>Awards</wa-option>
+                                <wa-option value="Biology"<% if self.project.topics.contains(&"Biology".to_string()) { %> selected<% } %>>Biology</wa-option>
+                                <wa-option value="Birds"<% if self.project.topics.contains(&"Birds".to_string()) { %> selected<% } %>>Birds</wa-option>
+                                <wa-option value="Chemistry"<% if self.project.topics.contains(&"Chemistry".to_string()) { %> selected<% } %>>Chemistry</wa-option>
+                                <wa-option value="Climate & Weather"<% if self.project.topics.contains(&"Climate & Weather".to_string()) { %> selected<% } %>>Climate & Weather</wa-option>
+                                <wa-option value="Computers & Technology"<% if self.project.topics.contains(&"Computers & Technology".to_string()) { %> selected<% } %>>Computers & Technology</wa-option>
+                                <wa-option value="Crowd Funding"<% if self.project.topics.contains(&"Crowd Funding".to_string()) { %> selected<% } %>>Crowd Funding</wa-option>
+                                <wa-option value="Disaster Response"<% if self.project.topics.contains(&"Disaster Response".to_string()) { %> selected<% } %>>Disaster Response</wa-option>
+                                <wa-option value="Ecology & Environment"<% if self.project.topics.contains(&"Ecology & Environment".to_string()) { %> selected<% } %>>Ecology & Environment</wa-option>
+                                <wa-option value="Education"<% if self.project.topics.contains(&"Education".to_string()) { %> selected<% } %>>Education</wa-option>
+                                <wa-option value="Events"<% if self.project.topics.contains(&"Events".to_string()) { %> selected<% } %>>Events</wa-option>
+                                <wa-option value="Food"<% if self.project.topics.contains(&"Food".to_string()) { %> selected<% } %>>Food</wa-option>
+                                <wa-option value="Geography"<% if self.project.topics.contains(&"Geography".to_string()) { %> selected<% } %>>Geography</wa-option>
+                                <wa-option value="Geology & Earth Science"<% if self.project.topics.contains(&"Geology & Earth Science".to_string()) { %> selected<% } %>>Geology & Earth Science</wa-option>
+                                <wa-option value="Health & Medicine"<% if self.project.topics.contains(&"Health & Medicine".to_string()) { %> selected<% } %>>Health & Medicine</wa-option>
+                                <wa-option value="History, Archeology & Culture"<% if self.project.topics.contains(&"History, Archeology & Culture".to_string()) { %> selected<% } %>>History, Archeology & Culture</wa-option>
+                                <wa-option value="Insects & Pollinators"<% if self.project.topics.contains(&"Insects & Pollinators".to_string()) { %> selected<% } %>>Insects & Pollinators</wa-option>
+                                <wa-option value="Nature & Outdoors"<% if self.project.topics.contains(&"Nature & Outdoors".to_string()) { %> selected<% } %>>Nature & Outdoors</wa-option>
+                                <wa-option value="Ocean, Water, Marine & Terrestrial"<% if self.project.topics.contains(&"Ocean, Water, Marine & Terrestrial".to_string()) { %> selected<% } %>>Ocean, Water, Marine & Terrestrial</wa-option>
+                                <wa-option value="Physics"<% if self.project.topics.contains(&"Physics".to_string()) { %> selected<% } %>>Physics</wa-option>
+                                <wa-option value="Psychology"<% if self.project.topics.contains(&"Psychology".to_string()) { %> selected<% } %>>Psychology</wa-option>
+                                <wa-option value="Science Policy"<% if self.project.topics.contains(&"Science Policy".to_string()) { %> selected<% } %>>Science Policy</wa-option>
+                                <wa-option value="Social Science"<% if self.project.topics.contains(&"Social Science".to_string()) { %> selected<% } %>>Social Science</wa-option>
+                                <wa-option value="Sound"<% if self.project.topics.contains(&"Sound".to_string()) { %> selected<% } %>>Sound</wa-option>
+                                <wa-option value="Transportation"<% if self.project.topics.contains(&"Transportation".to_string()) { %> selected<% } %>>Transportation</wa-option>
+                            </wa-select>
+                            <button type="submit" class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700">Save Topics</button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <form hx-put="/-admin/projects/<%= self.project.id %>/field/fields_of_science" hx-target="#modal-message-container">
+                            <wa-select name="value" label="Fields of Science" multiple with-clear>
+                                <wa-option value="Astronomy"<% if self.project.fields_of_science.contains(&"Astronomy".to_string()) { %> selected<% } %>>Astronomy</wa-option>
+                                <wa-option value="Biology"<% if self.project.fields_of_science.contains(&"Biology".to_string()) { %> selected<% } %>>Biology</wa-option>
+                                <wa-option value="Chemistry"<% if self.project.fields_of_science.contains(&"Chemistry".to_string()) { %> selected<% } %>>Chemistry</wa-option>
+                                <wa-option value="Ecology"<% if self.project.fields_of_science.contains(&"Ecology".to_string()) { %> selected<% } %>>Ecology</wa-option>
+                                <wa-option value="Physics"<% if self.project.fields_of_science.contains(&"Physics".to_string()) { %> selected<% } %>>Physics</wa-option>
+                            </wa-select>
+                            <button type="submit" class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700">Save Fields of Science</button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <form hx-put="/-admin/projects/<%= self.project.id %>/field/practices" hx-target="#modal-message-container">
+                            <wa-select name="value" label="Practices" multiple with-clear>
+                                <wa-option value="Analyzing and interpreting data"<% if self.project.practices.contains(&"Analyzing and interpreting data".to_string()) { %> selected<% } %>>Analyzing and interpreting data</wa-option>
+                                <wa-option value="Asking questions"<% if self.project.practices.contains(&"Asking questions".to_string()) { %> selected<% } %>>Asking questions</wa-option>
+                                <wa-option value="Constructing explanations"<% if self.project.practices.contains(&"Constructing explanations".to_string()) { %> selected<% } %>>Constructing explanations</wa-option>
+                                <wa-option value="Defining problems"<% if self.project.practices.contains(&"Defining problems".to_string()) { %> selected<% } %>>Defining problems</wa-option>
+                                <wa-option value="Designing solutions"<% if self.project.practices.contains(&"Designing solutions".to_string()) { %> selected<% } %>>Designing solutions</wa-option>
+                                <wa-option value="Developing and using models"<% if self.project.practices.contains(&"Developing and using models".to_string()) { %> selected<% } %>>Developing and using models</wa-option>
+                                <wa-option value="Planning and carrying out investigations"<% if self.project.practices.contains(&"Planning and carrying out investigations".to_string()) { %> selected<% } %>>Planning and carrying out investigations</wa-option>
+                                <wa-option value="Using mathematics and computational thinking"<% if self.project.practices.contains(&"Using mathematics and computational thinking".to_string()) { %> selected<% } %>>Using mathematics and computational thinking</wa-option>
+                            </wa-select>
+                            <button type="submit" class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700">Save Practices</button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="practices-how" class="block text-sm font-medium text-gray-700">Practices How</label>
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/practices_how" hx-target="#modal-message-container">
+                            <textarea 
+                                name="value"
+                                id="practices-how" 
+                                rows="3"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            ><%= self.project.practices_how %></textarea>
+                            <button 
+                                type="submit"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save Practices How
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="search-terms" class="block text-sm font-medium text-gray-700">Search Terms</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/search_terms" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="search-terms"
+                                value="<%= self.project.search_terms %>"
+                                placeholder="comma, separated, terms"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="special-skills" class="block text-sm font-medium text-gray-700">Special Skills</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/special_skills" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="special-skills"
+                                value="<%= self.project.special_skills %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <form hx-put="/-admin/projects/<%= self.project.id %>/field/audience" hx-target="#modal-message-container">
+                            <wa-select name="value" label="Audience" multiple with-clear>
+                                <wa-option value="Adults"<% if self.project.audience.contains(&"Adults".to_string()) { %> selected<% } %>>Adults</wa-option>
+                                <wa-option value="College"<% if self.project.audience.contains(&"College".to_string()) { %> selected<% } %>>College</wa-option>
+                                <wa-option value="Elementary school (6 - 10 years)"<% if self.project.audience.contains(&"Elementary school (6 - 10 years)".to_string()) { %> selected<% } %>>Elementary school (6 - 10 years)</wa-option>
+                                <wa-option value="Families"<% if self.project.audience.contains(&"Families".to_string()) { %> selected<% } %>>Families</wa-option>
+                                <wa-option value="Graduate students"<% if self.project.audience.contains(&"Graduate students".to_string()) { %> selected<% } %>>Graduate students</wa-option>
+                                <wa-option value="High school (14 - 17 years)"<% if self.project.audience.contains(&"High school (14 - 17 years)".to_string()) { %> selected<% } %>>High school (14 - 17 years)</wa-option>
+                                <wa-option value="Middle school (11 - 13 years)"<% if self.project.audience.contains(&"Middle school (11 - 13 years)".to_string()) { %> selected<% } %>>Middle school (11 - 13 years)</wa-option>
+                                <wa-option value="Seniors"<% if self.project.audience.contains(&"Seniors".to_string()) { %> selected<% } %>>Seniors</wa-option>
+                            </wa-select>
+                            <button type="submit" class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700">Save Audience</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Location & Geography Section -->
+            <div class="bg-yellow-50 rounded-lg p-4">
+                <h4 class="text-md font-medium text-gray-900 mb-4">Location & Geography</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="location-type" class="block text-sm font-medium text-gray-700">Location Type</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/location_type" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="location-type"
+                                value="<%= self.project.location_type %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="united-nations-region" class="block text-sm font-medium text-gray-700">UN Region</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/united_nations_region" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="united-nations-region"
+                                value="<%= self.project.united_nations_region %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2 grid grid-cols-2 md:grid-cols-5 gap-2">
+                        <div class="flex items-center">
+                            <form class="flex items-center" hx-put="/-admin/projects/<%= self.project.id %>/field/entirely_online" hx-target="#modal-message-container">
+                                <input 
+                                    name="value"
+                                    value="true"
+                                    id="entirely-online" 
+                                    type="checkbox"
+                                    <% if self.project.entirely_online { %>checked<% } %>
+                                    class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                >
+                                <label for="entirely-online" class="ml-2 block text-sm text-gray-900">Online</label>
+                                <button 
+                                    type="submit"
+                                    class="ml-2 inline-flex items-center px-1 py-1 border border-gray-300 rounded text-xs text-gray-700 bg-gray-50 hover:bg-gray-100"
+                                >
+                                    Save
+                                </button>
+                            </form>
+                        </div>
+                        
+                        <div class="flex items-center">
+                            <form class="flex items-center" hx-put="/-admin/projects/<%= self.project.id %>/field/on_demand" hx-target="#modal-message-container">
+                                <input 
+                                    name="value"
+                                    value="true"
+                                    id="on-demand" 
+                                    type="checkbox"
+                                    <% if self.project.on_demand { %>checked<% } %>
+                                    class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                >
+                                <label for="on-demand" class="ml-2 block text-sm text-gray-900">On Demand</label>
+                                <button 
+                                    type="submit"
+                                    class="ml-2 inline-flex items-center px-1 py-1 border border-gray-300 rounded text-xs text-gray-700 bg-gray-50 hover:bg-gray-100"
+                                >
+                                    Save
+                                </button>
+                            </form>
+                        </div>
+                        
+                        <div class="flex items-center">
+                            <form class="flex items-center" hx-put="/-admin/projects/<%= self.project.id %>/field/in_person" hx-target="#modal-message-container">
+                                <input 
+                                    name="value"
+                                    value="true"
+                                    id="in-person" 
+                                    type="checkbox"
+                                    <% if self.project.in_person { %>checked<% } %>
+                                    class="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                                >
+                                <label for="in-person" class="ml-2 block text-sm text-gray-900">In Person</label>
+                                <button 
+                                    type="submit"
+                                    class="ml-2 inline-flex items-center px-1 py-1 border border-gray-300 rounded text-xs text-gray-700 bg-gray-50 hover:bg-gray-100"
+                                >
+                                    Save
+                                </button>
+                            </form>
+                        </div>
+                        
+                        <div class="flex items-center">
+                            <form class="flex items-center" hx-put="/-admin/projects/<%= self.project.id %>/field/indoors" hx-target="#modal-message-container">
+                                <input 
+                                    name="value"
+                                    value="true"
+                                    id="indoors" 
+                                    type="checkbox"
+                                    <% if self.project.indoors { %>checked<% } %>
+                                    class="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 rounded"
+                                >
+                                <label for="indoors" class="ml-2 block text-sm text-gray-900">Indoors</label>
+                                <button 
+                                    type="submit"
+                                    class="ml-2 inline-flex items-center px-1 py-1 border border-gray-300 rounded text-xs text-gray-700 bg-gray-50 hover:bg-gray-100"
+                                >
+                                    Save
+                                </button>
+                            </form>
+                        </div>
+                        
+                        <div class="flex items-center">
+                            <form class="flex items-center" hx-put="/-admin/projects/<%= self.project.id %>/field/outdoors" hx-target="#modal-message-container">
+                                <input 
+                                    name="value"
+                                    value="true"
+                                    id="outdoors" 
+                                    type="checkbox"
+                                    <% if self.project.outdoors { %>checked<% } %>
+                                    class="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                                >
+                                <label for="outdoors" class="ml-2 block text-sm text-gray-900">Outdoors</label>
+                                <button 
+                                    type="submit"
+                                    class="ml-2 inline-flex items-center px-1 py-1 border border-gray-300 rounded text-xs text-gray-700 bg-gray-50 hover:bg-gray-100"
+                                >
+                                    Save
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label for="regions" class="block text-sm font-medium text-gray-700">Regions</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/regions" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="regions"
+                                value="<% if let Some(regions) = &self.project.regions { %><%= regions %><% } %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="point" class="block text-sm font-medium text-gray-700">Geographic Point</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/point" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="point"
+                                value="<% if let Some(point) = &self.project.point { %><%= point %><% } %>"
+                                placeholder="lat,lng or GeoJSON"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="regions-description" class="block text-sm font-medium text-gray-700">Regions Description</label>
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/regions_description" hx-target="#modal-message-container">
+                            <textarea 
+                                name="value"
+                                id="regions-description" 
+                                rows="2"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            ><%= self.project.regions_description %></textarea>
+                            <button 
+                                type="submit"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save Regions Description
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="address" class="block text-sm font-medium text-gray-700">Address</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/address" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="address"
+                                value="<%= self.project.address %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="city" class="block text-sm font-medium text-gray-700">City</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/city" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="city"
+                                value="<%= self.project.city %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="state" class="block text-sm font-medium text-gray-700">State</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/state" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="state"
+                                value="<%= self.project.state %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="zip" class="block text-sm font-medium text-gray-700">ZIP Code</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/zip" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="zip"
+                                value="<%= self.project.zip %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="country" class="block text-sm font-medium text-gray-700">Country</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/country" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="country"
+                                value="<%= self.project.country %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="other" class="block text-sm font-medium text-gray-700">Other Location</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/other" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="other"
+                                value="<%= self.project.other %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="location-name" class="block text-sm font-medium text-gray-700">Location Name</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/location_name" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="location-name"
+                                value="<%= self.project.location_name %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="location-landuse" class="block text-sm font-medium text-gray-700">Location Landuse</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/location_landuse" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="location-landuse"
+                                value="<%= self.project.location_landuse %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="location-description" class="block text-sm font-medium text-gray-700">Location Description</label>
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/location_description" hx-target="#modal-message-container">
+                            <textarea 
+                                name="value"
+                                id="location-description" 
+                                rows="2"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            ><%= self.project.location_description %></textarea>
+                            <button 
+                                type="submit"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save Location Description
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="geographic-scope" class="block text-sm font-medium text-gray-700">Geographic Scope (JSON Array)</label>
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/geographic_scope" hx-target="#modal-message-container">
+                            <textarea 
+                                name="value"
+                                id="geographic-scope" 
+                                rows="2"
+                                placeholder='["regional", "national", "international"]'
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono"
+                            ><%= serde_json::to_string(&self.project.geographic_scope).unwrap_or_default() %></textarea>
+                            <button 
+                                type="submit"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save Geographic Scope
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Timing & Schedule Section -->
+            <div class="bg-purple-50 rounded-lg p-4">
+                <h4 class="text-md font-medium text-gray-900 mb-4">Timing & Schedule</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="begin-date" class="block text-sm font-medium text-gray-700">Begin Date</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/begin" hx-target="#modal-message-container">
+                            <input 
+                                type="datetime-local" 
+                                name="value"
+                                id="begin-date"
+                                value="<% if let Some(begin) = &self.project.begin { %><%= begin %><% } %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="end-date" class="block text-sm font-medium text-gray-700">End Date</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/end" hx-target="#modal-message-container">
+                            <input 
+                                type="datetime-local" 
+                                name="value"
+                                id="end-date"
+                                value="<% if let Some(end) = &self.project.end { %><%= end %><% } %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="project-timing" class="block text-sm font-medium text-gray-700">Project Timing</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/project_timing" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="project-timing"
+                                value="<%= self.project.project_timing %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="participation-schedule" class="block text-sm font-medium text-gray-700">Participation Schedule</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/participation_schedule" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="participation-schedule"
+                                value="<%= self.project.participation_schedule %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="time-per-participation" class="block text-sm font-medium text-gray-700">Time per Participation</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/time_per_participation" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="time-per-participation"
+                                value="<%= self.project.time_per_participation %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="time-required" class="block text-sm font-medium text-gray-700">Time Required</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/time_required" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="time-required"
+                                value="<%= self.project.time_required %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="year-started" class="block text-sm font-medium text-gray-700">Year Started</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/year_started" hx-target="#modal-message-container">
+                            <input 
+                                type="number" 
+                                name="value"
+                                id="year-started"
+                                value="<% if let Some(year) = &self.project.year_started { %><%= year %><% } %>"
+                                min="1900" max="2100"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="year-completed" class="block text-sm font-medium text-gray-700">Year Completed</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/year_completed" hx-target="#modal-message-container">
+                            <input 
+                                type="number" 
+                                name="value"
+                                id="year-completed"
+                                value="<% if let Some(year) = &self.project.year_completed { %><%= year %><% } %>"
+                                min="1900" max="2100"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="month-completed" class="block text-sm font-medium text-gray-700">Month Completed</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/month_completed" hx-target="#modal-message-container">
+                            <input 
+                                type="number" 
+                                name="value"
+                                id="month-completed"
+                                value="<% if let Some(month) = &self.project.month_completed { %><%= month %><% } %>"
+                                min="1" max="12"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="participation-tasks" class="block text-sm font-medium text-gray-700">Participation Tasks (JSON Array)</label>
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/participation_tasks" hx-target="#modal-message-container">
+                            <textarea 
+                                name="value"
+                                id="participation-tasks" 
+                                rows="2"
+                                placeholder='["data_collection", "observation", "analysis"]'
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono"
+                            ><%= serde_json::to_string(&self.project.participation_tasks).unwrap_or_default() %></textarea>
+                            <button 
+                                type="submit"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save Participation Tasks
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="activities" class="block text-sm font-medium text-gray-700">Activities (JSON Array)</label>
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/activities" hx-target="#modal-message-container">
+                            <textarea 
+                                name="value"
+                                id="activities" 
+                                rows="2"
+                                placeholder='["field_work", "data_entry", "photography"]'
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono"
+                            ><%= serde_json::to_string(&self.project.activities).unwrap_or_default() %></textarea>
+                            <button 
+                                type="submit"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save Activities
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Data & Research Section -->
+            <div class="bg-indigo-50 rounded-lg p-4">
+                <h4 class="text-md font-medium text-gray-900 mb-4">Data & Research</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="flex items-center">
+                        <form class="flex items-center" hx-put="/-admin/projects/<%= self.project.id %>/field/data_visualization" hx-target="#modal-message-container">
+                            <input 
+                                name="value"
+                                value="true"
+                                id="data-visualization" 
+                                type="checkbox"
+                                <% if self.project.data_visualization { %>checked<% } %>
+                                class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                            >
+                            <label for="data-visualization" class="ml-2 block text-sm text-gray-900">Data Visualization</label>
+                            <button 
+                                type="submit"
+                                class="ml-2 inline-flex items-center px-2 py-1 border border-gray-300 rounded text-xs text-gray-700 bg-gray-50 hover:bg-gray-100"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="flex items-center">
+                        <form class="flex items-center" hx-put="/-admin/projects/<%= self.project.id %>/field/data_quality" hx-target="#modal-message-container">
+                            <input 
+                                name="value"
+                                value="true"
+                                id="data-quality" 
+                                type="checkbox"
+                                <% if self.project.data_quality { %>checked<% } %>
+                                class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                            >
+                            <label for="data-quality" class="ml-2 block text-sm text-gray-900">Data Quality</label>
+                            <button 
+                                type="submit"
+                                class="ml-2 inline-flex items-center px-2 py-1 border border-gray-300 rounded text-xs text-gray-700 bg-gray-50 hover:bg-gray-100"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="data-license" class="block text-sm font-medium text-gray-700">Data License</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/data_license" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="data-license"
+                                value="<%= self.project.data_license %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="metadata-publication-url" class="block text-sm font-medium text-gray-700">Metadata Publication URL</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/metadata_publication_url" hx-target="#modal-message-container">
+                            <input 
+                                type="url" 
+                                name="value"
+                                id="metadata-publication-url"
+                                value="<%= self.project.metadata_publication_url %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="data-publication-url" class="block text-sm font-medium text-gray-700">Data Publication URL</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/data_publication_url" hx-target="#modal-message-container">
+                            <input 
+                                type="url" 
+                                name="value"
+                                id="data-publication-url"
+                                value="<%= self.project.data_publication_url %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="data-results" class="block text-sm font-medium text-gray-700">Data Results</label>
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/data_results" hx-target="#modal-message-container">
+                            <textarea 
+                                name="value"
+                                id="data-results" 
+                                rows="3"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            ><%= self.project.data_results %></textarea>
+                            <button 
+                                type="submit"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save Data Results
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="data-aggregation" class="block text-sm font-medium text-gray-700">Data Aggregation (JSON Array)</label>
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/data_aggregation" hx-target="#modal-message-container">
+                            <textarea 
+                                name="value"
+                                id="data-aggregation" 
+                                rows="2"
+                                placeholder='["daily", "weekly", "monthly"]'
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono"
+                            ><%= serde_json::to_string(&self.project.data_aggregation).unwrap_or_default() %></textarea>
+                            <button 
+                                type="submit"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save Data Aggregation
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="data-consent" class="block text-sm font-medium text-gray-700">Data Consent (JSON Array)</label>
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/data_consent" hx-target="#modal-message-container">
+                            <textarea 
+                                name="value"
+                                id="data-consent" 
+                                rows="2"
+                                placeholder='["informed_consent", "opt_in", "opt_out"]'
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono"
+                            ><%= serde_json::to_string(&self.project.data_consent).unwrap_or_default() %></textarea>
+                            <button 
+                                type="submit"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save Data Consent
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="data-access" class="block text-sm font-medium text-gray-700">Data Access (JSON Array)</label>
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/data_access" hx-target="#modal-message-container">
+                            <textarea 
+                                name="value"
+                                id="data-access" 
+                                rows="2"
+                                placeholder='["open", "restricted", "embargoed"]'
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono"
+                            ><%= serde_json::to_string(&self.project.data_access).unwrap_or_default() %></textarea>
+                            <button 
+                                type="submit"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save Data Access
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Outcomes & Results Section -->
+            <div class="bg-teal-50 rounded-lg p-4">
+                <h4 class="text-md font-medium text-gray-900 mb-4">Outcomes & Results</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="outcomes-label" class="block text-sm font-medium text-gray-700">Outcomes Label</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/outcomes_label" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="outcomes-label"
+                                value="<%= self.project.outcomes_label %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="outcomes-link" class="block text-sm font-medium text-gray-700">Outcomes Link</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/outcomes_link" hx-target="#modal-message-container">
+                            <input 
+                                type="url" 
+                                name="value"
+                                id="outcomes-link"
+                                value="<%= self.project.outcomes_link %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="university-affiliation" class="block text-sm font-medium text-gray-700">University Affiliation</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/university_affiliation" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="university-affiliation"
+                                value="<%= self.project.university_affiliation %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="circuit-id" class="block text-sm font-medium text-gray-700">Circuit ID</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/circuit_id" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="circuit-id"
+                                value="<%= self.project.circuit_id %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="outcome-other" class="block text-sm font-medium text-gray-700">Other Outcomes</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/outcome_other" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="outcome-other"
+                                value="<%= self.project.outcome_other %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <form hx-put="/-admin/projects/<%= self.project.id %>/field/sustainable_development_goals" hx-target="#modal-message-container">
+                            <wa-select name="value" label="Sustainable Development Goals" multiple with-clear>
+                                <wa-option value="No Poverty">No Poverty</wa-option>
+                                <wa-option value="Zero Hunger">Zero Hunger</wa-option>
+                                <wa-option value="Good Health and Well-being">Good Health and Well-being</wa-option>
+                                <wa-option value="Quality Education">Quality Education</wa-option>
+                                <wa-option value="Gender Equality">Gender Equality</wa-option>
+                                <wa-option value="Clean Water and Sanitation">Clean Water and Sanitation</wa-option>
+                                <wa-option value="Affordable and Clean Energy">Affordable and Clean Energy</wa-option>
+                                <wa-option value="Decent Work and Economic Growth">Decent Work and Economic Growth</wa-option>
+                                <wa-option value="Industry, Innovation and Infrastructure">Industry, Innovation and Infrastructure</wa-option>
+                                <wa-option value="Reduced Inequality">Reduced Inequality</wa-option>
+                                <wa-option value="Sustainable Cities and Communities">Sustainable Cities and Communities</wa-option>
+                                <wa-option value="Responsible Consumption and Production">Responsible Consumption and Production</wa-option>
+                                <wa-option value="Climate Action">Climate Action</wa-option>
+                                <wa-option value="Life Below Water">Life Below Water</wa-option>
+                                <wa-option value="Life on Land">Life on Land</wa-option>
+                                <wa-option value="Peace, Justice and Strong Institutions">Peace, Justice and Strong Institutions</wa-option>
+                                <wa-option value="Partnerships for the Goals">Partnerships for the Goals</wa-option>
+                            </wa-select>
+                            <button type="submit" class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700">Save</button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="intended-outcomes" class="block text-sm font-medium text-gray-700">Intended Outcomes (JSON Array)</label>
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/intended_outcomes" hx-target="#modal-message-container">
+                            <textarea 
+                                name="value"
+                                id="intended-outcomes" 
+                                rows="2"
+                                placeholder='["research", "education", "conservation"]'
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono"
+                            ><%= serde_json::to_string(&self.project.intended_outcomes).unwrap_or_default() %></textarea>
+                            <button 
+                                type="submit"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save Intended Outcomes
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="sponsors" class="block text-sm font-medium text-gray-700">Sponsors (JSON Array)</label>
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/sponsors" hx-target="#modal-message-container">
+                            <textarea 
+                                name="value"
+                                id="sponsors" 
+                                rows="2"
+                                placeholder='["NASA", "NSF", "University of X"]'
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono"
+                            ><%= serde_json::to_string(&self.project.sponsors).unwrap_or_default() %></textarea>
+                            <button 
+                                type="submit"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save Sponsors
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="stakeholders" class="block text-sm font-medium text-gray-700">Stakeholders (JSON Array)</label>
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/stakeholders" hx-target="#modal-message-container">
+                            <textarea 
+                                name="value"
+                                id="stakeholders" 
+                                rows="2"
+                                placeholder='["researchers", "educators", "policy_makers"]'
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono"
+                            ><%= serde_json::to_string(&self.project.stakeholders).unwrap_or_default() %></textarea>
+                            <button 
+                                type="submit"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save Stakeholders
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Mobile & Apps Section -->
+            <div class="bg-pink-50 rounded-lg p-4">
+                <h4 class="text-md font-medium text-gray-900 mb-4">Mobile & Apps</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="mobile-app-url-android" class="block text-sm font-medium text-gray-700">Android App URL</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/mobile_app_url_android" hx-target="#modal-message-container">
+                            <input 
+                                type="url" 
+                                name="value"
+                                id="mobile-app-url-android"
+                                value="<%= self.project.mobile_app_url_android %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="mobile-app-url-ios" class="block text-sm font-medium text-gray-700">iOS App URL</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/mobile_app_url_ios" hx-target="#modal-message-container">
+                            <input 
+                                type="url" 
+                                name="value"
+                                id="mobile-app-url-ios"
+                                value="<%= self.project.mobile_app_url_ios %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="mobile-app-url" class="block text-sm font-medium text-gray-700">General Mobile App URL</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/mobile_app_url" hx-target="#modal-message-container">
+                            <input 
+                                type="url" 
+                                name="value"
+                                id="mobile-app-url"
+                                value="<%= self.project.mobile_app_url %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="flex items-center">
+                        <form class="flex items-center" hx-put="/-admin/projects/<%= self.project.id %>/field/diy" hx-target="#modal-message-container">
+                            <input 
+                                name="value"
+                                value="true"
+                                id="diy" 
+                                type="checkbox"
+                                <% if self.project.diy { %>checked<% } %>
+                                class="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
+                            >
+                            <label for="diy" class="ml-2 block text-sm text-gray-900">DIY Project</label>
+                            <button 
+                                type="submit"
+                                class="ml-2 inline-flex items-center px-2 py-1 border border-gray-300 rounded text-xs text-gray-700 bg-gray-50 hover:bg-gray-100"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Project Connections Section -->
+            <div class="bg-orange-50 rounded-lg p-4">
+                <h4 class="text-md font-medium text-gray-900 mb-4">Project Connections</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="flex items-center">
+                        <form class="flex items-center" hx-put="/-admin/projects/<%= self.project.id %>/field/is_affiliate" hx-target="#modal-message-container">
+                            <input 
+                                name="value"
+                                value="true"
+                                id="is-affiliate" 
+                                type="checkbox"
+                                <% if self.project.is_affiliate { %>checked<% } %>
+                                class="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
+                            >
+                            <label for="is-affiliate" class="ml-2 block text-sm text-gray-900">Is Affiliate</label>
+                            <button 
+                                type="submit"
+                                class="ml-2 inline-flex items-center px-2 py-1 border border-gray-300 rounded text-xs text-gray-700 bg-gray-50 hover:bg-gray-100"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="flex items-center">
+                        <form class="flex items-center" hx-put="/-admin/projects/<%= self.project.id %>/field/is_inaturalist" hx-target="#modal-message-container">
+                            <input 
+                                name="value"
+                                value="true"
+                                id="is-inaturalist" 
+                                type="checkbox"
+                                <% if self.project.is_inaturalist { %>checked<% } %>
+                                class="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                            >
+                            <label for="is-inaturalist" class="ml-2 block text-sm text-gray-900">iNaturalist Project</label>
+                            <button 
+                                type="submit"
+                                class="ml-2 inline-flex items-center px-2 py-1 border border-gray-300 rounded text-xs text-gray-700 bg-gray-50 hover:bg-gray-100"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="inat-project-id" class="block text-sm font-medium text-gray-700">iNaturalist Project ID</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/inat_project_id" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="inat-project-id"
+                                value="<% if let Some(id) = &self.project.inat_project_id { %><%= id %><% } %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="part-of" class="block text-sm font-medium text-gray-700">Part Of</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/part_of" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="part-of"
+                                value="<% if let Some(part_of) = &self.project.part_of { %><%= part_of %><% } %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="connect-opaque-url" class="block text-sm font-medium text-gray-700">Connect Opaque URL</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/connect_opaque_url" hx-target="#modal-message-container">
+                            <input 
+                                type="url" 
+                                name="value"
+                                id="connect-opaque-url"
+                                value="<%= self.project.connect_opaque_url %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="connect-opaque-url1" class="block text-sm font-medium text-gray-700">Connect Opaque URL 1</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/connect_opaque_url1" hx-target="#modal-message-container">
+                            <input 
+                                type="url" 
+                                name="value"
+                                id="connect-opaque-url1"
+                                value="<%= self.project.connect_opaque_url1 %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="connect-opaque-url2" class="block text-sm font-medium text-gray-700">Connect Opaque URL 2</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/connect_opaque_url2" hx-target="#modal-message-container">
+                            <input 
+                                type="url" 
+                                name="value"
+                                id="connect-opaque-url2"
+                                value="<%= self.project.connect_opaque_url2 %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="associated-projects" class="block text-sm font-medium text-gray-700">Associated Projects (JSON Array)</label>
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/associated_projects" hx-target="#modal-message-container">
+                            <textarea 
+                                name="value"
+                                id="associated-projects" 
+                                rows="2"
+                                placeholder='["project_id_1", "project_id_2"]'
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono"
+                            ><%= serde_json::to_string(&self.project.associated_projects).unwrap_or_default() %></textarea>
+                            <button 
+                                type="submit"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save Associated Projects
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Resources & Materials Section -->
+            <div class="bg-cyan-50 rounded-lg p-4">
+                <h4 class="text-md font-medium text-gray-900 mb-4">Resources & Materials</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="signup-url" class="block text-sm font-medium text-gray-700">Signup URL</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/signup_url" hx-target="#modal-message-container">
+                            <input 
+                                type="url" 
+                                name="value"
+                                id="signup-url"
+                                value="<%= self.project.signup_url %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="total-expense" class="block text-sm font-medium text-gray-700">Total Expense</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/total_expense" hx-target="#modal-message-container">
+                            <input 
+                                type="number" 
+                                step="0.01"
+                                name="value"
+                                id="total-expense"
+                                value="<% if let Some(expense) = &self.project.total_expense { %><%= expense %><% } %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="materials" class="block text-sm font-medium text-gray-700">Materials</label>
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/materials" hx-target="#modal-message-container">
+                            <textarea 
+                                name="value"
+                                id="materials" 
+                                rows="3"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            ><%= self.project.materials %></textarea>
+                            <button 
+                                type="submit"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save Materials
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="gear" class="block text-sm font-medium text-gray-700">Gear</label>
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/gear" hx-target="#modal-message-container">
+                            <textarea 
+                                name="value"
+                                id="gear" 
+                                rows="3"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            ><%= self.project.gear %></textarea>
+                            <button 
+                                type="submit"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save Gear
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="participant-files" class="block text-sm font-medium text-gray-700">Participant Files (JSON Array)</label>
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/participant_files" hx-target="#modal-message-container">
+                            <textarea 
+                                name="value"
+                                id="participant-files" 
+                                rows="2"
+                                placeholder='["file1.pdf", "file2.doc"]'
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono"
+                            ><%= serde_json::to_string(&self.project.participant_files).unwrap_or_default() %></textarea>
+                            <button 
+                                type="submit"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save Participant Files
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="contacts" class="block text-sm font-medium text-gray-700">Contacts (JSON)</label>
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/contacts" hx-target="#modal-message-container">
+                            <textarea 
+                                name="value"
+                                id="contacts" 
+                                rows="4"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono"
+                            ><%= self.project.contacts %></textarea>
+                            <button 
+                                type="submit"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save Contacts
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- System & Editor Tracking Section -->
+            <div class="bg-red-50 rounded-lg p-4 border border-red-200">
+                <h4 class="text-md font-medium text-red-900 mb-4">System & Editor Tracking</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="flex items-center">
+                        <form class="flex items-center" hx-put="/-admin/projects/<%= self.project.id %>/field/welcomed" hx-target="#modal-message-container">
+                            <input 
+                                name="value"
+                                value="true"
+                                id="welcomed" 
+                                type="checkbox"
+                                <% if self.project.welcomed { %>checked<% } %>
+                                class="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
+                            >
+                            <label for="welcomed" class="ml-2 block text-sm text-red-900">Welcomed</label>
+                            <button 
+                                type="submit"
+                                class="ml-2 inline-flex items-center px-2 py-1 border border-red-300 rounded text-xs text-red-700 bg-red-100 hover:bg-red-200"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="page-editor-ids" class="block text-sm font-medium text-red-700">Page Editor IDs</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/page_editor_ids" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="page-editor-ids"
+                                value="<%= self.project.page_editor_ids %>"
+                                class="block w-full px-3 py-2 border border-red-300 rounded-l-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm bg-red-50"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-red-300 rounded-r-md bg-red-100 hover:bg-red-200 text-sm text-red-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <!-- TODO: Remove these last editor fields - they should come from log entries, not database fields -->
+                    <!-- These fields are now logged via common::service::log_activity in the projects_update_field handler -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Project Last Editor</label>
+                        <div class="mt-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 text-sm text-gray-900">
+                            <%= self.project.project_last_editor %>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Project Last Edited</label>
+                        <div class="mt-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 text-sm text-gray-900">
+                            <%= self.project.project_last_edited %>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">SciStarter Last Editor</label>
+                        <div class="mt-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 text-sm text-gray-900">
+                            <%= self.project.scistarter_last_editor %>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">SciStarter Last Edited</label>
+                        <div class="mt-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 text-sm text-gray-900">
+                            <%= self.project.scistarter_last_edited %>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label for="tags" class="block text-sm font-medium text-red-700">Tags</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/tags" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="tags"
+                                value="<%= self.project.tags %>"
+                                placeholder="comma,separated,tags"
+                                class="block w-full px-3 py-2 border border-red-300 rounded-l-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm bg-red-50"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-red-300 rounded-r-md bg-red-100 hover:bg-red-200 text-sm text-red-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="extra" class="block text-sm font-medium text-red-700">Extra Data (JSON)</label>
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/extra" hx-target="#modal-message-container">
+                            <textarea 
+                                name="value"
+                                id="extra" 
+                                rows="4"
+                                class="block w-full px-3 py-2 border border-red-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm font-mono bg-red-50"
+                            ><%= self.project.extra %></textarea>
+                            <button 
+                                type="submit"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-red-300 rounded-md bg-red-100 hover:bg-red-200 text-sm text-red-700"
+                            >
+                                Save Extra Data
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Legacy IDs Section -->
+            <div class="bg-gray-50 rounded-lg p-4">
+                <h4 class="text-md font-medium text-gray-900 mb-4">Legacy & System IDs</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="legacy-v1-id" class="block text-sm font-medium text-gray-700">Legacy V1 Project ID</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/legacy_v1_project_id" hx-target="#modal-message-container">
+                            <input 
+                                type="number" 
+                                name="value"
+                                id="legacy-v1-id"
+                                value="<% if let Some(id) = &self.project.legacy_v1_project_id { %><%= id %><% } %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <label for="legacy-v2-id" class="block text-sm font-medium text-gray-700">Legacy V2 Project ID</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/legacy_v2_project_id" hx-target="#modal-message-container">
+                            <input 
+                                type="number" 
+                                name="value"
+                                id="legacy-v2-id"
+                                value="<% if let Some(id) = &self.project.legacy_v2_project_id { %><%= id %><% } %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="foreign-id" class="block text-sm font-medium text-gray-700">Foreign ID</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/foreign_id" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="foreign-id"
+                                value="<% if let Some(id) = &self.project.foreign_id { %><%= id %><% } %>"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
             <!-- Metadata Section -->
             <div class="bg-gray-50 rounded-lg p-4">
                 <h4 class="text-md font-medium text-gray-900 mb-4">Metadata</h4>
@@ -318,20 +2658,12 @@
                         <span class="ml-2 text-gray-600"><%= self.project.page_creator_id %></span>
                     </div>
                     <div>
-                        <span class="font-medium text-gray-700">Participants:</span>
-                        <span class="ml-2 text-gray-600"><%= self.project.participants %></span>
-                    </div>
-                    <div>
                         <span class="font-medium text-gray-700">Origin:</span>
                         <span class="ml-2 text-gray-600"><%= self.project.origin %></span>
                     </div>
                     <div>
                         <span class="font-medium text-gray-700">Created:</span>
                         <span class="ml-2 text-gray-600"><%= self.project.created_date %></span>
-                    </div>
-                    <div>
-                        <span class="font-medium text-gray-700">Last Updated:</span>
-                        <span class="ml-2 text-gray-600"><%= self.project.last_updated %></span>
                     </div>
                 </div>
             </div>

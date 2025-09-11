@@ -9,26 +9,85 @@
      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
      <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap" rel="stylesheet">
 
-    <link rel="stylesheet" href="https://early.webawesome.com/webawesome@3.0.0-beta.4/dist/styles/webawesome.css" />
-    <script type="module" src="https://early.webawesome.com/webawesome@3.0.0-beta.4/dist/webawesome.loader.js"></script>
-
     <link rel="stylesheet" href="/-static/css/style.css">
-
 </head>
 <body>
-    <wa-dialog light-dismiss without-header id="dialog">
-    <h2 class="mb-0">asf</h2>
-    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p> 
-</wa-dialog>
 
-<wa-button>Open Dialog</wa-button>
-<p>asdfas</p>
+<button class="button btn-primary">Open Dialog with Floating Image</button>
+<button class="button btn-primary">Open Dialog with Full Image</button>
+<button class="button btn-primary">Open Dialog with No Image</button>
+
+<!-- dialog with floating image -->
+<dialog class="ss-dialog ss-dialog__img-float">
+        <div class="ss-dialog__body">
+            <div class="ss-dialog__content">
+                <h2 class="mb-1 text-lg text-primary-dark">Wrangling the Cosmos: Help Decode Galaxy Light with Redshift Wrangler</h2>
+                <p>Tuesday, October 8th, we are celebrating SPACE WEEK with our friends from Redshift Wrangler.</p> 
+                <p>Join us for SciStarter LIVE at 2pm Eastern and meet the expert team behind Redshift Wrangler, ask your own questions, and explore how we can read the light from distant galaxies to understand how they form, grow, and interact throughout the universe.</p> 
+                <p>Register to attend or receive a recording!</p>
+            </div>
+            <div class="ss-dialog__img">
+                <img src="/-static/img/fpo/dialog-fpo.jpg" alt="project image" />
+            </div>
+        </div>
+        <div class="ss-dialog__footer">
+            <button type="button" class="btn btn-primary">Register</button>
+        </div>
+</dialog>
+
+<!-- dialog with full image -->
+<dialog class="ss-dialog ss-dialog__img-full">
+    <div class="ss-dialog__body">
+        <div class="ss-dialog__content">
+            <h2 class="mb-1 text-lg text-primary-dark">Wrangling the Cosmos: Help Decode Galaxy Light with Redshift Wrangler</h2>
+            <p>Tuesday, October 8th, we are celebrating SPACE WEEK with our friends from Redshift Wrangler.</p> 
+            <p>Join us for SciStarter LIVE at 2pm Eastern and meet the expert team behind Redshift Wrangler, ask your own questions, and explore how we can read the light from distant galaxies to understand how they form, grow, and interact throughout the universe.</p> 
+            <p>Register to attend or receive a recording!</p>
+        </div>
+        <div class="ss-dialog__img">
+            <img src="/-static/img/fpo/dialog-fpo.jpg" class="md:hidden" alt="project image" />
+          <img src="/-static/img/fpo/dialog-fpo2.jpg" class="hidden md:block" alt="project image" />
+        </div>
+    </div>
+    <div class="ss-dialog__footer">
+        <button type="button" class="btn btn-primary">Register</button>
+    </div>
+</dialog>
+
+<!-- dialog with no image -->
+<dialog class="ss-dialog ss-dialog__img-none">
+    <div class="ss-dialog__body">
+        <div class="ss-dialog__content">
+            <h2 class="mb-1 text-lg text-primary-dark">Wrangling the Cosmos: Help Decode Galaxy Light with Redshift Wrangler</h2>
+            <p>Tuesday, October 8th, we are celebrating SPACE WEEK with our friends from Redshift Wrangler.</p> 
+            <p>Join us for SciStarter LIVE at 2pm Eastern and meet the expert team behind Redshift Wrangler, ask your own questions, and explore how we can read the light from distant galaxies to understand how they form, grow, and interact throughout the universe.</p> 
+            <p>Register to attend or receive a recording!</p>
+        </div>
+    </div>
+    <div class="ss-dialog__footer">
+        <button type="button" class="btn btn-primary">Register</button>
+    </div>
+</dialog>
+
+
+
+
 
 <script>
-  const dialog = document.querySelector('#dialog');
-  const openButton = dialog.nextElementSibling;
+  document.addEventListener("DOMContentLoaded", () => {
+    const buttons = document.querySelectorAll(".button.btn-primary");
+    const dialogs = document.querySelectorAll("dialog.ss-dialog");
 
-  openButton.addEventListener('click', () => (dialog.open = true));
+    buttons.forEach((btn, i) => {
+      btn.addEventListener("click", () => {
+        dialogs[i].showModal();
+      });
+      // Optional: close dialog when clicking outside or pressing Escape
+      dialogs[i].addEventListener("click", (e) => {
+        if (e.target === dialogs[i]) dialogs[i].close();
+      });
+    });
+  });
 </script>
 
 </body>
