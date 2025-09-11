@@ -1,118 +1,116 @@
-<tr 
-    id="project-row-<%= self.project.id %>" 
-    class="hover:bg-gray-50"
-    <% if self.oob { %>hx-swap-oob="<%= self.oob_swap %>:#project-row-<%= self.project.id %>"<% } %>
->
+<% if self.oob { %><template><% } %>
+  <tr id="project-row-<%= self.project.id %>" class="hover:bg-gray-50" <% if self.oob { %>hx-swap-oob="<%= self.oob_swap %>:#project-row-<%= self.project.id %>"<% } %> >
     <td class="px-6 py-4 whitespace-nowrap">
-        <div>
-            <div class="text-sm font-medium text-gray-900">
-                <span id="project-name-<%= self.project.id %>"><%= self.project.title %></span>
-            </div>
-            <div class="text-sm text-gray-500">
-                By <%= self.project.presenter %> • Created <%= self.project.created_date %>
-            </div>
-            <% if !self.project.description.is_empty() { %>
-                <div class="text-xs text-gray-500 mt-1 max-w-xs truncate">
-                    <%= self.project.description %>
-                </div>
-            <% } %>
+      <div>
+        <div class="text-sm font-medium text-gray-900">
+          <span id="project-name-<%= self.project.id %>"><%= self.project.title %></span>
         </div>
+        <div class="text-sm text-gray-500">
+          By <%= self.project.presenter %> • Created <%= self.project.created_date %>
+        </div>
+        <% if !self.project.description.is_empty() { %>
+          <div class="text-xs text-gray-500 mt-1 max-w-xs truncate">
+            <%= self.project.description %>
+          </div>
+        <% } %>
+      </div>
     </td>
     <td class="px-6 py-4 whitespace-nowrap">
-        <span id="project-status-<%= self.project.id %>">
-            <% if self.project.status == "active" { %>
-                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                    Active
-                </span>
-            <% } else if self.project.status == "pending" { %>
-                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                    Pending
-                </span>
-            <% } else if self.project.status == "hiatus" { %>
-                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">
-                    Hiatus
-                </span>
-            <% } else if self.project.status == "complete" { %>
-                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-                    Complete
-                </span>
-            <% } else if self.project.status == "hidden" { %>
-                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
-                    Hidden
-                </span>
-            <% } else { %>
-                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
-                    <%= self.project.status %>
-                </span>
-            <% } %>
+      <span id="project-status-<%= self.project.id %>">
+        <% if self.project.status == "active" { %>
+          <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+            Active
+          </span>
+        <% } else if self.project.status == "pending" { %>
+        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
+          Pending
         </span>
+            <% } else if self.project.status == "hiatus" { %>
+            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">
+              Hiatus
+            </span>
+            <% } else if self.project.status == "complete" { %>
+            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+              Complete
+            </span>
+            <% } else if self.project.status == "hidden" { %>
+            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+              Hidden
+            </span>
+            <% } else { %>
+            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
+              <%= self.project.status %>
+            </span>
+            <% } %>
+      </span>
     </td>
     <td class="px-6 py-4 whitespace-nowrap">
-        <div id="project-publish-<%= self.project.id %>">
-            <button 
-                hx-put="/-admin/projects/<%= self.project.id %>/field/publish"
-                hx-vals='{"value": "<%= !self.project.publish %>"}'
-                hx-target="#project-publish-<%= self.project.id %>"
-                class="relative inline-flex flex-shrink-0 h-6 w-11 border-2 border-transparent rounded-full cursor-pointer transition-colors ease-in-out duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 <%= if self.project.publish { "bg-indigo-600" } else { "bg-gray-200" } %>"
-                role="switch" 
-                aria-checked="<%= self.project.publish %>"
-            >
-                <span class="sr-only">Toggle publish status</span>
-                <span aria-hidden="true" class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition ease-in-out duration-200 <%= if self.project.publish { "translate-x-5" } else { "translate-x-0" } %>"></span>
-            </button>
-            <span class="ml-2 text-sm text-gray-600">
-                <% if self.project.publish { %>
-                    Published
-                <% } else { %>
-                    Unpublished
-                <% } %>
-            </span>
-        </div>
+      <div id="project-publish-<%= self.project.id %>">
+        <button 
+            hx-put="/-admin/projects/<%= self.project.id %>/field/publish"
+            hx-vals='{"value": "<%= !self.project.publish %>"}'
+            hx-target="#project-publish-<%= self.project.id %>"
+            class="relative inline-flex flex-shrink-0 h-6 w-11 border-2 border-transparent rounded-full cursor-pointer transition-colors ease-in-out duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 <%= if self.project.publish { "bg-indigo-600" } else { "bg-gray-200" } %>"
+            role="switch" 
+            aria-checked="<%= self.project.publish %>"
+        >
+          <span class="sr-only">Toggle publish status</span>
+          <span aria-hidden="true" class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition ease-in-out duration-200 <%= if self.project.publish { "translate-x-5" } else { "translate-x-0" } %>"></span>
+        </button>
+        <span class="ml-2 text-sm text-gray-600">
+          <% if self.project.publish { %>
+            Published
+          <% } else { %>
+            Unpublished
+          <% } %>
+        </span>
+      </div>
     </td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-        <span class="inline-flex px-2 py-1 text-xs rounded-full <%= if self.project.origin == "scistarter" { "bg-blue-100 text-blue-800" } else { "bg-purple-100 text-purple-800" } %>">
-            <%= self.project.origin %>
-        </span>
+      <span class="inline-flex px-2 py-1 text-xs rounded-full <%= if self.project.origin == "scistarter" { "bg-blue-100 text-blue-800" } else { "bg-purple-100 text-purple-800" } %>">
+        <%= self.project.origin %>
+      </span>
     </td>
     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-        <div class="flex items-center space-x-2">
-            <button 
-                hx-get="/-admin/projects/<%= self.project.id %>"
-                hx-target="#modal-container"
-                hx-swap="innerHTML"
-                class="text-indigo-600 hover:text-indigo-900 p-1 rounded hover:bg-indigo-50"
-                title="Edit project"
-            >
-                <wa-icon name="pencil" class="w-4 h-4"></wa-icon>
-            </button>
-            <% if self.project.flagged { %>
-                <button 
-                    hx-put="/-admin/projects/<%= self.project.id %>/field/flagged"
-                    hx-vals='{"value": "false"}'
-                    hx-target="#project-row-<%= self.project.id %>"
-                    hx-swap="outerHTML"
-                    class="text-yellow-600 hover:text-yellow-900 p-1 rounded hover:bg-yellow-50"
-                    title="Unflag project"
-                >
-                    <wa-icon name="flag" class="w-4 h-4"></wa-icon>
-                </button>
-            <% } else { %>
-                <button 
-                    hx-put="/-admin/projects/<%= self.project.id %>/field/flagged"
-                    hx-vals='{"value": "true"}'
-                    hx-target="#project-row-<%= self.project.id %>"
-                    hx-swap="outerHTML"
-                    class="text-gray-400 hover:text-yellow-600 p-1 rounded hover:bg-yellow-50"
-                    title="Flag project"
-                >
-                    <wa-icon name="flag" class="w-4 h-4"></wa-icon>
-                </button>
-            <% } %>
-            <% if self.project.is_test { %>
-                <span class="inline-flex px-2 py-1 text-xs rounded-full bg-orange-100 text-orange-800" title="Test project">
-                    TEST
-                </span>
-            <% } %>
-        </div>
+      <div class="flex items-center space-x-2">
+        <button 
+            hx-get="/-admin/projects/<%= self.project.id %>"
+            hx-target="#modal-container"
+            hx-swap="innerHTML"
+            class="text-indigo-600 hover:text-indigo-900 p-1 rounded hover:bg-indigo-50"
+            title="Edit project"
+        >
+          <wa-icon name="pencil" class="w-4 h-4"></wa-icon>
+        </button>
+        <% if self.project.flagged { %>
+          <button 
+              hx-put="/-admin/projects/<%= self.project.id %>/field/flagged"
+              hx-vals='{"value": "false"}'
+              hx-target="#project-row-<%= self.project.id %>"
+              hx-swap="outerHTML"
+              class="text-yellow-600 hover:text-yellow-900 p-1 rounded hover:bg-yellow-50"
+              title="Unflag project"
+          >
+            <wa-icon name="flag" class="w-4 h-4"></wa-icon>
+          </button>
+        <% } else { %>
+          <button 
+              hx-put="/-admin/projects/<%= self.project.id %>/field/flagged"
+              hx-vals='{"value": "true"}'
+              hx-target="#project-row-<%= self.project.id %>"
+              hx-swap="outerHTML"
+              class="text-gray-400 hover:text-yellow-600 p-1 rounded hover:bg-yellow-50"
+              title="Flag project"
+          >
+            <wa-icon name="flag" class="w-4 h-4"></wa-icon>
+          </button>
+        <% } %>
+        <% if self.project.is_test { %>
+          <span class="inline-flex px-2 py-1 text-xs rounded-full bg-orange-100 text-orange-800" title="Test project">
+            TEST
+          </span>
+        <% } %>
+      </div>
     </td>
-</tr>
+  </tr>
+<% if self.oob { %></template><% } %>

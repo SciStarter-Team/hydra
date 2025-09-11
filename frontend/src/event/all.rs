@@ -10,6 +10,16 @@ use crate::{contact::Contact, peering::LoadStorePeered};
 
 use super::{EventInstance, EventType};
 
+/// Container for all event fields.
+///
+/// This structure contains a representation of all event data. Its
+/// primary purpose is for receiving data synchronizations. It should
+/// not be used casually for other purposes, since there are more
+/// efficient options in most cases.
+///
+/// Note: The `tags_text` database column is NOT included here as it's
+/// a computed field for FTS search optimization, not a real event field.
+/// Tags are managed separately via the event_tags table.
 #[derive(Default, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct EventAll {

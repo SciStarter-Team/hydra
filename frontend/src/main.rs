@@ -264,10 +264,51 @@ async fn main() -> Result<(), Error> {
     println!("Listening on {}", env!("LISTEN_ON"));
     println!("Frontend NATS service started: frontend.health.check");
 
-    Server::new(TcpListener::bind(env!("LISTEN_ON")))
-        .run(routes)
-        .await?;
+    // Set up graceful shutdown
+    let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+    let shutdown_tx = std::sync::Arc::new(std::sync::Mutex::new(Some(shutdown_tx)));
+    
+    // Handle SIGINT and SIGTERM for graceful shutdown
+    use tokio::signal::unix::{signal, SignalKind};
+    
+    let shutdown_tx_sigint = shutdown_tx.clone();
+    let mut sigint = signal(SignalKind::interrupt())?;
+    tokio::spawn(async move {
+        sigint.recv().await;
+        tracing::info!("Received SIGINT, initiating graceful shutdown...");
+        if let Some(tx) = shutdown_tx_sigint.lock().unwrap().take() {
+            let _ = tx.send(());
+        }
+    });
+    
+    let shutdown_tx_sigterm = shutdown_tx.clone();
+    let mut sigterm = signal(SignalKind::terminate())?;
+    tokio::spawn(async move {
+        sigterm.recv().await;
+        tracing::info!("Received SIGTERM, initiating graceful shutdown...");
+        if let Some(tx) = shutdown_tx_sigterm.lock().unwrap().take() {
+            let _ = tx.send(());
+        }
+    });
 
+    // Run server with graceful shutdown
+    let server = Server::new(TcpListener::bind(env!("LISTEN_ON")));
+    let server_task = tokio::spawn(server.run(routes));
+    
+    tokio::select! {
+        result = server_task => {
+            match result {
+                Ok(Ok(())) => tracing::info!("Server completed successfully"),
+                Ok(Err(e)) => tracing::error!("Server error: {}", e),
+                Err(e) => tracing::error!("Server task panicked: {}", e),
+            }
+        }
+        _ = &mut shutdown_rx => {
+            tracing::info!("Shutdown signal received, stopping server...");
+        }
+    }
+    
+    tracing::info!("Frontend service shutting down...");
     Ok(())
 }
 

@@ -17,6 +17,10 @@ use super::{ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus};
 /// primary purpose is for receiving data synchronizations. It should
 /// not be used casually for other purposes, since there are more
 /// efficient options in most cases.
+///
+/// Note: The `tags_text` database column is NOT included here as it's
+/// a computed field for FTS search optimization, not a real project field.
+/// Tags are managed separately via the project_tags table.
 #[derive(Default, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct ProjectAll {
@@ -1294,11 +1298,11 @@ impl LoadStorePeered for ProjectAll {
                 editor_ids.into_boxed_slice()
             },
             extra: project_row.extra,
-            // TODO: Fix field access - these fields may not exist in database schema yet
-            project_last_editor: None, // TODO: Read from actual column
-            project_last_edited: None, // TODO: Read from actual column  
-            scistarter_last_editor: None, // TODO: Read from actual column
-            scistarter_last_edited: None, // TODO: Read from actual column
+            // Editor tracking is managed via log entries, not database columns
+            project_last_editor: None,
+            project_last_edited: None,
+            scistarter_last_editor: None,
+            scistarter_last_edited: None,
             
             // Project section
             draft: project_row.draft,

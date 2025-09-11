@@ -18,32 +18,139 @@
         <div class="px-6 py-4 space-y-6">
             <div id="modal-message-container"></div>
             
-            <!-- TODO: Create "Required Fields" section at top with: title, goal, task, description, image, image_credit, and other non-nullable fields with no defaults -->
-            <!-- These critical fields should be prominently displayed before optional fields for better UX -->
-            
-            <!-- Basic Information Section -->
-            <div class="bg-gray-50 rounded-lg p-4">
-                <h4 class="text-md font-medium text-gray-900 mb-4">Basic Information</h4>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Required Fields Section -->
+            <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                <h4 class="text-md font-medium text-red-900 mb-4">Required Fields</h4>
+                <div class="grid grid-cols-1 gap-4">
+                    <!-- Project Title -->
                     <div>
-                        <label for="project-name" class="block text-sm font-medium text-gray-700">Project Name</label>
+                        <label for="project-name-required" class="block text-sm font-medium text-red-700">Project Name *</label>
                         <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/name" hx-target="#project-name-<%= self.project.id %>">
                             <input 
                                 type="text" 
                                 name="value"
-                                id="project-name"
+                                id="project-name-required"
                                 value="<%= self.project.title %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                required
+                                class="block w-full px-3 py-2 border border-red-300 rounded-l-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm"
                             >
                             <button 
                                 type="submit"
-                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-red-300 rounded-r-md bg-red-50 hover:bg-red-100 text-sm text-red-700"
                             >
                                 Save
                             </button>
                         </form>
                     </div>
-                    
+
+                    <!-- Project Description -->
+                    <div>
+                        <label for="project-description-required" class="block text-sm font-medium text-red-700">Description *</label>
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/description" hx-target="#modal-message-container">
+                            <textarea 
+                                name="value"
+                                id="project-description-required" 
+                                rows="3"
+                                required
+                                class="block w-full px-3 py-2 border border-red-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm"
+                            ><%= self.project.description %></textarea>
+                            <button 
+                                type="submit"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-red-300 rounded-md bg-red-50 hover:bg-red-100 text-sm text-red-700"
+                            >
+                                Save Description
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Scientific Goal -->
+                    <div>
+                        <label for="project-goal-required" class="block text-sm font-medium text-red-700">Scientific Goal *</label>
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/goal" hx-target="#modal-message-container">
+                            <textarea 
+                                name="value"
+                                id="project-goal-required" 
+                                rows="3"
+                                required
+                                class="block w-full px-3 py-2 border border-red-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm"
+                            ><%= self.project.goal %></textarea>
+                            <button 
+                                type="submit"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-red-300 rounded-md bg-red-50 hover:bg-red-100 text-sm text-red-700"
+                            >
+                                Save Goal
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Participant Task -->
+                    <div>
+                        <label for="project-task-required" class="block text-sm font-medium text-red-700">Participant Task *</label>
+                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/task" hx-target="#modal-message-container">
+                            <textarea 
+                                name="value"
+                                id="project-task-required" 
+                                rows="3"
+                                required
+                                class="block w-full px-3 py-2 border border-red-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm"
+                            ><%= self.project.task %></textarea>
+                            <button 
+                                type="submit"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-red-300 rounded-md bg-red-50 hover:bg-red-100 text-sm text-red-700"
+                            >
+                                Save Task
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Image URL -->
+                    <div>
+                        <label for="project-image-required" class="block text-sm font-medium text-red-700">Image URL *</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/image" hx-target="#modal-message-container">
+                            <input 
+                                type="url" 
+                                name="value"
+                                id="project-image-required"
+                                value="<%= self.project.image %>"
+                                required
+                                class="block w-full px-3 py-2 border border-red-300 rounded-l-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-red-300 rounded-r-md bg-red-50 hover:bg-red-100 text-sm text-red-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Image Credit -->
+                    <div>
+                        <label for="image-credit-required" class="block text-sm font-medium text-red-700">Image Credit *</label>
+                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/image_credit" hx-target="#modal-message-container">
+                            <input 
+                                type="text" 
+                                name="value"
+                                id="image-credit-required"
+                                value="<%= self.project.image_credit %>"
+                                required
+                                class="block w-full px-3 py-2 border border-red-300 rounded-l-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm"
+                            >
+                            <button 
+                                type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-red-300 rounded-r-md bg-red-50 hover:bg-red-100 text-sm text-red-700"
+                            >
+                                Save
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Basic Information Section -->
+            <div class="bg-gray-50 rounded-lg p-4">
+                <h4 class="text-md font-medium text-gray-900 mb-4">Basic Information</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label for="project-presenter" class="block text-sm font-medium text-gray-700">Presenter</label>
                         <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/presenter" hx-target="#modal-message-container">
@@ -63,23 +170,6 @@
                         </form>
                     </div>
                     
-                    <div class="md:col-span-2">
-                        <label for="project-description" class="block text-sm font-medium text-gray-700">Description</label>
-                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/description" hx-target="#modal-message-container">
-                            <textarea 
-                                name="value"
-                                id="project-description" 
-                                rows="3"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                            ><%= self.project.description %></textarea>
-                            <button 
-                                type="submit"
-                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
-                            >
-                                Save Description
-                            </button>
-                        </form>
-                    </div>
                 </div>
             </div>
             
@@ -376,24 +466,6 @@
                         </form>
                     </div>
                     
-                    <div>
-                        <label for="project-image" class="block text-sm font-medium text-gray-700">Image URL</label>
-                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/image" hx-target="#modal-message-container">
-                            <input 
-                                type="url" 
-                                name="value"
-                                id="project-image"
-                                value="<%= self.project.image %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                            >
-                            <button 
-                                type="submit"
-                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
-                            >
-                                Save
-                            </button>
-                        </form>
-                    </div>
                     
                     <div>
                         <label for="video-url" class="block text-sm font-medium text-gray-700">Video URL</label>
@@ -491,68 +563,9 @@
                         </form>
                     </div>
                     
-                    <div>
-                        <label for="image-credit" class="block text-sm font-medium text-gray-700">Image Credit</label>
-                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/image_credit" hx-target="#modal-message-container">
-                            <input 
-                                type="text" 
-                                name="value"
-                                id="image-credit"
-                                value="<%= self.project.image_credit %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                            >
-                            <button 
-                                type="submit"
-                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
-                            >
-                                Save
-                            </button>
-                        </form>
-                    </div>
                 </div>
             </div>
 
-            <!-- Project Goals Section -->
-            <div class="bg-gray-50 rounded-lg p-4">
-                <h4 class="text-md font-medium text-gray-900 mb-4">Project Goals & Tasks</h4>
-                <div class="grid grid-cols-1 gap-4">
-                    <div>
-                        <label for="project-goal" class="block text-sm font-medium text-gray-700">Scientific Goal</label>
-                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/goal" hx-target="#modal-message-container">
-                            <textarea 
-                                name="value"
-                                id="project-goal" 
-                                rows="3"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                            ><%= self.project.goal %></textarea>
-                            <button 
-                                type="submit"
-                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
-                            >
-                                Save Goal
-                            </button>
-                        </form>
-                    </div>
-                    
-                    <div>
-                        <label for="project-task" class="block text-sm font-medium text-gray-700">Participant Task</label>
-                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/task" hx-target="#modal-message-container">
-                            <textarea 
-                                name="value"
-                                id="project-task" 
-                                rows="3"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                            ><%= self.project.task %></textarea>
-                            <button 
-                                type="submit"
-                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
-                            >
-                                Save Task
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            </div>
             
             <!-- Admin Section -->
             <div class="bg-red-50 rounded-lg p-4 border border-red-200">
@@ -2512,35 +2525,6 @@
                         </form>
                     </div>
                     
-                    <!-- TODO: Remove these last editor fields - they should come from log entries, not database fields -->
-                    <!-- These fields are now logged via common::service::log_activity in the projects_update_field handler -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Project Last Editor</label>
-                        <div class="mt-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 text-sm text-gray-900">
-                            <%= self.project.project_last_editor %>
-                        </div>
-                    </div>
-                    
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Project Last Edited</label>
-                        <div class="mt-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 text-sm text-gray-900">
-                            <%= self.project.project_last_edited %>
-                        </div>
-                    </div>
-                    
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">SciStarter Last Editor</label>
-                        <div class="mt-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 text-sm text-gray-900">
-                            <%= self.project.scistarter_last_editor %>
-                        </div>
-                    </div>
-                    
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">SciStarter Last Edited</label>
-                        <div class="mt-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 text-sm text-gray-900">
-                            <%= self.project.scistarter_last_edited %>
-                        </div>
-                    </div>
                     
                     <div>
                         <label for="tags" class="block text-sm font-medium text-red-700">Tags</label>

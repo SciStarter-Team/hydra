@@ -8,6 +8,10 @@ use crate::{contact::Contact, peering::LoadStorePeered};
 
 use super::{ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus};
 
+// Note: The `tags_text` database column is NOT included in ProjectFieldType
+// as it's a computed field for FTS search optimization, not a real project field.
+// Tags are managed separately via the project_tags table and dedicated handlers.
+
 #[derive(Debug, Clone, Copy)]
 pub enum ProjectFieldType {
     ProjectId,

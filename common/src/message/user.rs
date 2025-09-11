@@ -407,3 +407,17 @@ pub struct UserEmailResponse {
     pub message: String,
     pub emails: Vec<UserEmail>, // Return updated emails list
 }
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct AdminAnalyticsRequest {
+    // Empty for now - could add date ranges later
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct AdminAnalyticsResponse {
+    pub total_users: u32,
+    pub verified_users: u32,
+    pub monthly_signups: u32,
+    pub weekly_signups: u32,
+    pub daily_signups: u32,
+}

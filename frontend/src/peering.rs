@@ -21,12 +21,35 @@ pub trait LoadStorePeered:
     const GROUP: &str;
     const SPECIFIC: &str = "";
 
-    /// Saves self to the local database, without any peer involvement.
-    async fn save_to_database(&self) -> Result<(), Error>;
+    /// Loads the Self with the given id
+    ///
+    /// This is the main entry point for loading data.
+    ///
+    /// Overriding the default implementation is not recommended.
+    #[tracing::instrument(skip(key))]
+    //async fn load<'k>(key: Self::DatabaseKey<'k>) -> Result<Self, Error> {
+    async fn load(key: Self::DatabaseKey) -> Result<Self, Error> {
+        Self::read_from_database(key).await
+    }
 
-    /// Loads the Self with the given id from the local database, without any peer involvement.
-    //async fn read_from_database<'k>(key: Self::DatabaseKey<'k>) -> Result<Self, Error>;
-    async fn read_from_database(key: Self::DatabaseKey) -> Result<Self, Error>;
+    /// Stores self, updating peers with the change as well.
+    ///
+    /// This is the main entry point for storing data.
+    ///
+    /// Overriding the default implementation is not recommended.
+    #[tracing::instrument]
+    async fn store(&self) -> Result<(), Error> {
+        self.save_to_database().await?;
+        send_with_headers(
+            peering_subject_store::<Self>(),
+            nats_headers! {
+                "Source": SERVER_ID_STR.as_str(),
+            },
+            self,
+        )
+        .await?;
+        Ok(())
+    }
 
     /// Override the default implementation if you want to handle
     /// custom signals for this type.
@@ -59,32 +82,6 @@ pub trait LoadStorePeered:
         )
         .await?;
 
-        Ok(())
-    }
-
-    /// Loads the Self with the given id
-    #[tracing::instrument(skip(key))]
-    //async fn load<'k>(key: Self::DatabaseKey<'k>) -> Result<Self, Error> {
-    async fn load(key: Self::DatabaseKey) -> Result<Self, Error> {
-        Self::read_from_database(key).await
-    }
-
-    /// Stores self, updating peers with the change as well.
-    ///
-    /// Overriding the default implementation is not recommended. This
-    /// method should be the normal entry point for storing types
-    /// which implement the LoadLocalStorePeered trait.
-    #[tracing::instrument]
-    async fn store(&self) -> Result<(), Error> {
-        self.save_to_database().await?;
-        send_with_headers(
-            peering_subject_store::<Self>(),
-            nats_headers! {
-                "Source": SERVER_ID_STR.as_str(),
-            },
-            self,
-        )
-        .await?;
         Ok(())
     }
 
@@ -166,6 +163,19 @@ pub trait LoadStorePeered:
 
         Ok(())
     }
+
+    /// Saves self to the local database, without any peer involvement.
+    ///
+    /// Rather than calling this method directly, it should be invoked
+    /// via the store() method for proper peer-to-peer synchronization.
+    async fn save_to_database(&self) -> Result<(), Error>;
+
+    /// Loads the Self with the given id from the local database, without any peer involvement.
+    ///
+    /// Rather than calling this method directly, it should be invoked
+    /// via the load() method for proper peer-to-peer synchronization.
+    //async fn read_from_database<'k>(key: Self::DatabaseKey<'k>) -> Result<Self, Error>;
+    async fn read_from_database(key: Self::DatabaseKey) -> Result<Self, Error>;
 }
 
 // Seems like the next two functions *should* be able to be const fn,

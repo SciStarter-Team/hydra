@@ -981,6 +981,7 @@ async fn main() {
     let stats = service.group("user.stats");
     toplevel.spawn(handler!(stats, "total_count", stats::total_count));
     toplevel.spawn(handler!(stats, "verified_count", stats::verified_count));
+    toplevel.spawn(handler!(stats, "admin_analytics", stats::admin_analytics));
 
     let search = service.group("user.search");
     toplevel.spawn(handler!(search, "by_handle", users::search_by_handle));
@@ -1037,12 +1038,31 @@ async fn main() {
     let health = service.group("user.health");
     toplevel.spawn(handler!(health, "check", health::health_check));
 
-    toplevel.join_all().await;
+    // Set up graceful shutdown
+    use tokio::signal::unix::{signal, SignalKind};
+    
+    let mut sigint = signal(SignalKind::interrupt()).expect("Failed to create SIGINT handler");
+    let mut sigterm = signal(SignalKind::terminate()).expect("Failed to create SIGTERM handler");
+    
+    tokio::select! {
+        _ = toplevel.join_all() => {
+            println!("All service handlers completed");
+        }
+        _ = sigint.recv() => {
+            println!("Received SIGINT, shutting down user service gracefully...");
+        }
+        _ = sigterm.recv() => {
+            println!("Received SIGTERM, shutting down user service gracefully...");
+        }
+    }
 
+    println!("User service shutting down...");
     cleanup_task.abort();
     analyze_task.abort();
 
     sessions_sync_task.abort();
     users_sync_task.abort();
     userbadges_sync_task.abort();
+    
+    println!("User service shutdown complete");
 }
