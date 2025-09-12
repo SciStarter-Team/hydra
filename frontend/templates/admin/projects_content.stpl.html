@@ -1,23 +1,21 @@
-<!-- Projects Table -->
-<div class="overflow-x-auto">
-    <table class="w-full">
-        <thead class="bg-gray-50">
-            <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Project</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Published</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Participants</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Origin</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Updated</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-            </tr>
-        </thead>
-        <tbody id="projects-table-body" class="bg-white divide-y divide-gray-200">
-            <% for project in &self.projects { %>
-                <%+ ProjectRow { project: project.clone(), oob: false, oob_swap: "".to_string() } %>
-            <% } %>
-        </tbody>
-    </table>
+<!-- Projects List -->
+<div class="bg-white">
+    <!-- Header Row - Hidden on mobile, visible on larger screens -->
+    <div class="hidden lg:grid lg:grid-cols-7 bg-gray-50 px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
+        <div>Project</div>
+        <div>Presenter</div>
+        <div>Status</div>
+        <div>Published</div>
+        <div>Origin</div>
+        <div>Created</div>
+        <div>Actions</div>
+    </div>
+    
+    <div id="projects-table-body" class="divide-y divide-gray-200">
+        <% for project in &self.projects { %>
+            <%+ ProjectRow { project: project.clone(), oob: false, oob_swap: "".to_string() } %>
+        <% } %>
+    </div>
 </div>
 
 <!-- Results info and pagination -->

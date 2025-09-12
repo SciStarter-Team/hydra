@@ -70,8 +70,20 @@ header #nav--users a:hover{
     left:0;
   }
 
+  #main-nav-logo {
+    @apply w-36;
+  }
+
 
   @media (min-width:768px){
+
+    #main-nav-logo {
+      @apply w-40;
+    }
+    .logged-in #main-nav-logo {
+      display: none!important;
+    }
+
     #menu {
       top: auto;
       width: auto;
@@ -86,12 +98,30 @@ header #nav--users a:hover{
     }
     .mega-menu {
         position: absolute;
-        top:117px;
+        top:100%;
         left:0;
         width: 100%;
         margin: 0;
         z-index: 999;
         background-color: white;
+    }
+}
+
+@media (min-width:768px){
+   #main-nav-logo {
+      @apply w-36;
+    }
+}
+
+@media (min-width:800px){
+   #main-nav-logo {
+      @apply w-44;
+    }
+}
+
+@media (min-width:1024px){
+   #main-nav-logo {
+      @apply w-52;
     }
 }
 

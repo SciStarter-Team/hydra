@@ -74,6 +74,7 @@ pub fn routes() -> impl Endpoint {
             put(projects_update_field),
         )
         .at("/events", get(events))
+        .at("/events/search", get(events_search))
         .at("/analytics", get(analytics))
         .at("/help", get(help))
         .at("/engine-room", get(engine_room))
@@ -441,6 +442,66 @@ pub struct AdminProject {
     pub draft: bool,
 }
 
+impl AdminProject {
+    /// Generate hash-based color classes for origin pill
+    pub fn origin_color_classes(&self) -> String {
+        self.hash_color_classes(&self.origin)
+    }
+    
+    /// Generate color classes for status pill
+    pub fn status_color_classes(&self) -> String {
+        match self.status.as_str() {
+            "Active" => "bg-green-100 text-green-800".to_string(),
+            "Pending" => "bg-yellow-100 text-yellow-800".to_string(),
+            "Hiatus" => "bg-orange-100 text-orange-800".to_string(),
+            "Complete" => "bg-blue-100 text-blue-800".to_string(),
+            "Hidden" => "bg-red-100 text-red-800".to_string(),
+            _ => "bg-gray-100 text-gray-800".to_string(),
+        }
+    }
+    
+    /// Format created date and time in human-readable Eastern timezone format
+    /// Returns (date_part, time_part) tuple
+    pub fn formatted_created_date_time(&self) -> (String, String) {
+        use jiff::{Timestamp, tz::TimeZone};
+        
+        // Try to parse the created_date string as a Timestamp
+        if let Ok(timestamp) = self.created_date.parse::<Timestamp>() {
+            let eastern_tz = TimeZone::get("America/New_York").unwrap();
+            let zoned = timestamp.to_zoned(eastern_tz);
+            let date_part = zoned.strftime("%b %d, %Y").to_string();
+            let time_part = zoned.strftime("%I:%M %p %Z").to_string();
+            (date_part, time_part)
+        } else {
+            // Fallback to original string if parsing fails
+            (self.created_date.clone(), String::new())
+        }
+    }
+    
+    fn hash_color_classes(&self, value: &str) -> String {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let mut hasher = DefaultHasher::new();
+        value.hash(&mut hasher);
+        let hash = hasher.finish();
+        
+        // Define a set of pleasant, accessible color combinations
+        let colors = [
+            "bg-blue-100 text-blue-800",
+            "bg-green-100 text-green-800", 
+            "bg-purple-100 text-purple-800",
+            "bg-pink-100 text-pink-800",
+            "bg-indigo-100 text-indigo-800",
+            "bg-teal-100 text-teal-800",
+            "bg-amber-100 text-amber-800",
+            "bg-cyan-100 text-cyan-800",
+        ];
+        
+        colors[(hash % colors.len() as u64) as usize].to_string()
+    }
+}
+
 #[derive(Debug)]
 pub struct AdminProjectFull {
     pub id: String,
@@ -747,13 +808,17 @@ impl AdminProjectFull {
 }
 
 async fn fetch_recent_projects() -> Result<Vec<AdminProject>, anyhow::Error> {
-    fetch_projects_page(None, None, None, Some(1), Some(10)).await
+    fetch_projects_page(None, None, None, None, None, None, None, Some(1), Some(10)).await
 }
 
 async fn fetch_projects_page(
     search: Option<&str>,
     status_filter: Option<&str>,
     publish_filter: Option<&str>,
+    flagged_filter: Option<&str>,
+    spatial_overlap: Option<&str>,          // GeoJSON geometry for overlap search
+    spatial_point: Option<(f64, f64, f64)>, // (lat, lng, radius_meters) circle for intersection search  
+    proximity_sort: Option<(f64, f64)>,     // (lat, lng) for proximity sorting
     page: Option<u32>,
     per_page: Option<u32>,
 ) -> Result<Vec<AdminProject>, anyhow::Error> {
@@ -775,6 +840,7 @@ async fn fetch_projects_page(
              JOIN projects_fts f ON p.project_id = f.project_id 
              WHERE projects_fts MATCH ",
         );
+        // With porter stemming enabled, use simple term matching for better flexibility
         query.push_bind(search_term);
     } else {
         query.push(
@@ -796,7 +862,64 @@ async fn fetch_projects_page(
         query.push_bind(publish_bool);
     }
 
-    query.push(" ORDER BY p.created DESC LIMIT ");
+    if let Some(flagged) = flagged_filter.filter(|s| !s.is_empty()) {
+        let flagged_bool = flagged == "true";
+        query.push(" AND p.flagged = ");
+        query.push_bind(flagged_bool);
+    }
+
+    // Add spatial filtering
+    if let Some(geojson) = spatial_overlap {
+        query.push(" AND (ST_Intersects(p.regions, GeomFromGeoJSON(");
+        query.push_bind(geojson);
+        query.push(")) OR ST_Intersects(p.point, GeomFromGeoJSON(");
+        query.push_bind(geojson);
+        query.push(")))");
+    }
+
+    if let Some((lat, lng, radius)) = spatial_point {
+        // Create a circle and test intersection with both regions and point
+        query.push(" AND (ST_Intersects(p.regions, ST_Buffer(MakePoint(");
+        query.push_bind(lng);  // longitude first for MakePoint
+        query.push(", ");
+        query.push_bind(lat);
+        query.push(", 4326), ");
+        query.push_bind(radius);
+        query.push(")) OR ST_DWithin(p.point, MakePoint(");
+        query.push_bind(lng);
+        query.push(", ");
+        query.push_bind(lat);
+        query.push(", 4326), ");
+        query.push_bind(radius);
+        query.push("))");
+    }
+
+    // Use different ordering based on whether this is a search query or spatial sort
+    if let Some((lat, lng)) = proximity_sort {
+        // For proximity sorting with special handling for regions vs points
+        // For regions: when point is within regions, sort by area (smaller regions first)
+        //              when point is outside regions, add large constant to distance to deprioritize
+        // For points: just sort by straight distance
+        query.push(" ORDER BY CASE WHEN p.regions IS NOT NULL AND ST_Contains(p.regions, MakePoint(");
+        query.push_bind(lng);
+        query.push(", ");
+        query.push_bind(lat);
+        query.push(", 4326)) THEN ST_Area(p.regions) WHEN p.regions IS NOT NULL THEN ST_Distance(p.regions, MakePoint(");
+        query.push_bind(lng);
+        query.push(", ");
+        query.push_bind(lat);
+        query.push(", 4326)) + 50000000 WHEN p.point IS NOT NULL THEN ST_Distance(p.point, MakePoint(");
+        query.push_bind(lng);
+        query.push(", ");
+        query.push_bind(lat);
+        query.push(", 4326)) ELSE 999999999 END ASC, p.created DESC LIMIT ");  // Very large value for projects with no geometry
+    } else if search.filter(|s| !s.trim().is_empty()).is_some() {
+        // For search queries, order by relevance (best match first), then by creation date
+        query.push(" ORDER BY bm25(projects_fts), p.created DESC LIMIT ");
+    } else {
+        // For non-search queries, order by creation date only
+        query.push(" ORDER BY p.created DESC LIMIT ");
+    }
     query.push_bind(per_page);
     query.push(" OFFSET ");
     query.push_bind(offset);
@@ -857,6 +980,9 @@ async fn count_projects(
     search: Option<&str>,
     status_filter: Option<&str>,
     publish_filter: Option<&str>,
+    flagged_filter: Option<&str>,
+    spatial_overlap: Option<&str>,
+    spatial_point: Option<(f64, f64, f64)>,
 ) -> Result<u64, anyhow::Error> {
     use common::shared::db;
     use sqlx::QueryBuilder;
@@ -869,6 +995,7 @@ async fn count_projects(
              JOIN projects_fts f ON p.project_id = f.project_id 
              WHERE projects_fts MATCH ",
         );
+        // With porter stemming enabled, use simple term matching for better flexibility
         query.push_bind(search_term);
     } else {
         query.push("SELECT COUNT(*) FROM projects p WHERE 1=1");
@@ -883,6 +1010,38 @@ async fn count_projects(
         let publish_bool = publish == "true";
         query.push(" AND p.publish = ");
         query.push_bind(publish_bool);
+    }
+
+    if let Some(flagged) = flagged_filter.filter(|s| !s.is_empty()) {
+        let flagged_bool = flagged == "true";
+        query.push(" AND p.flagged = ");
+        query.push_bind(flagged_bool);
+    }
+
+    // Add spatial filtering (same as in fetch_projects_page)
+    if let Some(geojson) = spatial_overlap {
+        query.push(" AND (ST_Intersects(p.regions, GeomFromGeoJSON(");
+        query.push_bind(geojson);
+        query.push(")) OR ST_Intersects(p.point, GeomFromGeoJSON(");
+        query.push_bind(geojson);
+        query.push(")))");
+    }
+
+    if let Some((lat, lng, radius)) = spatial_point {
+        // Create a circle and test intersection with both regions and point
+        query.push(" AND (ST_Intersects(p.regions, ST_Buffer(MakePoint(");
+        query.push_bind(lng);  // longitude first for MakePoint
+        query.push(", ");
+        query.push_bind(lat);
+        query.push(", 4326), ");
+        query.push_bind(radius);
+        query.push(")) OR ST_DWithin(p.point, MakePoint(");
+        query.push_bind(lng);
+        query.push(", ");
+        query.push_bind(lat);
+        query.push(", 4326), ");
+        query.push_bind(radius);
+        query.push("))");
     }
 
     let count: (i64,) = query.build_query_as::<(i64,)>().fetch_one(db()).await?;
@@ -1017,6 +1176,7 @@ pub struct ProjectsPage {
     search: Option<String>,
     status: Option<String>,
     publish: Option<String>,
+    flagged: Option<String>,
 }
 
 #[derive(Debug, TemplateOnce)]
@@ -1035,6 +1195,7 @@ pub struct ProjectsPagePrepared {
     search_term: String,
     selected_status: String,
     selected_publish: String,
+    flagged: String,
 }
 
 impl Component for ProjectsPage {
@@ -1049,10 +1210,15 @@ impl Component for ProjectsPage {
         let status_ref = self.status.as_deref();
         let publish_ref = self.publish.as_deref();
 
+        let flagged_ref = self.flagged.as_deref();
         let projects_list = match fetch_projects_page(
             search_ref,
             status_ref,
             publish_ref,
+            flagged_ref,
+            None, // spatial_overlap
+            None, // spatial_point  
+            None, // proximity_sort
             Some(page),
             Some(per_page),
         )
@@ -1065,7 +1231,14 @@ impl Component for ProjectsPage {
             }
         };
 
-        let total_projects = count_projects(search_ref, status_ref, publish_ref)
+        let total_projects = count_projects(
+            search_ref, 
+            status_ref, 
+            publish_ref, 
+            flagged_ref,
+            None, // spatial_overlap
+            None  // spatial_point  
+        )
             .await
             .unwrap_or(0);
         let total_pages = (total_projects + per_page as u64 - 1) / per_page as u64;
@@ -1080,10 +1253,11 @@ impl Component for ProjectsPage {
             start_item: ((page - 1) * per_page) + 1,
             end_item: std::cmp::min(page * per_page, total_projects as u32),
             pagination_url: "/-admin/projects".to_string(),
-            pagination_include: "[name='search'], [name='status'], [name='publish']".to_string(),
+            pagination_include: "[name='search'], [name='status'], [name='publish'], [name='flagged']".to_string(),
             search_term: self.search.unwrap_or_default(),
             selected_status: self.status.unwrap_or_default(),
             selected_publish: self.publish.unwrap_or_default(),
+            flagged: self.flagged.unwrap_or_default(),
         };
 
         let content = projects_content.render_once()?;
@@ -1121,6 +1295,21 @@ pub struct EventsPagePrepared {
     has_next: bool,
     start_item: u32,
     end_item: u32,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/events_content.stpl.html")]
+pub struct EventsContent {
+    pub events: Vec<AdminEvent>,
+    pub current_page: u32,
+    pub total_events: u32,
+    pub has_previous: bool,
+    pub has_next: bool,
+    pub per_page: u32,
+    pub start_item: u32,
+    pub end_item: u32,
+    pub pagination_url: String,
+    pub pagination_include: String,
 }
 
 impl Component for EventsPage {
@@ -1217,6 +1406,10 @@ impl Component for AnalyticsPage {
             None,           // no search
             Some("active"), // only active
             Some("true"),   // only published
+            None,           // no flagged filter
+            None,           // spatial_overlap
+            None,           // spatial_point
+            None,           // proximity_sort
             Some(1),        // first page
             Some(5),        // top 5
         )
@@ -1713,11 +1906,12 @@ async fn projects(
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     // If any search parameters are provided, perform a search instead of the default list
-    if query.search.is_some() || query.status.is_some() || query.publish.is_some() {
+    if query.search.is_some() || query.status.is_some() || query.publish.is_some() || query.flagged.is_some() {
         let search_query = ProjectSearchQuery {
             search: query.search,
             status: query.status,
             publish: query.publish,
+            flagged: query.flagged,
             page: query.page,
         };
         let projects_page = projects_search_internal(search_query).await?;
@@ -1736,6 +1930,7 @@ async fn projects(
         search: query.search,
         status: query.status,
         publish: query.publish,
+        flagged: query.flagged,
     }
     .into_response(user_info)
     .await
@@ -2424,6 +2619,7 @@ struct ProjectPageQuery {
     search: Option<String>,
     status: Option<String>,
     publish: Option<String>,
+    flagged: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -2431,6 +2627,14 @@ struct ProjectSearchQuery {
     search: Option<String>,
     status: Option<String>,
     publish: Option<String>,
+    flagged: Option<String>,
+    page: Option<u32>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+struct EventSearchQuery {
+    search: Option<String>,
+    status: Option<String>,
     page: Option<u32>,
 }
 
@@ -2485,6 +2689,10 @@ async fn projects_search_internal(
         query.search.as_deref(),
         query.status.as_deref(),
         query.publish.as_deref(),
+        query.flagged.as_deref(),
+        None, // spatial_overlap
+        None, // spatial_point
+        None, // proximity_sort
         Some(page),
         Some(20), // per_page
     )
@@ -2495,6 +2703,9 @@ async fn projects_search_internal(
         query.search.as_deref(),
         query.status.as_deref(),
         query.publish.as_deref(),
+        query.flagged.as_deref(),
+        None, // spatial_overlap
+        None  // spatial_point
     )
     .await?;
 
@@ -2519,10 +2730,11 @@ async fn projects_search_internal(
         start_item: start_item as u32,
         end_item,
         pagination_url: "/-admin/projects".to_string(),
-        pagination_include: "[name='search'], [name='status'], [name='publish']".to_string(),
+        pagination_include: "[name='search'], [name='status'], [name='publish'], [name='flagged']".to_string(),
         search_term: query.search.unwrap_or_default(),
         selected_status: query.status.unwrap_or_default(),
         selected_publish: query.publish.unwrap_or_default(),
+        flagged: query.flagged.unwrap_or_default(),
     })
 }
 
@@ -2575,6 +2787,104 @@ async fn projects_search(
         "/-admin/projects".to_string()
     } else {
         format!("/-admin/projects?{}", url_params.join("&"))
+    };
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .header("HX-Push-Url", url)
+        .body(html))
+}
+
+async fn events_search_internal(query: EventSearchQuery) -> Result<EventsPagePrepared, anyhow::Error> {
+    let page = query.page.unwrap_or(1);
+    let per_page = 25u32;
+    
+    let events_list = match fetch_events_page(
+        query.search.as_deref(),
+        query.status.as_deref(),
+        Some(page),
+        Some(per_page)
+    ).await {
+        Ok(event_results) => event_results,
+        Err(e) => {
+            eprintln!("Error fetching events: {}", e);
+            vec![]
+        }
+    };
+
+    // Get total count - for now just estimate based on results
+    let total_events = if events_list.len() < per_page as usize {
+        ((page - 1) * per_page) + events_list.len() as u32
+    } else {
+        // If we got a full page, assume there might be more
+        page * per_page + 1
+    };
+
+    let has_previous = page > 1;
+    let has_next = events_list.len() == per_page as usize;
+    
+    let start_item = if total_events == 0 {
+        0
+    } else {
+        ((page - 1) * per_page) + 1
+    };
+    let end_item = start_item + events_list.len() as u32 - 1;
+
+    Ok(EventsPagePrepared {
+        events: events_list,
+        current_page: page,
+        total_events,
+        has_previous,
+        has_next,
+        start_item,
+        end_item,
+    })
+}
+
+#[handler]
+async fn events_search(
+    Query(query): Query<EventSearchQuery>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let events_page = events_search_internal(query.clone()).await?;
+
+    // For HTMX requests, render just the events content and set URL push header
+    let events_content = EventsContent {
+        events: events_page.events,
+        current_page: events_page.current_page,
+        total_events: events_page.total_events,
+        has_previous: events_page.has_previous,
+        has_next: events_page.has_next,
+        per_page: 25,
+        start_item: events_page.start_item,
+        end_item: events_page.end_item,
+        pagination_url: "/-admin/events/search".to_string(),
+        pagination_include: "#event-search-form".to_string(),
+    };
+
+    let html = events_content.render_once()?;
+
+    // Build URL parameters for HX-Push-Url
+    let mut url_params = vec![];
+    if let Some(search) = &query.search {
+        if !search.trim().is_empty() {
+            url_params.push(format!("search={}", search));
+        }
+    }
+    if let Some(status) = &query.status {
+        if !status.trim().is_empty() {
+            url_params.push(format!("status={}", status));
+        }
+    }
+    let page = query.page.unwrap_or(1);
+    if page > 1 {
+        url_params.push(format!("page={}", page));
+    }
+
+    let url = if url_params.is_empty() {
+        "/-admin/events".to_string()
+    } else {
+        format!("/-admin/events?{}", url_params.join("&"))
     };
 
     Ok(poem::Response::builder()

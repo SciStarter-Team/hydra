@@ -82,7 +82,7 @@ header nav a {
   .toggle-input {
     display: none;
   }
-  .toggle-input:not(checked) ~ .mega-menu {
+  .toggle-input:not(:checked) ~ .mega-menu {
     opacity:0;
     visibility:hidden;
     z-index: -900;

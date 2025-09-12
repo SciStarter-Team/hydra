@@ -1,18 +1,17 @@
-<div class="overflow-x-auto">
-    <table class="min-w-full divide-y divide-gray-200">
-        <thead class="bg-gray-50">
-            <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Joined</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email Status</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-            </tr>
-        </thead>
-        <tbody id="users-table-body" class="bg-white divide-y divide-gray-200">
-            <%+ UsersTableBody { users: self.users.clone() } %>
-        </tbody>
-    </table>
+<!-- Users List -->
+<div class="bg-white">
+    <!-- Header Row - Hidden on mobile, visible on larger screens -->
+    <div class="hidden lg:grid lg:grid-cols-5 bg-gray-50 px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
+        <div>User</div>
+        <div>Role</div>
+        <div>Joined</div>
+        <div>Email Status</div>
+        <div>Actions</div>
+    </div>
+    
+    <div id="users-table-body" class="divide-y divide-gray-200">
+        <%+ UsersTableBody { users: self.users.clone() } %>
+    </div>
 </div>
 
 <!-- Pagination -->

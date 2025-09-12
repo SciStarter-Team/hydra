@@ -1,0 +1,137 @@
+<!-- Events List -->
+<div class="bg-white">
+    <!-- Header Row - Hidden on mobile, visible on larger screens -->
+    <div class="hidden lg:grid lg:grid-cols-7 bg-gray-50 px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
+        <div>Event</div>
+        <div>Status</div>
+        <div>Date</div>
+        <div>Location</div>
+        <div>Instances</div>
+        <div>Type</div>
+        <div>Actions</div>
+    </div>
+    
+    <div class="divide-y divide-gray-200">
+        <% for event in &self.events { %>
+            <div class="flex flex-col lg:grid lg:grid-cols-7 gap-3 lg:gap-4 lg:items-center px-6 py-4 hover:bg-gray-50 transition-colors">
+              
+                <!-- Event Name -->
+                <div class="lg:col-span-1">
+                    <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Event</div>
+                    <div class="text-sm font-medium text-gray-900">
+                        <%= event.title %>
+                    </div>
+                </div>
+              
+                <!-- Status -->
+                <div class="lg:col-span-1">
+                    <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Status</div>
+                    <% if event.status == "upcoming" { %>
+                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                            <%= event.status %>
+                        </span>
+                    <% } else if event.status == "ongoing" { %>
+                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                            <%= event.status %>
+                        </span>
+                    <% } else if event.status == "completed" { %>
+                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
+                            <%= event.status %>
+                        </span>
+                    <% } else if event.status == "cancelled" { %>
+                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+                            <%= event.status %>
+                        </span>
+                    <% } else { %>
+                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
+                            <%= event.status %>
+                        </span>
+                    <% } %>
+                </div>
+              
+                <!-- Date -->
+                <div class="lg:col-span-1">
+                    <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Date</div>
+                    <div class="text-sm text-gray-600">
+                        <%= event.event_date %>
+                    </div>
+                </div>
+              
+                <!-- Location -->
+                <div class="lg:col-span-1">
+                    <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Location</div>
+                    <div class="text-sm text-gray-600">
+                        <%= event.location %>
+                    </div>
+                </div>
+              
+                <!-- Instances -->
+                <div class="lg:col-span-1">
+                    <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Instances</div>
+                    <div class="text-sm text-gray-600">
+                        <%= event.instances %>
+                    </div>
+                </div>
+              
+                <!-- Type -->
+                <div class="lg:col-span-1">
+                    <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Type</div>
+                    <span class="inline-flex px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
+                        <%= event.event_type %>
+                    </span>
+                </div>
+              
+                <!-- Actions -->
+                <div class="lg:col-span-1">
+                    <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Actions</div>
+                    <div class="flex items-center space-x-2">
+                        <button hx-get="/-admin/events/<%= event.id %>/edit" hx-target="#modal-container" hx-swap="innerHTML" class="text-indigo-600 hover:text-indigo-900 transition-colors">
+                            <wa-icon name="pencil" class="w-4 h-4"></wa-icon>
+                        </button>
+                        <button hx-delete="/-admin/events/<%= event.id %>" hx-confirm="Are you sure?" class="text-red-600 hover:text-red-900 transition-colors">
+                            <wa-icon name="trash" class="w-4 h-4"></wa-icon>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        <% } %>
+    </div>
+</div>
+
+<!-- Results info and pagination -->
+<div class="px-6 py-3 bg-gray-50 border-t border-gray-200">
+    <div class="flex items-center justify-between">
+        <div class="text-sm text-gray-700">
+            <% if self.total_events == 0 { %>
+                No events found
+            <% } else { %>
+                Showing <span class="font-medium"><%= self.start_item %></span> to <span class="font-medium"><%= self.end_item %></span> of <span class="font-medium"><%= self.total_events %></span> results
+            <% } %>
+        </div>
+        <div class="flex space-x-2">
+            <% if self.has_previous { %>
+                <button 
+                    hx-get="<%= self.pagination_url %>?page=<%= self.current_page - 1 %>" 
+                    hx-target="#events-content"
+                    hx-include="<%= self.pagination_include %>"
+                    class="px-3 py-1 bg-white border border-gray-300 text-sm rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                    Previous
+                </button>
+            <% } %>
+            <span class="px-3 py-1 text-sm text-gray-500">
+                Page <%= self.current_page %>
+            </span>
+            <% if self.has_next { %>
+                <button 
+                    hx-get="<%= self.pagination_url %>?page=<%= self.current_page + 1 %>" 
+                    hx-target="#events-content"
+                    hx-include="<%= self.pagination_include %>"
+                    class="px-3 py-1 bg-white border border-gray-300 text-sm rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                    Next
+                </button>
+            <% } %>
+        </div>
+    </div>
+</div>
