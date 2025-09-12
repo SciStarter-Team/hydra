@@ -65,7 +65,8 @@ type StaticFile = EmbeddedFileEndpoint<Static>;
 #[handler]
 #[tracing::instrument]
 async fn entity_page(Path(slug): Path<String>) -> poem::Result<poem::Response> {
-    Entity::response_for_slug(slug).await
+    Ok(slug.into())
+    //Entity::response_for_slug(slug).await
 }
 
 #[tracing::instrument]
@@ -140,7 +141,7 @@ async fn demo_forum(
 
 fn user_facing() -> impl Endpoint {
     Route::new()
-        .at("/:slug", get(entity_page))
+        .at("/*slug", get(entity_page))
         .at("/", get(pages::index::index_page))
         .at("/index.html", get(pages::index::index_page))
         .at("/signup", post(auth::signup_action))
@@ -267,10 +268,10 @@ async fn main() -> Result<(), Error> {
     // Set up graceful shutdown
     let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel::<()>();
     let shutdown_tx = std::sync::Arc::new(std::sync::Mutex::new(Some(shutdown_tx)));
-    
+
     // Handle SIGINT and SIGTERM for graceful shutdown
-    use tokio::signal::unix::{signal, SignalKind};
-    
+    use tokio::signal::unix::{SignalKind, signal};
+
     let shutdown_tx_sigint = shutdown_tx.clone();
     let mut sigint = signal(SignalKind::interrupt())?;
     tokio::spawn(async move {
@@ -280,7 +281,7 @@ async fn main() -> Result<(), Error> {
             let _ = tx.send(());
         }
     });
-    
+
     let shutdown_tx_sigterm = shutdown_tx.clone();
     let mut sigterm = signal(SignalKind::terminate())?;
     tokio::spawn(async move {
@@ -294,7 +295,7 @@ async fn main() -> Result<(), Error> {
     // Run server with graceful shutdown
     let server = Server::new(TcpListener::bind(env!("LISTEN_ON")));
     let server_task = tokio::spawn(server.run(routes));
-    
+
     tokio::select! {
         result = server_task => {
             match result {
@@ -307,7 +308,7 @@ async fn main() -> Result<(), Error> {
             tracing::info!("Shutdown signal received, stopping server...");
         }
     }
-    
+
     tracing::info!("Frontend service shutting down...");
     Ok(())
 }
