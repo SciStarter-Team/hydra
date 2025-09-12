@@ -2608,7 +2608,7 @@ async fn projects_edit(
         .map_err(|_| anyhow::anyhow!("Invalid project ID format"))?;
 
     // Load ProjectAll from database and convert to AdminProjectFull
-    let project_all = ProjectAll::read_from_database(project_ulid).await?;
+    let project_all = ProjectAll::load(project_ulid).await?;
     let project = AdminProjectFull::from_project_all(project_all).await?;
 
     let edit_project_form = EditProjectForm {

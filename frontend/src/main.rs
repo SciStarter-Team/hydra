@@ -65,8 +65,7 @@ type StaticFile = EmbeddedFileEndpoint<Static>;
 #[handler]
 #[tracing::instrument]
 async fn entity_page(Path(slug): Path<String>) -> poem::Result<poem::Response> {
-    Ok(slug.into())
-    //Entity::response_for_slug(slug).await
+    Entity::response_for_slug(slug).await
 }
 
 #[tracing::instrument]
