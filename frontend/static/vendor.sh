@@ -36,4 +36,5 @@ curl -L https://cdn.jsdelivr.net/gh/lit/dist@3/core/lit-core.min.js -o lit-core.
 #jsdl https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace/cdn/ shoelace
 
 # WebAwesome component library
+rm -rf webawesome
 jsdl https://cdn.jsdelivr.net/npm/@awesome.me/webawesome/dist-cdn/ webawesome
