@@ -1,0 +1,18 @@
+<body class="<% if self.user.is_some() { %>logged-in<% if self.collapsed {%> logged-in-collapsed<%}} else { %>not-logged-in<% } %>">
+  <a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50bg-white text-blue-600 font-medium px-4 py-2 rounded-md shadow-md">Skip to content</a>
+
+  <%+ self.header %>
+
+  <%+ self.sidebar %>
+
+  <!-- main page content-->
+  <main id="main-content" class="ss-page">
+    <%# Most content items should have <div class="ss-container !pt-8 !pb-8 mx-auto "> as the top level element. %>
+    <%+ self.content %>
+  </main>
+
+  <%+ self.footer %>
+
+  <script src="/-static/js/scripts.js"></script>
+
+</body>

@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use common::{
     message::{
         location::LocationInfo,
@@ -12,7 +13,7 @@ use poem::{
 };
 
 use crate::{
-    component::{Component, Footer, Head, Header},
+    component::{Component, Head, StandardLayout},
     middleware::authorization::Authenticated,
     session::session_tags,
 };
@@ -28,12 +29,17 @@ struct LoginPageParameters {
 #[derive(sailfish::TemplateOnce)]
 #[template(path = "auth/login_signup.stpl.html")]
 struct LoginSignupPage {
+    head: <Head as Component>::Prepared,
+    layout: <StandardLayout<LoginSignupContent> as Component>::Prepared,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "auth/login_signup_content.stpl.html")]
+struct LoginSignupContent {
     system: bool,
     password: bool,
     unauthorized: bool,
-    head: <Head as Component>::Prepared,
-    header: <Header as Component>::Prepared,
-    footer: <Footer as Component>::Prepared,
+    user_info: Option<Arc<BasicInfo>>,
 }
 
 #[handler]
@@ -50,13 +56,18 @@ pub async fn login_signup_page(
         }
     }
 
-    LoginSignupPage {
+    let layout = StandardLayout::new(LoginSignupContent {
         system: params.system.unwrap_or_default(),
         password: params.password.unwrap_or_default(),
         unauthorized: params.unauthorized.unwrap_or_default(),
+        user_info: user_info.clone(),
+    })
+    .prepare(user_info.clone())
+    .await?;
+
+    LoginSignupPage {
         head: Head::default().prepare(None).await?,
-        header: Header::default().prepare(user_info.clone()).await?,
-        footer: Footer::default().prepare(user_info).await?,
+        layout,
     }
     .into_response(None)
     .await

@@ -1,8 +1,9 @@
-use common::message::location::LocationInfo;
+use common::message::{location::LocationInfo, user::BasicInfo};
 use poem::{Response, handler, http::HeaderMap, session::Session, web::RealIp};
+use std::sync::Arc;
 
 use crate::{
-    component::{Component, Footer, Head, Header},
+    component::{Component, Head, StandardLayout},
     middleware::authorization::Authenticated,
 };
 
@@ -10,8 +11,13 @@ use crate::{
 #[template(path = "pages/index.stpl.html")]
 struct IndexPage {
     head: <Head as Component>::Prepared,
-    header: <Header as Component>::Prepared,
-    footer: <Footer as Component>::Prepared,
+    layout: <StandardLayout<IndexPageContent> as Component>::Prepared,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "pages/index_content.stpl.html")]
+struct IndexPageContent {
+    user_info: Option<Arc<BasicInfo>>,
 }
 
 #[handler]
@@ -30,10 +36,43 @@ pub async fn index_page(
         LocationInfo::default()
     };
 
+    let layout = StandardLayout::new(IndexPageContent {
+        user_info: user_info.clone(),
+    })
+    .prepare(user_info.clone())
+    .await?;
+
     IndexPage {
         head: Head::default().prepare(None).await?,
-        header: Header::default().prepare(user_info.clone()).await?,
-        footer: Footer::default().prepare(user_info).await?,
+        layout,
+    }
+    .into_response(None)
+    .await
+}
+
+// Temporarily needed until https://github.com/poem-web/poem/issues/1098 is fixed
+#[tracing::instrument]
+pub async fn index_page_pseudo_handler(
+    client_ip: Option<std::net::IpAddr>,
+    user_info: Option<Arc<BasicInfo>>,
+) -> Result<Response, anyhow::Error> {
+    let _location = if let Some(addr) = client_ip {
+        common::service::request("location.ip", addr.to_string())
+            .await
+            .unwrap_or_default()
+    } else {
+        LocationInfo::default()
+    };
+
+    let layout = StandardLayout::new(IndexPageContent {
+        user_info: user_info.clone(),
+    })
+    .prepare(user_info.clone())
+    .await?;
+
+    IndexPage {
+        head: Head::default().prepare(None).await?,
+        layout,
     }
     .into_response(None)
     .await

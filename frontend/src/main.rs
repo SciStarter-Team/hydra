@@ -25,6 +25,7 @@ use entity::Entity;
 use event::{all::EventAll, field::EventField};
 use futures::StreamExt;
 use middleware::authorization::{Authenticated, NotAuthorized};
+use pages::index::index_page_pseudo_handler;
 use peering::LoadStorePeered;
 use poem::{
     Endpoint, EndpointExt, IntoResponse, Response, Route, Server,
@@ -62,10 +63,26 @@ struct Static;
 type StaticFiles = EmbeddedFilesEndpoint<Static>;
 type StaticFile = EmbeddedFileEndpoint<Static>;
 
+// This will be the implementation after https://github.com/poem-web/poem/issues/1098 is fixed
+// #[handler]
+// #[tracing::instrument]
+// async fn entity_page(Path(slug): Path<String>) -> poem::Result<poem::Response> {
+//     Entity::response_for_slug(dbg!(slug)).await
+// }
+
+// Temporary implementation until https://github.com/poem-web/poem/issues/1098 is fixed
 #[handler]
 #[tracing::instrument]
-async fn entity_page(Path(slug): Path<String>) -> poem::Result<poem::Response> {
-    Entity::response_for_slug(slug).await
+async fn entity_page(
+    poem::web::RealIp(client_ip): poem::web::RealIp,
+    Authenticated(user_info): Authenticated,
+    Path(slug): Path<String>,
+) -> poem::Result<poem::Response> {
+    if &slug == "" {
+        Ok(index_page_pseudo_handler(client_ip, user_info).await?)
+    } else {
+        Entity::response_for_slug(slug).await
+    }
 }
 
 #[tracing::instrument]
@@ -116,9 +133,14 @@ async fn error_dispatch(err: poem::Error) -> Response {
 #[derive(sailfish::TemplateOnce)]
 #[template(path = "dev/demo_forum.stpl.html")]
 struct DemoForum {
-    header: <component::Header as Component>::Prepared,
+    head: <component::Head as Component>::Prepared,
+    layout: <component::StandardLayout<DemoForumContent> as Component>::Prepared,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "dev/demo_forum_content.stpl.html")]
+struct DemoForumContent {
     forum: <component::Forum as Component>::Prepared,
-    footer: <component::Footer as Component>::Prepared,
 }
 
 #[handler]
@@ -126,21 +148,23 @@ struct DemoForum {
 async fn demo_forum(
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    let prepared = DemoForum {
-        header: component::Header::default()
-            .prepare(user_info.clone())
-            .await?,
+    let layout = component::StandardLayout::new(DemoForumContent {
         forum: component::Forum::new("general")
             .prepare(user_info.clone())
             .await?,
-        footer: component::Footer::default().prepare(user_info).await?,
+    })
+    .prepare(user_info.clone())
+    .await?;
+
+    let prepared = DemoForum {
+        head: component::Head::default().prepare(None).await?,
+        layout,
     };
     prepared.into_response(None).await
 }
 
 fn user_facing() -> impl Endpoint {
     Route::new()
-        .at("/*slug", get(entity_page))
         .at("/", get(pages::index::index_page))
         .at("/index.html", get(pages::index::index_page))
         .at("/signup", post(auth::signup_action))
@@ -150,6 +174,7 @@ fn user_facing() -> impl Endpoint {
         )
         .at("/logout", get(auth::logout_action))
         .at("/demo-forum", get(demo_forum))
+        .at("/*slug", get(entity_page))
         .with(middleware::analytics::AnalyticsMiddleware)
 }
 
@@ -165,13 +190,13 @@ fn dynamic() -> impl Endpoint {
     // This ensures user page manager status stays synchronized with the user service.
 
     Route::new()
-        .nest_no_strip("/", user_facing())
         .nest("/-dev", dev::routes())
         .nest("/-admin", admin::routes().catch_all_error(error_dispatch))
         .nest("/-channel", channel::routes())
         .nest("/-ui", ui::routes())
         .nest("/-upload", upload::authenticated_routes())
         .nest("/-forum", component::forum::forum_endpoints())
+        .nest_no_strip("/", user_facing())
         .catch_all_error(error_dispatch)
         .with(middleware::authorization::AuthMiddleware)
         .with(ServerSession::new(
@@ -213,10 +238,10 @@ async fn main() -> Result<(), Error> {
     sqlx::migrate!("./migrations").run(db()).await?;
 
     let routes = Route::new()
-        .nest_no_strip("/", dynamic())
+        .at("/favicon.ico", StaticFile::new("favicon.ico"))
         .nest("/-static", StaticFiles::new())
         .nest("/-uploaded", upload::anonymous_routes())
-        .at("/favicon.ico", StaticFile::new("favicon.ico"))
+        .nest_no_strip("/", dynamic())
         .with_if(
             cfg!(not(debug_assertions)),
             SetHeader::new().overriding(

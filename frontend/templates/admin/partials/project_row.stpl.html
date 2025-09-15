@@ -57,14 +57,14 @@
   </div>
   
   <!-- Origin - Hidden label on desktop, visible on mobile -->
-  <div class="lg:col-span-1">
+  <div class="lg:col-span-1 min-w-0">
     <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Origin</div>
-    <div class="flex items-center gap-2">
-      <span class="inline-flex px-2 py-1 text-xs rounded-full <%= self.project.origin_color_classes() %>">
+    <div class="flex items-center gap-2 min-w-0">
+      <span class="inline-flex px-2 py-1 text-xs rounded-full <%= self.project.origin_color_classes() %> max-w-full truncate" title="<%= self.project.origin %>">
         <%= self.project.origin %>
       </span>
       <% if self.project.is_test { %>
-        <span class="inline-flex px-2 py-1 text-xs rounded-full bg-orange-100 text-orange-800" title="Test project">
+        <span class="inline-flex px-2 py-1 text-xs rounded-full bg-orange-100 text-orange-800 flex-shrink-0" title="Test project">
           TEST
         </span>
       <% } %>
