@@ -155,3 +155,10 @@
   margin:2rem auto 3rem;
   color: #00b34d;
 }
+
+footer a {
+  text-decoration: none;
+}
+footer a:hover {
+  text-decoration: underline;
+}

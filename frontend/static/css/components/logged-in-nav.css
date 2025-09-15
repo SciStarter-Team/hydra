@@ -12,6 +12,7 @@
     left:0;
     width:100%;
     height: 44px;
+    z-index: 99;
 }
 
 #logged-in-sidebar-menu span {
@@ -47,6 +48,7 @@
     color: white;
     text-decoration: none;
     width: 100%;
+     height: 100%;
 }
 
 #logged-in-sidebar-menu > li > a > span , #logged-in-nav-mobile > li > a > span {
@@ -135,8 +137,22 @@
     width: 24px;
 }
 
+#logged-in-sidebar-menu a.active {
+    @apply bg-primary;
+}
+
 
 @media (min-width:768px){
+    .logged-in #logged-in-nav-logo {
+        display: block;
+        max-width: 200px;
+    }
+    .logged-in-collapsed.logged-in #logged-in-nav-logo {
+        display: none;
+    }
+    .logged-in-collapsed.logged-in #logged-in-nav-logo-short {
+        display: block;
+    }
     .add-my::before {
         content:'My ';
 
@@ -144,23 +160,133 @@
 
     #logged-in-toggle {
         display: block;
-    }
-     #logged-in-toggle svg {
-        width: 24px;
-        position: absolute;
-        left:100%;
+        position: fixed;
+        left:200px;
         top: 0;
-     }
+        width:20px;
+        height:20px;
+        @apply bg-primary-action p-1;
+        z-index: 99;
+        box-shadow: 0 0 2px rgba(0,0,0,.2);
+    }
+    .logged-in-collapsed #logged-in-toggle {
+        left:80px;
+    }
+    #logged-in-toggle svg {
+        @apply fill-white;
+    }
+    .logged-in-collapsed #logged-in-toggle svg {
+        transform: rotate(180deg);
+    }
 
     #logged-in-sidebar {
         position: fixed;
         top: 0;
         bottom: 0;
         left:0;
-        width:300px;
+        width:200px;
         height: 100%;
+        display: block;
+        overflow-y: auto;
+        overflow-x: hidden;
+        transition: width 100ms ease-in-out;
+        z-index: 1;
+    }
+    .logged-in-collapsed #logged-in-sidebar {
+        width: 80px;
+    }
+    /* For Webkit browsers (Chrome, Safari, Edge) */
+    #logged-in-sidebar {
+    overflow-y: auto;
+    scrollbar-width: none; /* Firefox */
+    }
+    #logged-in-sidebar::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Edge */
     }
 
+    /* For Firefox */
+    #logged-in-sidebar {
+    scrollbar-width: none; /* Hide scrollbar */
+    }
+    #logged-in-sidebar-menu span {
+        @apply text-base;
+        transition: all 100ms ease-in;
+    }
+    .logged-in-collapsed #logged-in-sidebar-menu span {
+        visibility: hidden;
+        width:0;
+        margin: 0;
+        padding: 0;
+    }
 
+    #logged-in-sidebar-menu > li > a, #logged-in-nav-mobile > li > a {
+        flex-direction: row;
+        justify-content: flex-start;
+        @apply gap-2;
+    }
+    .logged-in-collapsed #logged-in-sidebar-menu > li > a, .logged-in-collapsed #logged-in-sidebar-menu > li > button {
+        @apply gap-0 justify-center items-center;
+    }
+    #logged-in-nav-mobile {
+        display: none;
+    }
+    #logged-in-sidebar-menu {
+        width:100%;
+        border:0;
+        @apply gap-8;
+        display: block;
+    }
+    #logged-in-sidebar-menu li.mobile-hidden {
+        display: block;
+    }
+     #logged-in-sidebar-menu > li {
+        display: block;
+        @apply mt-4 border-b border-white-alpha px-4 border-r-0;
+    }
+    #logged-in-sidebar-menu > li:last-child {
+        border:0;
+    }
+    #logged-in-sidebar-menu > li > a {
+        @apply p-2 mb-4;
+    }
+    #logged-in-sidebar-menu li > ul {
+        display: block;
+       margin-top: -10px;
+    }
+     .logged-in-collapsed  #logged-in-sidebar-menu li > ul {
+        display: none;
+     }
 
+     #logged-in-sidebar-menu li > ul > li {
+        margin-left: 32px;
+        @apply mb-4;
+        width: auto;
+     }
+     #logged-in-sidebar-menu li > ul > li > a {
+        @apply text-sm text-white px-4;
+        text-decoration: none;
+        display: block;
+        border-radius: 4px;
+     }
+     #logged-in-sidebar-menu a.active, #logged-in-sidebar-menu > li > a:hover {
+        @apply bg-primary mb-4 font-bold;
+        border-radius: 4px;
+    }
+    #logged-in-sidebar-menu li > ul > li > a:hover {
+        @apply bg-primary font-bold;
+    }
+
+    .logged-in footer {
+        margin-bottom: 0;
+    }
+    
+}
+
+@media (min-width:1024px){
+    #logged-in-sidebar {
+        width: 280px;
+    }
+    #logged-in-toggle {
+        left:280px
+    }
 }

@@ -1,17 +1,14 @@
 <nav id="logged-in-sidebar" class="bg-primary-dark flex" role="navigation">
-    <button type="button" id="logged-in-toggle" aria-controls="logged-in-sidebar" aria-expanded="false" aria-label="Open sidebar">
-        <svg fill="none" height="512" viewBox="0 0 15 15" width="512" xmlns="http://www.w3.org/2000/svg" id="fi_7891448"><path clip-rule="evenodd" d="m12 7.5c0 .27614-.2239.5-.5.5h-6.79289l2.64644 2.6464c.19527.1953.19527.5119 0 .7072-.19526.1952-.51184.1952-.7071 0l-3.5-3.50005c-.09751-.09751-.14633-.22526-.14645-.35306v4.99951c0 .2761-.22386.5-.5.5s-.5-.2239-.5-.5v-10c0-.27614.22386-.5.5-.5s.5.22386.5.5v4.99951c.00012-.1278.04894-.25556.14645-.35307l3.5-3.49999c.19526-.19527.51184-.19527.7071 0 .19527.19526.19527.51184 0 .7071l-2.64644 2.64645h6.79289c.2761 0 .5.22386.5.5z" fill="rgb(0,0,0)" fill-rule="evenodd"></path></svg>
-    </button>
 
     <!-- LOGO -->
            <div class="relative block">
-             <a href="/" class="py-3 lg:py-8 block"><img src="/-static/img/logo/svg/Standard__tagline-dark.svg" alt="SciStarter logo" id="logged-in-nav-logo" /></a>
+             <a href="/" class="py-3 md:pt-4 md:mb-8 md:px-4  block"><img src="/-static/img/logo/svg/Standard__tagline-white.svg" alt="SciStarter logo" id="logged-in-nav-logo" /><img src="/-static/img/logo/svg/short.svg" alt="SciStarter Alternate logo" id="logged-in-nav-logo-short" class="hidden" /></a>
            </div>
            <!---->
 
     <ul id="logged-in-sidebar-menu" class="flex md:flex-col">
         <li>
-            <a href="">
+            <a href="" class="active">
                 <svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 24 24" alt="Home Icon" class="fill-white">
                     <path class="st0" d="M23.4,10.4s0,0,0,0L13.6.6c-.4-.4-1-.6-1.6-.6s-1.1.2-1.6.6L.7,10.4s0,0,0,0c-.9.9-.9,2.3,0,3.1.4.4.9.6,1.5.6,0,0,0,0,0,0h.4v7.2c0,1.4,1.2,2.6,2.6,2.6h3.8c.4,0,.7-.3.7-.7v-5.6c0-.7.5-1.2,1.2-1.2h2.3c.7,0,1.2.5,1.2,1.2v5.6c0,.4.3.7.7.7h3.8c1.4,0,2.6-1.2,2.6-2.6v-7.2h.4c.6,0,1.1-.2,1.6-.6.9-.9.9-2.3,0-3.1ZM22.4,12.6c-.2.2-.4.2-.6.2h-1.1c-.4,0-.7.3-.7.7v7.9c0,.7-.5,1.2-1.2,1.2h-3.1v-4.9c0-1.4-1.2-2.6-2.6-2.6h-2.3c-1.4,0-2.6,1.2-2.6,2.6v4.9h-3.1c-.7,0-1.2-.5-1.2-1.2v-7.9c0-.4-.3-.7-.7-.7h-1s0,0,0,0c-.2,0-.4,0-.6-.2-.3-.3-.3-.8,0-1.1,0,0,0,0,0,0h0S11.4,1.6,11.4,1.6c.2-.2.4-.2.6-.2s.4,0,.6.2l9.8,9.8s0,0,0,0c.3.3.3.8,0,1.1Z"/>
                 </svg>
@@ -69,7 +66,7 @@
             </a>
         </li>
         <li class="mobile-hidden">
-            <button class="btn btn-icon btn-secondary border-white bg-primary-dark hover:bg-primary-dark">
+            <button class="btn btn-icon border border-white bg-primary-dark hover:bg-primary text-white">
                 <svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 24 24" alt="Logout Icon" class="fill-white">
                     <path class="st0" d="M10.2,1.7c.5,0,.8-.4.8-.9s-.4-.9-.8-.9H3.8C1.8,0,.2,1.7.2,3.7v16.6c0,2,1.6,3.7,3.6,3.7h6.4c.5,0,.8-.4.8-.9s-.4-.9-.8-.9H3.8c-1.1,0-1.9-.9-1.9-2V3.7c0-1.1.9-2,1.9-2h6.4Z"/>
                     <path class="st0" d="M18.1,5.4c-.3-.3-.8-.3-1.2,0-.3.3-.3.9,0,1.2l4.1,4.2H5.9c-.5,0-.8.4-.8.9s.4.9.8.9h15l-4,4.2c-.3.3-.3.9,0,1.2.3.3.8.3,1.2,0l5.5-5.6c.2-.2.2-.4.2-.6h0s0,0,0,0c0-.2,0-.5-.2-.6l-5.5-5.6Z"/>
@@ -126,3 +123,9 @@
     <button>
         
 </nav>
+
+  <button type="button" id="logged-in-toggle" aria-controls="logged-in-sidebar" aria-expanded="false" aria-label="Open sidebar">
+        <svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 24 24">
+            <path  d="M22.9,12c0,.6-.5,1.1-1.1,1.1H7l5.8,5.8c.4.4.4,1.1,0,1.5-.4.4-1.1.4-1.5,0l-7.6-7.6c-.2-.2-.3-.5-.3-.8v10.9c0,.6-.5,1.1-1.1,1.1s-1.1-.5-1.1-1.1V1.1c0-.6.5-1.1,1.1-1.1s1.1.5,1.1,1.1v10.9c0-.3.1-.6.3-.8l7.6-7.6c.4-.4,1.1-.4,1.5,0,.4.4.4,1.1,0,1.5l-5.8,5.8h14.8c.6,0,1.1.5,1.1,1.1Z"/>
+        </svg>
+    </button>
