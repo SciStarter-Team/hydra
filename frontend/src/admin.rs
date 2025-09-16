@@ -11,6 +11,7 @@ struct EmailRow {
 
 use crate::peering::LoadStorePeered;
 use crate::project::all::ProjectAll;
+use crate::project::field::{ProjectField, ProjectFieldType};
 use common::{
     insensitivestring::InsensitiveString,
     message::health::{
@@ -72,6 +73,18 @@ pub fn routes() -> impl Endpoint {
         .at(
             "/projects/:id/field/:field_type",
             put(projects_update_field),
+        )
+        .at(
+            "/projects/:id/multiselect/:field_type",
+            put(projects_update_multiselect_field),
+        )
+        .at(
+            "/projects/:id/array/:field_type/items",
+            get(projects_get_array_items).post(projects_add_array_item),
+        )
+        .at(
+            "/projects/:id/array/:field_type/items/:index",
+            put(projects_update_array_item).delete(projects_remove_array_item),
         )
         .at("/events", get(events))
         .at("/events/search", get(events_search))
@@ -2678,6 +2691,40 @@ struct AddProjectForm {
 struct UpdateProjectFieldForm {
     value: String,
 }
+#[derive(Debug, Deserialize)]
+struct UpdateProjectMultiselectForm {
+    value: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AddArrayItemForm {
+    value: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateArrayItemForm {
+    value: String,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/partials/array_items.stpl.html")]
+struct ArrayItems {
+    project_id: Ulid,
+    field_type: ProjectFieldType,
+    items: Vec<String>,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/partials/success_message.stpl.html")]
+struct SuccessMessage {
+    message: String,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/partials/error_message.stpl.html")]
+struct ErrorMessage {
+    message: String,
+}
 
 async fn projects_search_internal(
     query: ProjectSearchQuery,
@@ -4023,12 +4070,14 @@ async fn projects_update_field(
             let project_row_html = project_row.render_once()?;
 
             // Return success message + OOB update of the project row
+            let success_message = SuccessMessage {
+                message: format!("Updated {} for project {}", field_type, project_id),
+            }.render_once()?;
+
             let response_html = format!(
-                r#"<div class="p-3 text-sm text-green-700 bg-green-100 rounded-lg border border-green-200">
-                    <strong>Success:</strong> Updated {} for project {}
-                </div>
+                r#"{}
                 <div hx-swap-oob="outerHTML:#project-row-{}">{}</div>"#,
-                field_type, project_id, project_id, project_row_html
+                success_message, project_id, project_row_html
             );
             Ok(poem::Response::builder()
                 .content_type("text/html")
@@ -4036,18 +4085,230 @@ async fn projects_update_field(
         }
         Err(e) => {
             // Return error response
-            let error_html = format!(
-                r#"<div class="p-3 text-sm text-red-700 bg-red-100 rounded-lg border border-red-200">
-                    <strong>Error:</strong> Failed to update {}: {}
-                </div>"#,
-                field_type, e
-            );
+            let error_html = ErrorMessage {
+                message: format!("Failed to update {}: {}", field_type, e),
+            }.render_once()?;
             Ok(poem::Response::builder()
                 .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
                 .content_type("text/html")
                 .body(error_html))
         }
     }
+}
+
+#[handler]
+async fn projects_update_multiselect_field(
+    Path((project_id, field_type)): Path<(String, String)>,
+    body: poem::Body,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::project::field::{ProjectField, ProjectFieldType, ProjectFieldValue};
+
+    // Read the form body and parse with serde_qs (with strict mode disabled)
+    let body_str = body.into_string().await?;
+    let config = serde_qs::Config::new(5, false); // max_depth=5, strict=false
+    let form: UpdateProjectMultiselectForm = config.deserialize_str(&body_str)?;
+
+    let project_ulid = project_id
+        .parse::<Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid project ID format"))?;
+
+    let field_type_enum = match field_type.as_str() {
+        "topics" => ProjectFieldType::Topics,
+        "fields_of_science" => ProjectFieldType::FieldsOfScience,
+        "practices" => ProjectFieldType::Practices,
+        "audience" => ProjectFieldType::Audience,
+        "sustainable_development_goals" => ProjectFieldType::SustainableDevelopmentGoals,
+        _ => return Err(anyhow::anyhow!("Unsupported multiselect field type: {}", field_type)),
+    };
+
+    let field_value = match field_type_enum {
+        ProjectFieldType::Topics => {
+            ProjectFieldValue::Topics(form.value.into_boxed_slice())
+        }
+        ProjectFieldType::FieldsOfScience => {
+            ProjectFieldValue::FieldsOfScience(form.value.into_boxed_slice())
+        }
+        ProjectFieldType::Practices => {
+            ProjectFieldValue::Practices(form.value.into_boxed_slice())
+        }
+        ProjectFieldType::Audience => {
+            ProjectFieldValue::Audience(form.value.into_boxed_slice())
+        }
+        ProjectFieldType::SustainableDevelopmentGoals => {
+            ProjectFieldValue::SustainableDevelopmentGoals(form.value.join(","))
+        }
+        _ => return Err(anyhow::anyhow!("Unsupported field type in multiselect handler")),
+    };
+
+    let project_field = ProjectField::new(project_ulid, field_value);
+
+    match project_field.store().await {
+        Ok(_) => {
+            let success_html = r#"
+                <div id="modal-message-container" hx-swap-oob="innerHTML">
+                    <div class="bg-green-50 border border-green-200 rounded-md p-4">
+                        <div class="flex">
+                            <div class="ml-3">
+                                <p class="text-sm text-green-800">Field updated successfully!</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            "#;
+            Ok(poem::Response::builder()
+                .content_type("text/html")
+                .body(success_html))
+        }
+        Err(e) => {
+            let error_html = format!(
+                r#"
+                    <div id="modal-message-container" hx-swap-oob="innerHTML">
+                        <div class="bg-red-50 border border-red-200 rounded-md p-4">
+                            <div class="flex">
+                                <div class="ml-3">
+                                    <p class="text-sm text-red-800">Error updating field: {}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                "#,
+                e
+            );
+            Ok(poem::Response::builder()
+                .content_type("text/html")
+                .body(error_html))
+        }
+    }
+}
+
+#[handler]
+async fn projects_get_array_items(
+    Path((project_id, field_type)): Path<(String, String)>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let project_ulid = project_id
+        .parse::<Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid project ID format"))?;
+
+    let field_enum = ProjectFieldType::try_from(field_type.as_str())?;
+    let project_field = ProjectField::load((project_ulid, field_enum)).await?;
+    let items: Vec<String> = (&project_field).try_into()?;
+
+    let items_html = ArrayItems {
+        project_id: project_ulid,
+        field_type: field_enum,
+        items,
+    }.render_once()?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(items_html))
+}
+
+#[handler]
+async fn projects_add_array_item(
+    Path((project_id, field_type)): Path<(String, String)>,
+    Form(form): Form<AddArrayItemForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let project_ulid = project_id
+        .parse::<Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid project ID format"))?;
+
+    let field_enum = ProjectFieldType::try_from(field_type.as_str())?;
+    let project_field = ProjectField::load((project_ulid, field_enum)).await?;
+    let mut items: Vec<String> = (&project_field).try_into()?;
+
+    let new_item = form.value.trim().to_string();
+    if !new_item.is_empty() && !items.contains(&new_item) {
+        items.push(new_item);
+    }
+
+    let new_project_field = ProjectField::new_array(project_ulid, field_enum, items.clone())?;
+    new_project_field.store().await?;
+
+    let items_html = ArrayItems {
+        project_id: project_ulid,
+        field_type: field_enum,
+        items,
+    }.render_once()?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(items_html))
+}
+
+#[handler]
+async fn projects_update_array_item(
+    Path((project_id, field_type, index)): Path<(String, String, String)>,
+    Form(form): Form<UpdateArrayItemForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let project_ulid = project_id
+        .parse::<Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid project ID format"))?;
+    let item_index = index
+        .parse::<usize>()
+        .map_err(|_| anyhow::anyhow!("Invalid index format"))?;
+
+    let field_enum = ProjectFieldType::try_from(field_type.as_str())?;
+    let project_field = ProjectField::load((project_ulid, field_enum)).await?;
+    let mut items: Vec<String> = (&project_field).try_into()?;
+
+    if item_index < items.len() {
+        let new_value = form.value.trim().to_string();
+        if !new_value.is_empty() {
+            items[item_index] = new_value;
+        }
+    }
+
+    let new_project_field = ProjectField::new_array(project_ulid, field_enum, items.clone())?;
+    new_project_field.store().await?;
+
+    let items_html = ArrayItems {
+        project_id: project_ulid,
+        field_type: field_enum,
+        items,
+    }.render_once()?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(items_html))
+}
+
+#[handler]
+async fn projects_remove_array_item(
+    Path((project_id, field_type, index)): Path<(String, String, String)>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let project_ulid = project_id
+        .parse::<Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid project ID format"))?;
+    let item_index = index
+        .parse::<usize>()
+        .map_err(|_| anyhow::anyhow!("Invalid index format"))?;
+
+    let field_enum = ProjectFieldType::try_from(field_type.as_str())?;
+    let project_field = ProjectField::load((project_ulid, field_enum)).await?;
+    let mut items: Vec<String> = (&project_field).try_into()?;
+
+    if item_index < items.len() {
+        items.remove(item_index);
+    }
+
+    let new_project_field = ProjectField::new_array(project_ulid, field_enum, items.clone())?;
+    new_project_field.store().await?;
+
+    let items_html = ArrayItems {
+        project_id: project_ulid,
+        field_type: field_enum,
+        items,
+    }.render_once()?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(items_html))
 }
 
 #[handler]

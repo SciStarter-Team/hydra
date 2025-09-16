@@ -296,10 +296,134 @@ pub enum ProjectFieldValue {
     SustainableDevelopmentGoals(String),
 }
 
+// Conversion traits for ProjectFieldType
+impl TryFrom<&str> for ProjectFieldType {
+    type Error = anyhow::Error;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        match s {
+            "participant-files" => Ok(ProjectFieldType::ParticipantFiles),
+            "topics" => Ok(ProjectFieldType::Topics),
+            "fields-of-science" => Ok(ProjectFieldType::FieldsOfScience),
+            "practices" => Ok(ProjectFieldType::Practices),
+            "audience" => Ok(ProjectFieldType::Audience),
+            "geographic-scope" => Ok(ProjectFieldType::GeographicScope),
+            "participation-tasks" => Ok(ProjectFieldType::ParticipationTasks),
+            "activities" => Ok(ProjectFieldType::Activities),
+            "data-aggregation" => Ok(ProjectFieldType::DataAggregation),
+            "data-consent" => Ok(ProjectFieldType::DataConsent),
+            "data-access" => Ok(ProjectFieldType::DataAccess),
+            "intended-outcomes" => Ok(ProjectFieldType::IntendedOutcomes),
+            "sponsors" => Ok(ProjectFieldType::Sponsors),
+            "stakeholders" => Ok(ProjectFieldType::Stakeholders),
+            "associated-projects" => Ok(ProjectFieldType::AssociatedProjects),
+            _ => Err(anyhow::anyhow!("Unsupported array field type: {}", s)),
+        }
+    }
+}
+
+impl std::fmt::Display for ProjectFieldType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            ProjectFieldType::ParticipantFiles => "participant-files",
+            ProjectFieldType::Topics => "topics",
+            ProjectFieldType::FieldsOfScience => "fields-of-science",
+            ProjectFieldType::Practices => "practices",
+            ProjectFieldType::Audience => "audience",
+            ProjectFieldType::GeographicScope => "geographic-scope",
+            ProjectFieldType::ParticipationTasks => "participation-tasks",
+            ProjectFieldType::Activities => "activities",
+            ProjectFieldType::DataAggregation => "data-aggregation",
+            ProjectFieldType::DataConsent => "data-consent",
+            ProjectFieldType::DataAccess => "data-access",
+            ProjectFieldType::IntendedOutcomes => "intended-outcomes",
+            ProjectFieldType::Sponsors => "sponsors",
+            ProjectFieldType::Stakeholders => "stakeholders",
+            ProjectFieldType::AssociatedProjects => "associated-projects",
+            _ => return Err(std::fmt::Error),
+        };
+        write!(f, "{}", s)
+    }
+}
+
+impl From<ProjectFieldType> for String {
+    fn from(field_type: ProjectFieldType) -> String {
+        field_type.to_string()
+    }
+}
+
+// Conversion traits for ProjectField to/from Vec<String> for array fields
+impl TryFrom<&ProjectField> for Vec<String> {
+    type Error = anyhow::Error;
+
+    fn try_from(project_field: &ProjectField) -> Result<Self, Self::Error> {
+        match &project_field.field {
+            ProjectFieldValue::ParticipantFiles(arr) => Ok(arr.to_vec()),
+            ProjectFieldValue::Topics(arr) => Ok(arr.to_vec()),
+            ProjectFieldValue::FieldsOfScience(arr) => Ok(arr.to_vec()),
+            ProjectFieldValue::Practices(arr) => Ok(arr.to_vec()),
+            ProjectFieldValue::Audience(arr) => Ok(arr.to_vec()),
+            ProjectFieldValue::GeographicScope(arr) => Ok(arr.to_vec()),
+            ProjectFieldValue::ParticipationTasks(arr) => Ok(arr.to_vec()),
+            ProjectFieldValue::Activities(arr) => Ok(arr.to_vec()),
+            ProjectFieldValue::DataAggregation(arr) => Ok(arr.to_vec()),
+            ProjectFieldValue::DataConsent(arr) => Ok(arr.to_vec()),
+            ProjectFieldValue::DataAccess(arr) => Ok(arr.to_vec()),
+            ProjectFieldValue::IntendedOutcomes(arr) => Ok(arr.to_vec()),
+            ProjectFieldValue::Sponsors(arr) => Ok(arr.to_vec()),
+            ProjectFieldValue::Stakeholders(arr) => Ok(arr.to_vec()),
+            ProjectFieldValue::AssociatedProjects(arr) => Ok(arr.iter().map(|ulid| ulid.to_string()).collect()),
+            _ => Err(anyhow::anyhow!("ProjectField is not an array type")),
+        }
+    }
+}
+
 impl ProjectField {
     /// Create a new ProjectField with the given project_id and field value
     pub fn new(project_id: Ulid, field: ProjectFieldValue) -> Self {
         Self { project_id, field }
+    }
+
+    /// Create a new ProjectField with an array field type and items
+    pub fn new_array(
+        project_id: Ulid,
+        field_type: ProjectFieldType,
+        items: Vec<String>,
+    ) -> Result<Self, anyhow::Error> {
+        let boxed_items: Box<[String]> = items.into_boxed_slice();
+
+        let field_value = match field_type {
+            ProjectFieldType::ParticipantFiles => ProjectFieldValue::ParticipantFiles(boxed_items),
+            ProjectFieldType::Topics => ProjectFieldValue::Topics(boxed_items),
+            ProjectFieldType::FieldsOfScience => ProjectFieldValue::FieldsOfScience(boxed_items),
+            ProjectFieldType::Practices => ProjectFieldValue::Practices(boxed_items),
+            ProjectFieldType::Audience => ProjectFieldValue::Audience(boxed_items),
+            ProjectFieldType::GeographicScope => ProjectFieldValue::GeographicScope(boxed_items),
+            ProjectFieldType::ParticipationTasks => {
+                ProjectFieldValue::ParticipationTasks(boxed_items)
+            }
+            ProjectFieldType::Activities => ProjectFieldValue::Activities(boxed_items),
+            ProjectFieldType::DataAggregation => ProjectFieldValue::DataAggregation(boxed_items),
+            ProjectFieldType::DataConsent => ProjectFieldValue::DataConsent(boxed_items),
+            ProjectFieldType::DataAccess => ProjectFieldValue::DataAccess(boxed_items),
+            ProjectFieldType::IntendedOutcomes => ProjectFieldValue::IntendedOutcomes(boxed_items),
+            ProjectFieldType::Sponsors => ProjectFieldValue::Sponsors(boxed_items),
+            ProjectFieldType::Stakeholders => ProjectFieldValue::Stakeholders(boxed_items),
+            ProjectFieldType::AssociatedProjects => {
+                let boxed_ulids: Result<Vec<Ulid>, anyhow::Error> = boxed_items
+                    .into_iter()
+                    .map(|s| s.parse().map_err(|e: ulid::DecodeError| e.into()))
+                    .collect();
+                ProjectFieldValue::AssociatedProjects(boxed_ulids?.into_boxed_slice())
+            }
+            _ => {
+                return Err(anyhow::anyhow!(
+                    "Field type is not supported for array operations"
+                ));
+            }
+        };
+
+        Ok(Self::new(project_id, field_value))
     }
 
     #[tracing::instrument]
@@ -340,7 +464,9 @@ impl ProjectField {
             ProjectFieldValue::Name(_) => ProjectFieldType::Name,
             ProjectFieldValue::Tags(_) => ProjectFieldType::Tags,
             ProjectFieldValue::ParticipationDegree(_) => ProjectFieldType::ParticipationDegree,
-            ProjectFieldValue::ParticipantInstructions(_) => ProjectFieldType::ParticipantInstructions,
+            ProjectFieldValue::ParticipantInstructions(_) => {
+                ProjectFieldType::ParticipantInstructions
+            }
             ProjectFieldValue::ParticipantInstructionsEmail(_) => {
                 ProjectFieldType::ParticipantInstructionsEmail
             }
@@ -436,7 +562,9 @@ impl ProjectField {
             ProjectFieldValue::DataVisualization(_) => ProjectFieldType::DataVisualization,
             ProjectFieldValue::DataAccess(_) => ProjectFieldType::DataAccess,
             ProjectFieldValue::DataQuality(_) => ProjectFieldType::DataQuality,
-            ProjectFieldValue::MetadataPublicationUrl(_) => ProjectFieldType::MetadataPublicationUrl,
+            ProjectFieldValue::MetadataPublicationUrl(_) => {
+                ProjectFieldType::MetadataPublicationUrl
+            }
             ProjectFieldValue::DataPublicationUrl(_) => ProjectFieldType::DataPublicationUrl,
             ProjectFieldValue::DataLicense(_) => ProjectFieldType::DataLicense,
             ProjectFieldValue::IntendedOutcomes(_) => ProjectFieldType::IntendedOutcomes,
@@ -453,18 +581,17 @@ impl ProjectField {
 
     // Helper functions for database operations
     async fn save_status(&self, status: ProjectStatus) -> Result<(), Error> {
-        
         let project_id_str = self.project_id.to_string();
         let status_str = match status {
             ProjectStatus::Pending => "Pending",
-            ProjectStatus::Active => "Active", 
+            ProjectStatus::Active => "Active",
             ProjectStatus::PeriodicallyActive => "Periodically Active",
             ProjectStatus::Hiatus => "Hiatus",
             ProjectStatus::Complete => "Complete",
             ProjectStatus::Hidden => "Hidden",
             ProjectStatus::Expired => "Expired",
         };
-        
+
         sqlx::query!(
             "UPDATE projects SET status = ? WHERE project_id = ?",
             status_str,
@@ -472,13 +599,11 @@ impl ProjectField {
         )
         .execute(db())
         .await?;
-        
+
         Ok(())
     }
 
     async fn save_name(&self, name: &str) -> Result<(), Error> {
-
-        
         let project_id_str = self.project_id.to_string();
         sqlx::query!(
             "UPDATE projects SET name = ? WHERE project_id = ?",
@@ -487,13 +612,11 @@ impl ProjectField {
         )
         .execute(db())
         .await?;
-        
+
         Ok(())
     }
 
     async fn save_description(&self, description: &str) -> Result<(), Error> {
-
-        
         let project_id_str = self.project_id.to_string();
         sqlx::query!(
             "UPDATE projects SET description = ? WHERE project_id = ?",
@@ -502,13 +625,11 @@ impl ProjectField {
         )
         .execute(db())
         .await?;
-        
+
         Ok(())
     }
 
     async fn save_presenter(&self, presenter: &str) -> Result<(), Error> {
-
-        
         let project_id_str = self.project_id.to_string();
         sqlx::query!(
             "UPDATE projects SET presenter = ? WHERE project_id = ?",
@@ -517,13 +638,11 @@ impl ProjectField {
         )
         .execute(db())
         .await?;
-        
+
         Ok(())
     }
 
     async fn save_goal(&self, goal: &str) -> Result<(), Error> {
-
-        
         let project_id_str = self.project_id.to_string();
         sqlx::query!(
             "UPDATE projects SET goal = ? WHERE project_id = ?",
@@ -532,13 +651,11 @@ impl ProjectField {
         )
         .execute(db())
         .await?;
-        
+
         Ok(())
     }
 
     async fn save_task(&self, task: &str) -> Result<(), Error> {
-
-        
         let project_id_str = self.project_id.to_string();
         sqlx::query!(
             "UPDATE projects SET task = ? WHERE project_id = ?",
@@ -547,13 +664,11 @@ impl ProjectField {
         )
         .execute(db())
         .await?;
-        
+
         Ok(())
     }
 
     async fn save_url(&self, url: &str) -> Result<(), Error> {
-
-        
         let project_id_str = self.project_id.to_string();
         sqlx::query!(
             "UPDATE projects SET url = ? WHERE project_id = ?",
@@ -562,13 +677,11 @@ impl ProjectField {
         )
         .execute(db())
         .await?;
-        
+
         Ok(())
     }
 
     async fn save_image(&self, image: &str) -> Result<(), Error> {
-
-        
         let project_id_str = self.project_id.to_string();
         sqlx::query!(
             "UPDATE projects SET image = ? WHERE project_id = ?",
@@ -577,13 +690,11 @@ impl ProjectField {
         )
         .execute(db())
         .await?;
-        
+
         Ok(())
     }
 
     async fn save_admin_notes(&self, notes: &str) -> Result<(), Error> {
-
-        
         let project_id_str = self.project_id.to_string();
         sqlx::query!(
             "UPDATE projects SET admin_notes = ? WHERE project_id = ?",
@@ -592,16 +703,14 @@ impl ProjectField {
         )
         .execute(db())
         .await?;
-        
+
         Ok(())
     }
 
     async fn save_draft(&self, draft: bool) -> Result<(), Error> {
-
-        
         let project_id_str = self.project_id.to_string();
         let draft_int = if draft { 1 } else { 0 };
-        
+
         sqlx::query!(
             "UPDATE projects SET draft = ? WHERE project_id = ?",
             draft_int,
@@ -609,16 +718,14 @@ impl ProjectField {
         )
         .execute(db())
         .await?;
-        
+
         Ok(())
     }
 
     async fn save_publish(&self, publish: bool) -> Result<(), Error> {
-
-        
         let project_id_str = self.project_id.to_string();
         let publish_int = if publish { 1 } else { 0 };
-        
+
         sqlx::query!(
             "UPDATE projects SET publish = ? WHERE project_id = ?",
             publish_int,
@@ -626,16 +733,14 @@ impl ProjectField {
         )
         .execute(db())
         .await?;
-        
+
         Ok(())
     }
 
     async fn save_flagged(&self, flagged: bool) -> Result<(), Error> {
-
-        
         let project_id_str = self.project_id.to_string();
         let flagged_int = if flagged { 1 } else { 0 };
-        
+
         sqlx::query!(
             "UPDATE projects SET flagged = ? WHERE project_id = ?",
             flagged_int,
@@ -643,16 +748,14 @@ impl ProjectField {
         )
         .execute(db())
         .await?;
-        
+
         Ok(())
     }
 
     async fn save_duplicate(&self, duplicate: bool) -> Result<(), Error> {
-
-        
         let project_id_str = self.project_id.to_string();
         let duplicate_int = if duplicate { 1 } else { 0 };
-        
+
         sqlx::query!(
             "UPDATE projects SET duplicate = ? WHERE project_id = ?",
             duplicate_int,
@@ -660,16 +763,14 @@ impl ProjectField {
         )
         .execute(db())
         .await?;
-        
+
         Ok(())
     }
 
     async fn save_is_test(&self, is_test: bool) -> Result<(), Error> {
-
-        
         let project_id_str = self.project_id.to_string();
         let is_test_int = if is_test { 1 } else { 0 };
-        
+
         sqlx::query!(
             "UPDATE projects SET is_test = ? WHERE project_id = ?",
             is_test_int,
@@ -677,16 +778,14 @@ impl ProjectField {
         )
         .execute(db())
         .await?;
-        
+
         Ok(())
     }
 
     async fn save_begin(&self, begin: &Option<TimeString>) -> Result<(), Error> {
-
-        
         let project_id_str = self.project_id.to_string();
         let begin_str = begin.as_ref().map(|ts| ts.to_string());
-        
+
         sqlx::query!(
             "UPDATE projects SET begin = ? WHERE project_id = ?",
             begin_str,
@@ -694,16 +793,14 @@ impl ProjectField {
         )
         .execute(db())
         .await?;
-        
+
         Ok(())
     }
 
     async fn save_end(&self, end: &Option<TimeString>) -> Result<(), Error> {
-
-        
         let project_id_str = self.project_id.to_string();
         let end_str = end.as_ref().map(|ts| ts.to_string());
-        
+
         sqlx::query!(
             "UPDATE projects SET end = ? WHERE project_id = ?",
             end_str,
@@ -711,14 +808,12 @@ impl ProjectField {
         )
         .execute(db())
         .await?;
-        
+
         Ok(())
     }
 
     // Helper functions for reading from database
     async fn read_status(project_id: Ulid) -> Result<Self, Error> {
-
-        
         let project_id_str = project_id.to_string();
         let status_str = sqlx::query_scalar!(
             "SELECT status FROM projects WHERE project_id = ?",
@@ -726,7 +821,7 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        
+
         let status = match status_str.as_str() {
             "Pending" => ProjectStatus::Pending,
             "Active" => ProjectStatus::Active,
@@ -737,13 +832,14 @@ impl ProjectField {
             "Expired" => ProjectStatus::Expired,
             _ => ProjectStatus::Active, // Default fallback
         };
-        
-        Ok(ProjectField::new(project_id, ProjectFieldValue::Status(status)))
+
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::Status(status),
+        ))
     }
 
     async fn read_name(project_id: Ulid) -> Result<Self, Error> {
-
-        
         let project_id_str = project_id.to_string();
         let name = sqlx::query_scalar!(
             "SELECT name FROM projects WHERE project_id = ?",
@@ -751,13 +847,11 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        
+
         Ok(ProjectField::new(project_id, ProjectFieldValue::Name(name)))
     }
 
     async fn read_description(project_id: Ulid) -> Result<Self, Error> {
-
-        
         let project_id_str = project_id.to_string();
         let description = sqlx::query_scalar!(
             "SELECT description FROM projects WHERE project_id = ?",
@@ -765,13 +859,14 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        
-        Ok(ProjectField::new(project_id, ProjectFieldValue::Description(description)))
+
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::Description(description),
+        ))
     }
 
     async fn read_presenter(project_id: Ulid) -> Result<Self, Error> {
-
-        
         let project_id_str = project_id.to_string();
         let presenter = sqlx::query_scalar!(
             "SELECT presenter FROM projects WHERE project_id = ?",
@@ -779,13 +874,14 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        
-        Ok(ProjectField::new(project_id, ProjectFieldValue::Presenter(presenter)))
+
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::Presenter(presenter),
+        ))
     }
 
     async fn read_goal(project_id: Ulid) -> Result<Self, Error> {
-
-        
         let project_id_str = project_id.to_string();
         let goal = sqlx::query_scalar!(
             "SELECT goal FROM projects WHERE project_id = ?",
@@ -793,13 +889,11 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        
+
         Ok(ProjectField::new(project_id, ProjectFieldValue::Goal(goal)))
     }
 
     async fn read_task(project_id: Ulid) -> Result<Self, Error> {
-
-        
         let project_id_str = project_id.to_string();
         let task = sqlx::query_scalar!(
             "SELECT task FROM projects WHERE project_id = ?",
@@ -807,13 +901,11 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        
+
         Ok(ProjectField::new(project_id, ProjectFieldValue::Task(task)))
     }
 
     async fn read_url(project_id: Ulid) -> Result<Self, Error> {
-
-        
         let project_id_str = project_id.to_string();
         let url = sqlx::query_scalar!(
             "SELECT url FROM projects WHERE project_id = ?",
@@ -821,13 +913,11 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        
+
         Ok(ProjectField::new(project_id, ProjectFieldValue::Url(url)))
     }
 
     async fn read_image(project_id: Ulid) -> Result<Self, Error> {
-
-        
         let project_id_str = project_id.to_string();
         let image = sqlx::query_scalar!(
             "SELECT image FROM projects WHERE project_id = ?",
@@ -835,13 +925,14 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        
-        Ok(ProjectField::new(project_id, ProjectFieldValue::Image(image)))
+
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::Image(image),
+        ))
     }
 
     async fn read_admin_notes(project_id: Ulid) -> Result<Self, Error> {
-
-        
         let project_id_str = project_id.to_string();
         let notes = sqlx::query_scalar!(
             "SELECT admin_notes FROM projects WHERE project_id = ?",
@@ -849,13 +940,14 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        
-        Ok(ProjectField::new(project_id, ProjectFieldValue::AdminNotes(notes)))
+
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::AdminNotes(notes),
+        ))
     }
 
     async fn read_draft(project_id: Ulid) -> Result<Self, Error> {
-
-        
         let project_id_str = project_id.to_string();
         let draft = sqlx::query_scalar!(
             "SELECT draft FROM projects WHERE project_id = ?",
@@ -863,12 +955,13 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::Draft(draft)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::Draft(draft),
+        ))
     }
 
     async fn read_publish(project_id: Ulid) -> Result<Self, Error> {
-
-        
         let project_id_str = project_id.to_string();
         let publish = sqlx::query_scalar!(
             "SELECT publish FROM projects WHERE project_id = ?",
@@ -876,12 +969,13 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::Publish(publish.unwrap_or(false))))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::Publish(publish.unwrap_or(false)),
+        ))
     }
 
     async fn read_flagged(project_id: Ulid) -> Result<Self, Error> {
-
-        
         let project_id_str = project_id.to_string();
         let flagged = sqlx::query_scalar!(
             "SELECT flagged FROM projects WHERE project_id = ?",
@@ -889,12 +983,13 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::Flagged(flagged)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::Flagged(flagged),
+        ))
     }
 
     async fn read_duplicate(project_id: Ulid) -> Result<Self, Error> {
-
-        
         let project_id_str = project_id.to_string();
         let duplicate = sqlx::query_scalar!(
             "SELECT duplicate FROM projects WHERE project_id = ?",
@@ -902,12 +997,13 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::Duplicate(duplicate)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::Duplicate(duplicate),
+        ))
     }
 
     async fn read_is_test(project_id: Ulid) -> Result<Self, Error> {
-
-        
         let project_id_str = project_id.to_string();
         let is_test = sqlx::query_scalar!(
             "SELECT is_test FROM projects WHERE project_id = ?",
@@ -915,12 +1011,13 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::IsTest(is_test)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::IsTest(is_test),
+        ))
     }
 
     async fn read_begin(project_id: Ulid) -> Result<Self, Error> {
-
-        
         let project_id_str = project_id.to_string();
         let begin_str = sqlx::query_scalar!(
             "SELECT begin FROM projects WHERE project_id = ?",
@@ -928,14 +1025,15 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        
+
         let begin = begin_str.and_then(|s| TimeString::try_from(s).ok());
-        Ok(ProjectField::new(project_id, ProjectFieldValue::Begin(begin)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::Begin(begin),
+        ))
     }
 
     async fn read_end(project_id: Ulid) -> Result<Self, Error> {
-
-        
         let project_id_str = project_id.to_string();
         let end_str = sqlx::query_scalar!(
             "SELECT end FROM projects WHERE project_id = ?",
@@ -943,7 +1041,7 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        
+
         let end = end_str.and_then(|s| TimeString::try_from(s).ok());
         Ok(ProjectField::new(project_id, ProjectFieldValue::End(end)))
     }
@@ -956,7 +1054,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::Authoritative(authoritative)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::Authoritative(authoritative),
+        ))
     }
 
     async fn read_wild_hope(project_id: Ulid) -> Result<Self, Error> {
@@ -967,7 +1068,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::WildHope(wild_hope)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::WildHope(wild_hope),
+        ))
     }
 
     async fn read_exchange(project_id: Ulid) -> Result<Self, Error> {
@@ -978,7 +1082,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::Exchange(exchange)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::Exchange(exchange),
+        ))
     }
 
     async fn read_origin(project_id: Ulid) -> Result<Self, Error> {
@@ -989,7 +1096,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::Origin(origin)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::Origin(origin),
+        ))
     }
 
     async fn read_suborigin(project_id: Ulid) -> Result<Self, Error> {
@@ -1000,7 +1110,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::Suborigin(suborigin)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::Suborigin(suborigin),
+        ))
     }
 
     async fn read_guid(project_id: Ulid) -> Result<Self, Error> {
@@ -1022,7 +1135,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::OpengraphDescription(opengraph_description)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::OpengraphDescription(opengraph_description),
+        ))
     }
 
     async fn read_is_affiliate(project_id: Ulid) -> Result<Self, Error> {
@@ -1033,7 +1149,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::IsAffiliate(is_affiliate)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::IsAffiliate(is_affiliate),
+        ))
     }
 
     async fn read_is_inaturalist(project_id: Ulid) -> Result<Self, Error> {
@@ -1044,7 +1163,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::IsInaturalist(is_inaturalist)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::IsInaturalist(is_inaturalist),
+        ))
     }
 
     async fn read_welcomed(project_id: Ulid) -> Result<Self, Error> {
@@ -1055,7 +1177,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::Welcomed(welcomed)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::Welcomed(welcomed),
+        ))
     }
 
     async fn read_created(project_id: Ulid) -> Result<Self, Error> {
@@ -1067,7 +1192,10 @@ impl ProjectField {
         .fetch_one(db())
         .await?;
         let created = TimeString::try_from(created_str)?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::Created(created)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::Created(created),
+        ))
     }
 
     async fn read_participation_degree(project_id: Ulid) -> Result<Self, Error> {
@@ -1085,7 +1213,10 @@ impl ProjectField {
             "Contractual" => ProjectParticipationDegree::Contractual,
             _ => ProjectParticipationDegree::Collegial, // Default
         };
-        Ok(ProjectField::new(project_id, ProjectFieldValue::ParticipationDegree(participation_degree)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::ParticipationDegree(participation_degree),
+        ))
     }
 
     async fn read_participant_instructions(project_id: Ulid) -> Result<Self, Error> {
@@ -1096,7 +1227,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::ParticipantInstructions(participant_instructions)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::ParticipantInstructions(participant_instructions),
+        ))
     }
 
     async fn read_us_federally_funded(project_id: Ulid) -> Result<Self, Error> {
@@ -1107,7 +1241,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::UsFederallyFunded(us_federally_funded)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::UsFederallyFunded(us_federally_funded),
+        ))
     }
 
     async fn read_image_credit(project_id: Ulid) -> Result<Self, Error> {
@@ -1118,7 +1255,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::ImageCredit(image_credit)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::ImageCredit(image_credit),
+        ))
     }
 
     async fn read_how_to_join(project_id: Ulid) -> Result<Self, Error> {
@@ -1129,7 +1269,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::HowToJoin(how_to_join)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::HowToJoin(how_to_join),
+        ))
     }
 
     async fn read_total_expense(project_id: Ulid) -> Result<Self, Error> {
@@ -1140,7 +1283,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::TotalExpense(total_expense.map(|x| x as f32))))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::TotalExpense(total_expense.map(|x| x as f32)),
+        ))
     }
 
     async fn read_special_skills(project_id: Ulid) -> Result<Self, Error> {
@@ -1151,7 +1297,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::SpecialSkills(special_skills)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::SpecialSkills(special_skills),
+        ))
     }
 
     async fn read_country(project_id: Ulid) -> Result<Self, Error> {
@@ -1162,7 +1311,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::Country(country)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::Country(country),
+        ))
     }
 
     async fn read_state(project_id: Ulid) -> Result<Self, Error> {
@@ -1173,7 +1325,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::State(state)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::State(state),
+        ))
     }
 
     async fn read_city(project_id: Ulid) -> Result<Self, Error> {
@@ -1206,7 +1361,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::Address(address)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::Address(address),
+        ))
     }
 
     async fn read_location_name(project_id: Ulid) -> Result<Self, Error> {
@@ -1217,7 +1375,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::LocationName(location_name)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::LocationName(location_name),
+        ))
     }
 
     async fn read_entirely_online(project_id: Ulid) -> Result<Self, Error> {
@@ -1228,7 +1389,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::EntirelyOnline(entirely_online)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::EntirelyOnline(entirely_online),
+        ))
     }
 
     async fn read_location_type(project_id: Ulid) -> Result<Self, Error> {
@@ -1239,7 +1403,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::LocationType(location_type)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::LocationType(location_type),
+        ))
     }
 
     async fn read_point(project_id: Ulid) -> Result<Self, Error> {
@@ -1250,7 +1417,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::Point(point)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::Point(point),
+        ))
     }
 
     async fn read_regions(project_id: Ulid) -> Result<Self, Error> {
@@ -1261,7 +1431,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::Regions(regions)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::Regions(regions),
+        ))
     }
 
     async fn read_location_description(project_id: Ulid) -> Result<Self, Error> {
@@ -1272,7 +1445,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::LocationDescription(location_description)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::LocationDescription(location_description),
+        ))
     }
 
     async fn read_signup_url(project_id: Ulid) -> Result<Self, Error> {
@@ -1283,7 +1459,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::SignupUrl(signup_url)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::SignupUrl(signup_url),
+        ))
     }
 
     async fn read_outcomes_label(project_id: Ulid) -> Result<Self, Error> {
@@ -1294,7 +1473,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::OutcomesLabel(outcomes_label)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::OutcomesLabel(outcomes_label),
+        ))
     }
 
     async fn read_outcomes_link(project_id: Ulid) -> Result<Self, Error> {
@@ -1305,7 +1487,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::OutcomesLink(outcomes_link)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::OutcomesLink(outcomes_link),
+        ))
     }
 
     async fn read_video_url(project_id: Ulid) -> Result<Self, Error> {
@@ -1316,7 +1501,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::VideoUrl(video_url)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::VideoUrl(video_url),
+        ))
     }
 
     async fn read_blog_url(project_id: Ulid) -> Result<Self, Error> {
@@ -1327,7 +1515,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::BlogUrl(blog_url)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::BlogUrl(blog_url),
+        ))
     }
 
     async fn read_twitter_name(project_id: Ulid) -> Result<Self, Error> {
@@ -1338,7 +1529,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::TwitterName(twitter_name)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::TwitterName(twitter_name),
+        ))
     }
 
     async fn read_facebook_page(project_id: Ulid) -> Result<Self, Error> {
@@ -1349,7 +1543,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::FacebookPage(facebook_page)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::FacebookPage(facebook_page),
+        ))
     }
 
     async fn read_instagram_page(project_id: Ulid) -> Result<Self, Error> {
@@ -1360,7 +1557,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::InstagramPage(instagram_page)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::InstagramPage(instagram_page),
+        ))
     }
 
     async fn read_practices_how(project_id: Ulid) -> Result<Self, Error> {
@@ -1371,7 +1571,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::PracticesHow(practices_how)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::PracticesHow(practices_how),
+        ))
     }
 
     async fn read_search_terms(project_id: Ulid) -> Result<Self, Error> {
@@ -1382,7 +1585,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::SearchTerms(search_terms)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::SearchTerms(search_terms),
+        ))
     }
 
     async fn read_difficulty(project_id: Ulid) -> Result<Self, Error> {
@@ -1393,7 +1599,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::Difficulty(difficulty)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::Difficulty(difficulty),
+        ))
     }
 
     async fn read_diy(project_id: Ulid) -> Result<Self, Error> {
@@ -1415,7 +1624,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::LegacyV1ProjectId(legacy_v1_project_id)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::LegacyV1ProjectId(legacy_v1_project_id),
+        ))
     }
 
     async fn read_legacy_v2_project_id(project_id: Ulid) -> Result<Self, Error> {
@@ -1426,7 +1638,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::LegacyV2ProjectId(legacy_v2_project_id)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::LegacyV2ProjectId(legacy_v2_project_id),
+        ))
     }
 
     async fn read_foreign_id(project_id: Ulid) -> Result<Self, Error> {
@@ -1437,7 +1652,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::ForeignId(foreign_id)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::ForeignId(foreign_id),
+        ))
     }
 
     async fn read_promotion_time(project_id: Ulid) -> Result<Self, Error> {
@@ -1452,9 +1670,17 @@ impl ProjectField {
             "Promote at any time" => ProjectPromotionTime::PromoteAtAnyTime,
             "Do not promote" => ProjectPromotionTime::DoNotPromote,
             "Prefer promotion on the target date" => ProjectPromotionTime::PreferOnTargetDate,
-            _ => return Err(anyhow::anyhow!("Unknown promotion_time value: {}", promotion_time_str)),
+            _ => {
+                return Err(anyhow::anyhow!(
+                    "Unknown promotion_time value: {}",
+                    promotion_time_str
+                ));
+            }
         };
-        Ok(ProjectField::new(project_id, ProjectFieldValue::PromotionTime(promotion_time)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::PromotionTime(promotion_time),
+        ))
     }
 
     async fn read_promotion_target(project_id: Ulid) -> Result<Self, Error> {
@@ -1469,7 +1695,10 @@ impl ProjectField {
             Some(s) => TimeString::try_from(s).ok(),
             None => None,
         };
-        Ok(ProjectField::new(project_id, ProjectFieldValue::PromotionTarget(promotion_target)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::PromotionTarget(promotion_target),
+        ))
     }
 
     async fn read_inat_project_id(project_id: Ulid) -> Result<Self, Error> {
@@ -1480,7 +1709,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::InatProjectId(inat_project_id.map(|i| i as i32))))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::InatProjectId(inat_project_id.map(|i| i as i32)),
+        ))
     }
 
     async fn read_page_creator_id(project_id: Ulid) -> Result<Self, Error> {
@@ -1493,7 +1725,10 @@ impl ProjectField {
         .await?;
         let page_creator_id = Ulid::from_string(&page_creator_id_str)
             .map_err(|e| anyhow::anyhow!("Invalid ULID format for page_creator_id: {}", e))?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::PageCreatorId(page_creator_id)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::PageCreatorId(page_creator_id),
+        ))
     }
 
     async fn read_extra(project_id: Ulid) -> Result<Self, Error> {
@@ -1504,7 +1739,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::Extra(extra)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::Extra(extra),
+        ))
     }
 
     async fn read_participant_instructions_email(project_id: Ulid) -> Result<Self, Error> {
@@ -1515,7 +1753,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::ParticipantInstructionsEmail(participant_instructions_email)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::ParticipantInstructionsEmail(participant_instructions_email),
+        ))
     }
 
     async fn read_connect_opaque_url(project_id: Ulid) -> Result<Self, Error> {
@@ -1526,7 +1767,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::ConnectOpaqueUrl(connect_opaque_url)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::ConnectOpaqueUrl(connect_opaque_url),
+        ))
     }
 
     async fn read_connect_opaque_url1(project_id: Ulid) -> Result<Self, Error> {
@@ -1537,7 +1781,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::ConnectOpaqueUrl1(connect_opaque_url1)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::ConnectOpaqueUrl1(connect_opaque_url1),
+        ))
     }
 
     async fn read_connect_opaque_url2(project_id: Ulid) -> Result<Self, Error> {
@@ -1548,7 +1795,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::ConnectOpaqueUrl2(connect_opaque_url2)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::ConnectOpaqueUrl2(connect_opaque_url2),
+        ))
     }
 
     async fn read_prefix_how_to_logged_in(project_id: Ulid) -> Result<Self, Error> {
@@ -1559,7 +1809,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::PrefixHowToLoggedIn(prefix_how_to_logged_in)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::PrefixHowToLoggedIn(prefix_how_to_logged_in),
+        ))
     }
 
     async fn read_prefix_how_to_logged_out(project_id: Ulid) -> Result<Self, Error> {
@@ -1570,7 +1823,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::PrefixHowToLoggedOut(prefix_how_to_logged_out)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::PrefixHowToLoggedOut(prefix_how_to_logged_out),
+        ))
     }
 
     async fn read_howto_video(project_id: Ulid) -> Result<Self, Error> {
@@ -1581,7 +1837,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::HowtoVideo(howto_video)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::HowtoVideo(howto_video),
+        ))
     }
 
     async fn read_time_required(project_id: Ulid) -> Result<Self, Error> {
@@ -1592,7 +1851,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::TimeRequired(time_required)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::TimeRequired(time_required),
+        ))
     }
 
     async fn read_training_materials(project_id: Ulid) -> Result<Self, Error> {
@@ -1603,7 +1865,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::TrainingMaterials(training_materials)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::TrainingMaterials(training_materials),
+        ))
     }
 
     async fn read_classroom_materials(project_id: Ulid) -> Result<Self, Error> {
@@ -1614,7 +1879,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::ClassroomMaterials(classroom_materials)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::ClassroomMaterials(classroom_materials),
+        ))
     }
 
     async fn read_consent_statement(project_id: Ulid) -> Result<Self, Error> {
@@ -1625,7 +1893,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::ConsentStatement(consent_statement)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::ConsentStatement(consent_statement),
+        ))
     }
 
     async fn read_consent_statement_date(project_id: Ulid) -> Result<Self, Error> {
@@ -1640,7 +1911,10 @@ impl ProjectField {
             Some(s) => TimeString::try_from(s).ok(),
             None => None,
         };
-        Ok(ProjectField::new(project_id, ProjectFieldValue::ConsentStatementDate(consent_statement_date)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::ConsentStatementDate(consent_statement_date),
+        ))
     }
 
     async fn read_participation_tools(project_id: Ulid) -> Result<Self, Error> {
@@ -1651,7 +1925,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::ParticipationTools(participation_tools)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::ParticipationTools(participation_tools),
+        ))
     }
 
     async fn read_participation_prompt(project_id: Ulid) -> Result<Self, Error> {
@@ -1662,7 +1939,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::ParticipationPrompt(participation_prompt)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::ParticipationPrompt(participation_prompt),
+        ))
     }
 
     async fn read_participation_confirmation_message(project_id: Ulid) -> Result<Self, Error> {
@@ -1673,7 +1953,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::ParticipationConfirmationMessage(participation_confirmation_message)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::ParticipationConfirmationMessage(participation_confirmation_message),
+        ))
     }
 
     async fn read_participation_notification_email(project_id: Ulid) -> Result<Self, Error> {
@@ -1684,7 +1967,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::ParticipationNotificationEmail(participation_notification_email)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::ParticipationNotificationEmail(participation_notification_email),
+        ))
     }
 
     async fn read_participation_usage(project_id: Ulid) -> Result<Self, Error> {
@@ -1695,7 +1981,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::ParticipationUsage(participation_usage)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::ParticipationUsage(participation_usage),
+        ))
     }
 
     async fn read_part_of(project_id: Ulid) -> Result<Self, Error> {
@@ -1707,10 +1996,16 @@ impl ProjectField {
         .fetch_one(db())
         .await?;
         let part_of = match part_of_str {
-            Some(s) => Some(Ulid::from_string(&s).map_err(|e| anyhow::anyhow!("Invalid ULID format for part_of: {}", e))?),
+            Some(s) => Some(
+                Ulid::from_string(&s)
+                    .map_err(|e| anyhow::anyhow!("Invalid ULID format for part_of: {}", e))?,
+            ),
             None => None,
         };
-        Ok(ProjectField::new(project_id, ProjectFieldValue::PartOf(part_of)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::PartOf(part_of),
+        ))
     }
 
     async fn read_materials(project_id: Ulid) -> Result<Self, Error> {
@@ -1721,7 +2016,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::Materials(materials)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::Materials(materials),
+        ))
     }
 
     async fn read_gear(project_id: Ulid) -> Result<Self, Error> {
@@ -1743,7 +2041,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::MobileAppUrlAndroid(mobile_app_url_android)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::MobileAppUrlAndroid(mobile_app_url_android),
+        ))
     }
 
     async fn read_mobile_app_url_ios(project_id: Ulid) -> Result<Self, Error> {
@@ -1754,7 +2055,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::MobileAppUrlIos(mobile_app_url_ios)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::MobileAppUrlIos(mobile_app_url_ios),
+        ))
     }
 
     async fn read_mobile_app_url(project_id: Ulid) -> Result<Self, Error> {
@@ -1765,7 +2069,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::MobileAppUrl(mobile_app_url)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::MobileAppUrl(mobile_app_url),
+        ))
     }
 
     async fn read_on_demand(project_id: Ulid) -> Result<Self, Error> {
@@ -1776,7 +2083,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::OnDemand(on_demand)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::OnDemand(on_demand),
+        ))
     }
 
     async fn read_in_person(project_id: Ulid) -> Result<Self, Error> {
@@ -1787,7 +2097,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::InPerson(in_person)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::InPerson(in_person),
+        ))
     }
 
     async fn read_indoors(project_id: Ulid) -> Result<Self, Error> {
@@ -1798,7 +2111,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::Indoors(indoors)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::Indoors(indoors),
+        ))
     }
 
     async fn read_outdoors(project_id: Ulid) -> Result<Self, Error> {
@@ -1809,7 +2125,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::Outdoors(outdoors)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::Outdoors(outdoors),
+        ))
     }
 
     async fn read_regions_description(project_id: Ulid) -> Result<Self, Error> {
@@ -1820,7 +2139,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::RegionsDescription(regions_description)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::RegionsDescription(regions_description),
+        ))
     }
 
     async fn read_other(project_id: Ulid) -> Result<Self, Error> {
@@ -1831,7 +2153,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::Other(other)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::Other(other),
+        ))
     }
 
     async fn read_location_landuse(project_id: Ulid) -> Result<Self, Error> {
@@ -1842,7 +2167,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::LocationLanduse(location_landuse)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::LocationLanduse(location_landuse),
+        ))
     }
 
     async fn read_united_nations_region(project_id: Ulid) -> Result<Self, Error> {
@@ -1853,7 +2181,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::UnitedNationsRegion(united_nations_region)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::UnitedNationsRegion(united_nations_region),
+        ))
     }
 
     async fn read_project_timing(project_id: Ulid) -> Result<Self, Error> {
@@ -1864,7 +2195,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::ProjectTiming(project_timing)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::ProjectTiming(project_timing),
+        ))
     }
 
     async fn read_participation_schedule(project_id: Ulid) -> Result<Self, Error> {
@@ -1875,7 +2209,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::ParticipationSchedule(participation_schedule)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::ParticipationSchedule(participation_schedule),
+        ))
     }
 
     async fn read_time_per_participation(project_id: Ulid) -> Result<Self, Error> {
@@ -1886,7 +2223,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::TimePerParticipation(time_per_participation)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::TimePerParticipation(time_per_participation),
+        ))
     }
 
     async fn read_year_started(project_id: Ulid) -> Result<Self, Error> {
@@ -1897,7 +2237,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::YearStarted(year_started.map(|i| i as i32))))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::YearStarted(year_started.map(|i| i as i32)),
+        ))
     }
 
     async fn read_year_completed(project_id: Ulid) -> Result<Self, Error> {
@@ -1908,7 +2251,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::YearCompleted(year_completed.map(|i| i as i32))))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::YearCompleted(year_completed.map(|i| i as i32)),
+        ))
     }
 
     async fn read_month_completed(project_id: Ulid) -> Result<Self, Error> {
@@ -1919,7 +2265,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::MonthCompleted(month_completed.map(|i| i as i32))))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::MonthCompleted(month_completed.map(|i| i as i32)),
+        ))
     }
 
     async fn read_data_results(project_id: Ulid) -> Result<Self, Error> {
@@ -1930,7 +2279,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::DataResults(data_results)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::DataResults(data_results),
+        ))
     }
 
     async fn read_data_visualization(project_id: Ulid) -> Result<Self, Error> {
@@ -1941,7 +2293,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::DataVisualization(data_visualization)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::DataVisualization(data_visualization),
+        ))
     }
 
     async fn read_data_quality(project_id: Ulid) -> Result<Self, Error> {
@@ -1952,7 +2307,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::DataQuality(data_quality)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::DataQuality(data_quality),
+        ))
     }
 
     async fn read_metadata_publication_url(project_id: Ulid) -> Result<Self, Error> {
@@ -1963,7 +2321,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::MetadataPublicationUrl(metadata_publication_url)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::MetadataPublicationUrl(metadata_publication_url),
+        ))
     }
 
     async fn read_data_publication_url(project_id: Ulid) -> Result<Self, Error> {
@@ -1974,7 +2335,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::DataPublicationUrl(data_publication_url)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::DataPublicationUrl(data_publication_url),
+        ))
     }
 
     async fn read_data_license(project_id: Ulid) -> Result<Self, Error> {
@@ -1985,7 +2349,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::DataLicense(data_license)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::DataLicense(data_license),
+        ))
     }
 
     async fn read_outcome_other(project_id: Ulid) -> Result<Self, Error> {
@@ -1996,7 +2363,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::OutcomeOther(outcome_other)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::OutcomeOther(outcome_other),
+        ))
     }
 
     async fn read_university_affiliation(project_id: Ulid) -> Result<Self, Error> {
@@ -2007,7 +2377,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::UniversityAffiliation(university_affiliation)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::UniversityAffiliation(university_affiliation),
+        ))
     }
 
     async fn read_circuit_id(project_id: Ulid) -> Result<Self, Error> {
@@ -2018,7 +2391,10 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::CircuitId(circuit_id)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::CircuitId(circuit_id),
+        ))
     }
 
     async fn read_sustainable_development_goals(project_id: Ulid) -> Result<Self, Error> {
@@ -2029,92 +2405,151 @@ impl ProjectField {
         )
         .fetch_one(db())
         .await?;
-        Ok(ProjectField::new(project_id, ProjectFieldValue::SustainableDevelopmentGoals(sustainable_development_goals)))
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::SustainableDevelopmentGoals(sustainable_development_goals),
+        ))
     }
-
 
     // Batch 1: Basic administrative fields (missing save helpers)
     async fn save_authoritative(&self, authoritative: bool) -> Result<(), Error> {
-
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET authoritative = ? WHERE project_id = ?", authoritative, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET authoritative = ? WHERE project_id = ?",
+            authoritative,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_wild_hope(&self, wild_hope: bool) -> Result<(), Error> {
-
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET wild_hope = ? WHERE project_id = ?", wild_hope, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET wild_hope = ? WHERE project_id = ?",
+            wild_hope,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_exchange(&self, exchange: &Option<String>) -> Result<(), Error> {
-
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET exchange = ? WHERE project_id = ?", exchange, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET exchange = ? WHERE project_id = ?",
+            exchange,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_origin(&self, origin: &str) -> Result<(), Error> {
-
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET origin = ? WHERE project_id = ?", origin, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET origin = ? WHERE project_id = ?",
+            origin,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_suborigin(&self, suborigin: &str) -> Result<(), Error> {
-
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET suborigin = ? WHERE project_id = ?", suborigin, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET suborigin = ? WHERE project_id = ?",
+            suborigin,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_guid(&self, guid: &str) -> Result<(), Error> {
-
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET guid = ? WHERE project_id = ?", guid, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET guid = ? WHERE project_id = ?",
+            guid,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_opengraph_description(&self, opengraph_description: &str) -> Result<(), Error> {
-
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET opengraph_description = ? WHERE project_id = ?", opengraph_description, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET opengraph_description = ? WHERE project_id = ?",
+            opengraph_description,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_is_affiliate(&self, is_affiliate: bool) -> Result<(), Error> {
-
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET is_affiliate = ? WHERE project_id = ?", is_affiliate, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET is_affiliate = ? WHERE project_id = ?",
+            is_affiliate,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_is_inaturalist(&self, is_inaturalist: bool) -> Result<(), Error> {
-
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET is_inaturalist = ? WHERE project_id = ?", is_inaturalist, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET is_inaturalist = ? WHERE project_id = ?",
+            is_inaturalist,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_welcomed(&self, welcomed: bool) -> Result<(), Error> {
-
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET welcomed = ? WHERE project_id = ?", welcomed, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET welcomed = ? WHERE project_id = ?",
+            welcomed,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_created(&self, created: &TimeString) -> Result<(), Error> {
-
         let project_id_str = self.project_id.to_string();
         let created_str = created.to_string();
-        sqlx::query!("UPDATE projects SET created = ? WHERE project_id = ?", created_str, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET created = ? WHERE project_id = ?",
+            created_str,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     // Basic project fields
-    async fn save_participation_degree(&self, participation_degree: ProjectParticipationDegree) -> Result<(), Error> {
-
+    async fn save_participation_degree(
+        &self,
+        participation_degree: ProjectParticipationDegree,
+    ) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
         let degree_str = match participation_degree {
             ProjectParticipationDegree::CoCreated => "Co-Created",
@@ -2123,95 +2558,185 @@ impl ProjectField {
             ProjectParticipationDegree::Contractual => "Contractual",
             ProjectParticipationDegree::Collegial => "Collegial",
         };
-        sqlx::query!("UPDATE projects SET participation_degree = ? WHERE project_id = ?", degree_str, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET participation_degree = ? WHERE project_id = ?",
+            degree_str,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
-    async fn save_participant_instructions(&self, participant_instructions: &str) -> Result<(), Error> {
-
+    async fn save_participant_instructions(
+        &self,
+        participant_instructions: &str,
+    ) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET participant_instructions = ? WHERE project_id = ?", participant_instructions, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET participant_instructions = ? WHERE project_id = ?",
+            participant_instructions,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_us_federally_funded(&self, us_federally_funded: bool) -> Result<(), Error> {
-
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET us_federally_funded = ? WHERE project_id = ?", us_federally_funded, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET us_federally_funded = ? WHERE project_id = ?",
+            us_federally_funded,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_image_credit(&self, image_credit: &str) -> Result<(), Error> {
-
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET image_credit = ? WHERE project_id = ?", image_credit, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET image_credit = ? WHERE project_id = ?",
+            image_credit,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_how_to_join(&self, how_to_join: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET how_to_join = ? WHERE project_id = ?", how_to_join, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET how_to_join = ? WHERE project_id = ?",
+            how_to_join,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_total_expense(&self, total_expense: &Option<f32>) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET total_expense = ? WHERE project_id = ?", total_expense, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET total_expense = ? WHERE project_id = ?",
+            total_expense,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_special_skills(&self, special_skills: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET special_skills = ? WHERE project_id = ?", special_skills, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET special_skills = ? WHERE project_id = ?",
+            special_skills,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_country(&self, country: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET country = ? WHERE project_id = ?", country, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET country = ? WHERE project_id = ?",
+            country,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_state(&self, state: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET state = ? WHERE project_id = ?", state, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET state = ? WHERE project_id = ?",
+            state,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_city(&self, city: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET city = ? WHERE project_id = ?", city, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET city = ? WHERE project_id = ?",
+            city,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_zip(&self, zip: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET zip = ? WHERE project_id = ?", zip, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET zip = ? WHERE project_id = ?",
+            zip,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_address(&self, address: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET address = ? WHERE project_id = ?", address, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET address = ? WHERE project_id = ?",
+            address,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_location_name(&self, location_name: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET location_name = ? WHERE project_id = ?", location_name, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET location_name = ? WHERE project_id = ?",
+            location_name,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_entirely_online(&self, entirely_online: bool) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
         let entirely_online_int = if entirely_online { 1 } else { 0 };
-        sqlx::query!("UPDATE projects SET entirely_online = ? WHERE project_id = ?", entirely_online_int, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET entirely_online = ? WHERE project_id = ?",
+            entirely_online_int,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_location_type(&self, location_type: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET location_type = ? WHERE project_id = ?", location_type, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET location_type = ? WHERE project_id = ?",
+            location_type,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
@@ -2249,97 +2774,199 @@ impl ProjectField {
 
     async fn save_location_description(&self, location_description: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET location_description = ? WHERE project_id = ?", location_description, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET location_description = ? WHERE project_id = ?",
+            location_description,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_signup_url(&self, signup_url: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET signup_url = ? WHERE project_id = ?", signup_url, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET signup_url = ? WHERE project_id = ?",
+            signup_url,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_outcomes_label(&self, outcomes_label: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET outcomes_label = ? WHERE project_id = ?", outcomes_label, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET outcomes_label = ? WHERE project_id = ?",
+            outcomes_label,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_outcomes_link(&self, outcomes_link: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET outcomes_link = ? WHERE project_id = ?", outcomes_link, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET outcomes_link = ? WHERE project_id = ?",
+            outcomes_link,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_video_url(&self, video_url: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET video_url = ? WHERE project_id = ?", video_url, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET video_url = ? WHERE project_id = ?",
+            video_url,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_blog_url(&self, blog_url: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET blog_url = ? WHERE project_id = ?", blog_url, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET blog_url = ? WHERE project_id = ?",
+            blog_url,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_twitter_name(&self, twitter_name: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET twitter_name = ? WHERE project_id = ?", twitter_name, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET twitter_name = ? WHERE project_id = ?",
+            twitter_name,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_facebook_page(&self, facebook_page: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET facebook_page = ? WHERE project_id = ?", facebook_page, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET facebook_page = ? WHERE project_id = ?",
+            facebook_page,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_instagram_page(&self, instagram_page: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET instagram_page = ? WHERE project_id = ?", instagram_page, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET instagram_page = ? WHERE project_id = ?",
+            instagram_page,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_practices_how(&self, practices_how: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET practices_how = ? WHERE project_id = ?", practices_how, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET practices_how = ? WHERE project_id = ?",
+            practices_how,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_search_terms(&self, search_terms: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET search_terms = ? WHERE project_id = ?", search_terms, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET search_terms = ? WHERE project_id = ?",
+            search_terms,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_difficulty(&self, difficulty: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET difficulty = ? WHERE project_id = ?", difficulty, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET difficulty = ? WHERE project_id = ?",
+            difficulty,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_diy(&self, diy: bool) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET diy = ? WHERE project_id = ?", diy, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET diy = ? WHERE project_id = ?",
+            diy,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
-    async fn save_legacy_v1_project_id(&self, legacy_v1_project_id: &Option<i64>) -> Result<(), Error> {
+    async fn save_legacy_v1_project_id(
+        &self,
+        legacy_v1_project_id: &Option<i64>,
+    ) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET legacy_v1_project_id = ? WHERE project_id = ?", legacy_v1_project_id, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET legacy_v1_project_id = ? WHERE project_id = ?",
+            legacy_v1_project_id,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
-    async fn save_legacy_v2_project_id(&self, legacy_v2_project_id: &Option<i64>) -> Result<(), Error> {
+    async fn save_legacy_v2_project_id(
+        &self,
+        legacy_v2_project_id: &Option<i64>,
+    ) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET legacy_v2_project_id = ? WHERE project_id = ?", legacy_v2_project_id, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET legacy_v2_project_id = ? WHERE project_id = ?",
+            legacy_v2_project_id,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_foreign_id(&self, foreign_id: &Option<String>) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET foreign_id = ? WHERE project_id = ?", foreign_id, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET foreign_id = ? WHERE project_id = ?",
+            foreign_id,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
@@ -2347,320 +2974,659 @@ impl ProjectField {
         let project_id_str = self.project_id.to_string();
         let promotion_time_str = match promotion_time {
             ProjectPromotionTime::PromoteAtAnyTime => "Promote at any time",
-            ProjectPromotionTime::DoNotPromote => "Do not promote", 
+            ProjectPromotionTime::DoNotPromote => "Do not promote",
             ProjectPromotionTime::PreferOnTargetDate => "Prefer promotion on the target date",
         };
-        sqlx::query!("UPDATE projects SET promotion_time = ? WHERE project_id = ?", promotion_time_str, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET promotion_time = ? WHERE project_id = ?",
+            promotion_time_str,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
-    async fn save_promotion_target(&self, promotion_target: &Option<TimeString>) -> Result<(), Error> {
+    async fn save_promotion_target(
+        &self,
+        promotion_target: &Option<TimeString>,
+    ) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
         let promotion_target_str = promotion_target.as_ref().map(|t| t.to_string());
-        sqlx::query!("UPDATE projects SET promotion_target = ? WHERE project_id = ?", promotion_target_str, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET promotion_target = ? WHERE project_id = ?",
+            promotion_target_str,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_inat_project_id(&self, inat_project_id: &Option<i32>) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET inat_project_id = ? WHERE project_id = ?", inat_project_id, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET inat_project_id = ? WHERE project_id = ?",
+            inat_project_id,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_page_creator_id(&self, page_creator_id: Ulid) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
         let page_creator_id_str = page_creator_id.to_string();
-        sqlx::query!("UPDATE projects SET page_creator_id = ? WHERE project_id = ?", page_creator_id_str, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET page_creator_id = ? WHERE project_id = ?",
+            page_creator_id_str,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_extra(&self, extra: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET extra = ? WHERE project_id = ?", extra, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET extra = ? WHERE project_id = ?",
+            extra,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
-    async fn save_participant_instructions_email(&self, participant_instructions_email: &str) -> Result<(), Error> {
+    async fn save_participant_instructions_email(
+        &self,
+        participant_instructions_email: &str,
+    ) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET participant_instructions_email = ? WHERE project_id = ?", participant_instructions_email, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET participant_instructions_email = ? WHERE project_id = ?",
+            participant_instructions_email,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_connect_opaque_url(&self, connect_opaque_url: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET connect_opaque_url = ? WHERE project_id = ?", connect_opaque_url, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET connect_opaque_url = ? WHERE project_id = ?",
+            connect_opaque_url,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_connect_opaque_url1(&self, connect_opaque_url1: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET connect_opaque_url1 = ? WHERE project_id = ?", connect_opaque_url1, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET connect_opaque_url1 = ? WHERE project_id = ?",
+            connect_opaque_url1,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_connect_opaque_url2(&self, connect_opaque_url2: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET connect_opaque_url2 = ? WHERE project_id = ?", connect_opaque_url2, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET connect_opaque_url2 = ? WHERE project_id = ?",
+            connect_opaque_url2,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
-    async fn save_prefix_how_to_logged_in(&self, prefix_how_to_logged_in: &str) -> Result<(), Error> {
+    async fn save_prefix_how_to_logged_in(
+        &self,
+        prefix_how_to_logged_in: &str,
+    ) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET prefix_how_to_logged_in = ? WHERE project_id = ?", prefix_how_to_logged_in, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET prefix_how_to_logged_in = ? WHERE project_id = ?",
+            prefix_how_to_logged_in,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
-    async fn save_prefix_how_to_logged_out(&self, prefix_how_to_logged_out: &str) -> Result<(), Error> {
+    async fn save_prefix_how_to_logged_out(
+        &self,
+        prefix_how_to_logged_out: &str,
+    ) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET prefix_how_to_logged_out = ? WHERE project_id = ?", prefix_how_to_logged_out, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET prefix_how_to_logged_out = ? WHERE project_id = ?",
+            prefix_how_to_logged_out,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_howto_video(&self, howto_video: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET howto_video = ? WHERE project_id = ?", howto_video, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET howto_video = ? WHERE project_id = ?",
+            howto_video,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_time_required(&self, time_required: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET time_required = ? WHERE project_id = ?", time_required, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET time_required = ? WHERE project_id = ?",
+            time_required,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_training_materials(&self, training_materials: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET training_materials = ? WHERE project_id = ?", training_materials, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET training_materials = ? WHERE project_id = ?",
+            training_materials,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_classroom_materials(&self, classroom_materials: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET classroom_materials = ? WHERE project_id = ?", classroom_materials, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET classroom_materials = ? WHERE project_id = ?",
+            classroom_materials,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_consent_statement(&self, consent_statement: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET consent_statement = ? WHERE project_id = ?", consent_statement, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET consent_statement = ? WHERE project_id = ?",
+            consent_statement,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
-    async fn save_consent_statement_date(&self, consent_statement_date: &Option<TimeString>) -> Result<(), Error> {
+    async fn save_consent_statement_date(
+        &self,
+        consent_statement_date: &Option<TimeString>,
+    ) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
         let consent_statement_date_str = consent_statement_date.as_ref().map(|t| t.to_string());
-        sqlx::query!("UPDATE projects SET consent_statement_date = ? WHERE project_id = ?", consent_statement_date_str, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET consent_statement_date = ? WHERE project_id = ?",
+            consent_statement_date_str,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_participation_tools(&self, participation_tools: bool) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET participation_tools = ? WHERE project_id = ?", participation_tools, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET participation_tools = ? WHERE project_id = ?",
+            participation_tools,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_participation_prompt(&self, participation_prompt: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET participation_prompt = ? WHERE project_id = ?", participation_prompt, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET participation_prompt = ? WHERE project_id = ?",
+            participation_prompt,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
-    async fn save_participation_confirmation_message(&self, participation_confirmation_message: &str) -> Result<(), Error> {
+    async fn save_participation_confirmation_message(
+        &self,
+        participation_confirmation_message: &str,
+    ) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET participation_confirmation_message = ? WHERE project_id = ?", participation_confirmation_message, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET participation_confirmation_message = ? WHERE project_id = ?",
+            participation_confirmation_message,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
-    async fn save_participation_notification_email(&self, participation_notification_email: &str) -> Result<(), Error> {
+    async fn save_participation_notification_email(
+        &self,
+        participation_notification_email: &str,
+    ) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET participation_notification_email = ? WHERE project_id = ?", participation_notification_email, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET participation_notification_email = ? WHERE project_id = ?",
+            participation_notification_email,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_participation_usage(&self, participation_usage: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET participation_usage = ? WHERE project_id = ?", participation_usage, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET participation_usage = ? WHERE project_id = ?",
+            participation_usage,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_part_of(&self, part_of: &Option<Ulid>) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
         let part_of_str = part_of.map(|u| u.to_string());
-        sqlx::query!("UPDATE projects SET part_of = ? WHERE project_id = ?", part_of_str, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET part_of = ? WHERE project_id = ?",
+            part_of_str,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_materials(&self, materials: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET materials = ? WHERE project_id = ?", materials, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET materials = ? WHERE project_id = ?",
+            materials,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_gear(&self, gear: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET gear = ? WHERE project_id = ?", gear, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET gear = ? WHERE project_id = ?",
+            gear,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_mobile_app_url_android(&self, mobile_app_url_android: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET mobile_app_url_android = ? WHERE project_id = ?", mobile_app_url_android, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET mobile_app_url_android = ? WHERE project_id = ?",
+            mobile_app_url_android,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_mobile_app_url_ios(&self, mobile_app_url_ios: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET mobile_app_url_ios = ? WHERE project_id = ?", mobile_app_url_ios, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET mobile_app_url_ios = ? WHERE project_id = ?",
+            mobile_app_url_ios,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_mobile_app_url(&self, mobile_app_url: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET mobile_app_url = ? WHERE project_id = ?", mobile_app_url, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET mobile_app_url = ? WHERE project_id = ?",
+            mobile_app_url,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_on_demand(&self, on_demand: bool) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET on_demand = ? WHERE project_id = ?", on_demand, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET on_demand = ? WHERE project_id = ?",
+            on_demand,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_in_person(&self, in_person: bool) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET in_person = ? WHERE project_id = ?", in_person, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET in_person = ? WHERE project_id = ?",
+            in_person,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_indoors(&self, indoors: bool) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET indoors = ? WHERE project_id = ?", indoors, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET indoors = ? WHERE project_id = ?",
+            indoors,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_outdoors(&self, outdoors: bool) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET outdoors = ? WHERE project_id = ?", outdoors, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET outdoors = ? WHERE project_id = ?",
+            outdoors,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_regions_description(&self, regions_description: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET regions_description = ? WHERE project_id = ?", regions_description, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET regions_description = ? WHERE project_id = ?",
+            regions_description,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_other(&self, other: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET other = ? WHERE project_id = ?", other, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET other = ? WHERE project_id = ?",
+            other,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_location_landuse(&self, location_landuse: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET location_landuse = ? WHERE project_id = ?", location_landuse, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET location_landuse = ? WHERE project_id = ?",
+            location_landuse,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_united_nations_region(&self, united_nations_region: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET united_nations_region = ? WHERE project_id = ?", united_nations_region, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET united_nations_region = ? WHERE project_id = ?",
+            united_nations_region,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_project_timing(&self, project_timing: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET project_timing = ? WHERE project_id = ?", project_timing, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET project_timing = ? WHERE project_id = ?",
+            project_timing,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_participation_schedule(&self, participation_schedule: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET participation_schedule = ? WHERE project_id = ?", participation_schedule, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET participation_schedule = ? WHERE project_id = ?",
+            participation_schedule,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_time_per_participation(&self, time_per_participation: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET time_per_participation = ? WHERE project_id = ?", time_per_participation, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET time_per_participation = ? WHERE project_id = ?",
+            time_per_participation,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_year_started(&self, year_started: &Option<i32>) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET year_started = ? WHERE project_id = ?", year_started, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET year_started = ? WHERE project_id = ?",
+            year_started,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_year_completed(&self, year_completed: &Option<i32>) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET year_completed = ? WHERE project_id = ?", year_completed, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET year_completed = ? WHERE project_id = ?",
+            year_completed,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_month_completed(&self, month_completed: &Option<i32>) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET month_completed = ? WHERE project_id = ?", month_completed, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET month_completed = ? WHERE project_id = ?",
+            month_completed,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_data_results(&self, data_results: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET data_results = ? WHERE project_id = ?", data_results, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET data_results = ? WHERE project_id = ?",
+            data_results,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_data_visualization(&self, data_visualization: bool) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET data_visualization = ? WHERE project_id = ?", data_visualization, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET data_visualization = ? WHERE project_id = ?",
+            data_visualization,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_data_quality(&self, data_quality: bool) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET data_quality = ? WHERE project_id = ?", data_quality, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET data_quality = ? WHERE project_id = ?",
+            data_quality,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
-    async fn save_metadata_publication_url(&self, metadata_publication_url: &str) -> Result<(), Error> {
+    async fn save_metadata_publication_url(
+        &self,
+        metadata_publication_url: &str,
+    ) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET metadata_publication_url = ? WHERE project_id = ?", metadata_publication_url, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET metadata_publication_url = ? WHERE project_id = ?",
+            metadata_publication_url,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_data_publication_url(&self, data_publication_url: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET data_publication_url = ? WHERE project_id = ?", data_publication_url, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET data_publication_url = ? WHERE project_id = ?",
+            data_publication_url,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_data_license(&self, data_license: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET data_license = ? WHERE project_id = ?", data_license, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET data_license = ? WHERE project_id = ?",
+            data_license,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_outcome_other(&self, outcome_other: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET outcome_other = ? WHERE project_id = ?", outcome_other, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET outcome_other = ? WHERE project_id = ?",
+            outcome_other,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_university_affiliation(&self, university_affiliation: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET university_affiliation = ? WHERE project_id = ?", university_affiliation, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET university_affiliation = ? WHERE project_id = ?",
+            university_affiliation,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
     async fn save_circuit_id(&self, circuit_id: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET circuit_id = ? WHERE project_id = ?", circuit_id, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET circuit_id = ? WHERE project_id = ?",
+            circuit_id,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 
-    async fn save_sustainable_development_goals(&self, sustainable_development_goals: &str) -> Result<(), Error> {
+    async fn save_sustainable_development_goals(
+        &self,
+        sustainable_development_goals: &str,
+    ) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        sqlx::query!("UPDATE projects SET sustainable_development_goals = ? WHERE project_id = ?", sustainable_development_goals, project_id_str).execute(db()).await?;
+        sqlx::query!(
+            "UPDATE projects SET sustainable_development_goals = ? WHERE project_id = ?",
+            sustainable_development_goals,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 }
@@ -2691,105 +3657,267 @@ impl LoadStorePeered for ProjectField {
             ProjectFieldValue::IsTest(is_test) => self.save_is_test(*is_test).await,
             ProjectFieldValue::Begin(begin) => self.save_begin(begin).await,
             ProjectFieldValue::End(end) => self.save_end(end).await,
-            ProjectFieldValue::Authoritative(authoritative) => self.save_authoritative(*authoritative).await,
+            ProjectFieldValue::Authoritative(authoritative) => {
+                self.save_authoritative(*authoritative).await
+            }
             ProjectFieldValue::WildHope(wild_hope) => self.save_wild_hope(*wild_hope).await,
             ProjectFieldValue::Exchange(exchange) => self.save_exchange(exchange).await,
             ProjectFieldValue::Origin(origin) => self.save_origin(origin).await,
             ProjectFieldValue::Suborigin(suborigin) => self.save_suborigin(suborigin).await,
             ProjectFieldValue::Guid(guid) => self.save_guid(guid).await,
-            ProjectFieldValue::OpengraphDescription(opengraph_description) => self.save_opengraph_description(opengraph_description).await,
-            ProjectFieldValue::IsAffiliate(is_affiliate) => self.save_is_affiliate(*is_affiliate).await,
-            ProjectFieldValue::IsInaturalist(is_inaturalist) => self.save_is_inaturalist(*is_inaturalist).await,
+            ProjectFieldValue::OpengraphDescription(opengraph_description) => {
+                self.save_opengraph_description(opengraph_description).await
+            }
+            ProjectFieldValue::IsAffiliate(is_affiliate) => {
+                self.save_is_affiliate(*is_affiliate).await
+            }
+            ProjectFieldValue::IsInaturalist(is_inaturalist) => {
+                self.save_is_inaturalist(*is_inaturalist).await
+            }
             ProjectFieldValue::Welcomed(welcomed) => self.save_welcomed(*welcomed).await,
             ProjectFieldValue::Created(created) => self.save_created(created).await,
-            ProjectFieldValue::ParticipationDegree(participation_degree) => self.save_participation_degree(*participation_degree).await,
-            ProjectFieldValue::ParticipantInstructions(participant_instructions) => self.save_participant_instructions(participant_instructions).await,
-            ProjectFieldValue::UsFederallyFunded(us_federally_funded) => self.save_us_federally_funded(*us_federally_funded).await,
-            ProjectFieldValue::ImageCredit(image_credit) => self.save_image_credit(image_credit).await,
+            ProjectFieldValue::ParticipationDegree(participation_degree) => {
+                self.save_participation_degree(*participation_degree).await
+            }
+            ProjectFieldValue::ParticipantInstructions(participant_instructions) => {
+                self.save_participant_instructions(participant_instructions)
+                    .await
+            }
+            ProjectFieldValue::UsFederallyFunded(us_federally_funded) => {
+                self.save_us_federally_funded(*us_federally_funded).await
+            }
+            ProjectFieldValue::ImageCredit(image_credit) => {
+                self.save_image_credit(image_credit).await
+            }
             ProjectFieldValue::HowToJoin(how_to_join) => self.save_how_to_join(how_to_join).await,
-            ProjectFieldValue::TotalExpense(total_expense) => self.save_total_expense(total_expense).await,
-            ProjectFieldValue::SpecialSkills(special_skills) => self.save_special_skills(special_skills).await,
+            ProjectFieldValue::TotalExpense(total_expense) => {
+                self.save_total_expense(total_expense).await
+            }
+            ProjectFieldValue::SpecialSkills(special_skills) => {
+                self.save_special_skills(special_skills).await
+            }
             ProjectFieldValue::Country(country) => self.save_country(country).await,
             ProjectFieldValue::State(state) => self.save_state(state).await,
             ProjectFieldValue::City(city) => self.save_city(city).await,
             ProjectFieldValue::Zip(zip) => self.save_zip(zip).await,
             ProjectFieldValue::Address(address) => self.save_address(address).await,
-            ProjectFieldValue::LocationName(location_name) => self.save_location_name(location_name).await,
-            ProjectFieldValue::EntirelyOnline(entirely_online) => self.save_entirely_online(*entirely_online).await,
-            ProjectFieldValue::LocationType(location_type) => self.save_location_type(location_type).await,
+            ProjectFieldValue::LocationName(location_name) => {
+                self.save_location_name(location_name).await
+            }
+            ProjectFieldValue::EntirelyOnline(entirely_online) => {
+                self.save_entirely_online(*entirely_online).await
+            }
+            ProjectFieldValue::LocationType(location_type) => {
+                self.save_location_type(location_type).await
+            }
             ProjectFieldValue::Point(point) => self.save_point(point).await,
             ProjectFieldValue::Regions(regions) => self.save_regions(regions).await,
-            ProjectFieldValue::LocationDescription(location_description) => self.save_location_description(location_description).await,
+            ProjectFieldValue::LocationDescription(location_description) => {
+                self.save_location_description(location_description).await
+            }
             ProjectFieldValue::SignupUrl(signup_url) => self.save_signup_url(signup_url).await,
-            ProjectFieldValue::OutcomesLabel(outcomes_label) => self.save_outcomes_label(outcomes_label).await,
-            ProjectFieldValue::OutcomesLink(outcomes_link) => self.save_outcomes_link(outcomes_link).await,
+            ProjectFieldValue::OutcomesLabel(outcomes_label) => {
+                self.save_outcomes_label(outcomes_label).await
+            }
+            ProjectFieldValue::OutcomesLink(outcomes_link) => {
+                self.save_outcomes_link(outcomes_link).await
+            }
             ProjectFieldValue::VideoUrl(video_url) => self.save_video_url(video_url).await,
             ProjectFieldValue::BlogUrl(blog_url) => self.save_blog_url(blog_url).await,
-            ProjectFieldValue::TwitterName(twitter_name) => self.save_twitter_name(twitter_name).await,
-            ProjectFieldValue::FacebookPage(facebook_page) => self.save_facebook_page(facebook_page).await,
-            ProjectFieldValue::InstagramPage(instagram_page) => self.save_instagram_page(instagram_page).await,
-            ProjectFieldValue::PracticesHow(practices_how) => self.save_practices_how(practices_how).await,
-            ProjectFieldValue::SearchTerms(search_terms) => self.save_search_terms(search_terms).await,
+            ProjectFieldValue::TwitterName(twitter_name) => {
+                self.save_twitter_name(twitter_name).await
+            }
+            ProjectFieldValue::FacebookPage(facebook_page) => {
+                self.save_facebook_page(facebook_page).await
+            }
+            ProjectFieldValue::InstagramPage(instagram_page) => {
+                self.save_instagram_page(instagram_page).await
+            }
+            ProjectFieldValue::PracticesHow(practices_how) => {
+                self.save_practices_how(practices_how).await
+            }
+            ProjectFieldValue::SearchTerms(search_terms) => {
+                self.save_search_terms(search_terms).await
+            }
             ProjectFieldValue::Difficulty(difficulty) => self.save_difficulty(difficulty).await,
             ProjectFieldValue::Diy(diy) => self.save_diy(*diy).await,
-            ProjectFieldValue::LegacyV1ProjectId(legacy_v1_project_id) => self.save_legacy_v1_project_id(legacy_v1_project_id).await,
-            ProjectFieldValue::LegacyV2ProjectId(legacy_v2_project_id) => self.save_legacy_v2_project_id(legacy_v2_project_id).await,
+            ProjectFieldValue::LegacyV1ProjectId(legacy_v1_project_id) => {
+                self.save_legacy_v1_project_id(legacy_v1_project_id).await
+            }
+            ProjectFieldValue::LegacyV2ProjectId(legacy_v2_project_id) => {
+                self.save_legacy_v2_project_id(legacy_v2_project_id).await
+            }
             ProjectFieldValue::ForeignId(foreign_id) => self.save_foreign_id(foreign_id).await,
-            ProjectFieldValue::PromotionTime(promotion_time) => self.save_promotion_time(*promotion_time).await,
-            ProjectFieldValue::PromotionTarget(promotion_target) => self.save_promotion_target(promotion_target).await,
-            ProjectFieldValue::InatProjectId(inat_project_id) => self.save_inat_project_id(inat_project_id).await,
-            ProjectFieldValue::PageCreatorId(page_creator_id) => self.save_page_creator_id(*page_creator_id).await,
+            ProjectFieldValue::PromotionTime(promotion_time) => {
+                self.save_promotion_time(*promotion_time).await
+            }
+            ProjectFieldValue::PromotionTarget(promotion_target) => {
+                self.save_promotion_target(promotion_target).await
+            }
+            ProjectFieldValue::InatProjectId(inat_project_id) => {
+                self.save_inat_project_id(inat_project_id).await
+            }
+            ProjectFieldValue::PageCreatorId(page_creator_id) => {
+                self.save_page_creator_id(*page_creator_id).await
+            }
             ProjectFieldValue::Extra(extra) => self.save_extra(extra).await,
-            ProjectFieldValue::ParticipantInstructionsEmail(participant_instructions_email) => self.save_participant_instructions_email(participant_instructions_email).await,
-            ProjectFieldValue::ConnectOpaqueUrl(connect_opaque_url) => self.save_connect_opaque_url(connect_opaque_url).await,
-            ProjectFieldValue::ConnectOpaqueUrl1(connect_opaque_url1) => self.save_connect_opaque_url1(connect_opaque_url1).await,
-            ProjectFieldValue::ConnectOpaqueUrl2(connect_opaque_url2) => self.save_connect_opaque_url2(connect_opaque_url2).await,
-            ProjectFieldValue::PrefixHowToLoggedIn(prefix_how_to_logged_in) => self.save_prefix_how_to_logged_in(prefix_how_to_logged_in).await,
-            ProjectFieldValue::PrefixHowToLoggedOut(prefix_how_to_logged_out) => self.save_prefix_how_to_logged_out(prefix_how_to_logged_out).await,
+            ProjectFieldValue::ParticipantInstructionsEmail(participant_instructions_email) => {
+                self.save_participant_instructions_email(participant_instructions_email)
+                    .await
+            }
+            ProjectFieldValue::ConnectOpaqueUrl(connect_opaque_url) => {
+                self.save_connect_opaque_url(connect_opaque_url).await
+            }
+            ProjectFieldValue::ConnectOpaqueUrl1(connect_opaque_url1) => {
+                self.save_connect_opaque_url1(connect_opaque_url1).await
+            }
+            ProjectFieldValue::ConnectOpaqueUrl2(connect_opaque_url2) => {
+                self.save_connect_opaque_url2(connect_opaque_url2).await
+            }
+            ProjectFieldValue::PrefixHowToLoggedIn(prefix_how_to_logged_in) => {
+                self.save_prefix_how_to_logged_in(prefix_how_to_logged_in)
+                    .await
+            }
+            ProjectFieldValue::PrefixHowToLoggedOut(prefix_how_to_logged_out) => {
+                self.save_prefix_how_to_logged_out(prefix_how_to_logged_out)
+                    .await
+            }
             ProjectFieldValue::HowtoVideo(howto_video) => self.save_howto_video(howto_video).await,
-            ProjectFieldValue::TimeRequired(time_required) => self.save_time_required(time_required).await,
-            ProjectFieldValue::TrainingMaterials(training_materials) => self.save_training_materials(training_materials).await,
-            ProjectFieldValue::ClassroomMaterials(classroom_materials) => self.save_classroom_materials(classroom_materials).await,
-            ProjectFieldValue::ConsentStatement(consent_statement) => self.save_consent_statement(consent_statement).await,
-            ProjectFieldValue::ConsentStatementDate(consent_statement_date) => self.save_consent_statement_date(consent_statement_date).await,
-            ProjectFieldValue::ParticipationTools(participation_tools) => self.save_participation_tools(*participation_tools).await,
-            ProjectFieldValue::ParticipationPrompt(participation_prompt) => self.save_participation_prompt(participation_prompt).await,
-            ProjectFieldValue::ParticipationConfirmationMessage(participation_confirmation_message) => self.save_participation_confirmation_message(participation_confirmation_message).await,
-            ProjectFieldValue::ParticipationNotificationEmail(participation_notification_email) => self.save_participation_notification_email(participation_notification_email).await,
-            ProjectFieldValue::ParticipationUsage(participation_usage) => self.save_participation_usage(participation_usage).await,
+            ProjectFieldValue::TimeRequired(time_required) => {
+                self.save_time_required(time_required).await
+            }
+            ProjectFieldValue::TrainingMaterials(training_materials) => {
+                self.save_training_materials(training_materials).await
+            }
+            ProjectFieldValue::ClassroomMaterials(classroom_materials) => {
+                self.save_classroom_materials(classroom_materials).await
+            }
+            ProjectFieldValue::ConsentStatement(consent_statement) => {
+                self.save_consent_statement(consent_statement).await
+            }
+            ProjectFieldValue::ConsentStatementDate(consent_statement_date) => {
+                self.save_consent_statement_date(consent_statement_date)
+                    .await
+            }
+            ProjectFieldValue::ParticipationTools(participation_tools) => {
+                self.save_participation_tools(*participation_tools).await
+            }
+            ProjectFieldValue::ParticipationPrompt(participation_prompt) => {
+                self.save_participation_prompt(participation_prompt).await
+            }
+            ProjectFieldValue::ParticipationConfirmationMessage(
+                participation_confirmation_message,
+            ) => {
+                self.save_participation_confirmation_message(participation_confirmation_message)
+                    .await
+            }
+            ProjectFieldValue::ParticipationNotificationEmail(participation_notification_email) => {
+                self.save_participation_notification_email(participation_notification_email)
+                    .await
+            }
+            ProjectFieldValue::ParticipationUsage(participation_usage) => {
+                self.save_participation_usage(participation_usage).await
+            }
             ProjectFieldValue::PartOf(part_of) => self.save_part_of(part_of).await,
             ProjectFieldValue::Materials(materials) => self.save_materials(materials).await,
             ProjectFieldValue::Gear(gear) => self.save_gear(gear).await,
-            ProjectFieldValue::MobileAppUrlAndroid(mobile_app_url_android) => self.save_mobile_app_url_android(mobile_app_url_android).await,
-            ProjectFieldValue::MobileAppUrlIos(mobile_app_url_ios) => self.save_mobile_app_url_ios(mobile_app_url_ios).await,
-            ProjectFieldValue::MobileAppUrl(mobile_app_url) => self.save_mobile_app_url(mobile_app_url).await,
+            ProjectFieldValue::MobileAppUrlAndroid(mobile_app_url_android) => {
+                self.save_mobile_app_url_android(mobile_app_url_android)
+                    .await
+            }
+            ProjectFieldValue::MobileAppUrlIos(mobile_app_url_ios) => {
+                self.save_mobile_app_url_ios(mobile_app_url_ios).await
+            }
+            ProjectFieldValue::MobileAppUrl(mobile_app_url) => {
+                self.save_mobile_app_url(mobile_app_url).await
+            }
             ProjectFieldValue::OnDemand(on_demand) => self.save_on_demand(*on_demand).await,
             ProjectFieldValue::InPerson(in_person) => self.save_in_person(*in_person).await,
             ProjectFieldValue::Indoors(indoors) => self.save_indoors(*indoors).await,
             ProjectFieldValue::Outdoors(outdoors) => self.save_outdoors(*outdoors).await,
-            ProjectFieldValue::RegionsDescription(regions_description) => self.save_regions_description(regions_description).await,
+            ProjectFieldValue::RegionsDescription(regions_description) => {
+                self.save_regions_description(regions_description).await
+            }
             ProjectFieldValue::Other(other) => self.save_other(other).await,
-            ProjectFieldValue::LocationLanduse(location_landuse) => self.save_location_landuse(location_landuse).await,
-            ProjectFieldValue::UnitedNationsRegion(united_nations_region) => self.save_united_nations_region(united_nations_region).await,
-            ProjectFieldValue::ProjectTiming(project_timing) => self.save_project_timing(project_timing).await,
-            ProjectFieldValue::ParticipationSchedule(participation_schedule) => self.save_participation_schedule(participation_schedule).await,
-            ProjectFieldValue::TimePerParticipation(time_per_participation) => self.save_time_per_participation(time_per_participation).await,
-            ProjectFieldValue::YearStarted(year_started) => self.save_year_started(year_started).await,
-            ProjectFieldValue::YearCompleted(year_completed) => self.save_year_completed(year_completed).await,
-            ProjectFieldValue::MonthCompleted(month_completed) => self.save_month_completed(month_completed).await,
-            ProjectFieldValue::DataResults(data_results) => self.save_data_results(data_results).await,
-            ProjectFieldValue::DataVisualization(data_visualization) => self.save_data_visualization(*data_visualization).await,
-            ProjectFieldValue::DataQuality(data_quality) => self.save_data_quality(*data_quality).await,
-            ProjectFieldValue::MetadataPublicationUrl(metadata_publication_url) => self.save_metadata_publication_url(metadata_publication_url).await,
-            ProjectFieldValue::DataPublicationUrl(data_publication_url) => self.save_data_publication_url(data_publication_url).await,
-            ProjectFieldValue::DataLicense(data_license) => self.save_data_license(data_license).await,
-            ProjectFieldValue::OutcomeOther(outcome_other) => self.save_outcome_other(outcome_other).await,
-            ProjectFieldValue::UniversityAffiliation(university_affiliation) => self.save_university_affiliation(university_affiliation).await,
+            ProjectFieldValue::LocationLanduse(location_landuse) => {
+                self.save_location_landuse(location_landuse).await
+            }
+            ProjectFieldValue::UnitedNationsRegion(united_nations_region) => {
+                self.save_united_nations_region(united_nations_region).await
+            }
+            ProjectFieldValue::ProjectTiming(project_timing) => {
+                self.save_project_timing(project_timing).await
+            }
+            ProjectFieldValue::ParticipationSchedule(participation_schedule) => {
+                self.save_participation_schedule(participation_schedule)
+                    .await
+            }
+            ProjectFieldValue::TimePerParticipation(time_per_participation) => {
+                self.save_time_per_participation(time_per_participation)
+                    .await
+            }
+            ProjectFieldValue::YearStarted(year_started) => {
+                self.save_year_started(year_started).await
+            }
+            ProjectFieldValue::YearCompleted(year_completed) => {
+                self.save_year_completed(year_completed).await
+            }
+            ProjectFieldValue::MonthCompleted(month_completed) => {
+                self.save_month_completed(month_completed).await
+            }
+            ProjectFieldValue::DataResults(data_results) => {
+                self.save_data_results(data_results).await
+            }
+            ProjectFieldValue::DataVisualization(data_visualization) => {
+                self.save_data_visualization(*data_visualization).await
+            }
+            ProjectFieldValue::DataQuality(data_quality) => {
+                self.save_data_quality(*data_quality).await
+            }
+            ProjectFieldValue::MetadataPublicationUrl(metadata_publication_url) => {
+                self.save_metadata_publication_url(metadata_publication_url)
+                    .await
+            }
+            ProjectFieldValue::DataPublicationUrl(data_publication_url) => {
+                self.save_data_publication_url(data_publication_url).await
+            }
+            ProjectFieldValue::DataLicense(data_license) => {
+                self.save_data_license(data_license).await
+            }
+            ProjectFieldValue::OutcomeOther(outcome_other) => {
+                self.save_outcome_other(outcome_other).await
+            }
+            ProjectFieldValue::UniversityAffiliation(university_affiliation) => {
+                self.save_university_affiliation(university_affiliation)
+                    .await
+            }
             ProjectFieldValue::CircuitId(circuit_id) => self.save_circuit_id(circuit_id).await,
-            ProjectFieldValue::SustainableDevelopmentGoals(sustainable_development_goals) => self.save_sustainable_development_goals(sustainable_development_goals).await,
+            ProjectFieldValue::SustainableDevelopmentGoals(sustainable_development_goals) => {
+                self.save_sustainable_development_goals(sustainable_development_goals)
+                    .await
+            }
+            // Array field types
+            ProjectFieldValue::ParticipantFiles(files) => self.save_participant_files(files).await,
+            ProjectFieldValue::Topics(topics) => self.save_topics(topics).await,
+            ProjectFieldValue::FieldsOfScience(fields) => self.save_fields_of_science(fields).await,
+            ProjectFieldValue::Practices(practices) => self.save_practices(practices).await,
+            ProjectFieldValue::Audience(audience) => self.save_audience(audience).await,
+            ProjectFieldValue::GeographicScope(scope) => self.save_geographic_scope(scope).await,
+            ProjectFieldValue::ParticipationTasks(tasks) => self.save_participation_tasks(tasks).await,
+            ProjectFieldValue::Activities(activities) => self.save_activities(activities).await,
+            ProjectFieldValue::DataAggregation(aggregation) => self.save_data_aggregation(aggregation).await,
+            ProjectFieldValue::DataConsent(consent) => self.save_data_consent(consent).await,
+            ProjectFieldValue::DataAccess(access) => self.save_data_access(access).await,
+            ProjectFieldValue::IntendedOutcomes(outcomes) => self.save_intended_outcomes(outcomes).await,
+            ProjectFieldValue::Sponsors(sponsors) => self.save_sponsors(sponsors).await,
+            ProjectFieldValue::Stakeholders(stakeholders) => self.save_stakeholders(stakeholders).await,
+            ProjectFieldValue::AssociatedProjects(projects) => self.save_associated_projects(projects).await,
             _ => {
                 // For field types not yet implemented, return an error
-                Err(anyhow::anyhow!("ProjectFieldValue type {:?} not yet implemented for database save", self.field_type()))
+                Err(anyhow::anyhow!(
+                    "ProjectFieldValue type {:?} not yet implemented for database save",
+                    self.field_type()
+                ))
             }
         }
     }
@@ -2798,7 +3926,7 @@ impl LoadStorePeered for ProjectField {
     //async fn read_from_database<'k>(key: Self::DatabaseKey<'k>) -> Result<Self, Error> {
     async fn read_from_database(key: Self::DatabaseKey) -> Result<Self, Error> {
         let (project_id, field_type) = key;
-        
+
         match field_type {
             ProjectFieldType::Status => Self::read_status(project_id).await,
             ProjectFieldType::Name => Self::read_name(project_id).await,
@@ -2822,13 +3950,19 @@ impl LoadStorePeered for ProjectField {
             ProjectFieldType::Origin => Self::read_origin(project_id).await,
             ProjectFieldType::Suborigin => Self::read_suborigin(project_id).await,
             ProjectFieldType::Guid => Self::read_guid(project_id).await,
-            ProjectFieldType::OpengraphDescription => Self::read_opengraph_description(project_id).await,
+            ProjectFieldType::OpengraphDescription => {
+                Self::read_opengraph_description(project_id).await
+            }
             ProjectFieldType::IsAffiliate => Self::read_is_affiliate(project_id).await,
             ProjectFieldType::IsInaturalist => Self::read_is_inaturalist(project_id).await,
             ProjectFieldType::Welcomed => Self::read_welcomed(project_id).await,
             ProjectFieldType::Created => Self::read_created(project_id).await,
-            ProjectFieldType::ParticipationDegree => Self::read_participation_degree(project_id).await,
-            ProjectFieldType::ParticipantInstructions => Self::read_participant_instructions(project_id).await,
+            ProjectFieldType::ParticipationDegree => {
+                Self::read_participation_degree(project_id).await
+            }
+            ProjectFieldType::ParticipantInstructions => {
+                Self::read_participant_instructions(project_id).await
+            }
             ProjectFieldType::UsFederallyFunded => Self::read_us_federally_funded(project_id).await,
             ProjectFieldType::ImageCredit => Self::read_image_credit(project_id).await,
             ProjectFieldType::HowToJoin => Self::read_how_to_join(project_id).await,
@@ -2844,7 +3978,9 @@ impl LoadStorePeered for ProjectField {
             ProjectFieldType::LocationType => Self::read_location_type(project_id).await,
             ProjectFieldType::Point => Self::read_point(project_id).await,
             ProjectFieldType::Regions => Self::read_regions(project_id).await,
-            ProjectFieldType::LocationDescription => Self::read_location_description(project_id).await,
+            ProjectFieldType::LocationDescription => {
+                Self::read_location_description(project_id).await
+            }
             ProjectFieldType::SignupUrl => Self::read_signup_url(project_id).await,
             ProjectFieldType::OutcomesLabel => Self::read_outcomes_label(project_id).await,
             ProjectFieldType::OutcomesLink => Self::read_outcomes_link(project_id).await,
@@ -2857,65 +3993,736 @@ impl LoadStorePeered for ProjectField {
             ProjectFieldType::SearchTerms => Self::read_search_terms(project_id).await,
             ProjectFieldType::Difficulty => Self::read_difficulty(project_id).await,
             ProjectFieldType::Diy => Self::read_diy(project_id).await,
-            ProjectFieldType::LegacyV1ProjectId => Self::read_legacy_v1_project_id(project_id).await,
-            ProjectFieldType::LegacyV2ProjectId => Self::read_legacy_v2_project_id(project_id).await,
+            ProjectFieldType::LegacyV1ProjectId => {
+                Self::read_legacy_v1_project_id(project_id).await
+            }
+            ProjectFieldType::LegacyV2ProjectId => {
+                Self::read_legacy_v2_project_id(project_id).await
+            }
             ProjectFieldType::ForeignId => Self::read_foreign_id(project_id).await,
             ProjectFieldType::PromotionTime => Self::read_promotion_time(project_id).await,
             ProjectFieldType::PromotionTarget => Self::read_promotion_target(project_id).await,
             ProjectFieldType::InatProjectId => Self::read_inat_project_id(project_id).await,
             ProjectFieldType::PageCreatorId => Self::read_page_creator_id(project_id).await,
             ProjectFieldType::Extra => Self::read_extra(project_id).await,
-            ProjectFieldType::ParticipantInstructionsEmail => Self::read_participant_instructions_email(project_id).await,
+            ProjectFieldType::ParticipantInstructionsEmail => {
+                Self::read_participant_instructions_email(project_id).await
+            }
             ProjectFieldType::ConnectOpaqueUrl => Self::read_connect_opaque_url(project_id).await,
             ProjectFieldType::ConnectOpaqueUrl1 => Self::read_connect_opaque_url1(project_id).await,
             ProjectFieldType::ConnectOpaqueUrl2 => Self::read_connect_opaque_url2(project_id).await,
-            ProjectFieldType::PrefixHowToLoggedIn => Self::read_prefix_how_to_logged_in(project_id).await,
-            ProjectFieldType::PrefixHowToLoggedOut => Self::read_prefix_how_to_logged_out(project_id).await,
+            ProjectFieldType::PrefixHowToLoggedIn => {
+                Self::read_prefix_how_to_logged_in(project_id).await
+            }
+            ProjectFieldType::PrefixHowToLoggedOut => {
+                Self::read_prefix_how_to_logged_out(project_id).await
+            }
             ProjectFieldType::HowtoVideo => Self::read_howto_video(project_id).await,
             ProjectFieldType::TimeRequired => Self::read_time_required(project_id).await,
             ProjectFieldType::TrainingMaterials => Self::read_training_materials(project_id).await,
-            ProjectFieldType::ClassroomMaterials => Self::read_classroom_materials(project_id).await,
+            ProjectFieldType::ClassroomMaterials => {
+                Self::read_classroom_materials(project_id).await
+            }
             ProjectFieldType::ConsentStatement => Self::read_consent_statement(project_id).await,
-            ProjectFieldType::ConsentStatementDate => Self::read_consent_statement_date(project_id).await,
-            ProjectFieldType::ParticipationTools => Self::read_participation_tools(project_id).await,
-            ProjectFieldType::ParticipationPrompt => Self::read_participation_prompt(project_id).await,
-            ProjectFieldType::ParticipationConfirmationMessage => Self::read_participation_confirmation_message(project_id).await,
-            ProjectFieldType::ParticipationNotificationEmail => Self::read_participation_notification_email(project_id).await,
-            ProjectFieldType::ParticipationUsage => Self::read_participation_usage(project_id).await,
+            ProjectFieldType::ConsentStatementDate => {
+                Self::read_consent_statement_date(project_id).await
+            }
+            ProjectFieldType::ParticipationTools => {
+                Self::read_participation_tools(project_id).await
+            }
+            ProjectFieldType::ParticipationPrompt => {
+                Self::read_participation_prompt(project_id).await
+            }
+            ProjectFieldType::ParticipationConfirmationMessage => {
+                Self::read_participation_confirmation_message(project_id).await
+            }
+            ProjectFieldType::ParticipationNotificationEmail => {
+                Self::read_participation_notification_email(project_id).await
+            }
+            ProjectFieldType::ParticipationUsage => {
+                Self::read_participation_usage(project_id).await
+            }
             ProjectFieldType::PartOf => Self::read_part_of(project_id).await,
             ProjectFieldType::Materials => Self::read_materials(project_id).await,
             ProjectFieldType::Gear => Self::read_gear(project_id).await,
-            ProjectFieldType::MobileAppUrlAndroid => Self::read_mobile_app_url_android(project_id).await,
+            ProjectFieldType::MobileAppUrlAndroid => {
+                Self::read_mobile_app_url_android(project_id).await
+            }
             ProjectFieldType::MobileAppUrlIos => Self::read_mobile_app_url_ios(project_id).await,
             ProjectFieldType::MobileAppUrl => Self::read_mobile_app_url(project_id).await,
             ProjectFieldType::OnDemand => Self::read_on_demand(project_id).await,
             ProjectFieldType::InPerson => Self::read_in_person(project_id).await,
             ProjectFieldType::Indoors => Self::read_indoors(project_id).await,
             ProjectFieldType::Outdoors => Self::read_outdoors(project_id).await,
-            ProjectFieldType::RegionsDescription => Self::read_regions_description(project_id).await,
+            ProjectFieldType::RegionsDescription => {
+                Self::read_regions_description(project_id).await
+            }
             ProjectFieldType::Other => Self::read_other(project_id).await,
             ProjectFieldType::LocationLanduse => Self::read_location_landuse(project_id).await,
-            ProjectFieldType::UnitedNationsRegion => Self::read_united_nations_region(project_id).await,
+            ProjectFieldType::UnitedNationsRegion => {
+                Self::read_united_nations_region(project_id).await
+            }
             ProjectFieldType::ProjectTiming => Self::read_project_timing(project_id).await,
-            ProjectFieldType::ParticipationSchedule => Self::read_participation_schedule(project_id).await,
-            ProjectFieldType::TimePerParticipation => Self::read_time_per_participation(project_id).await,
+            ProjectFieldType::ParticipationSchedule => {
+                Self::read_participation_schedule(project_id).await
+            }
+            ProjectFieldType::TimePerParticipation => {
+                Self::read_time_per_participation(project_id).await
+            }
             ProjectFieldType::YearStarted => Self::read_year_started(project_id).await,
             ProjectFieldType::YearCompleted => Self::read_year_completed(project_id).await,
             ProjectFieldType::MonthCompleted => Self::read_month_completed(project_id).await,
             ProjectFieldType::DataResults => Self::read_data_results(project_id).await,
             ProjectFieldType::DataVisualization => Self::read_data_visualization(project_id).await,
             ProjectFieldType::DataQuality => Self::read_data_quality(project_id).await,
-            ProjectFieldType::MetadataPublicationUrl => Self::read_metadata_publication_url(project_id).await,
-            ProjectFieldType::DataPublicationUrl => Self::read_data_publication_url(project_id).await,
+            ProjectFieldType::MetadataPublicationUrl => {
+                Self::read_metadata_publication_url(project_id).await
+            }
+            ProjectFieldType::DataPublicationUrl => {
+                Self::read_data_publication_url(project_id).await
+            }
             ProjectFieldType::DataLicense => Self::read_data_license(project_id).await,
             ProjectFieldType::OutcomeOther => Self::read_outcome_other(project_id).await,
-            ProjectFieldType::UniversityAffiliation => Self::read_university_affiliation(project_id).await,
+            ProjectFieldType::UniversityAffiliation => {
+                Self::read_university_affiliation(project_id).await
+            }
             ProjectFieldType::CircuitId => Self::read_circuit_id(project_id).await,
-            ProjectFieldType::SustainableDevelopmentGoals => Self::read_sustainable_development_goals(project_id).await,
+            ProjectFieldType::SustainableDevelopmentGoals => {
+                Self::read_sustainable_development_goals(project_id).await
+            }
+            // Array field types
+            ProjectFieldType::ParticipantFiles => Self::read_participant_files(project_id).await,
+            ProjectFieldType::Topics => Self::read_topics(project_id).await,
+            ProjectFieldType::FieldsOfScience => Self::read_fields_of_science(project_id).await,
+            ProjectFieldType::Practices => Self::read_practices(project_id).await,
+            ProjectFieldType::Audience => Self::read_audience(project_id).await,
+            ProjectFieldType::GeographicScope => Self::read_geographic_scope(project_id).await,
+            ProjectFieldType::ParticipationTasks => Self::read_participation_tasks(project_id).await,
+            ProjectFieldType::Activities => Self::read_activities(project_id).await,
+            ProjectFieldType::DataAggregation => Self::read_data_aggregation(project_id).await,
+            ProjectFieldType::DataConsent => Self::read_data_consent(project_id).await,
+            ProjectFieldType::DataAccess => Self::read_data_access(project_id).await,
+            ProjectFieldType::IntendedOutcomes => Self::read_intended_outcomes(project_id).await,
+            ProjectFieldType::Sponsors => Self::read_sponsors(project_id).await,
+            ProjectFieldType::Stakeholders => Self::read_stakeholders(project_id).await,
+            ProjectFieldType::AssociatedProjects => Self::read_associated_projects(project_id).await,
             _ => {
                 // For field types not yet implemented, return an error
-                Err(anyhow::anyhow!("ProjectFieldType {:?} not yet implemented for database read", field_type))
+                Err(anyhow::anyhow!(
+                    "ProjectFieldType {:?} not yet implemented for database read",
+                    field_type
+                ))
             }
         }
     }
+}
+
+// Array field read methods implementation
+impl ProjectField {
+    async fn read_participant_files(project_id: Ulid) -> Result<Self, Error> {
+        let project_id_str = project_id.to_string();
+        let rows = sqlx::query!(
+            "SELECT url FROM project_participant_files WHERE project_id = ? ORDER BY url",
+            project_id_str
+        )
+        .fetch_all(db())
+        .await?;
+
+        let urls: Vec<String> = rows.into_iter().map(|row| row.url).collect();
+        Ok(ProjectField {
+            project_id,
+            field: ProjectFieldValue::ParticipantFiles(urls.into_boxed_slice()),
+        })
+    }
+
+    async fn read_topics(project_id: Ulid) -> Result<Self, Error> {
+        let project_id_str = project_id.to_string();
+        let rows = sqlx::query!(
+            "SELECT topic FROM project_topics WHERE project_id = ? ORDER BY topic",
+            project_id_str
+        )
+        .fetch_all(db())
+        .await?;
+
+        let topics: Vec<String> = rows.into_iter().map(|row| row.topic).collect();
+        Ok(ProjectField {
+            project_id,
+            field: ProjectFieldValue::Topics(topics.into_boxed_slice()),
+        })
+    }
+
+    async fn read_fields_of_science(project_id: Ulid) -> Result<Self, Error> {
+        let project_id_str = project_id.to_string();
+        let rows = sqlx::query!(
+            "SELECT field_of_science FROM project_fields_of_science WHERE project_id = ? ORDER BY field_of_science",
+            project_id_str
+        )
+        .fetch_all(db())
+        .await?;
+
+        let fields: Vec<String> = rows.into_iter().map(|row| row.field_of_science).collect();
+        Ok(ProjectField {
+            project_id,
+            field: ProjectFieldValue::FieldsOfScience(fields.into_boxed_slice()),
+        })
+    }
+
+    async fn read_practices(project_id: Ulid) -> Result<Self, Error> {
+        let project_id_str = project_id.to_string();
+        let rows = sqlx::query!(
+            "SELECT practice FROM project_practices WHERE project_id = ? ORDER BY practice",
+            project_id_str
+        )
+        .fetch_all(db())
+        .await?;
+
+        let practices: Vec<String> = rows.into_iter().map(|row| row.practice).collect();
+        Ok(ProjectField {
+            project_id,
+            field: ProjectFieldValue::Practices(practices.into_boxed_slice()),
+        })
+    }
+
+    async fn read_audience(project_id: Ulid) -> Result<Self, Error> {
+        let project_id_str = project_id.to_string();
+        let rows = sqlx::query!(
+            "SELECT audience FROM project_audiences WHERE project_id = ? ORDER BY audience",
+            project_id_str
+        )
+        .fetch_all(db())
+        .await?;
+
+        let audiences: Vec<String> = rows.into_iter().map(|row| row.audience).collect();
+        Ok(ProjectField {
+            project_id,
+            field: ProjectFieldValue::Audience(audiences.into_boxed_slice()),
+        })
+    }
+
+    async fn read_geographic_scope(project_id: Ulid) -> Result<Self, Error> {
+        let project_id_str = project_id.to_string();
+        let rows = sqlx::query!(
+            "SELECT geographic_scope FROM project_geographic_scopes WHERE project_id = ? ORDER BY geographic_scope",
+            project_id_str
+        )
+        .fetch_all(db())
+        .await?;
+
+        let scopes: Vec<String> = rows.into_iter().map(|row| row.geographic_scope).collect();
+        Ok(ProjectField {
+            project_id,
+            field: ProjectFieldValue::GeographicScope(scopes.into_boxed_slice()),
+        })
+    }
+
+    async fn read_participation_tasks(project_id: Ulid) -> Result<Self, Error> {
+        let project_id_str = project_id.to_string();
+        let rows = sqlx::query!(
+            "SELECT participation_task FROM project_participation_tasks WHERE project_id = ? ORDER BY participation_task",
+            project_id_str
+        )
+        .fetch_all(db())
+        .await?;
+
+        let tasks: Vec<String> = rows.into_iter().map(|row| row.participation_task).collect();
+        Ok(ProjectField {
+            project_id,
+            field: ProjectFieldValue::ParticipationTasks(tasks.into_boxed_slice()),
+        })
+    }
+
+    async fn read_activities(project_id: Ulid) -> Result<Self, Error> {
+        let project_id_str = project_id.to_string();
+        let rows = sqlx::query!(
+            "SELECT activity FROM project_activities WHERE project_id = ? ORDER BY activity",
+            project_id_str
+        )
+        .fetch_all(db())
+        .await?;
+
+        let activities: Vec<String> = rows.into_iter().map(|row| row.activity).collect();
+        Ok(ProjectField {
+            project_id,
+            field: ProjectFieldValue::Activities(activities.into_boxed_slice()),
+        })
+    }
+
+    async fn read_data_aggregation(project_id: Ulid) -> Result<Self, Error> {
+        let project_id_str = project_id.to_string();
+        let rows = sqlx::query!(
+            "SELECT data_aggregation FROM project_data_aggregations WHERE project_id = ? ORDER BY data_aggregation",
+            project_id_str
+        )
+        .fetch_all(db())
+        .await?;
+
+        let aggregations: Vec<String> = rows.into_iter().map(|row| row.data_aggregation).collect();
+        Ok(ProjectField {
+            project_id,
+            field: ProjectFieldValue::DataAggregation(aggregations.into_boxed_slice()),
+        })
+    }
+
+    async fn read_data_consent(project_id: Ulid) -> Result<Self, Error> {
+        let project_id_str = project_id.to_string();
+        let rows = sqlx::query!(
+            "SELECT data_consent FROM project_data_consents WHERE project_id = ? ORDER BY data_consent",
+            project_id_str
+        )
+        .fetch_all(db())
+        .await?;
+
+        let consents: Vec<String> = rows.into_iter().map(|row| row.data_consent).collect();
+        Ok(ProjectField {
+            project_id,
+            field: ProjectFieldValue::DataConsent(consents.into_boxed_slice()),
+        })
+    }
+
+    async fn read_data_access(project_id: Ulid) -> Result<Self, Error> {
+        let project_id_str = project_id.to_string();
+        let rows = sqlx::query!(
+            "SELECT data_access FROM project_data_access WHERE project_id = ? ORDER BY data_access",
+            project_id_str
+        )
+        .fetch_all(db())
+        .await?;
+
+        let accesses: Vec<String> = rows.into_iter().map(|row| row.data_access).collect();
+        Ok(ProjectField {
+            project_id,
+            field: ProjectFieldValue::DataAccess(accesses.into_boxed_slice()),
+        })
+    }
+
+    async fn read_intended_outcomes(project_id: Ulid) -> Result<Self, Error> {
+        let project_id_str = project_id.to_string();
+        let rows = sqlx::query!(
+            "SELECT intended_outcome FROM project_intended_outcomes WHERE project_id = ? ORDER BY intended_outcome",
+            project_id_str
+        )
+        .fetch_all(db())
+        .await?;
+
+        let outcomes: Vec<String> = rows.into_iter().map(|row| row.intended_outcome).collect();
+        Ok(ProjectField {
+            project_id,
+            field: ProjectFieldValue::IntendedOutcomes(outcomes.into_boxed_slice()),
+        })
+    }
+
+    async fn read_sponsors(project_id: Ulid) -> Result<Self, Error> {
+        let project_id_str = project_id.to_string();
+        let rows = sqlx::query!(
+            "SELECT sponsor FROM project_sponsors WHERE project_id = ? ORDER BY sponsor",
+            project_id_str
+        )
+        .fetch_all(db())
+        .await?;
+
+        let sponsors: Vec<String> = rows.into_iter().map(|row| row.sponsor).collect();
+        Ok(ProjectField {
+            project_id,
+            field: ProjectFieldValue::Sponsors(sponsors.into_boxed_slice()),
+        })
+    }
+
+    async fn read_stakeholders(project_id: Ulid) -> Result<Self, Error> {
+        let project_id_str = project_id.to_string();
+        let rows = sqlx::query!(
+            "SELECT stakeholder FROM project_stakeholders WHERE project_id = ? ORDER BY stakeholder",
+            project_id_str
+        )
+        .fetch_all(db())
+        .await?;
+
+        let stakeholders: Vec<String> = rows.into_iter().map(|row| row.stakeholder).collect();
+        Ok(ProjectField {
+            project_id,
+            field: ProjectFieldValue::Stakeholders(stakeholders.into_boxed_slice()),
+        })
+    }
+
+    async fn read_associated_projects(project_id: Ulid) -> Result<Self, Error> {
+        let project_id_str = project_id.to_string();
+        let rows = sqlx::query!(
+            "SELECT associated_project_id FROM project_associated_projects WHERE project_id = ? ORDER BY associated_project_id",
+            project_id_str
+        )
+        .fetch_all(db())
+        .await?;
+
+        let project_ids: Result<Vec<Ulid>, _> = rows
+            .into_iter()
+            .map(|row| row.associated_project_id.parse::<Ulid>())
+            .collect();
+
+        Ok(ProjectField {
+            project_id,
+            field: ProjectFieldValue::AssociatedProjects(project_ids?.into_boxed_slice()),
+        })
+    }
+
+    // Array field save methods
+    async fn save_participant_files(&self, files: &[String]) -> Result<(), Error> {
+        let project_id_str = self.project_id.to_string();
+
+        // Delete existing entries
+        sqlx::query!(
+            "DELETE FROM project_participant_files WHERE project_id = ?",
+            project_id_str
+        )
+        .execute(db())
+        .await?;
+
+        // Insert new entries
+        for file in files {
+            sqlx::query!(
+                "INSERT INTO project_participant_files (project_id, url) VALUES (?, ?)",
+                project_id_str,
+                file
+            )
+            .execute(db())
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn save_topics(&self, topics: &[String]) -> Result<(), Error> {
+        let project_id_str = self.project_id.to_string();
+
+        // Delete existing entries
+        sqlx::query!(
+            "DELETE FROM project_topics WHERE project_id = ?",
+            project_id_str
+        )
+        .execute(db())
+        .await?;
+
+        // Insert new entries
+        for topic in topics {
+            sqlx::query!(
+                "INSERT INTO project_topics (project_id, topic) VALUES (?, ?)",
+                project_id_str,
+                topic
+            )
+            .execute(db())
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn save_fields_of_science(&self, fields: &[String]) -> Result<(), Error> {
+        let project_id_str = self.project_id.to_string();
+
+        // Delete existing entries
+        sqlx::query!(
+            "DELETE FROM project_fields_of_science WHERE project_id = ?",
+            project_id_str
+        )
+        .execute(db())
+        .await?;
+
+        // Insert new entries
+        for field in fields {
+            sqlx::query!(
+                "INSERT INTO project_fields_of_science (project_id, field_of_science) VALUES (?, ?)",
+                project_id_str,
+                field
+            )
+            .execute(db())
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn save_practices(&self, practices: &[String]) -> Result<(), Error> {
+        let project_id_str = self.project_id.to_string();
+
+        // Delete existing entries
+        sqlx::query!(
+            "DELETE FROM project_practices WHERE project_id = ?",
+            project_id_str
+        )
+        .execute(db())
+        .await?;
+
+        // Insert new entries
+        for practice in practices {
+            sqlx::query!(
+                "INSERT INTO project_practices (project_id, practice) VALUES (?, ?)",
+                project_id_str,
+                practice
+            )
+            .execute(db())
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn save_audience(&self, audience: &[String]) -> Result<(), Error> {
+        let project_id_str = self.project_id.to_string();
+
+        // Delete existing entries
+        sqlx::query!(
+            "DELETE FROM project_audiences WHERE project_id = ?",
+            project_id_str
+        )
+        .execute(db())
+        .await?;
+
+        // Insert new entries
+        for aud in audience {
+            sqlx::query!(
+                "INSERT INTO project_audiences (project_id, audience) VALUES (?, ?)",
+                project_id_str,
+                aud
+            )
+            .execute(db())
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn save_geographic_scope(&self, scope: &[String]) -> Result<(), Error> {
+        let project_id_str = self.project_id.to_string();
+
+        // Delete existing entries
+        sqlx::query!(
+            "DELETE FROM project_geographic_scopes WHERE project_id = ?",
+            project_id_str
+        )
+        .execute(db())
+        .await?;
+
+        // Insert new entries
+        for location in scope {
+            sqlx::query!(
+                "INSERT INTO project_geographic_scopes (project_id, geographic_scope) VALUES (?, ?)",
+                project_id_str,
+                location
+            )
+            .execute(db())
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn save_participation_tasks(&self, tasks: &[String]) -> Result<(), Error> {
+        let project_id_str = self.project_id.to_string();
+
+        // Delete existing entries
+        sqlx::query!(
+            "DELETE FROM project_participation_tasks WHERE project_id = ?",
+            project_id_str
+        )
+        .execute(db())
+        .await?;
+
+        // Insert new entries
+        for task in tasks {
+            sqlx::query!(
+                "INSERT INTO project_participation_tasks (project_id, participation_task) VALUES (?, ?)",
+                project_id_str,
+                task
+            )
+            .execute(db())
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn save_activities(&self, activities: &[String]) -> Result<(), Error> {
+        let project_id_str = self.project_id.to_string();
+
+        // Delete existing entries
+        sqlx::query!(
+            "DELETE FROM project_activities WHERE project_id = ?",
+            project_id_str
+        )
+        .execute(db())
+        .await?;
+
+        // Insert new entries
+        for activity in activities {
+            sqlx::query!(
+                "INSERT INTO project_activities (project_id, activity) VALUES (?, ?)",
+                project_id_str,
+                activity
+            )
+            .execute(db())
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn save_data_aggregation(&self, aggregation: &[String]) -> Result<(), Error> {
+        let project_id_str = self.project_id.to_string();
+
+        // Delete existing entries
+        sqlx::query!(
+            "DELETE FROM project_data_aggregations WHERE project_id = ?",
+            project_id_str
+        )
+        .execute(db())
+        .await?;
+
+        // Insert new entries
+        for agg in aggregation {
+            sqlx::query!(
+                "INSERT INTO project_data_aggregations (project_id, data_aggregation) VALUES (?, ?)",
+                project_id_str,
+                agg
+            )
+            .execute(db())
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn save_data_consent(&self, consent: &[String]) -> Result<(), Error> {
+        let project_id_str = self.project_id.to_string();
+
+        // Delete existing entries
+        sqlx::query!(
+            "DELETE FROM project_data_consents WHERE project_id = ?",
+            project_id_str
+        )
+        .execute(db())
+        .await?;
+
+        // Insert new entries
+        for cons in consent {
+            sqlx::query!(
+                "INSERT INTO project_data_consents (project_id, data_consent) VALUES (?, ?)",
+                project_id_str,
+                cons
+            )
+            .execute(db())
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn save_data_access(&self, access: &[String]) -> Result<(), Error> {
+        let project_id_str = self.project_id.to_string();
+
+        // Delete existing entries
+        sqlx::query!(
+            "DELETE FROM project_data_access WHERE project_id = ?",
+            project_id_str
+        )
+        .execute(db())
+        .await?;
+
+        // Insert new entries
+        for acc in access {
+            sqlx::query!(
+                "INSERT INTO project_data_access (project_id, data_access) VALUES (?, ?)",
+                project_id_str,
+                acc
+            )
+            .execute(db())
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn save_intended_outcomes(&self, outcomes: &[String]) -> Result<(), Error> {
+        let project_id_str = self.project_id.to_string();
+
+        // Delete existing entries
+        sqlx::query!(
+            "DELETE FROM project_intended_outcomes WHERE project_id = ?",
+            project_id_str
+        )
+        .execute(db())
+        .await?;
+
+        // Insert new entries
+        for outcome in outcomes {
+            sqlx::query!(
+                "INSERT INTO project_intended_outcomes (project_id, intended_outcome) VALUES (?, ?)",
+                project_id_str,
+                outcome
+            )
+            .execute(db())
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn save_sponsors(&self, sponsors: &[String]) -> Result<(), Error> {
+        let project_id_str = self.project_id.to_string();
+
+        // Delete existing entries
+        sqlx::query!(
+            "DELETE FROM project_sponsors WHERE project_id = ?",
+            project_id_str
+        )
+        .execute(db())
+        .await?;
+
+        // Insert new entries
+        for sponsor in sponsors {
+            sqlx::query!(
+                "INSERT INTO project_sponsors (project_id, sponsor) VALUES (?, ?)",
+                project_id_str,
+                sponsor
+            )
+            .execute(db())
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn save_stakeholders(&self, stakeholders: &[String]) -> Result<(), Error> {
+        let project_id_str = self.project_id.to_string();
+
+        // Delete existing entries
+        sqlx::query!(
+            "DELETE FROM project_stakeholders WHERE project_id = ?",
+            project_id_str
+        )
+        .execute(db())
+        .await?;
+
+        // Insert new entries
+        for stakeholder in stakeholders {
+            sqlx::query!(
+                "INSERT INTO project_stakeholders (project_id, stakeholder) VALUES (?, ?)",
+                project_id_str,
+                stakeholder
+            )
+            .execute(db())
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn save_associated_projects(&self, projects: &[Ulid]) -> Result<(), Error> {
+        let project_id_str = self.project_id.to_string();
+
+        // Delete existing entries
+        sqlx::query!(
+            "DELETE FROM project_associated_projects WHERE project_id = ?",
+            project_id_str
+        )
+        .execute(db())
+        .await?;
+
+        // Insert new entries
+        for project in projects {
+            let associated_project_str = project.to_string();
+            sqlx::query!(
+                "INSERT INTO project_associated_projects (project_id, associated_project_id) VALUES (?, ?)",
+                project_id_str,
+                associated_project_str
+            )
+            .execute(db())
+            .await?;
+        }
+        Ok(())
+    }
+
 }

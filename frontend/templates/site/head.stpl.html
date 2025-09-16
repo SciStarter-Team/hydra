@@ -2,21 +2,38 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;700;800;900&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">
-<% if self.enable_webawesome { %>
-  <link rel="stylesheet" href="/-static/webawesome/styles/utilities.css" />
-  <%# Leaving out WebAwesome's native.css on purpose, it's optional and would conflict with Tailwind %>
-  <link rel="stylesheet" href="/-static/webawesome/styles/themes/default.css" />
-<% } %>
+<%# https://tailwindcss.com/docs/styling-with-utility-classes %>
 <link rel=stylesheet href="/-static/css/style.css"/>
+<%# https://htmx.org/docs/ %>
 <script src="/-static/htmx.js"></script>
-<% if self.enable_sse { %><script src="/-static/hx-sse.js"></script><% } %>
+<% if self.enable_sse { %>
+  <%# https://htmx.org/extensions/sse/ %>
+  <script src="/-static/hx-sse.js"></script>
+<% } %>
 <% if self.enable_alpine { %>
+  <%# https://alpinejs.dev/start-here %>
+  <%# Don't use Alpine's AJAX tools, HTMX does it better. Alpine is great for client-side logic and state, though. %>
   <script src="/-static/hx-alpine-morph.js"></script>
   <script src="/-static/alpine-morph.js" defer></script>
   <script src="/-static/alpine.js" defer></script>
 <% } %>
 <% if self.enable_webawesome { %>
+  <%# https://webawesome.com/docs/components/ %>
+  <link rel="stylesheet" href="/-static/webawesome/styles/utilities.css" />
+  <%# Leaving out WebAwesome's native.css on purpose, it's optional and would conflict with Tailwind %>
+  <link rel="stylesheet" href="/-static/webawesome/styles/themes/default.css" />
   <script type="module" src="/-static/webawesome/webawesome.loader.js"></script>
   <style>body:not([data-loading-phase-over]):has(:not(:defined)),:not(:defined){opacity:0;}</style>
   <script>setTimeout(() => {document.body.dataset.loadingPhaseOver=true;}, 2000);</script>
+<% } %>
+<% if self.enable_maplibre { %>
+  <%# https://maplibre.org/maplibre-gl-js/docs/ %>
+  <%# https://openfreemap.org/quick_start/ %>
+  <link href='/-static/maplibre-gl.css' rel='stylesheet' />
+  <script src='/-static/maplibre-gl.js'></script>
+<% } %>
+<% if self.enable_quill { %>
+  <%# https://quilljs.com/docs/quickstart %>
+  <link href="/-static/quill.snow.css" rel="stylesheet" />
+  <script src="/-static/quill.js"></script>
 <% } %>

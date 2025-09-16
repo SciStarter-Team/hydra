@@ -31,6 +31,10 @@ curl -L https://cdn.jsdelivr.net/npm/quill@2/dist/quill.snow.css -o quill.snow.m
 # Lit Web Component framework
 curl -L https://cdn.jsdelivr.net/gh/lit/dist@3/core/lit-core.min.js -o lit-core.min.js
 
+# MapLibre GL
+curl -L https://cdn.jsdelivr.net/npm/maplibre-gl@5/dist/maplibre-gl.min.js -o maplibre-gl.min.js
+curl -L https://cdn.jsdelivr.net/npm/maplibre-gl@5/dist/maplibre-gl.min.css -o maplibre-gl.min.css
+
 # Shoelace component library
 # WebAwesome is the next version of Shoelace
 #jsdl https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace/cdn/ shoelace

@@ -19,12 +19,12 @@
             <div id="modal-message-container"></div>
             
             <!-- Required Fields Section -->
-            <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-                <h4 class="text-md font-medium text-red-900 mb-4">Required Fields</h4>
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <h4 class="text-md font-medium text-blue-900 mb-4">Required Fields</h4>
                 <div class="grid grid-cols-1 gap-4">
                     <!-- Project Title -->
                     <div>
-                        <label for="project-name-required" class="block text-sm font-medium text-red-700">Project Name *</label>
+                        <label for="project-name-required" class="block text-sm font-medium text-blue-700">Project Name *</label>
                         <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/name" hx-target="#project-name-<%= self.project.id %>">
                             <input 
                                 type="text" 
@@ -32,11 +32,11 @@
                                 id="project-name-required"
                                 value="<%= self.project.title %>"
                                 required
-                                class="block w-full px-3 py-2 border border-red-300 rounded-l-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-blue-300 rounded-l-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                             >
                             <button 
                                 type="submit"
-                                class="inline-flex items-center px-3 py-2 border border-l-0 border-red-300 rounded-r-md bg-red-50 hover:bg-red-100 text-sm text-red-700"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-blue-300 rounded-r-md bg-blue-50 hover:bg-blue-100 text-sm text-blue-700"
                             >
                                 Save
                             </button>
@@ -45,18 +45,18 @@
 
                     <!-- Project Description -->
                     <div>
-                        <label for="project-description-required" class="block text-sm font-medium text-red-700">Description *</label>
+                        <label for="project-description-required" class="block text-sm font-medium text-blue-700">Description *</label>
                         <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/description" hx-target="#modal-message-container">
                             <textarea 
                                 name="value"
                                 id="project-description-required" 
                                 rows="3"
                                 required
-                                class="block w-full px-3 py-2 border border-red-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-blue-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                             ><%= self.project.description %></textarea>
                             <button 
                                 type="submit"
-                                class="mt-2 inline-flex items-center px-3 py-2 border border-red-300 rounded-md bg-red-50 hover:bg-red-100 text-sm text-red-700"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-blue-300 rounded-md bg-blue-50 hover:bg-blue-100 text-sm text-blue-700"
                             >
                                 Save Description
                             </button>
@@ -65,18 +65,18 @@
 
                     <!-- Scientific Goal -->
                     <div>
-                        <label for="project-goal-required" class="block text-sm font-medium text-red-700">Scientific Goal *</label>
+                        <label for="project-goal-required" class="block text-sm font-medium text-blue-700">Scientific Goal *</label>
                         <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/goal" hx-target="#modal-message-container">
                             <textarea 
                                 name="value"
                                 id="project-goal-required" 
                                 rows="3"
                                 required
-                                class="block w-full px-3 py-2 border border-red-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-blue-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                             ><%= self.project.goal %></textarea>
                             <button 
                                 type="submit"
-                                class="mt-2 inline-flex items-center px-3 py-2 border border-red-300 rounded-md bg-red-50 hover:bg-red-100 text-sm text-red-700"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-blue-300 rounded-md bg-blue-50 hover:bg-blue-100 text-sm text-blue-700"
                             >
                                 Save Goal
                             </button>
@@ -85,18 +85,18 @@
 
                     <!-- Participant Task -->
                     <div>
-                        <label for="project-task-required" class="block text-sm font-medium text-red-700">Participant Task *</label>
+                        <label for="project-task-required" class="block text-sm font-medium text-blue-700">Participant Task *</label>
                         <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/task" hx-target="#modal-message-container">
                             <textarea 
                                 name="value"
                                 id="project-task-required" 
                                 rows="3"
                                 required
-                                class="block w-full px-3 py-2 border border-red-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-blue-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                             ><%= self.project.task %></textarea>
                             <button 
                                 type="submit"
-                                class="mt-2 inline-flex items-center px-3 py-2 border border-red-300 rounded-md bg-red-50 hover:bg-red-100 text-sm text-red-700"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-blue-300 rounded-md bg-blue-50 hover:bg-blue-100 text-sm text-blue-700"
                             >
                                 Save Task
                             </button>
@@ -105,7 +105,7 @@
 
                     <!-- Image URL -->
                     <div>
-                        <label for="project-image-required" class="block text-sm font-medium text-red-700">Image URL *</label>
+                        <label for="project-image-required" class="block text-sm font-medium text-blue-700">Image URL *</label>
                         <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/image" hx-target="#modal-message-container">
                             <input 
                                 type="url" 
@@ -113,11 +113,11 @@
                                 id="project-image-required"
                                 value="<%= self.project.image %>"
                                 required
-                                class="block w-full px-3 py-2 border border-red-300 rounded-l-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-blue-300 rounded-l-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                             >
                             <button 
                                 type="submit"
-                                class="inline-flex items-center px-3 py-2 border border-l-0 border-red-300 rounded-r-md bg-red-50 hover:bg-red-100 text-sm text-red-700"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-blue-300 rounded-r-md bg-blue-50 hover:bg-blue-100 text-sm text-blue-700"
                             >
                                 Save
                             </button>
@@ -126,7 +126,7 @@
 
                     <!-- Image Credit -->
                     <div>
-                        <label for="image-credit-required" class="block text-sm font-medium text-red-700">Image Credit *</label>
+                        <label for="image-credit-required" class="block text-sm font-medium text-blue-700">Image Credit *</label>
                         <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/image_credit" hx-target="#modal-message-container">
                             <input 
                                 type="text" 
@@ -134,11 +134,11 @@
                                 id="image-credit-required"
                                 value="<%= self.project.image_credit %>"
                                 required
-                                class="block w-full px-3 py-2 border border-red-300 rounded-l-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-blue-300 rounded-l-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                             >
                             <button 
                                 type="submit"
-                                class="inline-flex items-center px-3 py-2 border border-l-0 border-red-300 rounded-r-md bg-red-50 hover:bg-red-100 text-sm text-red-700"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-blue-300 rounded-r-md bg-blue-50 hover:bg-blue-100 text-sm text-blue-700"
                             >
                                 Save
                             </button>
@@ -159,7 +159,7 @@
                                 name="value"
                                 id="project-presenter"
                                 value="<%= self.project.presenter %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -183,7 +183,7 @@
                             <select 
                                 name="value"
                                 id="project-status"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                                 <option value="active"<% if self.project.status == "active" { %> selected<% } %>>Active</option>
                                 <option value="pending"<% if self.project.status == "pending" { %> selected<% } %>>Pending</option>
@@ -206,7 +206,7 @@
                             <select 
                                 name="value"
                                 id="promotion-time"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                                 <option value="Promote at any time"<% if self.project.promotion_time == "Promote at any time" { %> selected<% } %>>Promote at any time</option>
                                 <option value="Do not promote"<% if self.project.promotion_time == "Do not promote" { %> selected<% } %>>Do not promote</option>
@@ -250,7 +250,7 @@
                                     id="project-flagged" 
                                     type="checkbox"
                                     <% if self.project.flagged { %>checked<% } %>
-                                    class="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
+                                    class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                                 >
                                 <label for="project-flagged" class="ml-2 block text-sm text-gray-900">Flagged</label>
                                 <button 
@@ -334,7 +334,7 @@
                                 name="value"
                                 id="promotion-target"
                                 value="<% if let Some(target) = &self.project.promotion_target { %><%= target %><% } %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -373,7 +373,7 @@
                                 name="value"
                                 id="exchange"
                                 value="<% if let Some(exchange) = &self.project.exchange { %><%= exchange %><% } %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -392,7 +392,7 @@
                                 name="value"
                                 id="origin"
                                 value="<%= self.project.origin %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -411,7 +411,7 @@
                                 name="value"
                                 id="suborigin"
                                 value="<%= self.project.suborigin %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -430,7 +430,7 @@
                                 name="value"
                                 id="guid"
                                 value="<%= self.project.guid %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -455,7 +455,7 @@
                                 name="value"
                                 id="project-url"
                                 value="<%= self.project.url %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -475,7 +475,7 @@
                                 name="value"
                                 id="video-url"
                                 value="<%= self.project.video_url %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -494,7 +494,7 @@
                                 name="value"
                                 id="blog-url"
                                 value="<%= self.project.blog_url %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -514,7 +514,7 @@
                                 id="twitter-name"
                                 value="<%= self.project.twitter_name %>"
                                 placeholder="@username"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -533,7 +533,7 @@
                                 name="value"
                                 id="facebook-page"
                                 value="<%= self.project.facebook_page %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -552,7 +552,7 @@
                                 name="value"
                                 id="instagram-page"
                                 value="<%= self.project.instagram_page %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -568,21 +568,21 @@
 
             
             <!-- Admin Section -->
-            <div class="bg-red-50 rounded-lg p-4 border border-red-200">
-                <h4 class="text-md font-medium text-red-900 mb-4">Administrative Settings</h4>
+            <div class="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                <h4 class="text-md font-medium text-blue-900 mb-4">Administrative Settings</h4>
                 <div class="grid grid-cols-1 gap-4">
                     <div>
-                        <label for="admin-notes" class="block text-sm font-medium text-red-700">Admin Notes (Internal Only)</label>
+                        <label for="admin-notes" class="block text-sm font-medium text-blue-700">Admin Notes (Internal Only)</label>
                         <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/admin_notes" hx-target="#modal-message-container">
                             <textarea 
                                 name="value"
                                 id="admin-notes" 
                                 rows="3"
-                                class="block w-full px-3 py-2 border border-red-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm bg-red-50"
+                                class="block w-full px-3 py-2 border border-blue-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-blue-50"
                             ><%= self.project.admin_notes %></textarea>
                             <button 
                                 type="submit"
-                                class="mt-2 inline-flex items-center px-3 py-2 border border-red-300 rounded-md bg-red-100 hover:bg-red-200 text-sm text-red-700"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-blue-300 rounded-md bg-blue-100 hover:bg-red-200 text-sm text-blue-700"
                             >
                                 Save Admin Notes
                             </button>
@@ -597,12 +597,12 @@
                                 id="project-draft" 
                                 type="checkbox"
                                 <% if self.project.draft { %>checked<% } %>
-                                class="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
+                                class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                             >
-                            <label for="project-draft" class="ml-2 block text-sm text-red-900">Draft Status</label>
+                            <label for="project-draft" class="ml-2 block text-sm text-blue-900">Draft Status</label>
                             <button 
                                 type="submit"
-                                class="ml-2 inline-flex items-center px-2 py-1 border border-red-300 rounded text-xs text-red-700 bg-red-100 hover:bg-red-200"
+                                class="ml-2 inline-flex items-center px-2 py-1 border border-blue-300 rounded text-xs text-blue-700 bg-blue-100 hover:bg-red-200"
                             >
                                 Save
                             </button>
@@ -610,18 +610,18 @@
                     </div>
                     
                     <div>
-                        <label for="created" class="block text-sm font-medium text-red-700">Created Date</label>
+                        <label for="created" class="block text-sm font-medium text-blue-700">Created Date</label>
                         <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/created" hx-target="#modal-message-container">
                             <input 
                                 type="datetime-local" 
                                 name="value"
                                 id="created"
                                 value="<%= self.project.created_date %>"
-                                class="block w-full px-3 py-2 border border-red-300 rounded-l-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm bg-red-50"
+                                class="block w-full px-3 py-2 border border-blue-300 rounded-l-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-blue-50"
                             >
                             <button 
                                 type="submit"
-                                class="inline-flex items-center px-3 py-2 border border-l-0 border-red-300 rounded-r-md bg-red-100 hover:bg-red-200 text-sm text-red-700"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-blue-300 rounded-r-md bg-blue-100 hover:bg-red-200 text-sm text-blue-700"
                             >
                                 Save
                             </button>
@@ -642,7 +642,7 @@
                                 name="value"
                                 id="participation-degree"
                                 value="<%= self.project.participation_degree %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -661,7 +661,7 @@
                                 name="value"
                                 id="how-to-join"
                                 value="<%= self.project.how_to_join %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -679,7 +679,7 @@
                                 name="value"
                                 id="participant-instructions" 
                                 rows="4"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             ><%= self.project.participant_instructions %></textarea>
                             <button 
                                 type="submit"
@@ -697,7 +697,7 @@
                                 name="value"
                                 id="participant-instructions-email" 
                                 rows="3"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             ><%= self.project.participant_instructions_email %></textarea>
                             <button 
                                 type="submit"
@@ -715,7 +715,7 @@
                                 name="value"
                                 id="prefix-how-to-logged-in" 
                                 rows="3"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             ><%= self.project.prefix_how_to_logged_in %></textarea>
                             <button 
                                 type="submit"
@@ -733,7 +733,7 @@
                                 name="value"
                                 id="prefix-how-to-logged-out" 
                                 rows="3"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             ><%= self.project.prefix_how_to_logged_out %></textarea>
                             <button 
                                 type="submit"
@@ -752,7 +752,7 @@
                                 name="value"
                                 id="howto-video"
                                 value="<%= self.project.howto_video %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -771,7 +771,7 @@
                                 name="value"
                                 id="training-materials"
                                 value="<%= self.project.training_materials %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -790,7 +790,7 @@
                                 name="value"
                                 id="classroom-materials"
                                 value="<%= self.project.classroom_materials %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -809,7 +809,7 @@
                                 name="value"
                                 id="consent-statement"
                                 value="<%= self.project.consent_statement %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -828,7 +828,7 @@
                                 name="value"
                                 id="consent-statement-date"
                                 value="<% if let Some(date) = &self.project.consent_statement_date { %><%= date %><% } %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -887,7 +887,7 @@
                                 name="value"
                                 id="participation-prompt"
                                 value="<%= self.project.participation_prompt %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -906,7 +906,7 @@
                                 name="value"
                                 id="participation-confirmation-message"
                                 value="<%= self.project.participation_confirmation_message %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -925,7 +925,7 @@
                                 name="value"
                                 id="participation-notification-email"
                                 value="<%= self.project.participation_notification_email %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -944,7 +944,7 @@
                                 name="value"
                                 id="participation-usage"
                                 value="<%= self.project.participation_usage %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -958,7 +958,7 @@
             </div>
             
             <!-- Classification & Content Section -->
-            <div class="bg-green-50 rounded-lg p-4">
+            <div class="bg-gray-50 rounded-lg p-4">
                 <h4 class="text-md font-medium text-gray-900 mb-4">Classification & Content</h4>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
@@ -969,7 +969,7 @@
                                 name="value"
                                 id="project-category"
                                 value=""
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -999,7 +999,7 @@
                                 name="value"
                                 id="opengraph-description" 
                                 rows="3"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             ><%= self.project.opengraph_description %></textarea>
                             <button 
                                 type="submit"
@@ -1011,8 +1011,8 @@
                     </div>
                     
                     <div class="md:col-span-2">
-                        <form hx-put="/-admin/projects/<%= self.project.id %>/field/topics" hx-target="#modal-message-container">
-                            <wa-select name="value" label="Topics" multiple with-clear>
+                        <form hx-put="/-admin/projects/<%= self.project.id %>/multiselect/topics" hx-target="#modal-message-container">
+                            <wa-select name="value[]" label="Topics" multiple with-clear>
                                 <wa-option value="Agriculture"<% if self.project.topics.contains(&"Agriculture".to_string()) { %> selected<% } %>>Agriculture</wa-option>
                                 <wa-option value="Animals"<% if self.project.topics.contains(&"Animals".to_string()) { %> selected<% } %>>Animals</wa-option>
                                 <wa-option value="Astronomy & Space"<% if self.project.topics.contains(&"Astronomy & Space".to_string()) { %> selected<% } %>>Astronomy & Space</wa-option>
@@ -1047,8 +1047,8 @@
                     </div>
                     
                     <div class="md:col-span-2">
-                        <form hx-put="/-admin/projects/<%= self.project.id %>/field/fields_of_science" hx-target="#modal-message-container">
-                            <wa-select name="value" label="Fields of Science" multiple with-clear>
+                        <form hx-put="/-admin/projects/<%= self.project.id %>/multiselect/fields_of_science" hx-target="#modal-message-container">
+                            <wa-select name="value[]" label="Fields of Science" multiple with-clear>
                                 <wa-option value="Astronomy"<% if self.project.fields_of_science.contains(&"Astronomy".to_string()) { %> selected<% } %>>Astronomy</wa-option>
                                 <wa-option value="Biology"<% if self.project.fields_of_science.contains(&"Biology".to_string()) { %> selected<% } %>>Biology</wa-option>
                                 <wa-option value="Chemistry"<% if self.project.fields_of_science.contains(&"Chemistry".to_string()) { %> selected<% } %>>Chemistry</wa-option>
@@ -1060,8 +1060,8 @@
                     </div>
                     
                     <div class="md:col-span-2">
-                        <form hx-put="/-admin/projects/<%= self.project.id %>/field/practices" hx-target="#modal-message-container">
-                            <wa-select name="value" label="Practices" multiple with-clear>
+                        <form hx-put="/-admin/projects/<%= self.project.id %>/multiselect/practices" hx-target="#modal-message-container">
+                            <wa-select name="value[]" label="Practices" multiple with-clear>
                                 <wa-option value="Analyzing and interpreting data"<% if self.project.practices.contains(&"Analyzing and interpreting data".to_string()) { %> selected<% } %>>Analyzing and interpreting data</wa-option>
                                 <wa-option value="Asking questions"<% if self.project.practices.contains(&"Asking questions".to_string()) { %> selected<% } %>>Asking questions</wa-option>
                                 <wa-option value="Constructing explanations"<% if self.project.practices.contains(&"Constructing explanations".to_string()) { %> selected<% } %>>Constructing explanations</wa-option>
@@ -1082,7 +1082,7 @@
                                 name="value"
                                 id="practices-how" 
                                 rows="3"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             ><%= self.project.practices_how %></textarea>
                             <button 
                                 type="submit"
@@ -1102,7 +1102,7 @@
                                 id="search-terms"
                                 value="<%= self.project.search_terms %>"
                                 placeholder="comma, separated, terms"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -1121,7 +1121,7 @@
                                 name="value"
                                 id="special-skills"
                                 value="<%= self.project.special_skills %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -1133,8 +1133,8 @@
                     </div>
                     
                     <div class="md:col-span-2">
-                        <form hx-put="/-admin/projects/<%= self.project.id %>/field/audience" hx-target="#modal-message-container">
-                            <wa-select name="value" label="Audience" multiple with-clear>
+                        <form hx-put="/-admin/projects/<%= self.project.id %>/multiselect/audience" hx-target="#modal-message-container">
+                            <wa-select name="value[]" label="Audience" multiple with-clear>
                                 <wa-option value="Adults"<% if self.project.audience.contains(&"Adults".to_string()) { %> selected<% } %>>Adults</wa-option>
                                 <wa-option value="College"<% if self.project.audience.contains(&"College".to_string()) { %> selected<% } %>>College</wa-option>
                                 <wa-option value="Elementary school (6 - 10 years)"<% if self.project.audience.contains(&"Elementary school (6 - 10 years)".to_string()) { %> selected<% } %>>Elementary school (6 - 10 years)</wa-option>
@@ -1162,7 +1162,7 @@
                                 name="value"
                                 id="location-type"
                                 value="<%= self.project.location_type %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -1181,7 +1181,7 @@
                                 name="value"
                                 id="united-nations-region"
                                 value="<%= self.project.united_nations_region %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -1302,7 +1302,7 @@
                                 name="value"
                                 id="regions"
                                 value="<% if let Some(regions) = &self.project.regions { %><%= regions %><% } %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -1322,7 +1322,7 @@
                                 id="point"
                                 value="<% if let Some(point) = &self.project.point { %><%= point %><% } %>"
                                 placeholder="lat,lng or GeoJSON"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -1340,7 +1340,7 @@
                                 name="value"
                                 id="regions-description" 
                                 rows="2"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             ><%= self.project.regions_description %></textarea>
                             <button 
                                 type="submit"
@@ -1359,7 +1359,7 @@
                                 name="value"
                                 id="address"
                                 value="<%= self.project.address %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -1378,7 +1378,7 @@
                                 name="value"
                                 id="city"
                                 value="<%= self.project.city %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -1397,7 +1397,7 @@
                                 name="value"
                                 id="state"
                                 value="<%= self.project.state %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -1416,7 +1416,7 @@
                                 name="value"
                                 id="zip"
                                 value="<%= self.project.zip %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -1435,7 +1435,7 @@
                                 name="value"
                                 id="country"
                                 value="<%= self.project.country %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -1454,7 +1454,7 @@
                                 name="value"
                                 id="other"
                                 value="<%= self.project.other %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -1473,7 +1473,7 @@
                                 name="value"
                                 id="location-name"
                                 value="<%= self.project.location_name %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -1492,7 +1492,7 @@
                                 name="value"
                                 id="location-landuse"
                                 value="<%= self.project.location_landuse %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -1510,7 +1510,7 @@
                                 name="value"
                                 id="location-description" 
                                 rows="2"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             ><%= self.project.location_description %></textarea>
                             <button 
                                 type="submit"
@@ -1522,22 +1522,12 @@
                     </div>
                     
                     <div class="md:col-span-2">
-                        <label for="geographic-scope" class="block text-sm font-medium text-gray-700">Geographic Scope (JSON Array)</label>
-                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/geographic_scope" hx-target="#modal-message-container">
-                            <textarea 
-                                name="value"
-                                id="geographic-scope" 
-                                rows="2"
-                                placeholder='["regional", "national", "international"]'
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono"
-                            ><%= serde_json::to_string(&self.project.geographic_scope).unwrap_or_default() %></textarea>
-                            <button 
-                                type="submit"
-                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
-                            >
-                                Save Geographic Scope
-                            </button>
-                        </form>
+                        <label class="block text-sm font-medium text-gray-700">Geographic Scope</label>
+                        <div class="mt-1"
+                             hx-get="/-admin/projects/<%= self.project.id %>/array/geographic-scope/items"
+                             hx-trigger="load">
+                            Loading...
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1554,7 +1544,7 @@
                                 name="value"
                                 id="begin-date"
                                 value="<% if let Some(begin) = &self.project.begin { %><%= begin %><% } %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -1573,7 +1563,7 @@
                                 name="value"
                                 id="end-date"
                                 value="<% if let Some(end) = &self.project.end { %><%= end %><% } %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -1592,7 +1582,7 @@
                                 name="value"
                                 id="project-timing"
                                 value="<%= self.project.project_timing %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -1611,7 +1601,7 @@
                                 name="value"
                                 id="participation-schedule"
                                 value="<%= self.project.participation_schedule %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -1630,7 +1620,7 @@
                                 name="value"
                                 id="time-per-participation"
                                 value="<%= self.project.time_per_participation %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -1649,7 +1639,7 @@
                                 name="value"
                                 id="time-required"
                                 value="<%= self.project.time_required %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -1669,7 +1659,7 @@
                                 id="year-started"
                                 value="<% if let Some(year) = &self.project.year_started { %><%= year %><% } %>"
                                 min="1900" max="2100"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -1689,7 +1679,7 @@
                                 id="year-completed"
                                 value="<% if let Some(year) = &self.project.year_completed { %><%= year %><% } %>"
                                 min="1900" max="2100"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -1709,7 +1699,7 @@
                                 id="month-completed"
                                 value="<% if let Some(month) = &self.project.month_completed { %><%= month %><% } %>"
                                 min="1" max="12"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -1721,41 +1711,21 @@
                     </div>
                     
                     <div class="md:col-span-2">
-                        <label for="participation-tasks" class="block text-sm font-medium text-gray-700">Participation Tasks (JSON Array)</label>
-                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/participation_tasks" hx-target="#modal-message-container">
-                            <textarea 
-                                name="value"
-                                id="participation-tasks" 
-                                rows="2"
-                                placeholder='["data_collection", "observation", "analysis"]'
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono"
-                            ><%= serde_json::to_string(&self.project.participation_tasks).unwrap_or_default() %></textarea>
-                            <button 
-                                type="submit"
-                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
-                            >
-                                Save Participation Tasks
-                            </button>
-                        </form>
+                        <label class="block text-sm font-medium text-gray-700">Participation Tasks</label>
+                        <div class="mt-1"
+                             hx-get="/-admin/projects/<%= self.project.id %>/array/participation-tasks/items"
+                             hx-trigger="load">
+                            Loading...
+                        </div>
                     </div>
                     
                     <div class="md:col-span-2">
-                        <label for="activities" class="block text-sm font-medium text-gray-700">Activities (JSON Array)</label>
-                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/activities" hx-target="#modal-message-container">
-                            <textarea 
-                                name="value"
-                                id="activities" 
-                                rows="2"
-                                placeholder='["field_work", "data_entry", "photography"]'
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono"
-                            ><%= serde_json::to_string(&self.project.activities).unwrap_or_default() %></textarea>
-                            <button 
-                                type="submit"
-                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
-                            >
-                                Save Activities
-                            </button>
-                        </form>
+                        <label class="block text-sm font-medium text-gray-700">Activities</label>
+                        <div class="mt-1"
+                             hx-get="/-admin/projects/<%= self.project.id %>/array/activities/items"
+                             hx-trigger="load">
+                            Loading...
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1812,7 +1782,7 @@
                                 name="value"
                                 id="data-license"
                                 value="<%= self.project.data_license %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -1831,7 +1801,7 @@
                                 name="value"
                                 id="metadata-publication-url"
                                 value="<%= self.project.metadata_publication_url %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -1850,7 +1820,7 @@
                                 name="value"
                                 id="data-publication-url"
                                 value="<%= self.project.data_publication_url %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -1868,7 +1838,7 @@
                                 name="value"
                                 id="data-results" 
                                 rows="3"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             ><%= self.project.data_results %></textarea>
                             <button 
                                 type="submit"
@@ -1880,60 +1850,30 @@
                     </div>
                     
                     <div class="md:col-span-2">
-                        <label for="data-aggregation" class="block text-sm font-medium text-gray-700">Data Aggregation (JSON Array)</label>
-                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/data_aggregation" hx-target="#modal-message-container">
-                            <textarea 
-                                name="value"
-                                id="data-aggregation" 
-                                rows="2"
-                                placeholder='["daily", "weekly", "monthly"]'
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono"
-                            ><%= serde_json::to_string(&self.project.data_aggregation).unwrap_or_default() %></textarea>
-                            <button 
-                                type="submit"
-                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
-                            >
-                                Save Data Aggregation
-                            </button>
-                        </form>
+                        <label class="block text-sm font-medium text-gray-700">Data Aggregation</label>
+                        <div class="mt-1"
+                             hx-get="/-admin/projects/<%= self.project.id %>/array/data-aggregation/items"
+                             hx-trigger="load">
+                            Loading...
+                        </div>
                     </div>
                     
                     <div class="md:col-span-2">
-                        <label for="data-consent" class="block text-sm font-medium text-gray-700">Data Consent (JSON Array)</label>
-                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/data_consent" hx-target="#modal-message-container">
-                            <textarea 
-                                name="value"
-                                id="data-consent" 
-                                rows="2"
-                                placeholder='["informed_consent", "opt_in", "opt_out"]'
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono"
-                            ><%= serde_json::to_string(&self.project.data_consent).unwrap_or_default() %></textarea>
-                            <button 
-                                type="submit"
-                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
-                            >
-                                Save Data Consent
-                            </button>
-                        </form>
+                        <label class="block text-sm font-medium text-gray-700">Data Consent</label>
+                        <div class="mt-1"
+                             hx-get="/-admin/projects/<%= self.project.id %>/array/data-consent/items"
+                             hx-trigger="load">
+                            Loading...
+                        </div>
                     </div>
                     
                     <div class="md:col-span-2">
-                        <label for="data-access" class="block text-sm font-medium text-gray-700">Data Access (JSON Array)</label>
-                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/data_access" hx-target="#modal-message-container">
-                            <textarea 
-                                name="value"
-                                id="data-access" 
-                                rows="2"
-                                placeholder='["open", "restricted", "embargoed"]'
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono"
-                            ><%= serde_json::to_string(&self.project.data_access).unwrap_or_default() %></textarea>
-                            <button 
-                                type="submit"
-                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
-                            >
-                                Save Data Access
-                            </button>
-                        </form>
+                        <label class="block text-sm font-medium text-gray-700">Data Access</label>
+                        <div class="mt-1"
+                             hx-get="/-admin/projects/<%= self.project.id %>/array/data-access/items"
+                             hx-trigger="load">
+                            Loading...
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1950,7 +1890,7 @@
                                 name="value"
                                 id="outcomes-label"
                                 value="<%= self.project.outcomes_label %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -1969,7 +1909,7 @@
                                 name="value"
                                 id="outcomes-link"
                                 value="<%= self.project.outcomes_link %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -1988,7 +1928,7 @@
                                 name="value"
                                 id="university-affiliation"
                                 value="<%= self.project.university_affiliation %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -2007,7 +1947,7 @@
                                 name="value"
                                 id="circuit-id"
                                 value="<%= self.project.circuit_id %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -2026,7 +1966,7 @@
                                 name="value"
                                 id="outcome-other"
                                 value="<%= self.project.outcome_other %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -2038,8 +1978,8 @@
                     </div>
                     
                     <div>
-                        <form hx-put="/-admin/projects/<%= self.project.id %>/field/sustainable_development_goals" hx-target="#modal-message-container">
-                            <wa-select name="value" label="Sustainable Development Goals" multiple with-clear>
+                        <form hx-put="/-admin/projects/<%= self.project.id %>/multiselect/sustainable_development_goals" hx-target="#modal-message-container">
+                            <wa-select name="value[]" label="Sustainable Development Goals" multiple with-clear>
                                 <wa-option value="No Poverty">No Poverty</wa-option>
                                 <wa-option value="Zero Hunger">Zero Hunger</wa-option>
                                 <wa-option value="Good Health and Well-being">Good Health and Well-being</wa-option>
@@ -2063,60 +2003,30 @@
                     </div>
                     
                     <div class="md:col-span-2">
-                        <label for="intended-outcomes" class="block text-sm font-medium text-gray-700">Intended Outcomes (JSON Array)</label>
-                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/intended_outcomes" hx-target="#modal-message-container">
-                            <textarea 
-                                name="value"
-                                id="intended-outcomes" 
-                                rows="2"
-                                placeholder='["research", "education", "conservation"]'
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono"
-                            ><%= serde_json::to_string(&self.project.intended_outcomes).unwrap_or_default() %></textarea>
-                            <button 
-                                type="submit"
-                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
-                            >
-                                Save Intended Outcomes
-                            </button>
-                        </form>
+                        <label class="block text-sm font-medium text-gray-700">Intended Outcomes</label>
+                        <div class="mt-1"
+                             hx-get="/-admin/projects/<%= self.project.id %>/array/intended-outcomes/items"
+                             hx-trigger="load">
+                            Loading...
+                        </div>
                     </div>
                     
                     <div class="md:col-span-2">
-                        <label for="sponsors" class="block text-sm font-medium text-gray-700">Sponsors (JSON Array)</label>
-                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/sponsors" hx-target="#modal-message-container">
-                            <textarea 
-                                name="value"
-                                id="sponsors" 
-                                rows="2"
-                                placeholder='["NASA", "NSF", "University of X"]'
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono"
-                            ><%= serde_json::to_string(&self.project.sponsors).unwrap_or_default() %></textarea>
-                            <button 
-                                type="submit"
-                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
-                            >
-                                Save Sponsors
-                            </button>
-                        </form>
+                        <label class="block text-sm font-medium text-gray-700">Sponsors</label>
+                        <div class="mt-1"
+                             hx-get="/-admin/projects/<%= self.project.id %>/array/sponsors/items"
+                             hx-trigger="load">
+                            Loading...
+                        </div>
                     </div>
                     
                     <div class="md:col-span-2">
-                        <label for="stakeholders" class="block text-sm font-medium text-gray-700">Stakeholders (JSON Array)</label>
-                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/stakeholders" hx-target="#modal-message-container">
-                            <textarea 
-                                name="value"
-                                id="stakeholders" 
-                                rows="2"
-                                placeholder='["researchers", "educators", "policy_makers"]'
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono"
-                            ><%= serde_json::to_string(&self.project.stakeholders).unwrap_or_default() %></textarea>
-                            <button 
-                                type="submit"
-                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
-                            >
-                                Save Stakeholders
-                            </button>
-                        </form>
+                        <label class="block text-sm font-medium text-gray-700">Stakeholders</label>
+                        <div class="mt-1"
+                             hx-get="/-admin/projects/<%= self.project.id %>/array/stakeholders/items"
+                             hx-trigger="load">
+                            Loading...
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2133,7 +2043,7 @@
                                 name="value"
                                 id="mobile-app-url-android"
                                 value="<%= self.project.mobile_app_url_android %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -2152,7 +2062,7 @@
                                 name="value"
                                 id="mobile-app-url-ios"
                                 value="<%= self.project.mobile_app_url_ios %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -2171,7 +2081,7 @@
                                 name="value"
                                 id="mobile-app-url"
                                 value="<%= self.project.mobile_app_url %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -2256,7 +2166,7 @@
                                 name="value"
                                 id="inat-project-id"
                                 value="<% if let Some(id) = &self.project.inat_project_id { %><%= id %><% } %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -2275,7 +2185,7 @@
                                 name="value"
                                 id="part-of"
                                 value="<% if let Some(part_of) = &self.project.part_of { %><%= part_of %><% } %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -2294,7 +2204,7 @@
                                 name="value"
                                 id="connect-opaque-url"
                                 value="<%= self.project.connect_opaque_url %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -2313,7 +2223,7 @@
                                 name="value"
                                 id="connect-opaque-url1"
                                 value="<%= self.project.connect_opaque_url1 %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -2332,7 +2242,7 @@
                                 name="value"
                                 id="connect-opaque-url2"
                                 value="<%= self.project.connect_opaque_url2 %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -2344,22 +2254,12 @@
                     </div>
                     
                     <div class="md:col-span-2">
-                        <label for="associated-projects" class="block text-sm font-medium text-gray-700">Associated Projects (JSON Array)</label>
-                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/associated_projects" hx-target="#modal-message-container">
-                            <textarea 
-                                name="value"
-                                id="associated-projects" 
-                                rows="2"
-                                placeholder='["project_id_1", "project_id_2"]'
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono"
-                            ><%= serde_json::to_string(&self.project.associated_projects).unwrap_or_default() %></textarea>
-                            <button 
-                                type="submit"
-                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
-                            >
-                                Save Associated Projects
-                            </button>
-                        </form>
+                        <label class="block text-sm font-medium text-gray-700">Associated Projects</label>
+                        <div class="mt-1"
+                             hx-get="/-admin/projects/<%= self.project.id %>/array/associated-projects/items"
+                             hx-trigger="load">
+                            Loading...
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2376,7 +2276,7 @@
                                 name="value"
                                 id="signup-url"
                                 value="<%= self.project.signup_url %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -2396,7 +2296,7 @@
                                 name="value"
                                 id="total-expense"
                                 value="<% if let Some(expense) = &self.project.total_expense { %><%= expense %><% } %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -2414,7 +2314,7 @@
                                 name="value"
                                 id="materials" 
                                 rows="3"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             ><%= self.project.materials %></textarea>
                             <button 
                                 type="submit"
@@ -2432,7 +2332,7 @@
                                 name="value"
                                 id="gear" 
                                 rows="3"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             ><%= self.project.gear %></textarea>
                             <button 
                                 type="submit"
@@ -2444,22 +2344,12 @@
                     </div>
                     
                     <div class="md:col-span-2">
-                        <label for="participant-files" class="block text-sm font-medium text-gray-700">Participant Files (JSON Array)</label>
-                        <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/participant_files" hx-target="#modal-message-container">
-                            <textarea 
-                                name="value"
-                                id="participant-files" 
-                                rows="2"
-                                placeholder='["file1.pdf", "file2.doc"]'
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono"
-                            ><%= serde_json::to_string(&self.project.participant_files).unwrap_or_default() %></textarea>
-                            <button 
-                                type="submit"
-                                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
-                            >
-                                Save Participant Files
-                            </button>
-                        </form>
+                        <label class="block text-sm font-medium text-gray-700">Participant Files</label>
+                        <div class="mt-1"
+                             hx-get="/-admin/projects/<%= self.project.id %>/array/participant-files/items"
+                             hx-trigger="load">
+                            Loading...
+                        </div>
                     </div>
                     
                     <div class="md:col-span-2">
@@ -2469,7 +2359,7 @@
                                 name="value"
                                 id="contacts" 
                                 rows="4"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white font-mono"
                             ><%= self.project.contacts %></textarea>
                             <button 
                                 type="submit"
@@ -2483,8 +2373,8 @@
             </div>
             
             <!-- System & Editor Tracking Section -->
-            <div class="bg-red-50 rounded-lg p-4 border border-red-200">
-                <h4 class="text-md font-medium text-red-900 mb-4">System & Editor Tracking</h4>
+            <div class="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                <h4 class="text-md font-medium text-blue-900 mb-4">System & Editor Tracking</h4>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="flex items-center">
                         <form class="flex items-center" hx-put="/-admin/projects/<%= self.project.id %>/field/welcomed" hx-target="#modal-message-container">
@@ -2494,12 +2384,12 @@
                                 id="welcomed" 
                                 type="checkbox"
                                 <% if self.project.welcomed { %>checked<% } %>
-                                class="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
+                                class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                             >
-                            <label for="welcomed" class="ml-2 block text-sm text-red-900">Welcomed</label>
+                            <label for="welcomed" class="ml-2 block text-sm text-blue-900">Welcomed</label>
                             <button 
                                 type="submit"
-                                class="ml-2 inline-flex items-center px-2 py-1 border border-red-300 rounded text-xs text-red-700 bg-red-100 hover:bg-red-200"
+                                class="ml-2 inline-flex items-center px-2 py-1 border border-blue-300 rounded text-xs text-blue-700 bg-blue-100 hover:bg-red-200"
                             >
                                 Save
                             </button>
@@ -2507,18 +2397,18 @@
                     </div>
                     
                     <div>
-                        <label for="page-editor-ids" class="block text-sm font-medium text-red-700">Page Editor IDs</label>
+                        <label for="page-editor-ids" class="block text-sm font-medium text-blue-700">Page Editor IDs</label>
                         <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/page_editor_ids" hx-target="#modal-message-container">
                             <input 
                                 type="text" 
                                 name="value"
                                 id="page-editor-ids"
                                 value="<%= self.project.page_editor_ids %>"
-                                class="block w-full px-3 py-2 border border-red-300 rounded-l-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm bg-red-50"
+                                class="block w-full px-3 py-2 border border-blue-300 rounded-l-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-blue-50"
                             >
                             <button 
                                 type="submit"
-                                class="inline-flex items-center px-3 py-2 border border-l-0 border-red-300 rounded-r-md bg-red-100 hover:bg-red-200 text-sm text-red-700"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-blue-300 rounded-r-md bg-blue-100 hover:bg-red-200 text-sm text-blue-700"
                             >
                                 Save
                             </button>
@@ -2527,7 +2417,7 @@
                     
                     
                     <div>
-                        <label for="tags" class="block text-sm font-medium text-red-700">Tags</label>
+                        <label for="tags" class="block text-sm font-medium text-blue-700">Tags</label>
                         <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/tags" hx-target="#modal-message-container">
                             <input 
                                 type="text" 
@@ -2535,11 +2425,11 @@
                                 id="tags"
                                 value="<%= self.project.tags %>"
                                 placeholder="comma,separated,tags"
-                                class="block w-full px-3 py-2 border border-red-300 rounded-l-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm bg-red-50"
+                                class="block w-full px-3 py-2 border border-blue-300 rounded-l-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-blue-50"
                             >
                             <button 
                                 type="submit"
-                                class="inline-flex items-center px-3 py-2 border border-l-0 border-red-300 rounded-r-md bg-red-100 hover:bg-red-200 text-sm text-red-700"
+                                class="inline-flex items-center px-3 py-2 border border-l-0 border-blue-300 rounded-r-md bg-blue-100 hover:bg-red-200 text-sm text-blue-700"
                             >
                                 Save
                             </button>
@@ -2547,17 +2437,17 @@
                     </div>
                     
                     <div class="md:col-span-2">
-                        <label for="extra" class="block text-sm font-medium text-red-700">Extra Data (JSON)</label>
+                        <label for="extra" class="block text-sm font-medium text-blue-700">Extra Data (JSON)</label>
                         <form class="mt-1" hx-put="/-admin/projects/<%= self.project.id %>/field/extra" hx-target="#modal-message-container">
                             <textarea 
                                 name="value"
                                 id="extra" 
                                 rows="4"
-                                class="block w-full px-3 py-2 border border-red-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm font-mono bg-red-50"
+                                class="block w-full px-3 py-2 border border-blue-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm font-mono bg-white"
                             ><%= self.project.extra %></textarea>
                             <button 
                                 type="submit"
-                                class="mt-2 inline-flex items-center px-3 py-2 border border-red-300 rounded-md bg-red-100 hover:bg-red-200 text-sm text-red-700"
+                                class="mt-2 inline-flex items-center px-3 py-2 border border-blue-300 rounded-md bg-blue-100 hover:bg-red-200 text-sm text-blue-700"
                             >
                                 Save Extra Data
                             </button>
@@ -2578,7 +2468,7 @@
                                 name="value"
                                 id="legacy-v1-id"
                                 value="<% if let Some(id) = &self.project.legacy_v1_project_id { %><%= id %><% } %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -2597,7 +2487,7 @@
                                 name="value"
                                 id="legacy-v2-id"
                                 value="<% if let Some(id) = &self.project.legacy_v2_project_id { %><%= id %><% } %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"
@@ -2616,7 +2506,7 @@
                                 name="value"
                                 id="foreign-id"
                                 value="<% if let Some(id) = &self.project.foreign_id { %><%= id %><% } %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                             >
                             <button 
                                 type="submit"

@@ -6,6 +6,8 @@ pub struct Head {
     enable_webawesome: bool,
     enable_sse: bool,
     enable_alpine: bool,
+    enable_quill: bool,
+    enable_maplibre: bool,
 }
 
 impl Default for Head {
@@ -14,6 +16,8 @@ impl Default for Head {
             enable_webawesome: false,
             enable_sse: false,
             enable_alpine: false,
+            enable_quill: false,
+            enable_maplibre: false,
         }
     }
 }
@@ -38,6 +42,18 @@ impl Head {
     }
 
     #[tracing::instrument]
+    pub fn with_quill(mut self) -> Self {
+        self.enable_quill = true;
+        self
+    }
+
+    #[tracing::instrument]
+    pub fn with_maplibre(mut self) -> Self {
+        self.enable_maplibre = true;
+        self
+    }
+
+    #[tracing::instrument]
     pub fn without_webawesome(mut self) -> Self {
         self.enable_webawesome = false;
         self
@@ -52,6 +68,18 @@ impl Head {
     #[tracing::instrument]
     pub fn without_alpine(mut self) -> Self {
         self.enable_alpine = false;
+        self
+    }
+
+    #[tracing::instrument]
+    pub fn without_quill(mut self) -> Self {
+        self.enable_quill = false;
+        self
+    }
+
+    #[tracing::instrument]
+    pub fn without_maplibre(mut self) -> Self {
+        self.enable_maplibre = false;
         self
     }
 }

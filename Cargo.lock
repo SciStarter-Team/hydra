@@ -2263,6 +2263,7 @@ dependencies = [
  "sailfish",
  "serde",
  "serde_json",
+ "serde_qs",
  "sqlx",
  "thiserror 2.0.16",
  "tokio",
@@ -4827,6 +4828,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a93142f0367a4cc53ae0fead1bcda39e85beccfad3dcd717656cacab94b12985"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "serde_qs"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f3faaf9e727533a19351a43cc5a8de957372163c7d35cc48c90b75cdda13c352"
+dependencies = [
+ "percent-encoding",
+ "serde",
+ "thiserror 2.0.16",
 ]
 
 [[package]]
