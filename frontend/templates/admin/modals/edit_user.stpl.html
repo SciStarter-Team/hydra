@@ -153,9 +153,7 @@
                         <button 
                             type="submit"
                             class="relative px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            hx-indicator="#save-loading"
                         >
-                            <span class="htmx-indicator absolute inset-0 flex items-center justify-center bg-black bg-opacity-75 text-white rounded-md" id="save-loading">⏳</span>
                             <span>Save Changes</span>
                         </button>
                     </div>
@@ -192,9 +190,7 @@
                             hx-target="closest div"
                             hx-swap="beforebegin"
                             hx-on:htmx:after-request="if(event.detail.successful) this.parentElement.querySelector('input[type=email]').value = ''"
-                            hx-indicator="#add-email-loading"
                         >
-                            <span class="htmx-indicator absolute inset-0 flex items-center justify-center bg-black bg-opacity-75 text-white rounded" id="add-email-loading">⏳</span>
                             <span>Add Email</span>
                         </button>
                     </div>

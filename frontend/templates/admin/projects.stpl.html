@@ -8,7 +8,6 @@
             hx-swap="innerHTML"
             class="relative inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
         >
-            <span class="htmx-indicator absolute inset-0 flex items-center justify-center bg-black bg-opacity-75 text-white rounded-md" id="new-project-loading">⏳</span>
             <span class="inline-flex items-center">
                 <wa-icon name="plus" class="w-4 h-4 mr-2"></wa-icon>
                 Add Project
@@ -20,12 +19,6 @@
     <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 relative">
         <form id="project-search-form" class="relative">
             <!-- Loading overlay -->
-            <div class="htmx-indicator absolute inset-0 flex items-center justify-center bg-gray-50 bg-opacity-90 rounded-md z-10 pointer-events-none" id="search-loading">
-                <div class="flex items-center space-x-2 text-gray-600">
-                    <span class="text-xl">⏳</span>
-                    <span class="text-sm font-medium">Searching...</span>
-                </div>
-            </div>
             
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0 sm:space-x-4">
                 <div class="flex-1 min-w-0">
@@ -37,7 +30,6 @@
                         hx-target="#projects-content"
                         hx-trigger="keyup changed delay:300ms"
                         hx-include="#project-search-form"
-                        hx-indicator="#search-loading"
                         name="search"
                         value="<%= self.search_term %>"
                     >
@@ -51,7 +43,6 @@
                         hx-target="#projects-content"
                         hx-trigger="change"
                         hx-include="#project-search-form"
-                        hx-indicator="#search-loading"
                     >
                         <option value=""<% if self.selected_status.is_empty() { %> selected<% } %>>All Status</option>
                         <option value="Active"<% if self.selected_status == "Active" { %> selected<% } %>>Active</option>
@@ -67,7 +58,6 @@
                         hx-target="#projects-content"
                         hx-trigger="change"
                         hx-include="#project-search-form"
-                        hx-indicator="#search-loading"
                     >
                         <option value=""<% if self.selected_publish.is_empty() { %> selected<% } %>>All Publish Status</option>
                         <option value="true"<% if self.selected_publish == "true" { %> selected<% } %>>Published</option>
@@ -80,7 +70,6 @@
                         hx-target="#projects-content"
                         hx-trigger="change"
                         hx-include="#project-search-form"
-                        hx-indicator="#search-loading"
                     >
                         <option value=""<% if self.flagged.is_empty() { %> selected<% } %>>All Flagged Status</option>
                         <option value="true"<% if self.flagged == "true" { %> selected<% } %>>Flagged</option>

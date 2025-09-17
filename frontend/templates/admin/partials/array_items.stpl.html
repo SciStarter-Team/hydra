@@ -9,18 +9,26 @@
                         hx-include="this"
                         name="value">
                     <% for option in vocab { %>
-                        <option value="<%= option %>" <% if option == item { %>selected<% } %>><%= option %></option>
+                        <option value="<%= option %>" <% if option == &item.value { %>selected<% } %>><%= option %></option>
                     <% } %>
                 </select>
             <% } else if self.field_type.to_string() == "associated-projects" { %>
-                <%+ crate::admin::autocomplete::EntityAutocomplete::new_project_selector(
-                    "value",
-                    "",
-                    "Select project..."
-                ).with_selected_id(item.parse().ok()).with_read_only(true) %>
+                <% if let Some(name) = &item.resolved_name { %>
+                    <%+ crate::admin::autocomplete::EntityAutocomplete::new_project_selector(
+                        "value",
+                        "",
+                        "Select project..."
+                    ).with_selected(item.value.parse().ok().unwrap_or_default(), name).with_read_only(true) %>
+                <% } else { %>
+                    <%+ crate::admin::autocomplete::EntityAutocomplete::new_project_selector(
+                        "value",
+                        "",
+                        "Select project..."
+                    ).with_selected_id(item.value.parse().ok()).with_read_only(true) %>
+                <% } %>
             <% } else { %>
                 <input type="text"
-                       value="<%= item %>"
+                       value="<%= item.value %>"
                        class="flex-1 px-2 py-1 border border-gray-300 rounded text-sm bg-white"
                        hx-put="/-admin/projects/<%= self.project_id|disp %>/array/<%= self.field_type|disp %>/items/<%= index %>"
                        hx-trigger="blur"

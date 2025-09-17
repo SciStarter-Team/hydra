@@ -2710,16 +2710,66 @@ struct UpdateArrayItemForm {
     value: String,
 }
 
+#[derive(Debug)]
+struct ArrayItem {
+    value: String,
+    resolved_name: Option<String>,
+}
+
 #[derive(Debug, TemplateOnce)]
 #[template(path = "admin/partials/array_items.stpl.html")]
 struct ArrayItems {
     project_id: Ulid,
     field_type: ProjectFieldType,
-    items: Vec<String>,
+    items: Vec<ArrayItem>,
     vocabulary: Option<Vec<String>>,
 }
 
 impl ArrayItems {
+    async fn new_with_resolved_names(
+        project_id: Ulid,
+        field_type: ProjectFieldType,
+        items: Vec<String>,
+    ) -> Result<Self, anyhow::Error> {
+        use crate::admin::autocomplete::resolve_project_names;
+
+        let vocabulary = Self::get_vocabulary(field_type);
+
+        let resolved_items = if field_type == ProjectFieldType::AssociatedProjects {
+            // Parse ULIDs and resolve names
+            let ulids: Vec<Ulid> = items
+                .iter()
+                .filter_map(|s| s.parse::<Ulid>().ok())
+                .collect();
+
+            let resolved_names = resolve_project_names(ulids).await?;
+
+            items
+                .into_iter()
+                .zip(resolved_names.into_iter().map(|(_, name)| Some(name)).chain(std::iter::repeat(None)))
+                .map(|(value, resolved_name)| ArrayItem {
+                    value,
+                    resolved_name,
+                })
+                .collect()
+        } else {
+            items
+                .into_iter()
+                .map(|value| ArrayItem {
+                    value,
+                    resolved_name: None,
+                })
+                .collect()
+        };
+
+        Ok(Self {
+            project_id,
+            field_type,
+            items: resolved_items,
+            vocabulary,
+        })
+    }
+
     fn get_vocabulary(field_type: ProjectFieldType) -> Option<Vec<String>> {
         match field_type {
             ProjectFieldType::ParticipationTasks => Some(
@@ -4250,12 +4300,8 @@ async fn projects_get_array_items(
     let project_field = ProjectField::load((project_ulid, field_enum)).await?;
     let items: Vec<String> = (&project_field).try_into()?;
 
-    let items_html = ArrayItems {
-        project_id: project_ulid,
-        field_type: field_enum,
-        vocabulary: ArrayItems::get_vocabulary(field_enum),
-        items,
-    }.render_once()?;
+    let array_items = ArrayItems::new_with_resolved_names(project_ulid, field_enum, items).await?;
+    let items_html = array_items.render_once()?;
 
     Ok(poem::Response::builder()
         .content_type("text/html")
@@ -4284,12 +4330,8 @@ async fn projects_add_array_item(
     let new_project_field = ProjectField::new_array(project_ulid, field_enum, items.clone())?;
     new_project_field.store().await?;
 
-    let items_html = ArrayItems {
-        project_id: project_ulid,
-        field_type: field_enum,
-        vocabulary: ArrayItems::get_vocabulary(field_enum),
-        items,
-    }.render_once()?;
+    let array_items = ArrayItems::new_with_resolved_names(project_ulid, field_enum, items).await?;
+    let items_html = array_items.render_once()?;
 
     Ok(poem::Response::builder()
         .content_type("text/html")
@@ -4323,12 +4365,8 @@ async fn projects_update_array_item(
     let new_project_field = ProjectField::new_array(project_ulid, field_enum, items.clone())?;
     new_project_field.store().await?;
 
-    let items_html = ArrayItems {
-        project_id: project_ulid,
-        field_type: field_enum,
-        vocabulary: ArrayItems::get_vocabulary(field_enum),
-        items,
-    }.render_once()?;
+    let array_items = ArrayItems::new_with_resolved_names(project_ulid, field_enum, items).await?;
+    let items_html = array_items.render_once()?;
 
     Ok(poem::Response::builder()
         .content_type("text/html")
@@ -4358,12 +4396,8 @@ async fn projects_remove_array_item(
     let new_project_field = ProjectField::new_array(project_ulid, field_enum, items.clone())?;
     new_project_field.store().await?;
 
-    let items_html = ArrayItems {
-        project_id: project_ulid,
-        field_type: field_enum,
-        vocabulary: ArrayItems::get_vocabulary(field_enum),
-        items,
-    }.render_once()?;
+    let array_items = ArrayItems::new_with_resolved_names(project_ulid, field_enum, items).await?;
+    let items_html = array_items.render_once()?;
 
     Ok(poem::Response::builder()
         .content_type("text/html")

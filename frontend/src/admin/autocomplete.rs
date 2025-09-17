@@ -256,6 +256,38 @@ pub async fn resolve_project_name(id: Ulid) -> Result<Option<String>, Error> {
     Ok(row.map(|(name,)| name))
 }
 
+pub async fn resolve_project_names(ids: Vec<Ulid>) -> Result<Vec<(Ulid, String)>, Error> {
+    use common::shared::db;
+
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut query_builder = sqlx::QueryBuilder::new("SELECT project_id, name FROM projects WHERE project_id IN (");
+    let mut separated = query_builder.separated(", ");
+    for id in &ids {
+        separated.push_bind(id.to_string());
+    }
+    separated.push_unseparated(")");
+
+    let rows = query_builder
+        .build_query_as::<(String, String)>()
+        .fetch_all(db())
+        .await?;
+
+    let results = rows
+        .into_iter()
+        .map(|(id_str, name)| -> Result<(Ulid, String), Error> {
+            let id = id_str
+                .parse::<Ulid>()
+                .map_err(|e| anyhow::anyhow!("Invalid ULID in database: {} - {}", id_str, e))?;
+            Ok((id, name))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(results)
+}
+
 pub async fn resolve_event_name(id: Ulid) -> Result<Option<String>, Error> {
     use common::shared::db;
 

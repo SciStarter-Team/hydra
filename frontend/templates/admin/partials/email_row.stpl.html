@@ -17,10 +17,8 @@
         hx-post="/-admin/users/<%= self.user_id %>/emails/<%= self.email.email %>/toggle-verified"
         hx-target="#email-row-<%= self.index %>"
         hx-swap="outerHTML"
-        hx-indicator="#toggle-loading-<%= self.index %>"
         title="<% if self.email.verified { %>Email is verified - click to mark unverified<% } else { %>Email is unverified - click to mark verified<% } %>"
     >
-        <span class="htmx-indicator absolute inset-0 flex items-center justify-center bg-black bg-opacity-75 text-white rounded" id="toggle-loading-<%= self.index %>">⏳</span>
         <span><% if self.email.verified { %>✓<% } else { %>✗<% } %></span>
     </button>
     <button 
@@ -31,9 +29,7 @@
         hx-target="#modal-container"
         hx-swap="innerHTML"
         hx-confirm="Send a password reset email to <%= self.email.email %>?"
-        hx-indicator="#reset-loading-<%= self.index %>"
     >
-        <span class="htmx-indicator absolute inset-0 flex items-center justify-center bg-black bg-opacity-75 text-white rounded" id="reset-loading-<%= self.index %>">⏳</span>
         <span>Send Password Reset</span>
     </button>
     <button 
@@ -43,9 +39,7 @@
         hx-target="#email-row-<%= self.index %>"
         hx-swap="outerHTML"
         hx-confirm="Delete this email address?"
-        hx-indicator="#delete-loading-<%= self.index %>"
     >
-        <span class="htmx-indicator absolute inset-0 flex items-center justify-center bg-black bg-opacity-75 text-white rounded" id="delete-loading-<%= self.index %>">⏳</span>
         <span>Delete</span>
     </button>
 </div>

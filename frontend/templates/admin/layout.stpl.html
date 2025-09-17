@@ -4,7 +4,7 @@
     <%+ self.head %>
     <title><%= self.title %> - Admin</title>
 </head>
-<body class="h-full" x-data="adminApp()">
+<body class="h-full" x-data="adminApp()" hx-indicator="#global-loading-indicator">
     <%+ self.header %>
     
     <div class="flex h-full">
@@ -192,7 +192,14 @@
     </div>
     
     <%+ self.footer %>
-    
+
+    <!-- Global HTMX loading indicator -->
+    <div id="global-loading-indicator" class="htmx-indicator fixed inset-0 flex items-center justify-center z-[100] pointer-events-none">
+        <div class="bg-gray-500 bg-opacity-75 text-white rounded-lg p-8 text-6xl shadow-lg">
+            <span class="inline-block animate-spin">⏳</span>
+        </div>
+    </div>
+
     <script>
         function adminApp() {
             return {
