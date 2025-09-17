@@ -1,6 +1,9 @@
 use crate::component::{AdminLayout, Component, admin_layout::AdminLayoutPrepared};
 use crate::contact::Contact;
 use crate::middleware::authorization::{Authenticated, StaffOnly};
+
+pub mod autocomplete;
+use autocomplete::EntityAutocomplete;
 #[derive(Debug, TemplateOnce)]
 #[template(path = "admin/partials/email_row.stpl.html")]
 struct EmailRow {
@@ -11,7 +14,7 @@ struct EmailRow {
 
 use crate::peering::LoadStorePeered;
 use crate::project::all::ProjectAll;
-use crate::project::field::{ProjectField, ProjectFieldType};
+use crate::project::field::{ProjectField, ProjectFieldType, PARTICIPATION_TASKS_VOCABULARY, ACTIVITIES_VOCABULARY, DATA_AGGREGATION_VOCABULARY, DATA_CONSENT_VOCABULARY, DATA_ACCESS_VOCABULARY, INTENDED_OUTCOMES_VOCABULARY, SPONSORS_VOCABULARY, STAKEHOLDERS_VOCABULARY, DIFFICULTY_VOCABULARY, TOPICS_VOCABULARY, FIELDS_OF_SCIENCE_VOCABULARY, PRACTICES_VOCABULARY, AUDIENCE_VOCABULARY, SUSTAINABLE_DEVELOPMENT_GOALS_VOCABULARY};
 use common::{
     insensitivestring::InsensitiveString,
     message::health::{
@@ -95,6 +98,7 @@ pub fn routes() -> impl Endpoint {
             "/engine-room/sync-page-managers",
             post(engine_room_sync_page_managers),
         )
+        .nest("/autocomplete", autocomplete::routes())
         .with(StaffOnly)
 }
 
@@ -2712,6 +2716,57 @@ struct ArrayItems {
     project_id: Ulid,
     field_type: ProjectFieldType,
     items: Vec<String>,
+    vocabulary: Option<Vec<String>>,
+}
+
+impl ArrayItems {
+    fn get_vocabulary(field_type: ProjectFieldType) -> Option<Vec<String>> {
+        match field_type {
+            ProjectFieldType::ParticipationTasks => Some(
+                PARTICIPATION_TASKS_VOCABULARY.iter().map(|s| s.to_string()).collect()
+            ),
+            ProjectFieldType::Activities => Some(
+                ACTIVITIES_VOCABULARY.iter().map(|s| s.to_string()).collect()
+            ),
+            ProjectFieldType::DataAggregation => Some(
+                DATA_AGGREGATION_VOCABULARY.iter().map(|s| s.to_string()).collect()
+            ),
+            ProjectFieldType::DataConsent => Some(
+                DATA_CONSENT_VOCABULARY.iter().map(|s| s.to_string()).collect()
+            ),
+            ProjectFieldType::DataAccess => Some(
+                DATA_ACCESS_VOCABULARY.iter().map(|s| s.to_string()).collect()
+            ),
+            ProjectFieldType::IntendedOutcomes => Some(
+                INTENDED_OUTCOMES_VOCABULARY.iter().map(|s| s.to_string()).collect()
+            ),
+            ProjectFieldType::Sponsors => Some(
+                SPONSORS_VOCABULARY.iter().map(|s| s.to_string()).collect()
+            ),
+            ProjectFieldType::Stakeholders => Some(
+                STAKEHOLDERS_VOCABULARY.iter().map(|s| s.to_string()).collect()
+            ),
+            ProjectFieldType::Difficulty => Some(
+                DIFFICULTY_VOCABULARY.iter().map(|s| s.to_string()).collect()
+            ),
+            ProjectFieldType::Topics => Some(
+                TOPICS_VOCABULARY.iter().map(|s| s.to_string()).collect()
+            ),
+            ProjectFieldType::FieldsOfScience => Some(
+                FIELDS_OF_SCIENCE_VOCABULARY.iter().map(|s| s.to_string()).collect()
+            ),
+            ProjectFieldType::Practices => Some(
+                PRACTICES_VOCABULARY.iter().map(|s| s.to_string()).collect()
+            ),
+            ProjectFieldType::Audience => Some(
+                AUDIENCE_VOCABULARY.iter().map(|s| s.to_string()).collect()
+            ),
+            ProjectFieldType::SustainableDevelopmentGoals => Some(
+                SUSTAINABLE_DEVELOPMENT_GOALS_VOCABULARY.iter().map(|s| s.to_string()).collect()
+            ),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, TemplateOnce)]
@@ -4198,6 +4253,7 @@ async fn projects_get_array_items(
     let items_html = ArrayItems {
         project_id: project_ulid,
         field_type: field_enum,
+        vocabulary: ArrayItems::get_vocabulary(field_enum),
         items,
     }.render_once()?;
 
@@ -4231,6 +4287,7 @@ async fn projects_add_array_item(
     let items_html = ArrayItems {
         project_id: project_ulid,
         field_type: field_enum,
+        vocabulary: ArrayItems::get_vocabulary(field_enum),
         items,
     }.render_once()?;
 
@@ -4269,6 +4326,7 @@ async fn projects_update_array_item(
     let items_html = ArrayItems {
         project_id: project_ulid,
         field_type: field_enum,
+        vocabulary: ArrayItems::get_vocabulary(field_enum),
         items,
     }.render_once()?;
 
@@ -4303,6 +4361,7 @@ async fn projects_remove_array_item(
     let items_html = ArrayItems {
         project_id: project_ulid,
         field_type: field_enum,
+        vocabulary: ArrayItems::get_vocabulary(field_enum),
         items,
     }.render_once()?;
 

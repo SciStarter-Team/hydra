@@ -1,0 +1,21 @@
+<div data-part=display class="absolute z-10 mt-1 w-full bg-white shadow-lg max-h-60 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none"
+     hx-on:click="
+       let widget = htmx.closest(this, '[data-part=widget]');
+       htmx.find(widget, '[data-part=display]').classList.add('hidden');
+       if(event.target.dataset.id) {
+         htmx.find(widget, '[data-part=storage]').value = event.target.dataset.id;
+         htmx.find(widget, '[data-part=input]').value = event.target.dataset.name;
+       }">
+    <% for result in &self.results { %>
+        <div class="autocomplete-option cursor-pointer px-3 py-2 hover:bg-gray-100 border-b border-gray-100 last:border-b-0"
+             data-id="<%= result.id|disp %>"
+             data-name="<%= result.name %>">
+            <%= result.name %>
+        </div>
+    <% } %>
+    <% if self.results.is_empty() { %>
+        <div class="px-3 py-2 text-gray-500 text-sm">
+            No results found
+        </div>
+    <% } %>
+</div>

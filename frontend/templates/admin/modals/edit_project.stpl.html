@@ -983,10 +983,9 @@
                     <div>
                         <form hx-put="/-admin/projects/<%= self.project.id %>/field/difficulty" hx-target="#modal-message-container">
                             <wa-select name="value" label="Difficulty" with-clear>
-                                <wa-option value="Beginner"<% if self.project.difficulty == "Beginner" { %> selected<% } %>>Beginner</wa-option>
-                                <wa-option value="Intermediate"<% if self.project.difficulty == "Intermediate" { %> selected<% } %>>Intermediate</wa-option>
-                                <wa-option value="Advanced"<% if self.project.difficulty == "Advanced" { %> selected<% } %>>Advanced</wa-option>
-                                <wa-option value="Expert"<% if self.project.difficulty == "Expert" { %> selected<% } %>>Expert</wa-option>
+                                <% for option in crate::project::field::DIFFICULTY_VOCABULARY { %>
+                                    <wa-option value="<%= option %>"<% if self.project.difficulty == *option { %> selected<% } %>><%= option %></wa-option>
+                                <% } %>
                             </wa-select>
                             <button type="submit" class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700">Save</button>
                         </form>
@@ -1013,34 +1012,9 @@
                     <div class="md:col-span-2">
                         <form hx-put="/-admin/projects/<%= self.project.id %>/multiselect/topics" hx-target="#modal-message-container">
                             <wa-select name="value[]" label="Topics" multiple with-clear>
-                                <wa-option value="Agriculture"<% if self.project.topics.contains(&"Agriculture".to_string()) { %> selected<% } %>>Agriculture</wa-option>
-                                <wa-option value="Animals"<% if self.project.topics.contains(&"Animals".to_string()) { %> selected<% } %>>Animals</wa-option>
-                                <wa-option value="Astronomy & Space"<% if self.project.topics.contains(&"Astronomy & Space".to_string()) { %> selected<% } %>>Astronomy & Space</wa-option>
-                                <wa-option value="Awards"<% if self.project.topics.contains(&"Awards".to_string()) { %> selected<% } %>>Awards</wa-option>
-                                <wa-option value="Biology"<% if self.project.topics.contains(&"Biology".to_string()) { %> selected<% } %>>Biology</wa-option>
-                                <wa-option value="Birds"<% if self.project.topics.contains(&"Birds".to_string()) { %> selected<% } %>>Birds</wa-option>
-                                <wa-option value="Chemistry"<% if self.project.topics.contains(&"Chemistry".to_string()) { %> selected<% } %>>Chemistry</wa-option>
-                                <wa-option value="Climate & Weather"<% if self.project.topics.contains(&"Climate & Weather".to_string()) { %> selected<% } %>>Climate & Weather</wa-option>
-                                <wa-option value="Computers & Technology"<% if self.project.topics.contains(&"Computers & Technology".to_string()) { %> selected<% } %>>Computers & Technology</wa-option>
-                                <wa-option value="Crowd Funding"<% if self.project.topics.contains(&"Crowd Funding".to_string()) { %> selected<% } %>>Crowd Funding</wa-option>
-                                <wa-option value="Disaster Response"<% if self.project.topics.contains(&"Disaster Response".to_string()) { %> selected<% } %>>Disaster Response</wa-option>
-                                <wa-option value="Ecology & Environment"<% if self.project.topics.contains(&"Ecology & Environment".to_string()) { %> selected<% } %>>Ecology & Environment</wa-option>
-                                <wa-option value="Education"<% if self.project.topics.contains(&"Education".to_string()) { %> selected<% } %>>Education</wa-option>
-                                <wa-option value="Events"<% if self.project.topics.contains(&"Events".to_string()) { %> selected<% } %>>Events</wa-option>
-                                <wa-option value="Food"<% if self.project.topics.contains(&"Food".to_string()) { %> selected<% } %>>Food</wa-option>
-                                <wa-option value="Geography"<% if self.project.topics.contains(&"Geography".to_string()) { %> selected<% } %>>Geography</wa-option>
-                                <wa-option value="Geology & Earth Science"<% if self.project.topics.contains(&"Geology & Earth Science".to_string()) { %> selected<% } %>>Geology & Earth Science</wa-option>
-                                <wa-option value="Health & Medicine"<% if self.project.topics.contains(&"Health & Medicine".to_string()) { %> selected<% } %>>Health & Medicine</wa-option>
-                                <wa-option value="History, Archeology & Culture"<% if self.project.topics.contains(&"History, Archeology & Culture".to_string()) { %> selected<% } %>>History, Archeology & Culture</wa-option>
-                                <wa-option value="Insects & Pollinators"<% if self.project.topics.contains(&"Insects & Pollinators".to_string()) { %> selected<% } %>>Insects & Pollinators</wa-option>
-                                <wa-option value="Nature & Outdoors"<% if self.project.topics.contains(&"Nature & Outdoors".to_string()) { %> selected<% } %>>Nature & Outdoors</wa-option>
-                                <wa-option value="Ocean, Water, Marine & Terrestrial"<% if self.project.topics.contains(&"Ocean, Water, Marine & Terrestrial".to_string()) { %> selected<% } %>>Ocean, Water, Marine & Terrestrial</wa-option>
-                                <wa-option value="Physics"<% if self.project.topics.contains(&"Physics".to_string()) { %> selected<% } %>>Physics</wa-option>
-                                <wa-option value="Psychology"<% if self.project.topics.contains(&"Psychology".to_string()) { %> selected<% } %>>Psychology</wa-option>
-                                <wa-option value="Science Policy"<% if self.project.topics.contains(&"Science Policy".to_string()) { %> selected<% } %>>Science Policy</wa-option>
-                                <wa-option value="Social Science"<% if self.project.topics.contains(&"Social Science".to_string()) { %> selected<% } %>>Social Science</wa-option>
-                                <wa-option value="Sound"<% if self.project.topics.contains(&"Sound".to_string()) { %> selected<% } %>>Sound</wa-option>
-                                <wa-option value="Transportation"<% if self.project.topics.contains(&"Transportation".to_string()) { %> selected<% } %>>Transportation</wa-option>
+                                <% for option in crate::project::field::TOPICS_VOCABULARY { %>
+                                    <wa-option value="<%= option %>"<% if self.project.topics.contains(&(*option).to_string()) { %> selected<% } %>><%= option %></wa-option>
+                                <% } %>
                             </wa-select>
                             <button type="submit" class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700">Save Topics</button>
                         </form>
@@ -1049,11 +1023,9 @@
                     <div class="md:col-span-2">
                         <form hx-put="/-admin/projects/<%= self.project.id %>/multiselect/fields_of_science" hx-target="#modal-message-container">
                             <wa-select name="value[]" label="Fields of Science" multiple with-clear>
-                                <wa-option value="Astronomy"<% if self.project.fields_of_science.contains(&"Astronomy".to_string()) { %> selected<% } %>>Astronomy</wa-option>
-                                <wa-option value="Biology"<% if self.project.fields_of_science.contains(&"Biology".to_string()) { %> selected<% } %>>Biology</wa-option>
-                                <wa-option value="Chemistry"<% if self.project.fields_of_science.contains(&"Chemistry".to_string()) { %> selected<% } %>>Chemistry</wa-option>
-                                <wa-option value="Ecology"<% if self.project.fields_of_science.contains(&"Ecology".to_string()) { %> selected<% } %>>Ecology</wa-option>
-                                <wa-option value="Physics"<% if self.project.fields_of_science.contains(&"Physics".to_string()) { %> selected<% } %>>Physics</wa-option>
+                                <% for option in crate::project::field::FIELDS_OF_SCIENCE_VOCABULARY { %>
+                                    <wa-option value="<%= option %>"<% if self.project.fields_of_science.contains(&(*option).to_string()) { %> selected<% } %>><%= option %></wa-option>
+                                <% } %>
                             </wa-select>
                             <button type="submit" class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700">Save Fields of Science</button>
                         </form>
@@ -1062,14 +1034,9 @@
                     <div class="md:col-span-2">
                         <form hx-put="/-admin/projects/<%= self.project.id %>/multiselect/practices" hx-target="#modal-message-container">
                             <wa-select name="value[]" label="Practices" multiple with-clear>
-                                <wa-option value="Analyzing and interpreting data"<% if self.project.practices.contains(&"Analyzing and interpreting data".to_string()) { %> selected<% } %>>Analyzing and interpreting data</wa-option>
-                                <wa-option value="Asking questions"<% if self.project.practices.contains(&"Asking questions".to_string()) { %> selected<% } %>>Asking questions</wa-option>
-                                <wa-option value="Constructing explanations"<% if self.project.practices.contains(&"Constructing explanations".to_string()) { %> selected<% } %>>Constructing explanations</wa-option>
-                                <wa-option value="Defining problems"<% if self.project.practices.contains(&"Defining problems".to_string()) { %> selected<% } %>>Defining problems</wa-option>
-                                <wa-option value="Designing solutions"<% if self.project.practices.contains(&"Designing solutions".to_string()) { %> selected<% } %>>Designing solutions</wa-option>
-                                <wa-option value="Developing and using models"<% if self.project.practices.contains(&"Developing and using models".to_string()) { %> selected<% } %>>Developing and using models</wa-option>
-                                <wa-option value="Planning and carrying out investigations"<% if self.project.practices.contains(&"Planning and carrying out investigations".to_string()) { %> selected<% } %>>Planning and carrying out investigations</wa-option>
-                                <wa-option value="Using mathematics and computational thinking"<% if self.project.practices.contains(&"Using mathematics and computational thinking".to_string()) { %> selected<% } %>>Using mathematics and computational thinking</wa-option>
+                                <% for option in crate::project::field::PRACTICES_VOCABULARY { %>
+                                    <wa-option value="<%= option %>"<% if self.project.practices.contains(&(*option).to_string()) { %> selected<% } %>><%= option %></wa-option>
+                                <% } %>
                             </wa-select>
                             <button type="submit" class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700">Save Practices</button>
                         </form>
@@ -1135,14 +1102,9 @@
                     <div class="md:col-span-2">
                         <form hx-put="/-admin/projects/<%= self.project.id %>/multiselect/audience" hx-target="#modal-message-container">
                             <wa-select name="value[]" label="Audience" multiple with-clear>
-                                <wa-option value="Adults"<% if self.project.audience.contains(&"Adults".to_string()) { %> selected<% } %>>Adults</wa-option>
-                                <wa-option value="College"<% if self.project.audience.contains(&"College".to_string()) { %> selected<% } %>>College</wa-option>
-                                <wa-option value="Elementary school (6 - 10 years)"<% if self.project.audience.contains(&"Elementary school (6 - 10 years)".to_string()) { %> selected<% } %>>Elementary school (6 - 10 years)</wa-option>
-                                <wa-option value="Families"<% if self.project.audience.contains(&"Families".to_string()) { %> selected<% } %>>Families</wa-option>
-                                <wa-option value="Graduate students"<% if self.project.audience.contains(&"Graduate students".to_string()) { %> selected<% } %>>Graduate students</wa-option>
-                                <wa-option value="High school (14 - 17 years)"<% if self.project.audience.contains(&"High school (14 - 17 years)".to_string()) { %> selected<% } %>>High school (14 - 17 years)</wa-option>
-                                <wa-option value="Middle school (11 - 13 years)"<% if self.project.audience.contains(&"Middle school (11 - 13 years)".to_string()) { %> selected<% } %>>Middle school (11 - 13 years)</wa-option>
-                                <wa-option value="Seniors"<% if self.project.audience.contains(&"Seniors".to_string()) { %> selected<% } %>>Seniors</wa-option>
+                                <% for option in crate::project::field::AUDIENCE_VOCABULARY { %>
+                                    <wa-option value="<%= option %>"<% if self.project.audience.contains(&(*option).to_string()) { %> selected<% } %>><%= option %></wa-option>
+                                <% } %>
                             </wa-select>
                             <button type="submit" class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700">Save Audience</button>
                         </form>
@@ -1980,23 +1942,9 @@
                     <div>
                         <form hx-put="/-admin/projects/<%= self.project.id %>/multiselect/sustainable_development_goals" hx-target="#modal-message-container">
                             <wa-select name="value[]" label="Sustainable Development Goals" multiple with-clear>
-                                <wa-option value="No Poverty">No Poverty</wa-option>
-                                <wa-option value="Zero Hunger">Zero Hunger</wa-option>
-                                <wa-option value="Good Health and Well-being">Good Health and Well-being</wa-option>
-                                <wa-option value="Quality Education">Quality Education</wa-option>
-                                <wa-option value="Gender Equality">Gender Equality</wa-option>
-                                <wa-option value="Clean Water and Sanitation">Clean Water and Sanitation</wa-option>
-                                <wa-option value="Affordable and Clean Energy">Affordable and Clean Energy</wa-option>
-                                <wa-option value="Decent Work and Economic Growth">Decent Work and Economic Growth</wa-option>
-                                <wa-option value="Industry, Innovation and Infrastructure">Industry, Innovation and Infrastructure</wa-option>
-                                <wa-option value="Reduced Inequality">Reduced Inequality</wa-option>
-                                <wa-option value="Sustainable Cities and Communities">Sustainable Cities and Communities</wa-option>
-                                <wa-option value="Responsible Consumption and Production">Responsible Consumption and Production</wa-option>
-                                <wa-option value="Climate Action">Climate Action</wa-option>
-                                <wa-option value="Life Below Water">Life Below Water</wa-option>
-                                <wa-option value="Life on Land">Life on Land</wa-option>
-                                <wa-option value="Peace, Justice and Strong Institutions">Peace, Justice and Strong Institutions</wa-option>
-                                <wa-option value="Partnerships for the Goals">Partnerships for the Goals</wa-option>
+                                <% for option in crate::project::field::SUSTAINABLE_DEVELOPMENT_GOALS_VOCABULARY { %>
+                                    <wa-option value="<%= option %>"><%= option %></wa-option>
+                                <% } %>
                             </wa-select>
                             <button type="submit" class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700">Save</button>
                         </form>
@@ -2178,18 +2126,17 @@
                     </div>
                     
                     <div>
-                        <label for="part-of" class="block text-sm font-medium text-gray-700">Part Of</label>
-                        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/part_of" hx-target="#modal-message-container">
-                            <input 
-                                type="text" 
-                                name="value"
-                                id="part-of"
-                                value="<% if let Some(part_of) = &self.project.part_of { %><%= part_of %><% } %>"
-                                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
-                            >
-                            <button 
+                        <form hx-put="/-admin/projects/<%= self.project.id %>/field/part_of" hx-target="#modal-message-container">
+                            <%+ crate::admin::autocomplete::EntityAutocomplete::new_project_selector(
+                                "value",
+                                "Part Of",
+                                "Select parent project..."
+                            )
+                            .with_publish_filter(crate::admin::autocomplete::PublishFilter::All)
+                            .with_selected_id(self.project.part_of.as_ref().and_then(|s| s.parse().ok())) %>
+                            <button
                                 type="submit"
-                                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                                class="inline-flex items-center px-3 py-2 mt-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
                             >
                                 Save
                             </button>

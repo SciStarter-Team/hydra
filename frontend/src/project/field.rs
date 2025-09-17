@@ -8,11 +8,201 @@ use crate::{contact::Contact, peering::LoadStorePeered};
 
 use super::{ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus};
 
+// Vocabulary constants for controlled fields
+pub const PARTICIPATION_TASKS_VOCABULARY: &[&str] = &[
+    "Joined the project",
+    "Classification / Transcription",
+    "Data collection",
+    "Participated",
+];
+
+pub const ACTIVITIES_VOCABULARY: &[&str] = &[
+    "On a lunch break",
+    "At sports stadiums",
+    "At night",
+    "At a science center, zoo or aquarium",
+    "At school",
+    "On a walk, run",
+    "Exclusively online",
+    "At the beach",
+    "In snow or rain",
+    "At home",
+    "In the car",
+    "Emergency Response",
+    "On a hike",
+    "While fishing",
+    "In oceans, streams, rivers, lakes",
+];
+
+pub const DATA_AGGREGATION_VOCABULARY: &[&str] = &["Raw", "Aggregated"];
+
+pub const DATA_CONSENT_VOCABULARY: &[&str] = &[
+    "Not at all",
+    "Through a generic terms of use agreement",
+    "Through signature of an informed consent form",
+    "Other",
+];
+
+pub const DATA_ACCESS_VOCABULARY: &[&str] = &[
+    "Bulk download of all data at once (e.g. by FTP download)",
+    "User-customizable download of selected parts",
+    "User-customizable services for computation",
+];
+
+pub const INTENDED_OUTCOMES_VOCABULARY: &[&str] = &[
+    "Civic and community : economic",
+    "Civic and community : empowerment",
+    "Civic and community : media and journalism",
+    "Civic and community : policy",
+    "Civic and community : resilience",
+    "Civic and community : social capital",
+    "Conservation : policy",
+    "Conservation : regulation / mitigation",
+    "Conservation : site management / preservation",
+    "Conservation : species management",
+    "Individual Learning : behavior change",
+    "Individual Learning : interest",
+    "Individual Learning : knowledge",
+    "Individual Learning : motivation",
+    "Individual Learning : self-efficacy (confidence)",
+    "Individual Learning : skills",
+    "Research advancement : baseline monitoring",
+    "Research advancement : build or use sensors / instruments",
+    "Research advancement : data classification",
+    "Research advancement : data gathering",
+    "Research advancement : knowledge generation",
+    "Other : inform public policy",
+    "Other : operational integration or use",
+    "Other : proof of concept",
+    "Other : regulation",
+];
+
+pub const SPONSORS_VOCABULARY: &[&str] = &[
+    "Other/none",
+    "BLM (Bureau of Land Management)",
+    "CDC (Center for Disease Control and Prevention)",
+    "DHS (Department of Homeland Security)",
+    "DOS (Department of State)",
+    "EPA (Environmental Protection Agency)",
+    "FDA (Food and Drug Administration)",
+    "HHS (Department of Health and Human Services)",
+    "NARA (National Archives and Records Administration)",
+    "NASA (National Aeronautics and Space Administration)",
+    "NIH (National Institute of Health)",
+    "NMFS (National Marine Fisheries Service)",
+    "NOAA (National Oceanic and Atmospheric Administration)",
+    "NPS (National Park Service)",
+    "NSF (National Science Foundation)",
+    "NWS (National Weather Service)",
+    "OSTP (Office of Science and Technology Policy)",
+    "SI (Smithsonian Institution)",
+    "SSA (Social Security Administration)",
+    "USAID (U. S. Agency for International Development)",
+    "USDA (U. S. Department of Agriculture)",
+    "USFS (U. S. Forest Service)",
+    "USFWS (U. S. Fish and Wildlife Service)",
+    "USGS (U. S. Geological Survey)",
+    "Other executive branch agency",
+    "Other independent agency",
+    "Other judicial branch agency",
+    "Other legislative branch agency",
+];
+
+pub const STAKEHOLDERS_VOCABULARY: &[&str] = &[
+    "College or university",
+    "Community group",
+    "Federal agency",
+    "Formal non-profit/NGO",
+    "For-profit",
+    "K-12 Education",
+    "Museum",
+    "Other",
+    "State or local government",
+];
+
+pub const DIFFICULTY_VOCABULARY: &[&str] = &["Beginner", "Intermediate", "Advanced", "Expert"];
+
+pub const TOPICS_VOCABULARY: &[&str] = &[
+    "Agriculture",
+    "Animals",
+    "Astronomy & Space",
+    "Awards",
+    "Biology",
+    "Birds",
+    "Chemistry",
+    "Climate & Weather",
+    "Computers & Technology",
+    "Crowd Funding",
+    "Disaster Response",
+    "Ecology & Environment",
+    "Education",
+    "Events",
+    "Food",
+    "Geography",
+    "Geology & Earth Science",
+    "Health & Medicine",
+    "History, Archeology & Culture",
+    "Insects & Pollinators",
+    "Nature & Outdoors",
+    "Ocean, Water, Marine & Terrestrial",
+    "Physics",
+    "Psychology",
+    "Science Policy",
+    "Social Science",
+    "Sound",
+    "Transportation",
+];
+
+pub const FIELDS_OF_SCIENCE_VOCABULARY: &[&str] =
+    &["Astronomy", "Biology", "Chemistry", "Ecology", "Physics"];
+
+pub const PRACTICES_VOCABULARY: &[&str] = &[
+    "Analyzing and interpreting data",
+    "Asking questions",
+    "Constructing explanations",
+    "Defining problems",
+    "Designing solutions",
+    "Developing and using models",
+    "Planning and carrying out investigations",
+    "Using mathematics and computational thinking",
+];
+
+pub const AUDIENCE_VOCABULARY: &[&str] = &[
+    "Adults",
+    "College",
+    "Elementary school (6 - 10 years)",
+    "Families",
+    "Graduate students",
+    "High school (14 - 17 years)",
+    "Middle school (11 - 13 years)",
+    "Seniors",
+];
+
+pub const SUSTAINABLE_DEVELOPMENT_GOALS_VOCABULARY: &[&str] = &[
+    "No Poverty",
+    "Zero Hunger",
+    "Good Health and Well-being",
+    "Quality Education",
+    "Gender Equality",
+    "Clean Water and Sanitation",
+    "Affordable and Clean Energy",
+    "Decent Work and Economic Growth",
+    "Industry, Innovation and Infrastructure",
+    "Reduced Inequality",
+    "Sustainable Cities and Communities",
+    "Responsible Consumption and Production",
+    "Climate Action",
+    "Life Below Water",
+    "Life on Land",
+    "Peace, Justice and Strong Institutions",
+    "Partnerships for the Goals",
+];
+
 // Note: The `tags_text` database column is NOT included in ProjectFieldType
 // as it's a computed field for FTS search optimization, not a real project field.
 // Tags are managed separately via the project_tags table and dedicated handlers.
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum ProjectFieldType {
     ProjectId,
     LegacyV1ProjectId,
@@ -372,7 +562,9 @@ impl TryFrom<&ProjectField> for Vec<String> {
             ProjectFieldValue::IntendedOutcomes(arr) => Ok(arr.to_vec()),
             ProjectFieldValue::Sponsors(arr) => Ok(arr.to_vec()),
             ProjectFieldValue::Stakeholders(arr) => Ok(arr.to_vec()),
-            ProjectFieldValue::AssociatedProjects(arr) => Ok(arr.iter().map(|ulid| ulid.to_string()).collect()),
+            ProjectFieldValue::AssociatedProjects(arr) => {
+                Ok(arr.iter().map(|ulid| ulid.to_string()).collect())
+            }
             _ => Err(anyhow::anyhow!("ProjectField is not an array type")),
         }
     }
@@ -3903,15 +4095,25 @@ impl LoadStorePeered for ProjectField {
             ProjectFieldValue::Practices(practices) => self.save_practices(practices).await,
             ProjectFieldValue::Audience(audience) => self.save_audience(audience).await,
             ProjectFieldValue::GeographicScope(scope) => self.save_geographic_scope(scope).await,
-            ProjectFieldValue::ParticipationTasks(tasks) => self.save_participation_tasks(tasks).await,
+            ProjectFieldValue::ParticipationTasks(tasks) => {
+                self.save_participation_tasks(tasks).await
+            }
             ProjectFieldValue::Activities(activities) => self.save_activities(activities).await,
-            ProjectFieldValue::DataAggregation(aggregation) => self.save_data_aggregation(aggregation).await,
+            ProjectFieldValue::DataAggregation(aggregation) => {
+                self.save_data_aggregation(aggregation).await
+            }
             ProjectFieldValue::DataConsent(consent) => self.save_data_consent(consent).await,
             ProjectFieldValue::DataAccess(access) => self.save_data_access(access).await,
-            ProjectFieldValue::IntendedOutcomes(outcomes) => self.save_intended_outcomes(outcomes).await,
+            ProjectFieldValue::IntendedOutcomes(outcomes) => {
+                self.save_intended_outcomes(outcomes).await
+            }
             ProjectFieldValue::Sponsors(sponsors) => self.save_sponsors(sponsors).await,
-            ProjectFieldValue::Stakeholders(stakeholders) => self.save_stakeholders(stakeholders).await,
-            ProjectFieldValue::AssociatedProjects(projects) => self.save_associated_projects(projects).await,
+            ProjectFieldValue::Stakeholders(stakeholders) => {
+                self.save_stakeholders(stakeholders).await
+            }
+            ProjectFieldValue::AssociatedProjects(projects) => {
+                self.save_associated_projects(projects).await
+            }
             _ => {
                 // For field types not yet implemented, return an error
                 Err(anyhow::anyhow!(
@@ -4097,7 +4299,9 @@ impl LoadStorePeered for ProjectField {
             ProjectFieldType::Practices => Self::read_practices(project_id).await,
             ProjectFieldType::Audience => Self::read_audience(project_id).await,
             ProjectFieldType::GeographicScope => Self::read_geographic_scope(project_id).await,
-            ProjectFieldType::ParticipationTasks => Self::read_participation_tasks(project_id).await,
+            ProjectFieldType::ParticipationTasks => {
+                Self::read_participation_tasks(project_id).await
+            }
             ProjectFieldType::Activities => Self::read_activities(project_id).await,
             ProjectFieldType::DataAggregation => Self::read_data_aggregation(project_id).await,
             ProjectFieldType::DataConsent => Self::read_data_consent(project_id).await,
@@ -4105,7 +4309,9 @@ impl LoadStorePeered for ProjectField {
             ProjectFieldType::IntendedOutcomes => Self::read_intended_outcomes(project_id).await,
             ProjectFieldType::Sponsors => Self::read_sponsors(project_id).await,
             ProjectFieldType::Stakeholders => Self::read_stakeholders(project_id).await,
-            ProjectFieldType::AssociatedProjects => Self::read_associated_projects(project_id).await,
+            ProjectFieldType::AssociatedProjects => {
+                Self::read_associated_projects(project_id).await
+            }
             _ => {
                 // For field types not yet implemented, return an error
                 Err(anyhow::anyhow!(
@@ -4724,5 +4930,4 @@ impl ProjectField {
         }
         Ok(())
     }
-
 }
