@@ -3,6 +3,8 @@ use async_nats::{HeaderMap, Message, subject::ToSubject};
 use errors::DecodeError;
 use futures::StreamExt;
 use serde::de::DeserializeOwned;
+use std::time::Duration;
+use tracing::{warn, debug};
 use ulid::Ulid;
 
 use crate::{shared::nats, timestring::TimeString, ulid::AsUlid};
@@ -204,6 +206,81 @@ where
         .decode_error()?;
 
     decode_structured_message(msg)
+}
+
+/// Publish a structured data message through NATS, wait for a reply,
+/// and decode it into structured data with infinite retry on failure.
+///
+/// This function will retry indefinitely with exponential backoff when requests fail.
+/// It's useful for critical operations that must eventually succeed, especially during
+/// service startup when dependencies may not be immediately available.
+///
+/// The retry delay starts at 100ms and doubles on each failure, up to a maximum
+/// of 30 seconds between attempts.
+///
+/// Note: This function will never return an Err - it retries indefinitely until success.
+/// However, it returns Result<R, anyhow::Error> for API compatibility with the regular
+/// request function.
+pub async fn request_with_retry<R>(
+    subject: impl ToSubject,
+    message: impl serde::Serialize + Clone,
+) -> Result<R, anyhow::Error>
+where
+    R: DeserializeOwned,
+{
+    let mut retry_count = 0u64;
+    let mut delay = Duration::from_millis(100);
+    let subject_str = subject.to_subject();
+
+    loop {
+        match request(subject_str.clone(), message.clone()).await {
+            Ok(response) => {
+                if retry_count > 0 {
+                    debug!(
+                        subject = %subject_str,
+                        retry_count,
+                        "Request succeeded after retries"
+                    );
+                }
+                return Ok(response);
+            }
+            Err(e) => {
+                retry_count += 1;
+
+                // Log first few attempts as warnings, then reduce to debug to avoid spam
+                if retry_count <= 3 {
+                    warn!(
+                        subject = %subject_str,
+                        retry_count,
+                        delay_ms = delay.as_millis(),
+                        error = %e,
+                        "Request failed, retrying"
+                    );
+                } else if retry_count % 10 == 0 {
+                    // Log every 10th attempt to show we're still trying
+                    warn!(
+                        subject = %subject_str,
+                        retry_count,
+                        delay_ms = delay.as_millis(),
+                        "Request still failing after {} attempts",
+                        retry_count
+                    );
+                } else {
+                    debug!(
+                        subject = %subject_str,
+                        retry_count,
+                        error = %e,
+                        "Request failed, retrying"
+                    );
+                }
+
+                tokio::time::sleep(delay).await;
+
+                // Exponential backoff, capped at 30 seconds
+                delay = std::cmp::min(delay * 2, Duration::from_secs(30));
+            }
+        }
+    }
 }
 
 /// A convenience wrapper around [`common::service::send`] for sending

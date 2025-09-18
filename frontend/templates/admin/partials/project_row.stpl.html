@@ -87,15 +87,13 @@
   <div class="lg:col-span-1">
     <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Actions</div>
     <div class="flex items-center space-x-2">
-      <button 
-          hx-get="/-admin/projects/<%= self.project.id %>"
-          hx-target="#modal-container"
-          hx-swap="innerHTML"
-          class="text-indigo-600 hover:text-indigo-900 p-1 rounded hover:bg-indigo-50"
+      <a
+          href="/-admin/projects/<%= self.project.id %>"
+          class="text-indigo-600 hover:text-indigo-900 p-1 rounded hover:bg-indigo-50 inline-flex items-center"
           title="Edit project"
       >
         <wa-icon name="pencil" class="w-4 h-4"></wa-icon>
-      </button>
+      </a>
       <% if self.project.flagged { %>
         <button 
             hx-put="/-admin/projects/<%= self.project.id %>/field/flagged"

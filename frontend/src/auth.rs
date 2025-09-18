@@ -4,7 +4,7 @@ use common::{
         location::LocationInfo,
         user::{BasicInfo, Login, Signup},
     },
-    service::{log_activity, request},
+    service::{log_activity, request, request_with_retry},
 };
 use poem::{
     IntoResponse, Response, handler,
@@ -123,7 +123,7 @@ pub async fn signup_action(
     };
 
     // Call user-service's signup via NATS
-    match request::<Option<BasicInfo>>("user.auth.signup", signup_request).await {
+    match request_with_retry::<Option<BasicInfo>>("user.auth.signup", signup_request).await {
         Ok(Some(basic_info)) => {
             // Store user info in session
             session.set("basic_info", &basic_info);
@@ -149,7 +149,8 @@ pub async fn signup_action(
             Redirect::see_other("/login?signup=failed").into_response()
         }
         Err(_) => {
-            // Service error
+            // This should never happen since request_with_retry retries indefinitely
+            // But we include it for completeness
             Redirect::see_other("/login?signup=error").into_response()
         }
     }
@@ -172,7 +173,7 @@ pub async fn login_action(session: &Session, Form(form): Form<LoginForm>) -> Res
     };
 
     // Call user-service's login via NATS
-    match request::<Option<BasicInfo>>("user.auth.login", login_request).await {
+    match request_with_retry::<Option<BasicInfo>>("user.auth.login", login_request).await {
         Ok(Some(basic_info)) => {
             // Merge session tags with user tags if any exist
             let session_tags = session_tags::clear(session);
@@ -211,7 +212,8 @@ pub async fn login_action(session: &Session, Form(form): Form<LoginForm>) -> Res
             }
         }
         Err(_) => {
-            // Service error
+            // This should never happen since request_with_retry retries indefinitely
+            // But we include it for completeness
             if let Some(next) = next {
                 Redirect::see_other(format!("/login?system=true&next={next}")).into_response()
             } else {

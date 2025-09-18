@@ -492,21 +492,21 @@ impl TryFrom<&str> for ProjectFieldType {
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s {
-            "participant-files" => Ok(ProjectFieldType::ParticipantFiles),
+            "participant_files" => Ok(ProjectFieldType::ParticipantFiles),
             "topics" => Ok(ProjectFieldType::Topics),
-            "fields-of-science" => Ok(ProjectFieldType::FieldsOfScience),
+            "fields_of_science" => Ok(ProjectFieldType::FieldsOfScience),
             "practices" => Ok(ProjectFieldType::Practices),
             "audience" => Ok(ProjectFieldType::Audience),
-            "geographic-scope" => Ok(ProjectFieldType::GeographicScope),
-            "participation-tasks" => Ok(ProjectFieldType::ParticipationTasks),
+            "geographic_scope" => Ok(ProjectFieldType::GeographicScope),
+            "participation_tasks" => Ok(ProjectFieldType::ParticipationTasks),
             "activities" => Ok(ProjectFieldType::Activities),
-            "data-aggregation" => Ok(ProjectFieldType::DataAggregation),
-            "data-consent" => Ok(ProjectFieldType::DataConsent),
-            "data-access" => Ok(ProjectFieldType::DataAccess),
-            "intended-outcomes" => Ok(ProjectFieldType::IntendedOutcomes),
+            "data_aggregation" => Ok(ProjectFieldType::DataAggregation),
+            "data_consent" => Ok(ProjectFieldType::DataConsent),
+            "data_access" => Ok(ProjectFieldType::DataAccess),
+            "intended_outcomes" => Ok(ProjectFieldType::IntendedOutcomes),
             "sponsors" => Ok(ProjectFieldType::Sponsors),
             "stakeholders" => Ok(ProjectFieldType::Stakeholders),
-            "associated-projects" => Ok(ProjectFieldType::AssociatedProjects),
+            "associated_projects" => Ok(ProjectFieldType::AssociatedProjects),
             _ => Err(anyhow::anyhow!("Unsupported array field type: {}", s)),
         }
     }
@@ -515,21 +515,21 @@ impl TryFrom<&str> for ProjectFieldType {
 impl std::fmt::Display for ProjectFieldType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            ProjectFieldType::ParticipantFiles => "participant-files",
+            ProjectFieldType::ParticipantFiles => "participant_files",
             ProjectFieldType::Topics => "topics",
-            ProjectFieldType::FieldsOfScience => "fields-of-science",
+            ProjectFieldType::FieldsOfScience => "fields_of_science",
             ProjectFieldType::Practices => "practices",
             ProjectFieldType::Audience => "audience",
-            ProjectFieldType::GeographicScope => "geographic-scope",
-            ProjectFieldType::ParticipationTasks => "participation-tasks",
+            ProjectFieldType::GeographicScope => "geographic_scope",
+            ProjectFieldType::ParticipationTasks => "participation_tasks",
             ProjectFieldType::Activities => "activities",
-            ProjectFieldType::DataAggregation => "data-aggregation",
-            ProjectFieldType::DataConsent => "data-consent",
-            ProjectFieldType::DataAccess => "data-access",
-            ProjectFieldType::IntendedOutcomes => "intended-outcomes",
+            ProjectFieldType::DataAggregation => "data_aggregation",
+            ProjectFieldType::DataConsent => "data_consent",
+            ProjectFieldType::DataAccess => "data_access",
+            ProjectFieldType::IntendedOutcomes => "intended_outcomes",
             ProjectFieldType::Sponsors => "sponsors",
             ProjectFieldType::Stakeholders => "stakeholders",
-            ProjectFieldType::AssociatedProjects => "associated-projects",
+            ProjectFieldType::AssociatedProjects => "associated_projects",
             _ => return Err(std::fmt::Error),
         };
         write!(f, "{}", s)

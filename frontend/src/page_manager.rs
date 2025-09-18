@@ -1,7 +1,7 @@
 use anyhow::Error;
 use common::{
     message::user::{PageManagerSyncRequest, PageManagerSyncResponse, PageManagerUpdateRequest, PageManagerUpdateResponse},
-    service::request,
+    service::request_with_retry,
     shared::db,
 };
 use ulid::Ulid;
@@ -17,21 +17,21 @@ pub async fn sync_all_page_managers() -> Result<PageManagerSyncResponse, Error> 
     };
     
     // Send bulk sync request to user service
-    request("user.page_manager.sync", sync_request).await
+    request_with_retry("user.page_manager.sync", sync_request).await
 }
 
 /// Update page manager status for a specific user
 pub async fn update_user_page_manager_status(user_id: Ulid) -> Result<PageManagerUpdateResponse, Error> {
     // Check if this user is a page editor for any projects or events
     let is_page_manager = user_is_page_editor(user_id).await?;
-    
+
     let update_request = PageManagerUpdateRequest {
         user_id,
         is_page_manager,
     };
-    
-    // Send individual update request to user service
-    request("user.page_manager.update", update_request).await
+
+    // Send individual update request to user service with retry
+    request_with_retry("user.page_manager.update", update_request).await
 }
 
 /// Query the frontend database to get all user IDs that should be page managers
@@ -88,12 +88,9 @@ async fn user_is_page_editor(user_id: Ulid) -> Result<bool, Error> {
 pub async fn trigger_page_manager_sync_for_users(user_ids: &[Ulid]) -> Result<(), Error> {
     // Update status for all affected users
     for &user_id in user_ids {
-        if let Err(e) = update_user_page_manager_status(user_id).await {
-            eprintln!("Failed to update page manager status for user {}: {}", user_id, e);
-            // Continue with other users even if one fails
-        }
+        update_user_page_manager_status(user_id).await?;
     }
-    
+
     Ok(())
 }
 

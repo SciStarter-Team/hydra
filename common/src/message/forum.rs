@@ -144,7 +144,7 @@ pub struct CreateForum {
     pub display_order: Option<i32>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UpdateForum {
     pub user_id: Ulid,
     pub forum_id: Ulid,
@@ -168,14 +168,14 @@ pub struct ContentFilterResult {
 }
 
 // Forum moderator management messages
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AddForumModerator {
     pub requester_id: Ulid,
     pub forum_id: Ulid,
     pub user_id: Ulid,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RemoveForumModerator {
     pub requester_id: Ulid,
     pub forum_id: Ulid,
@@ -213,14 +213,14 @@ pub struct ForumCategoryInfo {
     pub updated_at: Option<TimeString>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CreateForumCategory {
     pub user_id: Ulid,
     pub forum_id: Ulid,
     pub category_name: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UpdateForumCategory {
     pub user_id: Ulid,
     pub category_id: Ulid,
@@ -228,7 +228,7 @@ pub struct UpdateForumCategory {
     pub is_active: Option<bool>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DeleteForumCategory {
     pub user_id: Ulid,
     pub category_id: Ulid,

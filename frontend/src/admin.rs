@@ -32,7 +32,7 @@ use common::{
         UserEmailAddRequest, UserEmailDeleteRequest, UserEmailResponse,
         UserEmailToggleVerifiedRequest, UserEmailUpdateRequest,
     },
-    service::{request, request_timeout},
+    service::{request, request_timeout, request_with_retry},
     shared::db,
     timestring::TimeString,
 };
@@ -2094,7 +2094,7 @@ async fn users_delete(
         user_id: parsed_user_id,
     };
 
-    match request::<AdminUserDeleteResponse>("user.admin.user_delete", delete_request).await {
+    match request_with_retry::<AdminUserDeleteResponse>("user.admin.user_delete", delete_request).await {
         Ok(response) => {
             if response.success {
                 // Success - return empty response to remove the table row
@@ -2107,12 +2107,13 @@ async fn users_delete(
                     .body("Failed to delete user"))
             }
         }
-        Err(e) => {
-            // Return error response
+        Err(_) => {
+            // This should never happen since request_with_retry retries indefinitely
+            // But we include it for completeness
             Ok(poem::Response::builder()
                 .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
                 .content_type("text/html")
-                .body(format!("Error: {}", e)))
+                .body("Service error"))
         }
     }
 }
@@ -2149,7 +2150,7 @@ async fn users_password_reset(
         email: form.reset_email,
     };
 
-    match request::<AdminPasswordResetResponse>("user.admin.password_reset", reset_request).await {
+    match request_with_retry::<AdminPasswordResetResponse>("user.admin.password_reset", reset_request).await {
         Ok(response) => {
             if response.success {
                 // Success - show success message via out-of-band update
@@ -2205,7 +2206,7 @@ async fn users_create(
         verified: form.verified,
     };
 
-    match request::<AdminUserResponse>("user.admin.user_create", create_request).await {
+    match request_with_retry::<AdminUserResponse>("user.admin.user_create", create_request).await {
         Ok(_response) => {
             // Success - close modal and refresh users table with updated data
             match request::<AdminUserListResponse>(
@@ -2301,7 +2302,7 @@ async fn users_update(
         is_active: form.active,
     };
 
-    match request::<AdminUserResponse>("user.admin.user_update", update_request).await {
+    match request_with_retry::<AdminUserResponse>("user.admin.user_update", update_request).await {
         Ok(response) => {
             // Success - close modal and update the specific user row with OOB
             let updated_user = &response.user;
@@ -2437,7 +2438,7 @@ async fn users_emails_add(
         email: form.new_email,
     };
 
-    match request::<UserEmailResponse>("user.admin.email_add", email_request).await {
+    match request_with_retry::<UserEmailResponse>("user.admin.email_add", email_request).await {
         Ok(response) => {
             if response.success {
                 // Find the newly added email and render just that row
@@ -2491,7 +2492,7 @@ async fn users_emails_update(
         new_email: form.new_email,
     };
 
-    match request::<UserEmailResponse>("user.admin.email_update", email_request).await {
+    match request_with_retry::<UserEmailResponse>("user.admin.email_update", email_request).await {
         Ok(response) => {
             if response.success {
                 // Find the updated email and render just that row
@@ -2546,7 +2547,7 @@ async fn users_emails_delete(
         email: email.clone(),
     };
 
-    match request::<UserEmailResponse>("user.admin.email_delete", email_request).await {
+    match request_with_retry::<UserEmailResponse>("user.admin.email_delete", email_request).await {
         Ok(response) => {
             if response.success {
                 // Return empty content to remove the row
@@ -2581,7 +2582,7 @@ async fn users_emails_toggle_verified(
         email: email.clone(),
     };
 
-    match request::<AdminUserResponse>("user.admin.email_toggle_verified", email_request).await {
+    match request_with_retry::<AdminUserResponse>("user.admin.email_toggle_verified", email_request).await {
         Ok(response) => {
             // Find the toggled email and render just that row
             if let Some((index, updated_email)) = response
@@ -2678,10 +2679,33 @@ pub struct ProjectRow {
     pub oob_swap: String,
 }
 
+#[derive(Debug)]
+struct EditProjectPage {
+    project: AdminProjectFull,
+}
+
+impl Component for EditProjectPage {
+    type Param = Option<Arc<BasicInfo>>;
+    type Prepared = AdminLayoutPrepared;
+
+    async fn prepare(self, user_info: Self::Param) -> anyhow::Result<Self::Prepared> {
+        let title = self.project.title.clone();
+        let content = EditProjectContent { project: self.project };
+        let content_html = content.render_once()?;
+
+        AdminLayout::new(&format!("Edit Project: {}", title))
+            .with_breadcrumb("Projects", Some("/-admin/projects"))
+            .with_breadcrumb(&title, None)
+            .with_sidebar_active("projects")
+            .with_content(content_html)
+            .prepare(user_info)
+            .await
+    }
+}
+
 #[derive(Debug, TemplateOnce)]
-#[template(path = "admin/modals/edit_project.stpl.html")]
-struct EditProjectForm {
-    title: String,
+#[template(path = "admin/edit_project_content.stpl.html")]
+struct EditProjectContent {
     project: AdminProjectFull,
 }
 
@@ -3062,7 +3086,7 @@ async fn ulid_to_email(user_id: Option<Ulid>) -> String {
 #[handler]
 async fn projects_edit(
     Path(project_id): Path<String>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     // Parse project ID and load real project data
     let project_ulid = project_id
@@ -3073,12 +3097,9 @@ async fn projects_edit(
     let project_all = ProjectAll::load(project_ulid).await?;
     let project = AdminProjectFull::from_project_all(project_all).await?;
 
-    let edit_project_form = EditProjectForm {
-        title: format!("Edit Project: {}", project.title),
-        project,
-    };
+    let edit_project_page = EditProjectPage { project };
 
-    Ok(edit_project_form.into_response(None).await?)
+    Ok(edit_project_page.into_response(user_info).await?)
 }
 
 #[handler]
@@ -4166,38 +4187,82 @@ async fn projects_update_field(
             };
 
             // Create the updated project row for out-of-band swap
-            use sailfish::TemplateOnce;
-            let project_row = ProjectRow {
-                project: admin_project,
-                oob: false,
-                oob_swap: String::new(),
-            };
-            let project_row_html = project_row.render_once()?;
 
-            // Return success message + OOB update of the project row
-            let success_message = SuccessMessage {
-                message: format!("Updated {} for project {}", field_type, project_id),
-            }.render_once()?;
+            // For the new page-based edit form, send custom events instead of OOB updates
+            let field_label = get_field_label(&field_type);
+            let trigger_data = serde_json::json!({
+                "field-updated": {
+                    "field": field_type,
+                    "label": field_label,
+                    "success": true
+                }
+            });
 
-            let response_html = format!(
-                r#"{}
-                <div hx-swap-oob="outerHTML:#project-row-{}">{}</div>"#,
-                success_message, project_id, project_row_html
-            );
             Ok(poem::Response::builder()
                 .content_type("text/html")
-                .body(response_html))
+                .header("HX-Trigger", trigger_data.to_string())
+                .body(""))
         }
         Err(e) => {
-            // Return error response
-            let error_html = ErrorMessage {
-                message: format!("Failed to update {}: {}", field_type, e),
-            }.render_once()?;
+            // Return error response with custom event
+            let field_label = get_field_label(&field_type);
+            let trigger_data = serde_json::json!({
+                "field-updated": {
+                    "field": field_type,
+                    "label": field_label,
+                    "success": false,
+                    "error": e.to_string()
+                }
+            });
+
             Ok(poem::Response::builder()
                 .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
                 .content_type("text/html")
-                .body(error_html))
+                .header("HX-Trigger", trigger_data.to_string())
+                .body(""))
         }
+    }
+}
+
+// Helper function to get user-friendly field labels
+fn get_field_label(field_type: &str) -> &str {
+    match field_type {
+        "name" => "Project Name",
+        "description" => "Description",
+        "goal" => "Scientific Goal",
+        "task" => "Participant Task",
+        "image" => "Image URL",
+        "image_credit" => "Image Credit",
+        "presenter" => "Presenter",
+        "status" => "Status",
+        "difficulty" => "Difficulty",
+        "url" => "Project URL",
+        "video_url" => "Video URL",
+        "blog_url" => "Blog URL",
+        "twitter_name" => "Twitter Handle",
+        "entirely_online" => "Entirely Online",
+        "in_person" => "In Person",
+        "indoors" => "Indoors",
+        "outdoors" => "Outdoors",
+        // Multiselect fields
+        "topics" => "Topics",
+        "fields_of_science" => "Fields of Science",
+        "practices" => "Practices",
+        "audience" => "Audience",
+        "sustainable_development_goals" => "Sustainable Development Goals",
+        // Array fields
+        "participant_files" => "Participant Files",
+        "geographic_scope" => "Geographic Scope",
+        "participation_tasks" => "Participation Tasks",
+        "activities" => "Activities",
+        "data_aggregation" => "Data Aggregation",
+        "data_consent" => "Data Consent",
+        "data_access" => "Data Access",
+        "intended_outcomes" => "Intended Outcomes",
+        "sponsors" => "Sponsors",
+        "stakeholders" => "Stakeholders",
+        "associated_projects" => "Associated Projects",
+        _ => field_type, // Fallback to field_type if no label found
     }
 }
 
@@ -4248,41 +4313,37 @@ async fn projects_update_multiselect_field(
 
     let project_field = ProjectField::new(project_ulid, field_value);
 
+    let field_label = get_field_label(&field_type);
+
     match project_field.store().await {
         Ok(_) => {
-            let success_html = r#"
-                <div id="modal-message-container" hx-swap-oob="innerHTML">
-                    <div class="bg-green-50 border border-green-200 rounded-md p-4">
-                        <div class="flex">
-                            <div class="ml-3">
-                                <p class="text-sm text-green-800">Field updated successfully!</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            "#;
+            let trigger_data = serde_json::json!({
+                "field-updated": {
+                    "field": field_type,
+                    "label": field_label,
+                    "success": true
+                }
+            });
+
             Ok(poem::Response::builder()
                 .content_type("text/html")
-                .body(success_html))
+                .header("HX-Trigger", trigger_data.to_string())
+                .body(""))
         }
         Err(e) => {
-            let error_html = format!(
-                r#"
-                    <div id="modal-message-container" hx-swap-oob="innerHTML">
-                        <div class="bg-red-50 border border-red-200 rounded-md p-4">
-                            <div class="flex">
-                                <div class="ml-3">
-                                    <p class="text-sm text-red-800">Error updating field: {}</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                "#,
-                e
-            );
+            let trigger_data = serde_json::json!({
+                "field-updated": {
+                    "field": field_type,
+                    "label": field_label,
+                    "success": false,
+                    "error": e.to_string()
+                }
+            });
+
             Ok(poem::Response::builder()
                 .content_type("text/html")
-                .body(error_html))
+                .header("HX-Trigger", trigger_data.to_string())
+                .body(""))
         }
     }
 }
@@ -4328,14 +4389,42 @@ async fn projects_add_array_item(
     }
 
     let new_project_field = ProjectField::new_array(project_ulid, field_enum, items.clone())?;
-    new_project_field.store().await?;
+    let field_label = get_field_label(&field_type);
 
-    let array_items = ArrayItems::new_with_resolved_names(project_ulid, field_enum, items).await?;
-    let items_html = array_items.render_once()?;
+    match new_project_field.store().await {
+        Ok(_) => {
+            let array_items = ArrayItems::new_with_resolved_names(project_ulid, field_enum, items).await?;
+            let items_html = array_items.render_once()?;
 
-    Ok(poem::Response::builder()
-        .content_type("text/html")
-        .body(items_html))
+            let trigger_data = serde_json::json!({
+                "field-updated": {
+                    "field": field_type,
+                    "label": field_label,
+                    "success": true
+                }
+            });
+
+            Ok(poem::Response::builder()
+                .content_type("text/html")
+                .header("HX-Trigger", trigger_data.to_string())
+                .body(items_html))
+        }
+        Err(e) => {
+            let trigger_data = serde_json::json!({
+                "field-updated": {
+                    "field": field_type,
+                    "label": field_label,
+                    "success": false,
+                    "error": e.to_string()
+                }
+            });
+
+            Ok(poem::Response::builder()
+                .content_type("text/html")
+                .header("HX-Trigger", trigger_data.to_string())
+                .body(""))
+        }
+    }
 }
 
 #[handler]
@@ -4363,14 +4452,42 @@ async fn projects_update_array_item(
     }
 
     let new_project_field = ProjectField::new_array(project_ulid, field_enum, items.clone())?;
-    new_project_field.store().await?;
+    let field_label = get_field_label(&field_type);
 
-    let array_items = ArrayItems::new_with_resolved_names(project_ulid, field_enum, items).await?;
-    let items_html = array_items.render_once()?;
+    match new_project_field.store().await {
+        Ok(_) => {
+            let array_items = ArrayItems::new_with_resolved_names(project_ulid, field_enum, items).await?;
+            let items_html = array_items.render_once()?;
 
-    Ok(poem::Response::builder()
-        .content_type("text/html")
-        .body(items_html))
+            let trigger_data = serde_json::json!({
+                "field-updated": {
+                    "field": field_type,
+                    "label": field_label,
+                    "success": true
+                }
+            });
+
+            Ok(poem::Response::builder()
+                .content_type("text/html")
+                .header("HX-Trigger", trigger_data.to_string())
+                .body(items_html))
+        }
+        Err(e) => {
+            let trigger_data = serde_json::json!({
+                "field-updated": {
+                    "field": field_type,
+                    "label": field_label,
+                    "success": false,
+                    "error": e.to_string()
+                }
+            });
+
+            Ok(poem::Response::builder()
+                .content_type("text/html")
+                .header("HX-Trigger", trigger_data.to_string())
+                .body(""))
+        }
+    }
 }
 
 #[handler]
@@ -4394,14 +4511,42 @@ async fn projects_remove_array_item(
     }
 
     let new_project_field = ProjectField::new_array(project_ulid, field_enum, items.clone())?;
-    new_project_field.store().await?;
+    let field_label = get_field_label(&field_type);
 
-    let array_items = ArrayItems::new_with_resolved_names(project_ulid, field_enum, items).await?;
-    let items_html = array_items.render_once()?;
+    match new_project_field.store().await {
+        Ok(_) => {
+            let array_items = ArrayItems::new_with_resolved_names(project_ulid, field_enum, items).await?;
+            let items_html = array_items.render_once()?;
 
-    Ok(poem::Response::builder()
-        .content_type("text/html")
-        .body(items_html))
+            let trigger_data = serde_json::json!({
+                "field-updated": {
+                    "field": field_type,
+                    "label": field_label,
+                    "success": true
+                }
+            });
+
+            Ok(poem::Response::builder()
+                .content_type("text/html")
+                .header("HX-Trigger", trigger_data.to_string())
+                .body(items_html))
+        }
+        Err(e) => {
+            let trigger_data = serde_json::json!({
+                "field-updated": {
+                    "field": field_type,
+                    "label": field_label,
+                    "success": false,
+                    "error": e.to_string()
+                }
+            });
+
+            Ok(poem::Response::builder()
+                .content_type("text/html")
+                .header("HX-Trigger", trigger_data.to_string())
+                .body(""))
+        }
+    }
 }
 
 #[handler]

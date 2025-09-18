@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use anyhow::Result;
 use common::{
     message::{forum::*, user::BasicInfo},
-    service::request,
+    service::{request, request_with_retry},
 };
 use poem::{
     IntoResponse, Response, get, handler, post,
@@ -507,7 +507,7 @@ async fn create_topic_action(
         tags,
     };
 
-    match request::<TopicInfo>("forum.topics.create", create_topic).await {
+    match request_with_retry::<TopicInfo>("forum.topics.create", create_topic).await {
         Ok(_topic) => {
             // Success - directly render the updated forum component
             let forum_component = Forum::with_pagination(form.slug, 0, 20);
@@ -553,7 +553,7 @@ async fn create_post_action(
         parent_post_id,
     };
 
-    match request::<PostInfo>("forum.posts.create", create_post).await {
+    match request_with_retry::<PostInfo>("forum.posts.create", create_post).await {
         Ok(_post) => {
             // Success - return the updated topic content
             let topic: TopicInfo = request("forum.topics.get", topic_id.to_string()).await?;
@@ -703,7 +703,7 @@ async fn update_forum_action(
         is_active: Some(form.is_active.is_some()),
     };
 
-    let _updated_forum: ForumInfo = request("forum.management.update", update_forum).await?;
+    let _updated_forum: ForumInfo = request_with_retry("forum.management.update", update_forum).await?;
 
     // Return HTMX response to reload the forum component
     let target_url = format!("/-forum/{}/page?page=0", slug);
@@ -816,7 +816,7 @@ async fn add_forum_moderator_action(
         user_id: target_user_id,
     };
 
-    match request::<()>("forum.moderation.add_moderator", add_moderator).await {
+    match request_with_retry::<()>("forum.moderation.add_moderator", add_moderator).await {
         Ok(_) => {
             // Return updated moderator list
             list_forum_moderators_impl(&slug, &user_info).await
@@ -885,7 +885,7 @@ async fn remove_forum_moderator_action(
         user_id: target_user_id,
     };
 
-    request::<()>("forum.moderation.remove_moderator", remove_moderator).await?;
+    request_with_retry::<()>("forum.moderation.remove_moderator", remove_moderator).await?;
 
     // Return updated moderator list
     list_forum_moderators_impl(&slug, &user_info).await
@@ -1046,7 +1046,7 @@ async fn create_forum_category_action(
         category_name: form.category_name.trim().to_string(),
     };
 
-    match request::<ForumCategoryInfo>("forum.categories.create", create_category).await {
+    match request_with_retry::<ForumCategoryInfo>("forum.categories.create", create_category).await {
         Ok(_) => {
             // Return the updated category list AND update all dropdowns
             let list_html = generate_category_list_html(&form.slug, &user_info).await?;
@@ -1109,7 +1109,7 @@ async fn update_forum_category_action(
         }),
     };
 
-    match request::<ForumCategoryInfo>("forum.categories.update", update_category).await {
+    match request_with_retry::<ForumCategoryInfo>("forum.categories.update", update_category).await {
         Ok(_) => {
             // Return the updated category list AND update all dropdowns
             let list_html = generate_category_list_html(&slug, &user_info).await?;
@@ -1158,7 +1158,7 @@ async fn delete_forum_category_action(
         category_id,
     };
 
-    match request::<()>("forum.categories.delete", delete_category).await {
+    match request_with_retry::<()>("forum.categories.delete", delete_category).await {
         Ok(_) => {
             // Return the updated category list AND update all dropdowns
             let list_html = generate_category_list_html(&slug, &user_info).await?;
@@ -1229,7 +1229,7 @@ async fn moderate_content_action(
         reason: form.reason,
     };
 
-    match request::<()>("forum.moderation.action", moderation_action).await {
+    match request_with_retry::<()>("forum.moderation.action", moderation_action).await {
         Ok(_) => {
             // Success - return the updated topic content directly
             let topic_id = match form.target_type.as_str() {
