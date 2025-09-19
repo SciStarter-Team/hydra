@@ -1,7 +1,7 @@
 <% if self.selected_id.is_some() && self.selected_name.is_none() { %>
 <div class="relative"
      hx-get="/-admin/autocomplete/resolve/<%= self.entity_type|disp %>/<%= self.selected_id.as_ref().unwrap()|disp %>"
-     hx-vals='{"field_name": "<%= self.field_name %>", "field_label": "<%= self.field_label %>", "placeholder": "<%= self.placeholder %>", "publish": "<%= self.publish_filter|disp %>"}'
+     hx-vals='{"field_name": "<%= self.field_name %>", "field_label": "<%= self.field_label %>", "placeholder": "<%= self.placeholder %>", "publish": "<%= self.publish_filter|disp %>", "read_only": "<%= self.read_only %>"}'
      hx-trigger=load
      hx-swap=outerHTML
      hx-target=this>

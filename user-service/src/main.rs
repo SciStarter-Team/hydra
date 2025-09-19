@@ -1021,6 +1021,7 @@ async fn main() {
     toplevel.spawn(handler!(admin, "user_list", users::admin_user_list));
     toplevel.spawn(handler!(admin, "user_search", users::admin_user_search));
     toplevel.spawn(handler!(admin, "user_get", users::admin_user_get));
+    toplevel.spawn(handler!(admin, "user_batch_get", users::admin_user_batch_get));
     toplevel.spawn(handler!(admin, "user_create", users::admin_user_create));
     toplevel.spawn(handler!(admin, "user_update", users::admin_user_update));
     toplevel.spawn(handler!(admin, "user_delete", users::admin_user_delete));

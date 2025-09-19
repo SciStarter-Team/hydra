@@ -1,18 +1,9 @@
 <div id="array-items-<%= self.project_id|disp %>-<%= self.field_type|disp %>" class="space-y-2">
     <% for (index, item) in self.items.iter().enumerate() { %>
         <div class="flex items-center space-x-2 p-2 bg-gray-50 rounded">
-            <% if let Some(vocab) = &self.vocabulary { %>
-                <select class="flex-1 px-2 py-1 border border-gray-300 rounded text-sm bg-white"
-                        hx-put="/-admin/projects/<%= self.project_id|disp %>/array/<%= self.field_type|disp %>/items/<%= index %>"
-                        hx-trigger="change"
-                        hx-target="#array-items-<%= self.project_id|disp %>-<%= self.field_type|disp %>"
-                        hx-include="this"
-                        name="value">
-                    <% for option in vocab { %>
-                        <option value="<%= option %>" <% if option == &item.value { %>selected<% } %>><%= option %></option>
-                    <% } %>
-                </select>
-            <% } else if self.field_type.to_string() == "associated-projects" { %>
+            <% if self.vocabulary.is_some() { %>
+                <span class="flex-1 min-w-0 px-2 py-1 text-sm text-gray-900"><%= item.value %></span>
+            <% } else if self.field_type.to_string() == "associated_projects" { %>
                 <% if let Some(name) = &item.resolved_name { %>
                     <%+ crate::admin::autocomplete::EntityAutocomplete::new_project_selector(
                         "value",
@@ -26,10 +17,24 @@
                         "Select project..."
                     ).with_selected_id(item.value.parse().ok()).with_read_only(true) %>
                 <% } %>
+            <% } else if self.field_type.to_string() == "page_editor_ids" { %>
+                <% if let Some(email) = &item.resolved_name { %>
+                    <%+ crate::admin::autocomplete::EntityAutocomplete::new_user_selector(
+                        "value",
+                        "",
+                        "Select user..."
+                    ).with_selected(item.value.parse().ok().unwrap_or_default(), email).with_read_only(true) %>
+                <% } else { %>
+                    <%+ crate::admin::autocomplete::EntityAutocomplete::new_user_selector(
+                        "value",
+                        "",
+                        "Select user..."
+                    ).with_selected_id(item.value.parse().ok()).with_read_only(true) %>
+                <% } %>
             <% } else { %>
                 <input type="text"
                        value="<%= item.value %>"
-                       class="flex-1 px-2 py-1 border border-gray-300 rounded text-sm bg-white"
+                       class="flex-1 min-w-0 px-2 py-1 border border-gray-300 rounded text-sm bg-white"
                        hx-put="/-admin/projects/<%= self.project_id|disp %>/array/<%= self.field_type|disp %>/items/<%= index %>"
                        hx-trigger="blur"
                        hx-target="#array-items-<%= self.project_id|disp %>-<%= self.field_type|disp %>"
@@ -49,7 +54,7 @@
     <!-- Add new item form -->
     <div class="flex items-center space-x-2 p-2 bg-blue-50 rounded">
         <% if let Some(vocab) = &self.vocabulary { %>
-            <select class="flex-1 px-2 py-1 border border-gray-300 rounded text-sm bg-white"
+            <select class="flex-1 min-w-0 px-2 py-1 border border-gray-300 rounded text-sm bg-white"
                     name="value">
                 <option value="">Select an option...</option>
                 <% for option in vocab { %>
@@ -58,17 +63,19 @@
             </select>
         <% } else if self.field_type == crate::project::field::ProjectFieldType::AssociatedProjects { %>
             <%+ crate::admin::autocomplete::EntityAutocomplete::new_project_selector("value", "", "Select project to add...") %>
+        <% } else if self.field_type == crate::project::field::ProjectFieldType::PageEditorIds { %>
+            <%+ crate::admin::autocomplete::EntityAutocomplete::new_user_selector("value", "", "Select user to add...") %>
         <% } else { %>
             <input type="text"
                    placeholder="Add new item..."
-                   class="flex-1 px-2 py-1 border border-gray-300 rounded text-sm bg-white"
+                   class="flex-1 min-w-0 px-2 py-1 border border-gray-300 rounded text-sm bg-white"
                    name="value" />
         <% } %>
         <button type="button"
                 class="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
                 hx-post="/-admin/projects/<%= self.project_id|disp %>/array/<%= self.field_type|disp %>/items"
                 hx-target="#array-items-<%= self.project_id|disp %>-<%= self.field_type|disp %>"
-                hx-include="<% if self.vocabulary.is_some() { %>previous select<% } else if self.field_type == crate::project::field::ProjectFieldType::AssociatedProjects { %>previous [data-part=storage]<%} else { %>previous input<% } %>">
+                hx-include="<% if self.vocabulary.is_some() { %>previous select<% } else if self.field_type == crate::project::field::ProjectFieldType::AssociatedProjects { %>previous [data-part=storage]<% } else if self.field_type == crate::project::field::ProjectFieldType::PageEditorIds { %>previous [data-part=storage]<% } else { %>previous input<% } %>">
             Add
         </button>
     </div>

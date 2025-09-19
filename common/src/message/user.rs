@@ -328,6 +328,22 @@ pub struct AdminUserGetRequest {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AdminUserBatchGetRequest {
+    pub user_ids: Vec<Ulid>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserNameMapping {
+    pub user_id: Ulid,
+    pub primary_email: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AdminUserBatchGetResponse {
+    pub users: Vec<UserNameMapping>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PageManagerSyncRequest {
     pub user_ids: Vec<Ulid>, // All user IDs that should be page managers
 }

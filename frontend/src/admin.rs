@@ -1,9 +1,9 @@
 use crate::component::{AdminLayout, Component, admin_layout::AdminLayoutPrepared};
 use crate::contact::Contact;
 use crate::middleware::authorization::{Authenticated, StaffOnly};
+use crate::project::field::{ProjectField, ProjectFieldType, ProjectFieldValue};
 
 pub mod autocomplete;
-use autocomplete::EntityAutocomplete;
 #[derive(Debug, TemplateOnce)]
 #[template(path = "admin/partials/email_row.stpl.html")]
 struct EmailRow {
@@ -14,7 +14,13 @@ struct EmailRow {
 
 use crate::peering::LoadStorePeered;
 use crate::project::all::ProjectAll;
-use crate::project::field::{ProjectField, ProjectFieldType, PARTICIPATION_TASKS_VOCABULARY, ACTIVITIES_VOCABULARY, DATA_AGGREGATION_VOCABULARY, DATA_CONSENT_VOCABULARY, DATA_ACCESS_VOCABULARY, INTENDED_OUTCOMES_VOCABULARY, SPONSORS_VOCABULARY, STAKEHOLDERS_VOCABULARY, DIFFICULTY_VOCABULARY, TOPICS_VOCABULARY, FIELDS_OF_SCIENCE_VOCABULARY, PRACTICES_VOCABULARY, AUDIENCE_VOCABULARY, SUSTAINABLE_DEVELOPMENT_GOALS_VOCABULARY};
+use crate::project::field::{
+    ACTIVITIES_VOCABULARY, AUDIENCE_VOCABULARY, DATA_ACCESS_VOCABULARY,
+    DATA_AGGREGATION_VOCABULARY, DATA_CONSENT_VOCABULARY, DIFFICULTY_VOCABULARY,
+    FIELDS_OF_SCIENCE_VOCABULARY, GEOGRAPHIC_SCOPE_VOCABULARY, INTENDED_OUTCOMES_VOCABULARY, PARTICIPATION_TASKS_VOCABULARY,
+    PRACTICES_VOCABULARY, SPONSORS_VOCABULARY,
+    STAKEHOLDERS_VOCABULARY, SUSTAINABLE_DEVELOPMENT_GOALS_VOCABULARY, TOPICS_VOCABULARY,
+};
 use common::{
     insensitivestring::InsensitiveString,
     message::health::{
@@ -38,7 +44,7 @@ use common::{
 };
 use jiff::{Timestamp, ToSpan, tz::TimeZone};
 use poem::{
-    Endpoint, EndpointExt, Route, get, handler, post, put,
+    Endpoint, EndpointExt, Route, delete, get, handler, post, put,
     web::{Form, Path, Query},
 };
 use sailfish::TemplateOnce;
@@ -88,6 +94,16 @@ pub fn routes() -> impl Endpoint {
         .at(
             "/projects/:id/array/:field_type/items/:index",
             put(projects_update_array_item).delete(projects_remove_array_item),
+        )
+        .at("/projects/:id/tags", post(projects_add_tag))
+        .at("/projects/:id/tags/:tag", delete(projects_remove_tag))
+        .at(
+            "/projects/:id/contacts/items",
+            get(projects_get_contacts).post(projects_add_contact),
+        )
+        .at(
+            "/projects/:id/contacts/items/:contact_id",
+            put(projects_update_contact).delete(projects_remove_contact),
         )
         .at("/events", get(events))
         .at("/events/search", get(events_search))
@@ -445,6 +461,7 @@ pub struct AdminProject {
     pub publish: bool,
     pub created_date: String,
     pub page_creator_id: String,
+    pub page_creator_email: Option<String>,
     pub description: String,
     pub presenter: String,
     pub origin: String,
@@ -457,6 +474,7 @@ pub struct AdminProject {
     pub url: String,
     pub admin_notes: String,
     pub draft: bool,
+    pub tags: Vec<String>,
 }
 
 impl AdminProject {
@@ -464,7 +482,7 @@ impl AdminProject {
     pub fn origin_color_classes(&self) -> String {
         self.hash_color_classes(&self.origin)
     }
-    
+
     /// Generate color classes for status pill
     pub fn status_color_classes(&self) -> String {
         match self.status.as_str() {
@@ -476,12 +494,12 @@ impl AdminProject {
             _ => "bg-gray-100 text-gray-800".to_string(),
         }
     }
-    
+
     /// Format created date and time in human-readable Eastern timezone format
     /// Returns (date_part, time_part) tuple
     pub fn formatted_created_date_time(&self) -> (String, String) {
         use jiff::{Timestamp, tz::TimeZone};
-        
+
         // Try to parse the created_date string as a Timestamp
         if let Ok(timestamp) = self.created_date.parse::<Timestamp>() {
             let eastern_tz = TimeZone::get("America/New_York").unwrap();
@@ -494,19 +512,19 @@ impl AdminProject {
             (self.created_date.clone(), String::new())
         }
     }
-    
+
     fn hash_color_classes(&self, value: &str) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
         value.hash(&mut hasher);
         let hash = hasher.finish();
-        
+
         // Define a set of pleasant, accessible color combinations
         let colors = [
             "bg-blue-100 text-blue-800",
-            "bg-green-100 text-green-800", 
+            "bg-green-100 text-green-800",
             "bg-purple-100 text-purple-800",
             "bg-pink-100 text-pink-800",
             "bg-indigo-100 text-indigo-800",
@@ -514,7 +532,7 @@ impl AdminProject {
             "bg-amber-100 text-amber-800",
             "bg-cyan-100 text-cyan-800",
         ];
-        
+
         colors[(hash % colors.len() as u64) as usize].to_string()
     }
 }
@@ -527,6 +545,7 @@ pub struct AdminProjectFull {
     pub publish: bool,
     pub created_date: String,
     pub page_creator_id: String,
+    pub page_creator_email: Option<String>,
     pub description: String,
     pub presenter: String,
     pub origin: String,
@@ -563,7 +582,7 @@ pub struct AdminProjectFull {
     pub welcomed: bool,
     pub page_editor_ids: String,
     pub extra: String,
-    pub tags: String,
+    pub tags: Vec<String>,
     // Content and participation fields
     pub participation_degree: String,
     pub participant_instructions: String,
@@ -659,23 +678,23 @@ pub struct AdminProjectFull {
     pub sustainable_development_goals: String,
 }
 
+// Helper function to look up user email by ULID
+async fn lookup_user_email(user_id: Option<Ulid>) -> String {
+    match user_id {
+        Some(id) => {
+            let get_request = AdminUserGetRequest { user_id: id };
+            match request::<AdminUserResponse>("user.admin.user_get", get_request).await {
+                Ok(response) => response.user.primary_email,
+                Err(_) => id.to_string(), // Fallback to ULID if lookup fails
+            }
+        }
+        None => String::new(),
+    }
+}
+
 impl AdminProjectFull {
     /// Convert a ProjectAll to AdminProjectFull, performing user lookups for editor fields
     pub async fn from_project_all(project: ProjectAll) -> Result<Self, anyhow::Error> {
-        // Helper function to look up user email by ULID
-        async fn lookup_user_email(user_id: Option<Ulid>) -> String {
-            match user_id {
-                Some(id) => {
-                    let get_request = AdminUserGetRequest { user_id: id };
-                    match request::<AdminUserResponse>("user.admin.user_get", get_request).await {
-                        Ok(response) => response.user.primary_email,
-                        Err(_) => id.to_string(), // Fallback to ULID if lookup fails
-                    }
-                }
-                None => String::new(),
-            }
-        }
-
         Ok(AdminProjectFull {
             id: project.project_id.to_string(),
             title: project.name,
@@ -695,6 +714,7 @@ impl AdminProjectFull {
             url: project.url,
             admin_notes: project.admin_notes,
             page_creator_id: project.page_creator_id.to_string(),
+            page_creator_email: Some(lookup_user_email(Some(project.page_creator_id)).await),
             created_date: project.created.to_string(),
             wild_hope: project.wild_hope,
             exchange: project.exchange,
@@ -719,14 +739,11 @@ impl AdminProjectFull {
             page_editor_ids: serde_json::to_string(&project.page_editor_ids.to_vec())
                 .unwrap_or_default(),
             extra: project.extra,
-            tags: serde_json::to_string(
-                &project
-                    .tags
-                    .into_iter()
-                    .map(|t| t.to_string())
-                    .collect::<Vec<_>>(),
-            )
-            .unwrap_or_default(),
+            tags: project
+                .tags
+                .into_iter()
+                .map(|t| t.to_string())
+                .collect::<Vec<_>>(),
             participation_degree: format!("{:?}", project.participation_degree),
             participant_instructions: project.participant_instructions,
             participant_instructions_email: project.participant_instructions_email,
@@ -833,8 +850,8 @@ async fn fetch_projects_page(
     status_filter: Option<&str>,
     publish_filter: Option<&str>,
     flagged_filter: Option<&str>,
-    spatial_overlap: Option<&str>,          // GeoJSON geometry for overlap search
-    spatial_point: Option<(f64, f64, f64)>, // (lat, lng, radius_meters) circle for intersection search  
+    spatial_overlap: Option<&str>, // GeoJSON geometry for overlap search
+    spatial_point: Option<(f64, f64, f64)>, // (lat, lng, radius_meters) circle for intersection search
     proximity_sort: Option<(f64, f64)>,     // (lat, lng) for proximity sorting
     page: Option<u32>,
     per_page: Option<u32>,
@@ -897,7 +914,7 @@ async fn fetch_projects_page(
     if let Some((lat, lng, radius)) = spatial_point {
         // Create a circle and test intersection with both regions and point
         query.push(" AND (ST_Intersects(p.regions, ST_Buffer(MakePoint(");
-        query.push_bind(lng);  // longitude first for MakePoint
+        query.push_bind(lng); // longitude first for MakePoint
         query.push(", ");
         query.push_bind(lat);
         query.push(", 4326), ");
@@ -917,7 +934,9 @@ async fn fetch_projects_page(
         // For regions: when point is within regions, sort by area (smaller regions first)
         //              when point is outside regions, add large constant to distance to deprioritize
         // For points: just sort by straight distance
-        query.push(" ORDER BY CASE WHEN p.regions IS NOT NULL AND ST_Contains(p.regions, MakePoint(");
+        query.push(
+            " ORDER BY CASE WHEN p.regions IS NOT NULL AND ST_Contains(p.regions, MakePoint(",
+        );
         query.push_bind(lng);
         query.push(", ");
         query.push_bind(lat);
@@ -925,11 +944,13 @@ async fn fetch_projects_page(
         query.push_bind(lng);
         query.push(", ");
         query.push_bind(lat);
-        query.push(", 4326)) + 50000000 WHEN p.point IS NOT NULL THEN ST_Distance(p.point, MakePoint(");
+        query.push(
+            ", 4326)) + 50000000 WHEN p.point IS NOT NULL THEN ST_Distance(p.point, MakePoint(",
+        );
         query.push_bind(lng);
         query.push(", ");
         query.push_bind(lat);
-        query.push(", 4326)) ELSE 999999999 END ASC, p.created DESC LIMIT ");  // Very large value for projects with no geometry
+        query.push(", 4326)) ELSE 999999999 END ASC, p.created DESC LIMIT "); // Very large value for projects with no geometry
     } else if search.filter(|s| !s.trim().is_empty()).is_some() {
         // For search queries, order by relevance (best match first), then by creation date
         query.push(" ORDER BY bm25(projects_fts), p.created DESC LIMIT ");
@@ -974,6 +995,7 @@ async fn fetch_projects_page(
                 publish: row.publish,
                 created_date: row.created,
                 page_creator_id: String::new(), // Not selected in ProjectRow query
+                page_creator_email: None,       // Not needed for project list
                 description: row.description,
                 presenter: row.presenter,
                 origin: row.origin,
@@ -986,6 +1008,7 @@ async fn fetch_projects_page(
                 url: row.url,
                 admin_notes: row.admin_notes,
                 draft: row.draft,
+                tags: Vec::new(), // Tags not needed for project list
             }
         })
         .collect();
@@ -1047,7 +1070,7 @@ async fn count_projects(
     if let Some((lat, lng, radius)) = spatial_point {
         // Create a circle and test intersection with both regions and point
         query.push(" AND (ST_Intersects(p.regions, ST_Buffer(MakePoint(");
-        query.push_bind(lng);  // longitude first for MakePoint
+        query.push_bind(lng); // longitude first for MakePoint
         query.push(", ");
         query.push_bind(lat);
         query.push(", 4326), ");
@@ -1234,7 +1257,7 @@ impl Component for ProjectsPage {
             publish_ref,
             flagged_ref,
             None, // spatial_overlap
-            None, // spatial_point  
+            None, // spatial_point
             None, // proximity_sort
             Some(page),
             Some(per_page),
@@ -1249,15 +1272,15 @@ impl Component for ProjectsPage {
         };
 
         let total_projects = count_projects(
-            search_ref, 
-            status_ref, 
-            publish_ref, 
+            search_ref,
+            status_ref,
+            publish_ref,
             flagged_ref,
             None, // spatial_overlap
-            None  // spatial_point  
+            None, // spatial_point
         )
-            .await
-            .unwrap_or(0);
+        .await
+        .unwrap_or(0);
         let total_pages = (total_projects + per_page as u64 - 1) / per_page as u64;
 
         let projects_content = ProjectsPagePrepared {
@@ -1270,7 +1293,8 @@ impl Component for ProjectsPage {
             start_item: ((page - 1) * per_page) + 1,
             end_item: std::cmp::min(page * per_page, total_projects as u32),
             pagination_url: "/-admin/projects".to_string(),
-            pagination_include: "[name='search'], [name='status'], [name='publish'], [name='flagged']".to_string(),
+            pagination_include:
+                "[name='search'], [name='status'], [name='publish'], [name='flagged']".to_string(),
             search_term: self.search.unwrap_or_default(),
             selected_status: self.status.unwrap_or_default(),
             selected_publish: self.publish.unwrap_or_default(),
@@ -1923,7 +1947,11 @@ async fn projects(
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     // If any search parameters are provided, perform a search instead of the default list
-    if query.search.is_some() || query.status.is_some() || query.publish.is_some() || query.flagged.is_some() {
+    if query.search.is_some()
+        || query.status.is_some()
+        || query.publish.is_some()
+        || query.flagged.is_some()
+    {
         let search_query = ProjectSearchQuery {
             search: query.search,
             status: query.status,
@@ -2094,7 +2122,9 @@ async fn users_delete(
         user_id: parsed_user_id,
     };
 
-    match request_with_retry::<AdminUserDeleteResponse>("user.admin.user_delete", delete_request).await {
+    match request_with_retry::<AdminUserDeleteResponse>("user.admin.user_delete", delete_request)
+        .await
+    {
         Ok(response) => {
             if response.success {
                 // Success - return empty response to remove the table row
@@ -2150,7 +2180,12 @@ async fn users_password_reset(
         email: form.reset_email,
     };
 
-    match request_with_retry::<AdminPasswordResetResponse>("user.admin.password_reset", reset_request).await {
+    match request_with_retry::<AdminPasswordResetResponse>(
+        "user.admin.password_reset",
+        reset_request,
+    )
+    .await
+    {
         Ok(response) => {
             if response.success {
                 // Success - show success message via out-of-band update
@@ -2397,7 +2432,7 @@ async fn engine_room(
 async fn engine_room_sync_page_managers(
     Authenticated(_user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    match crate::page_manager::full_page_manager_sync().await {
+    match crate::page_manager::full_page_editor_sync().await {
         Ok(count) => {
             let success_html = format!(
                 r#"<div class="p-3 text-sm text-green-700 bg-green-100 rounded-lg border border-green-200">
@@ -2582,7 +2617,9 @@ async fn users_emails_toggle_verified(
         email: email.clone(),
     };
 
-    match request_with_retry::<AdminUserResponse>("user.admin.email_toggle_verified", email_request).await {
+    match request_with_retry::<AdminUserResponse>("user.admin.email_toggle_verified", email_request)
+        .await
+    {
         Ok(response) => {
             // Find the toggled email and render just that row
             if let Some((index, updated_email)) = response
@@ -2690,7 +2727,9 @@ impl Component for EditProjectPage {
 
     async fn prepare(self, user_info: Self::Param) -> anyhow::Result<Self::Prepared> {
         let title = self.project.title.clone();
-        let content = EditProjectContent { project: self.project };
+        let content = EditProjectContent {
+            project: self.project,
+        };
         let content_html = content.render_once()?;
 
         AdminLayout::new(&format!("Edit Project: {}", title))
@@ -2730,6 +2769,18 @@ struct AddArrayItemForm {
 }
 
 #[derive(Debug, Deserialize)]
+struct AddTagForm {
+    tag: String,
+}
+
+#[derive(TemplateOnce)]
+#[template(path = "admin/partials/tags_display.stpl.html")]
+struct TagsDisplay {
+    project_id: String,
+    tags: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
 struct UpdateArrayItemForm {
     value: String,
 }
@@ -2755,12 +2806,12 @@ impl ArrayItems {
         field_type: ProjectFieldType,
         items: Vec<String>,
     ) -> Result<Self, anyhow::Error> {
-        use crate::admin::autocomplete::resolve_project_names;
+        use crate::admin::autocomplete::{resolve_project_names, resolve_user_names};
 
         let vocabulary = Self::get_vocabulary(field_type);
 
         let resolved_items = if field_type == ProjectFieldType::AssociatedProjects {
-            // Parse ULIDs and resolve names
+            // Parse ULIDs and resolve project names
             let ulids: Vec<Ulid> = items
                 .iter()
                 .filter_map(|s| s.parse::<Ulid>().ok())
@@ -2770,7 +2821,34 @@ impl ArrayItems {
 
             items
                 .into_iter()
-                .zip(resolved_names.into_iter().map(|(_, name)| Some(name)).chain(std::iter::repeat(None)))
+                .zip(
+                    resolved_names
+                        .into_iter()
+                        .map(|(_, name)| Some(name))
+                        .chain(std::iter::repeat(None)),
+                )
+                .map(|(value, resolved_name)| ArrayItem {
+                    value,
+                    resolved_name,
+                })
+                .collect()
+        } else if field_type == ProjectFieldType::PageEditorIds {
+            // Parse ULIDs and resolve user emails
+            let ulids: Vec<Ulid> = items
+                .iter()
+                .filter_map(|s| s.parse::<Ulid>().ok())
+                .collect();
+
+            let resolved_names = resolve_user_names(ulids).await?;
+
+            items
+                .into_iter()
+                .zip(
+                    resolved_names
+                        .into_iter()
+                        .map(|(_, email)| Some(email))
+                        .chain(std::iter::repeat(None)),
+                )
                 .map(|(value, resolved_name)| ArrayItem {
                     value,
                     resolved_name,
@@ -2797,49 +2875,177 @@ impl ArrayItems {
     fn get_vocabulary(field_type: ProjectFieldType) -> Option<Vec<String>> {
         match field_type {
             ProjectFieldType::ParticipationTasks => Some(
-                PARTICIPATION_TASKS_VOCABULARY.iter().map(|s| s.to_string()).collect()
+                PARTICIPATION_TASKS_VOCABULARY
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
             ),
             ProjectFieldType::Activities => Some(
-                ACTIVITIES_VOCABULARY.iter().map(|s| s.to_string()).collect()
+                ACTIVITIES_VOCABULARY
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
             ),
             ProjectFieldType::DataAggregation => Some(
-                DATA_AGGREGATION_VOCABULARY.iter().map(|s| s.to_string()).collect()
+                DATA_AGGREGATION_VOCABULARY
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
             ),
             ProjectFieldType::DataConsent => Some(
-                DATA_CONSENT_VOCABULARY.iter().map(|s| s.to_string()).collect()
+                DATA_CONSENT_VOCABULARY
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
             ),
             ProjectFieldType::DataAccess => Some(
-                DATA_ACCESS_VOCABULARY.iter().map(|s| s.to_string()).collect()
+                DATA_ACCESS_VOCABULARY
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
             ),
             ProjectFieldType::IntendedOutcomes => Some(
-                INTENDED_OUTCOMES_VOCABULARY.iter().map(|s| s.to_string()).collect()
+                INTENDED_OUTCOMES_VOCABULARY
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
             ),
-            ProjectFieldType::Sponsors => Some(
-                SPONSORS_VOCABULARY.iter().map(|s| s.to_string()).collect()
-            ),
+            ProjectFieldType::Sponsors => {
+                Some(SPONSORS_VOCABULARY.iter().map(|s| s.to_string()).collect())
+            }
             ProjectFieldType::Stakeholders => Some(
-                STAKEHOLDERS_VOCABULARY.iter().map(|s| s.to_string()).collect()
+                STAKEHOLDERS_VOCABULARY
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
             ),
             ProjectFieldType::Difficulty => Some(
-                DIFFICULTY_VOCABULARY.iter().map(|s| s.to_string()).collect()
+                DIFFICULTY_VOCABULARY
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
             ),
-            ProjectFieldType::Topics => Some(
-                TOPICS_VOCABULARY.iter().map(|s| s.to_string()).collect()
-            ),
+            ProjectFieldType::Topics => {
+                Some(TOPICS_VOCABULARY.iter().map(|s| s.to_string()).collect())
+            }
             ProjectFieldType::FieldsOfScience => Some(
-                FIELDS_OF_SCIENCE_VOCABULARY.iter().map(|s| s.to_string()).collect()
+                FIELDS_OF_SCIENCE_VOCABULARY
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
             ),
-            ProjectFieldType::Practices => Some(
-                PRACTICES_VOCABULARY.iter().map(|s| s.to_string()).collect()
-            ),
-            ProjectFieldType::Audience => Some(
-                AUDIENCE_VOCABULARY.iter().map(|s| s.to_string()).collect()
+            ProjectFieldType::Practices => {
+                Some(PRACTICES_VOCABULARY.iter().map(|s| s.to_string()).collect())
+            }
+            ProjectFieldType::Audience => {
+                Some(AUDIENCE_VOCABULARY.iter().map(|s| s.to_string()).collect())
+            }
+            ProjectFieldType::GeographicScope => Some(
+                GEOGRAPHIC_SCOPE_VOCABULARY
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
             ),
             ProjectFieldType::SustainableDevelopmentGoals => Some(
-                SUSTAINABLE_DEVELOPMENT_GOALS_VOCABULARY.iter().map(|s| s.to_string()).collect()
+                SUSTAINABLE_DEVELOPMENT_GOALS_VOCABULARY
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
             ),
             _ => None,
         }
+    }
+}
+
+// Contact widget structures
+#[derive(Debug)]
+struct ContactItem {
+    contact: Contact,
+    read_only: bool,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/partials/contact_items.stpl.html")]
+struct ContactItems {
+    project_id: Ulid,
+    contacts: Vec<ContactItem>,
+}
+
+impl ContactItems {
+    fn new(project_id: Ulid, contacts: Vec<Contact>) -> Self {
+        let contact_items = contacts
+            .into_iter()
+            .map(|contact| ContactItem {
+                contact,
+                read_only: false, // Existing contacts are directly editable
+            })
+            .collect();
+
+        Self {
+            project_id,
+            contacts: contact_items,
+        }
+    }
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/partials/contact_widget.stpl.html")]
+struct ContactWidget {
+    project_id: Ulid,
+    contact: Option<Contact>,
+    read_only: bool,
+}
+
+impl ContactWidget {
+    fn new_readonly(project_id: Ulid, contact: Contact) -> Self {
+        Self {
+            project_id,
+            contact: Some(contact),
+            read_only: true,
+        }
+    }
+
+    fn new_editable(project_id: Ulid, contact: Option<Contact>) -> Self {
+        Self {
+            project_id,
+            contact,
+            read_only: false,
+        }
+    }
+}
+
+// Contact form structures
+#[derive(Debug, Deserialize)]
+struct ContactForm {
+    role: String,
+    email: String,
+    name: Option<String>,
+    affiliation: Option<String>,
+    phone: Option<String>,
+    address: Option<String>,
+}
+
+impl ContactForm {
+    fn to_contact(&self, contact_id: Ulid) -> Result<Contact, anyhow::Error> {
+        use crate::contact::ContactRole;
+
+        let role = match self.role.as_str() {
+            "Manager" => ContactRole::Manager,
+            "ContactPerson" => ContactRole::ContactPerson,
+            "Technical" => ContactRole::Technical,
+            "Notification" => ContactRole::Notification,
+            _ => return Err(anyhow::anyhow!("Invalid contact role: {}", self.role)),
+        };
+
+        Ok(Contact {
+            contact_id,
+            role,
+            name: self.name.clone().filter(|s| !s.is_empty()),
+            affiliation: self.affiliation.clone().filter(|s| !s.is_empty()),
+            email: self.email.clone(),
+            phone: self.phone.clone().filter(|s| !s.is_empty()),
+            address: self.address.clone().filter(|s| !s.is_empty()),
+        })
     }
 }
 
@@ -2881,7 +3087,7 @@ async fn projects_search_internal(
         query.publish.as_deref(),
         query.flagged.as_deref(),
         None, // spatial_overlap
-        None  // spatial_point
+        None, // spatial_point
     )
     .await?;
 
@@ -2906,7 +3112,8 @@ async fn projects_search_internal(
         start_item: start_item as u32,
         end_item,
         pagination_url: "/-admin/projects".to_string(),
-        pagination_include: "[name='search'], [name='status'], [name='publish'], [name='flagged']".to_string(),
+        pagination_include: "[name='search'], [name='status'], [name='publish'], [name='flagged']"
+            .to_string(),
         search_term: query.search.unwrap_or_default(),
         selected_status: query.status.unwrap_or_default(),
         selected_publish: query.publish.unwrap_or_default(),
@@ -2971,16 +3178,20 @@ async fn projects_search(
         .body(html))
 }
 
-async fn events_search_internal(query: EventSearchQuery) -> Result<EventsPagePrepared, anyhow::Error> {
+async fn events_search_internal(
+    query: EventSearchQuery,
+) -> Result<EventsPagePrepared, anyhow::Error> {
     let page = query.page.unwrap_or(1);
     let per_page = 25u32;
-    
+
     let events_list = match fetch_events_page(
         query.search.as_deref(),
         query.status.as_deref(),
         Some(page),
-        Some(per_page)
-    ).await {
+        Some(per_page),
+    )
+    .await
+    {
         Ok(event_results) => event_results,
         Err(e) => {
             eprintln!("Error fetching events: {}", e);
@@ -2998,7 +3209,7 @@ async fn events_search_internal(query: EventSearchQuery) -> Result<EventsPagePre
 
     let has_previous = page > 1;
     let has_next = events_list.len() == per_page as usize;
-    
+
     let start_item = if total_events == 0 {
         0
     } else {
@@ -3480,7 +3691,7 @@ async fn projects_update_field(
                     serde_json::from_str(&form.value)
                         .map_err(|e| anyhow::anyhow!("Invalid JSON format for ULID array: {}", e))?
                 };
-                crate::project::field::ProjectFieldValue::PageManagerIds(ulids.into_boxed_slice())
+                crate::project::field::ProjectFieldValue::PageEditorIds(ulids.into_boxed_slice())
             }
             crate::project::field::ProjectFieldType::Extra => {
                 crate::project::field::ProjectFieldValue::Extra(form.value)
@@ -4165,6 +4376,15 @@ async fn projects_update_field(
             .await
             .map_err(|e| anyhow::anyhow!("Failed to reload project after update: {}", e))?;
 
+            // Resolve creator email
+            let page_creator_email =
+                if let Ok(creator_id) = updated_project.page_creator_id.parse::<Ulid>() {
+                    let email = lookup_user_email(Some(creator_id)).await;
+                    if email.is_empty() { None } else { Some(email) }
+                } else {
+                    None
+                };
+
             let admin_project = AdminProject {
                 id: updated_project.project_id,
                 title: updated_project.name,
@@ -4172,6 +4392,7 @@ async fn projects_update_field(
                 publish: updated_project.publish.unwrap_or(false),
                 created_date: updated_project.created,
                 page_creator_id: updated_project.page_creator_id,
+                page_creator_email,
                 description: updated_project.description,
                 presenter: updated_project.presenter,
                 origin: updated_project.origin,
@@ -4184,6 +4405,7 @@ async fn projects_update_field(
                 url: updated_project.url,
                 admin_notes: updated_project.admin_notes,
                 draft: updated_project.draft,
+                tags: Vec::new(), // Tags not needed for OOB update
             };
 
             // Create the updated project row for out-of-band swap
@@ -4262,6 +4484,7 @@ fn get_field_label(field_type: &str) -> &str {
         "sponsors" => "Sponsors",
         "stakeholders" => "Stakeholders",
         "associated_projects" => "Associated Projects",
+        "page_editor_ids" => "Page Editors",
         _ => field_type, // Fallback to field_type if no label found
     }
 }
@@ -4289,26 +4512,29 @@ async fn projects_update_multiselect_field(
         "practices" => ProjectFieldType::Practices,
         "audience" => ProjectFieldType::Audience,
         "sustainable_development_goals" => ProjectFieldType::SustainableDevelopmentGoals,
-        _ => return Err(anyhow::anyhow!("Unsupported multiselect field type: {}", field_type)),
+        _ => {
+            return Err(anyhow::anyhow!(
+                "Unsupported multiselect field type: {}",
+                field_type
+            ));
+        }
     };
 
     let field_value = match field_type_enum {
-        ProjectFieldType::Topics => {
-            ProjectFieldValue::Topics(form.value.into_boxed_slice())
-        }
+        ProjectFieldType::Topics => ProjectFieldValue::Topics(form.value.into_boxed_slice()),
         ProjectFieldType::FieldsOfScience => {
             ProjectFieldValue::FieldsOfScience(form.value.into_boxed_slice())
         }
-        ProjectFieldType::Practices => {
-            ProjectFieldValue::Practices(form.value.into_boxed_slice())
-        }
-        ProjectFieldType::Audience => {
-            ProjectFieldValue::Audience(form.value.into_boxed_slice())
-        }
+        ProjectFieldType::Practices => ProjectFieldValue::Practices(form.value.into_boxed_slice()),
+        ProjectFieldType::Audience => ProjectFieldValue::Audience(form.value.into_boxed_slice()),
         ProjectFieldType::SustainableDevelopmentGoals => {
             ProjectFieldValue::SustainableDevelopmentGoals(form.value.join(","))
         }
-        _ => return Err(anyhow::anyhow!("Unsupported field type in multiselect handler")),
+        _ => {
+            return Err(anyhow::anyhow!(
+                "Unsupported field type in multiselect handler"
+            ));
+        }
     };
 
     let project_field = ProjectField::new(project_ulid, field_value);
@@ -4393,7 +4619,8 @@ async fn projects_add_array_item(
 
     match new_project_field.store().await {
         Ok(_) => {
-            let array_items = ArrayItems::new_with_resolved_names(project_ulid, field_enum, items).await?;
+            let array_items =
+                ArrayItems::new_with_resolved_names(project_ulid, field_enum, items).await?;
             let items_html = array_items.render_once()?;
 
             let trigger_data = serde_json::json!({
@@ -4456,7 +4683,8 @@ async fn projects_update_array_item(
 
     match new_project_field.store().await {
         Ok(_) => {
-            let array_items = ArrayItems::new_with_resolved_names(project_ulid, field_enum, items).await?;
+            let array_items =
+                ArrayItems::new_with_resolved_names(project_ulid, field_enum, items).await?;
             let items_html = array_items.render_once()?;
 
             let trigger_data = serde_json::json!({
@@ -4515,7 +4743,8 @@ async fn projects_remove_array_item(
 
     match new_project_field.store().await {
         Ok(_) => {
-            let array_items = ArrayItems::new_with_resolved_names(project_ulid, field_enum, items).await?;
+            let array_items =
+                ArrayItems::new_with_resolved_names(project_ulid, field_enum, items).await?;
             let items_html = array_items.render_once()?;
 
             let trigger_data = serde_json::json!({
@@ -4607,6 +4836,10 @@ async fn projects_create(
     // Save the new project to the database using LoadStorePeered
     new_project.store().await?;
 
+    // Resolve creator email for the current user
+    let email = lookup_user_email(Some(user_info.user_id)).await;
+    let page_creator_email = if email.is_empty() { None } else { Some(email) };
+
     // Create AdminProject for the UI
     let admin_project = AdminProject {
         id: project_id.to_string(),
@@ -4615,6 +4848,7 @@ async fn projects_create(
         publish: form.publish,
         created_date: current_time.to_string(),
         page_creator_id: user_info.user_id.to_string(),
+        page_creator_email,
         description: new_project.description.clone(),
         presenter: new_project.presenter.clone(),
         origin: new_project.origin.clone(),
@@ -4627,6 +4861,7 @@ async fn projects_create(
         url: new_project.url.clone(),
         admin_notes: new_project.admin_notes.clone(),
         draft: form.draft,
+        tags: Vec::new(), // New projects start with no tags
     };
 
     // Create the new project row with OOB support to add to the top of the projects list
@@ -4662,4 +4897,239 @@ async fn projects_create(
     Ok(poem::Response::builder()
         .content_type("text/html")
         .body(combined_html))
+}
+
+#[handler]
+async fn projects_add_tag(
+    Path(project_id): Path<String>,
+    Form(form): Form<AddTagForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let project_ulid = project_id
+        .parse::<Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid project ID format"))?;
+
+    let field_enum = ProjectFieldType::Tags;
+    let project_field = ProjectField::load((project_ulid, field_enum)).await?;
+    let mut tags: Vec<String> = (&project_field).try_into()?;
+
+    let new_tag = form.tag.trim().to_string();
+    if !new_tag.is_empty() && !tags.contains(&new_tag) {
+        tags.push(new_tag);
+    }
+
+    let new_project_field = ProjectField::new_array(project_ulid, field_enum, tags.clone())?;
+    new_project_field.store().await?;
+
+    // Return the updated tags display
+    use sailfish::TemplateOnce;
+    let tags_display = TagsDisplay {
+        project_id: project_id.clone(),
+        tags,
+    };
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(tags_display.render_once()?))
+}
+
+#[handler]
+async fn projects_remove_tag(
+    Path((project_id, tag)): Path<(String, String)>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let project_ulid = project_id
+        .parse::<Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid project ID format"))?;
+
+    let field_enum = ProjectFieldType::Tags;
+    let project_field = ProjectField::load((project_ulid, field_enum)).await?;
+    let mut tags: Vec<String> = (&project_field).try_into()?;
+
+    // Remove the tag (Path extractor handles URL decoding automatically)
+    tags.retain(|t| t != &tag);
+
+    let new_project_field = ProjectField::new_array(project_ulid, field_enum, tags.clone())?;
+    new_project_field.store().await?;
+
+    // Return the updated tags display
+    use sailfish::TemplateOnce;
+    let tags_display = TagsDisplay {
+        project_id: project_id.clone(),
+        tags,
+    };
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(tags_display.render_once()?))
+}
+
+
+// Contact handlers
+#[handler]
+async fn projects_get_contacts(
+    Path(project_id): Path<String>,
+) -> Result<poem::Response, poem::Error> {
+    let project_ulid: Ulid = project_id.parse().map_err(|_| {
+        poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST)
+    })?;
+
+    // Load the project field for contacts
+    let project_field = ProjectField::load((project_ulid, ProjectFieldType::Contacts)).await
+        .map_err(|e| {
+            tracing::error!("Failed to load contacts field: {:?}", e);
+            poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+        })?;
+
+    let contacts = match project_field.field {
+        ProjectFieldValue::Contacts(contacts) => contacts.into_vec(),
+        _ => Vec::new(),
+    };
+
+    use sailfish::TemplateOnce;
+    let contact_items = ContactItems::new(project_ulid, contacts);
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(contact_items.render_once().map_err(|_| {
+            poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+        })?))
+}
+
+#[handler]
+async fn projects_add_contact(
+    Path(project_id): Path<String>,
+    poem::web::Form(form): poem::web::Form<ContactForm>,
+) -> Result<poem::Response, poem::Error> {
+    let project_ulid: Ulid = project_id.parse().map_err(|_| {
+        poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST)
+    })?;
+
+    // Load existing contacts
+    let project_field = ProjectField::load((project_ulid, ProjectFieldType::Contacts)).await
+        .map_err(|_| poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR))?;
+
+    let mut contacts = match project_field.field {
+        ProjectFieldValue::Contacts(contacts) => contacts.into_vec(),
+        _ => Vec::new(),
+    };
+
+    // Create new contact with generated ULID
+    let new_contact = form.to_contact(Ulid::new()).map_err(|_| {
+        poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST)
+    })?;
+
+    contacts.push(new_contact);
+
+    // Save updated contacts
+    let new_project_field = ProjectField::new(
+        project_ulid,
+        ProjectFieldValue::Contacts(contacts.clone().into_boxed_slice()),
+    );
+    new_project_field.store().await.map_err(|_| {
+        poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+
+    // Return updated contact list
+    use sailfish::TemplateOnce;
+    let contact_items = ContactItems::new(project_ulid, contacts);
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(contact_items.render_once().map_err(|_| {
+            poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+        })?))
+}
+
+#[handler]
+async fn projects_update_contact(
+    Path((project_id, contact_id)): Path<(String, String)>,
+    poem::web::Form(form): poem::web::Form<ContactForm>,
+) -> Result<poem::Response, poem::Error> {
+    let project_ulid: Ulid = project_id.parse().map_err(|_| {
+        poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST)
+    })?;
+    let contact_ulid: Ulid = contact_id.parse().map_err(|_| {
+        poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST)
+    })?;
+
+    // Load existing contacts
+    let project_field = ProjectField::load((project_ulid, ProjectFieldType::Contacts)).await
+        .map_err(|_| poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR))?;
+
+    let mut contacts = match project_field.field {
+        ProjectFieldValue::Contacts(contacts) => contacts.into_vec(),
+        _ => Vec::new(),
+    };
+
+    // Find and update the contact
+    if let Some(contact) = contacts.iter_mut().find(|c| c.contact_id == contact_ulid) {
+        *contact = form.to_contact(contact_ulid).map_err(|_| {
+            poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST)
+        })?;
+    } else {
+        return Err(poem::Error::from_status(poem::http::StatusCode::NOT_FOUND));
+    }
+
+    // Save updated contacts
+    let new_project_field = ProjectField::new(
+        project_ulid,
+        ProjectFieldValue::Contacts(contacts.clone().into_boxed_slice()),
+    );
+    new_project_field.store().await.map_err(|_| {
+        poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+
+    // Return updated contact list
+    use sailfish::TemplateOnce;
+    let contact_items = ContactItems::new(project_ulid, contacts);
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(contact_items.render_once().map_err(|_| {
+            poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+        })?))
+}
+
+#[handler]
+async fn projects_remove_contact(
+    Path((project_id, contact_id)): Path<(String, String)>,
+) -> Result<poem::Response, poem::Error> {
+    let project_ulid: Ulid = project_id.parse().map_err(|_| {
+        poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST)
+    })?;
+    let contact_ulid: Ulid = contact_id.parse().map_err(|_| {
+        poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST)
+    })?;
+
+    // Load existing contacts
+    let project_field = ProjectField::load((project_ulid, ProjectFieldType::Contacts)).await
+        .map_err(|_| poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR))?;
+
+    let mut contacts = match project_field.field {
+        ProjectFieldValue::Contacts(contacts) => contacts.into_vec(),
+        _ => Vec::new(),
+    };
+
+    // Remove the contact
+    contacts.retain(|c| c.contact_id != contact_ulid);
+
+    // Save updated contacts
+    let new_project_field = ProjectField::new(
+        project_ulid,
+        ProjectFieldValue::Contacts(contacts.clone().into_boxed_slice()),
+    );
+    new_project_field.store().await.map_err(|_| {
+        poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+
+    // Return updated contact list
+    use sailfish::TemplateOnce;
+    let contact_items = ContactItems::new(project_ulid, contacts);
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(contact_items.render_once().map_err(|_| {
+            poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+        })?))
 }

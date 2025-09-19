@@ -1,0 +1,11 @@
+<div id="contact-items-<%= self.project_id|disp %>" class="space-y-4">
+    <% for contact_item in &self.contacts { %>
+        <%+ crate::admin::ContactWidget::new_editable(self.project_id, Some(contact_item.contact.clone())) %>
+    <% } %>
+
+    <!-- Add new contact form -->
+    <div class="border border-gray-200 rounded-lg p-4 bg-blue-50">
+        <h5 class="text-sm font-medium text-gray-900 mb-3">Add New Contact</h5>
+        <%+ crate::admin::ContactWidget::new_editable(self.project_id, None) %>
+    </div>
+</div>

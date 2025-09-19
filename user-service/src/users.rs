@@ -2,7 +2,7 @@ use anyhow::Error;
 use async_nats::service::Request;
 use common::{
     badge::Badge,
-    message::user::{AdminUser, AdminUserListRequest, AdminUserListResponse, AdminUserSearchRequest, AdminUserCreateRequest, AdminUserUpdateRequest, AdminUserDeleteRequest, AdminUserGetRequest, AdminUserResponse, AdminUserDeleteResponse, BasicInfo, UserAndBadge, UserBadge, PageManagerSyncRequest, PageManagerSyncResponse, PageManagerUpdateRequest, PageManagerUpdateResponse, UserEmail, AdminPasswordResetRequest, AdminPasswordResetResponse, UserEmailAddRequest, UserEmailUpdateRequest, UserEmailDeleteRequest, UserEmailToggleVerifiedRequest, UserEmailResponse},
+    message::user::{AdminUser, AdminUserListRequest, AdminUserListResponse, AdminUserSearchRequest, AdminUserCreateRequest, AdminUserUpdateRequest, AdminUserDeleteRequest, AdminUserGetRequest, AdminUserResponse, AdminUserDeleteResponse, AdminUserBatchGetRequest, AdminUserBatchGetResponse, UserNameMapping, BasicInfo, UserAndBadge, UserBadge, PageManagerSyncRequest, PageManagerSyncResponse, PageManagerUpdateRequest, PageManagerUpdateResponse, UserEmail, AdminPasswordResetRequest, AdminPasswordResetResponse, UserEmailAddRequest, UserEmailUpdateRequest, UserEmailDeleteRequest, UserEmailToggleVerifiedRequest, UserEmailResponse},
     service::{decode_structured_message, log_activity, send},
     shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower},
     timestring::TimeString,
@@ -752,6 +752,47 @@ pub async fn admin_user_get(req: &Request) -> Result<AdminUserResponse, Error> {
         }
         None => Err(anyhow::anyhow!("User not found").into()),
     }
+}
+
+pub async fn admin_user_batch_get(req: &Request) -> Result<AdminUserBatchGetResponse, Error> {
+    let request: AdminUserBatchGetRequest = decode_structured_message(req.message.clone())?;
+
+    if request.user_ids.is_empty() {
+        return Ok(AdminUserBatchGetResponse {
+            users: Vec::new(),
+        });
+    }
+
+    // Build query to get users by IDs
+    let mut query_builder = sqlx::QueryBuilder::new(
+        r#"SELECT "user_id", "primary_email" FROM "users" WHERE "user_id" IN ("#
+    );
+    let mut separated = query_builder.separated(", ");
+    for user_id in &request.user_ids {
+        separated.push_bind(user_id.to_string());
+    }
+    separated.push_unseparated(")");
+
+    let rows = query_builder
+        .build_query_as::<(String, String)>()
+        .fetch_all(db())
+        .await?;
+
+    let users: Result<Vec<UserNameMapping>, Error> = rows
+        .into_iter()
+        .map(|(user_id_str, primary_email)| -> Result<UserNameMapping, Error> {
+            let user_id = user_id_str.as_ulid()
+                .map_err(|e| anyhow::anyhow!("Invalid user ID in database: {}", e))?;
+            Ok(UserNameMapping {
+                user_id,
+                primary_email,
+            })
+        })
+        .collect();
+
+    Ok(AdminUserBatchGetResponse {
+        users: users?,
+    })
 }
 
 pub async fn admin_user_create(req: &Request) -> Result<AdminUserResponse, Error> {

@@ -178,6 +178,13 @@ pub const AUDIENCE_VOCABULARY: &[&str] = &[
     "Seniors",
 ];
 
+pub const GEOGRAPHIC_SCOPE_VOCABULARY: &[&str] = &[
+    "International",
+    "National",
+    "Regional",
+    "Local",
+];
+
 pub const SUSTAINABLE_DEVELOPMENT_GOALS_VOCABULARY: &[&str] = &[
     "No Poverty",
     "Zero Hunger",
@@ -374,7 +381,7 @@ pub enum ProjectFieldValue {
     InatProjectId(Option<i32>),
     Welcomed(bool),
     PageCreatorId(Ulid),
-    PageManagerIds(Box<[Ulid]>),
+    PageEditorIds(Box<[Ulid]>),
     Extra(String),
     ProjectLastEditor(Option<Ulid>),
     ProjectLastEdited(Option<TimeString>),
@@ -507,6 +514,7 @@ impl TryFrom<&str> for ProjectFieldType {
             "sponsors" => Ok(ProjectFieldType::Sponsors),
             "stakeholders" => Ok(ProjectFieldType::Stakeholders),
             "associated_projects" => Ok(ProjectFieldType::AssociatedProjects),
+            "page_editor_ids" => Ok(ProjectFieldType::PageEditorIds),
             _ => Err(anyhow::anyhow!("Unsupported array field type: {}", s)),
         }
     }
@@ -530,6 +538,7 @@ impl std::fmt::Display for ProjectFieldType {
             ProjectFieldType::Sponsors => "sponsors",
             ProjectFieldType::Stakeholders => "stakeholders",
             ProjectFieldType::AssociatedProjects => "associated_projects",
+            ProjectFieldType::PageEditorIds => "page_editor_ids",
             _ => return Err(std::fmt::Error),
         };
         write!(f, "{}", s)
@@ -564,6 +573,12 @@ impl TryFrom<&ProjectField> for Vec<String> {
             ProjectFieldValue::Stakeholders(arr) => Ok(arr.to_vec()),
             ProjectFieldValue::AssociatedProjects(arr) => {
                 Ok(arr.iter().map(|ulid| ulid.to_string()).collect())
+            }
+            ProjectFieldValue::PageEditorIds(arr) => {
+                Ok(arr.iter().map(|ulid| ulid.to_string()).collect())
+            }
+            ProjectFieldValue::Tags(set) => {
+                Ok(set.iter().map(|tag| tag.to_string()).collect())
             }
             _ => Err(anyhow::anyhow!("ProjectField is not an array type")),
         }
@@ -608,6 +623,20 @@ impl ProjectField {
                     .collect();
                 ProjectFieldValue::AssociatedProjects(boxed_ulids?.into_boxed_slice())
             }
+            ProjectFieldType::PageEditorIds => {
+                let boxed_ulids: Result<Vec<Ulid>, anyhow::Error> = boxed_items
+                    .into_iter()
+                    .map(|s| s.parse().map_err(|e: ulid::DecodeError| e.into()))
+                    .collect();
+                ProjectFieldValue::PageEditorIds(boxed_ulids?.into_boxed_slice())
+            }
+            ProjectFieldType::Tags => {
+                let tag_set: HashSet<InsensitiveString> = boxed_items
+                    .into_iter()
+                    .map(InsensitiveString::from)
+                    .collect();
+                ProjectFieldValue::Tags(tag_set)
+            }
             _ => {
                 return Err(anyhow::anyhow!(
                     "Field type is not supported for array operations"
@@ -646,7 +675,7 @@ impl ProjectField {
             ProjectFieldValue::InatProjectId(_) => ProjectFieldType::InatProjectId,
             ProjectFieldValue::Welcomed(_) => ProjectFieldType::Welcomed,
             ProjectFieldValue::PageCreatorId(_) => ProjectFieldType::PageCreatorId,
-            ProjectFieldValue::PageManagerIds(_) => ProjectFieldType::PageEditorIds,
+            ProjectFieldValue::PageEditorIds(_) => ProjectFieldType::PageEditorIds,
             ProjectFieldValue::Extra(_) => ProjectFieldType::Extra,
             ProjectFieldValue::ProjectLastEditor(_) => ProjectFieldType::ProjectLastEditor,
             ProjectFieldValue::ProjectLastEdited(_) => ProjectFieldType::ProjectLastEdited,
@@ -4114,6 +4143,11 @@ impl LoadStorePeered for ProjectField {
             ProjectFieldValue::AssociatedProjects(projects) => {
                 self.save_associated_projects(projects).await
             }
+            ProjectFieldValue::PageEditorIds(editor_ids) => {
+                self.save_page_editor_ids(editor_ids).await
+            }
+            ProjectFieldValue::Tags(tags) => self.save_tags(tags).await,
+            ProjectFieldValue::Contacts(contacts) => self.save_contacts(contacts).await,
             _ => {
                 // For field types not yet implemented, return an error
                 Err(anyhow::anyhow!(
@@ -4312,6 +4346,9 @@ impl LoadStorePeered for ProjectField {
             ProjectFieldType::AssociatedProjects => {
                 Self::read_associated_projects(project_id).await
             }
+            ProjectFieldType::PageEditorIds => Self::read_page_editor_ids(project_id).await,
+            ProjectFieldType::Tags => Self::read_tags(project_id).await,
+            ProjectFieldType::Contacts => Self::read_contacts(project_id).await,
             _ => {
                 // For field types not yet implemented, return an error
                 Err(anyhow::anyhow!(
@@ -4566,6 +4603,26 @@ impl ProjectField {
         Ok(ProjectField {
             project_id,
             field: ProjectFieldValue::AssociatedProjects(project_ids?.into_boxed_slice()),
+        })
+    }
+
+    async fn read_page_editor_ids(project_id: Ulid) -> Result<Self, Error> {
+        let project_id_str = project_id.to_string();
+        let rows = sqlx::query!(
+            "SELECT user_id FROM project_page_editors WHERE project_id = ? ORDER BY user_id",
+            project_id_str
+        )
+        .fetch_all(db())
+        .await?;
+
+        let user_ids: Result<Vec<Ulid>, ulid::DecodeError> = rows
+            .into_iter()
+            .map(|row| row.user_id.parse::<Ulid>())
+            .collect();
+
+        Ok(ProjectField {
+            project_id,
+            field: ProjectFieldValue::PageEditorIds(user_ids?.into_boxed_slice()),
         })
     }
 
@@ -4929,5 +4986,185 @@ impl ProjectField {
             .await?;
         }
         Ok(())
+    }
+
+    async fn save_page_editor_ids(&self, editor_ids: &[Ulid]) -> Result<(), Error> {
+        let project_id_str = self.project_id.to_string();
+
+        // Get existing editors before making changes
+        let existing_rows = sqlx::query!(
+            "SELECT user_id FROM project_page_editors WHERE project_id = ?",
+            project_id_str
+        )
+        .fetch_all(db())
+        .await?;
+
+        let existing_editors: Vec<Ulid> = existing_rows
+            .into_iter()
+            .filter_map(|row| row.user_id.parse::<Ulid>().ok())
+            .collect();
+
+        // Delete existing entries
+        sqlx::query!(
+            "DELETE FROM project_page_editors WHERE project_id = ?",
+            project_id_str
+        )
+        .execute(db())
+        .await?;
+
+        // Insert new entries
+        for editor_id in editor_ids {
+            let editor_id_str = editor_id.to_string();
+            sqlx::query!(
+                "INSERT INTO project_page_editors (project_id, user_id) VALUES (?, ?)",
+                project_id_str,
+                editor_id_str
+            )
+            .execute(db())
+            .await?;
+        }
+
+        // Sync page manager status for all affected users (old + new)
+        let mut affected_users = existing_editors;
+        affected_users.extend_from_slice(editor_ids);
+        affected_users.sort();
+        affected_users.dedup();
+
+        if !affected_users.is_empty() {
+            if let Err(err) =
+                crate::page_manager::trigger_page_editor_sync_for_users(&affected_users).await
+            {
+                tracing::error!(
+                    "Failed to sync page manager status for project {}: {}",
+                    self.project_id,
+                    err
+                );
+                // Don't fail the save operation if sync fails
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn save_tags(&self, tags: &HashSet<InsensitiveString>) -> Result<(), Error> {
+        let project_id_str = self.project_id.to_string();
+
+        // Delete existing entries
+        sqlx::query!(
+            "DELETE FROM project_tags WHERE project_id = ?",
+            project_id_str
+        )
+        .execute(db())
+        .await?;
+
+        // Insert new entries
+        for tag in tags {
+            let tag_str = tag.as_ref();
+            sqlx::query!(
+                "INSERT INTO project_tags (project_id, tag) VALUES (?, ?)",
+                project_id_str,
+                tag_str
+            )
+            .execute(db())
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn read_tags(project_id: Ulid) -> Result<Self, Error> {
+        let project_id_str = project_id.to_string();
+        let rows = sqlx::query!(
+            "SELECT tag FROM project_tags WHERE project_id = ? ORDER BY tag",
+            project_id_str
+        )
+        .fetch_all(db())
+        .await?;
+
+        let tags: HashSet<InsensitiveString> = rows
+            .into_iter()
+            .map(|row| InsensitiveString::from(row.tag))
+            .collect();
+
+        Ok(ProjectField {
+            project_id,
+            field: ProjectFieldValue::Tags(tags),
+        })
+    }
+
+    async fn save_contacts(&self, contacts: &[Contact]) -> Result<(), Error> {
+        let project_id_str = self.project_id.to_string();
+
+        // Delete existing entries
+        sqlx::query!(
+            "DELETE FROM project_contacts WHERE project_id = ?",
+            project_id_str
+        )
+        .execute(db())
+        .await?;
+
+        // Insert new entries
+        for contact in contacts {
+            let contact_id_str = contact.contact_id.to_string();
+            let role_str = match contact.role {
+                crate::contact::ContactRole::Manager => "Manager",
+                crate::contact::ContactRole::ContactPerson => "ContactPerson",
+                crate::contact::ContactRole::Technical => "Technical",
+                crate::contact::ContactRole::Notification => "Notification",
+            };
+
+            sqlx::query!(
+                "INSERT INTO project_contacts (contact_id, project_id, role, name, affiliation, email, phone, address) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                contact_id_str,
+                project_id_str,
+                role_str,
+                contact.name,
+                contact.affiliation,
+                contact.email,
+                contact.phone,
+                contact.address
+            )
+            .execute(db())
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn read_contacts(project_id: Ulid) -> Result<Self, Error> {
+        let project_id_str = project_id.to_string();
+        let rows = sqlx::query!(
+            "SELECT contact_id, role, name, affiliation, email, phone, address FROM project_contacts WHERE project_id = ? ORDER BY contact_id",
+            project_id_str
+        )
+        .fetch_all(db())
+        .await?;
+
+        let mut contacts = Vec::new();
+        for row in rows {
+            let contact_id: Ulid = row.contact_id.parse()
+                .map_err(|e| anyhow::anyhow!("Invalid ULID for contact_id: {}", e))?;
+
+            let role = match row.role.as_str() {
+                "Manager" => crate::contact::ContactRole::Manager,
+                "ContactPerson" => crate::contact::ContactRole::ContactPerson,
+                "Technical" => crate::contact::ContactRole::Technical,
+                "Notification" => crate::contact::ContactRole::Notification,
+                _ => return Err(anyhow::anyhow!("Invalid contact role: {}", row.role)),
+            };
+
+            contacts.push(Contact {
+                contact_id,
+                role,
+                name: row.name,
+                affiliation: row.affiliation,
+                email: row.email,
+                phone: row.phone,
+                address: row.address,
+            });
+        }
+
+        Ok(Self {
+            project_id,
+            field: ProjectFieldValue::Contacts(contacts.into_boxed_slice()),
+        })
     }
 }

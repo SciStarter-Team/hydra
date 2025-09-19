@@ -1,0 +1,99 @@
+<div class="border border-gray-200 rounded-lg p-4 bg-white">
+    <% if let Some(contact) = &self.contact { %>
+        <!-- Existing contact form -->
+        <form class="space-y-3" hx-put="/-admin/projects/<%= self.project_id|disp %>/contacts/items/<%= contact.contact_id|disp %>" hx-target="#contact-items-<%= self.project_id|disp %>" hx-swap="outerHTML">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Role *</label>
+                    <select name="role" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white">
+                        <option value="Manager"<% if matches!(contact.role, crate::contact::ContactRole::Manager) { %> selected<% } %>>Manager</option>
+                        <option value="ContactPerson"<% if matches!(contact.role, crate::contact::ContactRole::ContactPerson) { %> selected<% } %>>Contact Person</option>
+                        <option value="Technical"<% if matches!(contact.role, crate::contact::ContactRole::Technical) { %> selected<% } %>>Technical</option>
+                        <option value="Notification"<% if matches!(contact.role, crate::contact::ContactRole::Notification) { %> selected<% } %>>Notification</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Email *</label>
+                    <input type="email" name="email" required value="<%= contact.email %>" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white">
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Name</label>
+                    <input type="text" name="name" value="<% if let Some(name) = &contact.name { %><%= name %><% } %>" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Affiliation</label>
+                    <input type="text" name="affiliation" value="<% if let Some(affiliation) = &contact.affiliation { %><%= affiliation %><% } %>" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white">
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Phone</label>
+                    <input type="tel" name="phone" value="<% if let Some(phone) = &contact.phone { %><%= phone %><% } %>" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Address</label>
+                    <input type="text" name="address" value="<% if let Some(address) = &contact.address { %><%= address %><% } %>" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white">
+                </div>
+            </div>
+            <div class="flex space-x-2">
+                <button type="submit" class="px-3 py-2 text-sm bg-blue-500 text-white rounded hover:bg-blue-600">
+                    Save Contact
+                </button>
+                <button type="button" class="px-3 py-2 text-sm bg-red-500 text-white rounded hover:bg-red-600"
+                        hx-delete="/-admin/projects/<%= self.project_id|disp %>/contacts/items/<%= contact.contact_id|disp %>"
+                        hx-target="#contact-items-<%= self.project_id|disp %>"
+                        hx-swap="outerHTML"
+                        hx-confirm="Are you sure you want to remove this contact?">
+                    Remove
+                </button>
+            </div>
+        </form>
+    <% } else { %>
+        <!-- New contact form -->
+        <form class="space-y-3" hx-post="/-admin/projects/<%= self.project_id|disp %>/contacts/items" hx-target="#contact-items-<%= self.project_id|disp %>" hx-swap="outerHTML">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Role *</label>
+                    <select name="role" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white">
+                        <option value="">Select role...</option>
+                        <option value="Manager">Manager</option>
+                        <option value="ContactPerson">Contact Person</option>
+                        <option value="Technical">Technical</option>
+                        <option value="Notification">Notification</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Email *</label>
+                    <input type="email" name="email" required placeholder="contact@example.com" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white">
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Name</label>
+                    <input type="text" name="name" placeholder="Full name" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Affiliation</label>
+                    <input type="text" name="affiliation" placeholder="Organization" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white">
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Phone</label>
+                    <input type="tel" name="phone" placeholder="+1 (555) 123-4567" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Address</label>
+                    <input type="text" name="address" placeholder="Full address" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white">
+                </div>
+            </div>
+            <div>
+                <button type="submit" class="px-3 py-2 text-sm bg-green-500 text-white rounded hover:bg-green-600">
+                    Add Contact
+                </button>
+            </div>
+        </form>
+    <% } %>
+</div>

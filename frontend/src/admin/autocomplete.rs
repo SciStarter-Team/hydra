@@ -11,6 +11,7 @@ use ulid::Ulid;
 pub enum AutocompleteEntityType {
     Projects,
     Events,
+    Users,
 }
 
 impl std::fmt::Display for AutocompleteEntityType {
@@ -18,6 +19,7 @@ impl std::fmt::Display for AutocompleteEntityType {
         match self {
             AutocompleteEntityType::Projects => write!(f, "projects"),
             AutocompleteEntityType::Events => write!(f, "events"),
+            AutocompleteEntityType::Users => write!(f, "users"),
         }
     }
 }
@@ -87,6 +89,23 @@ impl EntityAutocomplete {
         }
     }
 
+    pub fn new_user_selector(
+        field_name: impl Into<String>,
+        field_label: impl Into<String>,
+        placeholder: impl Into<String>,
+    ) -> Self {
+        Self {
+            entity_type: AutocompleteEntityType::Users,
+            publish_filter: PublishFilter::All,
+            field_name: field_name.into(),
+            field_label: field_label.into(),
+            placeholder: placeholder.into(),
+            selected_id: None,
+            selected_name: None,
+            read_only: false,
+        }
+    }
+
     pub fn with_selected(mut self, id: Ulid, name: impl Into<String>) -> Self {
         self.selected_id = Some(id);
         self.selected_name = Some(name.into());
@@ -125,6 +144,7 @@ pub struct ResolveQuery {
     pub field_label: String,
     pub placeholder: String,
     pub publish: Option<PublishFilter>,
+    pub read_only: Option<bool>,
 }
 
 #[derive(Debug)]
@@ -299,12 +319,104 @@ pub async fn resolve_event_name(id: Ulid) -> Result<Option<String>, Error> {
     Ok(row.map(|(name,)| name))
 }
 
+pub async fn search_users(query: &AutocompleteQuery) -> Result<Vec<AutocompleteResult>, Error> {
+    use common::{message::user::{AdminUserSearchRequest, AdminUserListResponse}, shared::nats};
+
+    let search_term = query.search.as_deref().unwrap_or("").trim();
+    if search_term.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let search_request = AdminUserSearchRequest {
+        search: Some(search_term.to_string()),
+        role: None,
+        email_status: None,
+        page: Some(1),
+        limit: Some(10),
+    };
+
+    let request_payload = flexbuffers::to_vec(&search_request)
+        .map_err(|e| anyhow::anyhow!("Failed to serialize search request: {}", e))?;
+
+    let response = nats()
+        .request("user.admin.user_search", request_payload.into())
+        .await
+        .map_err(|e| anyhow::anyhow!("NATS request failed: {}", e))?;
+
+    let search_response: AdminUserListResponse = flexbuffers::from_slice(&response.payload)
+        .map_err(|e| anyhow::anyhow!("Failed to deserialize search response: {}", e))?;
+
+    let results = search_response
+        .users
+        .into_iter()
+        .map(|user| AutocompleteResult {
+            id: user.user_id,
+            name: user.primary_email,
+        })
+        .collect();
+
+    Ok(results)
+}
+
+pub async fn resolve_user_name(id: Ulid) -> Result<Option<String>, Error> {
+    use common::{message::user::{AdminUserGetRequest, AdminUserResponse}, shared::nats};
+
+    let get_request = AdminUserGetRequest { user_id: id };
+
+    let request_payload = flexbuffers::to_vec(&get_request)
+        .map_err(|e| anyhow::anyhow!("Failed to serialize get request: {}", e))?;
+
+    let response = nats()
+        .request("user.admin.user_get", request_payload.into())
+        .await
+        .map_err(|e| anyhow::anyhow!("NATS request failed: {}", e))?;
+
+    // If the user doesn't exist, the user service returns an error
+    match flexbuffers::from_slice::<AdminUserResponse>(&response.payload) {
+        Ok(user_response) => Ok(Some(user_response.user.primary_email)),
+        Err(_) => Ok(None), // User not found
+    }
+}
+
+pub async fn resolve_user_names(ids: Vec<Ulid>) -> Result<Vec<(Ulid, String)>, Error> {
+    use common::{message::user::{AdminUserBatchGetRequest, AdminUserBatchGetResponse}, shared::nats};
+
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let batch_request = AdminUserBatchGetRequest {
+        user_ids: ids,
+    };
+
+    let request_payload = flexbuffers::to_vec(&batch_request)
+        .map_err(|e| anyhow::anyhow!("Failed to serialize batch request: {}", e))?;
+
+    let response = nats()
+        .request("user.admin.user_batch_get", request_payload.into())
+        .await
+        .map_err(|e| anyhow::anyhow!("NATS request failed: {}", e))?;
+
+    let batch_response: AdminUserBatchGetResponse = flexbuffers::from_slice(&response.payload)
+        .map_err(|e| anyhow::anyhow!("Failed to deserialize batch response: {}", e))?;
+
+    let results = batch_response
+        .users
+        .into_iter()
+        .map(|mapping| (mapping.user_id, mapping.primary_email))
+        .collect();
+
+    Ok(results)
+}
+
 pub fn routes() -> impl Endpoint {
     Route::new()
         .at("/projects", get(handle_projects_autocomplete))
         .at("/events", get(handle_events_autocomplete))
+        .at("/users", get(handle_users_autocomplete))
         .at("/resolve/projects/:id", get(handle_resolve_project_widget))
         .at("/resolve/events/:id", get(handle_resolve_event_widget))
+        .at("/resolve/users/:id", get(handle_resolve_user_widget))
 }
 
 #[handler]
@@ -344,13 +456,17 @@ async fn handle_resolve_project_widget(
         poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
     })?;
 
-    let widget = EntityAutocomplete::new_project_selector(
+    let mut widget = EntityAutocomplete::new_project_selector(
         query.field_name,
         query.field_label,
         query.placeholder,
     )
     .with_publish_filter(query.publish.unwrap_or(PublishFilter::All))
     .with_selected(id, name.unwrap_or_else(|| "Unknown Project".to_string()));
+
+    if let Some(read_only) = query.read_only {
+        widget = widget.with_read_only(read_only);
+    }
 
     let html = widget.render_once().map_err(|e| {
         poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
@@ -368,13 +484,58 @@ async fn handle_resolve_event_widget(
         poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
     })?;
 
-    let widget = EntityAutocomplete::new_event_selector(
+    let mut widget = EntityAutocomplete::new_event_selector(
         query.field_name,
         query.field_label,
         query.placeholder,
     )
     .with_publish_filter(query.publish.unwrap_or(PublishFilter::All))
     .with_selected(id, name.unwrap_or_else(|| "Unknown Event".to_string()));
+
+    if let Some(read_only) = query.read_only {
+        widget = widget.with_read_only(read_only);
+    }
+
+    let html = widget.render_once().map_err(|e| {
+        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+
+    Ok(Response::builder().content_type("text/html").body(html))
+}
+
+#[handler]
+async fn handle_users_autocomplete(Query(query): Query<AutocompleteQuery>) -> Result<Response> {
+    let results = search_users(&query).await.map_err(|e| {
+        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+
+    let template = AutocompleteResults::new(results, query.field_name.unwrap_or_default());
+    let html = template.render_once().map_err(|e| {
+        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+
+    Ok(Response::builder().content_type("text/html").body(html))
+}
+
+#[handler]
+async fn handle_resolve_user_widget(
+    Path(id): Path<Ulid>,
+    Query(query): Query<ResolveQuery>,
+) -> Result<Response> {
+    let email = resolve_user_name(id).await.map_err(|e| {
+        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+
+    let mut widget = EntityAutocomplete::new_user_selector(
+        query.field_name,
+        query.field_label,
+        query.placeholder,
+    )
+    .with_selected(id, email.unwrap_or_else(|| "Unknown User".to_string()));
+
+    if let Some(read_only) = query.read_only {
+        widget = widget.with_read_only(read_only);
+    }
 
     let html = widget.render_once().map_err(|e| {
         poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
