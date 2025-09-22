@@ -1,7 +1,9 @@
 use crate::component::{AdminLayout, Component, admin_layout::AdminLayoutPrepared};
 use crate::contact::Contact;
+use crate::gourl::{GoUrl, GoUrlType};
 use crate::middleware::authorization::{Authenticated, StaffOnly};
 use crate::project::field::{ProjectField, ProjectFieldType, ProjectFieldValue};
+use crate::upload::storage::FileMetadata;
 
 pub mod autocomplete;
 #[derive(Debug, TemplateOnce)]
@@ -45,10 +47,10 @@ use common::{
 use jiff::{Timestamp, ToSpan, tz::TimeZone};
 use poem::{
     Endpoint, EndpointExt, Route, delete, get, handler, post, put,
-    web::{Form, Path, Query},
+    web::{Form, Json, Path, Query}, IntoResponse,
 };
 use sailfish::TemplateOnce;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -114,6 +116,10 @@ pub fn routes() -> impl Endpoint {
             "/engine-room/sync-page-managers",
             post(engine_room_sync_page_managers),
         )
+        .at("/files-links", get(files_links))
+        .at("/files-links/search", get(files_links_search))
+        .at("/files-links/redirect", post(files_links_create_redirect))
+        .at("/files-links/:slug", delete(files_links_delete_go_url))
         .nest("/autocomplete", autocomplete::routes())
         .with(StaffOnly)
 }
@@ -5132,4 +5138,283 @@ async fn projects_remove_contact(
         .body(contact_items.render_once().map_err(|_| {
             poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
         })?))
+}
+
+// Files & Links admin page structures
+#[derive(Debug, Clone)]
+pub struct GoUrlWithFileInfo {
+    pub slug: String,
+    pub url_type: GoUrlType,
+    pub file_info: Option<FileMetadata>,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/files_links.stpl.html")]
+pub struct FilesLinksPage {
+    pub go_urls_list: GoUrlsList,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/go_urls_list.stpl.html")]
+pub struct GoUrlsList {
+    pub go_urls: Vec<GoUrlWithFileInfo>,
+    pub pagination: PaginationInfo,
+    pub search_query: Option<String>,
+}
+
+#[derive(Debug)]
+pub struct PaginationInfo {
+    pub current_page: u32,
+    pub per_page: u32,
+    pub total_count: u32,
+    pub total_pages: u32,
+    pub has_prev: bool,
+    pub has_next: bool,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/partials/go_url_row.stpl.html")]
+pub struct GoUrlRow<'a> {
+    pub go_url: &'a GoUrlWithFileInfo,
+    pub oob: bool,
+    pub oob_swap: String,
+}
+
+
+// Files & Links admin handlers
+#[derive(Serialize, Deserialize)]
+struct SearchQuery {
+    page: Option<u32>,
+    per_page: Option<u32>,
+    search: Option<String>,
+}
+
+#[handler]
+async fn files_links(
+    Authenticated(user_info): Authenticated,
+    Query(query): Query<SearchQuery>,
+) -> Result<poem::Response, anyhow::Error> {
+    let page = query.page.unwrap_or(1).max(1);
+    let per_page = query.per_page.unwrap_or(20).clamp(1, 100); // Limit to reasonable range
+    let search = query.search.filter(|s| !s.trim().is_empty());
+
+    let go_urls_list = get_go_urls_with_file_info_searched(page, per_page, search.clone()).await?;
+    let content = FilesLinksPage { go_urls_list }.render_once()?;
+
+    AdminLayout::new("Files & Links")
+        .with_breadcrumb("Files & Links", None)
+        .with_sidebar_active("files-links")
+        .with_content(content)
+        .into_response(user_info)
+        .await
+}
+
+#[handler]
+async fn files_links_search(
+    Authenticated(_user_info): Authenticated,
+    Query(query): Query<SearchQuery>,
+) -> Result<impl IntoResponse, poem::Error> {
+    let page = query.page.unwrap_or(1).max(1);
+    let per_page = query.per_page.unwrap_or(20).clamp(1, 100);
+    let search = query.search.filter(|s| !s.trim().is_empty());
+
+    match get_go_urls_with_file_info_searched(page, per_page, search).await {
+        Ok(go_urls_list) => {
+            use sailfish::TemplateOnce;
+            match go_urls_list.render_once() {
+                Ok(rendered) => Ok(poem::Response::builder()
+                    .status(poem::http::StatusCode::OK)
+                    .content_type("text/html")
+                    .body(rendered)),
+                Err(e) => {
+                    tracing::error!("Failed to render go URLs list: {}", e);
+                    Err(poem::Error::from_string(
+                        "Failed to render search results",
+                        poem::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    ))
+                }
+            }
+        }
+        Err(e) => {
+            tracing::error!("Failed to search go URLs: {}", e);
+            Err(poem::Error::from_string(
+                "Search failed",
+                poem::http::StatusCode::INTERNAL_SERVER_ERROR,
+            ))
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct CreateRedirectRequest {
+    slug: String,
+    target_url: String,
+}
+
+#[handler]
+async fn files_links_create_redirect(
+    Form(request): Form<CreateRedirectRequest>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<impl IntoResponse, poem::Error> {
+    // Validate slug
+    if !GoUrl::is_valid_slug(&request.slug) {
+        return Ok(poem::Response::builder()
+            .status(poem::http::StatusCode::BAD_REQUEST)
+            .content_type("text/html")
+            .body(r#"<div class="text-red-600">Invalid slug format</div>"#));
+    }
+
+    // Check if slug already exists
+    if GoUrl::load(request.slug.clone()).await.is_ok() {
+        return Ok(poem::Response::builder()
+            .status(poem::http::StatusCode::BAD_REQUEST)
+            .content_type("text/html")
+            .body(r#"<div class="text-red-600">Slug already exists</div>"#));
+    }
+
+    // Create and save redirect
+    let go_url = GoUrl::new_redirect(request.slug, request.target_url);
+    if let Err(e) = go_url.store().await {
+        tracing::error!("Failed to create redirect: {}", e);
+        return Ok(poem::Response::builder()
+            .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+            .content_type("text/html")
+            .body(r#"<div class="text-red-600">Failed to create redirect</div>"#));
+    }
+
+    // Return updated go URLs list
+    let go_urls_list = get_go_urls_with_file_info().await.map_err(|e| {
+        tracing::error!("Failed to get go URLs: {}", e);
+        poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+
+    use sailfish::TemplateOnce;
+    let rendered = go_urls_list.render_once().map_err(|e| {
+        tracing::error!("Failed to render template: {}", e);
+        poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::OK)
+        .content_type("text/html")
+        .body(rendered))
+}
+
+#[handler]
+async fn files_links_delete_go_url(
+    Path(slug): Path<String>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<impl IntoResponse, poem::Error> {
+    // Try to load the go URL first to verify it exists
+    if GoUrl::load(slug.clone()).await.is_err() {
+        return Ok(poem::Response::builder()
+            .status(poem::http::StatusCode::NOT_FOUND)
+            .content_type("text/html")
+            .body(r#"<div class="text-red-600">Go URL not found</div>"#));
+    }
+
+    // Delete the go URL
+    if let Err(e) = GoUrl::delete(slug.clone()).await {
+        tracing::error!("Failed to delete go URL {}: {}", slug, e);
+        return Ok(poem::Response::builder()
+            .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+            .content_type("text/html")
+            .body(r#"<div class="text-red-600">Failed to delete go URL</div>"#));
+    }
+
+    // Return updated go URLs list
+    let go_urls_list = get_go_urls_with_file_info().await.map_err(|e| {
+        tracing::error!("Failed to get go URLs: {}", e);
+        poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+
+    use sailfish::TemplateOnce;
+    let rendered = go_urls_list.render_once().map_err(|e| {
+        tracing::error!("Failed to render template: {}", e);
+        poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::OK)
+        .content_type("text/html")
+        .body(rendered))
+}
+
+// Helper function to get paginated and searched go URLs with file information
+pub async fn get_go_urls_with_file_info_searched(page: u32, per_page: u32, search: Option<String>) -> Result<GoUrlsList, anyhow::Error> {
+    use common::shared::db;
+    use sqlx::{QueryBuilder, Row};
+
+    // Build count query
+    let mut count_query: QueryBuilder<sqlx::Sqlite> = QueryBuilder::new("SELECT COUNT(*) FROM go_urls");
+    if let Some(ref search_term) = search {
+        count_query.push(" WHERE slug LIKE ");
+        count_query.push_bind(format!("%{}%", search_term));
+    }
+
+    let total_count: i64 = count_query.build_query_scalar().fetch_one(db()).await?;
+    let total_count = total_count as u32;
+    let total_pages = (total_count + per_page - 1) / per_page; // Ceiling division
+    let offset = (page - 1) * per_page;
+
+    // Build main query
+    let mut query: QueryBuilder<sqlx::Sqlite> = QueryBuilder::new("SELECT slug, url_type FROM go_urls");
+    if let Some(ref search_term) = search {
+        query.push(" WHERE slug LIKE ");
+        query.push_bind(format!("%{}%", search_term));
+    }
+    query.push(" ORDER BY slug LIMIT ");
+    query.push_bind(per_page);
+    query.push(" OFFSET ");
+    query.push_bind(offset);
+
+    let rows = query.build().fetch_all(db()).await?;
+
+    let mut go_urls = Vec::new();
+
+    for row in rows {
+        let slug: String = row.get("slug");
+        let url_type_blob: Vec<u8> = row.get("url_type");
+        let url_type: GoUrlType = flexbuffers::from_slice(&url_type_blob)?;
+
+        let file_info = match &url_type {
+            GoUrlType::TrackedFile { file_id } => {
+                // Get file metadata if this is a tracked file
+                use crate::upload::storage::FileMetadata;
+                FileMetadata::load(*file_id).await.ok()
+            }
+            GoUrlType::Redirect { .. } => None,
+        };
+
+        go_urls.push(GoUrlWithFileInfo {
+            slug,
+            url_type,
+            file_info,
+        });
+    }
+
+    let pagination = PaginationInfo {
+        current_page: page,
+        per_page,
+        total_count,
+        total_pages,
+        has_prev: page > 1,
+        has_next: page < total_pages,
+    };
+
+    Ok(GoUrlsList {
+        go_urls,
+        pagination,
+        search_query: search,
+    })
+}
+
+// Helper function to get paginated go URLs with file information (for backward compatibility)
+pub async fn get_go_urls_with_file_info_paginated(page: u32, per_page: u32) -> Result<GoUrlsList, anyhow::Error> {
+    get_go_urls_with_file_info_searched(page, per_page, None).await
+}
+
+// Helper function to get all go URLs with file information (for backward compatibility)
+pub async fn get_go_urls_with_file_info() -> Result<GoUrlsList, anyhow::Error> {
+    get_go_urls_with_file_info_searched(1, 1000, None).await // Large page size for "all"
 }

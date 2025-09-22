@@ -1,4 +1,6 @@
 use std::collections::BTreeMap;
+use std::sync::Arc;
+use std::fmt;
 
 use crate::badge::Badge;
 use crate::timestring::TimeString;
@@ -186,6 +188,19 @@ impl UserInfo for Option<&BasicInfo> {
         match self {
             Some(info) => info.is_superuser(),
             None => Unauthenticated.is_superuser(),
+        }
+    }
+}
+
+pub trait UserDisplayStr {
+    fn display_str(&self) -> String;
+}
+
+impl UserDisplayStr for Option<Arc<BasicInfo>> {
+    fn display_str(&self) -> String {
+        match self {
+            Some(user) => user.user_id.to_string(),
+            None => "anonymous".to_string(),
         }
     }
 }

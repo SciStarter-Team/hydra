@@ -16,7 +16,7 @@ pub trait LoadStorePeered:
     std::fmt::Debug + serde::Serialize + for<'d> serde::Deserialize<'d>
 {
     //type DatabaseKey<'k>;
-    type DatabaseKey; // Should be DatabaseKey<'k> but as of Rust 1.87 that triggers https://github.com/rust-lang/rust/issues/100013
+    type DatabaseKey: Clone + serde::Serialize; // Should be DatabaseKey<'k> but as of Rust 1.87 that triggers https://github.com/rust-lang/rust/issues/100013
 
     const GROUP: &str;
     const SPECIFIC: &str = "";
@@ -176,6 +176,33 @@ pub trait LoadStorePeered:
     /// via the load() method for proper peer-to-peer synchronization.
     //async fn read_from_database<'k>(key: Self::DatabaseKey<'k>) -> Result<Self, Error>;
     async fn read_from_database(key: Self::DatabaseKey) -> Result<Self, Error>;
+
+    /// Deletes the record with the given key from the local database, without any peer involvement.
+    ///
+    /// Rather than calling this method directly, it should be invoked
+    /// via the delete() method for proper peer-to-peer synchronization.
+    async fn delete_from_database(_key: Self::DatabaseKey) -> Result<(), Error> {
+        unimplemented!("delete_from_database not implemented for this type")
+    }
+
+    /// Deletes the record with the matching key, updating peers with the change as well.
+    ///
+    /// This is the main entry point for deleting data.
+    ///
+    /// Overriding the default implementation is not recommended.
+    #[tracing::instrument(skip(key))]
+    async fn delete(key: Self::DatabaseKey) -> Result<(), Error> {
+        Self::delete_from_database(key.clone()).await?;
+        send_with_headers(
+            peering_subject_delete::<Self>(),
+            nats_headers! {
+                "Source": SERVER_ID_STR.as_str(),
+            },
+            &key,
+        )
+        .await?;
+        Ok(())
+    }
 }
 
 // Seems like the next two functions *should* be able to be const fn,
@@ -198,6 +225,16 @@ fn peering_subject_load<T: LoadStorePeered>() -> String {
         format!("frontend.{}.load", T::GROUP)
     } else {
         format!("frontend.{}.load.{}", T::GROUP, T::SPECIFIC)
+    }
+}
+
+/// Returns the NATS subject used for peering deletes on T.
+#[tracing::instrument]
+fn peering_subject_delete<T: LoadStorePeered>() -> String {
+    if T::SPECIFIC.is_empty() {
+        format!("frontend.{}.delete", T::GROUP)
+    } else {
+        format!("frontend.{}.delete.{}", T::GROUP, T::SPECIFIC)
     }
 }
 

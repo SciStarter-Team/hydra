@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use anyhow::Error;
 use common::{insensitivestring::InsensitiveString, shared::db, timestring::TimeString};
+use serde::{Serialize, Deserialize};
 use ulid::Ulid;
 
 use crate::{contact::Contact, peering::LoadStorePeered};
@@ -209,7 +210,7 @@ pub const SUSTAINABLE_DEVELOPMENT_GOALS_VOCABULARY: &[&str] = &[
 // as it's a computed field for FTS search optimization, not a real project field.
 // Tags are managed separately via the project_tags table and dedicated handlers.
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ProjectFieldType {
     ProjectId,
     LegacyV1ProjectId,

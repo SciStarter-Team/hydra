@@ -1,13 +1,14 @@
 use anyhow::Error;
 use ulid::Ulid;
 use common::timestring::TimeString;
+use serde::{Serialize, Deserialize};
 use crate::{event::EventStatus, peering::LoadStorePeered};
 
 // Note: The `tags_text` database column is NOT included in EventFieldType
 // as it's a computed field for FTS search optimization, not a real event field.
 // Tags are managed separately via the event_tags table and dedicated handlers.
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum EventFieldType {
     EventId,
     Status,

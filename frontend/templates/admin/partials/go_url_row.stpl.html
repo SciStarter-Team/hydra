@@ -1,0 +1,102 @@
+<div id="go-url-<%= self.go_url.slug %>" class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50" <% if self.oob { %>hx-swap-oob="<%= self.oob_swap %>"<% } %>>
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 lg:gap-0">
+        <div class="flex-1">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                <div>
+                    <a href="/go/<%= self.go_url.slug %>" target="_blank" class="text-sm font-medium text-gray-900 hover:underline">
+                        <code class="bg-gray-100 px-2 py-1 rounded text-sm">/go/<%= self.go_url.slug %></code>
+                    </a>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <% match &self.go_url.url_type {
+                        crate::gourl::GoUrlType::TrackedFile { file_id } => { %>
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                File
+                            </span>
+                            <% if let Some(file_info) = self.go_url.file_info.as_ref() { %>
+                                <% if let Some(filename) = &file_info.original_filename { %>
+                                    <span class="text-sm text-gray-600"><%= filename %></span>
+                                <% } %>
+                                <% if file_info.force_download { %>
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800">
+                                        Force Download
+                                    </span>
+                                <% } %>
+                            <% } %>
+                        <% }
+                        crate::gourl::GoUrlType::Redirect { target_url } => { %>
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                Redirect
+                            </span>
+                            <span class="text-sm text-gray-600">→ <%= target_url %></span>
+                        <% }
+                    } %>
+                </div>
+            </div>
+        </div>
+        <div class="flex items-center justify-start lg:justify-end space-x-4">
+            <% match &self.go_url.url_type {
+                crate::gourl::GoUrlType::TrackedFile { file_id } => { %>
+                    <% if let Some(file_info) = self.go_url.file_info.as_ref() { %>
+                        <!-- Toggle Download Mode -->
+                        <div class="flex items-center space-x-2">
+                            <span class="text-xs text-gray-600">Force Download</span>
+                            <form hx-put="/-upload/files/<%= file_id|disp %>/download-mode"
+                                  hx-target="#go-url-<%= self.go_url.slug %>" hx-swap="outerHTML"
+                                  class="inline">
+                                <input type="hidden" name="force_download" value="<%= !file_info.force_download %>">
+                                <input type="hidden" name="slug" value="<%= self.go_url.slug %>">
+                                <button type="submit"
+                                        class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 <%= if file_info.force_download { "bg-blue-600" } else { "bg-gray-200" } %>">
+                                    <span class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform <%= if file_info.force_download { "translate-x-5" } else { "translate-x-1" } %>"></span>
+                                </button>
+                            </form>
+                        </div>
+                    <% } %>
+                <% }
+                crate::gourl::GoUrlType::Redirect { .. } => { %>
+                    <!-- No actions for redirects yet -->
+                <% }
+            } %>
+
+            <!-- Delete Go URL -->
+            <button hx-delete="/-admin/files-links/<%= self.go_url.slug %>"
+                    hx-target="#go-url-<%= self.go_url.slug %>"
+                    hx-swap="outerHTML swap:1s"
+                    hx-confirm="Are you sure you want to delete this go URL?"
+                    class="text-sm text-red-600 hover:text-red-800">
+                Delete
+            </button>
+        </div>
+    </div>
+
+    <% match &self.go_url.url_type {
+        crate::gourl::GoUrlType::TrackedFile { file_id } => { %>
+            <% if self.go_url.file_info.is_none() { %>
+                <div class="mt-2">
+                    <!-- Set Go URL for this file -->
+                    <form hx-put="/-upload/files/<%= file_id|disp %>/friendly-url"
+                          hx-target="#go-url-<%= self.go_url.slug %>" hx-swap="outerHTML"
+                          class="flex items-center space-x-2">
+                        <span class="text-sm text-gray-600">Set go URL:</span>
+                        <div class="flex">
+                            <span class="inline-flex items-center px-2 py-1 border border-r-0 border-gray-300 bg-gray-50 text-gray-500 text-xs rounded-l-md">
+                                /go/
+                            </span>
+                            <input type="text" name="friendly_url" required pattern="[a-zA-Z0-9-]+"
+                                   placeholder="slug"
+                                   class="block w-32 text-sm rounded-r-md border-gray-300 focus:border-blue-500 focus:ring-blue-500">
+                        </div>
+                        <button type="submit"
+                                class="text-sm text-blue-600 hover:text-blue-800">
+                            Set
+                        </button>
+                    </form>
+                </div>
+            <% } %>
+        <% }
+        crate::gourl::GoUrlType::Redirect { .. } => { %>
+            <!-- Redirects don't need file URLs -->
+        <% }
+    } %>
+</div>

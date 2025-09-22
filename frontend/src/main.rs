@@ -6,6 +6,7 @@ pub mod contact;
 pub mod dev;
 pub mod entity;
 pub mod event;
+pub mod gourl;
 pub mod health;
 pub mod middleware;
 pub mod misc;
@@ -196,6 +197,7 @@ fn dynamic() -> impl Endpoint {
         .nest("/-ui", ui::routes())
         .nest("/-upload", upload::authenticated_routes())
         .nest("/-forum", component::forum::forum_endpoints())
+        .at("/go/*friendly_url", get(gourl::handle_go_url))
         .nest_no_strip("/", user_facing())
         .catch_all_error(error_dispatch)
         .with(middleware::authorization::AuthMiddleware)
