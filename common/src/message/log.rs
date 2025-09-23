@@ -69,3 +69,36 @@ pub struct RecentActivityItem {
 pub struct RecentActivityResponse {
     pub activities: Vec<RecentActivityItem>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GoUrlStatsRequest {
+    pub slug: String,
+    pub start_date: Option<String>, // ISO 8601 date (YYYY-MM-DD), None = all time
+    pub end_date: Option<String>,   // ISO 8601 date (YYYY-MM-DD), None = today
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GoUrlViewEntry {
+    pub timestamp: String,
+    pub ip_address: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GoUrlChartPoint {
+    pub date: String,        // YYYY-MM-DD
+    pub date_label: String,  // e.g., "Sep 23"
+    pub views: i64,
+    pub height_percent: f64, // 0-100 for chart display
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GoUrlStatsResponse {
+    pub slug: String,
+    pub total_views: i64,
+    pub views_in_range: i64,  // Views within the specified date range
+    pub chart_data: Vec<GoUrlChartPoint>,
+    pub chart_max_views: i64,
+    pub recent_views: Vec<GoUrlViewEntry>,
+    pub date_range_start: String, // The actual start date used (for display)
+    pub date_range_end: String,   // The actual end date used (for display)
+}

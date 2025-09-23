@@ -1,0 +1,130 @@
+<!-- Stats Modal -->
+<dialog class="rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 backdrop:bg-gray-500 backdrop:bg-opacity-75 m-auto"
+        hx-on::load="this.showModal()"
+        onclick="if (event.target === this) this.remove()">
+    <div class="w-full">
+                    <!-- Modal Header -->
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <h3 class="text-lg leading-6 font-medium text-gray-900">
+                                Go URL Stats: <code class="bg-gray-100 px-2 py-1 rounded">/go/<%= self.slug %></code>
+                            </h3>
+                            <p class="mt-1 text-sm text-gray-500">View statistics and usage analytics</p>
+                        </div>
+                        <button onclick="this.closest('dialog').remove()"
+                                class="text-gray-400 hover:text-gray-600">
+                            <wa-icon name="xmark" class="w-6 h-6"></wa-icon>
+                        </button>
+                    </div>
+
+                    <!-- Stats Content -->
+                    <div class="space-y-6">
+                        <!-- Date Range Filter -->
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <form hx-post="/-admin/files-links/<%= self.slug %>/stats"
+                                  hx-target="#modal-container"
+                                  hx-swap="innerHTML"
+                                  class="flex flex-wrap items-end gap-4">
+                                <div class="flex-1 min-w-[120px]">
+                                    <label for="start_date" class="block text-sm font-medium text-gray-700 mb-1">
+                                        Start Date
+                                    </label>
+                                    <input type="date"
+                                           id="start_date"
+                                           name="start_date"
+                                           value="<%= self.date_range_start %>"
+                                           class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                                </div>
+                                <div class="flex-1 min-w-[120px]">
+                                    <label for="end_date" class="block text-sm font-medium text-gray-700 mb-1">
+                                        End Date
+                                    </label>
+                                    <input type="date"
+                                           id="end_date"
+                                           name="end_date"
+                                           value="<%= self.date_range_end %>"
+                                           class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                                </div>
+                                <div>
+                                    <button type="submit"
+                                            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                                        <wa-icon name="magnifying-glass" class="w-4 h-4 mr-2"></wa-icon>
+                                        Update Stats
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- Summary Stats -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="bg-blue-50 p-4 rounded-lg">
+                                <div class="flex items-center">
+                                    <wa-icon name="eye" class="w-8 h-8 text-blue-600 mr-3"></wa-icon>
+                                    <div>
+                                        <p class="text-sm font-medium text-blue-600">Total Views (All Time)</p>
+                                        <p class="text-2xl font-bold text-blue-900"><%= self.total_views %></p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-green-50 p-4 rounded-lg">
+                                <div class="flex items-center">
+                                    <wa-icon name="calendar-days" class="w-8 h-8 text-green-600 mr-3"></wa-icon>
+                                    <div>
+                                        <p class="text-sm font-medium text-green-600">Views in Date Range</p>
+                                        <p class="text-2xl font-bold text-green-900"><%= self.views_in_range %></p>
+                                        <p class="text-xs text-green-600 mt-1"><%= self.date_range_start %> to <%= self.date_range_end %></p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Chart Container -->
+                        <div class="bg-white border border-gray-200 rounded-lg p-4">
+                            <h4 class="text-lg font-medium text-gray-900 mb-4">Views Over Time</h4>
+                            <div class="flex items-end h-48 space-x-1">
+                                <% for chart_point in &self.chart_data { %>
+                                <div class="flex-1 flex flex-col items-center">
+                                    <div class="w-full bg-blue-500 rounded-t transition-all hover:bg-blue-600"
+                                         style="height: <%= chart_point.height_percent %>%;"
+                                         title="<%= chart_point.date %>: <%= chart_point.views %> views">
+                                    </div>
+                                    <div class="text-xs text-gray-500 mt-2 text-center">
+                                        <%= chart_point.date_label %>
+                                    </div>
+                                </div>
+                                <% } %>
+                            </div>
+                            <!-- Y-axis labels -->
+                            <div class="flex justify-between mt-2 text-xs text-gray-400">
+                                <span>0</span>
+                                <span><%= self.chart_max_views %> views</span>
+                            </div>
+                        </div>
+
+                        <!-- Recent Activity -->
+                        <% if !self.recent_views.is_empty() { %>
+                        <div class="bg-white border border-gray-200 rounded-lg p-4">
+                            <h4 class="text-lg font-medium text-gray-900 mb-4">Recent Activity</h4>
+                            <div class="space-y-2 max-h-32 overflow-y-auto">
+                                <% for view in &self.recent_views { %>
+                                <div class="flex items-center justify-between py-2 border-b border-gray-100 last:border-b-0">
+                                    <div class="flex items-center">
+                                        <wa-icon name="eye" class="w-4 h-4 text-gray-400 mr-2"></wa-icon>
+                                        <span class="text-sm text-gray-600"><%= view.timestamp %></span>
+                                    </div>
+                                    <% if let Some(ref ip) = view.ip_address { %>
+                                    <span class="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded"><%= ip %></span>
+                                    <% } %>
+                                </div>
+                                <% } %>
+                            </div>
+                        </div>
+                        <% } else { %>
+                        <div class="bg-gray-50 border border-gray-200 rounded-lg p-8 text-center">
+                            <wa-icon name="chart-bar" class="w-12 h-12 text-gray-400 mx-auto mb-2"></wa-icon>
+                            <p class="text-gray-500">No views recorded yet</p>
+                        </div>
+                        <% } %>
+                    </div>
+    </div>
+</dialog>

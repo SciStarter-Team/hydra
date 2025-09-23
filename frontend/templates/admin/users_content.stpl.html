@@ -1,3 +1,61 @@
+<div id="users-content">
+    <!-- Search and Filters -->
+    <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 relative">
+        <form id="user-search-form" class="relative" onsubmit="return false;">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0 sm:space-x-4">
+                <div class="flex-1 min-w-0">
+                    <div class="relative">
+                        <input
+                            type="search"
+                            placeholder="Search users..."
+                            class="block w-full px-3 py-2 pr-8 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            hx-get="/-admin/users/search"
+                            hx-target="#users-content"
+                            hx-trigger="keyup[keyCode==13]"
+                            hx-include="#user-search-form"
+                            name="search"
+                            value="<%= self.search_term %>"
+                        >
+                        <button type="button"
+                                hx-get="/-admin/users/search"
+                                hx-target="#users-content"
+                                hx-vals='{"search": "", "role": "<%= self.selected_role %>", "email_status": "<%= self.selected_email_status %>", "page": "1"}'
+                                class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                            <wa-icon name="xmark" class="w-4 h-4"></wa-icon>
+                        </button>
+                    </div>
+                </div>
+                <div class="flex space-x-3">
+                    <select
+                        name="role"
+                        class="block px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        hx-get="/-admin/users/search"
+                        hx-target="#users-content"
+                        hx-trigger="change"
+                        hx-include="#user-search-form"
+                    >
+                        <option value=""<% if self.selected_role.is_empty() { %> selected<% } %>>All Roles</option>
+                        <option value="user"<% if self.selected_role == "user" { %> selected<% } %>>User</option>
+                        <option value="page_manager"<% if self.selected_role == "page_manager" { %> selected<% } %>>Page Manager</option>
+                        <option value="staff"<% if self.selected_role == "staff" { %> selected<% } %>>Staff</option>
+                    </select>
+                    <select
+                        name="email_status"
+                        class="block px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        hx-get="/-admin/users/search"
+                        hx-target="#users-content"
+                        hx-trigger="change"
+                        hx-include="#user-search-form"
+                    >
+                        <option value=""<% if self.selected_email_status.is_empty() { %> selected<% } %>>All Email Status</option>
+                        <option value="verified"<% if self.selected_email_status == "verified" { %> selected<% } %>>Verified</option>
+                        <option value="unverified"<% if self.selected_email_status == "unverified" { %> selected<% } %>>Unverified</option>
+                    </select>
+                </div>
+            </div>
+        </form>
+    </div>
+
 <!-- Users List -->
 <div class="bg-white">
     <!-- Header Row - Hidden on mobile, visible on larger screens -->
@@ -148,4 +206,5 @@
             </div>
         </div>
     </div>
+</div>
 </div>

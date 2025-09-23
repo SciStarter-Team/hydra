@@ -14,86 +14,22 @@
             </span>
         </button>
     </div>
-    
-    <!-- Search and Filters -->
-    <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 relative">
-        <form id="project-search-form" class="relative">
-            <!-- Loading overlay -->
-            
-            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0 sm:space-x-4">
-                <div class="flex-1 min-w-0">
-                    <input 
-                        type="search" 
-                        placeholder="Search projects..."
-                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                        hx-get="/-admin/projects/search"
-                        hx-target="#projects-content"
-                        hx-trigger="keyup changed delay:300ms"
-                        hx-include="#project-search-form"
-                        name="search"
-                        value="<%= self.search_term %>"
-                    >
-                    <input type="hidden" name="page" value="1">
-                </div>
-                <div class="flex space-x-3">
-                    <select 
-                        name="status"
-                        class="block px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                        hx-get="/-admin/projects/search"
-                        hx-target="#projects-content"
-                        hx-trigger="change"
-                        hx-include="#project-search-form"
-                    >
-                        <option value=""<% if self.selected_status.is_empty() { %> selected<% } %>>All Status</option>
-                        <option value="Active"<% if self.selected_status == "Active" { %> selected<% } %>>Active</option>
-                        <option value="Pending"<% if self.selected_status == "Pending" { %> selected<% } %>>Pending</option>
-                        <option value="Hiatus"<% if self.selected_status == "Hiatus" { %> selected<% } %>>Hiatus</option>
-                        <option value="Complete"<% if self.selected_status == "Complete" { %> selected<% } %>>Complete</option>
-                        <option value="Hidden"<% if self.selected_status == "Hidden" { %> selected<% } %>>Hidden</option>
-                    </select>
-                    <select 
-                        name="publish"
-                        class="block px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                        hx-get="/-admin/projects/search"
-                        hx-target="#projects-content"
-                        hx-trigger="change"
-                        hx-include="#project-search-form"
-                    >
-                        <option value=""<% if self.selected_publish.is_empty() { %> selected<% } %>>All Publish Status</option>
-                        <option value="true"<% if self.selected_publish == "true" { %> selected<% } %>>Published</option>
-                        <option value="false"<% if self.selected_publish == "false" { %> selected<% } %>>Unpublished</option>
-                    </select>
-                    <select 
-                        name="flagged"
-                        class="block px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                        hx-get="/-admin/projects/search"
-                        hx-target="#projects-content"
-                        hx-trigger="change"
-                        hx-include="#project-search-form"
-                    >
-                        <option value=""<% if self.flagged.is_empty() { %> selected<% } %>>All Flagged Status</option>
-                        <option value="true"<% if self.flagged == "true" { %> selected<% } %>>Flagged</option>
-                        <option value="false"<% if self.flagged == "false" { %> selected<% } %>>Not Flagged</option>
-                    </select>
-                </div>
-            </div>
-        </form>
-    </div>
-    
-    <div id="projects-content">
-        <%+ ProjectsContent { 
-            projects: self.projects.clone(), 
-            current_page: self.current_page, 
-            total_projects: self.total_projects, 
-            has_previous: self.has_previous, 
-            has_next: self.has_next, 
-            per_page: self.per_page,
-            start_item: self.start_item, 
-            end_item: self.end_item, 
-            pagination_url: self.pagination_url.clone(), 
-            pagination_include: self.pagination_include.clone() 
-        } %>
-    </div>
+    <%+ ProjectsContent {
+        projects: self.projects.clone(),
+        current_page: self.current_page,
+        total_projects: self.total_projects,
+        has_previous: self.has_previous,
+        has_next: self.has_next,
+        per_page: self.per_page,
+        start_item: self.start_item,
+        end_item: self.end_item,
+        pagination_url: self.pagination_url.clone(),
+        pagination_include: self.pagination_include.clone(),
+        search_term: self.search_term.clone(),
+        selected_status: self.selected_status.clone(),
+        selected_publish: self.selected_publish.clone(),
+        flagged: self.flagged.clone()
+    } %>
 </div>
 
 <!-- Modal Container -->

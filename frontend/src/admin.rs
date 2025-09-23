@@ -6,21 +6,14 @@ use crate::project::field::{ProjectField, ProjectFieldType, ProjectFieldValue};
 use crate::upload::storage::FileMetadata;
 
 pub mod autocomplete;
-#[derive(Debug, TemplateOnce)]
-#[template(path = "admin/partials/email_row.stpl.html")]
-struct EmailRow {
-    user_id: String,
-    email: UserEmail,
-    index: usize,
-}
 
 use crate::peering::LoadStorePeered;
 use crate::project::all::ProjectAll;
 use crate::project::field::{
     ACTIVITIES_VOCABULARY, AUDIENCE_VOCABULARY, DATA_ACCESS_VOCABULARY,
     DATA_AGGREGATION_VOCABULARY, DATA_CONSENT_VOCABULARY, DIFFICULTY_VOCABULARY,
-    FIELDS_OF_SCIENCE_VOCABULARY, GEOGRAPHIC_SCOPE_VOCABULARY, INTENDED_OUTCOMES_VOCABULARY, PARTICIPATION_TASKS_VOCABULARY,
-    PRACTICES_VOCABULARY, SPONSORS_VOCABULARY,
+    FIELDS_OF_SCIENCE_VOCABULARY, GEOGRAPHIC_SCOPE_VOCABULARY, INTENDED_OUTCOMES_VOCABULARY,
+    PARTICIPATION_TASKS_VOCABULARY, PRACTICES_VOCABULARY, SPONSORS_VOCABULARY,
     STAKEHOLDERS_VOCABULARY, SUSTAINABLE_DEVELOPMENT_GOALS_VOCABULARY, TOPICS_VOCABULARY,
 };
 use common::{
@@ -31,6 +24,7 @@ use common::{
     },
     message::log::{
         AnalyticsQuery, AnalyticsResponse, RecentActivityRequest, RecentActivityResponse,
+        GoUrlStatsRequest, GoUrlStatsResponse,
     },
     message::user::{
         AdminAnalyticsRequest, AdminAnalyticsResponse, AdminPasswordResetRequest,
@@ -46,8 +40,8 @@ use common::{
 };
 use jiff::{Timestamp, ToSpan, tz::TimeZone};
 use poem::{
-    Endpoint, EndpointExt, Route, delete, get, handler, post, put,
-    web::{Form, Json, Path, Query}, IntoResponse,
+    Endpoint, EndpointExt, IntoResponse, Route, delete, get, handler, post, put,
+    web::{Form, Json, Path, Query},
 };
 use sailfish::TemplateOnce;
 use serde::{Deserialize, Serialize};
@@ -120,6 +114,8 @@ pub fn routes() -> impl Endpoint {
         .at("/files-links/search", get(files_links_search))
         .at("/files-links/redirect", post(files_links_create_redirect))
         .at("/files-links/:slug", delete(files_links_delete_go_url))
+        .at("/files-links/:slug/stats", get(files_links_get_stats).post(files_links_post_stats))
+        .at("/clear-modal", post(clear_modal))
         .nest("/autocomplete", autocomplete::routes())
         .with(StaffOnly)
 }
@@ -1095,9 +1091,20 @@ async fn count_projects(
     Ok(count.0 as u64)
 }
 
+fn humanize_event_date(datetime_str: Option<String>) -> String {
+    match datetime_str {
+        Some(date_str) => match TimeString::try_from(date_str) {
+            Ok(time_string) => time_string.format_display(),
+            Err(_) => "Invalid date".to_string(),
+        },
+        None => "No upcoming instances".to_string(),
+    }
+}
+
 async fn fetch_events_page(
     search: Option<&str>,
     status_filter: Option<&str>,
+    publish_filter: Option<&str>,
     page: Option<u32>,
     per_page: Option<u32>,
 ) -> Result<Vec<AdminEvent>, anyhow::Error> {
@@ -1112,45 +1119,63 @@ async fn fetch_events_page(
     struct EventRow {
         event_id: String,
         name: String,
-        status: String,
+        publish: i32,
         created: String,
         location_name: String,
         event_type: String,
         entirely_online: bool,
         next_instance_begin: Option<String>,
         instance_count: i64,
+        is_currently_ongoing: i32,
     }
 
     let mut query = QueryBuilder::new("");
 
     if let Some(search_term) = search.filter(|s| !s.trim().is_empty()) {
         query.push(
-            "SELECT e.event_id, e.name, e.status, e.created, e.location_name, e.event_type, e.entirely_online,
+            "SELECT e.event_id, e.name, e.publish, e.created, e.location_name, e.event_type, e.entirely_online,
                     MIN(CASE WHEN ei.begin > datetime('now') THEN ei.begin END) as next_instance_begin,
-                    COUNT(ei.begin) as instance_count
-             FROM events e 
-             JOIN events_fts f ON e.event_id = f.event_id 
-             LEFT JOIN event_instances ei ON e.event_id = ei.event_id 
+                    COUNT(ei.begin) as instance_count,
+                    CASE WHEN EXISTS(SELECT 1 FROM event_instances ei2 WHERE ei2.event_id = e.event_id AND ei2.begin <= datetime('now') AND ei2.end > datetime('now')) THEN 1 ELSE 0 END as is_currently_ongoing
+             FROM events e
+             JOIN events_fts f ON e.event_id = f.event_id
+             LEFT JOIN event_instances ei ON e.event_id = ei.event_id
              WHERE events_fts MATCH "
         );
         query.push_bind(search_term);
     } else {
         query.push(
-            "SELECT e.event_id, e.name, e.status, e.created, e.location_name, e.event_type, e.entirely_online,
+            "SELECT e.event_id, e.name, e.publish, e.created, e.location_name, e.event_type, e.entirely_online,
                     MIN(CASE WHEN ei.begin > datetime('now') THEN ei.begin END) as next_instance_begin,
-                    COUNT(ei.begin) as instance_count
-             FROM events e 
-             LEFT JOIN event_instances ei ON e.event_id = ei.event_id 
+                    COUNT(ei.begin) as instance_count,
+                    CASE WHEN EXISTS(SELECT 1 FROM event_instances ei2 WHERE ei2.event_id = e.event_id AND ei2.begin <= datetime('now') AND ei2.end > datetime('now')) THEN 1 ELSE 0 END as is_currently_ongoing
+             FROM events e
+             LEFT JOIN event_instances ei ON e.event_id = ei.event_id
              WHERE 1=1"
         );
     }
 
     if let Some(status) = status_filter.filter(|s| !s.is_empty()) {
-        query.push(" AND e.status = ");
-        query.push_bind(status);
+        match status {
+            "Upcoming" => {
+                query.push(" AND EXISTS (SELECT 1 FROM event_instances ei2 WHERE ei2.event_id = e.event_id AND ei2.end > datetime('now'))");
+            }
+            "Past" => {
+                query.push(" AND NOT EXISTS (SELECT 1 FROM event_instances ei2 WHERE ei2.event_id = e.event_id AND ei2.end > datetime('now'))");
+            }
+            _ => {
+                // "All Status" or any other value - no additional filtering
+            }
+        }
     }
 
-    query.push(" GROUP BY e.event_id, e.name, e.status, e.created, e.location_name, e.event_type, e.entirely_online");
+    if let Some(publish) = publish_filter.filter(|s| !s.is_empty()) {
+        let publish_bool = publish == "true";
+        query.push(" AND e.publish = ");
+        query.push_bind(publish_bool);
+    }
+
+    query.push(" GROUP BY e.event_id, e.name, e.publish, e.created, e.location_name, e.event_type, e.entirely_online");
     query.push(" ORDER BY e.created DESC LIMIT ");
     query.push_bind(per_page);
     query.push(" OFFSET ");
@@ -1167,14 +1192,21 @@ async fn fetch_events_page(
                 row.location_name
             };
 
-            let event_date = row
-                .next_instance_begin
-                .unwrap_or_else(|| "No scheduled instances".to_string());
+            // Check if event is currently ongoing
+            let event_date = if row.is_currently_ongoing != 0 {
+                "Currently ongoing".to_string()
+            } else {
+                humanize_event_date(row.next_instance_begin)
+            };
 
             AdminEvent {
                 id: row.event_id,
                 title: row.name,
-                status: row.status,
+                published: if row.publish != 0 {
+                    "Published".to_string()
+                } else {
+                    "Unpublished".to_string()
+                },
                 instances: row.instance_count as u32,
                 event_date,
                 location,
@@ -1189,6 +1221,7 @@ async fn fetch_events_page(
 async fn count_events(
     search: Option<&str>,
     status_filter: Option<&str>,
+    publish_filter: Option<&str>,
 ) -> Result<u64, anyhow::Error> {
     use common::shared::db;
     use sqlx::QueryBuilder;
@@ -1207,8 +1240,23 @@ async fn count_events(
     }
 
     if let Some(status) = status_filter.filter(|s| !s.is_empty()) {
-        query.push(" AND e.status = ");
-        query.push_bind(status);
+        match status {
+            "Upcoming" => {
+                query.push(" AND EXISTS (SELECT 1 FROM event_instances ei WHERE ei.event_id = e.event_id AND ei.end > datetime('now'))");
+            }
+            "Past" => {
+                query.push(" AND NOT EXISTS (SELECT 1 FROM event_instances ei WHERE ei.event_id = e.event_id AND ei.end > datetime('now'))");
+            }
+            _ => {
+                // "All Status" or any other value - no additional filtering
+            }
+        }
+    }
+
+    if let Some(publish) = publish_filter.filter(|s| !s.is_empty()) {
+        let publish_bool = publish == "true";
+        query.push(" AND e.publish = ");
+        query.push_bind(publish_bool);
     }
 
     let count: (i64,) = query.build_query_as::<(i64,)>().fetch_one(db()).await?;
@@ -1322,7 +1370,7 @@ impl Component for ProjectsPage {
 pub struct AdminEvent {
     pub id: String,
     pub title: String,
-    pub status: String,
+    pub published: String,
     pub instances: u32, // Number of scheduled instances
     pub event_date: String,
     pub location: String,
@@ -1342,6 +1390,9 @@ pub struct EventsPagePrepared {
     has_next: bool,
     start_item: u32,
     end_item: u32,
+    search_term: String,
+    selected_status: String,
+    selected_publish: String,
 }
 
 #[derive(Debug, TemplateOnce)]
@@ -1357,6 +1408,9 @@ pub struct EventsContent {
     pub end_item: u32,
     pub pagination_url: String,
     pub pagination_include: String,
+    pub search_term: String,
+    pub selected_status: String,
+    pub selected_publish: String,
 }
 
 impl Component for EventsPage {
@@ -1367,15 +1421,16 @@ impl Component for EventsPage {
         let page = 1u32; // For now, just show first page on dashboard
         let per_page = 10u32; // Show top 10 recent events
 
-        let events_list = match fetch_events_page(None, None, Some(page), Some(per_page)).await {
-            Ok(event_results) => event_results,
-            Err(e) => {
-                tracing::warn!("Failed to fetch events from database: {}", e);
-                vec![]
-            }
-        };
+        let events_list =
+            match fetch_events_page(None, None, None, Some(page), Some(per_page)).await {
+                Ok(event_results) => event_results,
+                Err(e) => {
+                    tracing::warn!("Failed to fetch events from database: {}", e);
+                    vec![]
+                }
+            };
 
-        let total_events = count_events(None, None).await.unwrap_or(0);
+        let total_events = count_events(None, None, None).await.unwrap_or(0);
 
         let events_content = EventsPagePrepared {
             events: events_list.clone(),
@@ -1385,6 +1440,9 @@ impl Component for EventsPage {
             has_next: total_events > per_page as u64,
             start_item: 1,
             end_item: std::cmp::min(per_page, total_events as u32),
+            search_term: "".to_string(),
+            selected_status: "".to_string(),
+            selected_publish: "".to_string(),
         };
 
         let content = events_content.render_once()?;
@@ -1593,7 +1651,10 @@ impl Component for UsersPage {
             start_item: ((response.page - 1) * response.limit) + 1,
             end_item: std::cmp::min(response.page * response.limit, response.total_count as u32),
             pagination_url: "/-admin/users".to_string(),
-            pagination_include: "".to_string(),
+            pagination_include: "#user-search-form".to_string(),
+            search_term: "".to_string(),
+            selected_role: "".to_string(),
+            selected_email_status: "".to_string(),
         };
 
         let users_page = UsersPagePrepared {
@@ -1790,6 +1851,9 @@ pub struct UsersContent {
     pub end_item: u32,
     pub pagination_url: String,
     pub pagination_include: String,
+    pub search_term: String,
+    pub selected_role: String,
+    pub selected_email_status: String,
 }
 
 async fn users_search_internal(query: UserSearchQuery) -> Result<UsersPagePrepared, anyhow::Error> {
@@ -1856,6 +1920,9 @@ async fn users_search(
         end_item: users_page.end_item,
         pagination_url: users_page.pagination_url,
         pagination_include: users_page.pagination_include,
+        search_term: query.search.as_deref().unwrap_or("").to_string(),
+        selected_role: query.role.as_deref().unwrap_or("").to_string(),
+        selected_email_status: query.email_status.as_deref().unwrap_or("").to_string(),
     };
 
     let html = users_content.render_once()?;
@@ -2282,6 +2349,9 @@ async fn users_create(
                         end_item,
                         pagination_url: "/-admin/users".to_string(),
                         pagination_include: "#user-search-form".to_string(),
+                        search_term: "".to_string(),
+                        selected_role: "".to_string(),
+                        selected_email_status: "".to_string(),
                     };
 
                     let users_html = users_content.render_once()?;
@@ -2462,6 +2532,14 @@ async fn engine_room_sync_page_managers(
                 .body(error_html))
         }
     }
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/partials/email_row.stpl.html")]
+struct EmailRow {
+    user_id: String,
+    email: UserEmail,
+    index: usize,
 }
 
 #[handler]
@@ -2696,6 +2774,7 @@ struct ProjectSearchQuery {
 struct EventSearchQuery {
     search: Option<String>,
     status: Option<String>,
+    publish: Option<String>,
     page: Option<u32>,
 }
 
@@ -2712,6 +2791,10 @@ pub struct ProjectsContent {
     pub end_item: u32,
     pub pagination_url: String,
     pub pagination_include: String,
+    pub search_term: String,
+    pub selected_status: String,
+    pub selected_publish: String,
+    pub flagged: String,
 }
 
 #[derive(Debug, TemplateOnce)]
@@ -2720,6 +2803,21 @@ pub struct ProjectRow {
     pub project: AdminProject,
     pub oob: bool,
     pub oob_swap: String,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/partials/redirect_success_response.stpl.html")]
+pub struct RedirectSuccessResponse {
+    pub slug: String,
+    pub go_urls_list: GoUrlsList,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/partials/upload_success_response.stpl.html")]
+pub struct UploadSuccessResponse {
+    pub slug: String,
+    pub file_id: ulid::Ulid,
+    pub go_urls_list: GoUrlsList,
 }
 
 #[derive(Debug)]
@@ -3146,6 +3244,10 @@ async fn projects_search(
         end_item: projects_page.end_item,
         pagination_url: projects_page.pagination_url,
         pagination_include: projects_page.pagination_include,
+        search_term: query.search.clone().unwrap_or_default(),
+        selected_status: query.status.clone().unwrap_or_default(),
+        selected_publish: query.publish.clone().unwrap_or_default(),
+        flagged: query.flagged.clone().unwrap_or_default(),
     };
 
     let html = projects_content.render_once()?;
@@ -3165,6 +3267,11 @@ async fn projects_search(
     if let Some(publish) = &query.publish {
         if !publish.trim().is_empty() {
             url_params.push(format!("publish={}", urlencoding::encode(publish)));
+        }
+    }
+    if let Some(flagged) = &query.flagged {
+        if !flagged.trim().is_empty() {
+            url_params.push(format!("flagged={}", urlencoding::encode(flagged)));
         }
     }
     let page = query.page.unwrap_or(1);
@@ -3193,6 +3300,7 @@ async fn events_search_internal(
     let events_list = match fetch_events_page(
         query.search.as_deref(),
         query.status.as_deref(),
+        query.publish.as_deref(),
         Some(page),
         Some(per_page),
     )
@@ -3205,23 +3313,24 @@ async fn events_search_internal(
         }
     };
 
-    // Get total count - for now just estimate based on results
-    let total_events = if events_list.len() < per_page as usize {
-        ((page - 1) * per_page) + events_list.len() as u32
-    } else {
-        // If we got a full page, assume there might be more
-        page * per_page + 1
-    };
+    // Get accurate total count using the count_events function
+    let total_events = count_events(
+        query.search.as_deref(),
+        query.status.as_deref(),
+        query.publish.as_deref(),
+    )
+    .await
+    .unwrap_or(0) as u32;
 
     let has_previous = page > 1;
-    let has_next = events_list.len() == per_page as usize;
+    let has_next = (page * per_page) < total_events;
 
     let start_item = if total_events == 0 {
         0
     } else {
         ((page - 1) * per_page) + 1
     };
-    let end_item = start_item + events_list.len() as u32 - 1;
+    let end_item = std::cmp::min(page * per_page, total_events as u32);
 
     Ok(EventsPagePrepared {
         events: events_list,
@@ -3231,6 +3340,9 @@ async fn events_search_internal(
         has_next,
         start_item,
         end_item,
+        search_term: query.search.as_deref().unwrap_or("").to_string(),
+        selected_status: query.status.as_deref().unwrap_or("").to_string(),
+        selected_publish: query.publish.as_deref().unwrap_or("").to_string(),
     })
 }
 
@@ -3253,6 +3365,9 @@ async fn events_search(
         end_item: events_page.end_item,
         pagination_url: "/-admin/events/search".to_string(),
         pagination_include: "#event-search-form".to_string(),
+        search_term: query.search.as_deref().unwrap_or("").to_string(),
+        selected_status: query.status.as_deref().unwrap_or("").to_string(),
+        selected_publish: query.publish.as_deref().unwrap_or("").to_string(),
     };
 
     let html = events_content.render_once()?;
@@ -3267,6 +3382,11 @@ async fn events_search(
     if let Some(status) = &query.status {
         if !status.trim().is_empty() {
             url_params.push(format!("status={}", status));
+        }
+    }
+    if let Some(publish) = &query.publish {
+        if !publish.trim().is_empty() {
+            url_params.push(format!("publish={}", publish));
         }
     }
     let page = query.page.unwrap_or(1);
@@ -4970,18 +5090,18 @@ async fn projects_remove_tag(
         .body(tags_display.render_once()?))
 }
 
-
 // Contact handlers
 #[handler]
 async fn projects_get_contacts(
     Path(project_id): Path<String>,
 ) -> Result<poem::Response, poem::Error> {
-    let project_ulid: Ulid = project_id.parse().map_err(|_| {
-        poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST)
-    })?;
+    let project_ulid: Ulid = project_id
+        .parse()
+        .map_err(|_| poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST))?;
 
     // Load the project field for contacts
-    let project_field = ProjectField::load((project_ulid, ProjectFieldType::Contacts)).await
+    let project_field = ProjectField::load((project_ulid, ProjectFieldType::Contacts))
+        .await
         .map_err(|e| {
             tracing::error!("Failed to load contacts field: {:?}", e);
             poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
@@ -4995,11 +5115,11 @@ async fn projects_get_contacts(
     use sailfish::TemplateOnce;
     let contact_items = ContactItems::new(project_ulid, contacts);
 
-    Ok(poem::Response::builder()
-        .content_type("text/html")
-        .body(contact_items.render_once().map_err(|_| {
-            poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-        })?))
+    Ok(poem::Response::builder().content_type("text/html").body(
+        contact_items
+            .render_once()
+            .map_err(|_| poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR))?,
+    ))
 }
 
 #[handler]
@@ -5007,12 +5127,13 @@ async fn projects_add_contact(
     Path(project_id): Path<String>,
     poem::web::Form(form): poem::web::Form<ContactForm>,
 ) -> Result<poem::Response, poem::Error> {
-    let project_ulid: Ulid = project_id.parse().map_err(|_| {
-        poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST)
-    })?;
+    let project_ulid: Ulid = project_id
+        .parse()
+        .map_err(|_| poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST))?;
 
     // Load existing contacts
-    let project_field = ProjectField::load((project_ulid, ProjectFieldType::Contacts)).await
+    let project_field = ProjectField::load((project_ulid, ProjectFieldType::Contacts))
+        .await
         .map_err(|_| poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR))?;
 
     let mut contacts = match project_field.field {
@@ -5021,9 +5142,9 @@ async fn projects_add_contact(
     };
 
     // Create new contact with generated ULID
-    let new_contact = form.to_contact(Ulid::new()).map_err(|_| {
-        poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST)
-    })?;
+    let new_contact = form
+        .to_contact(Ulid::new())
+        .map_err(|_| poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST))?;
 
     contacts.push(new_contact);
 
@@ -5032,19 +5153,20 @@ async fn projects_add_contact(
         project_ulid,
         ProjectFieldValue::Contacts(contacts.clone().into_boxed_slice()),
     );
-    new_project_field.store().await.map_err(|_| {
-        poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
+    new_project_field
+        .store()
+        .await
+        .map_err(|_| poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR))?;
 
     // Return updated contact list
     use sailfish::TemplateOnce;
     let contact_items = ContactItems::new(project_ulid, contacts);
 
-    Ok(poem::Response::builder()
-        .content_type("text/html")
-        .body(contact_items.render_once().map_err(|_| {
-            poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-        })?))
+    Ok(poem::Response::builder().content_type("text/html").body(
+        contact_items
+            .render_once()
+            .map_err(|_| poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR))?,
+    ))
 }
 
 #[handler]
@@ -5052,15 +5174,16 @@ async fn projects_update_contact(
     Path((project_id, contact_id)): Path<(String, String)>,
     poem::web::Form(form): poem::web::Form<ContactForm>,
 ) -> Result<poem::Response, poem::Error> {
-    let project_ulid: Ulid = project_id.parse().map_err(|_| {
-        poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST)
-    })?;
-    let contact_ulid: Ulid = contact_id.parse().map_err(|_| {
-        poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST)
-    })?;
+    let project_ulid: Ulid = project_id
+        .parse()
+        .map_err(|_| poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST))?;
+    let contact_ulid: Ulid = contact_id
+        .parse()
+        .map_err(|_| poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST))?;
 
     // Load existing contacts
-    let project_field = ProjectField::load((project_ulid, ProjectFieldType::Contacts)).await
+    let project_field = ProjectField::load((project_ulid, ProjectFieldType::Contacts))
+        .await
         .map_err(|_| poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR))?;
 
     let mut contacts = match project_field.field {
@@ -5070,9 +5193,9 @@ async fn projects_update_contact(
 
     // Find and update the contact
     if let Some(contact) = contacts.iter_mut().find(|c| c.contact_id == contact_ulid) {
-        *contact = form.to_contact(contact_ulid).map_err(|_| {
-            poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST)
-        })?;
+        *contact = form
+            .to_contact(contact_ulid)
+            .map_err(|_| poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST))?;
     } else {
         return Err(poem::Error::from_status(poem::http::StatusCode::NOT_FOUND));
     }
@@ -5082,34 +5205,36 @@ async fn projects_update_contact(
         project_ulid,
         ProjectFieldValue::Contacts(contacts.clone().into_boxed_slice()),
     );
-    new_project_field.store().await.map_err(|_| {
-        poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
+    new_project_field
+        .store()
+        .await
+        .map_err(|_| poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR))?;
 
     // Return updated contact list
     use sailfish::TemplateOnce;
     let contact_items = ContactItems::new(project_ulid, contacts);
 
-    Ok(poem::Response::builder()
-        .content_type("text/html")
-        .body(contact_items.render_once().map_err(|_| {
-            poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-        })?))
+    Ok(poem::Response::builder().content_type("text/html").body(
+        contact_items
+            .render_once()
+            .map_err(|_| poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR))?,
+    ))
 }
 
 #[handler]
 async fn projects_remove_contact(
     Path((project_id, contact_id)): Path<(String, String)>,
 ) -> Result<poem::Response, poem::Error> {
-    let project_ulid: Ulid = project_id.parse().map_err(|_| {
-        poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST)
-    })?;
-    let contact_ulid: Ulid = contact_id.parse().map_err(|_| {
-        poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST)
-    })?;
+    let project_ulid: Ulid = project_id
+        .parse()
+        .map_err(|_| poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST))?;
+    let contact_ulid: Ulid = contact_id
+        .parse()
+        .map_err(|_| poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST))?;
 
     // Load existing contacts
-    let project_field = ProjectField::load((project_ulid, ProjectFieldType::Contacts)).await
+    let project_field = ProjectField::load((project_ulid, ProjectFieldType::Contacts))
+        .await
         .map_err(|_| poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR))?;
 
     let mut contacts = match project_field.field {
@@ -5125,19 +5250,20 @@ async fn projects_remove_contact(
         project_ulid,
         ProjectFieldValue::Contacts(contacts.clone().into_boxed_slice()),
     );
-    new_project_field.store().await.map_err(|_| {
-        poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
+    new_project_field
+        .store()
+        .await
+        .map_err(|_| poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR))?;
 
     // Return updated contact list
     use sailfish::TemplateOnce;
     let contact_items = ContactItems::new(project_ulid, contacts);
 
-    Ok(poem::Response::builder()
-        .content_type("text/html")
-        .body(contact_items.render_once().map_err(|_| {
-            poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-        })?))
+    Ok(poem::Response::builder().content_type("text/html").body(
+        contact_items
+            .render_once()
+            .map_err(|_| poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR))?,
+    ))
 }
 
 // Files & Links admin page structures
@@ -5180,7 +5306,6 @@ pub struct GoUrlRow<'a> {
     pub oob_swap: String,
 }
 
-
 // Files & Links admin handlers
 #[derive(Serialize, Deserialize)]
 struct SearchQuery {
@@ -5218,14 +5343,36 @@ async fn files_links_search(
     let per_page = query.per_page.unwrap_or(20).clamp(1, 100);
     let search = query.search.filter(|s| !s.trim().is_empty());
 
-    match get_go_urls_with_file_info_searched(page, per_page, search).await {
+    match get_go_urls_with_file_info_searched(page, per_page, search.clone()).await {
         Ok(go_urls_list) => {
             use sailfish::TemplateOnce;
             match go_urls_list.render_once() {
-                Ok(rendered) => Ok(poem::Response::builder()
-                    .status(poem::http::StatusCode::OK)
-                    .content_type("text/html")
-                    .body(rendered)),
+                Ok(rendered) => {
+                    // Build the URL for HX-Push-Url
+                    let mut url = String::from("/-admin/files-links");
+                    let mut params = Vec::new();
+
+                    if page > 1 {
+                        params.push(format!("page={}", page));
+                    }
+                    if per_page != 20 {
+                        params.push(format!("per_page={}", per_page));
+                    }
+                    if let Some(ref search_term) = search {
+                        params.push(format!("search={}", urlencoding::encode(search_term)));
+                    }
+
+                    if !params.is_empty() {
+                        url.push('?');
+                        url.push_str(&params.join("&"));
+                    }
+
+                    Ok(poem::Response::builder()
+                        .status(poem::http::StatusCode::OK)
+                        .content_type("text/html")
+                        .header("HX-Push-Url", url)
+                        .body(rendered))
+                }
                 Err(e) => {
                     tracing::error!("Failed to render go URLs list: {}", e);
                     Err(poem::Error::from_string(
@@ -5272,6 +5419,9 @@ async fn files_links_create_redirect(
             .body(r#"<div class="text-red-600">Slug already exists</div>"#));
     }
 
+    // Save slug before it gets moved
+    let slug = request.slug.clone();
+
     // Create and save redirect
     let go_url = GoUrl::new_redirect(request.slug, request.target_url);
     if let Err(e) = go_url.store().await {
@@ -5282,14 +5432,19 @@ async fn files_links_create_redirect(
             .body(r#"<div class="text-red-600">Failed to create redirect</div>"#));
     }
 
-    // Return updated go URLs list
+    // Return success message with form clearing and go URLs list update
     let go_urls_list = get_go_urls_with_file_info().await.map_err(|e| {
         tracing::error!("Failed to get go URLs: {}", e);
         poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
     })?;
 
     use sailfish::TemplateOnce;
-    let rendered = go_urls_list.render_once().map_err(|e| {
+    let response = RedirectSuccessResponse {
+        slug,
+        go_urls_list,
+    };
+
+    let rendered = response.render_once().map_err(|e| {
         tracing::error!("Failed to render template: {}", e);
         poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
     })?;
@@ -5322,31 +5477,25 @@ async fn files_links_delete_go_url(
             .body(r#"<div class="text-red-600">Failed to delete go URL</div>"#));
     }
 
-    // Return updated go URLs list
-    let go_urls_list = get_go_urls_with_file_info().await.map_err(|e| {
-        tracing::error!("Failed to get go URLs: {}", e);
-        poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
-
-    use sailfish::TemplateOnce;
-    let rendered = go_urls_list.render_once().map_err(|e| {
-        tracing::error!("Failed to render template: {}", e);
-        poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
-
+    // Return empty response - HTMX will remove the targeted element
     Ok(poem::Response::builder()
         .status(poem::http::StatusCode::OK)
         .content_type("text/html")
-        .body(rendered))
+        .body(""))
 }
 
 // Helper function to get paginated and searched go URLs with file information
-pub async fn get_go_urls_with_file_info_searched(page: u32, per_page: u32, search: Option<String>) -> Result<GoUrlsList, anyhow::Error> {
+pub async fn get_go_urls_with_file_info_searched(
+    page: u32,
+    per_page: u32,
+    search: Option<String>,
+) -> Result<GoUrlsList, anyhow::Error> {
     use common::shared::db;
     use sqlx::{QueryBuilder, Row};
 
     // Build count query
-    let mut count_query: QueryBuilder<sqlx::Sqlite> = QueryBuilder::new("SELECT COUNT(*) FROM go_urls");
+    let mut count_query: QueryBuilder<sqlx::Sqlite> =
+        QueryBuilder::new("SELECT COUNT(*) FROM go_urls");
     if let Some(ref search_term) = search {
         count_query.push(" WHERE slug LIKE ");
         count_query.push_bind(format!("%{}%", search_term));
@@ -5358,7 +5507,8 @@ pub async fn get_go_urls_with_file_info_searched(page: u32, per_page: u32, searc
     let offset = (page - 1) * per_page;
 
     // Build main query
-    let mut query: QueryBuilder<sqlx::Sqlite> = QueryBuilder::new("SELECT slug, url_type FROM go_urls");
+    let mut query: QueryBuilder<sqlx::Sqlite> =
+        QueryBuilder::new("SELECT slug, url_type FROM go_urls");
     if let Some(ref search_term) = search {
         query.push(" WHERE slug LIKE ");
         query.push_bind(format!("%{}%", search_term));
@@ -5410,11 +5560,166 @@ pub async fn get_go_urls_with_file_info_searched(page: u32, per_page: u32, searc
 }
 
 // Helper function to get paginated go URLs with file information (for backward compatibility)
-pub async fn get_go_urls_with_file_info_paginated(page: u32, per_page: u32) -> Result<GoUrlsList, anyhow::Error> {
+pub async fn get_go_urls_with_file_info_paginated(
+    page: u32,
+    per_page: u32,
+) -> Result<GoUrlsList, anyhow::Error> {
     get_go_urls_with_file_info_searched(page, per_page, None).await
 }
 
 // Helper function to get all go URLs with file information (for backward compatibility)
 pub async fn get_go_urls_with_file_info() -> Result<GoUrlsList, anyhow::Error> {
     get_go_urls_with_file_info_searched(1, 1000, None).await // Large page size for "all"
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/partials/go_url_stats_modal.stpl.html")]
+pub struct GoUrlStatsModal {
+    pub slug: String,
+    pub total_views: i64,
+    pub views_in_range: i64,
+    pub chart_data: Vec<ChartPoint>,
+    pub chart_max_views: i64,
+    pub recent_views: Vec<RecentView>,
+    pub date_range_start: String,
+    pub date_range_end: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ChartPoint {
+    pub date: String,        // YYYY-MM-DD
+    pub date_label: String,  // e.g., "Sep 23"
+    pub views: i64,
+    pub height_percent: f64, // 0-100 for chart display
+}
+
+#[derive(Debug, Clone)]
+pub struct RecentView {
+    pub timestamp: String,
+    pub ip_address: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct StatsDateRange {
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/partials/error_modal.stpl.html")]
+pub struct ErrorModal {
+    pub message: String,
+}
+
+async fn fetch_go_url_stats(
+    slug: String,
+    start_date: Option<String>,
+    end_date: Option<String>,
+) -> Result<GoUrlStatsModal, String> {
+    use common::service::request;
+
+    // Request stats from log service
+    let stats_request = GoUrlStatsRequest {
+        slug: slug.clone(),
+        start_date,
+        end_date,
+    };
+
+    match request::<GoUrlStatsResponse>("log.stats.go_url", stats_request).await {
+        Ok(stats) => {
+            let chart_data = stats.chart_data
+                .into_iter()
+                .map(|point| ChartPoint {
+                    date: point.date,
+                    date_label: point.date_label,
+                    views: point.views,
+                    height_percent: point.height_percent,
+                })
+                .collect();
+
+            let recent_views = stats.recent_views
+                .into_iter()
+                .map(|view| RecentView {
+                    timestamp: view.timestamp,
+                    ip_address: view.ip_address,
+                })
+                .collect();
+
+            Ok(GoUrlStatsModal {
+                slug: stats.slug,
+                total_views: stats.total_views,
+                views_in_range: stats.views_in_range,
+                chart_data,
+                chart_max_views: stats.chart_max_views,
+                recent_views,
+                date_range_start: stats.date_range_start,
+                date_range_end: stats.date_range_end,
+            })
+        }
+        Err(e) => {
+            tracing::error!("Failed to get go URL stats for {}: {}", slug, e);
+            Err(format!("Failed to load stats for {}", slug))
+        }
+    }
+}
+
+#[handler]
+async fn files_links_get_stats(
+    Path(slug): Path<String>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<impl IntoResponse, poem::Error> {
+    match fetch_go_url_stats(slug, None, None).await {
+        Ok(modal) => Ok(modal.render_once().unwrap()),
+        Err(error_msg) => {
+            let error_modal = ErrorModal { message: error_msg.clone() };
+            match error_modal.render_once() {
+                Ok(rendered) => {
+                    tracing::info!("Rendered error modal: {}", rendered.len());
+                    Ok(rendered)
+                }
+                Err(e) => {
+                    tracing::error!("Failed to render error modal: {}", e);
+                    Ok(format!(
+                        r#"<div class="p-4 bg-red-100 border border-red-300 rounded">Error: {}</div>"#,
+                        error_msg
+                    ))
+                }
+            }
+        }
+    }
+}
+
+#[handler]
+async fn files_links_post_stats(
+    Path(slug): Path<String>,
+    Form(date_range): Form<StatsDateRange>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<impl IntoResponse, poem::Error> {
+    match fetch_go_url_stats(slug, date_range.start_date, date_range.end_date).await {
+        Ok(modal) => Ok(modal.render_once().unwrap()),
+        Err(error_msg) => {
+            let error_modal = ErrorModal { message: error_msg.clone() };
+            match error_modal.render_once() {
+                Ok(rendered) => {
+                    tracing::info!("Rendered error modal: {}", rendered.len());
+                    Ok(rendered)
+                }
+                Err(e) => {
+                    tracing::error!("Failed to render error modal: {}", e);
+                    Ok(format!(
+                        r#"<div class="p-4 bg-red-100 border border-red-300 rounded">Error: {}</div>"#,
+                        error_msg
+                    ))
+                }
+            }
+        }
+    }
+}
+
+#[handler]
+async fn clear_modal(
+    Authenticated(_user_info): Authenticated,
+) -> Result<impl IntoResponse, poem::Error> {
+    // Return empty response to clear the modal container
+    Ok("")
 }

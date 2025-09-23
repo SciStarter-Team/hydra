@@ -1,0 +1,18 @@
+<!-- Error Modal -->
+<dialog class="rounded-lg shadow-xl max-w-lg w-full p-6 backdrop:bg-gray-500 backdrop:bg-opacity-75 m-auto"
+        hx-on::load="this.showModal()"
+        onclick="if (event.target === this) this.remove()">
+    <div class="text-center">
+        <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
+            Error Loading Stats
+        </h3>
+        <p class="text-sm text-gray-500 mb-6">
+            <%= self.message %>
+        </p>
+        <button onclick="this.closest('dialog').remove()"
+                type="button"
+                class="inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+            Close
+        </button>
+    </div>
+</dialog>

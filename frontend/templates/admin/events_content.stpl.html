@@ -1,10 +1,67 @@
-<!-- Events List -->
-<div class="bg-white">
+<div id="events-content">
+    <!-- Search and Filters -->
+    <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 relative">
+        <form id="event-search-form" class="relative" onsubmit="return false;">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0 sm:space-x-4">
+                <div class="flex-1 min-w-0">
+                    <div class="relative">
+                        <input
+                            type="search"
+                            placeholder="Search events..."
+                            class="block w-full px-3 py-2 pr-8 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            hx-get="/-admin/events/search"
+                            hx-target="#events-content"
+                            hx-trigger="keyup[keyCode==13]"
+                            hx-include="#event-search-form"
+                            name="search"
+                            value="<%= self.search_term %>"
+                        >
+                        <button type="button"
+                                hx-get="/-admin/events/search"
+                                hx-target="#events-content"
+                                hx-vals='{"search": "", "status": "<%= self.selected_status %>", "publish": "<%= self.selected_publish %>", "page": "1"}'
+                                class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                            <wa-icon name="xmark" class="w-4 h-4"></wa-icon>
+                        </button>
+                    </div>
+                </div>
+                <div class="flex space-x-3">
+                    <select
+                        name="status"
+                        class="block px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        hx-get="/-admin/events/search"
+                        hx-target="#events-content"
+                        hx-trigger="change"
+                        hx-include="#event-search-form"
+                    >
+                        <option value=""<% if self.selected_status.is_empty() { %> selected<% } %>>All Status</option>
+                        <option value="Upcoming"<% if self.selected_status == "Upcoming" { %> selected<% } %>>Upcoming</option>
+                        <option value="Past"<% if self.selected_status == "Past" { %> selected<% } %>>Past</option>
+                    </select>
+                    <select
+                        name="publish"
+                        class="block px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        hx-get="/-admin/events/search"
+                        hx-target="#events-content"
+                        hx-trigger="change"
+                        hx-include="#event-search-form"
+                    >
+                        <option value=""<% if self.selected_publish.is_empty() { %> selected<% } %>>All Publish</option>
+                        <option value="true"<% if self.selected_publish == "true" { %> selected<% } %>>Published</option>
+                        <option value="false"<% if self.selected_publish == "false" { %> selected<% } %>>Unpublished</option>
+                    </select>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Events List -->
+    <div class="bg-white">
     <!-- Header Row - Hidden on mobile, visible on larger screens -->
     <div class="hidden lg:grid lg:grid-cols-7 bg-gray-50 px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
         <div>Event</div>
-        <div>Status</div>
-        <div>Date</div>
+        <div>Published</div>
+        <div>Next Date</div>
         <div>Location</div>
         <div>Instances</div>
         <div>Type</div>
@@ -23,35 +80,23 @@
                     </div>
                 </div>
               
-                <!-- Status -->
+                <!-- Published -->
                 <div class="lg:col-span-1">
-                    <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Status</div>
-                    <% if event.status == "upcoming" { %>
-                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-                            <%= event.status %>
-                        </span>
-                    <% } else if event.status == "ongoing" { %>
+                    <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Published</div>
+                    <% if event.published == "Published" { %>
                         <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                            <%= event.status %>
-                        </span>
-                    <% } else if event.status == "completed" { %>
-                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
-                            <%= event.status %>
-                        </span>
-                    <% } else if event.status == "cancelled" { %>
-                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
-                            <%= event.status %>
+                            <%= event.published %>
                         </span>
                     <% } else { %>
                         <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
-                            <%= event.status %>
+                            <%= event.published %>
                         </span>
                     <% } %>
                 </div>
               
                 <!-- Date -->
                 <div class="lg:col-span-1">
-                    <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Date</div>
+                    <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Next Date</div>
                     <div class="text-sm text-gray-600">
                         <%= event.event_date %>
                     </div>
@@ -134,4 +179,5 @@
             <% } %>
         </div>
     </div>
+</div>
 </div>

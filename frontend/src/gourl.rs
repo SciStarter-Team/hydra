@@ -4,13 +4,15 @@ use anyhow::{Context, Result};
 use crate::peering::LoadStorePeered;
 use poem::{
     handler,
-    web::{Path, Query},
+    web::{Path, Query, RealIp},
     http::{StatusCode, header::CONTENT_TYPE},
     Body, Response, IntoResponse
 };
 use tracing::{info, error};
 use crate::middleware::authorization::Authenticated;
-use common::service::log_activity;
+use crate::middleware::analytics::{Device, Interaction};
+use std::net::IpAddr;
+use common::service::log_clickthrough;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GoUrlType {
@@ -127,6 +129,9 @@ pub struct ProgramQuery {
 #[handler]
 pub async fn handle_go_url(
     Authenticated(user_info): Authenticated,
+    RealIp(ip_address): RealIp,
+    device: Device,
+    interaction: Interaction,
     Path(slug): Path<String>,
     Query(query): Query<ProgramQuery>,
 ) -> Result<impl IntoResponse, poem::Error> {
@@ -155,23 +160,28 @@ pub async fn handle_go_url(
                         .await
                     {
                         Ok((metadata, data)) => {
-                            // Log the file access via friendly URL
-                            let target_id = query
+                            // Log the file access via friendly URL as clickthrough
+                            let program_id = query
                                 .program
                                 .as_ref()
-                                .and_then(|p| p.parse().ok())
-                                .or(Some(file_id)); // Use file_id if no program specified
+                                .map(|p| p.clone())
+                                .or_else(|| Some(file_id.to_string())); // Use file_id if no program specified
 
-                            if let Err(e) = log_activity(
-                                None,
-                                "file-view",
-                                user_info.as_ref().map(|u| u.user_id),
-                                target_id,
-                                Some(format!("/go/{}", slug)),
+                            if let Err(e) = log_clickthrough(
+                                None, // when
+                                ip_address.unwrap_or_else(|| IpAddr::from([0, 0, 0, 0])).to_string(), // ip_address
+                                device, // device_id
+                                interaction, // interaction_id
+                                user_info.as_ref().map(|u| u.user_id), // user_id
+                                format!("/go/{}", slug), // from_path
+                                format!("file:{}", file_id), // to_url
+                                "golink", // link_type
+                                program_id, // program_id
+                                None, // geolocation - will be resolved
                             )
                             .await
                             {
-                                error!("Failed to log file view: {}", e);
+                                error!("Failed to log file clickthrough: {}", e);
                             }
 
                             let content_type = metadata
@@ -208,17 +218,24 @@ pub async fn handle_go_url(
                     }
                 }
                 GoUrlType::Redirect { target_url } => {
-                    // Log the redirect access
-                    if let Err(e) = log_activity(
-                        None,
-                        "redirect-view",
-                        user_info.as_ref().map(|u| u.user_id),
-                        None, // No specific target for redirects
-                        Some(format!("/go/{} -> {}", slug, target_url)),
+                    // Log the redirect access as clickthrough
+                    let program_id = query.program.as_ref().map(|p| p.clone());
+
+                    if let Err(e) = log_clickthrough(
+                        None, // when
+                        ip_address.unwrap_or_else(|| IpAddr::from([0, 0, 0, 0])).to_string(), // ip_address
+                        device, // device_id
+                        interaction, // interaction_id
+                        user_info.as_ref().map(|u| u.user_id), // user_id
+                        format!("/go/{}", slug), // from_path
+                        target_url.clone(), // to_url
+                        "golink", // link_type
+                        program_id, // program_id from query
+                        None, // geolocation - will be resolved
                     )
                     .await
                     {
-                        error!("Failed to log redirect: {}", e);
+                        error!("Failed to log redirect clickthrough: {}", e);
                     }
 
                     // Return redirect response

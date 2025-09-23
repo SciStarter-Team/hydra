@@ -1,8 +1,8 @@
 use anyhow::Result;
-use common::{message::log::{AnalyticsQuery, AnalyticsResponse, RecentActivityRequest, RecentActivityResponse}, service::decode_structured_message};
+use common::{message::log::{AnalyticsQuery, AnalyticsResponse, RecentActivityRequest, RecentActivityResponse, GoUrlStatsRequest, GoUrlStatsResponse}, service::decode_structured_message};
 
 use log_service::{
-    analytics::{get_clickthrough_analytics, get_join_analytics, get_recent_activity},
+    analytics::{get_clickthrough_analytics, get_join_analytics, get_recent_activity, get_go_url_stats},
     cache::{update_user_emails_cache, update_user_tags_cache},
     health::{HealthResponse},
 };
@@ -222,8 +222,16 @@ pub async fn handle_health_check(req: &async_nats::service::Request) -> Result<H
 
 pub async fn handle_recent_activity(req: &async_nats::service::Request) -> Result<RecentActivityResponse, anyhow::Error> {
     let request: RecentActivityRequest = decode_structured_message(req.message.clone())?;
-    
+
     // Clone database reference and use it in scope
     let database = DATABASE.read().as_ref().expect("Database not initialized").clone();
     get_recent_activity(database, request).await.map_err(Into::into)
+}
+
+pub async fn handle_go_url_stats(req: &async_nats::service::Request) -> Result<GoUrlStatsResponse, anyhow::Error> {
+    let request: GoUrlStatsRequest = decode_structured_message(req.message.clone())?;
+
+    // Clone database reference and use it in scope
+    let database = DATABASE.read().as_ref().expect("Database not initialized").clone();
+    get_go_url_stats(database, request).await.map_err(Into::into)
 }

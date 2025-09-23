@@ -59,6 +59,15 @@
                 <% }
             } %>
 
+            <!-- Stats Button -->
+            <button hx-get="/-admin/files-links/<%= self.go_url.slug %>/stats"
+                    hx-target="#modal-container"
+                    hx-swap="innerHTML"
+                    class="text-sm text-blue-600 hover:text-blue-800">
+                <wa-icon name="chart-bar" class="w-4 h-4 inline mr-1"></wa-icon>
+                Stats
+            </button>
+
             <!-- Delete Go URL -->
             <button hx-delete="/-admin/files-links/<%= self.go_url.slug %>"
                     hx-target="#go-url-<%= self.go_url.slug %>"

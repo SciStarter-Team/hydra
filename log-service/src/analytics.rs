@@ -2,7 +2,8 @@ use crate::error::{LogServiceError, Result};
 use common::badge::Badge;
 use common::message::log::{
     AnalyticsQuery, AnalyticsResponse, RecentActivityItem, RecentActivityRequest,
-    RecentActivityResponse, WeeklyCount,
+    RecentActivityResponse, WeeklyCount, GoUrlStatsRequest, GoUrlStatsResponse,
+    GoUrlViewEntry, GoUrlChartPoint,
 };
 use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::functions::expr_fn::date_trunc;
@@ -610,4 +611,175 @@ fn format_time_ago(when: &str) -> String {
     } else {
         "unknown time".to_string()
     }
+}
+
+/// Get go URL statistics including view counts and chart data
+pub async fn get_go_url_stats(
+    database: Arc<Database>,
+    request: GoUrlStatsRequest,
+) -> Result<GoUrlStatsResponse> {
+    let ctx = database.context();
+
+    // Determine date range
+    let today = jiff::Timestamp::now().to_zoned(jiff::tz::TimeZone::UTC).date();
+    let (start_date, end_date) = match (request.start_date, request.end_date) {
+        (Some(start), Some(end)) => (start, end),
+        (Some(start), None) => (start, today.to_string()),
+        (None, Some(end)) => {
+            // Default to 28 days before end date
+            let end_date = jiff::civil::Date::strptime("%Y-%m-%d", &end)
+                .unwrap_or(today);
+            let start = end_date.saturating_sub(jiff::ToSpan::days(28));
+            (start.to_string(), end)
+        }
+        (None, None) => {
+            // Default: last 28 days for chart, all time for total
+            let start = today.saturating_sub(jiff::ToSpan::days(28));
+            (start.to_string(), today.to_string())
+        }
+    };
+
+    // Query the clickthroughs table where from_path matches the go URL pattern
+    let from_path_pattern = format!("/go/{}", request.slug);
+
+    // Get total views (all time) for golink clickthroughs
+    let total_views_df = ctx
+        .table("clickthroughs")
+        .await?
+        .filter(col("link_type").eq(lit("golink")))?
+        .filter(col("from_path").eq(lit(&from_path_pattern)))?
+        .aggregate(vec![], vec![count(lit(1)).alias("total")])?;
+
+    let total_views_batches = total_views_df.collect().await?;
+    let total_views = if !total_views_batches.is_empty() && total_views_batches[0].num_rows() > 0 {
+        total_views_batches[0]
+            .column(0)
+            .as_any()
+            .downcast_ref::<datafusion::arrow::array::Int64Array>()
+            .unwrap()
+            .value(0)
+    } else {
+        0
+    };
+
+    // Get views in date range
+    let views_in_range_df = ctx
+        .table("clickthroughs")
+        .await?
+        .filter(col("link_type").eq(lit("golink")))?
+        .filter(col("from_path").eq(lit(&from_path_pattern)))?
+        .filter(col("when").gt_eq(lit(&start_date)))?
+        .filter(col("when").lt_eq(lit(format!("{}T23:59:59", end_date))))?
+        .aggregate(vec![], vec![count(lit(1)).alias("total")])?;
+
+    let views_in_range_batches = views_in_range_df.collect().await?;
+    let views_in_range = if !views_in_range_batches.is_empty() && views_in_range_batches[0].num_rows() > 0 {
+        views_in_range_batches[0]
+            .column(0)
+            .as_any()
+            .downcast_ref::<datafusion::arrow::array::Int64Array>()
+            .unwrap()
+            .value(0)
+    } else {
+        0
+    };
+
+    // Calculate chart date range (use selected range, but limit to reasonable number of days)
+    let chart_start = jiff::civil::Date::strptime("%Y-%m-%d", &start_date).unwrap_or(today);
+    let chart_end = jiff::civil::Date::strptime("%Y-%m-%d", &end_date).unwrap_or(today);
+    let days_diff = chart_end.since(chart_start).unwrap().total(jiff::Unit::Day).unwrap_or(0.0) as i64;
+
+    // Limit chart to max 30 days for readability
+    let chart_days = if days_diff > 30 { 30 } else { days_diff.max(1) };
+    let actual_chart_start = chart_end.saturating_sub(jiff::ToSpan::days(chart_days - 1));
+
+    // Get chart data
+    let mut chart_data = Vec::new();
+    let mut max_views = 0;
+
+    for i in 0..chart_days {
+        let date = actual_chart_start.saturating_add(jiff::ToSpan::days(i));
+        let date_str = date.to_string();
+
+        let daily_views_df = ctx
+            .table("clickthroughs")
+            .await?
+            .filter(col("link_type").eq(lit("golink")))?
+            .filter(col("from_path").eq(lit(&from_path_pattern)))?
+            .filter(col("when").like(lit(format!("{}%", date_str))))?
+            .aggregate(vec![], vec![count(lit(1)).alias("total")])?;
+
+        let daily_views_batches = daily_views_df.collect().await?;
+        let daily_views = if !daily_views_batches.is_empty() && daily_views_batches[0].num_rows() > 0 {
+            daily_views_batches[0]
+                .column(0)
+                .as_any()
+                .downcast_ref::<datafusion::arrow::array::Int64Array>()
+                .unwrap()
+                .value(0)
+        } else {
+            0
+        };
+
+        max_views = max_views.max(daily_views);
+
+        let date_label = date.strftime("%b %d").to_string();
+        chart_data.push(GoUrlChartPoint {
+            date: date_str,
+            date_label,
+            views: daily_views,
+            height_percent: 0.0, // Will be calculated after we know max_views
+        });
+    }
+
+    // Calculate height percentages
+    for point in &mut chart_data {
+        point.height_percent = if max_views > 0 {
+            (point.views as f64 / max_views as f64) * 100.0
+        } else {
+            0.0
+        };
+    }
+
+    // Get recent views (last 10 in the date range)
+    let recent_views_df = ctx
+        .table("clickthroughs")
+        .await?
+        .filter(col("link_type").eq(lit("golink")))?
+        .filter(col("from_path").eq(lit(&from_path_pattern)))?
+        .filter(col("when").gt_eq(lit(&start_date)))?
+        .filter(col("when").lt_eq(lit(format!("{}T23:59:59", end_date))))?
+        .select(vec![col("when")])?
+        .sort(vec![col("when").sort(false, true)])? // DESC
+        .limit(0, Some(10))?;
+
+    let recent_views_batches = recent_views_df.collect().await?;
+    let mut recent_views = Vec::new();
+
+    for batch in recent_views_batches {
+        for row in 0..batch.num_rows() {
+            let when_array = batch
+                .column(0)
+                .as_any()
+                .downcast_ref::<datafusion::arrow::array::StringArray>()
+                .unwrap();
+            let timestamp = when_array.value(row).to_string();
+
+            recent_views.push(GoUrlViewEntry {
+                timestamp,
+                ip_address: None, // We don't track IP in activity logs
+            });
+        }
+    }
+
+    Ok(GoUrlStatsResponse {
+        slug: request.slug,
+        total_views,
+        views_in_range,
+        chart_data,
+        chart_max_views: max_views,
+        recent_views,
+        date_range_start: start_date,
+        date_range_end: end_date,
+    })
 }

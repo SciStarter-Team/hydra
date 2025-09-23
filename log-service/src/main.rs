@@ -12,7 +12,7 @@ mod sync;
 use handlers::{
     handle_activity_log, handle_clickthrough, handle_clickthrough_analytics, handle_health_check,
     handle_join, handle_join_analytics, handle_page_view, handle_recent_activity,
-    handle_user_emails_update, handle_user_tags_update,
+    handle_user_emails_update, handle_user_tags_update, handle_go_url_stats,
 };
 use log_service::{Database, run_compactor_service};
 use parking_lot::RwLock;
@@ -125,6 +125,10 @@ async fn main() -> Result<()> {
         handle_recent_activity
     ));
 
+    // Stats endpoints
+    let stats_group = svc.group("log.stats");
+    toplevel.spawn(handler!(stats_group, "go_url", handle_go_url_stats));
+
     // Cache endpoints
     let cache_group = svc.group("log.cache");
     toplevel.spawn(recv_handler!(
@@ -150,6 +154,7 @@ async fn main() -> Result<()> {
     println!("  - log.clickthrough_analytics");
     println!("  - log.join_analytics");
     println!("  - log.recent_activity");
+    println!("  - log.stats.go_url");
     println!("  - log.cache.user_tags_update");
     println!("  - log.cache.user_emails_update");
     println!("  - log.health.check");

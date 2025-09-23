@@ -14,6 +14,8 @@ use ulid::Ulid;
 
 use crate::gourl::ProgramQuery;
 use crate::middleware::authorization::Authenticated;
+use crate::admin::UploadSuccessResponse;
+use sailfish::TemplateOnce;
 use common::service::log_activity;
 
 pub mod processing;
@@ -143,30 +145,32 @@ async fn upload_tracked_file(
             match go_url.save_to_database().await {
                 Ok(()) => {
                     // Get updated go URLs list for OOB update
-                    let go_urls_list = match crate::admin::get_go_urls_with_file_info().await {
-                        Ok(list) => {
-                            use sailfish::TemplateOnce;
-                            match list.render_once() {
-                                Ok(rendered) => format!(r#"<div id="go-urls-list" hx-swap-oob="true">{}</div>"#, rendered),
-                                Err(_) => String::new(),
-                            }
-                        }
-                        Err(_) => String::new(),
+                    let go_urls_list = crate::admin::get_go_urls_with_file_info().await.map_err(|e| {
+                        error!("Failed to get go URLs: {}", e);
+                        poem::Error::from_string(
+                            "Failed to get go URLs",
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                        )
+                    })?;
+
+                    let response = UploadSuccessResponse {
+                        slug,
+                        file_id,
+                        go_urls_list,
                     };
+
+                    let rendered = response.render_once().map_err(|e| {
+                        error!("Failed to render upload success template: {}", e);
+                        poem::Error::from_string(
+                            "Failed to render response",
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                        )
+                    })?;
 
                     Ok(Response::builder()
                         .status(StatusCode::OK)
                         .content_type("text/html")
-                        .body(format!(
-                            r#"<div class="text-green-600 font-medium">
-                                File uploaded successfully and go URL created!
-                                <span class="text-sm text-gray-600">File ID: {} | Go URL: /go/{}</span>
-                            </div>
-                            {}"#,
-                            file_id,
-                            slug,
-                            go_urls_list
-                        )))
+                        .body(rendered))
                 }
                 Err(e) => {
                     error!("Failed to create go URL for file {}: {}", file_id, e);

@@ -14,61 +14,21 @@
             </span>
         </button>
     </div>
-    
-    <!-- Search and Filters -->
-    <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 relative">
-        <form id="event-search-form" class="relative">
-            <!-- Loading overlay -->
-            
-            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0 sm:space-x-4">
-                <div class="flex-1 min-w-0">
-                    <input 
-                        type="search" 
-                        placeholder="Search events..."
-                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                        hx-get="/-admin/events/search"
-                        hx-target="#events-content"
-                        hx-trigger="keyup changed delay:300ms"
-                        hx-include="#event-search-form"
-                        name="search"
-                        value=""
-                    >
-                    <input type="hidden" name="page" value="1">
-                </div>
-                <div class="flex space-x-3">
-                    <select 
-                        name="status"
-                        class="block px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                        hx-get="/-admin/events/search"
-                        hx-target="#events-content"
-                        hx-trigger="change"
-                        hx-include="#event-search-form"
-                    >
-                        <option value="">All Status</option>
-                        <option value="upcoming">Upcoming</option>
-                        <option value="ongoing">Ongoing</option>
-                        <option value="completed">Completed</option>
-                        <option value="cancelled">Cancelled</option>
-                    </select>
-                </div>
-            </div>
-        </form>
-    </div>
-
-    <div id="events-content">
-        <%+ EventsContent { 
-            events: self.events.clone(), 
-            current_page: self.current_page, 
-            total_events: self.total_events, 
-            has_previous: self.has_previous, 
-            has_next: self.has_next, 
-            per_page: 25,
-            start_item: self.start_item, 
-            end_item: self.end_item, 
-            pagination_url: "/-admin/events/search".to_string(), 
-            pagination_include: "#event-search-form".to_string() 
-        } %>
-    </div>
+    <%+ EventsContent {
+        events: self.events.clone(),
+        current_page: self.current_page,
+        total_events: self.total_events,
+        has_previous: self.has_previous,
+        has_next: self.has_next,
+        per_page: 25,
+        start_item: self.start_item,
+        end_item: self.end_item,
+        pagination_url: "/-admin/events/search".to_string(),
+        pagination_include: "#event-search-form".to_string(),
+        search_term: self.search_term.clone(),
+        selected_status: self.selected_status.clone(),
+        selected_publish: self.selected_publish.clone()
+    } %>
 </div>
 
 <!-- Modal Container -->
