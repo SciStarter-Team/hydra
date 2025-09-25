@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
-use std::sync::Arc;
 use std::fmt;
+use std::sync::Arc;
 
 use crate::badge::Badge;
 use crate::timestring::TimeString;
@@ -251,7 +251,9 @@ impl AdminUser {
         if self.first_name.is_empty() && self.last_name.is_empty() {
             self.handle.clone()
         } else {
-            format!("{} {}", self.first_name, self.last_name).trim().to_string()
+            format!("{} {}", self.first_name, self.last_name)
+                .trim()
+                .to_string()
         }
     }
 
@@ -292,7 +294,7 @@ pub struct AdminUserListResponse {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AdminUserSearchRequest {
     pub search: Option<String>,
-    pub role: Option<String>, // user, page_manager, staff
+    pub role: Option<String>,         // user, page_manager, staff
     pub email_status: Option<String>, // verified, unverified
     pub page: Option<u32>,
     pub limit: Option<u32>,
@@ -317,7 +319,7 @@ pub struct AdminUserUpdateRequest {
     pub last_name: String,
     pub primary_email: String,
     pub new_password: Option<String>, // None means don't change password
-    pub role: String, // user, page_manager, staff
+    pub role: String,                 // user, page_manager, staff
     pub verified: bool,
     pub is_active: bool,
 }

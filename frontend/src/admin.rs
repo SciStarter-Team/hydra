@@ -23,8 +23,8 @@ use common::{
         LogServiceHealthResponse, UserServiceHealthResponse,
     },
     message::log::{
-        AnalyticsQuery, AnalyticsResponse, RecentActivityRequest, RecentActivityResponse,
-        GoUrlStatsRequest, GoUrlStatsResponse,
+        AnalyticsQuery, AnalyticsResponse, GoUrlStatsRequest, GoUrlStatsResponse,
+        RecentActivityRequest, RecentActivityResponse,
     },
     message::user::{
         AdminAnalyticsRequest, AdminAnalyticsResponse, AdminPasswordResetRequest,
@@ -114,7 +114,10 @@ pub fn routes() -> impl Endpoint {
         .at("/files-links/search", get(files_links_search))
         .at("/files-links/redirect", post(files_links_create_redirect))
         .at("/files-links/:slug", delete(files_links_delete_go_url))
-        .at("/files-links/:slug/stats", get(files_links_get_stats).post(files_links_post_stats))
+        .at(
+            "/files-links/:slug/stats",
+            get(files_links_get_stats).post(files_links_post_stats),
+        )
         .at("/clear-modal", post(clear_modal))
         .nest("/autocomplete", autocomplete::routes())
         .with(StaffOnly)
@@ -5451,10 +5454,7 @@ async fn files_links_create_redirect(
     })?;
 
     use sailfish::TemplateOnce;
-    let response = RedirectSuccessResponse {
-        slug,
-        go_urls_list,
-    };
+    let response = RedirectSuccessResponse { slug, go_urls_list };
 
     let rendered = response.render_once().map_err(|e| {
         tracing::error!("Failed to render template: {}", e);
@@ -5611,8 +5611,8 @@ pub struct GoUrlStatsModal {
 
 #[derive(Debug, Clone)]
 pub struct ChartPoint {
-    pub date: String,        // YYYY-MM-DD
-    pub date_label: String,  // e.g., "Sep 23"
+    pub date: String,       // YYYY-MM-DD
+    pub date_label: String, // e.g., "Sep 23"
     pub views: i64,
     pub height_percent: f64, // 0-100 for chart display
 }
@@ -5651,7 +5651,8 @@ async fn fetch_go_url_stats(
 
     match request::<GoUrlStatsResponse>("log.stats.go_url", stats_request).await {
         Ok(stats) => {
-            let chart_data = stats.chart_data
+            let chart_data = stats
+                .chart_data
                 .into_iter()
                 .map(|point| ChartPoint {
                     date: point.date,
@@ -5661,7 +5662,8 @@ async fn fetch_go_url_stats(
                 })
                 .collect();
 
-            let recent_views = stats.recent_views
+            let recent_views = stats
+                .recent_views
                 .into_iter()
                 .map(|view| RecentView {
                     timestamp: view.timestamp,
@@ -5695,7 +5697,9 @@ async fn files_links_get_stats(
     match fetch_go_url_stats(slug, None, None).await {
         Ok(modal) => Ok(modal.render_once().unwrap()),
         Err(error_msg) => {
-            let error_modal = ErrorModal { message: error_msg.clone() };
+            let error_modal = ErrorModal {
+                message: error_msg.clone(),
+            };
             match error_modal.render_once() {
                 Ok(rendered) => {
                     tracing::info!("Rendered error modal: {}", rendered.len());
@@ -5722,7 +5726,9 @@ async fn files_links_post_stats(
     match fetch_go_url_stats(slug, date_range.start_date, date_range.end_date).await {
         Ok(modal) => Ok(modal.render_once().unwrap()),
         Err(error_msg) => {
-            let error_modal = ErrorModal { message: error_msg.clone() };
+            let error_modal = ErrorModal {
+                message: error_msg.clone(),
+            };
             match error_modal.render_once() {
                 Ok(rendered) => {
                     tracing::info!("Rendered error modal: {}", rendered.len());

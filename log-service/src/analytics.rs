@@ -1,9 +1,8 @@
 use crate::error::{LogServiceError, Result};
 use common::badge::Badge;
 use common::message::log::{
-    AnalyticsQuery, AnalyticsResponse, RecentActivityItem, RecentActivityRequest,
-    RecentActivityResponse, WeeklyCount, GoUrlStatsRequest, GoUrlStatsResponse,
-    GoUrlViewEntry, GoUrlChartPoint,
+    AnalyticsQuery, AnalyticsResponse, GoUrlChartPoint, GoUrlStatsRequest, GoUrlStatsResponse,
+    GoUrlViewEntry, RecentActivityItem, RecentActivityRequest, RecentActivityResponse, WeeklyCount,
 };
 use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::functions::expr_fn::date_trunc;
@@ -621,14 +620,15 @@ pub async fn get_go_url_stats(
     let ctx = database.context();
 
     // Determine date range
-    let today = jiff::Timestamp::now().to_zoned(jiff::tz::TimeZone::UTC).date();
+    let today = jiff::Timestamp::now()
+        .to_zoned(jiff::tz::TimeZone::UTC)
+        .date();
     let (start_date, end_date) = match (request.start_date, request.end_date) {
         (Some(start), Some(end)) => (start, end),
         (Some(start), None) => (start, today.to_string()),
         (None, Some(end)) => {
             // Default to 28 days before end date
-            let end_date = jiff::civil::Date::strptime("%Y-%m-%d", &end)
-                .unwrap_or(today);
+            let end_date = jiff::civil::Date::strptime("%Y-%m-%d", &end).unwrap_or(today);
             let start = end_date.saturating_sub(jiff::ToSpan::days(28));
             (start.to_string(), end)
         }
@@ -673,21 +673,26 @@ pub async fn get_go_url_stats(
         .aggregate(vec![], vec![count(lit(1)).alias("total")])?;
 
     let views_in_range_batches = views_in_range_df.collect().await?;
-    let views_in_range = if !views_in_range_batches.is_empty() && views_in_range_batches[0].num_rows() > 0 {
-        views_in_range_batches[0]
-            .column(0)
-            .as_any()
-            .downcast_ref::<datafusion::arrow::array::Int64Array>()
-            .unwrap()
-            .value(0)
-    } else {
-        0
-    };
+    let views_in_range =
+        if !views_in_range_batches.is_empty() && views_in_range_batches[0].num_rows() > 0 {
+            views_in_range_batches[0]
+                .column(0)
+                .as_any()
+                .downcast_ref::<datafusion::arrow::array::Int64Array>()
+                .unwrap()
+                .value(0)
+        } else {
+            0
+        };
 
     // Calculate chart date range (use selected range, but limit to reasonable number of days)
     let chart_start = jiff::civil::Date::strptime("%Y-%m-%d", &start_date).unwrap_or(today);
     let chart_end = jiff::civil::Date::strptime("%Y-%m-%d", &end_date).unwrap_or(today);
-    let days_diff = chart_end.since(chart_start).unwrap().total(jiff::Unit::Day).unwrap_or(0.0) as i64;
+    let days_diff = chart_end
+        .since(chart_start)
+        .unwrap()
+        .total(jiff::Unit::Day)
+        .unwrap_or(0.0) as i64;
 
     // Limit chart to max 30 days for readability
     let chart_days = if days_diff > 30 { 30 } else { days_diff.max(1) };
@@ -710,16 +715,17 @@ pub async fn get_go_url_stats(
             .aggregate(vec![], vec![count(lit(1)).alias("total")])?;
 
         let daily_views_batches = daily_views_df.collect().await?;
-        let daily_views = if !daily_views_batches.is_empty() && daily_views_batches[0].num_rows() > 0 {
-            daily_views_batches[0]
-                .column(0)
-                .as_any()
-                .downcast_ref::<datafusion::arrow::array::Int64Array>()
-                .unwrap()
-                .value(0)
-        } else {
-            0
-        };
+        let daily_views =
+            if !daily_views_batches.is_empty() && daily_views_batches[0].num_rows() > 0 {
+                daily_views_batches[0]
+                    .column(0)
+                    .as_any()
+                    .downcast_ref::<datafusion::arrow::array::Int64Array>()
+                    .unwrap()
+                    .value(0)
+            } else {
+                0
+            };
 
         max_views = max_views.max(daily_views);
 

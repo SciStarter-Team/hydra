@@ -85,8 +85,8 @@ pub struct GoUrlViewEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GoUrlChartPoint {
-    pub date: String,        // YYYY-MM-DD
-    pub date_label: String,  // e.g., "Sep 23"
+    pub date: String,       // YYYY-MM-DD
+    pub date_label: String, // e.g., "Sep 23"
     pub views: i64,
     pub height_percent: f64, // 0-100 for chart display
 }
@@ -95,7 +95,7 @@ pub struct GoUrlChartPoint {
 pub struct GoUrlStatsResponse {
     pub slug: String,
     pub total_views: i64,
-    pub views_in_range: i64,  // Views within the specified date range
+    pub views_in_range: i64, // Views within the specified date range
     pub chart_data: Vec<GoUrlChartPoint>,
     pub chart_max_views: i64,
     pub recent_views: Vec<GoUrlViewEntry>,

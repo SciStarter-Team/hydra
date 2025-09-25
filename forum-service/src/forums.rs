@@ -380,7 +380,10 @@ pub async fn get_personal_forum(req: &Request) -> Result<ForumInfo> {
     get_forum_internal(user_id, Some(user_id)).await
 }
 
-async fn copy_general_forum_categories_to_new_forum(new_forum_id: Ulid, _user_id: Ulid) -> Result<()> {
+async fn copy_general_forum_categories_to_new_forum(
+    new_forum_id: Ulid,
+    _user_id: Ulid,
+) -> Result<()> {
     let db = db();
     let now = TimeString::now();
     let now_str = now.to_string();

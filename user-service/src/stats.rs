@@ -25,8 +25,9 @@ pub async fn verified_count(_req: &async_nats::service::Request) -> Result<UserC
 }
 
 /// Get analytics data for admin dashboard
-pub async fn admin_analytics(_req: &async_nats::service::Request) -> Result<AdminAnalyticsResponse> {
-
+pub async fn admin_analytics(
+    _req: &async_nats::service::Request,
+) -> Result<AdminAnalyticsResponse> {
     // Get total users
     let total_users = sqlx::query!("SELECT COUNT(*) as count FROM users")
         .fetch_one(db())

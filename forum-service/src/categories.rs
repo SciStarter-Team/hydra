@@ -1,12 +1,7 @@
 use anyhow::Result;
 use async_nats::service::Request;
 use common::timestring::TimeString;
-use common::{
-    message::forum::*,
-    service::log_activity,
-    shared::db,
-    ulid::AsUlid,
-};
+use common::{message::forum::*, service::log_activity, shared::db, ulid::AsUlid};
 use ulid::Ulid;
 
 use crate::forums::check_forum_management_permission;
@@ -78,7 +73,7 @@ pub async fn get_forum_categories(req: &Request) -> Result<Vec<ForumCategoryInfo
     let active_only = message.active_only.unwrap_or(true);
 
     let db = db();
-    
+
     let rows: Vec<_> = if active_only {
         sqlx::query!(
             r#"SELECT category_id, forum_id, category_name, is_active, created_at, updated_at
@@ -90,7 +85,16 @@ pub async fn get_forum_categories(req: &Request) -> Result<Vec<ForumCategoryInfo
         .fetch_all(db)
         .await?
         .into_iter()
-        .map(|row| (row.category_id, row.forum_id, row.category_name, row.is_active, row.created_at, row.updated_at))
+        .map(|row| {
+            (
+                row.category_id,
+                row.forum_id,
+                row.category_name,
+                row.is_active,
+                row.created_at,
+                row.updated_at,
+            )
+        })
         .collect()
     } else {
         sqlx::query!(
@@ -103,13 +107,24 @@ pub async fn get_forum_categories(req: &Request) -> Result<Vec<ForumCategoryInfo
         .fetch_all(db)
         .await?
         .into_iter()
-        .map(|row| (row.category_id, row.forum_id, row.category_name, row.is_active, row.created_at, row.updated_at))
+        .map(|row| {
+            (
+                row.category_id,
+                row.forum_id,
+                row.category_name,
+                row.is_active,
+                row.created_at,
+                row.updated_at,
+            )
+        })
         .collect()
     };
 
     let mut categories = Vec::new();
     for row in rows {
-        let category_id_str = row.0.ok_or_else(|| anyhow::anyhow!("Category ID is null"))?;
+        let category_id_str = row
+            .0
+            .ok_or_else(|| anyhow::anyhow!("Category ID is null"))?;
         let category_id = category_id_str.as_ulid()?;
         let forum_id = row.1.as_ulid()?;
 
@@ -139,7 +154,7 @@ pub async fn update_forum_category(req: &Request) -> Result<ForumCategoryInfo> {
 
     // Get current category to check forum ownership
     let current = get_forum_category_internal(message.category_id).await?;
-    
+
     // Check if user has management permission for this forum
     if !check_forum_management_permission(current.forum_id, Some(user_id)).await? {
         return Err(anyhow::anyhow!("Permission denied"));
@@ -148,7 +163,10 @@ pub async fn update_forum_category(req: &Request) -> Result<ForumCategoryInfo> {
     let now = TimeString::now();
     let now_str = now.to_string();
 
-    let new_name = message.category_name.clone().unwrap_or(current.category_name.clone());
+    let new_name = message
+        .category_name
+        .clone()
+        .unwrap_or(current.category_name.clone());
     let new_is_active = if message.is_active.unwrap_or(current.is_active) {
         1
     } else {
@@ -169,7 +187,9 @@ pub async fn update_forum_category(req: &Request) -> Result<ForumCategoryInfo> {
             .await?;
 
             if existing.is_some() {
-                return Err(anyhow::anyhow!("Category name already exists for this forum"));
+                return Err(anyhow::anyhow!(
+                    "Category name already exists for this forum"
+                ));
             }
         }
     }
@@ -212,7 +232,7 @@ pub async fn delete_forum_category(req: &Request) -> Result<()> {
 
     // Get current category to check forum ownership
     let current = get_forum_category_internal(message.category_id).await?;
-    
+
     // Check if user has management permission for this forum
     if !check_forum_management_permission(current.forum_id, Some(user_id)).await? {
         return Err(anyhow::anyhow!("Permission denied"));

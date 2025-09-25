@@ -57,66 +57,64 @@ pub async fn moderate_content(req: &Request) -> Result<()> {
     let log_id = Ulid::new();
 
     match action.target_type {
-        ModerationTarget::Topic => {
-            match action.action {
-                ModerationActionType::Delete => {
-                    sqlx::query!(
-                        r#"UPDATE "topics" SET "is_deleted" = 1 WHERE "topic_id" = ?"#,
-                        target_id_str
-                    )
-                    .execute(db)
-                    .await?;
-                }
-                ModerationActionType::Pin => {
-                    sqlx::query!(
-                        r#"UPDATE "topics" SET "is_pinned" = 1 WHERE "topic_id" = ?"#,
-                        target_id_str
-                    )
-                    .execute(db)
-                    .await?;
-                }
-                ModerationActionType::Unpin => {
-                    sqlx::query!(
-                        r#"UPDATE "topics" SET "is_pinned" = 0 WHERE "topic_id" = ?"#,
-                        target_id_str
-                    )
-                    .execute(db)
-                    .await?;
-                }
-                ModerationActionType::Lock => {
-                    sqlx::query!(
-                        r#"UPDATE "topics" SET "is_locked" = 1 WHERE "topic_id" = ?"#,
-                        target_id_str
-                    )
-                    .execute(db)
-                    .await?;
-                }
-                ModerationActionType::Unlock => {
-                    sqlx::query!(
-                        r#"UPDATE "topics" SET "is_locked" = 0 WHERE "topic_id" = ?"#,
-                        target_id_str
-                    )
-                    .execute(db)
-                    .await?;
-                }
-                ModerationActionType::Flag => {
-                    sqlx::query!(
-                        r#"UPDATE "topics" SET "is_flagged" = 1 WHERE "topic_id" = ?"#,
-                        target_id_str
-                    )
-                    .execute(db)
-                    .await?;
-                }
-                ModerationActionType::Unflag => {
-                    sqlx::query!(
-                        r#"UPDATE "topics" SET "is_flagged" = 0 WHERE "topic_id" = ?"#,
-                        target_id_str
-                    )
-                    .execute(db)
-                    .await?;
-                }
+        ModerationTarget::Topic => match action.action {
+            ModerationActionType::Delete => {
+                sqlx::query!(
+                    r#"UPDATE "topics" SET "is_deleted" = 1 WHERE "topic_id" = ?"#,
+                    target_id_str
+                )
+                .execute(db)
+                .await?;
             }
-        }
+            ModerationActionType::Pin => {
+                sqlx::query!(
+                    r#"UPDATE "topics" SET "is_pinned" = 1 WHERE "topic_id" = ?"#,
+                    target_id_str
+                )
+                .execute(db)
+                .await?;
+            }
+            ModerationActionType::Unpin => {
+                sqlx::query!(
+                    r#"UPDATE "topics" SET "is_pinned" = 0 WHERE "topic_id" = ?"#,
+                    target_id_str
+                )
+                .execute(db)
+                .await?;
+            }
+            ModerationActionType::Lock => {
+                sqlx::query!(
+                    r#"UPDATE "topics" SET "is_locked" = 1 WHERE "topic_id" = ?"#,
+                    target_id_str
+                )
+                .execute(db)
+                .await?;
+            }
+            ModerationActionType::Unlock => {
+                sqlx::query!(
+                    r#"UPDATE "topics" SET "is_locked" = 0 WHERE "topic_id" = ?"#,
+                    target_id_str
+                )
+                .execute(db)
+                .await?;
+            }
+            ModerationActionType::Flag => {
+                sqlx::query!(
+                    r#"UPDATE "topics" SET "is_flagged" = 1 WHERE "topic_id" = ?"#,
+                    target_id_str
+                )
+                .execute(db)
+                .await?;
+            }
+            ModerationActionType::Unflag => {
+                sqlx::query!(
+                    r#"UPDATE "topics" SET "is_flagged" = 0 WHERE "topic_id" = ?"#,
+                    target_id_str
+                )
+                .execute(db)
+                .await?;
+            }
+        },
         ModerationTarget::Post => match action.action {
             ModerationActionType::Delete => {
                 sqlx::query!(
@@ -314,7 +312,8 @@ pub async fn add_forum_moderator(req: &Request) -> Result<()> {
         action.requester_id.to_string(),
     )
     .await?;
-    let requester_info = requester_info.ok_or_else(|| anyhow::anyhow!("Requester user not found"))?;
+    let requester_info =
+        requester_info.ok_or_else(|| anyhow::anyhow!("Requester user not found"))?;
     if !requester_info.is_staff() {
         return Err(anyhow::anyhow!(
             "Permission denied: only staff can manage forum moderators"
@@ -370,7 +369,8 @@ pub async fn remove_forum_moderator(req: &Request) -> Result<()> {
         action.requester_id.to_string(),
     )
     .await?;
-    let requester_info = requester_info.ok_or_else(|| anyhow::anyhow!("Requester user not found"))?;
+    let requester_info =
+        requester_info.ok_or_else(|| anyhow::anyhow!("Requester user not found"))?;
     if !requester_info.is_staff() {
         return Err(anyhow::anyhow!(
             "Permission denied: only staff can manage forum moderators"

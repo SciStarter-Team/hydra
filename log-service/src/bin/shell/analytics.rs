@@ -103,7 +103,11 @@ impl AnalyticsEngine {
             output.extend(self.format_as_row_per_column(&disambiguated_columns, display_rows));
         } else {
             // Use traditional column mode without width constraints (no truncation)
-            output.extend(self.format_as_columns(&disambiguated_columns, display_rows, &col_widths));
+            output.extend(self.format_as_columns(
+                &disambiguated_columns,
+                display_rows,
+                &col_widths,
+            ));
         }
 
         // Add truncation notice if needed
@@ -215,14 +219,24 @@ impl AnalyticsEngine {
             for (col_idx, column_name) in columns.iter().enumerate() {
                 let cell_value = row.get(col_idx).map(|s| s.as_str()).unwrap_or("");
                 // No truncation - show full values
-                output.push(format!("{:>width$}: {}", column_name, cell_value, width = max_col_name_width));
+                output.push(format!(
+                    "{:>width$}: {}",
+                    column_name,
+                    cell_value,
+                    width = max_col_name_width
+                ));
             }
         }
 
         output
     }
 
-    fn format_as_columns(&self, columns: &[String], rows: &[Vec<String>], col_widths: &[usize]) -> Vec<String> {
+    fn format_as_columns(
+        &self,
+        columns: &[String],
+        rows: &[Vec<String>],
+        col_widths: &[usize],
+    ) -> Vec<String> {
         let mut output = Vec::new();
 
         // Create header row without truncation
@@ -261,5 +275,4 @@ impl AnalyticsEngine {
 
         output
     }
-
 }

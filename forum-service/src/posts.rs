@@ -212,7 +212,7 @@ pub async fn list_posts(req: &Request) -> Result<Vec<PostInfo>> {
                 .map(|s| s.as_ulid())
                 .transpose()?,
             is_deleted: row.is_deleted == 1,
-        is_flagged: row.is_flagged == 1,
+            is_flagged: row.is_flagged == 1,
         });
     }
 

@@ -1,18 +1,17 @@
-use serde::{Serialize, Deserialize};
-use ulid::Ulid;
-use anyhow::{Context, Result};
-use crate::peering::LoadStorePeered;
-use poem::{
-    handler,
-    web::{Path, Query, RealIp},
-    http::{StatusCode, header::CONTENT_TYPE},
-    Body, Response, IntoResponse
-};
-use tracing::{info, error};
-use crate::middleware::authorization::Authenticated;
 use crate::middleware::analytics::{Device, Interaction};
-use std::net::IpAddr;
+use crate::middleware::authorization::Authenticated;
+use crate::peering::LoadStorePeered;
+use anyhow::{Context, Result};
 use common::service::log_clickthrough;
+use poem::{
+    Body, IntoResponse, Response, handler,
+    http::{StatusCode, header::CONTENT_TYPE},
+    web::{Path, Query, RealIp},
+};
+use serde::{Deserialize, Serialize};
+use std::net::IpAddr;
+use tracing::{error, info};
+use ulid::Ulid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GoUrlType {
@@ -23,11 +22,10 @@ pub enum GoUrlType {
     // Event { event_id: Ulid },
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GoUrl {
-    pub slug: String,           // The friendly URL slug (e.g., "kittens-and-puppies")
-    pub url_type: GoUrlType,    // What this URL points to
+    pub slug: String,        // The friendly URL slug (e.g., "kittens-and-puppies")
+    pub url_type: GoUrlType, // What this URL points to
 }
 
 impl LoadStorePeered for GoUrl {
@@ -38,8 +36,8 @@ impl LoadStorePeered for GoUrl {
     async fn save_to_database(&self) -> Result<(), anyhow::Error> {
         use common::shared::db;
 
-        let url_type_blob = flexbuffers::to_vec(&self.url_type)
-            .context("Failed to encode GoUrlType")?;
+        let url_type_blob =
+            flexbuffers::to_vec(&self.url_type).context("Failed to encode GoUrlType")?;
 
         sqlx::query!(
             r#"INSERT OR REPLACE INTO go_urls (slug, url_type)
@@ -81,13 +79,10 @@ impl LoadStorePeered for GoUrl {
     async fn delete_from_database(key: Self::DatabaseKey) -> Result<(), anyhow::Error> {
         use common::shared::db;
 
-        sqlx::query!(
-            r#"DELETE FROM go_urls WHERE LOWER(slug) = LOWER(?)"#,
-            key
-        )
-        .execute(db())
-        .await
-        .context("Failed to delete go_url from database")?;
+        sqlx::query!(r#"DELETE FROM go_urls WHERE LOWER(slug) = LOWER(?)"#, key)
+            .execute(db())
+            .await
+            .context("Failed to delete go_url from database")?;
 
         Ok(())
     }
@@ -154,15 +149,9 @@ pub async fn handle_go_url(
 ) -> Result<impl IntoResponse, poem::Error> {
     // Log the access with user information if available
     if let Some(ref user) = user_info {
-        info!(
-            "User {} accessing go URL: {}",
-            user.user_id, slug
-        );
+        info!("User {} accessing go URL: {}", user.user_id, slug);
     } else {
-        info!(
-            "Anonymous user accessing go URL: {}",
-            slug
-        );
+        info!("Anonymous user accessing go URL: {}", slug);
     }
 
     // Look up the GoUrl entry
@@ -186,7 +175,9 @@ pub async fn handle_go_url(
 
                             if let Err(e) = log_clickthrough(
                                 None, // when
-                                ip_address.unwrap_or_else(|| IpAddr::from([0, 0, 0, 0])).to_string(), // ip_address
+                                ip_address
+                                    .unwrap_or_else(|| IpAddr::from([0, 0, 0, 0]))
+                                    .to_string(), // ip_address
                                 device, // device_id
                                 interaction, // interaction_id
                                 user_info.as_ref().map(|u| u.user_id), // user_id
@@ -211,22 +202,20 @@ pub async fn handle_go_url(
 
                             // Add attachment headers if force_download is true
                             if metadata.force_download {
-                                response = response.header("Content-Disposition",
+                                response = response.header(
+                                    "Content-Disposition",
                                     if let Some(filename) = &metadata.original_filename {
                                         format!("attachment; filename=\"{}\"", filename)
                                     } else {
                                         "attachment".to_string()
-                                    }
+                                    },
                                 );
                             }
 
                             Ok(response.body(Body::from_bytes(data.into())))
                         }
                         Err(e) => {
-                            error!(
-                                "Failed to retrieve file via go URL {}: {}",
-                                slug, e
-                            );
+                            error!("Failed to retrieve file via go URL {}: {}", slug, e);
                             Err(poem::Error::from_string(
                                 "File not found",
                                 StatusCode::NOT_FOUND,
@@ -240,7 +229,9 @@ pub async fn handle_go_url(
 
                     if let Err(e) = log_clickthrough(
                         None, // when
-                        ip_address.unwrap_or_else(|| IpAddr::from([0, 0, 0, 0])).to_string(), // ip_address
+                        ip_address
+                            .unwrap_or_else(|| IpAddr::from([0, 0, 0, 0]))
+                            .to_string(), // ip_address
                         device, // device_id
                         interaction, // interaction_id
                         user_info.as_ref().map(|u| u.user_id), // user_id

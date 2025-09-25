@@ -4,7 +4,7 @@ use errors::DecodeError;
 use futures::StreamExt;
 use serde::de::DeserializeOwned;
 use std::time::Duration;
-use tracing::{warn, debug};
+use tracing::{debug, warn};
 use ulid::Ulid;
 
 use crate::{shared::nats, timestring::TimeString, ulid::AsUlid};

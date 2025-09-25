@@ -14,7 +14,8 @@ use std::sync::{Arc, LazyLock};
 use tokio::sync::RwLock;
 
 // Global cached regex - loaded once at startup and on explicit reload
-static FILTER_REGEX: LazyLock<Arc<RwLock<Option<Regex>>>> = LazyLock::new(|| Arc::new(RwLock::new(None)));
+static FILTER_REGEX: LazyLock<Arc<RwLock<Option<Regex>>>> =
+    LazyLock::new(|| Arc::new(RwLock::new(None)));
 
 pub async fn check_content(req: &Request) -> Result<ContentFilterResult> {
     let content: String = flexbuffers::from_slice(&req.message.payload)?;
@@ -23,7 +24,7 @@ pub async fn check_content(req: &Request) -> Result<ContentFilterResult> {
 
 pub async fn check_content_internal(content: &str) -> Result<ContentFilterResult> {
     let regex_guard = FILTER_REGEX.read().await;
-    
+
     if let Some(ref compiled_regex) = *regex_guard {
         // Find all matches and extract the matched words
         let flagged_words: Vec<String> = compiled_regex
@@ -63,7 +64,7 @@ pub async fn is_initialized() -> bool {
 // Reload the filter (for NATS endpoint)
 pub async fn reload_filter(req: &Request) -> Result<()> {
     let user_id: ulid::Ulid = flexbuffers::from_slice(&req.message.payload)?;
-    
+
     // Check permissions - only staff can reload filter
     let user_info: BasicInfo = request("user.basic_info.by_user_id", user_id.to_string()).await?;
     if !user_info.is_staff {
@@ -73,7 +74,7 @@ pub async fn reload_filter(req: &Request) -> Result<()> {
     let compiled_regex = build_filter_regex().await?;
     let mut regex_guard = FILTER_REGEX.write().await;
     *regex_guard = compiled_regex;
-    
+
     tracing::info!("Bad words filter reloaded by user {}", user_id);
     Ok(())
 }
@@ -98,9 +99,9 @@ async fn build_filter_regex() -> Result<Option<Regex>> {
         .iter()
         .map(|word| format!(r"\b{}\b", regex::escape(word)))
         .collect();
-    
+
     let pattern = format!(r"(?i)({})", escaped_words.join("|"));
-    
+
     match Regex::new(&pattern) {
         Ok(compiled_regex) => {
             tracing::info!("Compiled bad words filter with {} words", bad_words.len());

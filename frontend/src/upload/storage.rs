@@ -1,10 +1,10 @@
-use std::path::Path;
+use crate::peering::LoadStorePeered;
 use anyhow::{Context, Result};
 use object_store::{ObjectStore, aws::AmazonS3Builder, path::Path as ObjectPath};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
+use std::path::Path;
+use tracing::{error, info};
 use ulid::Ulid;
-use tracing::{info, error};
-use crate::peering::LoadStorePeered;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FileAccess {
@@ -72,8 +72,13 @@ impl StorageManager {
         Ok(file_path)
     }
 
-    async fn store_processed_file(&self, processed_file: &super::processing::ProcessedFile, original_metadata: &FileMetadata) -> Result<()> {
-        let file_extension = processed_file.original_filename
+    async fn store_processed_file(
+        &self,
+        processed_file: &super::processing::ProcessedFile,
+        original_metadata: &FileMetadata,
+    ) -> Result<()> {
+        let file_extension = processed_file
+            .original_filename
             .as_ref()
             .and_then(|name| Path::new(name).extension())
             .and_then(|ext| ext.to_str())
@@ -81,11 +86,13 @@ impl StorageManager {
 
         let filename = format!("{}.{}", processed_file.file_id, file_extension);
 
-        let folder_name = processed_file.original_filename
+        let folder_name = processed_file
+            .original_filename
             .as_ref()
             .map(|name| {
                 // Remove extension and sanitize filename for folder name
-                let stem = Path::new(name).file_stem()
+                let stem = Path::new(name)
+                    .file_stem()
                     .and_then(|s| s.to_str())
                     .unwrap_or("unnamed");
                 sanitize_filename(stem)
@@ -102,15 +109,24 @@ impl StorageManager {
             .with_context(|| format!("Failed to upload file to object storage: {}", object_path))?;
 
         // Store metadata using LoadStorePeered
-        let file_metadata = processed_file.to_metadata(original_metadata.uploaded_by, original_metadata.access.clone());
+        let file_metadata = processed_file.to_metadata(
+            original_metadata.uploaded_by,
+            original_metadata.access.clone(),
+        );
         file_metadata.store().await?;
 
-        info!("Uploaded processed file {} to {} (variant: {:?})",
-              processed_file.file_id, object_path, processed_file.variant);
+        info!(
+            "Uploaded processed file {} to {} (variant: {:?})",
+            processed_file.file_id, object_path, processed_file.variant
+        );
         Ok(())
     }
 
-    pub async fn get_file(&self, file_id: Ulid, requesting_user: Option<Ulid>) -> Result<(FileMetadata, Vec<u8>)> {
+    pub async fn get_file(
+        &self,
+        file_id: Ulid,
+        requesting_user: Option<Ulid>,
+    ) -> Result<(FileMetadata, Vec<u8>)> {
         // Get metadata using LoadStorePeered
         let metadata = FileMetadata::load(file_id).await?;
 
@@ -119,7 +135,9 @@ impl StorageManager {
             FileAccess::Tracked => {
                 if let Some(user_id) = requesting_user {
                     if metadata.uploaded_by != user_id {
-                        return Err(anyhow::anyhow!("Access denied: file belongs to different user"));
+                        return Err(anyhow::anyhow!(
+                            "Access denied: file belongs to different user"
+                        ));
                     }
                 } else {
                     return Err(anyhow::anyhow!("Authentication required for tracked files"));
@@ -131,7 +149,8 @@ impl StorageManager {
         }
 
         // Reconstruct the object path
-        let file_extension = metadata.original_filename
+        let file_extension = metadata
+            .original_filename
             .as_ref()
             .and_then(|name| Path::new(name).extension())
             .and_then(|ext| ext.to_str())
@@ -139,10 +158,12 @@ impl StorageManager {
 
         let filename = format!("{}.{}", metadata.file_id, file_extension);
 
-        let folder_name = metadata.original_filename
+        let folder_name = metadata
+            .original_filename
             .as_ref()
             .map(|name| {
-                let stem = Path::new(name).file_stem()
+                let stem = Path::new(name)
+                    .file_stem()
                     .and_then(|s| s.to_str())
                     .unwrap_or("unnamed");
                 sanitize_filename(stem)
@@ -153,10 +174,16 @@ impl StorageManager {
         let object_key = ObjectPath::from(object_path.clone());
 
         // Get the file from object storage
-        let data = self.object_store
+        let data = self
+            .object_store
             .get(&object_key)
             .await
-            .with_context(|| format!("Failed to retrieve file from object storage: {}", object_path))?
+            .with_context(|| {
+                format!(
+                    "Failed to retrieve file from object storage: {}",
+                    object_path
+                )
+            })?
             .bytes()
             .await
             .context("Failed to read file bytes")?
@@ -165,15 +192,18 @@ impl StorageManager {
         Ok((metadata, data))
     }
 
-
-
-
-    pub async fn set_friendly_url(&self, file_id: Ulid, friendly_url: Option<String>, requesting_user: &Option<std::sync::Arc<common::message::user::BasicInfo>>) -> Result<()> {
+    pub async fn set_friendly_url(
+        &self,
+        file_id: Ulid,
+        friendly_url: Option<String>,
+        requesting_user: &Option<std::sync::Arc<common::message::user::BasicInfo>>,
+    ) -> Result<()> {
         use crate::gourl::{GoUrl, GoUrlType};
         use common::service::log_activity;
 
         // Check if the user is staff
-        let user_info = requesting_user.as_ref()
+        let user_info = requesting_user
+            .as_ref()
             .ok_or_else(|| anyhow::anyhow!("Authentication required to set friendly URLs"))?;
 
         if !user_info.is_staff {
@@ -183,14 +213,18 @@ impl StorageManager {
         // Verify it's a tracked file
         let metadata = FileMetadata::load(file_id).await?;
         if !matches!(metadata.access, FileAccess::Tracked) {
-            return Err(anyhow::anyhow!("Friendly URLs can only be set for tracked files"));
+            return Err(anyhow::anyhow!(
+                "Friendly URLs can only be set for tracked files"
+            ));
         }
 
         match friendly_url {
             Some(slug) => {
                 // Validate friendly URL format
                 if !GoUrl::is_valid_slug(&slug) {
-                    return Err(anyhow::anyhow!("Invalid friendly URL format. Use only letters, numbers, and hyphens."));
+                    return Err(anyhow::anyhow!(
+                        "Invalid friendly URL format. Use only letters, numbers, and hyphens."
+                    ));
                 }
 
                 // Create or update the GoUrl entry
@@ -204,7 +238,9 @@ impl StorageManager {
                     Some(user_info.user_id),
                     Some(file_id),
                     Some(format!("/go/{}", slug)),
-                ).await {
+                )
+                .await
+                {
                     error!("Failed to log friendly URL creation: {}", e);
                 }
             }
@@ -212,18 +248,26 @@ impl StorageManager {
                 // TODO: Remove existing friendly URL
                 // We'd need to find and delete the GoUrl entry that points to this file_id
                 // This requires a reverse lookup capability we haven't implemented yet
-                return Err(anyhow::anyhow!("Removing friendly URLs not yet implemented"));
+                return Err(anyhow::anyhow!(
+                    "Removing friendly URLs not yet implemented"
+                ));
             }
         }
 
         Ok(())
     }
 
-    pub async fn set_download_mode(&self, file_id: Ulid, force_download: bool, requesting_user: &Option<std::sync::Arc<common::message::user::BasicInfo>>) -> Result<()> {
+    pub async fn set_download_mode(
+        &self,
+        file_id: Ulid,
+        force_download: bool,
+        requesting_user: &Option<std::sync::Arc<common::message::user::BasicInfo>>,
+    ) -> Result<()> {
         use common::service::log_activity;
 
         // Check if the user is staff
-        let user_info = requesting_user.as_ref()
+        let user_info = requesting_user
+            .as_ref()
             .ok_or_else(|| anyhow::anyhow!("Authentication required to set download mode"))?;
 
         if !user_info.is_staff {
@@ -252,7 +296,9 @@ impl StorageManager {
             Some(user_info.user_id),
             Some(file_id),
             Some(format!("force_download={}", force_download)),
-        ).await {
+        )
+        .await
+        {
             error!("Failed to log download mode change: {}", e);
         }
 
@@ -277,10 +323,11 @@ impl TryFrom<FileMetadataRow> for FileMetadata {
     type Error = anyhow::Error;
 
     fn try_from(row: FileMetadataRow) -> Result<Self> {
-        let file_id = row.file_id.parse()
-            .context("Invalid file_id ULID")?;
+        let file_id = row.file_id.parse().context("Invalid file_id ULID")?;
 
-        let uploaded_by = row.uploaded_by.parse()
+        let uploaded_by = row
+            .uploaded_by
+            .parse()
             .context("Invalid uploaded_by ULID")?;
 
         let access = match row.access.as_str() {
@@ -311,7 +358,6 @@ fn sanitize_filename(name: &str) -> String {
         })
         .collect()
 }
-
 
 impl LoadStorePeered for FileMetadata {
     type DatabaseKey = Ulid;

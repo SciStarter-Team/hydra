@@ -14,7 +14,6 @@ use sqlx::Row;
 use std::collections::HashSet;
 use ulid::Ulid;
 
-
 fn normalize_title(title: &str) -> HashSet<String> {
     let stop_words = [
         "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by",
@@ -199,7 +198,7 @@ pub async fn list_topics(req: &Request) -> Result<Vec<TopicInfo>> {
     let mut query_builder = sqlx::QueryBuilder::new(
         r#"SELECT topic_id, forum_id, title, content, author_id, created_at, updated_at, category,
                   is_pinned, is_locked, is_deleted, is_flagged
-           FROM topics WHERE is_deleted = 0"#
+           FROM topics WHERE is_deleted = 0"#,
     );
 
     // Add category filter if specified
@@ -222,7 +221,9 @@ pub async fn list_topics(req: &Request) -> Result<Vec<TopicInfo>> {
     let order_clause = match query.sort_by {
         TopicSortBy::CreatedDesc => " ORDER BY is_pinned DESC, created_at DESC",
         TopicSortBy::CreatedAsc => " ORDER BY is_pinned DESC, created_at ASC",
-        TopicSortBy::UpdatedDesc => " ORDER BY is_pinned DESC, COALESCE(updated_at, created_at) DESC",
+        TopicSortBy::UpdatedDesc => {
+            " ORDER BY is_pinned DESC, COALESCE(updated_at, created_at) DESC"
+        }
         TopicSortBy::UpdatedAsc => " ORDER BY is_pinned DESC, COALESCE(updated_at, created_at) ASC",
         TopicSortBy::PostCount => " ORDER BY is_pinned DESC, created_at DESC", // We'll sort by post count after fetching
     };

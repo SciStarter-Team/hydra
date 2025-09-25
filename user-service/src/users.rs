@@ -2,7 +2,16 @@ use anyhow::Error;
 use async_nats::service::Request;
 use common::{
     badge::Badge,
-    message::user::{AdminUser, AdminUserListRequest, AdminUserListResponse, AdminUserSearchRequest, AdminUserCreateRequest, AdminUserUpdateRequest, AdminUserDeleteRequest, AdminUserGetRequest, AdminUserResponse, AdminUserDeleteResponse, AdminUserBatchGetRequest, AdminUserBatchGetResponse, UserNameMapping, BasicInfo, UserAndBadge, UserBadge, PageManagerSyncRequest, PageManagerSyncResponse, PageManagerUpdateRequest, PageManagerUpdateResponse, UserEmail, AdminPasswordResetRequest, AdminPasswordResetResponse, UserEmailAddRequest, UserEmailUpdateRequest, UserEmailDeleteRequest, UserEmailToggleVerifiedRequest, UserEmailResponse},
+    message::user::{
+        AdminPasswordResetRequest, AdminPasswordResetResponse, AdminUser, AdminUserBatchGetRequest,
+        AdminUserBatchGetResponse, AdminUserCreateRequest, AdminUserDeleteRequest,
+        AdminUserDeleteResponse, AdminUserGetRequest, AdminUserListRequest, AdminUserListResponse,
+        AdminUserResponse, AdminUserSearchRequest, AdminUserUpdateRequest, BasicInfo,
+        PageManagerSyncRequest, PageManagerSyncResponse, PageManagerUpdateRequest,
+        PageManagerUpdateResponse, UserAndBadge, UserBadge, UserEmail, UserEmailAddRequest,
+        UserEmailDeleteRequest, UserEmailResponse, UserEmailToggleVerifiedRequest,
+        UserEmailUpdateRequest, UserNameMapping,
+    },
     service::{decode_structured_message, log_activity, send},
     shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower},
     timestring::TimeString,
@@ -47,7 +56,7 @@ async fn calculate_user_verified_status(user_id: Ulid) -> Result<bool, Error> {
     )
     .fetch_one(db())
     .await?;
-    
+
     Ok(verified_count != 0)
 }
 
@@ -55,7 +64,7 @@ async fn calculate_user_verified_status(user_id: Ulid) -> Result<bool, Error> {
 async fn update_user_verified_status(user_id: Ulid) -> Result<(), Error> {
     let calculated_verified = calculate_user_verified_status(user_id).await?;
     let user_id_str = user_id.to_string();
-    
+
     sqlx::query!(
         r#"UPDATE "users" SET "verified" = ? WHERE "user_id" = ?"#,
         calculated_verified,
@@ -63,7 +72,7 @@ async fn update_user_verified_status(user_id: Ulid) -> Result<(), Error> {
     )
     .execute(db())
     .await?;
-    
+
     Ok(())
 }
 
@@ -134,8 +143,8 @@ pub async fn search_by_handle(req: &Request) -> Result<Vec<BasicInfo>, Error> {
           "protected" as "protected: bool",
           AsText("point") as "point: String"
         from "users"
-        where "handle" LIKE ? || '%' 
-          AND "public" = 1 
+        where "handle" LIKE ? || '%'
+          AND "public" = 1
           AND "protected" = 0
         order by "handle""#,
         search_term,
@@ -402,7 +411,7 @@ pub async fn user_tags(req: &Request) -> Result<Vec<(String, String)>, Error> {
 }
 
 /// Get user emails for cache synchronization with pagination
-/// Returns a vector of (user_id, email) tuples  
+/// Returns a vector of (user_id, email) tuples
 /// Request payload: { "offset": 0, "limit": 1000 } (both optional, defaults: offset=0, limit=1000)
 pub async fn user_emails(req: &Request) -> Result<Vec<(String, String)>, Error> {
     let sync_req: SyncRequest = if req.message.payload.is_empty() {
@@ -519,18 +528,18 @@ pub async fn has_user_badge(req: &Request) -> Result<bool, Error> {
 
 pub async fn admin_user_list(req: &Request) -> Result<AdminUserListResponse, Error> {
     let request: AdminUserListRequest = decode_structured_message(req.message.clone())?;
-    
+
     let page = request.page.unwrap_or(1);
     let limit = request.limit.unwrap_or(25);
     let offset = (page - 1) * limit;
 
     let users_result = sqlx::query!(
         r#"
-        SELECT 
+        SELECT
             "user_id",
             "handle",
             "first_name",
-            "last_name", 
+            "last_name",
             "primary_email",
             "is_active" as "is_active: bool",
             "is_staff" as "is_staff: bool",
@@ -555,7 +564,9 @@ pub async fn admin_user_list(req: &Request) -> Result<AdminUserListResponse, Err
 
     let mut users = Vec::new();
     for row in users_result {
-        let user_id = row.user_id.as_ulid()
+        let user_id = row
+            .user_id
+            .as_ulid()
             .map_err(|e| anyhow::anyhow!("Invalid user ID in database: {}", e))?;
 
         users.push(AdminUser {
@@ -584,21 +595,21 @@ pub async fn admin_user_list(req: &Request) -> Result<AdminUserListResponse, Err
 
 pub async fn admin_user_search(req: &Request) -> Result<AdminUserListResponse, Error> {
     let request: AdminUserSearchRequest = decode_structured_message(req.message.clone())?;
-    
+
     let page = request.page.unwrap_or(1);
     let limit = request.limit.unwrap_or(25);
     let offset = (page - 1) * limit;
 
     let search_pattern = request.search.as_deref().unwrap_or("");
     let search_like = format!("%{}%", search_pattern);
-    
+
     let (role_staff_filter, role_page_manager_filter) = match request.role.as_deref() {
         Some("staff") => (Some(true), None),
         Some("page_manager") => (None, Some(true)),
         Some("user") => (Some(false), Some(false)),
         _ => (None, None),
     };
-    
+
     let email_verified_filter = match request.email_status.as_deref() {
         Some("verified") => Some(true),
         Some("unverified") => Some(false),
@@ -607,11 +618,11 @@ pub async fn admin_user_search(req: &Request) -> Result<AdminUserListResponse, E
 
     let users_result = sqlx::query!(
         r#"
-        SELECT 
+        SELECT
             "user_id",
             "handle",
             "first_name",
-            "last_name", 
+            "last_name",
             "primary_email",
             "is_active" as "is_active: bool",
             "is_staff" as "is_staff: bool",
@@ -620,7 +631,7 @@ pub async fn admin_user_search(req: &Request) -> Result<AdminUserListResponse, E
             "verified" as "verified: bool",
             "date_joined"
         FROM "users"
-        WHERE 
+        WHERE
             (? = '' OR "first_name" LIKE ? OR "last_name" LIKE ? OR "handle" LIKE ? OR "primary_email" LIKE ?)
             AND (? IS NULL OR "is_staff" = ?)
             AND (? IS NULL OR "is_page_manager" = ?)
@@ -630,7 +641,7 @@ pub async fn admin_user_search(req: &Request) -> Result<AdminUserListResponse, E
         "#,
         search_pattern,
         search_like,
-        search_like, 
+        search_like,
         search_like,
         search_like,
         role_staff_filter,
@@ -648,7 +659,7 @@ pub async fn admin_user_search(req: &Request) -> Result<AdminUserListResponse, E
     let total_count_result = sqlx::query!(
         r#"
         SELECT COUNT(*) as count FROM "users"
-        WHERE 
+        WHERE
             (? = '' OR "first_name" LIKE ? OR "last_name" LIKE ? OR "handle" LIKE ? OR "primary_email" LIKE ?)
             AND (? IS NULL OR "is_staff" = ?)
             AND (? IS NULL OR "is_page_manager" = ?)
@@ -656,7 +667,7 @@ pub async fn admin_user_search(req: &Request) -> Result<AdminUserListResponse, E
         "#,
         search_pattern,
         search_like,
-        search_like, 
+        search_like,
         search_like,
         search_like,
         role_staff_filter,
@@ -672,7 +683,9 @@ pub async fn admin_user_search(req: &Request) -> Result<AdminUserListResponse, E
 
     let mut users = Vec::new();
     for row in users_result {
-        let user_id = row.user_id.as_ulid()
+        let user_id = row
+            .user_id
+            .as_ulid()
             .map_err(|e| anyhow::anyhow!("Invalid user ID in database: {}", e))?;
 
         users.push(AdminUser {
@@ -705,11 +718,11 @@ pub async fn admin_user_get(req: &Request) -> Result<AdminUserResponse, Error> {
     let user_id_str = request.user_id.to_string();
     let user_result = sqlx::query!(
         r#"
-        SELECT 
+        SELECT
             "user_id",
             "handle",
             "first_name",
-            "last_name", 
+            "last_name",
             "primary_email",
             "is_active" as "is_active: bool",
             "is_staff" as "is_staff: bool",
@@ -727,7 +740,9 @@ pub async fn admin_user_get(req: &Request) -> Result<AdminUserResponse, Error> {
 
     match user_result {
         Some(row) => {
-            let user_id = row.user_id.as_ulid()
+            let user_id = row
+                .user_id
+                .as_ulid()
                 .map_err(|e| anyhow::anyhow!("Invalid user ID in database: {}", e))?;
 
             // Fetch user emails
@@ -758,14 +773,12 @@ pub async fn admin_user_batch_get(req: &Request) -> Result<AdminUserBatchGetResp
     let request: AdminUserBatchGetRequest = decode_structured_message(req.message.clone())?;
 
     if request.user_ids.is_empty() {
-        return Ok(AdminUserBatchGetResponse {
-            users: Vec::new(),
-        });
+        return Ok(AdminUserBatchGetResponse { users: Vec::new() });
     }
 
     // Build query to get users by IDs
     let mut query_builder = sqlx::QueryBuilder::new(
-        r#"SELECT "user_id", "primary_email" FROM "users" WHERE "user_id" IN ("#
+        r#"SELECT "user_id", "primary_email" FROM "users" WHERE "user_id" IN ("#,
     );
     let mut separated = query_builder.separated(", ");
     for user_id in &request.user_ids {
@@ -780,26 +793,27 @@ pub async fn admin_user_batch_get(req: &Request) -> Result<AdminUserBatchGetResp
 
     let users: Result<Vec<UserNameMapping>, Error> = rows
         .into_iter()
-        .map(|(user_id_str, primary_email)| -> Result<UserNameMapping, Error> {
-            let user_id = user_id_str.as_ulid()
-                .map_err(|e| anyhow::anyhow!("Invalid user ID in database: {}", e))?;
-            Ok(UserNameMapping {
-                user_id,
-                primary_email,
-            })
-        })
+        .map(
+            |(user_id_str, primary_email)| -> Result<UserNameMapping, Error> {
+                let user_id = user_id_str
+                    .as_ulid()
+                    .map_err(|e| anyhow::anyhow!("Invalid user ID in database: {}", e))?;
+                Ok(UserNameMapping {
+                    user_id,
+                    primary_email,
+                })
+            },
+        )
         .collect();
 
-    Ok(AdminUserBatchGetResponse {
-        users: users?,
-    })
+    Ok(AdminUserBatchGetResponse { users: users? })
 }
 
 pub async fn admin_user_create(req: &Request) -> Result<AdminUserResponse, Error> {
     let request: AdminUserCreateRequest = decode_structured_message(req.message.clone())?;
-    
+
     let user_id = ulid::Ulid::new();
-    
+
     let (is_staff, is_page_manager) = match request.role.as_str() {
         "staff" => (true, false),
         "page_manager" => (false, true),
@@ -808,12 +822,12 @@ pub async fn admin_user_create(req: &Request) -> Result<AdminUserResponse, Error
 
     let user_id_str = user_id.to_string();
     let password_hash = djangohashers::make_password(&request.password);
-    
+
     let mut tx = db().begin().await?;
-    
+
     let result = sqlx::query!(
         r#"INSERT INTO "users" (
-            "user_id", "handle", "first_name", "last_name", "primary_email", 
+            "user_id", "handle", "first_name", "last_name", "primary_email",
             "password", "is_active", "is_staff", "is_superuser", "is_page_manager", "verified",
             "date_joined"
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))"#,
@@ -892,7 +906,7 @@ pub async fn admin_user_create(req: &Request) -> Result<AdminUserResponse, Error
 
 pub async fn admin_user_update(req: &Request) -> Result<AdminUserResponse, Error> {
     let request: AdminUserUpdateRequest = decode_structured_message(req.message.clone())?;
-    
+
     let (is_staff, is_page_manager) = match request.role.as_str() {
         "staff" => (true, false),
         "page_manager" => (false, true),
@@ -900,10 +914,10 @@ pub async fn admin_user_update(req: &Request) -> Result<AdminUserResponse, Error
     };
 
     let user_id_str = request.user_id.to_string();
-    
+
     // Calculate verified status based on email records
     let calculated_verified = calculate_user_verified_status(request.user_id).await?;
-    
+
     // Handle password update if provided
     let result = if let Some(new_password) = &request.new_password {
         let password_hash = djangohashers::make_password(new_password);
@@ -987,12 +1001,9 @@ pub async fn admin_user_delete(req: &Request) -> Result<AdminUserDeleteResponse,
     let request: AdminUserDeleteRequest = decode_structured_message(req.message.clone())?;
 
     let user_id_str = request.user_id.to_string();
-    let result = sqlx::query!(
-        r#"DELETE FROM "users" WHERE "user_id" = ?"#,
-        user_id_str
-    )
-    .execute(db())
-    .await;
+    let result = sqlx::query!(r#"DELETE FROM "users" WHERE "user_id" = ?"#, user_id_str)
+        .execute(db())
+        .await;
 
     match result {
         Ok(result) => {
@@ -1005,21 +1016,21 @@ pub async fn admin_user_delete(req: &Request) -> Result<AdminUserDeleteResponse,
 
 pub async fn admin_password_reset(req: &Request) -> Result<AdminPasswordResetResponse, Error> {
     let request: AdminPasswordResetRequest = decode_structured_message(req.message.clone())?;
-    
+
     let user_id_str = request.user_id.to_string();
-    
+
     // Verify the user exists and the email belongs to them
     let email_check = sqlx::query!(
-        r#"SELECT u.user_id, u.handle, e.email, e.verified 
-           FROM users u 
-           JOIN emails e ON u.user_id = e.user_id 
+        r#"SELECT u.user_id, u.handle, e.email, e.verified
+           FROM users u
+           JOIN emails e ON u.user_id = e.user_id
            WHERE u.user_id = ? AND e.email = ?"#,
         user_id_str,
         request.email
     )
     .fetch_optional(db())
     .await?;
-    
+
     match email_check {
         Some(row) => {
             if !row.verified {
@@ -1028,7 +1039,7 @@ pub async fn admin_password_reset(req: &Request) -> Result<AdminPasswordResetRes
                     message: "Cannot send password reset to unverified email address".to_string(),
                 });
             }
-            
+
             // TODO: Implement actual email sending logic
             // For now, just return success with a placeholder message
             // In a real implementation, you would:
@@ -1036,9 +1047,17 @@ pub async fn admin_password_reset(req: &Request) -> Result<AdminPasswordResetRes
             // 2. Store it in a password_reset_tokens table with expiration
             // 3. Send email with reset link
             // 4. Handle the reset link in a separate endpoint
-            
-            log_activity(None, "password-reset-email-sent", request.user_id, None, format!("email={}", request.email)).await.ok();
-            
+
+            log_activity(
+                None,
+                "password-reset-email-sent",
+                request.user_id,
+                None,
+                format!("email={}", request.email),
+            )
+            .await
+            .ok();
+
             Ok(AdminPasswordResetResponse {
                 success: true,
                 message: format!("Password reset email sent to {}", request.email),
@@ -1053,9 +1072,9 @@ pub async fn admin_password_reset(req: &Request) -> Result<AdminPasswordResetRes
 
 pub async fn admin_email_add(req: &Request) -> Result<UserEmailResponse, Error> {
     let request: UserEmailAddRequest = decode_structured_message(req.message.clone())?;
-    
+
     let user_id_str = request.user_id.to_string();
-    
+
     // Check if user exists
     let user_exists = sqlx::query!(
         r#"SELECT "user_id" FROM "users" WHERE "user_id" = ?"#,
@@ -1063,7 +1082,7 @@ pub async fn admin_email_add(req: &Request) -> Result<UserEmailResponse, Error> 
     )
     .fetch_optional(db())
     .await?;
-    
+
     if user_exists.is_none() {
         return Ok(UserEmailResponse {
             success: false,
@@ -1071,7 +1090,7 @@ pub async fn admin_email_add(req: &Request) -> Result<UserEmailResponse, Error> 
             emails: vec![],
         });
     }
-    
+
     // Check if email already exists
     let email_exists = sqlx::query!(
         r#"SELECT "email" FROM "emails" WHERE "email" = ?"#,
@@ -1079,7 +1098,7 @@ pub async fn admin_email_add(req: &Request) -> Result<UserEmailResponse, Error> 
     )
     .fetch_optional(db())
     .await?;
-    
+
     if email_exists.is_some() {
         return Ok(UserEmailResponse {
             success: false,
@@ -1087,12 +1106,12 @@ pub async fn admin_email_add(req: &Request) -> Result<UserEmailResponse, Error> 
             emails: vec![],
         });
     }
-    
+
     // Add the email
     let hashed = hash_identifier(&request.email);
     let hashed_lower = hash_identifier_lower(&request.email);
     let hashed_capfirst = hash_identifier_capfirst(&request.email);
-    
+
     let result = sqlx::query!(
         r#"INSERT INTO "emails" (
             "user_id", "email", "verified", "hash", "hash_lower", "hash_capfirst"
@@ -1106,13 +1125,21 @@ pub async fn admin_email_add(req: &Request) -> Result<UserEmailResponse, Error> 
     )
     .execute(db())
     .await;
-    
+
     match result {
         Ok(_) => {
             // Return updated emails list
             let emails = fetch_user_emails(&user_id_str).await?;
-            log_activity(None, "email-added", request.user_id, None, format!("email={}", request.email)).await.ok();
-            
+            log_activity(
+                None,
+                "email-added",
+                request.user_id,
+                None,
+                format!("email={}", request.email),
+            )
+            .await
+            .ok();
+
             Ok(UserEmailResponse {
                 success: true,
                 message: format!("Email {} added successfully", request.email),
@@ -1129,9 +1156,9 @@ pub async fn admin_email_add(req: &Request) -> Result<UserEmailResponse, Error> 
 
 pub async fn admin_email_update(req: &Request) -> Result<UserEmailResponse, Error> {
     let request: UserEmailUpdateRequest = decode_structured_message(req.message.clone())?;
-    
+
     let user_id_str = request.user_id.to_string();
-    
+
     // Check if new email is already in use by someone else
     let email_exists = sqlx::query!(
         r#"SELECT "user_id" FROM "emails" WHERE "email" = ? AND "user_id" != ?"#,
@@ -1140,7 +1167,7 @@ pub async fn admin_email_update(req: &Request) -> Result<UserEmailResponse, Erro
     )
     .fetch_optional(db())
     .await?;
-    
+
     if email_exists.is_some() {
         return Ok(UserEmailResponse {
             success: false,
@@ -1148,12 +1175,12 @@ pub async fn admin_email_update(req: &Request) -> Result<UserEmailResponse, Erro
             emails: vec![],
         });
     }
-    
+
     // Update the email
     let hashed = hash_identifier(&request.new_email);
     let hashed_lower = hash_identifier_lower(&request.new_email);
     let hashed_capfirst = hash_identifier_capfirst(&request.new_email);
-    
+
     let result = sqlx::query!(
         r#"UPDATE "emails" SET
             "email" = ?, "hash" = ?, "hash_lower" = ?, "hash_capfirst" = ?, "verified" = ?
@@ -1168,7 +1195,7 @@ pub async fn admin_email_update(req: &Request) -> Result<UserEmailResponse, Erro
     )
     .execute(db())
     .await;
-    
+
     match result {
         Ok(result) => {
             if result.rows_affected() == 0 {
@@ -1178,14 +1205,25 @@ pub async fn admin_email_update(req: &Request) -> Result<UserEmailResponse, Erro
                     emails: vec![],
                 });
             }
-            
+
             // Return updated emails list
             let emails = fetch_user_emails(&user_id_str).await?;
-            log_activity(None, "email-updated", request.user_id, None, format!("old={}, new={}", request.old_email, request.new_email)).await.ok();
-            
+            log_activity(
+                None,
+                "email-updated",
+                request.user_id,
+                None,
+                format!("old={}, new={}", request.old_email, request.new_email),
+            )
+            .await
+            .ok();
+
             Ok(UserEmailResponse {
                 success: true,
-                message: format!("Email updated from {} to {}", request.old_email, request.new_email),
+                message: format!(
+                    "Email updated from {} to {}",
+                    request.old_email, request.new_email
+                ),
                 emails,
             })
         }
@@ -1199,9 +1237,9 @@ pub async fn admin_email_update(req: &Request) -> Result<UserEmailResponse, Erro
 
 pub async fn admin_email_delete(req: &Request) -> Result<UserEmailResponse, Error> {
     let request: UserEmailDeleteRequest = decode_structured_message(req.message.clone())?;
-    
+
     let user_id_str = request.user_id.to_string();
-    
+
     // Check if this is the user's only email or primary email
     let email_count = sqlx::query!(
         r#"SELECT COUNT(*) as count FROM "emails" WHERE "user_id" = ?"#,
@@ -1209,7 +1247,7 @@ pub async fn admin_email_delete(req: &Request) -> Result<UserEmailResponse, Erro
     )
     .fetch_one(db())
     .await?;
-    
+
     if email_count.count <= 1 {
         return Ok(UserEmailResponse {
             success: false,
@@ -1217,7 +1255,7 @@ pub async fn admin_email_delete(req: &Request) -> Result<UserEmailResponse, Erro
             emails: vec![],
         });
     }
-    
+
     // Check if this is the primary email
     let is_primary = sqlx::query!(
         r#"SELECT "primary_email" FROM "users" WHERE "user_id" = ?"#,
@@ -1225,7 +1263,7 @@ pub async fn admin_email_delete(req: &Request) -> Result<UserEmailResponse, Erro
     )
     .fetch_optional(db())
     .await?;
-    
+
     if let Some(user) = is_primary {
         if user.primary_email == request.email {
             return Ok(UserEmailResponse {
@@ -1235,7 +1273,7 @@ pub async fn admin_email_delete(req: &Request) -> Result<UserEmailResponse, Erro
             });
         }
     }
-    
+
     // Delete the email
     let result = sqlx::query!(
         r#"DELETE FROM "emails" WHERE "user_id" = ? AND "email" = ?"#,
@@ -1244,7 +1282,7 @@ pub async fn admin_email_delete(req: &Request) -> Result<UserEmailResponse, Erro
     )
     .execute(db())
     .await;
-    
+
     match result {
         Ok(result) => {
             if result.rows_affected() == 0 {
@@ -1254,14 +1292,22 @@ pub async fn admin_email_delete(req: &Request) -> Result<UserEmailResponse, Erro
                     emails: vec![],
                 });
             }
-            
+
             // Update user's overall verified status based on remaining email records
             update_user_verified_status(request.user_id).await.ok(); // Ignore errors for backwards compatibility
-            
+
             // Return updated emails list
             let emails = fetch_user_emails(&user_id_str).await?;
-            log_activity(None, "email-deleted", request.user_id, None, format!("email={}", request.email)).await.ok();
-            
+            log_activity(
+                None,
+                "email-deleted",
+                request.user_id,
+                None,
+                format!("email={}", request.email),
+            )
+            .await
+            .ok();
+
             Ok(UserEmailResponse {
                 success: true,
                 message: format!("Email {} deleted successfully", request.email),
@@ -1278,9 +1324,9 @@ pub async fn admin_email_delete(req: &Request) -> Result<UserEmailResponse, Erro
 
 pub async fn admin_email_toggle_verified(req: &Request) -> Result<AdminUserResponse, Error> {
     let request: UserEmailToggleVerifiedRequest = decode_structured_message(req.message.clone())?;
-    
+
     let user_id_str = request.user_id.to_string();
-    
+
     // Get current verified status
     let current_status = sqlx::query!(
         r#"SELECT "verified" FROM "emails" WHERE "user_id" = ? AND "email" = ?"#,
@@ -1289,11 +1335,11 @@ pub async fn admin_email_toggle_verified(req: &Request) -> Result<AdminUserRespo
     )
     .fetch_optional(db())
     .await?;
-    
+
     match current_status {
         Some(row) => {
             let new_status = !row.verified;
-            
+
             // Update verified status
             let result = sqlx::query!(
                 r#"UPDATE "emails" SET "verified" = ? WHERE "user_id" = ? AND "email" = ?"#,
@@ -1303,22 +1349,30 @@ pub async fn admin_email_toggle_verified(req: &Request) -> Result<AdminUserRespo
             )
             .execute(db())
             .await;
-            
+
             match result {
                 Ok(_) => {
                     // Update user's overall verified status based on email records
                     update_user_verified_status(request.user_id).await.ok(); // Ignore errors for backwards compatibility
-                    
-                    log_activity(None, "email-verification-toggled", request.user_id, None, format!("email={}, verified={}", request.email, new_status)).await.ok();
-                    
+
+                    log_activity(
+                        None,
+                        "email-verification-toggled",
+                        request.user_id,
+                        None,
+                        format!("email={}, verified={}", request.email, new_status),
+                    )
+                    .await
+                    .ok();
+
                     // Fetch complete user data (similar to admin_user_get but without separate email fetch)
                     let user_result = sqlx::query!(
                         r#"
-                        SELECT 
+                        SELECT
                             "user_id",
                             "handle",
                             "first_name",
-                            "last_name", 
+                            "last_name",
                             "primary_email",
                             "is_active" as "is_active: bool",
                             "is_staff" as "is_staff: bool",
@@ -1334,7 +1388,9 @@ pub async fn admin_email_toggle_verified(req: &Request) -> Result<AdminUserRespo
                     .fetch_one(db())
                     .await?;
 
-                    let user_id = user_result.user_id.as_ulid()
+                    let user_id = user_result
+                        .user_id
+                        .as_ulid()
                         .map_err(|e| anyhow::anyhow!("Invalid user ID in database: {}", e))?;
 
                     // Fetch updated emails list
@@ -1382,18 +1438,18 @@ async fn fetch_user_emails(user_id_str: &str) -> Result<Vec<UserEmail>, Error> {
         .collect())
 }
 
-/// Bulk sync page manager status - sets the flag for all provided user IDs 
+/// Bulk sync page manager status - sets the flag for all provided user IDs
 /// and clears it for everyone else
 pub async fn page_manager_sync(req: &Request) -> Result<PageManagerSyncResponse, Error> {
     let request: PageManagerSyncRequest = decode_structured_message(req.message.clone())?;
-    
+
     // First, clear all page manager flags
     sqlx::query!(r#"UPDATE "users" SET "is_page_manager" = 0"#)
         .execute(db())
         .await?;
-    
+
     let mut updated_count = 0u64;
-    
+
     // Set page manager flag for the provided user IDs
     if !request.user_ids.is_empty() {
         for user_id in request.user_ids {
@@ -1404,21 +1460,21 @@ pub async fn page_manager_sync(req: &Request) -> Result<PageManagerSyncResponse,
             )
             .execute(db())
             .await?;
-            
+
             updated_count += result.rows_affected();
         }
     }
-    
+
     Ok(PageManagerSyncResponse { updated_count })
 }
 
 /// Update page manager status for a single user
 pub async fn page_manager_update(req: &Request) -> Result<PageManagerUpdateResponse, Error> {
     let request: PageManagerUpdateRequest = decode_structured_message(req.message.clone())?;
-    
+
     let user_id_str = request.user_id.to_string();
     let is_page_manager = if request.is_page_manager { 1 } else { 0 };
-    
+
     let result = sqlx::query!(
         r#"UPDATE "users" SET "is_page_manager" = ? WHERE "user_id" = ?"#,
         is_page_manager,
@@ -1426,7 +1482,7 @@ pub async fn page_manager_update(req: &Request) -> Result<PageManagerUpdateRespo
     )
     .execute(db())
     .await;
-    
+
     match result {
         Ok(result) => {
             let success = result.rows_affected() > 0;

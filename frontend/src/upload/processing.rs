@@ -1,9 +1,9 @@
 use anyhow::{Context, Result};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 use ulid::Ulid;
 
-use super::storage::{FileMetadata, FileAccess};
+use super::storage::{FileAccess, FileMetadata};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProcessedFile {
@@ -98,18 +98,22 @@ impl ImageProcessor {
             content_type.starts_with("image/")
         } else if let Some(filename) = &metadata.original_filename {
             let lower = filename.to_lowercase();
-            lower.ends_with(".jpg") || lower.ends_with(".jpeg") ||
-            lower.ends_with(".png") || lower.ends_with(".gif") ||
-            lower.ends_with(".webp")
+            lower.ends_with(".jpg")
+                || lower.ends_with(".jpeg")
+                || lower.ends_with(".png")
+                || lower.ends_with(".gif")
+                || lower.ends_with(".webp")
         } else {
             false
         }
     }
 
     async fn process(&self, metadata: &FileMetadata, data: &[u8]) -> Result<Vec<ProcessedFile>> {
-        info!("Processing image file: {} ({})",
-              metadata.file_id,
-              metadata.original_filename.as_deref().unwrap_or("unknown"));
+        info!(
+            "Processing image file: {} ({})",
+            metadata.file_id,
+            metadata.original_filename.as_deref().unwrap_or("unknown")
+        );
 
         // For now, just return the original file
         // In the future, this could:
@@ -118,8 +122,7 @@ impl ImageProcessor {
         // - Strip EXIF data
         // - Optimize file size
 
-        let mut original = ProcessedFile::new(data.to_vec(), None)
-            .with_metadata(metadata);
+        let mut original = ProcessedFile::new(data.to_vec(), None).with_metadata(metadata);
         // Preserve the original file ID for the main file
         original.file_id = metadata.file_id;
 
@@ -144,23 +147,28 @@ pub struct DocumentProcessor;
 impl DocumentProcessor {
     fn can_process(&self, metadata: &FileMetadata) -> bool {
         if let Some(content_type) = &metadata.content_type {
-            content_type == "application/pdf" ||
-            content_type.starts_with("text/") ||
-            content_type == "application/msword" ||
-            content_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            content_type == "application/pdf"
+                || content_type.starts_with("text/")
+                || content_type == "application/msword"
+                || content_type
+                    == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         } else if let Some(filename) = &metadata.original_filename {
             let lower = filename.to_lowercase();
-            lower.ends_with(".pdf") || lower.ends_with(".txt") ||
-            lower.ends_with(".doc") || lower.ends_with(".docx")
+            lower.ends_with(".pdf")
+                || lower.ends_with(".txt")
+                || lower.ends_with(".doc")
+                || lower.ends_with(".docx")
         } else {
             false
         }
     }
 
     async fn process(&self, metadata: &FileMetadata, data: &[u8]) -> Result<Vec<ProcessedFile>> {
-        info!("Processing document file: {} ({})",
-              metadata.file_id,
-              metadata.original_filename.as_deref().unwrap_or("unknown"));
+        info!(
+            "Processing document file: {} ({})",
+            metadata.file_id,
+            metadata.original_filename.as_deref().unwrap_or("unknown")
+        );
 
         // Future document processing could:
         // - Extract text content as a separate file
@@ -168,8 +176,7 @@ impl DocumentProcessor {
         // - Scan for malware and return empty vec if infected
         // - Convert to different formats
 
-        let mut original = ProcessedFile::new(data.to_vec(), None)
-            .with_metadata(metadata);
+        let mut original = ProcessedFile::new(data.to_vec(), None).with_metadata(metadata);
         // Preserve the original file ID for the main file
         original.file_id = metadata.file_id;
 
@@ -187,9 +194,11 @@ impl SecurityFilter {
     }
 
     async fn process(&self, metadata: &FileMetadata, data: &[u8]) -> Result<Vec<ProcessedFile>> {
-        info!("Security scanning file: {} ({})",
-              metadata.file_id,
-              metadata.original_filename.as_deref().unwrap_or("unknown"));
+        info!(
+            "Security scanning file: {} ({})",
+            metadata.file_id,
+            metadata.original_filename.as_deref().unwrap_or("unknown")
+        );
 
         // Placeholder for security checks:
         // - Virus scanning
@@ -199,7 +208,11 @@ impl SecurityFilter {
 
         // Example: block files over 100MB
         if data.len() > 100 * 1024 * 1024 {
-            warn!("File {} rejected: too large ({} bytes)", metadata.file_id, data.len());
+            warn!(
+                "File {} rejected: too large ({} bytes)",
+                metadata.file_id,
+                data.len()
+            );
             return Ok(vec![]); // Return empty vec to block upload
         }
 
@@ -213,8 +226,7 @@ impl SecurityFilter {
         }
 
         // If all checks pass, return the original file
-        let mut processed = ProcessedFile::new(data.to_vec(), None)
-            .with_metadata(metadata);
+        let mut processed = ProcessedFile::new(data.to_vec(), None).with_metadata(metadata);
         // Preserve the original file ID for the main file
         processed.file_id = metadata.file_id;
 
@@ -237,7 +249,11 @@ impl ProcessingPipeline {
         }
     }
 
-    pub async fn process_file(&self, metadata: &FileMetadata, data: Vec<u8>) -> Result<Vec<ProcessedFile>> {
+    pub async fn process_file(
+        &self,
+        metadata: &FileMetadata,
+        data: Vec<u8>,
+    ) -> Result<Vec<ProcessedFile>> {
         let mut initial_file = ProcessedFile::new(data, None).with_metadata(metadata);
         // Preserve the original file ID for the main file
         initial_file.file_id = metadata.file_id;
@@ -258,7 +274,10 @@ impl ProcessingPipeline {
                             new_files.append(&mut processed_files);
                         }
                         Err(e) => {
-                            warn!("Failed to process file {} with processor: {}", metadata.file_id, e);
+                            warn!(
+                                "Failed to process file {} with processor: {}",
+                                metadata.file_id, e
+                            );
                             // On error, keep the original file
                             new_files.push(file);
                         }
@@ -269,8 +288,11 @@ impl ProcessingPipeline {
             }
         }
 
-        info!("Processing pipeline completed for file {}: {} files to store",
-              metadata.file_id, files_to_store.len());
+        info!(
+            "Processing pipeline completed for file {}: {} files to store",
+            metadata.file_id,
+            files_to_store.len()
+        );
 
         Ok(files_to_store)
     }

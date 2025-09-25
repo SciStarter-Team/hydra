@@ -7,7 +7,10 @@ use common::{
 };
 use ulid::Ulid;
 
-use crate::{contact::{Contact, ContactRole}, peering::LoadStorePeered};
+use crate::{
+    contact::{Contact, ContactRole},
+    peering::LoadStorePeered,
+};
 
 use super::{ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus};
 
@@ -1082,7 +1085,7 @@ impl LoadStorePeered for ProjectAll {
     //async fn read_from_database<'k>(_key: Self::DatabaseKey<'k>) -> Result<Self, Error> {
     async fn read_from_database(project_id: Self::DatabaseKey) -> Result<Self, Error> {
         let project_id_str = project_id.to_string();
-        
+
         // Read main project data from projects table
         let project_row = sqlx::query!(
             r#"SELECT
@@ -1121,7 +1124,7 @@ impl LoadStorePeered for ProjectAll {
         )
         .fetch_one(db())
         .await?;
-        
+
         // Read array fields from separate tables
         let topics = sqlx::query!(
             "SELECT topic FROM project_topics WHERE project_id = ? ORDER BY topic",
@@ -1133,7 +1136,7 @@ impl LoadStorePeered for ProjectAll {
         .map(|row| row.topic)
         .collect::<Vec<_>>()
         .into_boxed_slice();
-        
+
         let fields_of_science = sqlx::query!(
             "SELECT field_of_science FROM project_fields_of_science WHERE project_id = ? ORDER BY field_of_science",
             project_id_str
@@ -1144,7 +1147,7 @@ impl LoadStorePeered for ProjectAll {
         .map(|row| row.field_of_science)
         .collect::<Vec<_>>()
         .into_boxed_slice();
-        
+
         let practices = sqlx::query!(
             "SELECT practice FROM project_practices WHERE project_id = ? ORDER BY practice",
             project_id_str
@@ -1155,7 +1158,7 @@ impl LoadStorePeered for ProjectAll {
         .map(|row| row.practice)
         .collect::<Vec<_>>()
         .into_boxed_slice();
-        
+
         let audience = sqlx::query!(
             "SELECT audience FROM project_audiences WHERE project_id = ? ORDER BY audience",
             project_id_str
@@ -1166,7 +1169,7 @@ impl LoadStorePeered for ProjectAll {
         .map(|row| row.audience)
         .collect::<Vec<_>>()
         .into_boxed_slice();
-        
+
         // Read contacts
         let contact_rows = sqlx::query!(
             "SELECT contact_id, role, name, affiliation, email, phone, address FROM project_contacts WHERE project_id = ?",
@@ -1174,10 +1177,12 @@ impl LoadStorePeered for ProjectAll {
         )
         .fetch_all(db())
         .await?;
-        
+
         let mut contacts = Vec::new();
         for contact_row in contact_rows {
-            let contact_id = contact_row.contact_id.parse::<Ulid>()
+            let contact_id = contact_row
+                .contact_id
+                .parse::<Ulid>()
                 .map_err(|e| anyhow::anyhow!("Invalid contact ULID: {}", e))?;
             let role = match contact_row.role.as_str() {
                 "Manager" => ContactRole::Manager,
@@ -1196,7 +1201,7 @@ impl LoadStorePeered for ProjectAll {
                 address: contact_row.address,
             });
         }
-        
+
         // Read tags
         let tags = sqlx::query!(
             "SELECT tag FROM project_tags WHERE project_id = ?",
@@ -1207,7 +1212,7 @@ impl LoadStorePeered for ProjectAll {
         .into_iter()
         .map(|row| InsensitiveString::from(row.tag))
         .collect::<HashSet<_>>();
-        
+
         // Read participant files
         let participant_files = sqlx::query!(
             "SELECT url FROM project_participant_files WHERE project_id = ?",
@@ -1219,7 +1224,7 @@ impl LoadStorePeered for ProjectAll {
         .map(|row| row.url)
         .collect::<Vec<_>>()
         .into_boxed_slice();
-        
+
         // Parse main project fields
         let status = match project_row.status.as_str() {
             "Pending" => ProjectStatus::Pending,
@@ -1231,14 +1236,14 @@ impl LoadStorePeered for ProjectAll {
             "Expired" => ProjectStatus::Expired,
             _ => ProjectStatus::Active,
         };
-        
+
         let promotion_time = match project_row.promotion_time.as_str() {
             "Promote at any time" => ProjectPromotionTime::PromoteAtAnyTime,
             "Do not promote" => ProjectPromotionTime::DoNotPromote,
             "Prefer promotion on the target date" => ProjectPromotionTime::PreferOnTargetDate,
             _ => ProjectPromotionTime::PromoteAtAnyTime,
         };
-        
+
         let participation_degree = match project_row.participation_degree.as_str() {
             "Collegial" => ProjectParticipationDegree::Collegial,
             "Co-Created" => ProjectParticipationDegree::CoCreated,
@@ -1247,13 +1252,13 @@ impl LoadStorePeered for ProjectAll {
             "Contractual" => ProjectParticipationDegree::Contractual,
             _ => ProjectParticipationDegree::Collegial,
         };
-        
+
         Ok(ProjectAll {
             project_id,
             legacy_v1_project_id: project_row.legacy_v1_project_id,
             legacy_v2_project_id: project_row.legacy_v2_project_id,
             foreign_id: project_row.foreign_id,
-            
+
             // Admin section
             publish: project_row.publish.unwrap_or(false),
             duplicate: project_row.duplicate,
@@ -1262,7 +1267,8 @@ impl LoadStorePeered for ProjectAll {
             is_test: project_row.is_test,
             status,
             promotion_time,
-            promotion_target: project_row.promotion_target
+            promotion_target: project_row
+                .promotion_target
                 .map(|s| TimeString::try_from(s))
                 .transpose()
                 .map_err(|e| anyhow::anyhow!("Invalid promotion_target TimeString: {}", e))?,
@@ -1279,7 +1285,9 @@ impl LoadStorePeered for ProjectAll {
             is_inaturalist: project_row.is_inaturalist,
             inat_project_id: project_row.inat_project_id.map(|i| i as i32),
             welcomed: project_row.welcomed,
-            page_creator_id: project_row.page_creator_id.parse::<Ulid>()
+            page_creator_id: project_row
+                .page_creator_id
+                .parse::<Ulid>()
                 .map_err(|e| anyhow::anyhow!("Invalid page_creator_id ULID: {}", e))?,
             page_editor_ids: {
                 let editor_rows = sqlx::query!(
@@ -1288,10 +1296,12 @@ impl LoadStorePeered for ProjectAll {
                 )
                 .fetch_all(db())
                 .await?;
-                
+
                 let mut editor_ids = Vec::new();
                 for row in editor_rows {
-                    let editor_id = row.user_id.parse::<Ulid>()
+                    let editor_id = row
+                        .user_id
+                        .parse::<Ulid>()
                         .map_err(|e| anyhow::anyhow!("Invalid editor ULID: {}", e))?;
                     editor_ids.push(editor_id);
                 }
@@ -1303,7 +1313,7 @@ impl LoadStorePeered for ProjectAll {
             project_last_edited: None,
             scistarter_last_editor: None,
             scistarter_last_edited: None,
-            
+
             // Project section
             draft: project_row.draft,
             name: project_row.name,
@@ -1322,10 +1332,10 @@ impl LoadStorePeered for ProjectAll {
             connect_opaque_url: project_row.connect_opaque_url,
             connect_opaque_url1: project_row.connect_opaque_url1,
             connect_opaque_url2: project_row.connect_opaque_url2,
-            
+
             // Contact section
             contacts: contacts.into_boxed_slice(),
-            
+
             // Web section
             url: project_row.url,
             video_url: project_row.video_url,
@@ -1333,7 +1343,7 @@ impl LoadStorePeered for ProjectAll {
             twitter_name: project_row.twitter_name,
             facebook_page: project_row.facebook_page,
             instagram_page: project_row.instagram_page,
-            
+
             // Categorization section
             topics,
             fields_of_science,
@@ -1342,7 +1352,7 @@ impl LoadStorePeered for ProjectAll {
             search_terms: project_row.search_terms,
             difficulty: project_row.difficulty,
             diy: project_row.diy,
-            
+
             // Joining section
             audience,
             signup_url: project_row.signup_url,
@@ -1356,7 +1366,8 @@ impl LoadStorePeered for ProjectAll {
             training_materials: project_row.training_materials,
             classroom_materials: project_row.classroom_materials,
             consent_statement: project_row.consent_statement,
-            consent_statement_date: project_row.consent_statement_date
+            consent_statement_date: project_row
+                .consent_statement_date
                 .map(|s| TimeString::try_from(s))
                 .transpose()
                 .map_err(|e| anyhow::anyhow!("Invalid consent_statement_date TimeString: {}", e))?,
@@ -1365,9 +1376,10 @@ impl LoadStorePeered for ProjectAll {
             participation_confirmation_message: project_row.participation_confirmation_message,
             participation_notification_email: project_row.participation_notification_email,
             participation_usage: project_row.participation_usage,
-            
-            // Relations section  
-            part_of: project_row.part_of
+
+            // Relations section
+            part_of: project_row
+                .part_of
                 .map(|s| s.parse::<Ulid>())
                 .transpose()
                 .map_err(|e| anyhow::anyhow!("Invalid part_of ULID: {}", e))?,
@@ -1378,16 +1390,17 @@ impl LoadStorePeered for ProjectAll {
                 )
                 .fetch_all(db())
                 .await?;
-                
+
                 let mut project_ids = Vec::new();
                 for row in associated {
-                    let associated_id = row.associated_project_id.parse::<Ulid>()
-                        .map_err(|e| anyhow::anyhow!("Invalid associated_project_id ULID: {}", e))?;
+                    let associated_id = row.associated_project_id.parse::<Ulid>().map_err(|e| {
+                        anyhow::anyhow!("Invalid associated_project_id ULID: {}", e)
+                    })?;
                     project_ids.push(associated_id);
                 }
                 project_ids.into_boxed_slice()
             },
-            
+
             // Participants Need section
             total_expense: project_row.total_expense.map(|f| f as f32),
             materials: project_row.materials,
@@ -1395,7 +1408,7 @@ impl LoadStorePeered for ProjectAll {
             mobile_app_url_android: project_row.mobile_app_url_android,
             mobile_app_url_ios: project_row.mobile_app_url_ios,
             mobile_app_url: project_row.mobile_app_url,
-            
+
             // Where section
             location_type: project_row.location_type,
             entirely_online: project_row.entirely_online,
@@ -1416,13 +1429,15 @@ impl LoadStorePeered for ProjectAll {
             united_nations_region: project_row.united_nations_region,
             point: project_row.point.flatten(),
             regions: project_row.regions.flatten(),
-            
+
             // When section
-            begin: project_row.begin
+            begin: project_row
+                .begin
                 .map(|s| TimeString::try_from(s))
                 .transpose()
                 .map_err(|e| anyhow::anyhow!("Invalid begin TimeString: {}", e))?,
-            end: project_row.end
+            end: project_row
+                .end
                 .map(|s| TimeString::try_from(s))
                 .transpose()
                 .map_err(|e| anyhow::anyhow!("Invalid end TimeString: {}", e))?,
@@ -1432,10 +1447,10 @@ impl LoadStorePeered for ProjectAll {
             year_started: project_row.year_started.map(|i| i as i32),
             year_completed: project_row.year_completed.map(|i| i as i32),
             month_completed: project_row.month_completed.map(|i| i as i32),
-            
+
             // Skills section
             special_skills: project_row.special_skills,
-            
+
             // Data section
             data_results: project_row.data_results,
             data_visualization: project_row.data_visualization,
@@ -1443,7 +1458,7 @@ impl LoadStorePeered for ProjectAll {
             metadata_publication_url: project_row.metadata_publication_url,
             data_publication_url: project_row.data_publication_url,
             data_license: project_row.data_license,
-            
+
             // Read remaining array fields
             participation_tasks: {
                 let tasks = sqlx::query!(
@@ -1553,10 +1568,10 @@ impl LoadStorePeered for ProjectAll {
                 .collect::<Vec<_>>();
                 stakeholders.into_boxed_slice()
             },
-            
+
             // Outcomes section
             outcome_other: project_row.outcome_other,
-            
+
             // Sponsors section (additional fields)
             university_affiliation: project_row.university_affiliation,
             circuit_id: project_row.circuit_id,

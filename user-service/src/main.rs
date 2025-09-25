@@ -36,24 +36,24 @@ async fn analyze_tables() {
     loop {
         // Wait 7 days between runs
         sleep(Duration::from_secs(60 * 60 * 24 * 7)).await;
-        
+
         println!("Running weekly ANALYZE on database tables...");
-        
+
         // Update statistics for the users table and its indexes
         if let Err(err) = sqlx::query!("ANALYZE users").execute(db()).await {
             eprintln!("Error while running ANALYZE on users table: {:?}", err);
         }
-        
+
         // Update statistics for the emails table (used in joins)
         if let Err(err) = sqlx::query!("ANALYZE emails").execute(db()).await {
             eprintln!("Error while running ANALYZE on emails table: {:?}", err);
         }
-        
+
         // Update statistics for the user_tags table
         if let Err(err) = sqlx::query!("ANALYZE user_tags").execute(db()).await {
             eprintln!("Error while running ANALYZE on user_tags table: {:?}", err);
         }
-        
+
         println!("Weekly ANALYZE completed for all tables");
     }
 }
@@ -955,7 +955,7 @@ async fn main() {
         .expect("Unable to run migrations");
 
     let cleanup_task = spawn(cleanup());
-    
+
     let analyze_task = spawn(analyze_tables());
 
     let sessions_sync_task = spawn(sessions_synchronize());
@@ -1021,15 +1021,27 @@ async fn main() {
     toplevel.spawn(handler!(admin, "user_list", users::admin_user_list));
     toplevel.spawn(handler!(admin, "user_search", users::admin_user_search));
     toplevel.spawn(handler!(admin, "user_get", users::admin_user_get));
-    toplevel.spawn(handler!(admin, "user_batch_get", users::admin_user_batch_get));
+    toplevel.spawn(handler!(
+        admin,
+        "user_batch_get",
+        users::admin_user_batch_get
+    ));
     toplevel.spawn(handler!(admin, "user_create", users::admin_user_create));
     toplevel.spawn(handler!(admin, "user_update", users::admin_user_update));
     toplevel.spawn(handler!(admin, "user_delete", users::admin_user_delete));
-    toplevel.spawn(handler!(admin, "password_reset", users::admin_password_reset));
+    toplevel.spawn(handler!(
+        admin,
+        "password_reset",
+        users::admin_password_reset
+    ));
     toplevel.spawn(handler!(admin, "email_add", users::admin_email_add));
     toplevel.spawn(handler!(admin, "email_update", users::admin_email_update));
     toplevel.spawn(handler!(admin, "email_delete", users::admin_email_delete));
-    toplevel.spawn(handler!(admin, "email_toggle_verified", users::admin_email_toggle_verified));
+    toplevel.spawn(handler!(
+        admin,
+        "email_toggle_verified",
+        users::admin_email_toggle_verified
+    ));
 
     // Page manager endpoints
     let page_manager = service.group("user.page_manager");
@@ -1040,11 +1052,11 @@ async fn main() {
     toplevel.spawn(handler!(health, "check", health::health_check));
 
     // Set up graceful shutdown
-    use tokio::signal::unix::{signal, SignalKind};
-    
+    use tokio::signal::unix::{SignalKind, signal};
+
     let mut sigint = signal(SignalKind::interrupt()).expect("Failed to create SIGINT handler");
     let mut sigterm = signal(SignalKind::terminate()).expect("Failed to create SIGTERM handler");
-    
+
     tokio::select! {
         _ = toplevel.join_all() => {
             println!("All service handlers completed");
@@ -1064,6 +1076,6 @@ async fn main() {
     sessions_sync_task.abort();
     users_sync_task.abort();
     userbadges_sync_task.abort();
-    
+
     println!("User service shutdown complete");
 }

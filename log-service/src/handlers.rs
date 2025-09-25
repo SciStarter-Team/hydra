@@ -1,17 +1,23 @@
 use anyhow::Result;
-use common::{message::log::{AnalyticsQuery, AnalyticsResponse, RecentActivityRequest, RecentActivityResponse, GoUrlStatsRequest, GoUrlStatsResponse}, service::decode_structured_message};
+use common::{
+    message::log::{
+        AnalyticsQuery, AnalyticsResponse, GoUrlStatsRequest, GoUrlStatsResponse,
+        RecentActivityRequest, RecentActivityResponse,
+    },
+    service::decode_structured_message,
+};
 
 use log_service::{
-    analytics::{get_clickthrough_analytics, get_join_analytics, get_recent_activity, get_go_url_stats},
+    analytics::{
+        get_clickthrough_analytics, get_go_url_stats, get_join_analytics, get_recent_activity,
+    },
     cache::{update_user_emails_cache, update_user_tags_cache},
-    health::{HealthResponse},
+    health::HealthResponse,
 };
 // Import the global database instance from main
 use crate::DATABASE;
 
-pub async fn handle_activity_log(
-    req: &async_nats::service::Request,
-) -> Result<()> {
+pub async fn handle_activity_log(req: &async_nats::service::Request) -> Result<()> {
     let (when, action, user_id, target, extra): (
         String,
         String,
@@ -32,16 +38,18 @@ pub async fn handle_activity_log(
 
     // Clone database reference and drop it immediately after use
     {
-        let database = DATABASE.read().as_ref().expect("Database not initialized").clone();
+        let database = DATABASE
+            .read()
+            .as_ref()
+            .expect("Database not initialized")
+            .clone();
         database.activity_log.insert(row).await?
     };
 
     Ok(())
 }
 
-pub async fn handle_page_view(
-    req: &async_nats::service::Request,
-) -> Result<()> {
+pub async fn handle_page_view(req: &async_nats::service::Request) -> Result<()> {
     let (when, ip_address, device_id, interaction_id, user_id, path, referrer, query, geolocation): (String, String, String, String, Option<String>, String, Option<String>, Option<String>, String) = decode_structured_message(req.message.clone())?;
 
     use log_service::database::tables::PageViewRow;
@@ -60,16 +68,18 @@ pub async fn handle_page_view(
 
     // Clone database reference and drop it immediately after use
     {
-        let database = DATABASE.read().as_ref().expect("Database not initialized").clone();
+        let database = DATABASE
+            .read()
+            .as_ref()
+            .expect("Database not initialized")
+            .clone();
         database.page_views.insert(row).await?
     };
 
     Ok(())
 }
 
-pub async fn handle_clickthrough(
-    req: &async_nats::service::Request,
-) -> Result<()> {
+pub async fn handle_clickthrough(req: &async_nats::service::Request) -> Result<()> {
     let (
         when,
         ip_address,
@@ -111,16 +121,18 @@ pub async fn handle_clickthrough(
 
     // Clone database reference and drop it immediately after use
     {
-        let database = DATABASE.read().as_ref().expect("Database not initialized").clone();
+        let database = DATABASE
+            .read()
+            .as_ref()
+            .expect("Database not initialized")
+            .clone();
         database.clickthroughs.insert(row).await?
     };
 
     Ok(())
 }
 
-pub async fn handle_join(
-    req: &async_nats::service::Request,
-) -> Result<()> {
+pub async fn handle_join(req: &async_nats::service::Request) -> Result<()> {
     let (when, entity_id, user_id, active, consented, contacted, notified, activity, reason): (
         String,
         String,
@@ -150,7 +162,11 @@ pub async fn handle_join(
 
     // Clone database reference and drop it immediately after use
     {
-        let database = DATABASE.read().as_ref().expect("Database not initialized").clone();
+        let database = DATABASE
+            .read()
+            .as_ref()
+            .expect("Database not initialized")
+            .clone();
         database.join_table.insert(row).await?
     };
 
@@ -163,8 +179,14 @@ pub async fn handle_clickthrough_analytics(
     let query: AnalyticsQuery = decode_structured_message(req.message.clone())?;
 
     // Clone database reference and use it in scope
-    let database = DATABASE.read().as_ref().expect("Database not initialized").clone();
-    get_clickthrough_analytics(database, query).await.map_err(Into::into)
+    let database = DATABASE
+        .read()
+        .as_ref()
+        .expect("Database not initialized")
+        .clone();
+    get_clickthrough_analytics(database, query)
+        .await
+        .map_err(Into::into)
 }
 
 pub async fn handle_join_analytics(
@@ -173,13 +195,17 @@ pub async fn handle_join_analytics(
     let query: AnalyticsQuery = decode_structured_message(req.message.clone())?;
 
     // Clone database reference and use it in scope
-    let database = DATABASE.read().as_ref().expect("Database not initialized").clone();
-    get_join_analytics(database, query).await.map_err(Into::into)
+    let database = DATABASE
+        .read()
+        .as_ref()
+        .expect("Database not initialized")
+        .clone();
+    get_join_analytics(database, query)
+        .await
+        .map_err(Into::into)
 }
 
-pub async fn handle_user_tags_update(
-    req: &async_nats::service::Request,
-) -> Result<()> {
+pub async fn handle_user_tags_update(req: &async_nats::service::Request) -> Result<()> {
     let (user_id, tags): (String, Vec<String>) = decode_structured_message(req.message.clone())?;
 
     loop {
@@ -195,9 +221,7 @@ pub async fn handle_user_tags_update(
     Ok(())
 }
 
-pub async fn handle_user_emails_update(
-    req: &async_nats::service::Request,
-) -> Result<()> {
+pub async fn handle_user_emails_update(req: &async_nats::service::Request) -> Result<()> {
     let (user_id, emails): (String, Vec<String>) = decode_structured_message(req.message.clone())?;
 
     // Update cache using SQLite-based cache system with retry logic
@@ -214,24 +238,46 @@ pub async fn handle_user_emails_update(
     Ok(())
 }
 
-pub async fn handle_health_check(req: &async_nats::service::Request) -> Result<HealthResponse, anyhow::Error> {
+pub async fn handle_health_check(
+    req: &async_nats::service::Request,
+) -> Result<HealthResponse, anyhow::Error> {
     // Clone database reference and use it in scope
-    let database = DATABASE.read().as_ref().expect("Database not initialized").clone();
+    let database = DATABASE
+        .read()
+        .as_ref()
+        .expect("Database not initialized")
+        .clone();
     log_service::health::health_check(database, req).await
 }
 
-pub async fn handle_recent_activity(req: &async_nats::service::Request) -> Result<RecentActivityResponse, anyhow::Error> {
+pub async fn handle_recent_activity(
+    req: &async_nats::service::Request,
+) -> Result<RecentActivityResponse, anyhow::Error> {
     let request: RecentActivityRequest = decode_structured_message(req.message.clone())?;
 
     // Clone database reference and use it in scope
-    let database = DATABASE.read().as_ref().expect("Database not initialized").clone();
-    get_recent_activity(database, request).await.map_err(Into::into)
+    let database = DATABASE
+        .read()
+        .as_ref()
+        .expect("Database not initialized")
+        .clone();
+    get_recent_activity(database, request)
+        .await
+        .map_err(Into::into)
 }
 
-pub async fn handle_go_url_stats(req: &async_nats::service::Request) -> Result<GoUrlStatsResponse, anyhow::Error> {
+pub async fn handle_go_url_stats(
+    req: &async_nats::service::Request,
+) -> Result<GoUrlStatsResponse, anyhow::Error> {
     let request: GoUrlStatsRequest = decode_structured_message(req.message.clone())?;
 
     // Clone database reference and use it in scope
-    let database = DATABASE.read().as_ref().expect("Database not initialized").clone();
-    get_go_url_stats(database, request).await.map_err(Into::into)
+    let database = DATABASE
+        .read()
+        .as_ref()
+        .expect("Database not initialized")
+        .clone();
+    get_go_url_stats(database, request)
+        .await
+        .map_err(Into::into)
 }

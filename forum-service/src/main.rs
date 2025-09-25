@@ -41,7 +41,8 @@ async fn main() {
         .expect("Unable to run migrations");
 
     // Initialize the bad words filter
-    content_filter::initialize_filter().await
+    content_filter::initialize_filter()
+        .await
         .expect("Failed to initialize content filter");
 
     let nats = nats();
@@ -113,10 +114,26 @@ async fn main() {
 
     // Forum category management endpoints
     let categories = service.group("forum.categories");
-    toplevel.spawn(handler!(categories, "create", categories::create_forum_category));
-    toplevel.spawn(handler!(categories, "list", categories::get_forum_categories));
-    toplevel.spawn(handler!(categories, "update", categories::update_forum_category));
-    toplevel.spawn(handler!(categories, "delete", categories::delete_forum_category));
+    toplevel.spawn(handler!(
+        categories,
+        "create",
+        categories::create_forum_category
+    ));
+    toplevel.spawn(handler!(
+        categories,
+        "list",
+        categories::get_forum_categories
+    ));
+    toplevel.spawn(handler!(
+        categories,
+        "update",
+        categories::update_forum_category
+    ));
+    toplevel.spawn(handler!(
+        categories,
+        "delete",
+        categories::delete_forum_category
+    ));
 
     // Content filtering endpoints
     let filter = service.group("forum.filter");
@@ -138,11 +155,11 @@ async fn main() {
     toplevel.spawn(handler!(health, "check", health::health_check));
 
     // Set up graceful shutdown
-    use tokio::signal::unix::{signal, SignalKind};
-    
+    use tokio::signal::unix::{SignalKind, signal};
+
     let mut sigint = signal(SignalKind::interrupt()).expect("Failed to create SIGINT handler");
     let mut sigterm = signal(SignalKind::terminate()).expect("Failed to create SIGTERM handler");
-    
+
     tokio::select! {
         _ = toplevel.join_all() => {
             println!("All service handlers completed");
@@ -154,6 +171,6 @@ async fn main() {
             println!("Received SIGTERM, shutting down forum service gracefully...");
         }
     }
-    
+
     println!("Forum service shutdown complete");
 }

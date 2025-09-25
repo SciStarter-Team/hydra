@@ -283,7 +283,8 @@ pub async fn resolve_project_names(ids: Vec<Ulid>) -> Result<Vec<(Ulid, String)>
         return Ok(Vec::new());
     }
 
-    let mut query_builder = sqlx::QueryBuilder::new("SELECT project_id, name FROM projects WHERE project_id IN (");
+    let mut query_builder =
+        sqlx::QueryBuilder::new("SELECT project_id, name FROM projects WHERE project_id IN (");
     let mut separated = query_builder.separated(", ");
     for id in &ids {
         separated.push_bind(id.to_string());
@@ -320,7 +321,10 @@ pub async fn resolve_event_name(id: Ulid) -> Result<Option<String>, Error> {
 }
 
 pub async fn search_users(query: &AutocompleteQuery) -> Result<Vec<AutocompleteResult>, Error> {
-    use common::{message::user::{AdminUserSearchRequest, AdminUserListResponse}, shared::nats};
+    use common::{
+        message::user::{AdminUserListResponse, AdminUserSearchRequest},
+        shared::nats,
+    };
 
     let search_term = query.search.as_deref().unwrap_or("").trim();
     if search_term.is_empty() {
@@ -359,7 +363,10 @@ pub async fn search_users(query: &AutocompleteQuery) -> Result<Vec<AutocompleteR
 }
 
 pub async fn resolve_user_name(id: Ulid) -> Result<Option<String>, Error> {
-    use common::{message::user::{AdminUserGetRequest, AdminUserResponse}, shared::nats};
+    use common::{
+        message::user::{AdminUserGetRequest, AdminUserResponse},
+        shared::nats,
+    };
 
     let get_request = AdminUserGetRequest { user_id: id };
 
@@ -379,15 +386,16 @@ pub async fn resolve_user_name(id: Ulid) -> Result<Option<String>, Error> {
 }
 
 pub async fn resolve_user_names(ids: Vec<Ulid>) -> Result<Vec<(Ulid, String)>, Error> {
-    use common::{message::user::{AdminUserBatchGetRequest, AdminUserBatchGetResponse}, shared::nats};
+    use common::{
+        message::user::{AdminUserBatchGetRequest, AdminUserBatchGetResponse},
+        shared::nats,
+    };
 
     if ids.is_empty() {
         return Ok(Vec::new());
     }
 
-    let batch_request = AdminUserBatchGetRequest {
-        user_ids: ids,
-    };
+    let batch_request = AdminUserBatchGetRequest { user_ids: ids };
 
     let request_payload = flexbuffers::to_vec(&batch_request)
         .map_err(|e| anyhow::anyhow!("Failed to serialize batch request: {}", e))?;

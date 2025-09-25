@@ -30,11 +30,11 @@ async fn main() {
     toplevel.spawn(handler!(health, "check", health::health_check));
 
     // Set up graceful shutdown
-    use tokio::signal::unix::{signal, SignalKind};
-    
+    use tokio::signal::unix::{SignalKind, signal};
+
     let mut sigint = signal(SignalKind::interrupt()).expect("Failed to create SIGINT handler");
     let mut sigterm = signal(SignalKind::terminate()).expect("Failed to create SIGTERM handler");
-    
+
     tokio::select! {
         _ = toplevel.join_all() => {
             println!("All service handlers completed");
@@ -46,6 +46,6 @@ async fn main() {
             println!("Received SIGTERM, shutting down location service gracefully...");
         }
     }
-    
+
     println!("Location service shutdown complete");
 }

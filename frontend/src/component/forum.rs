@@ -703,7 +703,8 @@ async fn update_forum_action(
         is_active: Some(form.is_active.is_some()),
     };
 
-    let _updated_forum: ForumInfo = request_with_retry("forum.management.update", update_forum).await?;
+    let _updated_forum: ForumInfo =
+        request_with_retry("forum.management.update", update_forum).await?;
 
     // Return HTMX response to reload the forum component
     let target_url = format!("/-forum/{}/page?page=0", slug);
@@ -769,11 +770,13 @@ async fn add_forum_moderator_action(
             button_text: None,
             button_action: None,
         };
-        
+
         let mut response = Html(error_message.render_once()?).into_response();
         response.headers_mut().insert(
-            "HX-Retarget", 
-            format!("#forum-{} .moderator-errors", slug).parse().unwrap()
+            "HX-Retarget",
+            format!("#forum-{} .moderator-errors", slug)
+                .parse()
+                .unwrap(),
         );
         return Ok(response);
     }
@@ -800,11 +803,13 @@ async fn add_forum_moderator_action(
                 button_text: None,
                 button_action: None,
             };
-            
+
             let mut response = Html(error_message.render_once()?).into_response();
             response.headers_mut().insert(
-                "HX-Retarget", 
-                format!("#forum-{} .moderator-errors", slug).parse().unwrap()
+                "HX-Retarget",
+                format!("#forum-{} .moderator-errors", slug)
+                    .parse()
+                    .unwrap(),
             );
             return Ok(response);
         }
@@ -825,33 +830,43 @@ async fn add_forum_moderator_action(
             // Create user-friendly error message based on actual backend responses
             let error_str = error.to_string();
             let message = match error_str.as_str() {
-                msg if msg.contains("Target user not found") => 
-                    "User not found. Please check the username and try again.",
-                msg if msg.contains("Staff members cannot be added as forum-specific moderators") => 
-                    "Staff members and administrators cannot be added as moderators.",
-                msg if msg.contains("Permission denied: only staff can manage forum moderators") => 
-                    "You don't have permission to add moderators to this forum.",
+                msg if msg.contains("Target user not found") => {
+                    "User not found. Please check the username and try again."
+                }
+                msg if msg
+                    .contains("Staff members cannot be added as forum-specific moderators") =>
+                {
+                    "Staff members and administrators cannot be added as moderators."
+                }
+                msg if msg
+                    .contains("Permission denied: only staff can manage forum moderators") =>
+                {
+                    "You don't have permission to add moderators to this forum."
+                }
                 // Database constraint error for duplicate moderator
-                msg if msg.contains("UNIQUE constraint failed") || msg.contains("duplicate") => 
-                    "This user is already a moderator of this forum.",
+                msg if msg.contains("UNIQUE constraint failed") || msg.contains("duplicate") => {
+                    "This user is already a moderator of this forum."
+                }
                 _ => {
                     tracing::warn!("Unhandled add moderator error: {}", error_str);
                     "Failed to add moderator. Please try again."
-                },
+                }
             };
-            
+
             let error_message = ErrorMessage {
                 title: "Cannot Add Moderator",
                 message,
                 button_text: None,
                 button_action: None,
             };
-            
+
             // Use HX-Retarget to target the specific forum's moderator error container
             let mut response = Html(error_message.render_once()?).into_response();
             response.headers_mut().insert(
-                "HX-Retarget", 
-                format!("#forum-{} .moderator-errors", slug).parse().unwrap()
+                "HX-Retarget",
+                format!("#forum-{} .moderator-errors", slug)
+                    .parse()
+                    .unwrap(),
             );
             Ok(response)
         }
@@ -1046,7 +1061,8 @@ async fn create_forum_category_action(
         category_name: form.category_name.trim().to_string(),
     };
 
-    match request_with_retry::<ForumCategoryInfo>("forum.categories.create", create_category).await {
+    match request_with_retry::<ForumCategoryInfo>("forum.categories.create", create_category).await
+    {
         Ok(_) => {
             // Return the updated category list AND update all dropdowns
             let list_html = generate_category_list_html(&form.slug, &user_info).await?;
@@ -1057,28 +1073,32 @@ async fn create_forum_category_action(
             // Create user-friendly error message based on actual backend responses
             let error_str = error.to_string();
             let message = match error_str.as_str() {
-                msg if msg.contains("Category already exists for this forum") => 
-                    "A category with this name already exists.",
-                msg if msg.contains("Permission denied") => 
-                    "You don't have permission to create categories in this forum.",
+                msg if msg.contains("Category already exists for this forum") => {
+                    "A category with this name already exists."
+                }
+                msg if msg.contains("Permission denied") => {
+                    "You don't have permission to create categories in this forum."
+                }
                 _ => {
                     tracing::warn!("Unhandled create category error: {}", error_str);
                     "Failed to create category. Please try again."
-                },
+                }
             };
-            
+
             let error_message = ErrorMessage {
                 title: "Cannot Create Category",
                 message,
                 button_text: None,
                 button_action: None,
             };
-            
+
             // Use HX-Retarget to target the specific forum's category error container
             let mut response = Html(error_message.render_once()?).into_response();
             response.headers_mut().insert(
-                "HX-Retarget", 
-                format!("#forum-{} .category-errors", form.slug).parse().unwrap()
+                "HX-Retarget",
+                format!("#forum-{} .category-errors", form.slug)
+                    .parse()
+                    .unwrap(),
             );
             Ok(response)
         }
@@ -1109,7 +1129,8 @@ async fn update_forum_category_action(
         }),
     };
 
-    match request_with_retry::<ForumCategoryInfo>("forum.categories.update", update_category).await {
+    match request_with_retry::<ForumCategoryInfo>("forum.categories.update", update_category).await
+    {
         Ok(_) => {
             // Return the updated category list AND update all dropdowns
             let list_html = generate_category_list_html(&slug, &user_info).await?;
@@ -1119,25 +1140,33 @@ async fn update_forum_category_action(
         Err(error) => {
             // Create user-friendly error message
             let message = match error.to_string().as_str() {
-                msg if msg.contains("not found") => "Category not found. It may have been deleted by another user.",
-                msg if msg.contains("already exists") => "A category with this name already exists.",
-                msg if msg.contains("invalid name") => "Category name is invalid. Please use only letters, numbers, and spaces.",
-                msg if msg.contains("permission denied") => "You don't have permission to modify categories in this forum.",
+                msg if msg.contains("not found") => {
+                    "Category not found. It may have been deleted by another user."
+                }
+                msg if msg.contains("already exists") => {
+                    "A category with this name already exists."
+                }
+                msg if msg.contains("invalid name") => {
+                    "Category name is invalid. Please use only letters, numbers, and spaces."
+                }
+                msg if msg.contains("permission denied") => {
+                    "You don't have permission to modify categories in this forum."
+                }
                 _ => "Failed to update category. Please try again.",
             };
-            
+
             let error_message = ErrorMessage {
                 title: "Cannot Update Category",
                 message,
                 button_text: None,
                 button_action: None,
             };
-            
+
             // Use HX-Retarget to target the specific forum's error container
             let mut response = Html(error_message.render_once()?).into_response();
             response.headers_mut().insert(
-                "HX-Retarget", 
-                format!("#forum-{} .category-errors", slug).parse().unwrap()
+                "HX-Retarget",
+                format!("#forum-{} .category-errors", slug).parse().unwrap(),
             );
             Ok(response)
         }
@@ -1168,24 +1197,30 @@ async fn delete_forum_category_action(
         Err(error) => {
             // Create user-friendly error message
             let message = match error.to_string().as_str() {
-                msg if msg.contains("not found") => "Category not found. It may have been deleted by another user.",
-                msg if msg.contains("has topics") => "Cannot delete category because it contains topics. Move or delete topics first.",
-                msg if msg.contains("permission denied") => "You don't have permission to delete categories in this forum.",
+                msg if msg.contains("not found") => {
+                    "Category not found. It may have been deleted by another user."
+                }
+                msg if msg.contains("has topics") => {
+                    "Cannot delete category because it contains topics. Move or delete topics first."
+                }
+                msg if msg.contains("permission denied") => {
+                    "You don't have permission to delete categories in this forum."
+                }
                 _ => "Failed to delete category. Please try again.",
             };
-            
+
             let error_message = ErrorMessage {
                 title: "Cannot Delete Category",
                 message,
                 button_text: None,
                 button_action: None,
             };
-            
+
             // Use HX-Retarget to target the specific forum's error container
             let mut response = Html(error_message.render_once()?).into_response();
             response.headers_mut().insert(
-                "HX-Retarget", 
-                format!("#forum-{} .category-errors", slug).parse().unwrap()
+                "HX-Retarget",
+                format!("#forum-{} .category-errors", slug).parse().unwrap(),
             );
             Ok(response)
         }

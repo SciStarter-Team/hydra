@@ -12,11 +12,11 @@ use tokio::io::AsyncReadExt;
 use tracing::error;
 use ulid::Ulid;
 
+use crate::admin::UploadSuccessResponse;
 use crate::gourl::ProgramQuery;
 use crate::middleware::authorization::Authenticated;
-use crate::admin::UploadSuccessResponse;
-use sailfish::TemplateOnce;
 use common::service::log_activity;
+use sailfish::TemplateOnce;
 
 pub mod processing;
 pub mod storage;
@@ -74,7 +74,11 @@ async fn upload_tracked_file(
                         )
                     })?;
 
-                    file_data = Some((filename.unwrap_or_else(|| "unknown".to_string()), content_type, data));
+                    file_data = Some((
+                        filename.unwrap_or_else(|| "unknown".to_string()),
+                        content_type,
+                        data,
+                    ));
                 }
                 "slug" => {
                     let mut slug_data = Vec::new();
@@ -88,10 +92,7 @@ async fn upload_tracked_file(
                     })?;
                     slug = Some(String::from_utf8(slug_data).map_err(|e| {
                         error!("Invalid slug encoding: {}", e);
-                        poem::Error::from_string(
-                            "Invalid slug",
-                            StatusCode::BAD_REQUEST,
-                        )
+                        poem::Error::from_string("Invalid slug", StatusCode::BAD_REQUEST)
                     })?);
                 }
                 _ => {} // Ignore unknown fields
@@ -100,13 +101,11 @@ async fn upload_tracked_file(
     }
 
     // Validate required fields
-    let (filename, content_type, data) = file_data.ok_or_else(|| {
-        poem::Error::from_string("No file provided", StatusCode::BAD_REQUEST)
-    })?;
+    let (filename, content_type, data) = file_data
+        .ok_or_else(|| poem::Error::from_string("No file provided", StatusCode::BAD_REQUEST))?;
 
-    let slug = slug.ok_or_else(|| {
-        poem::Error::from_string("No slug provided", StatusCode::BAD_REQUEST)
-    })?;
+    let slug =
+        slug.ok_or_else(|| poem::Error::from_string("No slug provided", StatusCode::BAD_REQUEST))?;
 
     // Validate slug format
     if !slug.chars().all(|c| c.is_alphanumeric() || c == '-') || slug.is_empty() {
@@ -125,7 +124,7 @@ async fn upload_tracked_file(
         size: data.len() as u64,
         uploaded_by: user_info.user_id,
         access: FileAccess::Tracked,
-        variant: None, // Original upload, no variant
+        variant: None,         // Original upload, no variant
         force_download: false, // Default to letting browser decide
     };
 
@@ -145,13 +144,16 @@ async fn upload_tracked_file(
             match go_url.save_to_database().await {
                 Ok(()) => {
                     // Get updated go URLs list for OOB update
-                    let go_urls_list = crate::admin::get_go_urls_with_file_info().await.map_err(|e| {
-                        error!("Failed to get go URLs: {}", e);
-                        poem::Error::from_string(
-                            "Failed to get go URLs",
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                        )
-                    })?;
+                    let go_urls_list =
+                        crate::admin::get_go_urls_with_file_info()
+                            .await
+                            .map_err(|e| {
+                                error!("Failed to get go URLs: {}", e);
+                                poem::Error::from_string(
+                                    "Failed to get go URLs",
+                                    StatusCode::INTERNAL_SERVER_ERROR,
+                                )
+                            })?;
 
                     let response = UploadSuccessResponse {
                         slug,
@@ -183,8 +185,7 @@ async fn upload_tracked_file(
                                 File uploaded successfully, but go URL creation failed.
                                 <span class="text-sm text-gray-600">File ID: {} | Error: {}</span>
                             </div>"#,
-                            file_id,
-                            e
+                            file_id, e
                         )))
                 }
             }
@@ -234,7 +235,7 @@ async fn upload_untracked_file(
                     size: data.len() as u64,
                     uploaded_by: user_info.user_id,
                     access: FileAccess::Untracked,
-                    variant: None, // Original upload, no variant
+                    variant: None,         // Original upload, no variant
                     force_download: false, // Default to letting browser decide
                 };
 
@@ -243,11 +244,19 @@ async fn upload_untracked_file(
                         return Ok(Response::builder()
                             .status(StatusCode::OK)
                             .content_type("application/json")
-                            .body(serde_json::to_string(&serde_json::json!({
-                                "file_id": file_id.to_string(),
-                                "file_path": file_path,
-                                "status": "uploaded"
-                            })).map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR))?));
+                            .body(
+                                serde_json::to_string(&serde_json::json!({
+                                    "file_id": file_id.to_string(),
+                                    "file_path": file_path,
+                                    "status": "uploaded"
+                                }))
+                                .map_err(|e| {
+                                    poem::Error::from_string(
+                                        e.to_string(),
+                                        StatusCode::INTERNAL_SERVER_ERROR,
+                                    )
+                                })?,
+                            ));
                     }
                     Err(e) => {
                         error!("Failed to upload untracked file: {}", e);
@@ -305,12 +314,13 @@ async fn get_tracked_file(
 
             // Add attachment headers if force_download is true
             if metadata.force_download {
-                response = response.header("Content-Disposition",
+                response = response.header(
+                    "Content-Disposition",
                     if let Some(filename) = &metadata.original_filename {
                         format!("attachment; filename=\"{}\"", filename)
                     } else {
                         "attachment".to_string()
-                    }
+                    },
                 );
             }
 
@@ -344,12 +354,13 @@ async fn get_untracked_file(Path(file_id): Path<String>) -> Result<impl IntoResp
 
             // Add attachment headers if force_download is true
             if metadata.force_download {
-                response = response.header("Content-Disposition",
+                response = response.header(
+                    "Content-Disposition",
                     if let Some(filename) = &metadata.original_filename {
                         format!("attachment; filename=\"{}\"", filename)
                     } else {
                         "attachment".to_string()
-                    }
+                    },
                 );
             }
 
@@ -365,7 +376,6 @@ async fn get_untracked_file(Path(file_id): Path<String>) -> Result<impl IntoResp
     }
 }
 
-
 #[derive(Serialize, Deserialize)]
 struct SetFriendlyUrlRequest {
     friendly_url: Option<String>,
@@ -376,7 +386,6 @@ struct SetDownloadModeRequest {
     force_download: bool,
     slug: String,
 }
-
 
 #[handler]
 async fn set_friendly_url(
@@ -393,20 +402,21 @@ async fn set_friendly_url(
         .map_err(|_| poem::Error::from_string("Invalid file ID", StatusCode::BAD_REQUEST))?;
 
     match STORAGE
-        .set_friendly_url(
-            file_id,
-            request.friendly_url.clone(),
-            &Some(user_info),
-        )
+        .set_friendly_url(file_id, request.friendly_url.clone(), &Some(user_info))
         .await
     {
         Ok(()) => Ok(Response::builder()
             .status(StatusCode::OK)
             .content_type("application/json")
-            .body(serde_json::to_string(&serde_json::json!({
-                "status": "success",
-                "friendly_url": request.friendly_url
-            })).map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR))?)),
+            .body(
+                serde_json::to_string(&serde_json::json!({
+                    "status": "success",
+                    "friendly_url": request.friendly_url
+                }))
+                .map_err(|e| {
+                    poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR)
+                })?,
+            )),
         Err(e) => {
             error!("Failed to set friendly URL for file {}: {}", file_id, e);
             Err(poem::Error::from_string(
@@ -432,11 +442,7 @@ async fn set_download_mode(
         .map_err(|_| poem::Error::from_string("Invalid file ID", StatusCode::BAD_REQUEST))?;
 
     match STORAGE
-        .set_download_mode(
-            file_id,
-            request.force_download,
-            &Some(user_info),
-        )
+        .set_download_mode(file_id, request.force_download, &Some(user_info))
         .await
     {
         Ok(()) => {
@@ -475,7 +481,7 @@ async fn set_download_mode(
 
                     match FileMetadata::load(file_id).await {
                         Ok(file_metadata) => {
-                            use crate::admin::{GoUrlWithFileInfo, GoUrlRow};
+                            use crate::admin::{GoUrlRow, GoUrlWithFileInfo};
                             use sailfish::TemplateOnce;
 
                             let go_url_with_info = GoUrlWithFileInfo {
@@ -531,4 +537,3 @@ async fn set_download_mode(
         }
     }
 }
-

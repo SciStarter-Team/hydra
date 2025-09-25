@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use common::{
     message::{
         location::LocationInfo,
@@ -11,6 +10,7 @@ use poem::{
     session::Session,
     web::{Form, Query, RealIp, Redirect},
 };
+use std::sync::Arc;
 
 use crate::{
     component::{Component, Head, StandardLayout},

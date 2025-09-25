@@ -615,7 +615,7 @@ impl Database {
             }
         };
 
-        // Check WAL directory accessibility 
+        // Check WAL directory accessibility
         let wal_path = self.path.join("wal");
         let wal_status = if wal_path.exists() && wal_path.is_dir() {
             // Try to read the WAL directory

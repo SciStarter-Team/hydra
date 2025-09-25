@@ -1,7 +1,7 @@
-use std::sync::Arc;
-use sailfish::TemplateOnce;
-use crate::component::{Component, head::Head, header::Header, footer::Footer};
+use crate::component::{Component, footer::Footer, head::Head, header::Header};
 use common::message::user::BasicInfo;
+use sailfish::TemplateOnce;
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct Breadcrumb {
@@ -33,12 +33,10 @@ impl AdminLayout {
     pub fn new(title: &str) -> Self {
         Self {
             title: title.to_string(),
-            breadcrumbs: vec![
-                Breadcrumb {
-                    label: "Admin".to_string(),
-                    url: Some("/-admin".to_string()),
-                }
-            ],
+            breadcrumbs: vec![Breadcrumb {
+                label: "Admin".to_string(),
+                url: Some("/-admin".to_string()),
+            }],
             sidebar_active: String::new(),
             content: String::new(),
         }
@@ -70,9 +68,7 @@ impl Component for AdminLayout {
     async fn prepare(self, param: Self::Param) -> Result<Self::Prepared, anyhow::Error> {
         let user_info = param.clone();
         Ok(AdminLayoutPrepared {
-            head: Head::default()
-                .with_alpine()
-                .with_webawesome(),
+            head: Head::default().with_alpine().with_webawesome(),
             header: Header::default().prepare(user_info.clone()).await?,
             footer: Footer::default().prepare(user_info).await?,
             title: self.title,
@@ -82,4 +78,3 @@ impl Component for AdminLayout {
         })
     }
 }
-

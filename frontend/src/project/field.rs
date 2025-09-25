@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use anyhow::Error;
 use common::{insensitivestring::InsensitiveString, shared::db, timestring::TimeString};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
 use crate::{contact::Contact, peering::LoadStorePeered};
@@ -179,12 +179,8 @@ pub const AUDIENCE_VOCABULARY: &[&str] = &[
     "Seniors",
 ];
 
-pub const GEOGRAPHIC_SCOPE_VOCABULARY: &[&str] = &[
-    "International",
-    "National",
-    "Regional",
-    "Local",
-];
+pub const GEOGRAPHIC_SCOPE_VOCABULARY: &[&str] =
+    &["International", "National", "Regional", "Local"];
 
 pub const SUSTAINABLE_DEVELOPMENT_GOALS_VOCABULARY: &[&str] = &[
     "No Poverty",
@@ -578,9 +574,7 @@ impl TryFrom<&ProjectField> for Vec<String> {
             ProjectFieldValue::PageEditorIds(arr) => {
                 Ok(arr.iter().map(|ulid| ulid.to_string()).collect())
             }
-            ProjectFieldValue::Tags(set) => {
-                Ok(set.iter().map(|tag| tag.to_string()).collect())
-            }
+            ProjectFieldValue::Tags(set) => Ok(set.iter().map(|tag| tag.to_string()).collect()),
             _ => Err(anyhow::anyhow!("ProjectField is not an array type")),
         }
     }
@@ -5141,7 +5135,9 @@ impl ProjectField {
 
         let mut contacts = Vec::new();
         for row in rows {
-            let contact_id: Ulid = row.contact_id.parse()
+            let contact_id: Ulid = row
+                .contact_id
+                .parse()
                 .map_err(|e| anyhow::anyhow!("Invalid ULID for contact_id: {}", e))?;
 
             let role = match row.role.as_str() {
