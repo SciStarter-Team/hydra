@@ -175,6 +175,7 @@ fn user_facing() -> impl Endpoint {
         )
         .at("/logout", get(auth::logout_action))
         .at("/demo-forum", get(demo_forum))
+        .at("/go/*friendly_url", get(gourl::handle_go_url))
         .at("/*slug", get(entity_page))
         .with(middleware::analytics::AnalyticsMiddleware)
 }
@@ -197,7 +198,6 @@ fn dynamic() -> impl Endpoint {
         .nest("/-ui", ui::routes())
         .nest("/-upload", upload::authenticated_routes())
         .nest("/-forum", component::forum::forum_endpoints())
-        .at("/go/*friendly_url", get(gourl::handle_go_url))
         .nest_no_strip("/", user_facing())
         .catch_all_error(error_dispatch)
         .with(middleware::authorization::AuthMiddleware)

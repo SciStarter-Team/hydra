@@ -639,12 +639,12 @@ pub async fn get_go_url_stats(
         }
     };
 
-    // Query the clickthroughs table where from_path matches the go URL pattern
+    // Query the clickthroughs_realtime table (includes both parquet and WAL data) where from_path matches the go URL pattern
     let from_path_pattern = format!("/go/{}", request.slug);
 
-    // Get total views (all time) for golink clickthroughs
+    // Get total views (all time) for golink clickthroughs from realtime table
     let total_views_df = ctx
-        .table("clickthroughs")
+        .table("clickthroughs_realtime")
         .await?
         .filter(col("link_type").eq(lit("golink")))?
         .filter(col("from_path").eq(lit(&from_path_pattern)))?
@@ -664,7 +664,7 @@ pub async fn get_go_url_stats(
 
     // Get views in date range
     let views_in_range_df = ctx
-        .table("clickthroughs")
+        .table("clickthroughs_realtime")
         .await?
         .filter(col("link_type").eq(lit("golink")))?
         .filter(col("from_path").eq(lit(&from_path_pattern)))?
@@ -702,7 +702,7 @@ pub async fn get_go_url_stats(
         let date_str = date.to_string();
 
         let daily_views_df = ctx
-            .table("clickthroughs")
+            .table("clickthroughs_realtime")
             .await?
             .filter(col("link_type").eq(lit("golink")))?
             .filter(col("from_path").eq(lit(&from_path_pattern)))?
@@ -743,7 +743,7 @@ pub async fn get_go_url_stats(
 
     // Get recent views (last 10 in the date range)
     let recent_views_df = ctx
-        .table("clickthroughs")
+        .table("clickthroughs_realtime")
         .await?
         .filter(col("link_type").eq(lit("golink")))?
         .filter(col("from_path").eq(lit(&from_path_pattern)))?

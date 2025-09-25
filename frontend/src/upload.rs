@@ -444,6 +444,30 @@ async fn set_download_mode(
             use crate::gourl::GoUrl;
             use crate::peering::LoadStorePeered;
 
+            match GoUrl::slug_exists(&request.slug).await {
+                Ok(false) => {
+                    // Create new go URL since it doesn't exist
+                    let go_url = GoUrl::new_file_url(request.slug.clone(), file_id);
+                    if let Err(e) = go_url.store().await {
+                        tracing::error!("Failed to create go URL: {}", e);
+                        return Ok(poem::Response::builder()
+                            .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+                            .content_type("text/html")
+                            .body("Failed to create go URL"));
+                    }
+                }
+                Ok(true) => {
+                    // Go URL already exists, we'll load it below to get the correct case
+                }
+                Err(e) => {
+                    tracing::error!("Failed to check slug existence: {}", e);
+                    return Ok(poem::Response::builder()
+                        .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+                        .content_type("text/html")
+                        .body("Database error"));
+                }
+            }
+
             match GoUrl::load(request.slug.clone()).await {
                 Ok(go_url) => {
                     // Get the updated file metadata

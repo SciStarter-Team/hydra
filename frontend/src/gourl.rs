@@ -57,10 +57,11 @@ impl LoadStorePeered for GoUrl {
     async fn read_from_database(key: Self::DatabaseKey) -> Result<Self, anyhow::Error> {
         use common::shared::db;
 
+        // Use case-insensitive lookup
         let row = sqlx::query!(
             r#"SELECT slug, url_type
                FROM go_urls
-               WHERE slug = ?"#,
+               WHERE LOWER(slug) = LOWER(?)"#,
             key
         )
         .fetch_optional(db())
@@ -72,7 +73,7 @@ impl LoadStorePeered for GoUrl {
             .context("Failed to decode GoUrlType from database")?;
 
         Ok(GoUrl {
-            slug: row.slug,
+            slug: row.slug, // Return the original case from the database
             url_type,
         })
     }
@@ -81,7 +82,7 @@ impl LoadStorePeered for GoUrl {
         use common::shared::db;
 
         sqlx::query!(
-            r#"DELETE FROM go_urls WHERE slug = ?"#,
+            r#"DELETE FROM go_urls WHERE LOWER(slug) = LOWER(?)"#,
             key
         )
         .execute(db())
@@ -118,6 +119,22 @@ impl GoUrl {
         }
 
         slug.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+    }
+
+    /// Check if a slug exists in the database (case-insensitive)
+    /// More efficient than loading the full object for uniqueness checks
+    pub async fn slug_exists(slug: &str) -> Result<bool, anyhow::Error> {
+        use common::shared::db;
+
+        let row = sqlx::query!(
+            r#"SELECT slug FROM go_urls WHERE LOWER(slug) = LOWER(?) LIMIT 1"#,
+            slug
+        )
+        .fetch_optional(db())
+        .await
+        .context("Failed to check if slug exists")?;
+
+        Ok(row.is_some())
     }
 }
 

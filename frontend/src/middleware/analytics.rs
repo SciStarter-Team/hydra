@@ -19,7 +19,7 @@ impl<'a> FromRequest<'a> for Interaction {
             .extensions()
             .get::<Interaction>()
             .cloned()
-            .expect("AuthMiddleware must be installed to use Interaction"))
+            .expect("AnalyticsMiddleware must be installed to use Interaction"))
     }
 }
 
@@ -47,7 +47,7 @@ impl<'a> FromRequest<'a> for Device {
             .extensions()
             .get::<Device>()
             .cloned()
-            .expect("AuthMiddleware must be installed to use Device"))
+            .expect("AnalyticsMiddleware must be installed to use Device"))
     }
 }
 

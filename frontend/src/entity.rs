@@ -89,11 +89,12 @@ impl Entity {
         let mut tx = db().begin().await?;
 
         while sqlx::query_scalar!(
-            r#"select exists(select 1 from "entities" where "slug" = ?) as "conflict: bool""#,
+            r#"select exists(select 1 from "entities" where LOWER("slug") = LOWER(?)) as "conflict: bool""#,
             slug
         )
         .fetch_one(&mut *tx)
         .await?
+        .unwrap_or(false)
         {
             counter += 1;
             slug = format!("{}-{}", &base_slug, counter);
@@ -132,6 +133,20 @@ impl Entity {
     pub fn slug(&self) -> &str {
         &self.slug
     }
+
+    /// Check if an entity slug exists in the database (case-insensitive)
+    /// More efficient than loading the full object for uniqueness checks
+    #[tracing::instrument]
+    pub async fn slug_exists(slug: &str) -> Result<bool, Error> {
+        let row = sqlx::query!(
+            r#"SELECT "slug" FROM "entities" WHERE LOWER("slug") = LOWER(?) LIMIT 1"#,
+            slug
+        )
+        .fetch_optional(db())
+        .await?;
+
+        Ok(row.is_some())
+    }
 }
 
 impl LoadStorePeered for Entity {
@@ -150,7 +165,7 @@ impl LoadStorePeered for Entity {
                  "kind" as "kind: EntityKind",
                  "target"
                from "entities"
-               where "slug" = ?"#,
+               where LOWER("slug") = LOWER(?)"#,
             slug,
         )
         .fetch_one(db())

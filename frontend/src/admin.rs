@@ -5411,12 +5411,24 @@ async fn files_links_create_redirect(
             .body(r#"<div class="text-red-600">Invalid slug format</div>"#));
     }
 
-    // Check if slug already exists
-    if GoUrl::load(request.slug.clone()).await.is_ok() {
-        return Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::BAD_REQUEST)
-            .content_type("text/html")
-            .body(r#"<div class="text-red-600">Slug already exists</div>"#));
+    // Check if slug already exists (case-insensitive)
+    match GoUrl::slug_exists(&request.slug).await {
+        Ok(true) => {
+            return Ok(poem::Response::builder()
+                .status(poem::http::StatusCode::BAD_REQUEST)
+                .content_type("text/html")
+                .body(r#"<div class="text-red-600">Slug already exists</div>"#));
+        }
+        Err(e) => {
+            tracing::error!("Failed to check slug existence: {}", e);
+            return Ok(poem::Response::builder()
+                .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+                .content_type("text/html")
+                .body(r#"<div class="text-red-600">Database error</div>"#));
+        }
+        Ok(false) => {
+            // Slug doesn't exist, continue with creation
+        }
     }
 
     // Save slug before it gets moved
@@ -5460,12 +5472,24 @@ async fn files_links_delete_go_url(
     Path(slug): Path<String>,
     Authenticated(_user_info): Authenticated,
 ) -> Result<impl IntoResponse, poem::Error> {
-    // Try to load the go URL first to verify it exists
-    if GoUrl::load(slug.clone()).await.is_err() {
-        return Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::NOT_FOUND)
-            .content_type("text/html")
-            .body(r#"<div class="text-red-600">Go URL not found</div>"#));
+    // Check if the go URL exists (case-insensitive) before attempting deletion
+    match GoUrl::slug_exists(&slug).await {
+        Ok(false) => {
+            return Ok(poem::Response::builder()
+                .status(poem::http::StatusCode::NOT_FOUND)
+                .content_type("text/html")
+                .body(r#"<div class="text-red-600">Go URL not found</div>"#));
+        }
+        Err(e) => {
+            tracing::error!("Failed to check slug existence: {}", e);
+            return Ok(poem::Response::builder()
+                .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+                .content_type("text/html")
+                .body(r#"<div class="text-red-600">Database error</div>"#));
+        }
+        Ok(true) => {
+            // Go URL exists, continue with deletion
+        }
     }
 
     // Delete the go URL
