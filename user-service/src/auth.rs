@@ -28,7 +28,13 @@ pub async fn signup(req: &Request) -> Result<Option<BasicInfo>, Error> {
     let user_id_str = user_id.to_string();
     let handle = form.handle;
     let email = form.email;
-    let password = djangohashers::make_password(&form.password);
+    let password = if form.disabled_password {
+        // Store Django-style disabled password marker directly
+        "!".to_string()
+    } else {
+        // Hash the user's password
+        djangohashers::make_password(&form.password)
+    };
     let newsletter = form.newsletter;
     let zipcode = form.zipcode;
     let protected = form.protected;

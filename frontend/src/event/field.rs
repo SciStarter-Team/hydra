@@ -1,49 +1,11 @@
 use crate::{event::EventStatus, peering::LoadStorePeered};
 use anyhow::Error;
 use common::timestring::TimeString;
-use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
 // Note: The `tags_text` database column is NOT included in EventFieldType
 // as it's a computed field for FTS search optimization, not a real event field.
 // Tags are managed separately via the event_tags table and dedicated handlers.
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub enum EventFieldType {
-    EventId,
-    Status,
-    Created,
-    Publish,
-    Flagged,
-    AdminNotes,
-    Welcomed,
-    PageCreatorId,
-    Name,
-    Description,
-    Origin,
-    Presenter,
-    Url,
-    Image,
-    ImageCredit,
-    HowToJoin,
-    PartOf,
-    LocationType,
-    EntirelyOnline,
-    LocationName,
-    LocationDescription,
-    Address,
-    City,
-    Zip,
-    State,
-    Country,
-    EventType,
-    TicketingBegins,
-    OutcomesLabel,
-    OutcomesLink,
-    CircuitId,
-    Point,
-    Regions,
-}
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct EventField {
@@ -51,7 +13,8 @@ pub struct EventField {
     pub field: EventFieldValue,
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize, strum::EnumDiscriminants)]
+#[strum_discriminants(name(EventFieldType), derive(serde::Serialize, serde::Deserialize))]
 pub enum EventFieldValue {
     EventId(Ulid),
     Status(EventStatus),

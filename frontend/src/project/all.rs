@@ -28,6 +28,7 @@ use super::{ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus};
 #[serde(default)]
 pub struct ProjectAll {
     pub project_id: Ulid,
+    pub legacy_id: Option<i64>,
     pub legacy_v1_project_id: Option<i64>,
     pub legacy_v2_project_id: Option<i64>,
     pub foreign_id: Option<String>,
@@ -212,6 +213,7 @@ impl LoadStorePeered for ProjectAll {
         sqlx::query!(
             r#"insert or replace into projects (
           "project_id",
+          "legacy_id",
           "legacy_v1_project_id",
           "legacy_v2_project_id",
           "foreign_id",
@@ -326,6 +328,7 @@ impl LoadStorePeered for ProjectAll {
           "point"
         ) values (
           ?1,
+          ?2,
           ?2,
           ?3,
           ?4,
@@ -1089,7 +1092,7 @@ impl LoadStorePeered for ProjectAll {
         // Read main project data from projects table
         let project_row = sqlx::query!(
             r#"SELECT
-                project_id, legacy_v1_project_id, legacy_v2_project_id, foreign_id,
+                project_id, legacy_id, legacy_v1_project_id, legacy_v2_project_id, foreign_id,
                 publish, duplicate, authoritative, flagged, is_test, status,
                 promotion_time, promotion_target, admin_notes, created, wild_hope,
                 exchange, origin, suborigin, guid, opengraph_description,
@@ -1255,6 +1258,7 @@ impl LoadStorePeered for ProjectAll {
 
         Ok(ProjectAll {
             project_id,
+            legacy_id: project_row.legacy_id,
             legacy_v1_project_id: project_row.legacy_v1_project_id,
             legacy_v2_project_id: project_row.legacy_v2_project_id,
             foreign_id: project_row.foreign_id,

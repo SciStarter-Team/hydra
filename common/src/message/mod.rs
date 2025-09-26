@@ -2,4 +2,6 @@ pub mod forum;
 pub mod health;
 pub mod location;
 pub mod log;
+pub mod sync;
 pub mod user;
+pub mod webauthn;

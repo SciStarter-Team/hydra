@@ -10,3 +10,4 @@ pub mod timestring;
 #[cfg(feature = "database")]
 pub mod transaction;
 pub mod ulid;
+pub mod webauthn;

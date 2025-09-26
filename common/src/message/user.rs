@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::fmt;
 use std::sync::Arc;
 
 use crate::badge::Badge;
@@ -18,6 +17,7 @@ pub struct Signup {
     pub protected: bool,
     pub point: Option<String>,
     pub tags: Vec<String>,
+    pub disabled_password: bool,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]

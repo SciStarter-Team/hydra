@@ -15,57 +15,355 @@
     </p>
   <% } %>
   <div class="flex flex-col md:flex-row">
-    <form method=post action="/login">
-      <p>
-        <label>
-          Email
-          <input class="p-1 border-1 border-solid" type=text name=email>
-        </label>
-      </p>
-      <p>
-        <label>
-          Password
-          <input class="p-1 border-1 border-solid" type=password name=password>
-        </label>
-      </p>
-      <p><input class="btn btn-primary" type=submit value="Log In"></p>
-    </form>
-    <form method=post action="/signup">
-      <p>
-        <label>
-          Handle
-          <input class="p-1 border-1 border-solid" type=text name=handle required>
-        </label>
-      </p>
-      <p>
-        <label>
-          Email
-          <input class="p-1 border-1 border-solid" type=email name=email required>
-        </label>
-      </p>
-      <p>
-        <label>
-          Password
-          <input class="p-1 border-1 border-solid" type=password name=password1 required>
-        </label>
-        <label>
-          Re-type Password
-          <input class="p-1 border-1 border-solid" type=password name=password2 required>
-        </label>
-      </p>
-      <p>
-        <label>
-          Zip/Postal Code
-          <input class="p-1 border-1 border-solid" type=text name=zipcode>
-        </label>
-      </p>
-      <p>
-        <label>
-          Sign up for our newsletter
-          <input type=checkbox name=newsletter value=true checked>
-        </label>
-      </p>
-      <p><input class="btn btn-primary" type=submit value="Sign Up"></p>
-    </form>
+    <div>
+      <h3>Log In</h3>
+      <form method=post action="/login" id="login-form" hx-on:submit="handle_passkey_login(event)">
+        <p>
+          <label>
+            Email
+            <input class="p-1 border-1 border-solid" type=email name=email id="login-email" required>
+          </label>
+        </p>
+        <p>
+          <label>
+            Password
+            <input class="p-1 border-1 border-solid disabled:opacity-50" type=password name=password id="login-password">
+          </label>
+        </p>
+        <p hx-on::load="hide_if_no_webauthn(this)">
+          <label>
+            <input type=checkbox name=use_passkey value=true hx-on:change="let el = htmx.find('#login-password'); el.required = !this.checked; el.disabled=this.checked;">
+            Use passkey instead of password
+          </label>
+        </p>
+        <p><input class="btn btn-primary" type=submit value="Log In"></p>
+      </form>
+    </div>
+    <div>
+      <h3>Sign Up</h3>
+      <form method=post action="/signup" id="signup-form" hx-on:submit="handle_passkey_signup(event)">
+        <p>
+          <label>
+            Handle
+            <input class="p-1 border-1 border-solid" type=text name=handle id="signup-handle" required>
+          </label>
+        </p>
+        <p>
+          <label>
+            Email
+            <input class="p-1 border-1 border-solid" type=email name=email id="signup-email" required>
+          </label>
+        </p>
+        <p>
+          <label>
+            Password
+            <input class="p-1 border-1 border-solid disabled:opacity-50" type=password name=password1 id="signup-password1">
+          </label>
+          <label>
+            Re-type Password
+            <input class="p-1 border-1 border-solid disabled:opacity-50" type=password name=password2 id="signup-password2">
+          </label>
+        </p>
+        <p hx-on::load="hide_if_no_webauthn(this)">
+          <label>
+            <input type=checkbox id="use-passkey" name=use_passkey value=true hx-on:change="let el1 = htmx.find('#signup-password1'); let el2 = htmx.find('#signup-password2'); el1.required = !this.checked; el1.disabled=this.checked; el2.required = !this.checked; el2.disabled=this.checked;">
+            Use passkey instead of password
+          </label>
+        </p>
+        <p>
+          <label>
+            Zip/Postal Code
+            <input class="p-1 border-1 border-solid" type=text name=zipcode id="signup-zipcode">
+          </label>
+        </p>
+        <p>
+          <label>
+            Sign up for our newsletter
+            <input type=checkbox name=newsletter value=true checked>
+          </label>
+        </p>
+        <p><input class="btn btn-primary" type=submit value="Sign Up"></p>
+      </form>
+    </div>
   </div>
 </div>
+
+<script>
+ // htmx.logAll();
+
+ // WebAuthn JavaScript functionality
+
+ // Base64url decoding helper functions
+ function base64urlDecode(str) {
+     if (!str || typeof str !== 'string') {
+         console.error('base64urlDecode received invalid input:', str);
+         throw new Error('Invalid base64url input: ' + str);
+     }
+     return Uint8Array.from(atob(str.replace(/-/g, '+').replace(/_/g, '/').replace(/=/g, '')), c => c.charCodeAt(0));
+ }
+
+ function base64urlEncode(buffer) {
+     return btoa(String.fromCharCode(...new Uint8Array(buffer)))
+         .replace(/\+/g, '-')
+         .replace(/\//g, '_')
+         .replace(/=/g, '');
+ }
+
+ // Convert WebAuthn creation options from server format to browser format
+ function prepareCreationOptions(options) {
+     console.log('Preparing creation options:', options);
+     try {
+         // The options come wrapped in a publicKey object
+         const publicKey = options.publicKey || options;
+         return {
+             ...publicKey,
+             challenge: base64urlDecode(publicKey.challenge),
+             user: {
+                 ...publicKey.user,
+                 id: base64urlDecode(publicKey.user.id)
+             },
+             excludeCredentials: publicKey.excludeCredentials?.map(cred => ({
+                 ...cred,
+                 id: base64urlDecode(cred.id)
+             })) || []
+         };
+     } catch (error) {
+         console.error('Error preparing creation options:', error);
+         console.error('Options object:', JSON.stringify(options, null, 2));
+         throw error;
+     }
+ }
+
+ // Convert WebAuthn request options from server format to browser format
+ function prepareRequestOptions(options) {
+     console.log('Preparing request options:', options);
+     try {
+         // The options come wrapped in a publicKey object
+         const publicKey = options.publicKey || options;
+         return {
+             ...publicKey,
+             challenge: base64urlDecode(publicKey.challenge),
+             allowCredentials: publicKey.allowCredentials?.map(cred => ({
+                 ...cred,
+                 id: base64urlDecode(cred.id)
+             })) || []
+         };
+     } catch (error) {
+         console.error('Error preparing request options:', error);
+         console.error('Options object:', JSON.stringify(options, null, 2));
+         throw error;
+     }
+ }
+
+ // Convert credential from browser format to server format
+ function serializeCredential(credential) {
+     return {
+         id: credential.id,
+         rawId: base64urlEncode(credential.rawId),
+         type: credential.type,
+         response: {
+             clientDataJSON: base64urlEncode(credential.response.clientDataJSON),
+             attestationObject: base64urlEncode(credential.response.attestationObject)
+         }
+     };
+ }
+
+ // Convert authentication credential from browser format to server format
+ function serializeAuthCredential(credential) {
+     return {
+         id: credential.id,
+         rawId: base64urlEncode(credential.rawId),
+         type: credential.type,
+         response: {
+             clientDataJSON: base64urlEncode(credential.response.clientDataJSON),
+             authenticatorData: base64urlEncode(credential.response.authenticatorData),
+             signature: base64urlEncode(credential.response.signature),
+             userHandle: credential.response.userHandle ? base64urlEncode(credential.response.userHandle) : null
+         }
+     };
+ }
+
+ function hide_if_no_webauthn(el) {
+    if(!window.PublicKeyCredential) {
+        htmx.addClass(el, 'hidden');
+    }
+ }
+
+ async function handle_passkey_login(event) {
+     const use_passkey = document.getElementById('use-passkey-login').checked;
+
+     if (use_passkey) {
+         // Prevent the normal form submission
+         event.preventDefault();
+
+         try {
+             const form = event.target;
+             const form_data = new FormData(form);
+             const email = form_data.get('email');
+
+             // Start authentication
+             const startResponse = await fetch('/-webauthn/auth-start', {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify({ email: email || null })
+             });
+
+             const startData = await startResponse.json();
+             if (!startData.success) {
+                 alert('Error: ' + startData.error);
+                 return;
+             }
+
+             // Parse and prepare the credential request options
+             const options = JSON.parse(startData.request_options);
+             const preparedOptions = prepareRequestOptions(options);
+
+             // Call WebAuthn API
+             const credential = await navigator.credentials.get({
+                 publicKey: preparedOptions
+             });
+
+             // Serialize the credential for the server
+             const serializedCredential = serializeAuthCredential(credential);
+
+             // Complete authentication
+             const completeResponse = await fetch('/-webauthn/auth-complete', {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify({ credential: serializedCredential })
+             });
+
+             const completeData = await completeResponse.json();
+             if (completeData.success) {
+                 window.location.href = completeData.redirect;
+             } else {
+                 alert('Authentication failed: ' + completeData.error);
+             }
+         } catch (error) {
+             console.error('Passkey login error:', error);
+             alert('Passkey login failed: ' + error.message);
+         }
+     } else {
+         // For password users, ensure password is filled for validation
+         const password = document.getElementById('login-password');
+
+         if (!password.value) {
+             alert('Please enter a password');
+             event.preventDefault();
+             return;
+         }
+
+         // Let HTMX handle the normal form submission
+     }
+ }
+
+ async function handle_passkey_signup(event) {
+     const use_passkey = document.getElementById('use-passkey').checked;
+
+     if(use_passkey) {
+         // Prevent the normal form submission
+         event.preventDefault();
+
+         try {
+             const form = event.target;
+             const form_data = new FormData(form);
+             const handle = form_data.get('handle');
+
+             // Start WebAuthn registration
+             const startResponse = await fetch('/-webauthn/reg-start', {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify({
+                     username: handle,
+                     display_name: handle
+                 })
+             });
+
+             const startData = await startResponse.json();
+             if (!startData.success) {
+                 alert('Error starting passkey setup: ' + startData.error);
+                 return;
+             }
+
+             // Parse and prepare the credential creation options
+             const options = JSON.parse(startData.creation_options);
+             const preparedOptions = prepareCreationOptions(options);
+
+             // Call WebAuthn API
+             console.log('Calling navigator.credentials.create with:', preparedOptions);
+             const credential = await navigator.credentials.create({
+                 publicKey: preparedOptions
+             });
+             console.log('WebAuthn credential created successfully:', credential);
+
+             // Serialize the credential for the server
+             const serializedCredential = serializeCredential(credential);
+
+             // Complete registration with all form data
+             const completeResponse = await fetch('/-webauthn/reg-complete', {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify({
+                     credential: serializedCredential,
+                     signup_data: {
+                         handle: handle,
+                         email: form_data.get('email'),
+                         zipcode: form_data.get('zipcode') || '',
+                         newsletter: form_data.has('newsletter')
+                     }
+                 })
+             });
+
+             const completeData = await completeResponse.json();
+             if (completeData.success && completeData.logged_in) {
+                 // Signup and passkey setup complete - redirect
+                 window.location.href = completeData.redirect || '/';
+             } else {
+                 alert('Passkey signup failed: ' + (completeData.error || 'Unknown error'));
+             }
+         } catch (error) {
+             console.error('Passkey signup error:', error);
+             console.error('Error name:', error.name);
+             console.error('Error message:', error.message);
+             console.error('Error stack:', error.stack);
+
+             // Provide more specific error messages based on WebAuthn error types
+             let userMessage = 'Passkey signup failed: ';
+             if (error.name === 'NotAllowedError') {
+                 userMessage += 'Permission denied or user cancelled. Try clearing site data and permissions for localhost:2222';
+             } else if (error.name === 'SecurityError') {
+                 userMessage += 'Security error - check that you\'re on the correct domain';
+             } else if (error.name === 'NotSupportedError') {
+                 userMessage += 'WebAuthn not supported on this device/browser';
+             } else {
+                 userMessage += error.message;
+             }
+             alert(userMessage);
+         }
+     } else {
+         // For password users, ensure passwords are filled for validation
+         const password1 = document.getElementById('signup-password1');
+         const password2 = document.getElementById('signup-password2');
+
+         if (!password1.value || !password2.value) {
+             alert('Please enter a password');
+             event.preventDefault();
+             return;
+         }
+
+         // Let HTMX handle the normal form submission
+     }
+ }
+
+ // HTMX doesn't send the htmx:load event on page load, except to the
+ // <body>, so we do it ourselves. If we ever decide to use HTMX to swap
+ // out one of these elements, HTMX will take care of firing the
+ // additional load events at that time.
+ function load_events_for_individual_elements() {
+     htmx.off('htmx:load', load_events_for_individual_elements);
+     for(let el of document.querySelectorAll('[hx-on\\:\\:load]')) {
+         htmx.trigger(el, 'htmx:load', {});
+     }
+ }
+ htmx.on('htmx:load', load_events_for_individual_elements);
+</script>

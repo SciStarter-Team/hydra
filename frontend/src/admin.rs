@@ -41,7 +41,7 @@ use common::{
 use jiff::{Timestamp, ToSpan, tz::TimeZone};
 use poem::{
     Endpoint, EndpointExt, IntoResponse, Route, delete, get, handler, post, put,
-    web::{Form, Json, Path, Query},
+    web::{Form, Path, Query},
 };
 use sailfish::TemplateOnce;
 use serde::{Deserialize, Serialize};
@@ -846,10 +846,6 @@ impl AdminProjectFull {
     }
 }
 
-async fn fetch_recent_projects() -> Result<Vec<AdminProject>, anyhow::Error> {
-    fetch_projects_page(None, None, None, None, None, None, None, Some(1), Some(10)).await
-}
-
 async fn fetch_projects_page(
     search: Option<&str>,
     status_filter: Option<&str>,
@@ -1123,6 +1119,7 @@ async fn fetch_events_page(
         event_id: String,
         name: String,
         publish: i32,
+        #[allow(dead_code)]
         created: String,
         location_name: String,
         event_type: String,
@@ -1466,11 +1463,14 @@ pub struct AnalyticsPage;
 #[template(path = "admin/analytics.stpl.html")]
 pub struct AnalyticsPagePrepared {
     total_users: u32,
+    #[allow(dead_code)]
     verified_users: u32,
     total_projects: u32,
     total_events: u32,
     monthly_signups: u32,
+    #[allow(dead_code)]
     weekly_signups: u32,
+    #[allow(dead_code)]
     daily_signups: u32,
     top_projects: Vec<AdminProject>,
     user_growth_data: String, // JSON for charts
@@ -2131,7 +2131,7 @@ async fn users_new(
 #[handler]
 async fn users_edit(
     Path(user_id): Path<String>,
-    Authenticated(user_info): Authenticated,
+    Authenticated(_user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     // Parse user ID
     let parsed_user_id = user_id
@@ -3068,6 +3068,7 @@ impl ArrayItems {
 #[derive(Debug)]
 struct ContactItem {
     contact: Contact,
+    #[allow(dead_code)]
     read_only: bool,
 }
 
@@ -3100,23 +3101,13 @@ impl ContactItems {
 struct ContactWidget {
     project_id: Ulid,
     contact: Option<Contact>,
-    read_only: bool,
 }
 
 impl ContactWidget {
-    fn new_readonly(project_id: Ulid, contact: Contact) -> Self {
-        Self {
-            project_id,
-            contact: Some(contact),
-            read_only: true,
-        }
-    }
-
     fn new_editable(project_id: Ulid, contact: Option<Contact>) -> Self {
         Self {
             project_id,
             contact,
-            read_only: false,
         }
     }
 }
@@ -3154,18 +3145,6 @@ impl ContactForm {
             address: self.address.clone().filter(|s| !s.is_empty()),
         })
     }
-}
-
-#[derive(Debug, TemplateOnce)]
-#[template(path = "admin/partials/success_message.stpl.html")]
-struct SuccessMessage {
-    message: String,
-}
-
-#[derive(Debug, TemplateOnce)]
-#[template(path = "admin/partials/error_message.stpl.html")]
-struct ErrorMessage {
-    message: String,
 }
 
 async fn projects_search_internal(
@@ -3409,20 +3388,6 @@ async fn events_search(
         .body(html))
 }
 
-/// Helper function to convert a ULID to an email address by looking up the user
-async fn ulid_to_email(user_id: Option<Ulid>) -> String {
-    if let Some(id) = user_id {
-        let get_request = AdminUserGetRequest { user_id: id };
-
-        match request::<AdminUserResponse>("user.admin.user_get", get_request).await {
-            Ok(response) => response.user.primary_email,
-            Err(_) => format!("Unknown user ({})", id),
-        }
-    } else {
-        "Unknown".to_string()
-    }
-}
-
 #[handler]
 async fn projects_edit(
     Path(project_id): Path<String>,
@@ -3626,6 +3591,18 @@ async fn projects_update_field(
                     .parse::<Ulid>()
                     .map_err(|e| anyhow::anyhow!("Invalid ULID format: {}", e))?;
                 crate::project::field::ProjectFieldValue::ProjectId(ulid_value)
+            }
+            crate::project::field::ProjectFieldType::LegacyId => {
+                let option_value = if form.value.is_empty() {
+                    None
+                } else {
+                    Some(
+                        form.value
+                            .parse::<i64>()
+                            .map_err(|e| anyhow::anyhow!("Invalid integer format: {}", e))?,
+                    )
+                };
+                crate::project::field::ProjectFieldValue::LegacyId(option_value)
             }
             crate::project::field::ProjectFieldType::LegacyV1ProjectId => {
                 let option_value = if form.value.is_empty() {
@@ -4475,71 +4452,7 @@ async fn projects_update_field(
                 .await?;
             }
 
-            // Success - fetch updated project data directly from database
-            let project_id_str = parsed_project_id.to_string();
-            let updated_project = sqlx::query!(
-                r#"SELECT 
-                    project_id,
-                    name,
-                    status,
-                    publish,
-                    created,
-                    page_creator_id,
-                    description,
-                    presenter,
-                    origin,
-                    flagged,
-                    duplicate,
-                    is_test,
-                    goal,
-                    task,
-                    image,
-                    url,
-                    admin_notes,
-                    draft
-                FROM projects 
-                WHERE project_id = ?"#,
-                project_id_str
-            )
-            .fetch_one(db())
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to reload project after update: {}", e))?;
-
-            // Resolve creator email
-            let page_creator_email =
-                if let Ok(creator_id) = updated_project.page_creator_id.parse::<Ulid>() {
-                    let email = lookup_user_email(Some(creator_id)).await;
-                    if email.is_empty() { None } else { Some(email) }
-                } else {
-                    None
-                };
-
-            let admin_project = AdminProject {
-                id: updated_project.project_id,
-                title: updated_project.name,
-                status: updated_project.status,
-                publish: updated_project.publish.unwrap_or(false),
-                created_date: updated_project.created,
-                page_creator_id: updated_project.page_creator_id,
-                page_creator_email,
-                description: updated_project.description,
-                presenter: updated_project.presenter,
-                origin: updated_project.origin,
-                flagged: updated_project.flagged,
-                duplicate: updated_project.duplicate,
-                is_test: updated_project.is_test,
-                goal: updated_project.goal,
-                task: updated_project.task,
-                image: updated_project.image,
-                url: updated_project.url,
-                admin_notes: updated_project.admin_notes,
-                draft: updated_project.draft,
-                tags: Vec::new(), // Tags not needed for OOB update
-            };
-
-            // Create the updated project row for out-of-band swap
-
-            // For the new page-based edit form, send custom events instead of OOB updates
+            // For the new page-based edit form, send custom events
             let field_label = get_field_label(&field_type);
             let trigger_data = serde_json::json!({
                 "field-updated": {

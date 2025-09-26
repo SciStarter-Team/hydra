@@ -2,7 +2,6 @@ use std::collections::HashSet;
 
 use anyhow::Error;
 use common::{insensitivestring::InsensitiveString, shared::db, timestring::TimeString};
-use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
 use crate::{contact::Contact, peering::LoadStorePeered};
@@ -206,154 +205,17 @@ pub const SUSTAINABLE_DEVELOPMENT_GOALS_VOCABULARY: &[&str] = &[
 // as it's a computed field for FTS search optimization, not a real project field.
 // Tags are managed separately via the project_tags table and dedicated handlers.
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
-pub enum ProjectFieldType {
-    ProjectId,
-    LegacyV1ProjectId,
-    LegacyV2ProjectId,
-    ForeignId,
-    Publish,
-    Duplicate,
-    Authoritative,
-    Flagged,
-    IsTest,
-    Status,
-    PromotionTime,
-    PromotionTarget,
-    AdminNotes,
-    Created,
-    WildHope,
-    Exchange,
-    Origin,
-    Suborigin,
-    Guid,
-    OpengraphDescription,
-    IsAffiliate,
-    IsInaturalist,
-    InatProjectId,
-    Welcomed,
-    PageCreatorId,
-    PageEditorIds,
-    Extra,
-    ProjectLastEditor,
-    ProjectLastEdited,
-    ScistarterLastEditor,
-    ScistarterLastEdited,
-    Draft,
-    Name,
-    Tags,
-    ParticipationDegree,
-    ParticipantInstructions,
-    ParticipantInstructionsEmail,
-    ParticipantFiles,
-    UsFederallyFunded,
-    Presenter,
-    Goal,
-    Task,
-    Description,
-    Image,
-    ImageCredit,
-    ConnectOpaqueUrl,
-    ConnectOpaqueUrl1,
-    ConnectOpaqueUrl2,
-    Contacts,
-    Url,
-    VideoUrl,
-    BlogUrl,
-    TwitterName,
-    FacebookPage,
-    InstagramPage,
-    Topics,
-    FieldsOfScience,
-    Practices,
-    PracticesHow,
-    SearchTerms,
-    Difficulty,
-    Diy,
-    Audience,
-    SignupUrl,
-    PrefixHowToLoggedIn,
-    PrefixHowToLoggedOut,
-    HowToJoin,
-    HowtoVideo,
-    OutcomesLabel,
-    OutcomesLink,
-    TimeRequired,
-    TrainingMaterials,
-    ClassroomMaterials,
-    ConsentStatement,
-    ConsentStatementDate,
-    ParticipationTools,
-    ParticipationPrompt,
-    ParticipationConfirmationMessage,
-    ParticipationNotificationEmail,
-    ParticipationUsage,
-    PartOf,
-    AssociatedProjects,
-    TotalExpense,
-    Materials,
-    Gear,
-    MobileAppUrlAndroid,
-    MobileAppUrlIos,
-    MobileAppUrl,
-    LocationType,
-    EntirelyOnline,
-    OnDemand,
-    InPerson,
-    Indoors,
-    Outdoors,
-    Regions,
-    RegionsDescription,
-    Point,
-    Address,
-    City,
-    State,
-    Zip,
-    Country,
-    Other,
-    LocationName,
-    LocationLanduse,
-    LocationDescription,
-    GeographicScope,
-    UnitedNationsRegion,
-    Begin,
-    End,
-    ProjectTiming,
-    ParticipationSchedule,
-    TimePerParticipation,
-    YearStarted,
-    YearCompleted,
-    MonthCompleted,
-    ParticipationTasks,
-    Activities,
-    SpecialSkills,
-    DataResults,
-    DataAggregation,
-    DataConsent,
-    DataVisualization,
-    DataAccess,
-    DataQuality,
-    MetadataPublicationUrl,
-    DataPublicationUrl,
-    DataLicense,
-    IntendedOutcomes,
-    OutcomeOther,
-    UniversityAffiliation,
-    Sponsors,
-    Stakeholders,
-    CircuitId,
-    SustainableDevelopmentGoals,
-}
-
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct ProjectField {
     pub project_id: Ulid,
     pub field: ProjectFieldValue,
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize, strum::EnumDiscriminants)]
+#[strum_discriminants(name(ProjectFieldType), derive(serde::Serialize, serde::Deserialize))]
 pub enum ProjectFieldValue {
     ProjectId(Ulid),
+    LegacyId(Option<i64>),
     LegacyV1ProjectId(Option<i64>),
     LegacyV2ProjectId(Option<i64>),
     ForeignId(Option<String>),
@@ -646,6 +508,7 @@ impl ProjectField {
     pub fn field_type(&self) -> ProjectFieldType {
         match &self.field {
             ProjectFieldValue::ProjectId(_) => ProjectFieldType::ProjectId,
+            ProjectFieldValue::LegacyId(_) => ProjectFieldType::LegacyId,
             ProjectFieldValue::LegacyV1ProjectId(_) => ProjectFieldType::LegacyV1ProjectId,
             ProjectFieldValue::LegacyV2ProjectId(_) => ProjectFieldType::LegacyV2ProjectId,
             ProjectFieldValue::ForeignId(_) => ProjectFieldType::ForeignId,
@@ -1830,6 +1693,20 @@ impl ProjectField {
         .fetch_one(db())
         .await?;
         Ok(ProjectField::new(project_id, ProjectFieldValue::Diy(diy)))
+    }
+
+    async fn read_legacy_id(project_id: Ulid) -> Result<Self, Error> {
+        let project_id_str = project_id.to_string();
+        let legacy_id = sqlx::query_scalar!(
+            "SELECT legacy_id FROM projects WHERE project_id = ?",
+            project_id_str
+        )
+        .fetch_one(db())
+        .await?;
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::LegacyId(legacy_id),
+        ))
     }
 
     async fn read_legacy_v1_project_id(project_id: Ulid) -> Result<Self, Error> {
@@ -3144,6 +3021,18 @@ impl ProjectField {
         Ok(())
     }
 
+    async fn save_legacy_id(&self, legacy_id: &Option<i64>) -> Result<(), Error> {
+        let project_id_str = self.project_id.to_string();
+        sqlx::query!(
+            "UPDATE projects SET legacy_id = ? WHERE project_id = ?",
+            legacy_id,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
+        Ok(())
+    }
+
     async fn save_legacy_v1_project_id(
         &self,
         legacy_v1_project_id: &Option<i64>,
@@ -3957,6 +3846,7 @@ impl LoadStorePeered for ProjectField {
             }
             ProjectFieldValue::Difficulty(difficulty) => self.save_difficulty(difficulty).await,
             ProjectFieldValue::Diy(diy) => self.save_diy(*diy).await,
+            ProjectFieldValue::LegacyId(legacy_id) => self.save_legacy_id(legacy_id).await,
             ProjectFieldValue::LegacyV1ProjectId(legacy_v1_project_id) => {
                 self.save_legacy_v1_project_id(legacy_v1_project_id).await
             }
@@ -4224,6 +4114,7 @@ impl LoadStorePeered for ProjectField {
             ProjectFieldType::SearchTerms => Self::read_search_terms(project_id).await,
             ProjectFieldType::Difficulty => Self::read_difficulty(project_id).await,
             ProjectFieldType::Diy => Self::read_diy(project_id).await,
+            ProjectFieldType::LegacyId => Self::read_legacy_id(project_id).await,
             ProjectFieldType::LegacyV1ProjectId => {
                 Self::read_legacy_v1_project_id(project_id).await
             }

@@ -15,7 +15,7 @@ use ulid::Ulid;
 
 use crate::{component::Component, middleware::authorization::Authenticated};
 
-pub fn forum_endpoints() -> impl poem::Endpoint {
+pub fn forum_routes() -> impl poem::Endpoint {
     poem::Route::new()
         .at("/topic/new", post(create_topic_action))
         .at("/topic/:topic_id/page", get(topic_page_htmx))

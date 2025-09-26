@@ -17,6 +17,7 @@ struct IndexPage {
 #[derive(sailfish::TemplateOnce)]
 #[template(path = "pages/index_content.stpl.html")]
 struct IndexPageContent {
+    #[allow(dead_code)]
     user_info: Option<Arc<BasicInfo>>,
 }
 

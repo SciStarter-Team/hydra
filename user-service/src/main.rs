@@ -16,7 +16,9 @@ pub mod auth;
 pub mod health;
 pub mod sessions;
 pub mod stats;
+pub mod sync;
 pub mod users;
+pub mod webauthn;
 
 async fn cleanup() {
     loop {
@@ -964,6 +966,18 @@ async fn main() {
 
     let userbadges_sync_task = spawn(userbadges_synchronize());
 
+    // WebAuthn session cleanup task
+    let webauthn_cleanup_task = spawn(async {
+        use tokio::time::{Duration, interval};
+        let mut interval = interval(Duration::from_secs(3600)); // Every hour
+        loop {
+            interval.tick().await;
+            if let Err(e) = webauthn::cleanup_expired_sessions().await {
+                eprintln!("WebAuthn session cleanup error: {}", e);
+            }
+        }
+    });
+
     let nats = nats();
 
     let service = nats
@@ -1051,6 +1065,43 @@ async fn main() {
     let health = service.group("user.health");
     toplevel.spawn(handler!(health, "check", health::health_check));
 
+    // Sync endpoints
+    let sync = service.group("sync.sequence");
+    toplevel.spawn(handler!(sync, "next_project_id", sync::next_project_id));
+
+    // WebAuthn endpoints
+    let webauthn = service.group("user.webauthn");
+    toplevel.spawn(handler!(
+        webauthn,
+        "registration_start",
+        webauthn::registration_start
+    ));
+    toplevel.spawn(handler!(
+        webauthn,
+        "registration_complete",
+        webauthn::registration_complete
+    ));
+    toplevel.spawn(handler!(
+        webauthn,
+        "authentication_start",
+        webauthn::authentication_start
+    ));
+    toplevel.spawn(handler!(
+        webauthn,
+        "authentication_complete",
+        webauthn::authentication_complete
+    ));
+    toplevel.spawn(handler!(
+        webauthn,
+        "credentials_list",
+        webauthn::credentials_list
+    ));
+    toplevel.spawn(handler!(
+        webauthn,
+        "credential_delete",
+        webauthn::credential_delete
+    ));
+
     // Set up graceful shutdown
     use tokio::signal::unix::{SignalKind, signal};
 
@@ -1076,6 +1127,7 @@ async fn main() {
     sessions_sync_task.abort();
     users_sync_task.abort();
     userbadges_sync_task.abort();
+    webauthn_cleanup_task.abort();
 
     println!("User service shutdown complete");
 }

@@ -9,7 +9,7 @@
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
                     <% match &self.go_url.url_type {
-                        crate::gourl::GoUrlType::TrackedFile { file_id } => { %>
+                        crate::gourl::GoUrlType::TrackedFile { file_id: _ } => { %>
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                                 File
                             </span>

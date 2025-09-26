@@ -198,7 +198,7 @@ impl StorageManager {
         friendly_url: Option<String>,
         requesting_user: &Option<std::sync::Arc<common::message::user::BasicInfo>>,
     ) -> Result<()> {
-        use crate::gourl::{GoUrl, GoUrlType};
+        use crate::gourl::GoUrl;
         use common::service::log_activity;
 
         // Check if the user is staff
@@ -314,6 +314,7 @@ struct FileMetadataRow {
     size: i64,
     uploaded_by: String,
     access: String,
+    #[allow(dead_code)]
     created_at: String,
     variant: Option<String>,
     force_download: bool,

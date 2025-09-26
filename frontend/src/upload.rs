@@ -1,5 +1,4 @@
-use anyhow::{Context, Result};
-use object_store::{ObjectStore, aws::AmazonS3Builder};
+use anyhow::Result;
 use poem::{
     Body, Endpoint, IntoResponse, Response, Route, get, handler,
     http::{StatusCode, header::CONTENT_TYPE},

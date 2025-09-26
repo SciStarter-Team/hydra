@@ -197,7 +197,8 @@ fn dynamic() -> impl Endpoint {
         .nest("/-channel", channel::routes())
         .nest("/-ui", ui::routes())
         .nest("/-upload", upload::authenticated_routes())
-        .nest("/-forum", component::forum::forum_endpoints())
+        .nest("/-forum", component::forum::forum_routes())
+        .nest("/-webauthn", auth::webauthn_routes())
         .nest_no_strip("/", user_facing())
         .catch_all_error(error_dispatch)
         .with(middleware::authorization::AuthMiddleware)
@@ -629,6 +630,7 @@ mod sync {
                     }
                 };
 
+                proj.legacy_id = data.legacy_v1_project_id.map(|x| x as i64);
                 proj.legacy_v1_project_id = data.legacy_v1_project_id.map(|x| x as i64);
                 proj.legacy_v2_project_id = Some(data.legacy_v2_project_id as i64);
                 proj.foreign_id = data.foreign_id.empty_as_none();
