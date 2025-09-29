@@ -238,3 +238,35 @@ impl LoadStorePeered for Html {
         })
     }
 }
+
+/// A very simple adapter allowing string content to be used as a
+/// Sailfish template or, as a consequence of the universal
+/// implementation for Sailfish templates, as a Component.
+pub struct Literal<'c> {
+    content: &'c str,
+}
+
+impl<'c> Literal<'c> {
+    pub fn new(content: &'c str) -> Literal<'c> {
+        Literal { content }
+    }
+}
+
+impl<'c> sailfish::TemplateOnce for Literal<'c> {
+    fn render_once(self) -> sailfish::runtime::RenderResult {
+        Ok(String::from(self.content))
+    }
+
+    fn render_once_to(
+        self,
+        buf: &mut sailfish::runtime::Buffer,
+    ) -> Result<(), sailfish::RenderError> {
+        buf.push_str(self.content);
+        Ok(())
+    }
+}
+
+/// This renders our standard placeholder page.
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "site/placeholder.stpl.html")]
+pub struct Placeholder;

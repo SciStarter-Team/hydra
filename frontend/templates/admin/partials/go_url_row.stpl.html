@@ -61,8 +61,8 @@
 
             <!-- Stats Button -->
             <button hx-get="/-admin/files-links/<%= self.go_url.slug %>/stats"
-                    hx-target="#modal-container"
-                    hx-swap="innerHTML"
+                    hx-target="body"
+                    hx-swap="beforeend"
                     class="text-sm text-blue-600 hover:text-blue-800">
                 <wa-icon name="chart-bar" class="w-4 h-4 inline mr-1"></wa-icon>
                 Stats

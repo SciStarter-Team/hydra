@@ -1,0 +1,113 @@
+<div id="entities-content">
+    <!-- Search and Filters -->
+    <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 relative">
+        <form id="entity-search-form" class="relative" onsubmit="return false;">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0 sm:space-x-4">
+                <div class="flex-1 min-w-0">
+                    <div class="relative">
+                        <input
+                            type="search"
+                            placeholder="Search entities..."
+                            class="block w-full px-3 py-2 pr-8 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            hx-get="/-admin/entities/search"
+                            hx-target="#entities-content"
+                            hx-trigger="keyup[keyCode==13]"
+                            hx-include="#entity-search-form"
+                            name="search"
+                            value="<%= self.search_term %>"
+                        >
+                        <button type="button"
+                                hx-get="/-admin/entities/search"
+                                hx-target="#entities-content"
+                                hx-vals='{"search": "", "kind": "<%= self.selected_kind %>", "page": "1"}'
+                                class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                            <wa-icon name="xmark" class="w-4 h-4"></wa-icon>
+                        </button>
+                    </div>
+                </div>
+                <div class="flex space-x-3">
+                    <select
+                        name="kind"
+                        class="block px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        hx-get="/-admin/entities/search"
+                        hx-target="#entities-content"
+                        hx-trigger="change"
+                        hx-include="#entity-search-form"
+                    >
+                        <option value=""<% if self.selected_kind.is_empty() { %> selected<% } %>>All Types</option>
+                        <option value="Project"<% if self.selected_kind == "Project" { %> selected<% } %>>Project</option>
+                        <option value="Event"<% if self.selected_kind == "Event" { %> selected<% } %>>Event</option>
+                        <option value="WordPress"<% if self.selected_kind == "WordPress" { %> selected<% } %>>WordPress</option>
+                        <option value="Redirect"<% if self.selected_kind == "Redirect" { %> selected<% } %>>Redirect</option>
+                        <option value="RawHTML"<% if self.selected_kind == "RawHTML" { %> selected<% } %>>Raw HTML</option>
+                        <option value="Wysiwyg"<% if self.selected_kind == "Wysiwyg" { %> selected<% } %>>WYSIWYG</option>
+                        <option value="PageBuilder"<% if self.selected_kind == "PageBuilder" { %> selected<% } %>>Page Builder</option>
+                        <option value="Form"<% if self.selected_kind == "Form" { %> selected<% } %>>Form</option>
+                        <option value="Proxied"<% if self.selected_kind == "Proxied" { %> selected<% } %>>Proxied</option>
+                        <option value="Placeholder"<% if self.selected_kind == "Placeholder" { %> selected<% } %>>Placeholder</option>
+                    </select>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Entity List -->
+    <div class="bg-white">
+        <!-- Header Row - Hidden on mobile, visible on larger screens -->
+        <div class="hidden lg:grid lg:grid-cols-5 bg-gray-50 px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
+            <div>Slug</div>
+            <div>Type</div>
+            <div>Target</div>
+            <div>Published</div>
+            <div>Actions</div>
+        </div>
+
+        <div class="divide-y divide-gray-200">
+            <% for entity in &self.entities { %>
+                <%+ EntityRow {
+                    entity: entity.clone(),
+                    oob: false,
+                    oob_swap: "".to_string()
+                } %>
+            <% } %>
+        </div>
+    </div>
+
+    <!-- Results info and pagination -->
+    <div class="px-6 py-3 bg-gray-50 border-t border-gray-200">
+        <div class="flex items-center justify-between">
+            <div class="text-sm text-gray-700">
+                <% if self.total_entities == 0 { %>
+                    No entities found
+                <% } else { %>
+                    Showing <span class="font-medium"><%= self.start_item %></span> to <span class="font-medium"><%= self.end_item %></span> of <span class="font-medium"><%= self.total_entities %></span> results
+                <% } %>
+            </div>
+            <div class="flex space-x-2">
+                <% if self.has_previous { %>
+                    <button
+                        hx-get="<%= self.pagination_url %>?page=<%= self.current_page - 1 %>"
+                        hx-target="#entities-content"
+                        hx-include="<%= self.pagination_include %>"
+                        class="px-3 py-1 bg-white border border-gray-300 text-sm rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                        Previous
+                    </button>
+                <% } %>
+                <span class="px-3 py-1 text-sm text-gray-500">
+                    Page <%= self.current_page %>
+                </span>
+                <% if self.has_next { %>
+                    <button
+                        hx-get="<%= self.pagination_url %>?page=<%= self.current_page + 1 %>"
+                        hx-target="#entities-content"
+                        hx-include="<%= self.pagination_include %>"
+                        class="px-3 py-1 bg-white border border-gray-300 text-sm rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                        Next
+                    </button>
+                <% } %>
+            </div>
+        </div>
+    </div>
+</div>

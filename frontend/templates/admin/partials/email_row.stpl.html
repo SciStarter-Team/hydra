@@ -26,8 +26,8 @@
         class="relative px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded hover:bg-gray-200"
         hx-post="/-admin/users/<%= self.user_id %>/send-password-reset"
         hx-vals='{"reset_email": "<%= self.email.email %>"}'
-        hx-target="#modal-container"
-        hx-swap="innerHTML"
+        hx-target="body"
+        hx-swap="beforeend"
         hx-confirm="Send a password reset email to <%= self.email.email %>?"
     >
         <span>Send Password Reset</span>

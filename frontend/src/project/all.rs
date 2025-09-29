@@ -16,10 +16,23 @@ use super::{ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus};
 
 /// Container for all project fields.
 ///
-/// This structure contains a representation of all project data. Its
-/// primary purpose is for receiving data synchronizations. It should
-/// not be used casually for other purposes, since there are more
-/// efficient options in most cases.
+/// ⚠️  **PERFORMANCE WARNING**: This structure loads ALL 100+ project fields from the database.
+/// Only use when you actually need most/all fields. For common operations, use direct SQL queries:
+///
+/// ```rust
+/// // ❌ DON'T: Loading full object just for name and publish status
+/// let project = ProjectAll::load(ulid).await?;
+/// println!("{}: {}", project.name, project.publish);
+///
+/// // ✅ DO: Direct query for specific fields
+/// let result = sqlx::query!(
+///     r#"SELECT "name", "publish" FROM "projects" WHERE "project_id" = ?"#,
+///     ulid_str
+/// ).fetch_one(db()).await?;
+/// ```
+///
+/// This structure's primary purpose is for receiving data synchronizations. It should
+/// not be used casually for other purposes, since there are more efficient options in most cases.
 ///
 /// Note: The `tags_text` database column is NOT included here as it's
 /// a computed field for FTS search optimization, not a real project field.

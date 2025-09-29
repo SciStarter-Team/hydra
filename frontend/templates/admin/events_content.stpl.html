@@ -130,7 +130,7 @@
                 <div class="lg:col-span-1">
                     <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Actions</div>
                     <div class="flex items-center space-x-2">
-                        <button hx-get="/-admin/events/<%= event.id %>/edit" hx-target="#modal-container" hx-swap="innerHTML" class="text-indigo-600 hover:text-indigo-900 transition-colors">
+                        <button hx-get="/-admin/events/<%= event.id %>/edit" hx-target="body" hx-swap="beforeend" class="text-indigo-600 hover:text-indigo-900 transition-colors">
                             <wa-icon name="pencil" class="w-4 h-4"></wa-icon>
                         </button>
                         <button hx-delete="/-admin/events/<%= event.id %>" hx-confirm="Are you sure?" class="text-red-600 hover:text-red-900 transition-colors">

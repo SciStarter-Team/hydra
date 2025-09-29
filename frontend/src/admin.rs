@@ -1,5 +1,6 @@
 use crate::component::{AdminLayout, Component, admin_layout::AdminLayoutPrepared};
 use crate::contact::Contact;
+use crate::entity::{Entity, EntityKind, EntityTarget};
 use crate::gourl::{GoUrl, GoUrlType};
 use crate::middleware::authorization::{Authenticated, StaffOnly};
 use crate::project::field::{ProjectField, ProjectFieldType, ProjectFieldValue};
@@ -119,6 +120,14 @@ pub fn routes() -> impl Endpoint {
             get(files_links_get_stats).post(files_links_post_stats),
         )
         .at("/clear-modal", post(clear_modal))
+        .at("/entities", get(entities))
+        .at("/entities/search", get(entities_search))
+        .at("/entities/new", get(entities_new).post(entities_create))
+        .at("/entities/target-input", get(entities_target_input))
+        .at(
+            "/entities/edit/*slug",
+            get(entities_edit).put(entities_update).delete(entities_delete),
+        )
         .nest("/autocomplete", autocomplete::routes())
         .with(StaffOnly)
 }
@@ -2360,7 +2369,7 @@ async fn users_create(
                     let users_html = users_content.render_once()?;
                     let response_html = format!(
                         r#"
-                        <div hx-swap-oob="innerHTML:#modal-container"></div>
+                        <div hx-swap-oob="delete:dialog"></div>
                         <div hx-swap-oob="innerHTML:#users-content">{}</div>
                         "#,
                         users_html
@@ -2374,7 +2383,7 @@ async fn users_create(
                     // Fallback - just close modal if we can't refresh the list
                     Ok(poem::Response::builder()
                         .content_type("text/html")
-                        .body(r#"<div hx-swap-oob="innerHTML:#modal-container"></div>"#))
+                        .body(r#"<div hx-swap-oob="delete:dialog"></div>"#))
                 }
             }
         }
@@ -4927,7 +4936,7 @@ async fn projects_create(
     let combined_html = format!(
         r#"{}
         <div class="mt-3 text-sm text-blue-700">
-            <button onclick="document.getElementById('modal-container').innerHTML = '';" 
+            <button onclick="this.closest('dialog').remove();"
                     class="text-indigo-600 hover:text-indigo-800 underline">
                 Close
             </button>
@@ -5615,7 +5624,6 @@ async fn files_links_get_stats(
             };
             match error_modal.render_once() {
                 Ok(rendered) => {
-                    tracing::info!("Rendered error modal: {}", rendered.len());
                     Ok(rendered)
                 }
                 Err(e) => {
@@ -5644,7 +5652,6 @@ async fn files_links_post_stats(
             };
             match error_modal.render_once() {
                 Ok(rendered) => {
-                    tracing::info!("Rendered error modal: {}", rendered.len());
                     Ok(rendered)
                 }
                 Err(e) => {
@@ -5657,6 +5664,689 @@ async fn files_links_post_stats(
             }
         }
     }
+}
+
+// Entity Management Data Structures
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/entities.stpl.html")]
+pub struct EntitiesPage {
+    pub entities_content: EntitiesContent,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/entities_content.stpl.html")]
+pub struct EntitiesContent {
+    pub entities: Vec<EntityWithInfo>,
+    pub current_page: i64,
+    pub total_entities: i64,
+    pub has_previous: bool,
+    pub has_next: bool,
+    pub per_page: i64,
+    pub start_item: i64,
+    pub end_item: i64,
+    pub pagination_url: String,
+    pub pagination_include: String,
+    pub search_term: String,
+    pub selected_kind: String,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/partials/entity_row.stpl.html")]
+pub struct EntityRow {
+    pub entity: EntityWithInfo,
+    pub oob: bool,
+    pub oob_swap: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateEntityForm {
+    pub slug: String,
+    pub kind: String,
+    pub target: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateEntityForm {
+    pub slug: String,
+    pub kind: String,
+    pub target: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct EntitySearchQuery {
+    pub search: Option<String>,
+    pub kind: Option<String>,
+    pub page: Option<i32>,
+    pub per_page: Option<i32>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct EntityTargetInputQuery {
+    pub kind: String,
+    pub current_value: Option<String>,
+    pub mode: Option<String>, // "new" or "edit"
+}
+
+#[derive(Debug, sailfish::TemplateOnce)]
+#[template(path = "admin/partials/entity_target_input.stpl.html")]
+pub struct EntityTargetInputTemplate {
+    pub kind: EntityKind,
+    pub current_value: String,
+    pub project_widget: Option<crate::admin::autocomplete::EntityAutocomplete>,
+    pub event_widget: Option<crate::admin::autocomplete::EntityAutocomplete>,
+}
+
+#[derive(Debug, Clone)]
+pub struct EntityWithInfo {
+    pub slug: String,
+    pub kind: EntityKind,
+    pub target: String,
+    pub target_info: Option<String>, // Display name of the target (project name, event name, etc.)
+    pub published: bool, // Published status from project/event or true for other types
+}
+
+#[derive(TemplateOnce)]
+#[template(path = "admin/modals/new_entity.stpl.html")]
+pub struct NewEntityForm {
+    pub title: String,
+    pub error_message: Option<String>,
+}
+
+#[derive(TemplateOnce)]
+#[template(path = "admin/modals/edit_entity.stpl.html")]
+pub struct EditEntityForm {
+    pub title: String,
+    pub slug: String,
+    pub kind: String,
+    pub target: String,
+    pub target_ulid: Option<Ulid>,
+    pub target_input_template: EntityTargetInputTemplate,
+    pub error_message: Option<String>,
+}
+
+// Entity Kind Helper Functions
+impl EntityKind {
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            EntityKind::WordPress => "WordPress Page",
+            EntityKind::Proxied => "Proxied Content",
+            EntityKind::Redirect => "Redirect",
+            EntityKind::RawHTML => "Raw HTML",
+            EntityKind::DressedHtml => "Dressed HTML",
+            EntityKind::Wysiwyg => "WYSIWYG Editor",
+            EntityKind::PageBuilder => "Page Builder",
+            EntityKind::Form => "Form",
+            EntityKind::Project => "Project",
+            EntityKind::Event => "Event",
+            EntityKind::Placeholder => "Placeholder",
+        }
+    }
+
+    pub fn all_kinds() -> Vec<EntityKind> {
+        vec![
+            EntityKind::Project,
+            EntityKind::Event,
+            EntityKind::WordPress,
+            EntityKind::Redirect,
+            EntityKind::RawHTML,
+            EntityKind::Wysiwyg,
+            EntityKind::PageBuilder,
+            EntityKind::Form,
+            EntityKind::Proxied,
+            EntityKind::Placeholder,
+        ]
+    }
+}
+
+// Entity Handler Functions
+
+#[handler]
+async fn entities(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    let entities_content = fetch_entities_content(
+        &EntitySearchQuery {
+            search: None,
+            kind: None,
+            page: Some(1),
+            per_page: Some(25),
+        }
+    ).await?;
+
+    let page = EntitiesPage { entities_content };
+    let content = page.render_once()?;
+
+    let prepared = AdminLayout::new("Entity Management")
+        .with_breadcrumb("Entities", None)
+        .with_sidebar_active("entities")
+        .with_content(content)
+        .prepare(Some(user_info))
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+#[handler]
+async fn entities_search(
+    Query(query): Query<EntitySearchQuery>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let entities_content = fetch_entities_content(&query).await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(entities_content.render_once()?))
+}
+
+#[handler]
+async fn entities_target_input(
+    Query(query): Query<EntityTargetInputQuery>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let kind = query.kind.parse::<EntityKind>()?;
+    let current_value = query.current_value.unwrap_or_default();
+
+    let (project_widget, event_widget) = match kind {
+        EntityKind::Project => {
+            let widget = if !current_value.is_empty() {
+                if let Ok(ulid) = current_value.parse::<Ulid>() {
+                    // Resolve the project name to avoid autocomplete widget making its own request
+                    if let Ok(Some(name)) = crate::admin::autocomplete::resolve_project_name(ulid).await {
+                        crate::admin::autocomplete::EntityAutocomplete::new_project_selector("target", "Target", "Search for a project...").with_selected(ulid, name)
+                    } else {
+                        crate::admin::autocomplete::EntityAutocomplete::new_project_selector("target", "Target", "Search for a project...")
+                    }
+                } else {
+                    crate::admin::autocomplete::EntityAutocomplete::new_project_selector("target", "Target", "Search for a project...")
+                }
+            } else {
+                crate::admin::autocomplete::EntityAutocomplete::new_project_selector("target", "Target", "Search for a project...")
+            };
+            (Some(widget), None)
+        },
+        EntityKind::Event => {
+            let widget = if !current_value.is_empty() {
+                if let Ok(ulid) = current_value.parse::<Ulid>() {
+                    // Resolve the event name to avoid autocomplete widget making its own request
+                    if let Ok(Some(name)) = crate::admin::autocomplete::resolve_event_name(ulid).await {
+                        crate::admin::autocomplete::EntityAutocomplete::new_event_selector("target", "Target", "Search for an event...").with_selected(ulid, name)
+                    } else {
+                        crate::admin::autocomplete::EntityAutocomplete::new_event_selector("target", "Target", "Search for an event...")
+                    }
+                } else {
+                    crate::admin::autocomplete::EntityAutocomplete::new_event_selector("target", "Target", "Search for an event...")
+                }
+            } else {
+                crate::admin::autocomplete::EntityAutocomplete::new_event_selector("target", "Target", "Search for an event...")
+            };
+            (None, Some(widget))
+        },
+        _ => (None, None),
+    };
+
+    let template = EntityTargetInputTemplate {
+        kind,
+        current_value,
+        project_widget,
+        event_widget,
+    };
+
+    let html = template.render_once()?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(html))
+}
+
+#[handler]
+async fn entities_new(
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let form = NewEntityForm {
+        title: "Add New Entity".to_string(),
+        error_message: None,
+    };
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(form.render_once()?))
+}
+
+#[handler]
+async fn entities_create(
+    Form(form): Form<CreateEntityForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    // Validate and create entity
+    match (async || -> Result<(), anyhow::Error> {
+        // Validate form
+        if form.slug.trim().is_empty() {
+            return Err(anyhow::anyhow!("Slug is required"));
+        }
+
+        // Check if slug already exists
+        if Entity::slug_exists(&form.slug).await? {
+            return Err(anyhow::anyhow!("Slug already exists"));
+        }
+
+        // Parse entity kind using strum
+        let kind = form.kind.parse::<EntityKind>()?;
+
+        // Parse target based on kind and form input
+        let target = parse_target_for_kind(&kind, form.target.as_deref())?;
+
+        let entity = Entity::new(&form.slug, kind, target);
+        entity.store().await
+    })().await {
+        Ok(_) => {
+            // Success: Update entities list via OOB and close modal
+            let entities_content = fetch_entities_content(&EntitySearchQuery {
+                search: None,
+                kind: None,
+                page: Some(1),
+                per_page: Some(25),
+            }).await?;
+
+            Ok(poem::Response::builder()
+                .content_type("text/html")
+                .body(format!(r#"<div hx-swap-oob="innerHTML:#entities-content">{}</div>"#, entities_content.render_once()?)))
+        },
+        Err(e) => {
+            // Error: Return modal with error message
+            let form = NewEntityForm {
+                title: "Add New Entity".to_string(),
+                error_message: Some(e.to_string()),
+            };
+
+            Ok(poem::Response::builder()
+                .content_type("text/html")
+                .body(form.render_once()?))
+        }
+    }
+}
+
+#[handler]
+async fn entities_edit(
+    Path(slug): Path<String>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let entity = Entity::load(slug.clone()).await?;
+
+    let target_ulid = match entity.target() {
+        crate::entity::EntityTarget::Ulid(ulid) => Some(*ulid),
+        _ => None,
+    };
+
+    // Create the target input template for initial rendering
+    let target_input_template = {
+        let kind = *entity.kind();
+        let current_value = entity.target().to_string();
+
+        let (project_widget, event_widget) = match kind {
+            EntityKind::Project => {
+                let widget = if !current_value.is_empty() {
+                    if let Ok(ulid) = current_value.parse::<Ulid>() {
+                        // Resolve the project name to avoid autocomplete widget making its own request
+                        if let Ok(Some(name)) = crate::admin::autocomplete::resolve_project_name(ulid).await {
+                            crate::admin::autocomplete::EntityAutocomplete::new_project_selector("target", "Target", "Search for a project...").with_selected(ulid, name)
+                        } else {
+                            crate::admin::autocomplete::EntityAutocomplete::new_project_selector("target", "Target", "Search for a project...")
+                        }
+                    } else {
+                        crate::admin::autocomplete::EntityAutocomplete::new_project_selector("target", "Target", "Search for a project...")
+                    }
+                } else {
+                    crate::admin::autocomplete::EntityAutocomplete::new_project_selector("target", "Target", "Search for a project...")
+                };
+                (Some(widget), None)
+            },
+            EntityKind::Event => {
+                let widget = if !current_value.is_empty() {
+                    if let Ok(ulid) = current_value.parse::<Ulid>() {
+                        // Resolve the event name to avoid autocomplete widget making its own request
+                        if let Ok(Some(name)) = crate::admin::autocomplete::resolve_event_name(ulid).await {
+                            crate::admin::autocomplete::EntityAutocomplete::new_event_selector("target", "Target", "Search for an event...").with_selected(ulid, name)
+                        } else {
+                            crate::admin::autocomplete::EntityAutocomplete::new_event_selector("target", "Target", "Search for an event...")
+                        }
+                    } else {
+                        crate::admin::autocomplete::EntityAutocomplete::new_event_selector("target", "Target", "Search for an event...")
+                    }
+                } else {
+                    crate::admin::autocomplete::EntityAutocomplete::new_event_selector("target", "Target", "Search for an event...")
+                };
+                (None, Some(widget))
+            },
+            _ => (None, None),
+        };
+
+        EntityTargetInputTemplate {
+            kind,
+            current_value,
+            project_widget,
+            event_widget,
+        }
+    };
+
+    let form = EditEntityForm {
+        title: format!("Edit Entity: {}", slug),
+        slug: slug,
+        kind: entity.kind().as_ref().to_string(),
+        target: entity.target().to_string(),
+        target_ulid,
+        target_input_template,
+        error_message: None,
+    };
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(form.render_once()?))
+}
+
+#[handler]
+async fn entities_update(
+    Path(slug): Path<String>,
+    Form(form): Form<UpdateEntityForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    // Validate and parse form data
+    match (async || -> Result<(), anyhow::Error> {
+        let kind = form.kind.parse::<EntityKind>()?;
+        let target = parse_target_for_kind(&kind, form.target.as_deref())?;
+
+        let updated_entity = Entity::new(&slug, kind, target);
+        updated_entity.store().await
+    })().await {
+        Ok(_) => {
+            // Success: Update the entity row in the list via OOB and close modal
+            let entity = Entity::load(slug.clone()).await?;
+            let entity_with_info = create_entity_with_info(&entity).await?;
+            let entity_row = EntityRow {
+                entity: entity_with_info,
+                oob: true,
+                oob_swap: format!("outerHTML:#entity-{}", slug.replace("-", "_").replace("/", "_")),
+            };
+
+            Ok(poem::Response::builder()
+                .content_type("text/html")
+                .body(entity_row.render_once()?))
+        },
+        Err(e) => {
+            // Error: Return dialog with error message
+            let entity = Entity::load(slug.clone()).await?;
+            let target_ulid = match entity.target() {
+                crate::entity::EntityTarget::Ulid(ulid) => Some(*ulid),
+                _ => None,
+            };
+
+            let target_input_template = create_target_input_template(entity.kind(), &entity.target().to_string()).await;
+
+            let form = EditEntityForm {
+                title: format!("Edit Entity: {}", slug),
+                slug: slug,
+                kind: entity.kind().as_ref().to_string(),
+                target: entity.target().to_string(),
+                target_ulid,
+                target_input_template,
+                error_message: Some(format!("Error saving entity: {}", e)),
+            };
+
+            Ok(poem::Response::builder()
+                .content_type("text/html")
+                .body(form.render_once()?))
+        }
+    }
+}
+
+#[handler]
+async fn entities_delete(
+    Path(slug): Path<String>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    sqlx::query!(r#"DELETE FROM "entities" WHERE "slug" = ?"#, slug)
+        .execute(db())
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(""))
+}
+
+// Helper Functions
+
+async fn create_target_input_template(kind: &EntityKind, current_value: &str) -> EntityTargetInputTemplate {
+    let (project_widget, event_widget) = match kind {
+        EntityKind::Project => {
+            let widget = if !current_value.is_empty() {
+                if let Ok(ulid) = current_value.parse::<Ulid>() {
+                    if let Ok(Some(name)) = crate::admin::autocomplete::resolve_project_name(ulid).await {
+                        crate::admin::autocomplete::EntityAutocomplete::new_project_selector("target", "Target", "Search for a project...").with_selected(ulid, name)
+                    } else {
+                        crate::admin::autocomplete::EntityAutocomplete::new_project_selector("target", "Target", "Search for a project...")
+                    }
+                } else {
+                    crate::admin::autocomplete::EntityAutocomplete::new_project_selector("target", "Target", "Search for a project...")
+                }
+            } else {
+                crate::admin::autocomplete::EntityAutocomplete::new_project_selector("target", "Target", "Search for a project...")
+            };
+            (Some(widget), None)
+        },
+        EntityKind::Event => {
+            let widget = if !current_value.is_empty() {
+                if let Ok(ulid) = current_value.parse::<Ulid>() {
+                    if let Ok(Some(name)) = crate::admin::autocomplete::resolve_event_name(ulid).await {
+                        crate::admin::autocomplete::EntityAutocomplete::new_event_selector("target", "Target", "Search for an event...").with_selected(ulid, name)
+                    } else {
+                        crate::admin::autocomplete::EntityAutocomplete::new_event_selector("target", "Target", "Search for an event...")
+                    }
+                } else {
+                    crate::admin::autocomplete::EntityAutocomplete::new_event_selector("target", "Target", "Search for an event...")
+                }
+            } else {
+                crate::admin::autocomplete::EntityAutocomplete::new_event_selector("target", "Target", "Search for an event...")
+            };
+            (None, Some(widget))
+        },
+        _ => (None, None),
+    };
+
+    EntityTargetInputTemplate {
+        kind: *kind,
+        current_value: current_value.to_string(),
+        project_widget,
+        event_widget,
+    }
+}
+
+fn parse_target_for_kind(kind: &EntityKind, target_str: Option<&str>) -> Result<EntityTarget, anyhow::Error> {
+    match target_str {
+        Some(s) if !s.trim().is_empty() => {
+            match kind {
+                EntityKind::Proxied | EntityKind::Redirect => {
+                    let url = s.parse::<url::Url>()?;
+                    Ok(EntityTarget::Url(url))
+                },
+                EntityKind::WordPress => {
+                    Ok(EntityTarget::String(s.to_string()))
+                },
+                EntityKind::RawHTML | EntityKind::DressedHtml | EntityKind::Wysiwyg | EntityKind::PageBuilder |
+                EntityKind::Form | EntityKind::Project | EntityKind::Event => {
+                    let ulid = s.parse::<Ulid>()?;
+                    Ok(EntityTarget::Ulid(ulid))
+                },
+                EntityKind::Placeholder => {
+                    Ok(EntityTarget::Nil)
+                },
+            }
+        },
+        _ => Ok(EntityTarget::Nil),
+    }
+}
+
+#[derive(Debug)]
+struct EntityDbRow {
+    slug: String,
+    kind: EntityKind,
+    target: String,
+}
+
+async fn fetch_entities_content(query: &EntitySearchQuery) -> Result<EntitiesContent, anyhow::Error> {
+    let page = query.page.unwrap_or(1).max(1) as i64;
+    let per_page = query.per_page.unwrap_or(25).min(100).max(1) as i64;
+    let offset = (page - 1) * per_page;
+
+    let search_term = query.search.as_deref().unwrap_or("").trim();
+    let selected_kind = query.kind.as_deref().unwrap_or("");
+
+    // Fetch all entities and filter/paginate in Rust to avoid SQLx Record conflicts
+    let all_rows = sqlx::query_as!(
+        EntityDbRow,
+        r#"SELECT "slug", "kind" as "kind: EntityKind", "target" FROM "entities" ORDER BY "slug""#
+    ).fetch_all(db()).await?;
+
+    // Filter
+    let filtered_rows: Vec<_> = all_rows.into_iter()
+        .filter(|row| {
+            if !search_term.is_empty() && !row.slug.to_lowercase().contains(&search_term.to_lowercase()) {
+                return false;
+            }
+            if !selected_kind.is_empty() && row.kind.as_ref() != selected_kind {
+                return false;
+            }
+            true
+        })
+        .collect();
+
+    let total_entities = filtered_rows.len() as i64;
+
+    // Paginate
+    let entity_rows: Vec<_> = filtered_rows.into_iter()
+        .skip(offset as usize)
+        .take(per_page as usize)
+        .collect();
+
+    let mut entity_list = Vec::new();
+    for row in entity_rows {
+        let target = parse_database_target(row.kind, &row.target)?;
+        let entity = Entity::new(&row.slug, row.kind, target);
+        let entity_with_info = create_entity_with_info(&entity).await?;
+        entity_list.push(entity_with_info);
+    }
+
+    let has_previous = page > 1;
+    let has_next = (page * per_page) < total_entities;
+    let start_item = if total_entities > 0 { offset + 1 } else { 0 };
+    let end_item = std::cmp::min(page * per_page, total_entities);
+
+    Ok(EntitiesContent {
+        entities: entity_list,
+        current_page: page,
+        total_entities,
+        has_previous,
+        has_next,
+        per_page,
+        start_item,
+        end_item,
+        pagination_url: "/-admin/entities/search".to_string(),
+        pagination_include: "#entity-search-form".to_string(),
+        search_term: search_term.to_string(),
+        selected_kind: selected_kind.to_string(),
+    })
+}
+
+fn parse_database_target(kind: EntityKind, target_str: &str) -> Result<EntityTarget, anyhow::Error> {
+    if target_str.trim().is_empty() {
+        return Ok(EntityTarget::Nil);
+    }
+
+    match kind {
+        EntityKind::Proxied | EntityKind::Redirect => {
+            match target_str.parse() {
+                Ok(url) => Ok(EntityTarget::Url(url)),
+                Err(_) => Ok(EntityTarget::Nil),
+            }
+        },
+        EntityKind::WordPress => {
+            Ok(EntityTarget::String(target_str.to_string()))
+        },
+        EntityKind::RawHTML | EntityKind::DressedHtml | EntityKind::Wysiwyg | EntityKind::PageBuilder |
+        EntityKind::Form | EntityKind::Project | EntityKind::Event => {
+            match target_str.parse() {
+                Ok(ulid) => Ok(EntityTarget::Ulid(ulid)),
+                Err(_) => Ok(EntityTarget::Nil),
+            }
+        },
+        EntityKind::Placeholder => {
+            Ok(EntityTarget::Nil)
+        },
+    }
+}
+
+async fn create_entity_with_info(entity: &Entity) -> Result<EntityWithInfo, anyhow::Error> {
+    use common::shared::db;
+    let (target_info, published) = match (entity.kind(), entity.target()) {
+        (EntityKind::Project, EntityTarget::Ulid(ulid)) => {
+            // Fetch only name and publish fields from projects table
+            let ulid_str = ulid.to_string();
+            let result = sqlx::query!(
+                r#"SELECT "name", "publish" FROM "projects" WHERE "project_id" = ?"#,
+                ulid_str
+            )
+            .fetch_optional(db())
+            .await?;
+
+            if let Some(row) = result {
+                (Some(row.name), row.publish.unwrap_or(false))
+            } else {
+                (Some("Project not found".to_string()), false)
+            }
+        },
+        (EntityKind::Event, EntityTarget::Ulid(ulid)) => {
+            // Fetch only name and publish fields from events table
+            let ulid_str = ulid.to_string();
+            let result = sqlx::query!(
+                r#"SELECT "name", "publish" FROM "events" WHERE "event_id" = ?"#,
+                ulid_str
+            )
+            .fetch_optional(db())
+            .await?;
+
+            if let Some(row) = result {
+                (Some(row.name), row.publish)
+            } else {
+                (Some("Event not found".to_string()), false)
+            }
+        },
+        (EntityKind::Redirect | EntityKind::Proxied, EntityTarget::Url(url)) => {
+            (Some(url.to_string()), true) // Default to published for redirects/proxied
+        },
+        (EntityKind::WordPress, EntityTarget::String(s)) => {
+            (Some(format!("WordPress: {}", s)), true) // Default to published for WordPress
+        },
+        (EntityKind::RawHTML | EntityKind::DressedHtml | EntityKind::Wysiwyg | EntityKind::PageBuilder | EntityKind::Form, _) => {
+            (Some("Static content".to_string()), true) // Default to published for static content
+        },
+        (_, EntityTarget::Nil) => {
+            (None, false) // Unpublished if no target
+        },
+        _ => {
+            (Some("Invalid target type".to_string()), true) // Default to published
+        }
+    };
+
+    Ok(EntityWithInfo {
+        slug: entity.slug().to_string(),
+        kind: *entity.kind(),
+        target: entity.target().to_string(),
+        target_info,
+        published,
+    })
 }
 
 #[handler]

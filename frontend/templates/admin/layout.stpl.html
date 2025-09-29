@@ -58,12 +58,17 @@
                         <wa-icon name="users" class="w-5 h-5 flex-shrink-0"></wa-icon>
                         <span>Users</span>
                     </a>
-                    
+
+                    <a href="/-admin/entities" class="<%= if self.sidebar_active == "entities" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
+                        <wa-icon name="globe-americas" class="w-5 h-5 flex-shrink-0"></wa-icon>
+                        <span>Entities</span>
+                    </a>
+
                     <a href="/-admin/projects" class="<%= if self.sidebar_active == "projects" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
                         <wa-icon name="folder-open" class="w-5 h-5 flex-shrink-0"></wa-icon>
                         <span>Projects</span>
                     </a>
-                    
+
                     <a href="/-admin/events" class="<%= if self.sidebar_active == "events" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
                         <wa-icon name="calendar" class="w-5 h-5 flex-shrink-0"></wa-icon>
                         <span>Events</span>

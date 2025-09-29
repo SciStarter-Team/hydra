@@ -460,17 +460,27 @@ async fn handle_resolve_project_widget(
     Path(id): Path<Ulid>,
     Query(query): Query<ResolveQuery>,
 ) -> Result<Response> {
-    let name = resolve_project_name(id).await.map_err(|e| {
-        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
+    // Try to resolve the project name, but fall back gracefully if it fails
+    let name = resolve_project_name(id).await.ok().flatten();
 
-    let mut widget = EntityAutocomplete::new_project_selector(
-        query.field_name,
-        query.field_label,
-        query.placeholder,
-    )
-    .with_publish_filter(query.publish.unwrap_or(PublishFilter::All))
-    .with_selected(id, name.unwrap_or_else(|| "Unknown Project".to_string()));
+    let mut widget = if let Some(project_name) = name {
+        // ID exists as a project, use it with the resolved name
+        EntityAutocomplete::new_project_selector(
+            query.field_name,
+            query.field_label,
+            query.placeholder,
+        )
+        .with_publish_filter(query.publish.unwrap_or(PublishFilter::All))
+        .with_selected(id, project_name)
+    } else {
+        // ID doesn't exist as a project (might be wrong type), create empty widget
+        EntityAutocomplete::new_project_selector(
+            query.field_name,
+            query.field_label,
+            query.placeholder,
+        )
+        .with_publish_filter(query.publish.unwrap_or(PublishFilter::All))
+    };
 
     if let Some(read_only) = query.read_only {
         widget = widget.with_read_only(read_only);
@@ -488,17 +498,27 @@ async fn handle_resolve_event_widget(
     Path(id): Path<Ulid>,
     Query(query): Query<ResolveQuery>,
 ) -> Result<Response> {
-    let name = resolve_event_name(id).await.map_err(|e| {
-        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
+    // Try to resolve the event name, but fall back gracefully if it fails
+    let name = resolve_event_name(id).await.ok().flatten();
 
-    let mut widget = EntityAutocomplete::new_event_selector(
-        query.field_name,
-        query.field_label,
-        query.placeholder,
-    )
-    .with_publish_filter(query.publish.unwrap_or(PublishFilter::All))
-    .with_selected(id, name.unwrap_or_else(|| "Unknown Event".to_string()));
+    let mut widget = if let Some(event_name) = name {
+        // ID exists as an event, use it with the resolved name
+        EntityAutocomplete::new_event_selector(
+            query.field_name,
+            query.field_label,
+            query.placeholder,
+        )
+        .with_publish_filter(query.publish.unwrap_or(PublishFilter::All))
+        .with_selected(id, event_name)
+    } else {
+        // ID doesn't exist as an event (might be wrong type), create empty widget
+        EntityAutocomplete::new_event_selector(
+            query.field_name,
+            query.field_label,
+            query.placeholder,
+        )
+        .with_publish_filter(query.publish.unwrap_or(PublishFilter::All))
+    };
 
     if let Some(read_only) = query.read_only {
         widget = widget.with_read_only(read_only);

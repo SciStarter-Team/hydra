@@ -1,29 +1,102 @@
+use std::{fmt::Display, sync::Arc};
+
 use anyhow::Error;
-use common::shared::db;
-use poem::{IntoResponse, web::Html};
+use common::{message::user::BasicInfo, shared::db};
+use poem::{
+    IntoResponse,
+    http::StatusCode,
+    web::{Html, Redirect},
+};
 use ulid::Ulid;
+use url::Url;
 
-use crate::peering::LoadStorePeered;
+use crate::{
+    component::{Component, StandardLayout},
+    misc::{Literal, Placeholder},
+    pagecontent::PageContent,
+    peering::LoadStorePeered,
+};
 
-#[derive(Debug, Copy, Clone, sqlx::Type, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    sqlx::Type,
+    serde::Serialize,
+    serde::Deserialize,
+    strum::AsRefStr,
+    strum::EnumString,
+)]
 pub enum EntityKind {
-    Proxied, // Used for publishing WordPress pages and the like
+    Proxied,
     Redirect,
     RawHTML,
+    DressedHtml,
+    WordPress, // Used for publishing WordPress pages
     Wysiwyg,
     PageBuilder,
     Form,
     Project,
     Event,
-    Tool,
     Placeholder,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, strum::AsRefStr)]
+pub enum EntityTarget {
+    Nil,
+    Url(Url),
+    Ulid(Ulid),
+    String(String),
+}
+
+impl EntityTarget {
+    pub fn as_url(&self) -> Option<&Url> {
+        match self {
+            EntityTarget::Url(url) => Some(url),
+            _ => None,
+        }
+    }
+
+    pub fn as_ulid(&self) -> Option<Ulid> {
+        match self {
+            EntityTarget::Ulid(ulid) => Some(*ulid),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            EntityTarget::String(string) => Some(string.as_ref()),
+            _ => None,
+        }
+    }
+
+    pub fn value_string(&self) -> String {
+        match self {
+            EntityTarget::Nil => String::new(),
+            EntityTarget::Url(url) => url.to_string(),
+            EntityTarget::Ulid(ulid) => ulid.to_string(),
+            EntityTarget::String(string) => string.clone(),
+        }
+    }
+}
+
+impl Display for EntityTarget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EntityTarget::Nil => write!(f, ""),
+            EntityTarget::Url(url) => url.fmt(f),
+            EntityTarget::Ulid(ulid) => ulid.fmt(f),
+            EntityTarget::String(string) => string.fmt(f),
+        }
+    }
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Entity {
     slug: String,
     kind: EntityKind,
-    target: Ulid,
+    target: EntityTarget,
 }
 
 struct EntityDB {
@@ -33,20 +106,43 @@ struct EntityDB {
 }
 
 impl TryFrom<EntityDB> for Entity {
-    type Error = ulid::DecodeError;
+    type Error = anyhow::Error;
 
     fn try_from(value: EntityDB) -> Result<Self, Self::Error> {
+        let target = if value.target.trim().is_empty() {
+            EntityTarget::Nil
+        } else {
+            match value.kind {
+                EntityKind::Proxied | EntityKind::Redirect => match value.target.parse() {
+                    Ok(url) => EntityTarget::Url(url),
+                    Err(_) => EntityTarget::Nil,
+                },
+                EntityKind::WordPress => EntityTarget::String(value.target),
+                EntityKind::RawHTML
+                | EntityKind::DressedHtml
+                | EntityKind::Wysiwyg
+                | EntityKind::PageBuilder
+                | EntityKind::Form
+                | EntityKind::Project
+                | EntityKind::Event => match value.target.parse() {
+                    Ok(ulid) => EntityTarget::Ulid(ulid),
+                    Err(_) => EntityTarget::Nil,
+                },
+                EntityKind::Placeholder => EntityTarget::Nil,
+            }
+        };
+
         Ok(Entity {
             slug: value.slug,
             kind: value.kind,
-            target: value.target.parse()?,
+            target,
         })
     }
 }
 
 impl Entity {
     #[tracing::instrument(skip(slug))]
-    pub fn new(slug: impl Into<String>, kind: EntityKind, target: Ulid) -> Entity {
+    pub fn new(slug: impl Into<String>, kind: EntityKind, target: EntityTarget) -> Entity {
         Entity {
             slug: slug.into(),
             kind,
@@ -58,7 +154,7 @@ impl Entity {
     pub async fn new_by_name(
         name: impl AsRef<str>,
         kind: EntityKind,
-        target: Ulid,
+        target: EntityTarget,
     ) -> Result<Entity, Error> {
         let name = name.as_ref();
 
@@ -114,24 +210,85 @@ impl Entity {
     }
 
     #[tracing::instrument]
-    pub async fn response(&self) -> poem::Result<poem::Response> {
-        Ok(Html(format!("Viewing entity `{}`", &self.slug)).into_response())
+    pub async fn response(
+        &self,
+        user_info: Option<Arc<BasicInfo>>,
+    ) -> poem::Result<poem::Response> {
+        Ok(match self.kind {
+            EntityKind::Proxied => todo!(),
+            EntityKind::Redirect => {
+                if let Some(url) = self.target.as_url() {
+                    Redirect::moved_permanent(url).into_response()
+                } else {
+                    return Err(poem::Error::from_status(StatusCode::NOT_FOUND));
+                }
+            }
+            EntityKind::RawHTML => {
+                if let Some(ulid) = self.target.as_ulid() {
+                    let content = PageContent::load(ulid).await?;
+                    Html(content.as_utf8()?).into_response()
+                } else {
+                    return Err(poem::Error::from_status(StatusCode::NOT_FOUND));
+                }
+            }
+            EntityKind::DressedHtml => {
+                if let Some(ulid) = self.target.as_ulid() {
+                    let content = PageContent::load(ulid).await?;
+                    StandardLayout::new(Literal::new(content.as_utf8()?))
+                        .into_response(user_info)
+                        .await?
+                } else {
+                    return Err(poem::Error::from_status(StatusCode::NOT_FOUND));
+                }
+            }
+            EntityKind::Wysiwyg => {
+                if let Some(ulid) = self.target.as_ulid() {
+                    let content = PageContent::load(ulid).await?;
+                    StandardLayout::new(Literal::new(content.as_utf8()?))
+                        .into_response(user_info)
+                        .await?
+                } else {
+                    return Err(poem::Error::from_status(StatusCode::NOT_FOUND));
+                }
+            }
+            EntityKind::PageBuilder => todo!(),
+            EntityKind::Form => todo!(),
+            EntityKind::Project => todo!(),
+            EntityKind::Event => todo!(),
+            EntityKind::WordPress => todo!(),
+            EntityKind::Placeholder => {
+                StandardLayout::new(Placeholder)
+                    .into_response(user_info)
+                    .await?
+            }
+        })
     }
 
     #[tracing::instrument(skip(slug))]
-    pub async fn response_for_slug(slug: impl AsRef<str>) -> poem::Result<poem::Response> {
+    pub async fn response_for_slug(
+        slug: impl AsRef<str>,
+        user_info: Option<Arc<BasicInfo>>,
+    ) -> poem::Result<poem::Response> {
         // This as_ref().to_string() silliness is due to the issue
         // mentioned in peering.rs forcing us to use String instead of
         // &str as the key type.
         Entity::load(slug.as_ref().to_string())
             .await?
-            .response()
+            .response(user_info)
             .await
     }
 
     #[tracing::instrument]
     pub fn slug(&self) -> &str {
         &self.slug
+    }
+
+    pub fn kind(&self) -> &EntityKind {
+        &self.kind
+    }
+
+    pub fn target(&self) -> &EntityTarget {
+        &self.target
     }
 
     /// Check if an entity slug exists in the database (case-insensitive)

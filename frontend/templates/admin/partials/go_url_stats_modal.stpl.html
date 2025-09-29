@@ -1,5 +1,5 @@
 <!-- Stats Modal -->
-<dialog class="rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 backdrop:bg-gray-500 backdrop:bg-opacity-75 m-auto"
+<dialog class="rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 backdrop:bg-gray-500 backdrop:opacity-75 m-auto"
         hx-on::load="this.showModal()"
         onclick="if (event.target === this) this.remove()">
     <div class="w-full">
@@ -22,8 +22,8 @@
                         <!-- Date Range Filter -->
                         <div class="bg-gray-50 p-4 rounded-lg">
                             <form hx-post="/-admin/files-links/<%= self.slug %>/stats"
-                                  hx-target="#modal-container"
-                                  hx-swap="innerHTML"
+                                  hx-target="closest dialog"
+                                  hx-swap="outerHTML"
                                   class="flex flex-wrap items-end gap-4">
                                 <div class="flex-1 min-w-[120px]">
                                     <label for="start_date" class="block text-sm font-medium text-gray-700 mb-1">

@@ -11,6 +11,7 @@ pub mod health;
 pub mod middleware;
 pub mod misc;
 pub mod page_manager;
+pub mod pagecontent;
 pub mod pages;
 pub mod peering;
 pub mod project;
@@ -82,7 +83,7 @@ async fn entity_page(
     if &slug == "" {
         Ok(index_page_pseudo_handler(client_ip, user_info).await?)
     } else {
-        Entity::response_for_slug(slug).await
+        Entity::response_for_slug(slug, user_info).await
     }
 }
 
@@ -350,7 +351,7 @@ mod sync {
 
     use crate::{
         contact::{Contact, ContactRole},
-        entity::{Entity, EntityKind},
+        entity::Entity,
         event::{EventInstance, all::EventAll},
         page_manager,
         peering::LoadStorePeered,
@@ -1000,7 +1001,11 @@ mod sync {
                     // Continue processing - don't fail the sync for this
                 }
 
-                let entity = Entity::new(data.slug, EntityKind::Project, proj.project_id);
+                let entity = Entity::new(
+                    data.slug,
+                    crate::entity::EntityKind::Project,
+                    crate::entity::EntityTarget::Ulid(proj.project_id),
+                );
 
                 if let Err(err) = entity.store().await {
                     tracing::error!(
@@ -1342,7 +1347,11 @@ mod sync {
                     // Continue processing - don't fail the sync for this
                 }
 
-                let entity = Entity::new(data.slug, EntityKind::Event, evt.event_id);
+                let entity = Entity::new(
+                    data.slug,
+                    crate::entity::EntityKind::Event,
+                    crate::entity::EntityTarget::Ulid(evt.event_id),
+                );
 
                 if let Err(err) = entity.store().await {
                     tracing::error!(

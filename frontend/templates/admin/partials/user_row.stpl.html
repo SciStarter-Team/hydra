@@ -43,8 +43,8 @@
     <div class="flex space-x-2">
       <button
           hx-get="/-admin/users/<%= self.user.user_id |disp %>"
-          hx-target="#modal-container"
-          hx-swap="innerHTML"
+          hx-target="body"
+          hx-swap="beforeend"
           class="relative px-2 py-1 text-indigo-600 hover:text-indigo-900 transition-colors duration-200 rounded"
       >
         <span>Edit</span>
