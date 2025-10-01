@@ -40,23 +40,21 @@
   <!-- Actions - Hidden label on desktop, visible on mobile -->
   <div class="lg:col-span-1">
     <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Actions</div>
-    <div class="flex space-x-2">
-      <button
-          hx-get="/-admin/users/<%= self.user.user_id |disp %>"
-          hx-target="body"
-          hx-swap="beforeend"
-          class="relative px-2 py-1 text-indigo-600 hover:text-indigo-900 transition-colors duration-200 rounded"
+    <div class="flex items-center space-x-2">
+      <a
+          href="/-admin/users/<%= self.user.user_id |disp %>"
+          class="text-indigo-600 hover:text-indigo-900 transition-colors no-underline"
       >
-        <span>Edit</span>
-      </button>
+        <wa-icon name="pencil" class="w-4 h-4"></wa-icon>
+      </a>
       <button
           hx-delete="/-admin/users/<%= self.user.user_id |disp %>"
           hx-confirm="Are you sure you want to delete this user?"
           hx-target="#user-<%= self.user.user_id |disp %>"
           hx-swap="outerHTML swap:1s"
-          class="relative px-2 py-1 text-red-600 hover:text-red-900 transition-colors duration-200 rounded"
+          class="text-red-600 hover:text-red-900 transition-colors"
       >
-        <span>Delete</span>
+        <wa-icon name="trash" class="w-4 h-4"></wa-icon>
       </button>
     </div>
   </div>

@@ -6,12 +6,14 @@ use poem::{
 use sailfish::TemplateOnce;
 use serde::Deserialize;
 use ulid::Ulid;
+use crate::pagecontent::PageContentKind;
 
 #[derive(Debug, Clone)]
 pub enum AutocompleteEntityType {
     Projects,
     Events,
     Users,
+    PageContent,
 }
 
 impl std::fmt::Display for AutocompleteEntityType {
@@ -20,6 +22,7 @@ impl std::fmt::Display for AutocompleteEntityType {
             AutocompleteEntityType::Projects => write!(f, "projects"),
             AutocompleteEntityType::Events => write!(f, "events"),
             AutocompleteEntityType::Users => write!(f, "users"),
+            AutocompleteEntityType::PageContent => write!(f, "pagecontent"),
         }
     }
 }
@@ -52,6 +55,7 @@ pub struct EntityAutocomplete {
     pub selected_id: Option<Ulid>,
     pub selected_name: Option<String>,
     pub read_only: bool,
+    pub kind_filter: Option<String>,
 }
 
 impl EntityAutocomplete {
@@ -69,6 +73,7 @@ impl EntityAutocomplete {
             selected_id: None,
             selected_name: None,
             read_only: false,
+            kind_filter: None,
         }
     }
 
@@ -86,6 +91,7 @@ impl EntityAutocomplete {
             selected_id: None,
             selected_name: None,
             read_only: false,
+            kind_filter: None,
         }
     }
 
@@ -103,6 +109,25 @@ impl EntityAutocomplete {
             selected_id: None,
             selected_name: None,
             read_only: false,
+            kind_filter: None,
+        }
+    }
+
+    pub fn new_pagecontent_selector(
+        field_name: impl Into<String>,
+        field_label: impl Into<String>,
+        placeholder: impl Into<String>,
+    ) -> Self {
+        Self {
+            entity_type: AutocompleteEntityType::PageContent,
+            publish_filter: PublishFilter::All,
+            field_name: field_name.into(),
+            field_label: field_label.into(),
+            placeholder: placeholder.into(),
+            selected_id: None,
+            selected_name: None,
+            read_only: false,
+            kind_filter: None,
         }
     }
 
@@ -129,6 +154,11 @@ impl EntityAutocomplete {
         self.read_only = read_only;
         self
     }
+
+    pub fn with_kind_filter(mut self, kind: PageContentKind) -> Self {
+        self.kind_filter = Some(kind.as_ref().to_string());
+        self
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -136,6 +166,7 @@ pub struct AutocompleteQuery {
     pub search: Option<String>,
     pub publish: Option<PublishFilter>,
     pub field_name: Option<String>,
+    pub kind: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -145,6 +176,7 @@ pub struct ResolveQuery {
     pub placeholder: String,
     pub publish: Option<PublishFilter>,
     pub read_only: Option<bool>,
+    pub kind: Option<String>,
 }
 
 #[derive(Debug)]
@@ -417,14 +449,101 @@ pub async fn resolve_user_names(ids: Vec<Ulid>) -> Result<Vec<(Ulid, String)>, E
     Ok(results)
 }
 
+pub async fn search_pagecontent(query: &AutocompleteQuery) -> Result<Vec<AutocompleteResult>, Error> {
+    use common::shared::db;
+
+    let search_term = query.search.as_deref().unwrap_or("").trim();
+    if search_term.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let search_pattern = format!("%{}%", search_term);
+
+    let mut query_builder = sqlx::QueryBuilder::new(
+        "SELECT pagecontent_id, name FROM pagecontent WHERE name LIKE "
+    );
+    query_builder.push_bind(&search_pattern);
+
+    // Add kind filter if specified
+    if let Some(kind) = &query.kind {
+        query_builder.push(" AND kind = ");
+        query_builder.push_bind(kind);
+    }
+
+    query_builder.push(" ORDER BY name LIMIT 10");
+
+    let rows = query_builder
+        .build_query_as::<(String, String)>()
+        .fetch_all(db())
+        .await?;
+
+    let results = rows
+        .into_iter()
+        .map(|(id_str, name)| -> Result<AutocompleteResult, Error> {
+            let id = id_str
+                .parse::<Ulid>()
+                .map_err(|e| anyhow::anyhow!("Invalid ULID in database: {} - {}", id_str, e))?;
+            Ok(AutocompleteResult { id, name })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(results)
+}
+
+pub async fn resolve_pagecontent_name(id: Ulid) -> Result<Option<String>, Error> {
+    use common::shared::db;
+
+    let row = sqlx::query_as::<_, (String,)>("SELECT name FROM pagecontent WHERE pagecontent_id = ?")
+        .bind(id.to_string())
+        .fetch_optional(db())
+        .await?;
+
+    Ok(row.map(|(name,)| name))
+}
+
+pub async fn resolve_pagecontent_names(ids: Vec<Ulid>) -> Result<Vec<(Ulid, String)>, Error> {
+    use common::shared::db;
+
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut query_builder =
+        sqlx::QueryBuilder::new("SELECT pagecontent_id, name FROM pagecontent WHERE pagecontent_id IN (");
+    let mut separated = query_builder.separated(", ");
+    for id in &ids {
+        separated.push_bind(id.to_string());
+    }
+    separated.push_unseparated(")");
+
+    let rows = query_builder
+        .build_query_as::<(String, String)>()
+        .fetch_all(db())
+        .await?;
+
+    let results = rows
+        .into_iter()
+        .map(|(id_str, name)| -> Result<(Ulid, String), Error> {
+            let id = id_str
+                .parse::<Ulid>()
+                .map_err(|e| anyhow::anyhow!("Invalid ULID in database: {} - {}", id_str, e))?;
+            Ok((id, name))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(results)
+}
+
 pub fn routes() -> impl Endpoint {
     Route::new()
         .at("/projects", get(handle_projects_autocomplete))
         .at("/events", get(handle_events_autocomplete))
         .at("/users", get(handle_users_autocomplete))
+        .at("/pagecontent", get(handle_pagecontent_autocomplete))
         .at("/resolve/projects/:id", get(handle_resolve_project_widget))
         .at("/resolve/events/:id", get(handle_resolve_event_widget))
         .at("/resolve/users/:id", get(handle_resolve_user_widget))
+        .at("/resolve/pagecontent/:id", get(handle_resolve_pagecontent_widget))
 }
 
 #[handler]
@@ -560,6 +679,53 @@ async fn handle_resolve_user_widget(
         query.placeholder,
     )
     .with_selected(id, email.unwrap_or_else(|| "Unknown User".to_string()));
+
+    if let Some(read_only) = query.read_only {
+        widget = widget.with_read_only(read_only);
+    }
+
+    let html = widget.render_once().map_err(|e| {
+        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+
+    Ok(Response::builder().content_type("text/html").body(html))
+}
+
+#[handler]
+async fn handle_pagecontent_autocomplete(Query(query): Query<AutocompleteQuery>) -> Result<Response> {
+    let results = search_pagecontent(&query).await.map_err(|e| {
+        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+
+    let template = AutocompleteResults::new(results, query.field_name.unwrap_or_default());
+    let html = template.render_once().map_err(|e| {
+        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+
+    Ok(Response::builder().content_type("text/html").body(html))
+}
+
+#[handler]
+async fn handle_resolve_pagecontent_widget(
+    Path(id): Path<Ulid>,
+    Query(query): Query<ResolveQuery>,
+) -> Result<Response> {
+    let name = resolve_pagecontent_name(id).await.ok().flatten();
+
+    let mut widget = if let Some(pagecontent_name) = name {
+        EntityAutocomplete::new_pagecontent_selector(
+            query.field_name,
+            query.field_label,
+            query.placeholder,
+        )
+        .with_selected(id, pagecontent_name)
+    } else {
+        EntityAutocomplete::new_pagecontent_selector(
+            query.field_name,
+            query.field_label,
+            query.placeholder,
+        )
+    };
 
     if let Some(read_only) = query.read_only {
         widget = widget.with_read_only(read_only);

@@ -1,0 +1,443 @@
+<!-- Event Edit Form Content -->
+<div class="bg-white rounded-lg shadow border border-gray-200">
+  <div class="px-6 py-6 space-y-6">
+
+    <!-- Admin Notes -->
+    <details class="mb-6">
+      <summary class="cursor-pointer text-sm font-medium text-red-700 hover:text-red-900">Admin Notes</summary>
+      <div class="mt-2 p-3 bg-red-50 border border-red-200 rounded-md">
+        <form hx-put="/-admin/events/<%= self.event.id %>/field/admin_notes" hx-target="this" hx-swap="none">
+          <textarea
+              name="value"
+              rows="3"
+              placeholder="Internal admin notes..."
+              class="block w-full px-3 py-2 border border-red-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm bg-white"
+          ><%= self.event.admin_notes %></textarea>
+          <button
+              type="submit"
+              class="mt-2 inline-flex items-center px-3 py-2 border border-red-300 rounded-md bg-red-100 hover:bg-red-200 text-sm text-red-700"
+          >
+            Save Admin Notes
+          </button>
+        </form>
+      </div>
+    </details>
+
+    <!-- Basic Information Section -->
+    <div class="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+      <h4 class="text-blue-800 mb-4 text-lg font-semibold">Basic Information</h4>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+        <!-- Event Name -->
+        <div class="md:col-span-2">
+          <label for="event-name" class="block text-sm font-medium text-gray-700">Event Name *</label>
+          <form class="mt-1 flex" hx-put="/-admin/events/<%= self.event.id %>/field/name" hx-target="#event-name-<%= self.event.id %>">
+            <input
+                type="text"
+                name="value"
+                id="event-name"
+                value="<%= self.event.name %>"
+                required
+                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+            >
+            <button
+                type="submit"
+                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+            >
+              Save
+            </button>
+          </form>
+        </div>
+
+        <!-- Presenter -->
+        <div>
+          <label for="event-presenter" class="block text-sm font-medium text-gray-700">Presenter/Organization</label>
+          <form class="mt-1 flex" hx-put="/-admin/events/<%= self.event.id %>/field/presenter" hx-target="this" hx-swap="none">
+            <input
+                type="text"
+                name="value"
+                id="event-presenter"
+                value="<%= self.event.presenter %>"
+                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+            >
+            <button
+                type="submit"
+                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+            >
+              Save
+            </button>
+          </form>
+        </div>
+
+        <!-- Event URL -->
+        <div>
+          <label for="event-url" class="block text-sm font-medium text-gray-700">Event URL</label>
+          <form class="mt-1 flex" hx-put="/-admin/events/<%= self.event.id %>/field/url" hx-target="this" hx-swap="none">
+            <input
+                type="url"
+                name="value"
+                id="event-url"
+                value="<%= self.event.url %>"
+                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+            >
+            <button
+                type="submit"
+                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+            >
+              Save
+            </button>
+          </form>
+        </div>
+
+        <!-- Description -->
+        <div class="md:col-span-2">
+          <label for="event-description" class="block text-sm font-medium text-gray-700">Description</label>
+          <form class="mt-1" hx-put="/-admin/events/<%= self.event.id %>/field/description" hx-target="this" hx-swap="none">
+            <textarea
+                name="value"
+                id="event-description"
+                rows="4"
+                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+            ><%= self.event.description %></textarea>
+            <button
+                type="submit"
+                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+            >
+              Save
+            </button>
+          </form>
+        </div>
+
+        <!-- How to Join -->
+        <div class="md:col-span-2">
+          <label for="event-how-to-join" class="block text-sm font-medium text-gray-700">How to Join</label>
+          <form class="mt-1" hx-put="/-admin/events/<%= self.event.id %>/field/how_to_join" hx-target="this" hx-swap="none">
+            <textarea
+                name="value"
+                id="event-how-to-join"
+                rows="3"
+                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+            ><%= self.event.how_to_join %></textarea>
+            <button
+                type="submit"
+                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+            >
+              Save
+            </button>
+          </form>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Location Information Section -->
+    <div class="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
+      <h4 class="text-green-800 mb-4 text-lg font-semibold">Location Information</h4>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+        <!-- Location Type -->
+        <div>
+          <label for="location-type" class="block text-sm font-medium text-gray-700">Location Type</label>
+          <form class="mt-1 flex" hx-put="/-admin/events/<%= self.event.id %>/field/location_type" hx-target="this" hx-swap="none">
+            <input
+                type="text"
+                name="value"
+                id="location-type"
+                value="<%= self.event.location_type %>"
+                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+            >
+            <button
+                type="submit"
+                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+            >
+              Save
+            </button>
+          </form>
+        </div>
+
+        <!-- Entirely Online -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Online Event</label>
+          <form hx-put="/-admin/events/<%= self.event.id %>/field/entirely_online" hx-target="this" hx-swap="none">
+            <div class="flex items-center space-x-3">
+              <input
+                  type="checkbox"
+                  name="value"
+                  value="true"
+                  <% if self.event.entirely_online { %>checked<% } %>
+                  class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+              >
+              <span class="text-sm text-gray-900">Event is entirely online</span>
+              <button
+                  type="submit"
+                  class="ml-auto inline-flex items-center px-3 py-1 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-xs text-gray-700"
+              >
+                Save
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Location Name -->
+        <div class="md:col-span-2">
+          <label for="location-name" class="block text-sm font-medium text-gray-700">Location Name</label>
+          <form class="mt-1 flex" hx-put="/-admin/events/<%= self.event.id %>/field/location_name" hx-target="this" hx-swap="none">
+            <input
+                type="text"
+                name="value"
+                id="location-name"
+                value="<%= self.event.location_name %>"
+                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+            >
+            <button
+                type="submit"
+                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+            >
+              Save
+            </button>
+          </form>
+        </div>
+
+        <!-- Location Description -->
+        <div class="md:col-span-2">
+          <label for="location-description" class="block text-sm font-medium text-gray-700">Location Description</label>
+          <form class="mt-1" hx-put="/-admin/events/<%= self.event.id %>/field/location_description" hx-target="this" hx-swap="none">
+            <textarea
+                name="value"
+                id="location-description"
+                rows="2"
+                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+            ><%= self.event.location_description %></textarea>
+            <button
+                type="submit"
+                class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+            >
+              Save
+            </button>
+          </form>
+        </div>
+
+        <!-- Address -->
+        <div class="md:col-span-2">
+          <label for="address" class="block text-sm font-medium text-gray-700">Address</label>
+          <form class="mt-1 flex" hx-put="/-admin/events/<%= self.event.id %>/field/address" hx-target="this" hx-swap="none">
+            <input
+                type="text"
+                name="value"
+                id="address"
+                value="<%= self.event.address %>"
+                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+            >
+            <button
+                type="submit"
+                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+            >
+              Save
+            </button>
+          </form>
+        </div>
+
+        <!-- City, State, Zip, Country -->
+        <div>
+          <label for="city" class="block text-sm font-medium text-gray-700">City</label>
+          <form class="mt-1 flex" hx-put="/-admin/events/<%= self.event.id %>/field/city" hx-target="this" hx-swap="none">
+            <input
+                type="text"
+                name="value"
+                id="city"
+                value="<%= self.event.city %>"
+                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+            >
+            <button
+                type="submit"
+                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+            >
+              Save
+            </button>
+          </form>
+        </div>
+
+        <div>
+          <label for="state" class="block text-sm font-medium text-gray-700">State</label>
+          <form class="mt-1 flex" hx-put="/-admin/events/<%= self.event.id %>/field/state" hx-target="this" hx-swap="none">
+            <input
+                type="text"
+                name="value"
+                id="state"
+                value="<%= self.event.state %>"
+                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+            >
+            <button
+                type="submit"
+                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+            >
+              Save
+            </button>
+          </form>
+        </div>
+
+        <div>
+          <label for="zip" class="block text-sm font-medium text-gray-700">ZIP Code</label>
+          <form class="mt-1 flex" hx-put="/-admin/events/<%= self.event.id %>/field/zip" hx-target="this" hx-swap="none">
+            <input
+                type="text"
+                name="value"
+                id="zip"
+                value="<%= self.event.zip %>"
+                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+            >
+            <button
+                type="submit"
+                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+            >
+              Save
+            </button>
+          </form>
+        </div>
+
+        <div>
+          <label for="country" class="block text-sm font-medium text-gray-700">Country</label>
+          <form class="mt-1 flex" hx-put="/-admin/events/<%= self.event.id %>/field/country" hx-target="this" hx-swap="none">
+            <input
+                type="text"
+                name="value"
+                id="country"
+                value="<%= self.event.country %>"
+                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+            >
+            <button
+                type="submit"
+                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+            >
+              Save
+            </button>
+          </form>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Media Section -->
+    <div class="mb-6 bg-purple-50 border border-purple-200 rounded-lg p-4">
+      <h4 class="text-purple-800 mb-4 text-lg font-semibold">Media</h4>
+
+      <div class="grid grid-cols-1 gap-4">
+
+        <!-- Image URL -->
+        <div>
+          <label for="image" class="block text-sm font-medium text-gray-700">Event Image URL</label>
+          <form class="mt-1 flex" hx-put="/-admin/events/<%= self.event.id %>/field/image" hx-target="this" hx-swap="none">
+            <input
+                type="url"
+                name="value"
+                id="image"
+                value="<%= self.event.image %>"
+                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+            >
+            <button
+                type="submit"
+                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+            >
+              Save
+            </button>
+          </form>
+          <% if !self.event.image.is_empty() { %>
+            <img src="<%= self.event.image %>" alt="Event image" class="mt-2 max-w-md h-auto rounded-lg shadow">
+          <% } %>
+        </div>
+
+        <!-- Image Credit -->
+        <div>
+          <label for="image-credit" class="block text-sm font-medium text-gray-700">Image Credit</label>
+          <form class="mt-1 flex" hx-put="/-admin/events/<%= self.event.id %>/field/image_credit" hx-target="this" hx-swap="none">
+            <input
+                type="text"
+                name="value"
+                id="image-credit"
+                value="<%= self.event.image_credit %>"
+                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+            >
+            <button
+                type="submit"
+                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+            >
+              Save
+            </button>
+          </form>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Admin Section -->
+    <div class="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+      <h4 class="text-red-800 mb-4 text-lg font-semibold">Admin Settings</h4>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+        <!-- Published -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Published</label>
+          <form hx-put="/-admin/events/<%= self.event.id %>/field/publish" hx-target="this" hx-swap="none">
+            <div class="flex items-center space-x-3">
+              <input
+                  type="checkbox"
+                  name="value"
+                  value="true"
+                  <% if self.event.publish { %>checked<% } %>
+                  class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+              >
+              <span class="text-sm text-gray-900">Event is published</span>
+              <button
+                  type="submit"
+                  class="ml-auto inline-flex items-center px-3 py-1 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-xs text-gray-700"
+              >
+                Save
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Flagged -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Flagged</label>
+          <form hx-put="/-admin/events/<%= self.event.id %>/field/flagged" hx-target="this" hx-swap="none">
+            <div class="flex items-center space-x-3">
+              <input
+                  type="checkbox"
+                  name="value"
+                  value="true"
+                  <% if self.event.flagged { %>checked<% } %>
+                  class="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
+              >
+              <span class="text-sm text-gray-900">Event is flagged</span>
+              <button
+                  type="submit"
+                  class="ml-auto inline-flex items-center px-3 py-1 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-xs text-gray-700"
+              >
+                Save
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Read-only info -->
+        <div class="md:col-span-2 mt-2 pt-2 border-t border-red-200">
+          <div class="text-sm text-gray-600">
+            <p><strong>Created:</strong> <%= self.event.created_date %></p>
+            <p><strong>Origin:</strong> <%= self.event.origin %></p>
+            <p><strong>Page Creator:</strong> <%= self.event.page_creator_id %>
+              <% if let Some(ref email) = self.event.page_creator_email { %>
+                (<%= email %>)
+              <% } %>
+            </p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>

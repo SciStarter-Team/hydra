@@ -74,15 +74,28 @@
                         <span>Events</span>
                     </a>
 
+                    <a href="/-admin/wysiwyg" class="<%= if self.sidebar_active == "wysiwyg" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
+                        <wa-icon name="file-pen" class="w-5 h-5 flex-shrink-0"></wa-icon>
+                        <span>Simple Pages</span>
+                    </a>
+
                     <a href="/-admin/files-links" class="<%= if self.sidebar_active == "files-links" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
                         <wa-icon name="link" class="w-5 h-5 flex-shrink-0"></wa-icon>
                         <span>Files &amp; Links</span>
                     </a>
 
-                    <a href="/-admin/engine-room" class="<%= if self.sidebar_active == "engine-room" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
-                        <wa-icon name="screwdriver-wrench" class="w-5 h-5 flex-shrink-0"></wa-icon>
-                        <span>Engine Room</span>
-                    </a>
+                    <details class="group" <% if self.sidebar_active == "engine-room" || self.sidebar_active.starts_with("engine-room-") { %>open<% } %>>
+                        <summary class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200 cursor-pointer list-none">
+                            <wa-icon name="screwdriver-wrench" class="w-5 h-5 flex-shrink-0"></wa-icon>
+                            <span class="flex-1">Engine Room</span>
+                            <wa-icon name="chevron-down" class="w-4 h-4 transition-transform group-open:rotate-180"></wa-icon>
+                        </summary>
+                        <div class="ml-8 mt-1 space-y-1">
+                            <a href="/-admin/engine-room" class="<%= if self.sidebar_active == "engine-room" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
+                                <span>Controls</span>
+                            </a>
+                        </div>
+                    </details>
 
                     <!-- Logout Link -->
                     <div class="border-t border-gray-200 mt-4 pt-4">
@@ -162,10 +175,6 @@
             <!-- Page Content -->
             <main class="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50">
                 <div class="max-w-7xl mx-auto px-6 py-8">
-                    <div class="mb-6">
-                        <h1 class="text-2xl font-bold text-gray-900"><%= self.title %></h1>
-                    </div>
-                    
                     <!-- Dynamic Content -->
                     <div id="main-content">
                         <%- self.content %>

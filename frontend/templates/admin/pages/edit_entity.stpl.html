@@ -1,0 +1,95 @@
+<!-- Edit Entity Page -->
+<div class="max-w-4xl mx-auto">
+    <div class="bg-white rounded-lg shadow border border-gray-200">
+        <!-- Page Header -->
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-2xl font-bold text-gray-900">Edit Entity</h2>
+        </div>
+
+        <!-- Message Container -->
+        <% if let Some(error) = &self.error_message { %>
+            <div class="mx-6 mt-4 p-3 text-sm text-red-700 bg-red-100 rounded-lg border border-red-200">
+                <%= error %>
+            </div>
+        <% } %>
+
+        <!-- Page Body -->
+        <div class="p-6">
+            <form
+                method="post"
+                action="/-admin/entities/edit/<%= self.slug %>"
+            >
+                <div class="grid grid-cols-1 gap-6">
+                    <!-- Slug (read-only) -->
+                    <div>
+                        <label for="slug" class="block text-sm font-medium text-gray-700 mb-2">
+                            URL Slug
+                        </label>
+                        <div class="flex">
+                            <span class="inline-flex items-center px-3 py-2 border border-r-0 border-gray-300 bg-gray-50 text-gray-500 text-sm rounded-l-md">
+                                /
+                            </span>
+                            <input
+                                type="text"
+                                id="slug"
+                                name="slug"
+                                value="<%= self.slug %>"
+                                readonly
+                                class="flex-1 block w-full rounded-r-md border border-gray-300 bg-gray-50 text-gray-500 sm:text-sm px-3 py-2"
+                            >
+                        </div>
+                        <p class="mt-1 text-xs text-gray-500">Slug cannot be changed after creation</p>
+                    </div>
+
+                    <!-- Entity Kind -->
+                    <div>
+                        <label for="kind" class="block text-sm font-medium text-gray-700 mb-2">
+                            Entity Type <span class="text-red-500">*</span>
+                        </label>
+                        <select
+                            id="kind"
+                            name="kind"
+                            required
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            hx-get="/-admin/entities/target-input"
+                            hx-vals='js:{"kind": this.value, "current_value": "<%= self.target %>", "mode": "edit"}'
+                            hx-trigger="change"
+                            hx-target="#target-input-container"
+                            hx-swap="outerHTML"
+                        >
+                            <option value="Project"<% if self.kind == "Project" { %> selected<% } %>>Project</option>
+                            <option value="Event"<% if self.kind == "Event" { %> selected<% } %>>Event</option>
+                            <option value="WordPress"<% if self.kind == "WordPress" { %> selected<% } %>>WordPress Page</option>
+                            <option value="Redirect"<% if self.kind == "Redirect" { %> selected<% } %>>Redirect</option>
+                            <option value="RawHTML"<% if self.kind == "RawHTML" { %> selected<% } %>>Raw HTML</option>
+                            <option value="DressedHtml"<% if self.kind == "DressedHtml" { %> selected<% } %>>Dressed HTML</option>
+                            <option value="Wysiwyg"<% if self.kind == "Wysiwyg" { %> selected<% } %>>Simple Editor</option>
+                            <option value="PageBuilder"<% if self.kind == "PageBuilder" { %> selected<% } %>>Page Builder</option>
+                            <option value="Form"<% if self.kind == "Form" { %> selected<% } %>>Form</option>
+                            <option value="Placeholder"<% if self.kind == "Placeholder" { %> selected<% } %>>Placeholder</option>
+                        </select>
+                    </div>
+
+                    <!-- Target Input Container -->
+                    <%+ self.target_input_template %>
+                </div>
+
+                <!-- Form Footer -->
+                <div class="flex items-center justify-end pt-6 space-x-2 border-t border-gray-200 mt-6">
+                    <a
+                        href="/-admin/entities"
+                        class="px-4 py-2 bg-gray-300 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300"
+                    >
+                        Cancel
+                    </a>
+                    <button
+                        type="submit"
+                        class="relative px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                        <span>Save Changes</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

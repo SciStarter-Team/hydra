@@ -5,6 +5,7 @@ pub mod head;
 pub mod header;
 pub mod layout;
 pub mod sidebar;
+pub mod wordpress;
 
 use poem::{IntoResponse, Response, web::Html};
 use sailfish::TemplateOnce;
@@ -16,6 +17,7 @@ pub use head::Head;
 pub use header::Header;
 pub use layout::StandardLayout;
 pub use sidebar::Sidebar;
+pub use wordpress::WordPressContent;
 
 /// Wrapper trait for Sailfish's TemplateOnce, enabling an async
 /// preparation phase prior to rendering.

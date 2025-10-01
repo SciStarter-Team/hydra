@@ -8,6 +8,7 @@ pub mod entity;
 pub mod event;
 pub mod gourl;
 pub mod health;
+pub mod lru_cache;
 pub mod middleware;
 pub mod misc;
 pub mod page_manager;
@@ -15,9 +16,11 @@ pub mod pagecontent;
 pub mod pages;
 pub mod peering;
 pub mod project;
+pub mod quill;
 pub mod session;
 pub mod ui;
 pub mod upload;
+pub mod wordpress;
 
 use anyhow::Error;
 use async_nats::service::ServiceExt;
@@ -219,7 +222,7 @@ fn dynamic() -> impl Endpoint {
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    // might want a 'verbose' command line option for setting the it up with pretty and max level TRACE
+    // might want a 'vDuration, intervalne option for setting the it up with pretty and max level TRACE
     if cfg!(debug_assertions) {
         let subscriber = tracing_subscriber::FmtSubscriber::builder()
             .pretty()
@@ -273,6 +276,7 @@ async fn main() -> Result<(), Error> {
     let _synchronize_projects = tokio::spawn(sync::synchronize_projects());
     let _synchronize_events = tokio::spawn(sync::synchronize_events());
     let _update_expired_statuses = tokio::spawn(sync::update_expired_statuses());
+    let _periodic_maintenance = tokio::spawn(periodic_maintenance());
 
     // Start NATS service
     let nats = common::shared::nats();
@@ -339,6 +343,25 @@ async fn main() -> Result<(), Error> {
 
     tracing::info!("Frontend service shutting down...");
     Ok(())
+}
+
+/// Background task for periodic maintenance operations
+async fn periodic_maintenance() {
+    use tokio::time::{interval, Duration};
+
+    let mut interval = interval(Duration::from_secs(300)); // Run every 5 minutes
+
+    loop {
+        interval.tick().await;
+
+        // Clean expired entries from WordPress cache
+        if let Ok(mut cache) = wordpress::cache().lock() {
+            cache.clean();
+            tracing::debug!("WordPress cache cleaned");
+        }
+
+        // Add other periodic maintenance tasks here as needed
+    }
 }
 
 mod sync {

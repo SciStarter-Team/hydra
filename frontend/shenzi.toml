@@ -10,7 +10,7 @@ include = "**/*.xcf"
 handler = "Ignore"
 
 [[rules]]
-include = "update.sh"
+include = "vendor.sh"
 handler = "Ignore"
 
 [[rules]]
@@ -23,6 +23,11 @@ skip_unchanged = false
 # hitting a panic in minify_js this rule can be removed.
 [[rules]]
 include = "webawesome/**/*.js"
+handler = "Copy"
+
+# Same as webawesome
+[[rules]]
+include = "richtext.js"
 handler = "Copy"
 
 [[rules]]

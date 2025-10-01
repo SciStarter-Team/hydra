@@ -1,7 +1,7 @@
 <% if self.selected_id.is_some() && self.selected_name.is_none() { %>
 <div class="relative"
      hx-get="/-admin/autocomplete/resolve/<%= self.entity_type|disp %>/<%= self.selected_id.as_ref().unwrap()|disp %>"
-     hx-vals='{"field_name": "<%= self.field_name %>", "field_label": "<%= self.field_label %>", "placeholder": "<%= self.placeholder %>", "publish": "<%= self.publish_filter|disp %>", "read_only": "<%= self.read_only %>"}'
+     hx-vals='<% if let Some(kind) = &self.kind_filter { %>{"field_name": "<%= self.field_name %>", "field_label": "<%= self.field_label %>", "placeholder": "<%= self.placeholder %>", "publish": "<%= self.publish_filter|disp %>", "read_only": "<%= self.read_only %>", "kind": "<%= kind %>"}<% } else { %>{"field_name": "<%= self.field_name %>", "field_label": "<%= self.field_label %>", "placeholder": "<%= self.placeholder %>", "publish": "<%= self.publish_filter|disp %>", "read_only": "<%= self.read_only %>"}<% } %>'
      hx-trigger=load
      hx-swap=outerHTML
      hx-target=this>
@@ -24,7 +24,7 @@
              autocomplete=off
              <% if self.read_only { %>readonly<% } else { %>
              hx-get="/-admin/autocomplete/<%= self.entity_type|disp %>"
-             hx-vals='js:{"search": this.value, "publish": "<%= self.publish_filter|disp %>", "field_name": "<%= self.field_name %>"}'
+             hx-vals='js:<% if let Some(kind) = &self.kind_filter { %>{"search": this.value, "publish": "<%= self.publish_filter|disp %>", "field_name": "<%= self.field_name %>", "kind": "<%= kind %>"}<% } else { %>{"search": this.value, "publish": "<%= self.publish_filter|disp %>", "field_name": "<%= self.field_name %>"}<% } %>'
              hx-trigger="input changed delay:300ms"
              hx-target=next
              hx-swap=outerHTML<% } %>

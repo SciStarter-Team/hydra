@@ -15,6 +15,7 @@ pub struct AdminLayout {
     pub breadcrumbs: Vec<Breadcrumb>,
     pub sidebar_active: String,
     pub content: String,
+    pub enable_quill: bool,
 }
 
 #[derive(Debug, TemplateOnce)]
@@ -39,6 +40,7 @@ impl AdminLayout {
             }],
             sidebar_active: String::new(),
             content: String::new(),
+            enable_quill: false,
         }
     }
 
@@ -59,6 +61,11 @@ impl AdminLayout {
         self.content = content;
         self
     }
+
+    pub fn with_quill(mut self) -> Self {
+        self.enable_quill = true;
+        self
+    }
 }
 
 impl Component for AdminLayout {
@@ -67,8 +74,14 @@ impl Component for AdminLayout {
 
     async fn prepare(self, param: Self::Param) -> Result<Self::Prepared, anyhow::Error> {
         let user_info = param.clone();
+
+        let mut head = Head::default().with_alpine().with_webawesome();
+        if self.enable_quill {
+            head = head.with_quill();
+        }
+
         Ok(AdminLayoutPrepared {
-            head: Head::default().with_alpine().with_webawesome(),
+            head,
             header: Header::default().prepare(user_info.clone()).await?,
             footer: Footer::default().prepare(user_info).await?,
             title: self.title,

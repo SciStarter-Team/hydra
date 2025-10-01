@@ -11,11 +11,24 @@ use ulid::Ulid;
 use url::Url;
 
 use crate::{
-    component::{Component, StandardLayout},
+    component::{Component, Head, StandardLayout},
     misc::{Literal, Placeholder},
-    pagecontent::PageContent,
+    pagecontent::{PageContent, PageContentKind},
     peering::LoadStorePeered,
 };
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "pages/content.stpl.html")]
+struct ContentPage<'a> {
+    head: <Head as Component>::Prepared,
+    layout: <StandardLayout<ContentPageContent<'a>> as Component>::Prepared,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "pages/content_page_content.stpl.html")]
+struct ContentPageContent<'a> {
+    content: Literal<'a>,
+}
 
 #[derive(
     Debug,
@@ -28,7 +41,6 @@ use crate::{
     strum::EnumString,
 )]
 pub enum EntityKind {
-    Proxied,
     Redirect,
     RawHTML,
     DressedHtml,
@@ -99,6 +111,14 @@ pub struct Entity {
     target: EntityTarget,
 }
 
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "pages/wordpress_entity.stpl.html")]
+struct WordPressEntityPage {
+    head: <Head as Component>::Prepared,
+    layout: <StandardLayout<crate::component::wordpress::WordPressContentPrepared> as Component>::Prepared,
+    title: String,
+}
+
 struct EntityDB {
     slug: String,
     kind: EntityKind,
@@ -113,7 +133,7 @@ impl TryFrom<EntityDB> for Entity {
             EntityTarget::Nil
         } else {
             match value.kind {
-                EntityKind::Proxied | EntityKind::Redirect => match value.target.parse() {
+                EntityKind::Redirect => match value.target.parse() {
                     Ok(url) => EntityTarget::Url(url),
                     Err(_) => EntityTarget::Nil,
                 },
@@ -215,7 +235,6 @@ impl Entity {
         user_info: Option<Arc<BasicInfo>>,
     ) -> poem::Result<poem::Response> {
         Ok(match self.kind {
-            EntityKind::Proxied => todo!(),
             EntityKind::Redirect => {
                 if let Some(url) = self.target.as_url() {
                     Redirect::moved_permanent(url).into_response()
@@ -225,7 +244,7 @@ impl Entity {
             }
             EntityKind::RawHTML => {
                 if let Some(ulid) = self.target.as_ulid() {
-                    let content = PageContent::load(ulid).await?;
+                    let content = PageContent::load((PageContentKind::RawHTML, ulid)).await?;
                     Html(content.as_utf8()?).into_response()
                 } else {
                     return Err(poem::Error::from_status(StatusCode::NOT_FOUND));
@@ -233,20 +252,46 @@ impl Entity {
             }
             EntityKind::DressedHtml => {
                 if let Some(ulid) = self.target.as_ulid() {
-                    let content = PageContent::load(ulid).await?;
-                    StandardLayout::new(Literal::new(content.as_utf8()?))
-                        .into_response(user_info)
-                        .await?
+                    let content = PageContent::load((PageContentKind::DressedHtml, ulid)).await?;
+
+                    let content_wrapper = ContentPageContent {
+                        content: Literal::new(content.as_utf8()?),
+                    };
+
+                    let layout = StandardLayout::new(content_wrapper)
+                        .prepare(user_info.clone())
+                        .await?;
+
+                    ContentPage {
+                        head: Head::default().prepare(None).await?,
+                        layout,
+                    }
+                    .into_response(None)
+                    .await?
                 } else {
                     return Err(poem::Error::from_status(StatusCode::NOT_FOUND));
                 }
             }
             EntityKind::Wysiwyg => {
                 if let Some(ulid) = self.target.as_ulid() {
-                    let content = PageContent::load(ulid).await?;
-                    StandardLayout::new(Literal::new(content.as_utf8()?))
-                        .into_response(user_info)
-                        .await?
+                    let content = PageContent::load((PageContentKind::Wysiwyg, ulid)).await?;
+                    // Convert Quill Delta to HTML
+                    let html = crate::quill::delta_to_html(content.as_utf8()?)?;
+
+                    let content_wrapper = ContentPageContent {
+                        content: Literal::new(&html),
+                    };
+
+                    let layout = StandardLayout::new(content_wrapper)
+                        .prepare(user_info.clone())
+                        .await?;
+
+                    ContentPage {
+                        head: Head::default().prepare(None).await?,
+                        layout,
+                    }
+                    .into_response(None)
+                    .await?
                 } else {
                     return Err(poem::Error::from_status(StatusCode::NOT_FOUND));
                 }
@@ -255,7 +300,33 @@ impl Entity {
             EntityKind::Form => todo!(),
             EntityKind::Project => todo!(),
             EntityKind::Event => todo!(),
-            EntityKind::WordPress => todo!(),
+            EntityKind::WordPress => {
+                let page_url = self.target.as_str().ok_or_else(|| {
+                    poem::Error::from_string(
+                        "WordPress entity has no target URL",
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                    )
+                })?;
+
+                let wordpress_content = crate::component::WordPressContent {
+                    page_url: page_url.to_string(),
+                };
+
+                let prepared_content = wordpress_content.prepare(user_info.clone()).await?;
+                let title = prepared_content.title.clone();
+
+                let layout = StandardLayout::new(prepared_content)
+                    .prepare(user_info.clone())
+                    .await?;
+
+                WordPressEntityPage {
+                    head: Head::default().prepare(None).await?,
+                    layout,
+                    title,
+                }
+                .into_response(None)
+                .await?
+            }
             EntityKind::Placeholder => {
                 StandardLayout::new(Placeholder)
                     .into_response(user_info)
@@ -272,10 +343,16 @@ impl Entity {
         // This as_ref().to_string() silliness is due to the issue
         // mentioned in peering.rs forcing us to use String instead of
         // &str as the key type.
-        Entity::load(slug.as_ref().to_string())
-            .await?
-            .response(user_info)
-            .await
+        match Entity::load(slug.as_ref().to_string()).await {
+            Ok(ent) => ent.response(user_info).await,
+            Err(err) => match err.downcast_ref::<sqlx::Error>() {
+                Some(sqlx_err) => match sqlx_err {
+                    sqlx::Error::RowNotFound => Ok(StatusCode::NOT_FOUND.into()),
+                    _ => Err(err.into()),
+                },
+                None => Err(err.into()),
+            },
+        }
     }
 
     #[tracing::instrument]

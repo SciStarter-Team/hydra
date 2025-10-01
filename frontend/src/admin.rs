@@ -60,7 +60,7 @@ pub fn routes() -> impl Endpoint {
         .at("/users/new", get(users_new).post(users_create))
         .at(
             "/users/:id",
-            get(users_edit).put(users_update).delete(users_delete),
+            get(users_edit).post(users_update).delete(users_delete),
         )
         .at("/users/:id/send-password-reset", post(users_password_reset))
         .at("/users/:id/emails", post(users_emails_add))
@@ -104,6 +104,8 @@ pub fn routes() -> impl Endpoint {
         )
         .at("/events", get(events))
         .at("/events/search", get(events_search))
+        .at("/events/:id", get(events_edit))
+        .at("/events/:id/field/:field", put(events_update_field))
         .at("/analytics", get(analytics))
         .at("/help", get(help))
         .at("/engine-room", get(engine_room))
@@ -126,7 +128,15 @@ pub fn routes() -> impl Endpoint {
         .at("/entities/target-input", get(entities_target_input))
         .at(
             "/entities/edit/*slug",
-            get(entities_edit).put(entities_update).delete(entities_delete),
+            get(entities_edit).post(entities_update).delete(entities_delete),
+        )
+        .at("/wysiwyg", get(wysiwyg_list))
+        .at("/wysiwyg/search", get(wysiwyg_search))
+        .at("/wysiwyg/new", get(wysiwyg_new))
+        .at("/pagecontent", post(pagecontent_create))
+        .at(
+            "/pagecontent/:kind/:id",
+            get(pagecontent_edit).post(pagecontent_update).delete(pagecontent_delete),
         )
         .nest("/autocomplete", autocomplete::routes())
         .with(StaffOnly)
@@ -1386,6 +1396,70 @@ pub struct AdminEvent {
     pub event_type: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct AdminEventFull {
+    pub id: String,
+    pub name: String,
+    pub publish: bool,
+    pub created_date: String,
+    pub page_creator_id: String,
+    pub page_creator_email: Option<String>,
+    pub description: String,
+    pub presenter: String,
+    pub url: String,
+    pub image: String,
+    pub image_credit: String,
+    pub how_to_join: String,
+    pub admin_notes: String,
+    pub flagged: bool,
+    pub event_type: String,
+    pub location_type: String,
+    pub entirely_online: bool,
+    pub location_name: String,
+    pub location_description: String,
+    pub address: String,
+    pub city: String,
+    pub state: String,
+    pub zip: String,
+    pub country: String,
+    pub origin: String,
+}
+
+impl AdminEventFull {
+    pub async fn from_event_all(event: crate::event::all::EventAll) -> Result<Self, anyhow::Error> {
+        let email = lookup_user_email(Some(event.page_creator_id)).await;
+        let page_creator_email = if email.is_empty() { None } else { Some(email) };
+
+        Ok(AdminEventFull {
+            id: event.event_id.to_string(),
+            name: event.name,
+            publish: event.publish,
+            created_date: event.created.to_string(),
+            page_creator_id: event.page_creator_id.to_string(),
+            page_creator_email,
+            description: event.description,
+            presenter: event.presenter,
+            url: event.url,
+            image: event.image,
+            image_credit: event.image_credit,
+            how_to_join: event.how_to_join,
+            admin_notes: event.admin_notes,
+            flagged: event.flagged,
+            event_type: event.event_type.to_string(),
+            location_type: event.location_type,
+            entirely_online: event.entirely_online,
+            location_name: event.location_name,
+            location_description: event.location_description,
+            address: event.address,
+            city: event.city,
+            state: event.state,
+            zip: event.zip,
+            country: event.country,
+            origin: event.origin,
+        })
+    }
+}
+
 #[derive(Debug)]
 pub struct EventsPage;
 
@@ -2085,9 +2159,8 @@ struct NewUserForm {
 }
 
 #[derive(Debug, TemplateOnce)]
-#[template(path = "admin/modals/edit_user.stpl.html")]
-struct EditUserForm {
-    title: String,
+#[template(path = "admin/pages/edit_user.stpl.html")]
+struct EditUserPage {
     user_id: String,
     first_name: String,
     last_name: String,
@@ -2096,6 +2169,7 @@ struct EditUserForm {
     role: String,
     active: bool,
     emails: Vec<UserEmail>,
+    error_message: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2140,7 +2214,7 @@ async fn users_new(
 #[handler]
 async fn users_edit(
     Path(user_id): Path<String>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     // Parse user ID
     let parsed_user_id = user_id
@@ -2152,11 +2226,10 @@ async fn users_edit(
         user_id: parsed_user_id,
     };
 
-    match request::<AdminUserResponse>("user.admin.user_get", get_request).await {
+    let content = match request::<AdminUserResponse>("user.admin.user_get", get_request).await {
         Ok(response) => {
             let admin_user = response.user;
-            let edit_user_form = EditUserForm {
-                title: "Edit User".to_string(),
+            EditUserPage {
                 user_id,
                 first_name: admin_user.first_name,
                 last_name: admin_user.last_name,
@@ -2171,14 +2244,12 @@ async fn users_edit(
                 },
                 active: admin_user.is_active,
                 emails: admin_user.emails,
-            };
-
-            Ok(edit_user_form.into_response(None).await?)
+                error_message: None,
+            }
         }
         Err(_e) => {
             // If user not found, return empty form with error state
-            let edit_user_form = EditUserForm {
-                title: "Edit User - Not Found".to_string(),
+            EditUserPage {
                 user_id,
                 first_name: "".to_string(),
                 last_name: "".to_string(),
@@ -2187,10 +2258,24 @@ async fn users_edit(
                 role: "user".to_string(),
                 active: true,
                 emails: vec![],
-            };
-            Ok(edit_user_form.into_response(None).await?)
+                error_message: Some("User not found".to_string()),
+            }
         }
-    }
+    };
+
+    let content_html = content.render_once()?;
+
+    let prepared = crate::component::AdminLayout::new("Edit User")
+        .with_sidebar_active("users")
+        .with_breadcrumb("Users", Some("/-admin/users"))
+        .with_breadcrumb("Edit", None)
+        .with_content(content_html)
+        .prepare(user_info)
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
 }
 
 #[handler]
@@ -2406,51 +2491,90 @@ async fn users_create(
 async fn users_update(
     Path(user_id): Path<String>,
     Form(form): Form<UpdateUserForm>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     // Parse user ID
     let parsed_user_id = user_id
         .parse::<ulid::Ulid>()
         .map_err(|_| anyhow::anyhow!("Invalid user ID format"))?;
 
+    // Validate
+    if form.email.trim().is_empty() {
+        let content = EditUserPage {
+            user_id: user_id.clone(),
+            first_name: form.first_name,
+            last_name: form.last_name,
+            email: form.email,
+            handle: form.handle,
+            role: form.role,
+            active: form.active,
+            emails: vec![],
+            error_message: Some("Email is required".to_string()),
+        };
+
+        let content_html = content.render_once()?;
+
+        let prepared = crate::component::AdminLayout::new("Edit User")
+            .with_sidebar_active("users")
+            .with_breadcrumb("Users", Some("/-admin/users"))
+            .with_breadcrumb("Edit", None)
+            .with_content(content_html)
+            .prepare(user_info)
+            .await?;
+
+        return Ok(poem::Response::builder()
+            .content_type("text/html")
+            .body(prepared.render_once()?));
+    }
+
+    // Update
     let update_request = AdminUserUpdateRequest {
         user_id: parsed_user_id,
-        handle: form.handle,
-        first_name: form.first_name,
-        last_name: form.last_name,
-        primary_email: form.email,
-        new_password: form.new_password.filter(|p| !p.trim().is_empty()),
-        role: form.role,
+        handle: form.handle.clone(),
+        first_name: form.first_name.clone(),
+        last_name: form.last_name.clone(),
+        primary_email: form.email.clone(),
+        new_password: form.new_password.clone().filter(|p| !p.trim().is_empty()),
+        role: form.role.clone(),
         verified: false, // Will be auto-calculated by backend based on email verification
         is_active: form.active,
     };
 
     match request_with_retry::<AdminUserResponse>("user.admin.user_update", update_request).await {
-        Ok(response) => {
-            // Success - close modal and update the specific user row with OOB
-            let updated_user = &response.user;
-            let user_row = UserRow {
-                user: updated_user.clone(),
-                oob: true,
-                oob_swap: "true".to_string(), // Replace existing row
-            };
-
-            let html = user_row.render_once()?;
+        Ok(_response) => {
+            // Redirect back to list page
             Ok(poem::Response::builder()
-                .content_type("text/html")
-                .body(html))
+                .status(poem::http::StatusCode::SEE_OTHER)
+                .header("Location", "/-admin/users")
+                .finish())
         }
         Err(e) => {
-            // Show error in modal
-            let error_html = format!(
-                r#"<div class="p-4 mb-4 text-sm text-red-700 bg-red-100 rounded-lg border border-red-200">
-                    <strong>Error:</strong> Failed to update user: {}
-                </div>"#,
-                e
-            );
+            // Show error on page
+            let content = EditUserPage {
+                user_id: user_id.clone(),
+                first_name: form.first_name,
+                last_name: form.last_name,
+                email: form.email,
+                handle: form.handle,
+                role: form.role,
+                active: form.active,
+                emails: vec![],
+                error_message: Some(format!("Failed to update user: {}", e)),
+            };
+
+            let content_html = content.render_once()?;
+
+            let prepared = crate::component::AdminLayout::new("Edit User")
+                .with_sidebar_active("users")
+                .with_breadcrumb("Users", Some("/-admin/users"))
+                .with_breadcrumb("Edit", None)
+                .with_content(content_html)
+                .prepare(user_info)
+                .await?;
+
             Ok(poem::Response::builder()
                 .content_type("text/html")
-                .body(error_html))
+                .body(prepared.render_once()?))
         }
     }
 }
@@ -2864,10 +2988,42 @@ struct EditProjectContent {
     project: AdminProjectFull,
 }
 
+#[derive(Debug)]
+struct EditEventPage {
+    event: AdminEventFull,
+}
+
+impl Component for EditEventPage {
+    type Param = Option<Arc<BasicInfo>>;
+    type Prepared = AdminLayoutPrepared;
+
+    async fn prepare(self, user_info: Self::Param) -> anyhow::Result<Self::Prepared> {
+        let title = self.event.name.clone();
+        let content = EditEventContent {
+            event: self.event,
+        };
+        let content_html = content.render_once()?;
+
+        AdminLayout::new(&format!("Edit Event: {}", title))
+            .with_breadcrumb("Events", Some("/-admin/events"))
+            .with_breadcrumb(&title, None)
+            .with_sidebar_active("events")
+            .with_content(content_html)
+            .prepare(user_info)
+            .await
+    }
+}
+
 #[derive(Debug, TemplateOnce)]
-#[template(path = "admin/modals/add_project.stpl.html")]
-struct AddProjectForm {
-    title: String,
+#[template(path = "admin/edit_event_content.stpl.html")]
+struct EditEventContent {
+    event: AdminEventFull,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/pages/add_project.stpl.html")]
+struct AddProjectPage {
+    error_message: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -3395,6 +3551,74 @@ async fn events_search(
         .content_type("text/html")
         .header("HX-Push-Url", url)
         .body(html))
+}
+
+#[handler]
+async fn events_edit(
+    Path(event_id): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    // Parse event ID and load real event data
+    let event_ulid = event_id
+        .parse::<Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid event ID format"))?;
+
+    // Load EventAll from database and convert to AdminEventFull
+    let event_all = crate::event::all::EventAll::load(event_ulid).await?;
+    let event = AdminEventFull::from_event_all(event_all).await?;
+
+    let edit_event_page = EditEventPage { event };
+
+    Ok(edit_event_page.into_response(user_info).await?)
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateEventFieldForm {
+    value: String,
+}
+
+#[handler]
+async fn events_update_field(
+    Path((event_id, field_type)): Path<(String, String)>,
+    Form(form): Form<UpdateEventFieldForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::event::field::{EventField, EventFieldValue};
+
+    let event_ulid = event_id
+        .parse::<Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid event ID format"))?;
+
+    // Parse the field type and create the appropriate EventField
+    let field_value = match field_type.as_str() {
+        "name" => EventFieldValue::Name(form.value),
+        "description" => EventFieldValue::Description(form.value),
+        "presenter" => EventFieldValue::Presenter(form.value),
+        "url" => EventFieldValue::Url(form.value),
+        "image" => EventFieldValue::Image(form.value),
+        "image_credit" => EventFieldValue::ImageCredit(form.value),
+        "how_to_join" => EventFieldValue::HowToJoin(form.value),
+        "location_type" => EventFieldValue::LocationType(form.value),
+        "location_name" => EventFieldValue::LocationName(form.value),
+        "location_description" => EventFieldValue::LocationDescription(form.value),
+        "address" => EventFieldValue::Address(form.value),
+        "city" => EventFieldValue::City(form.value),
+        "state" => EventFieldValue::State(form.value),
+        "zip" => EventFieldValue::Zip(form.value),
+        "country" => EventFieldValue::Country(form.value),
+        "admin_notes" => EventFieldValue::AdminNotes(form.value),
+        "publish" => EventFieldValue::Publish(form.value == "true"),
+        "flagged" => EventFieldValue::Flagged(form.value == "true"),
+        "entirely_online" => EventFieldValue::EntirelyOnline(form.value == "true"),
+        _ => return Err(anyhow::anyhow!("Unknown field type: {}", field_type)),
+    };
+
+    let event_field = EventField::new(event_ulid, field_value);
+    event_field.store().await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(""))
 }
 
 #[handler]
@@ -4831,13 +5055,25 @@ async fn projects_remove_array_item(
 
 #[handler]
 async fn projects_new(
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    let add_project_form = AddProjectForm {
-        title: "Add New Project".to_string(),
+    let content = AddProjectPage {
+        error_message: None,
     };
 
-    Ok(add_project_form.into_response(None).await?)
+    let content_html = content.render_once()?;
+
+    let prepared = crate::component::AdminLayout::new("Add New Project")
+        .with_sidebar_active("projects")
+        .with_breadcrumb("Projects", Some("/-admin/projects"))
+        .with_breadcrumb("Add Project", None)
+        .with_content(content_html)
+        .prepare(user_info)
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
 }
 
 #[derive(Debug, Deserialize)]
@@ -4860,6 +5096,67 @@ async fn projects_create(
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    // Validate
+    if form.name.trim().is_empty() {
+        let content = AddProjectPage {
+            error_message: Some("Project name is required".to_string()),
+        };
+
+        let content_html = content.render_once()?;
+
+        let prepared = crate::component::AdminLayout::new("Add New Project")
+            .with_sidebar_active("projects")
+            .with_breadcrumb("Projects", Some("/-admin/projects"))
+            .with_breadcrumb("Add Project", None)
+            .with_content(content_html)
+            .prepare(Some(user_info.clone().into()))
+            .await?;
+
+        return Ok(poem::Response::builder()
+            .content_type("text/html")
+            .body(prepared.render_once()?));
+    }
+
+    if form.description.trim().is_empty() {
+        let content = AddProjectPage {
+            error_message: Some("Description is required".to_string()),
+        };
+
+        let content_html = content.render_once()?;
+
+        let prepared = crate::component::AdminLayout::new("Add New Project")
+            .with_sidebar_active("projects")
+            .with_breadcrumb("Projects", Some("/-admin/projects"))
+            .with_breadcrumb("Add Project", None)
+            .with_content(content_html)
+            .prepare(Some(user_info.clone().into()))
+            .await?;
+
+        return Ok(poem::Response::builder()
+            .content_type("text/html")
+            .body(prepared.render_once()?));
+    }
+
+    if form.presenter.trim().is_empty() {
+        let content = AddProjectPage {
+            error_message: Some("Presenter/Organization is required".to_string()),
+        };
+
+        let content_html = content.render_once()?;
+
+        let prepared = crate::component::AdminLayout::new("Add New Project")
+            .with_sidebar_active("projects")
+            .with_breadcrumb("Projects", Some("/-admin/projects"))
+            .with_breadcrumb("Add Project", None)
+            .with_content(content_html)
+            .prepare(Some(user_info.clone().into()))
+            .await?;
+
+        return Ok(poem::Response::builder()
+            .content_type("text/html")
+            .body(prepared.render_once()?));
+    }
 
     // Generate a new ULID for the project
     let project_id = Ulid::new();
@@ -4885,69 +5182,34 @@ async fn projects_create(
     new_project.status = crate::project::ProjectStatus::Active;
 
     // Save the new project to the database using LoadStorePeered
-    new_project.store().await?;
+    match new_project.store().await {
+        Ok(_) => {
+            // Redirect to the project edit page
+            Ok(poem::Response::builder()
+                .status(poem::http::StatusCode::SEE_OTHER)
+                .header("Location", format!("/-admin/projects/{}", project_id))
+                .finish())
+        }
+        Err(e) => {
+            let content = AddProjectPage {
+                error_message: Some(format!("Failed to create project: {}", e)),
+            };
 
-    // Resolve creator email for the current user
-    let email = lookup_user_email(Some(user_info.user_id)).await;
-    let page_creator_email = if email.is_empty() { None } else { Some(email) };
+            let content_html = content.render_once()?;
 
-    // Create AdminProject for the UI
-    let admin_project = AdminProject {
-        id: project_id.to_string(),
-        title: form.name.clone(),
-        status: "active".to_string(),
-        publish: form.publish,
-        created_date: current_time.to_string(),
-        page_creator_id: user_info.user_id.to_string(),
-        page_creator_email,
-        description: new_project.description.clone(),
-        presenter: new_project.presenter.clone(),
-        origin: new_project.origin.clone(),
-        flagged: false,
-        duplicate: false,
-        is_test: false,
-        goal: new_project.goal.clone(),
-        task: new_project.task.clone(),
-        image: new_project.image.clone(),
-        url: new_project.url.clone(),
-        admin_notes: new_project.admin_notes.clone(),
-        draft: form.draft,
-        tags: Vec::new(), // New projects start with no tags
-    };
+            let prepared = crate::component::AdminLayout::new("Add New Project")
+                .with_sidebar_active("projects")
+                .with_breadcrumb("Projects", Some("/-admin/projects"))
+                .with_breadcrumb("Add Project", None)
+                .with_content(content_html)
+                .prepare(Some(user_info.into()))
+                .await?;
 
-    // Create the new project row with OOB support to add to the top of the projects list
-    use sailfish::TemplateOnce;
-    let project_row = ProjectRow {
-        project: admin_project,
-        oob: true,
-        oob_swap: "afterbegin".to_string(),
-    };
-    let project_row_html = project_row.render_once()?;
-
-    // Create success message
-    let success_html = format!(
-        r#"<div class="p-3 text-sm text-green-700 bg-green-100 rounded-lg border border-green-200">
-            <strong>Success:</strong> Project "{}" has been created successfully!
-        </div>"#,
-        form.name
-    );
-
-    // Return success message + the project row wrapped in template for OOB swap
-    let combined_html = format!(
-        r#"{}
-        <div class="mt-3 text-sm text-blue-700">
-            <button onclick="this.closest('dialog').remove();"
-                    class="text-indigo-600 hover:text-indigo-800 underline">
-                Close
-            </button>
-        </div>
-        {}"#,
-        success_html, project_row_html
-    );
-
-    Ok(poem::Response::builder()
-        .content_type("text/html")
-        .body(combined_html))
+            Ok(poem::Response::builder()
+                .content_type("text/html")
+                .body(prepared.render_once()?))
+        }
+    }
 }
 
 #[handler]
@@ -5735,6 +5997,7 @@ pub struct EntityTargetInputTemplate {
     pub current_value: String,
     pub project_widget: Option<crate::admin::autocomplete::EntityAutocomplete>,
     pub event_widget: Option<crate::admin::autocomplete::EntityAutocomplete>,
+    pub pagecontent_widget: Option<crate::admin::autocomplete::EntityAutocomplete>,
 }
 
 #[derive(Debug, Clone)]
@@ -5754,9 +6017,8 @@ pub struct NewEntityForm {
 }
 
 #[derive(TemplateOnce)]
-#[template(path = "admin/modals/edit_entity.stpl.html")]
-pub struct EditEntityForm {
-    pub title: String,
+#[template(path = "admin/pages/edit_entity.stpl.html")]
+pub struct EditEntityPage {
     pub slug: String,
     pub kind: String,
     pub target: String,
@@ -5770,11 +6032,10 @@ impl EntityKind {
     pub fn display_name(&self) -> &'static str {
         match self {
             EntityKind::WordPress => "WordPress Page",
-            EntityKind::Proxied => "Proxied Content",
             EntityKind::Redirect => "Redirect",
             EntityKind::RawHTML => "Raw HTML",
             EntityKind::DressedHtml => "Dressed HTML",
-            EntityKind::Wysiwyg => "WYSIWYG Editor",
+            EntityKind::Wysiwyg => "Simple Editor",
             EntityKind::PageBuilder => "Page Builder",
             EntityKind::Form => "Form",
             EntityKind::Project => "Project",
@@ -5793,7 +6054,6 @@ impl EntityKind {
             EntityKind::Wysiwyg,
             EntityKind::PageBuilder,
             EntityKind::Form,
-            EntityKind::Proxied,
             EntityKind::Placeholder,
         ]
     }
@@ -5851,11 +6111,10 @@ async fn entities_target_input(
     let kind = query.kind.parse::<EntityKind>()?;
     let current_value = query.current_value.unwrap_or_default();
 
-    let (project_widget, event_widget) = match kind {
+    let (project_widget, event_widget, pagecontent_widget) = match kind {
         EntityKind::Project => {
             let widget = if !current_value.is_empty() {
                 if let Ok(ulid) = current_value.parse::<Ulid>() {
-                    // Resolve the project name to avoid autocomplete widget making its own request
                     if let Ok(Some(name)) = crate::admin::autocomplete::resolve_project_name(ulid).await {
                         crate::admin::autocomplete::EntityAutocomplete::new_project_selector("target", "Target", "Search for a project...").with_selected(ulid, name)
                     } else {
@@ -5867,12 +6126,11 @@ async fn entities_target_input(
             } else {
                 crate::admin::autocomplete::EntityAutocomplete::new_project_selector("target", "Target", "Search for a project...")
             };
-            (Some(widget), None)
+            (Some(widget), None, None)
         },
         EntityKind::Event => {
             let widget = if !current_value.is_empty() {
                 if let Ok(ulid) = current_value.parse::<Ulid>() {
-                    // Resolve the event name to avoid autocomplete widget making its own request
                     if let Ok(Some(name)) = crate::admin::autocomplete::resolve_event_name(ulid).await {
                         crate::admin::autocomplete::EntityAutocomplete::new_event_selector("target", "Target", "Search for an event...").with_selected(ulid, name)
                     } else {
@@ -5884,9 +6142,29 @@ async fn entities_target_input(
             } else {
                 crate::admin::autocomplete::EntityAutocomplete::new_event_selector("target", "Target", "Search for an event...")
             };
-            (None, Some(widget))
+            (None, Some(widget), None)
         },
-        _ => (None, None),
+        EntityKind::RawHTML => {
+            let widget = create_pagecontent_widget(&current_value, crate::pagecontent::PageContentKind::RawHTML).await;
+            (None, None, Some(widget))
+        },
+        EntityKind::DressedHtml => {
+            let widget = create_pagecontent_widget(&current_value, crate::pagecontent::PageContentKind::DressedHtml).await;
+            (None, None, Some(widget))
+        },
+        EntityKind::Wysiwyg => {
+            let widget = create_pagecontent_widget(&current_value, crate::pagecontent::PageContentKind::Wysiwyg).await;
+            (None, None, Some(widget))
+        },
+        EntityKind::PageBuilder => {
+            let widget = create_pagecontent_widget(&current_value, crate::pagecontent::PageContentKind::PageBuilder).await;
+            (None, None, Some(widget))
+        },
+        EntityKind::Form => {
+            let widget = create_pagecontent_widget(&current_value, crate::pagecontent::PageContentKind::Form).await;
+            (None, None, Some(widget))
+        },
+        _ => (None, None, None),
     };
 
     let template = EntityTargetInputTemplate {
@@ -5894,6 +6172,7 @@ async fn entities_target_input(
         current_value,
         project_widget,
         event_widget,
+        pagecontent_widget,
     };
 
     let html = template.render_once()?;
@@ -5973,7 +6252,7 @@ async fn entities_create(
 #[handler]
 async fn entities_edit(
     Path(slug): Path<String>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     let entity = Entity::load(slug.clone()).await?;
 
@@ -5983,59 +6262,10 @@ async fn entities_edit(
     };
 
     // Create the target input template for initial rendering
-    let target_input_template = {
-        let kind = *entity.kind();
-        let current_value = entity.target().to_string();
+    let target_input_template = create_target_input_template(entity.kind(), &entity.target().to_string()).await;
 
-        let (project_widget, event_widget) = match kind {
-            EntityKind::Project => {
-                let widget = if !current_value.is_empty() {
-                    if let Ok(ulid) = current_value.parse::<Ulid>() {
-                        // Resolve the project name to avoid autocomplete widget making its own request
-                        if let Ok(Some(name)) = crate::admin::autocomplete::resolve_project_name(ulid).await {
-                            crate::admin::autocomplete::EntityAutocomplete::new_project_selector("target", "Target", "Search for a project...").with_selected(ulid, name)
-                        } else {
-                            crate::admin::autocomplete::EntityAutocomplete::new_project_selector("target", "Target", "Search for a project...")
-                        }
-                    } else {
-                        crate::admin::autocomplete::EntityAutocomplete::new_project_selector("target", "Target", "Search for a project...")
-                    }
-                } else {
-                    crate::admin::autocomplete::EntityAutocomplete::new_project_selector("target", "Target", "Search for a project...")
-                };
-                (Some(widget), None)
-            },
-            EntityKind::Event => {
-                let widget = if !current_value.is_empty() {
-                    if let Ok(ulid) = current_value.parse::<Ulid>() {
-                        // Resolve the event name to avoid autocomplete widget making its own request
-                        if let Ok(Some(name)) = crate::admin::autocomplete::resolve_event_name(ulid).await {
-                            crate::admin::autocomplete::EntityAutocomplete::new_event_selector("target", "Target", "Search for an event...").with_selected(ulid, name)
-                        } else {
-                            crate::admin::autocomplete::EntityAutocomplete::new_event_selector("target", "Target", "Search for an event...")
-                        }
-                    } else {
-                        crate::admin::autocomplete::EntityAutocomplete::new_event_selector("target", "Target", "Search for an event...")
-                    }
-                } else {
-                    crate::admin::autocomplete::EntityAutocomplete::new_event_selector("target", "Target", "Search for an event...")
-                };
-                (None, Some(widget))
-            },
-            _ => (None, None),
-        };
-
-        EntityTargetInputTemplate {
-            kind,
-            current_value,
-            project_widget,
-            event_widget,
-        }
-    };
-
-    let form = EditEntityForm {
-        title: format!("Edit Entity: {}", slug),
-        slug: slug,
+    let content = EditEntityPage {
+        slug: slug.clone(),
         kind: entity.kind().as_ref().to_string(),
         target: entity.target().to_string(),
         target_ulid,
@@ -6043,52 +6273,116 @@ async fn entities_edit(
         error_message: None,
     };
 
+    let content_html = content.render_once()?;
+
+    let prepared = crate::component::AdminLayout::new("Edit Entity")
+        .with_sidebar_active("entities")
+        .with_breadcrumb("Entities", Some("/-admin/entities"))
+        .with_breadcrumb("Edit", None)
+        .with_content(content_html)
+        .prepare(user_info)
+        .await?;
+
     Ok(poem::Response::builder()
         .content_type("text/html")
-        .body(form.render_once()?))
+        .body(prepared.render_once()?))
 }
 
 #[handler]
 async fn entities_update(
     Path(slug): Path<String>,
     Form(form): Form<UpdateEntityForm>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     // Validate and parse form data
-    match (async || -> Result<(), anyhow::Error> {
-        let kind = form.kind.parse::<EntityKind>()?;
-        let target = parse_target_for_kind(&kind, form.target.as_deref())?;
-
-        let updated_entity = Entity::new(&slug, kind, target);
-        updated_entity.store().await
-    })().await {
-        Ok(_) => {
-            // Success: Update the entity row in the list via OOB and close modal
-            let entity = Entity::load(slug.clone()).await?;
-            let entity_with_info = create_entity_with_info(&entity).await?;
-            let entity_row = EntityRow {
-                entity: entity_with_info,
-                oob: true,
-                oob_swap: format!("outerHTML:#entity-{}", slug.replace("-", "_").replace("/", "_")),
-            };
-
-            Ok(poem::Response::builder()
-                .content_type("text/html")
-                .body(entity_row.render_once()?))
-        },
+    let kind = match form.kind.parse::<EntityKind>() {
+        Ok(k) => k,
         Err(e) => {
-            // Error: Return dialog with error message
             let entity = Entity::load(slug.clone()).await?;
             let target_ulid = match entity.target() {
                 crate::entity::EntityTarget::Ulid(ulid) => Some(*ulid),
                 _ => None,
             };
-
             let target_input_template = create_target_input_template(entity.kind(), &entity.target().to_string()).await;
 
-            let form = EditEntityForm {
-                title: format!("Edit Entity: {}", slug),
-                slug: slug,
+            let content = EditEntityPage {
+                slug: slug.clone(),
+                kind: form.kind,
+                target: form.target.unwrap_or_default(),
+                target_ulid,
+                target_input_template,
+                error_message: Some(format!("Invalid entity kind: {}", e)),
+            };
+
+            let content_html = content.render_once()?;
+            let prepared = crate::component::AdminLayout::new("Edit Entity")
+                .with_sidebar_active("entities")
+                .with_breadcrumb("Entities", Some("/-admin/entities"))
+                .with_breadcrumb("Edit", None)
+                .with_content(content_html)
+                .prepare(user_info)
+                .await?;
+
+            return Ok(poem::Response::builder()
+                .content_type("text/html")
+                .body(prepared.render_once()?));
+        }
+    };
+
+    let target = match parse_target_for_kind(&kind, form.target.as_deref()) {
+        Ok(t) => t,
+        Err(e) => {
+            let entity = Entity::load(slug.clone()).await?;
+            let target_ulid = match entity.target() {
+                crate::entity::EntityTarget::Ulid(ulid) => Some(*ulid),
+                _ => None,
+            };
+            let target_input_template = create_target_input_template(&kind, form.target.as_deref().unwrap_or("")).await;
+
+            let content = EditEntityPage {
+                slug: slug.clone(),
+                kind: form.kind,
+                target: form.target.unwrap_or_default(),
+                target_ulid,
+                target_input_template,
+                error_message: Some(format!("Invalid target: {}", e)),
+            };
+
+            let content_html = content.render_once()?;
+            let prepared = crate::component::AdminLayout::new("Edit Entity")
+                .with_sidebar_active("entities")
+                .with_breadcrumb("Entities", Some("/-admin/entities"))
+                .with_breadcrumb("Edit", None)
+                .with_content(content_html)
+                .prepare(user_info)
+                .await?;
+
+            return Ok(poem::Response::builder()
+                .content_type("text/html")
+                .body(prepared.render_once()?));
+        }
+    };
+
+    // Update entity
+    let updated_entity = Entity::new(&slug, kind, target);
+    match updated_entity.store().await {
+        Ok(_) => {
+            // Redirect back to list page
+            Ok(poem::Response::builder()
+                .status(poem::http::StatusCode::SEE_OTHER)
+                .header("Location", "/-admin/entities")
+                .finish())
+        }
+        Err(e) => {
+            let entity = Entity::load(slug.clone()).await?;
+            let target_ulid = match entity.target() {
+                crate::entity::EntityTarget::Ulid(ulid) => Some(*ulid),
+                _ => None,
+            };
+            let target_input_template = create_target_input_template(entity.kind(), &entity.target().to_string()).await;
+
+            let content = EditEntityPage {
+                slug: slug.clone(),
                 kind: entity.kind().as_ref().to_string(),
                 target: entity.target().to_string(),
                 target_ulid,
@@ -6096,9 +6390,18 @@ async fn entities_update(
                 error_message: Some(format!("Error saving entity: {}", e)),
             };
 
+            let content_html = content.render_once()?;
+            let prepared = crate::component::AdminLayout::new("Edit Entity")
+                .with_sidebar_active("entities")
+                .with_breadcrumb("Entities", Some("/-admin/entities"))
+                .with_breadcrumb("Edit", None)
+                .with_content(content_html)
+                .prepare(user_info)
+                .await?;
+
             Ok(poem::Response::builder()
                 .content_type("text/html")
-                .body(form.render_once()?))
+                .body(prepared.render_once()?))
         }
     }
 }
@@ -6119,8 +6422,33 @@ async fn entities_delete(
 
 // Helper Functions
 
+async fn create_pagecontent_widget(
+    current_value: &str,
+    pagecontent_kind: crate::pagecontent::PageContentKind,
+) -> crate::admin::autocomplete::EntityAutocomplete {
+    if !current_value.is_empty() {
+        if let Ok(ulid) = current_value.parse::<Ulid>() {
+            if let Ok(Some(name)) = crate::admin::autocomplete::resolve_pagecontent_name(ulid).await {
+                return crate::admin::autocomplete::EntityAutocomplete::new_pagecontent_selector(
+                    "target",
+                    "Target",
+                    "Search for content...",
+                )
+                .with_selected(ulid, name)
+                .with_kind_filter(pagecontent_kind);
+            }
+        }
+    }
+    crate::admin::autocomplete::EntityAutocomplete::new_pagecontent_selector(
+        "target",
+        "Target",
+        "Search for content...",
+    )
+    .with_kind_filter(pagecontent_kind)
+}
+
 async fn create_target_input_template(kind: &EntityKind, current_value: &str) -> EntityTargetInputTemplate {
-    let (project_widget, event_widget) = match kind {
+    let (project_widget, event_widget, pagecontent_widget) = match kind {
         EntityKind::Project => {
             let widget = if !current_value.is_empty() {
                 if let Ok(ulid) = current_value.parse::<Ulid>() {
@@ -6135,7 +6463,7 @@ async fn create_target_input_template(kind: &EntityKind, current_value: &str) ->
             } else {
                 crate::admin::autocomplete::EntityAutocomplete::new_project_selector("target", "Target", "Search for a project...")
             };
-            (Some(widget), None)
+            (Some(widget), None, None)
         },
         EntityKind::Event => {
             let widget = if !current_value.is_empty() {
@@ -6151,9 +6479,29 @@ async fn create_target_input_template(kind: &EntityKind, current_value: &str) ->
             } else {
                 crate::admin::autocomplete::EntityAutocomplete::new_event_selector("target", "Target", "Search for an event...")
             };
-            (None, Some(widget))
+            (None, Some(widget), None)
         },
-        _ => (None, None),
+        EntityKind::RawHTML => {
+            let widget = create_pagecontent_widget(current_value, crate::pagecontent::PageContentKind::RawHTML).await;
+            (None, None, Some(widget))
+        },
+        EntityKind::DressedHtml => {
+            let widget = create_pagecontent_widget(current_value, crate::pagecontent::PageContentKind::DressedHtml).await;
+            (None, None, Some(widget))
+        },
+        EntityKind::Wysiwyg => {
+            let widget = create_pagecontent_widget(current_value, crate::pagecontent::PageContentKind::Wysiwyg).await;
+            (None, None, Some(widget))
+        },
+        EntityKind::PageBuilder => {
+            let widget = create_pagecontent_widget(current_value, crate::pagecontent::PageContentKind::PageBuilder).await;
+            (None, None, Some(widget))
+        },
+        EntityKind::Form => {
+            let widget = create_pagecontent_widget(current_value, crate::pagecontent::PageContentKind::Form).await;
+            (None, None, Some(widget))
+        },
+        _ => (None, None, None),
     };
 
     EntityTargetInputTemplate {
@@ -6161,6 +6509,7 @@ async fn create_target_input_template(kind: &EntityKind, current_value: &str) ->
         current_value: current_value.to_string(),
         project_widget,
         event_widget,
+        pagecontent_widget,
     }
 }
 
@@ -6168,7 +6517,7 @@ fn parse_target_for_kind(kind: &EntityKind, target_str: Option<&str>) -> Result<
     match target_str {
         Some(s) if !s.trim().is_empty() => {
             match kind {
-                EntityKind::Proxied | EntityKind::Redirect => {
+                EntityKind::Redirect => {
                     let url = s.parse::<url::Url>()?;
                     Ok(EntityTarget::Url(url))
                 },
@@ -6266,7 +6615,7 @@ fn parse_database_target(kind: EntityKind, target_str: &str) -> Result<EntityTar
     }
 
     match kind {
-        EntityKind::Proxied | EntityKind::Redirect => {
+        EntityKind::Redirect => {
             match target_str.parse() {
                 Ok(url) => Ok(EntityTarget::Url(url)),
                 Err(_) => Ok(EntityTarget::Nil),
@@ -6323,7 +6672,7 @@ async fn create_entity_with_info(entity: &Entity) -> Result<EntityWithInfo, anyh
                 (Some("Event not found".to_string()), false)
             }
         },
-        (EntityKind::Redirect | EntityKind::Proxied, EntityTarget::Url(url)) => {
+        (EntityKind::Redirect, EntityTarget::Url(url)) => {
             (Some(url.to_string()), true) // Default to published for redirects/proxied
         },
         (EntityKind::WordPress, EntityTarget::String(s)) => {
@@ -6355,4 +6704,388 @@ async fn clear_modal(
 ) -> Result<impl IntoResponse, poem::Error> {
     // Return empty response to clear the modal container
     Ok("")
+}
+
+// WYSIWYG Content Management
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/wysiwyg.stpl.html")]
+struct WysiwygPage {
+    content: String,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/wysiwyg_content.stpl.html")]
+struct WysiwygContentTemplate {
+    items: Vec<WysiwygListItem>,
+    search_query: Option<String>,
+    page: usize,
+    per_page: usize,
+    total_count: usize,
+}
+
+#[derive(Debug, Clone)]
+struct WysiwygListItem {
+    id: Ulid,
+    name: String,
+    excerpt: String,
+    created_at: String,
+}
+
+#[derive(serde::Deserialize)]
+struct WysiwygSearchQuery {
+    search: Option<String>,
+    page: Option<usize>,
+    per_page: Option<usize>,
+}
+
+#[handler]
+async fn wysiwyg_list(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    let search_results = wysiwyg_search_impl(&WysiwygSearchQuery {
+        search: None,
+        page: Some(1),
+        per_page: Some(25),
+    }).await?;
+
+    let content = format!(r#"<div id="wysiwyg-content">{}</div>"#, search_results);
+
+    let page = WysiwygPage { content };
+    let page_html = page.render_once()?;
+
+    let prepared = crate::component::AdminLayout::new("Simple Content")
+        .with_sidebar_active("wysiwyg")
+        .with_breadcrumb("Simple Pages", None)
+        .with_quill()
+        .with_content(page_html)
+        .prepare(Some(user_info))
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+async fn wysiwyg_search_impl(query: &WysiwygSearchQuery) -> Result<String, anyhow::Error> {
+    let page = query.page.unwrap_or(1).max(1);
+    let per_page = query.per_page.unwrap_or(25).clamp(10, 100);
+    let offset = ((page - 1) * per_page) as i64;
+    let per_page = per_page as i64;
+
+    let search_pattern = query.search.as_ref().map(|s| format!("%{}%", s));
+    let kind = "Wysiwyg";
+
+    struct QueryRow {
+        pagecontent_id: String,
+        name: String,
+        content: Vec<u8>,
+    }
+
+    let items: Vec<QueryRow> = if let Some(ref pattern) = search_pattern {
+        sqlx::query_as!(
+            QueryRow,
+            r#"SELECT pagecontent_id, name, content FROM pagecontent
+               WHERE kind = ? AND name LIKE ?
+               ORDER BY pagecontent_id DESC
+               LIMIT ? OFFSET ?"#,
+            kind,
+            pattern,
+            per_page,
+            offset
+        )
+        .fetch_all(db())
+        .await?
+    } else {
+        sqlx::query_as!(
+            QueryRow,
+            r#"SELECT pagecontent_id, name, content FROM pagecontent
+               WHERE kind = ?
+               ORDER BY pagecontent_id DESC
+               LIMIT ? OFFSET ?"#,
+            kind,
+            per_page,
+            offset
+        )
+        .fetch_all(db())
+        .await?
+    };
+
+    let total_count = if let Some(ref pattern) = search_pattern {
+        sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count: i64" FROM pagecontent WHERE kind = 'Wysiwyg' AND name LIKE ?"#,
+            pattern
+        )
+        .fetch_one(db())
+        .await? as usize
+    } else {
+        sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count: i64" FROM pagecontent WHERE kind = 'Wysiwyg'"#
+        )
+        .fetch_one(db())
+        .await? as usize
+    };
+
+    let items = items
+        .into_iter()
+        .map(|row| {
+            let id: Ulid = row.pagecontent_id.parse().unwrap_or(Ulid::nil());
+            let timestamp = jiff::Timestamp::from_millisecond(id.timestamp_ms() as i64).unwrap();
+            let created_at = timestamp.strftime("%Y-%m-%d %H:%M").to_string();
+
+            // Extract text excerpt from Delta JSON
+            let excerpt = if let Ok(content_str) = std::str::from_utf8(&row.content) {
+                crate::quill::delta_to_excerpt(content_str, 100)
+            } else {
+                String::new()
+            };
+
+            WysiwygListItem {
+                id,
+                name: row.name,
+                excerpt,
+                created_at,
+            }
+        })
+        .collect();
+
+    let content = WysiwygContentTemplate {
+        items,
+        search_query: query.search.clone(),
+        page: query.page.unwrap_or(1).max(1),
+        per_page: query.per_page.unwrap_or(25).clamp(10, 100),
+        total_count,
+    };
+
+    Ok(content.render_once()?)
+}
+
+#[handler]
+async fn wysiwyg_search(
+    Query(query): Query<WysiwygSearchQuery>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let html = wysiwyg_search_impl(&query).await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(html))
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/modals/new_wysiwyg.stpl.html")]
+struct NewWysiwygForm {
+    title: String,
+    error_message: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct CreatePageContentForm {
+    kind: String,
+    name: String,
+    content: String,
+}
+
+#[handler]
+async fn wysiwyg_new(
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let form = NewWysiwygForm {
+        title: "Create New Simple Page".to_string(),
+        error_message: None,
+    };
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(form.render_once()?))
+}
+
+#[handler]
+async fn pagecontent_create(
+    Form(form): Form<CreatePageContentForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let kind: crate::pagecontent::PageContentKind = form.kind.parse()?;
+
+    match (async || -> Result<Ulid, anyhow::Error> {
+        if form.name.trim().is_empty() {
+            return Err(anyhow::anyhow!("Name is required"));
+        }
+
+        let id = Ulid::new();
+        let pagecontent = crate::pagecontent::PageContent::new_with_id(
+            id,
+            kind,
+            form.name,
+            form.content.as_bytes(),
+        );
+        pagecontent.store().await?;
+
+        Ok(id)
+    })()
+    .await
+    {
+        Ok(_id) => {
+            // Close modal and refresh list via OOB
+            let content = wysiwyg_search_impl(&WysiwygSearchQuery {
+                search: None,
+                page: Some(1),
+                per_page: Some(25),
+            }).await?;
+
+            let html = format!(
+                r#"<div id="wysiwyg-content" hx-swap-oob="innerHTML">{}</div>"#,
+                content
+            );
+
+            Ok(poem::Response::builder()
+                .content_type("text/html")
+                .body(html))
+        }
+        Err(e) => {
+            let form = NewWysiwygForm {
+                title: "Create New Simple Page".to_string(),
+                error_message: Some(e.to_string()),
+            };
+
+            Ok(poem::Response::builder()
+                .content_type("text/html")
+                .body(form.render_once()?))
+        }
+    }
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/pages/edit_wysiwyg.stpl.html")]
+struct EditWysiwygPage {
+    id: Ulid,
+    kind: crate::pagecontent::PageContentKind,
+    name: String,
+    content: String,
+    error_message: Option<String>,
+}
+
+#[handler]
+async fn pagecontent_edit(
+    Path((kind_str, id_str)): Path<(String, String)>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let kind: crate::pagecontent::PageContentKind = kind_str.parse()?;
+    let id: Ulid = id_str.parse()?;
+
+    let pagecontent = crate::pagecontent::PageContent::load((kind, id)).await?;
+
+    let content = EditWysiwygPage {
+        id,
+        kind,
+        name: pagecontent.name().to_string(),
+        content: pagecontent.as_utf8()?.to_string(),
+        error_message: None,
+    };
+
+    let content_html = content.render_once()?;
+
+    let prepared = crate::component::AdminLayout::new("Edit Simple Page")
+        .with_sidebar_active("wysiwyg")
+        .with_breadcrumb("Simple Pages", Some("/-admin/wysiwyg"))
+        .with_breadcrumb("Edit", None)
+        .with_quill()
+        .with_content(content_html)
+        .prepare(user_info)
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+#[derive(serde::Deserialize)]
+struct UpdatePageContentForm {
+    name: String,
+    content: String,
+}
+
+#[handler]
+async fn pagecontent_update(
+    Path((kind_str, id_str)): Path<(String, String)>,
+    Form(form): Form<UpdatePageContentForm>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let kind: crate::pagecontent::PageContentKind = kind_str.parse()?;
+    let id: Ulid = id_str.parse()?;
+
+    // Validate
+    if form.name.trim().is_empty() {
+        let content = EditWysiwygPage {
+            id,
+            kind,
+            name: form.name,
+            content: form.content,
+            error_message: Some("Name is required".to_string()),
+        };
+
+        let content_html = content.render_once()?;
+
+        let prepared = crate::component::AdminLayout::new("Edit Simple Page")
+            .with_sidebar_active("wysiwyg")
+            .with_breadcrumb("Simple Pages", Some("/-admin/wysiwyg"))
+            .with_breadcrumb("Edit", None)
+            .with_quill()
+            .with_content(content_html)
+            .prepare(user_info)
+            .await?;
+
+        return Ok(poem::Response::builder()
+            .content_type("text/html")
+            .body(prepared.render_once()?));
+    }
+
+    // Update
+    let mut pagecontent = crate::pagecontent::PageContent::load((kind, id)).await?;
+    pagecontent.set_name(form.name);
+    pagecontent.clear();
+    pagecontent.extend_from_slice(form.content.as_bytes());
+    pagecontent.store().await?;
+
+    // Redirect back to list page
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::SEE_OTHER)
+        .header("Location", "/-admin/wysiwyg")
+        .finish())
+}
+
+#[handler]
+async fn pagecontent_delete(
+    Path((kind_str, id_str)): Path<(String, String)>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let kind: crate::pagecontent::PageContentKind = kind_str.parse()?;
+    let id: Ulid = id_str.parse()?;
+    let id_string = id.to_string();
+    let kind_string = kind.as_ref();
+
+    sqlx::query!(
+        r#"DELETE FROM pagecontent WHERE pagecontent_id = ? AND kind = ?"#,
+        id_string,
+        kind_string,
+    )
+    .execute(db())
+    .await?;
+
+    let content = wysiwyg_search_impl(&WysiwygSearchQuery {
+        search: None,
+        page: Some(1),
+        per_page: Some(25),
+    }).await?;
+
+    let html = format!(
+        r#"<div id="wysiwyg-content" hx-swap-oob="innerHTML">{}</div>"#,
+        content
+    );
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(html))
 }

@@ -362,7 +362,164 @@ impl LoadStorePeered for EventAll {
     }
 
     #[tracing::instrument]
-    async fn read_from_database(_key: Self::DatabaseKey) -> Result<Self, anyhow::Error> {
-        unimplemented!("Implementation deferred until needed")
+    async fn read_from_database(event_id: Self::DatabaseKey) -> Result<Self, anyhow::Error> {
+        let event_id_str = event_id.to_string();
+
+        // Read main event data from events table
+        let event_row = sqlx::query!(
+            r#"SELECT
+                event_id, created, publish, flagged, admin_notes, welcomed,
+                page_creator_id, name, description, origin, presenter, url,
+                image, image_credit, how_to_join, part_of, location_type,
+                entirely_online, location_name, location_description, address,
+                city, zip, state, country, event_type, ticketing_begins,
+                outcomes_label, outcomes_link, circuit_id,
+                AsGeoJSON(regions) as "regions: Option<String>",
+                AsGeoJSON(point) as "point: Option<String>"
+            FROM events WHERE event_id = ?"#,
+            event_id_str
+        )
+        .fetch_one(db())
+        .await?;
+
+        // Read page_editor_ids
+        let page_editor_ids = sqlx::query!(
+            "SELECT user_id FROM event_page_editors WHERE event_id = ? ORDER BY user_id",
+            event_id_str
+        )
+        .fetch_all(db())
+        .await?
+        .into_iter()
+        .map(|row| {
+            row.user_id
+                .parse::<Ulid>()
+                .map_err(|e| anyhow::anyhow!("Invalid editor ULID: {}", e))
+        })
+        .collect::<Result<Vec<_>, _>>()?
+        .into_boxed_slice();
+
+        // Read tags
+        let tags = sqlx::query!(
+            "SELECT tag FROM event_tags WHERE event_id = ?",
+            event_id_str
+        )
+        .fetch_all(db())
+        .await?
+        .into_iter()
+        .map(|row| InsensitiveString::from(row.tag))
+        .collect::<HashSet<_>>();
+
+        // Read contacts
+        let contact_rows = sqlx::query!(
+            "SELECT contact_id, role, name, affiliation, email, phone, address FROM event_contacts WHERE event_id = ?",
+            event_id_str
+        )
+        .fetch_all(db())
+        .await?;
+
+        let mut contacts = Vec::new();
+        for contact_row in contact_rows {
+            let contact_id = contact_row
+                .contact_id
+                .parse::<Ulid>()
+                .map_err(|e| anyhow::anyhow!("Invalid contact ULID: {}", e))?;
+            let role = match contact_row.role.as_str() {
+                "Manager" => crate::contact::ContactRole::Manager,
+                "ContactPerson" => crate::contact::ContactRole::ContactPerson,
+                "Technical" => crate::contact::ContactRole::Technical,
+                "Notification" => crate::contact::ContactRole::Notification,
+                _ => crate::contact::ContactRole::ContactPerson,
+            };
+            contacts.push(Contact {
+                contact_id,
+                role,
+                name: contact_row.name,
+                affiliation: contact_row.affiliation,
+                email: contact_row.email,
+                phone: contact_row.phone,
+                address: contact_row.address,
+            });
+        }
+
+        // Read event instances
+        let instance_rows = sqlx::query!(
+            "SELECT begin, end FROM event_instances WHERE event_id = ? ORDER BY begin",
+            event_id_str
+        )
+        .fetch_all(db())
+        .await?;
+
+        let instances = instance_rows
+            .into_iter()
+            .map(|row| {
+                Ok(EventInstance {
+                    begin: TimeString::try_from(row.begin)
+                        .map_err(|e| anyhow::anyhow!("Invalid begin TimeString: {}", e))?,
+                    end: TimeString::try_from(row.end)
+                        .map_err(|e| anyhow::anyhow!("Invalid end TimeString: {}", e))?,
+                })
+            })
+            .collect::<Result<Vec<_>, anyhow::Error>>()?
+            .into_boxed_slice();
+
+        // Parse event_type
+        let event_type = event_row.event_type.parse::<EventType>()?;
+
+        Ok(EventAll {
+            event_id,
+            created: TimeString::try_from(event_row.created)
+                .map_err(|e| anyhow::anyhow!("Invalid created TimeString: {}", e))?,
+            publish: event_row.publish,
+            flagged: event_row.flagged,
+            admin_notes: event_row.admin_notes,
+            welcomed: event_row.welcomed,
+            page_creator_id: event_row
+                .page_creator_id
+                .parse::<Ulid>()
+                .map_err(|e| anyhow::anyhow!("Invalid page_creator_id ULID: {}", e))?,
+            page_editor_ids,
+            event_last_editor: None,
+            event_last_edited: None,
+            scistarter_last_editor: None,
+            scistarter_last_edited: None,
+            name: event_row.name,
+            tags,
+            description: event_row.description,
+            origin: event_row.origin,
+            contacts: contacts.into_boxed_slice(),
+            presenter: event_row.presenter,
+            url: event_row.url,
+            image: event_row.image,
+            image_credit: event_row.image_credit,
+            how_to_join: event_row.how_to_join,
+            part_of: event_row
+                .part_of
+                .map(|s| {
+                    s.parse::<Ulid>()
+                        .map_err(|e| anyhow::anyhow!("Invalid part_of ULID: {}", e))
+                })
+                .transpose()?,
+            location_type: event_row.location_type,
+            entirely_online: event_row.entirely_online,
+            location_name: event_row.location_name,
+            location_description: event_row.location_description,
+            address: event_row.address,
+            city: event_row.city,
+            zip: event_row.zip,
+            state: event_row.state,
+            country: event_row.country,
+            regions: event_row.regions.flatten(),
+            point: event_row.point.flatten(),
+            event_type,
+            ticketing_begins: event_row
+                .ticketing_begins
+                .map(|s| TimeString::try_from(s))
+                .transpose()
+                .map_err(|e| anyhow::anyhow!("Invalid ticketing_begins TimeString: {}", e))?,
+            outcomes_label: event_row.outcomes_label,
+            outcomes_link: event_row.outcomes_link,
+            circuit_id: event_row.circuit_id,
+            instances,
+        })
     }
 }
