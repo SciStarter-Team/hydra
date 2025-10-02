@@ -1,1 +1,75 @@
 @custom-variant project-completed (&:is(:where(.ss-project-card.completed) *, .ss-project-card.completed));
+
+/** TAGS **/
+.ss-pc-tag {
+    @apply inline-flex flex-nowrap gap-2 text-xs border border-linework bg-primary-light px-2 py-1 text-primary-action-dark;
+    border-radius: 4px;
+}
+
+.ss-pc-tag svg {
+    @apply w-[14px] fill-primary-action-dark;
+}
+
+.ss-pc-tag-wrap {
+    @apply flex gap-2 flex-wrap mb-4;
+}
+
+/** PROJECT CARD **/
+.ss-pc {
+    @apply border-linework border p-4 mb-8;
+    border-radius: 4px;
+}
+
+.ss-pc-img img {
+    @apply max-h-[150px] object-contain mx-auto;
+}
+.ss-pc-content {
+     @apply relative;
+}
+.ss-pc-content h3 {
+    @apply text-xl mb-1 mr-8;
+}
+.ss-pc-content p {
+    @apply text-sm;
+}
+
+.ss-pc-affiliate {
+    @apply absolute top-0 right-0 w-[30px];
+}
+
+
+@media (min-width:600px) {
+    .ss-pc {
+        @apply flex gap-4;
+    }
+
+    .ss-pc-img {
+        flex-basis: 200px;
+        flex-shrink: 0;
+    }
+    .ss-pc-img img {
+        @apply max-h-[250px];
+    }
+}
+
+@media (min-width:768px) {
+    .ss-pc-img {
+        flex-basis: 250px;
+    }
+}
+
+.ss-pc-vid-wrap .ss-pc {
+    @apply mb-0;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+.ss-pc-vid {
+    @apply flex gap-2 p-2 border border-t-0 border-linework bg-primary-light;
+    border-bottom-left-radius: 4px;
+    border-bottom-right-radius: 4px;
+}
+.ss-pc-vid svg {
+    @apply w-[24px] fill-primary-action;
+    flex-basis: 24px;
+    flex-shrink: 0;
+}

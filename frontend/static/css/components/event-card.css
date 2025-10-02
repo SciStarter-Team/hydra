@@ -1,0 +1,80 @@
+
+/** TAGS **/
+.ss-ec-tag {
+    @apply inline-flex flex-nowrap gap-2 text-xs border border-linework bg-white px-2 py-1 text-primary-action-dark;
+    border-radius: 4px;
+}
+
+.ss-ec-tag svg {
+    @apply w-[14px] fill-primary-action-dark;
+}
+
+.ss-ec-tag-wrap {
+    @apply flex gap-2 flex-wrap mb-4;
+}
+
+/** PROJECT CARD **/
+.ss-ec {
+    @apply border-linework border p-4 mb-8 bg-primary-light;
+    border-radius: 4px;
+}
+
+
+
+.ss-ec-content img {
+    @apply max-h-[250px] object-contain mb-4;
+}
+
+.ss-ec-content h3 {
+    @apply text-xl mb-1 mr-8;
+}
+.ss-ec-content h4 {
+    @apply text-neutral-dark text-base mb-0;
+}
+.ss-ec-content p {
+    @apply text-sm;
+}
+.ss-ec-loc {
+    @apply mb-4;
+}
+.ss-ec-info iframe, .ss-ec-info video {
+    width: 100%;
+    height:100%;
+    @apply mt-4;
+}
+.ss-ec-info  {
+    @apply mb-4;
+}
+
+
+.cc-ec-info-month, .cc-ec-info-day, .cc-ec-info-year {
+    @apply text-xl font-bold;
+}
+.cc-ec-info-month {
+    @apply text-accent1;
+}
+.cc-ec-info-day, .cc-ec-info-year {
+    @apply text-primary;
+}
+.cc-ec-info-time {
+    @apply font-bold text-base mb-2;
+    margin-top:-3px;
+
+}
+
+@media (min-width:768px) {
+    .ss-ec {
+        @apply flex gap-4;
+    }
+
+    .ss-ec-info  {
+        flex-basis: 250px;
+        flex-shrink: 0;
+        @apply mb-0;
+    }
+    .ss-ec-img img {
+        @apply max-h-[250px];
+    }
+}
+
+

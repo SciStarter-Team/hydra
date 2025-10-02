@@ -47,10 +47,12 @@
 @import "./components/breadcrumbs.css";
 @import "./components/dialog.css";
 @import "./components/project-card.css";
+@import "./components/event-card.css";
+@import "./components/media-object.css";
 
 
 /** Load Templates (page patterns) **/
-
+@import "./pages/communities.css";
 
 
 /** Load Page Specific **/

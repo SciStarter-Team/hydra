@@ -169,3 +169,206 @@
 .girlscout .tabs-style2 .tabs-tabs > li:not(.tab-active) > a:hover {
     @apply bg-girlscout-hover;
 }
+
+
+.tabs-wrapper {
+    position: relative;
+}
+.tabs-bar {
+    @apply flex border border-linework;
+}
+.tabs-bar > button {
+    flex: 1 1 0;
+    @apply p-4 bg-primary-light border-l border-linework text-primary-action;
+    white-space: nowrap;
+}
+
+.tabs-bar .tab-icon, .tabs-list .tab-icon {
+    @apply flex gap-2;
+}
+
+.tabs-bar .tab-icon > svg {
+    width: 24px;
+    @apply fill-primary-action;
+}
+
+.tabs-bar [aria-selected=true].tab-icon > svg, .tabs-bar .tab-icon:hover > svg {
+    @apply fill-white;
+}
+
+.tabs-bar > button:first-child {
+    @apply border-0;
+}
+
+.tabs-bar > [aria-selected=true] {
+    @apply bg-accent1 text-white;
+}
+
+  /* Outer wrapper controls position for the chevron */
+  .tabs-wrapper {
+    position: relative;
+    max-width: 100%;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(16,24,40,0.05);
+    overflow: visible;
+  }
+  .tabs-wrapper.sticky {
+    position: sticky;
+    top:0;
+  }
+
+  /* The horizontally scrollable tab list */
+  .tabs.tabs-bar, .tabs.tabs-list {
+    overflow-x: auto;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    margin-right: calc(var(--chev-size) * 0.0); /* visually reserve space if needed */
+  }
+  .tabs.tabs-bar {
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+  }
+
+  /* hide default scrollbar but keep scrollability */
+  .tabs-bar::-webkit-scrollbar{ height: 8px; }
+  .tabs-bar::-webkit-scrollbar-thumb{ background: rgba(0,0,0,0.12); border-radius: 999px; }
+  /* optional: entirely hide on production if you prefer */
+  .tabs-bar { scrollbar-width: none; -ms-overflow-style: none; } .tabs-bar::-webkit-scrollbar { display: none; }
+
+
+  .tabs-bar .tab:hover{ @apply bg-accent1 text-white }
+
+  .tabs-bar-wrapper .tabs-panels, .tabs-list-wrapper .tab-panels {
+    @apply border-linework;
+  }
+
+.tabs-bar-wrapper .tab-panel, .tabs-list-wrapper .tab-panel{ 
+        display:none; 
+        max-width: 960px;
+        margin: 0 auto;
+    }
+  .tabs-bar-wrapper .tab-panel[aria-hidden="false"], .tabs-list-wrapper .tab-panel[aria-hidden="false"]{ 
+    display:block; }
+
+  :root{
+    --chev-size: 40px;
+    --chev-bg: linear-gradient(to left, rgba(255,255,255,0.95), rgba(255,255,255,0.0));
+  }
+  /* Right chevron indicator */
+  .chevron {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: var(--chev-size);
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none; /* allow clicks to pass through to tabs by default */
+  }
+
+  /* a visual fade that suggests more content */
+  .chevron::before{
+    content: "";
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 100px;
+    background: var(--chev-bg);
+    border-radius: 0;
+    pointer-events: none;
+  }
+
+  /* interactive chevron button (clickable) */
+  .chev-btn{
+    pointer-events: auto; /* make the button clickable */
+    border: none;
+    @apply bg-primary-action;
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    display: inline-grid;
+    place-items: center;
+    box-shadow: 0 1px 3px rgba(16,24,40,0.06);
+    cursor: pointer;
+    transition: transform .12s, box-shadow .12s;
+    z-index: 99;
+  }
+  .chev-btn:active{ transform: translateX(2px); }
+  .chev-btn:focus{ outline: 2px solid rgba(37,99,235,0.25); }
+
+  /* chevron icon (SVG) */
+  .chev-icon{
+    width: 14px;
+    height: 14px;
+    display: block;
+    fill: none;
+    stroke: #fff;
+    stroke-width: 2.25;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  /* hidden state */
+  .chevron.hidden{ opacity: 0; visibility: hidden; transform: translateY(-50%); transition: opacity .18s; }
+
+  @media (min-width:1024px){
+    .tabs-wrapper.pullup {
+        margin-top:-30px;
+    }
+   .chevron {
+    display: none;
+   } 
+  }
+
+.tabs-list-wrapper {
+    position: relative;
+}
+  .tabs-list {
+    @apply flex flex-wrap gap-2;
+    overflow: hidden;
+    position: relative
+  }
+  .tabs-list .tab {
+    @apply text-primary-action p-4;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    text-decoration: underline;
+  }
+
+    .tabs-list .tab > svg {
+        @apply fill-primary-action;
+        width: 24px;
+    }
+
+    .tabs-list [aria-selected=true] {
+        @apply text-neutral-dark border-t border-r border-l border-linework bg-white;
+        position: relative;
+        bottom:-1px;
+        z-index: 99;
+        pointer-events: none;
+        text-decoration: none;
+    }
+    .tabs-list .tab:hover {
+        @apply lg:bg-neutral-xlight;
+    }
+
+    .tabs-list [aria-selected=true] > svg {
+        @apply fill-neutral-dark;
+    }
+
+    .no-shadow {
+        box-shadow: none!important;
+    }
+
+    .tabs-list-wrapper .tab-panels {
+        position: relative;
+        z-index: 1;
+    }
+    .tabs-list-wrapper .tabs-wrapper {
+        position: relative;
+        bottom:-1px;
+    }

@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;700;800;900&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">
+<link rel="stylesheet" type="text/css" href="/-static/css/style.css" />
+
+</head>
+<!-- logged in body gets logged-in class-->
+ <!-- if the logged in nav is collapsed body needs a class of logged-in-collapsed
+    if the logged in nav is open, body removes that class
+ -->
+<body class="logged-in logged-in-collapsed">
+
+    <a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50bg-white text-blue-600 font-medium px-4 py-2 rounded-md shadow-md">Skip to content</a>
+
+    
+<header>
+
+         <nav id="nav--users" class="bg-primary-action py-2 text-sm hidden md:block">
+         <div class="ss-container mx-auto">
+           <ul class="flex text-white gap-5 justify-end no-li-space">
+             <li><a href="/for-project-leaders" class="hover:underline text-white">Project Leaders</a></li>
+             <li><a href="https://pages.scistarter.org/for-educators-integrating-citizen-science-projects-into-social-studies-curriculum/" class="hover:underline text-white">Educators</a></li>
+             <li><a href="/library" class="hover:underline text-white">Libraries</a></li>
+             <li><a href="/gateways" class="hover:underline text-white">Communities</a></li>
+             </ul>
+         </div>
+    </nav>
+
+
+     <nav id="nav--main" class="relative bg-white border-b border-neutral-xlight">
+         <div class="ss-container mx-auto flex justify-between items-center z-50">
+
+          <!-- LOGO -->
+           <div class="relative block">
+             <a href="/" class="py-3 lg:py-8 lg:px-8 block"><img src="/-static/img/logo/svg/Standard__tagline-dark.svg" alt="SciStarter logo" id="main-nav-logo" /></a>
+           </div>
+           <!---->
+ 
+           <!-- MOBILE HAMBURGER -->
+           <svg xmlns="http://www.w3.org/2000/svg" id="menu-button" class="h-8 w-8 m-4 cursor-pointer md:hidden block stroke-primary-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+           </svg>
+           <!---->
+ 
+           <!-- MAIN NAVIGATION ELEMENTS -->
+           <div id="menu" class="off-canvas absolute transition-all flex flex-col bg-primary-dark text-white p-4 md:flex-row md:w-full  md:static md:bg-white md:text-primary-action md:text-lg md:gap-6 md:p-0 md:items-center md:justify-end md:relative md:z-50">
+             
+
+              <!-- Participate, Media, More-->
+              <!-- When on a page within a section (participate, about, more) add a class of active to the button.main-nav-btn -->
+
+
+<!--Participate-->
+<div class="order-3 md:order-1 z-50">
+
+    <!-- main navigation item-->
+    <button id="participate-button" class="main-nav-btn text-base md:text-lg block cursor-pointer font-semibold md:hover:text-primary-action py-4 md:py-0 border-b border-white-alpha" aria-haspopup="true" aria-expanded="false" aria-controls="participate-menu" data-dropdown-button>Participate <svg class="closed fill-primary-action" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M201.4 374.6c12.5 12.5 32.8 12.5 45.3 0l160-160c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L224 306.7 86.6 169.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l160 160z"/></svg><svg class="open fill-primary-action" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M201.4 137.4c12.5-12.5 32.8-12.5 45.3 0l160 160c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L224 205.3 86.6 342.6c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3l160-160z"/></svg></button>
+
+    <!-- dropdown menu -->
+    <div id="participate-menu" role="menu" aria-labelledby="participate-button" class="hidden p-4 mega-menu md:shadow-xl md:mt-6">
+            <div class="ss-container mx-auto">
+
+
+            <div class="flex flex-col md:flex-row md:gap-4"><!-- this wraps a row-->
+
+                <div class="basis-1/3 md:border-linework md:pb-4 md:border-r md:pr-4"><!-- this wraps a column -->
+
+                
+                <a href="/finder" class="flex-1 pb-4 md:min-h-38 block md:max-h-38">
+                    <h2 class="uppercase font-condensed text-primary md:text-accent1 text-sm md:font-semibold mb-0 hidden md:block">Find</h2>
+                    <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1"><span class="inline-flex items-center gap-1">Projects &amp; Events <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
+                    <p class="hidden md:block text-sm text-primary-light md:text-primary-dark leading-[1.4] mb-8">Find the perfect project or event to do acts of science!</p>
+                    </a>
+
+                    <hr class="border-0 h-[2px] bg-accent1 w-[33%] mb-8 hidden md:block" />
+
+                    <h2 class="hidden md:block uppercase font-condensed text-primary md:text-accent1 text-sm md:font-semibold mb-4">More ways to find projects &amp; events</h2>
+                    <a href="/affiliates" class="flex-1 pb-4">
+                    <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] mb-4"><span class="inline-flex items-center gap-1">Affiliates <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
+                    </a>
+                    <a href="/calendar" class="flex-1 pb-4">
+                    <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] mb-4 md:mb-0"><span class="inline-flex items-center gap-1">Theme Calendar <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
+                    </a>
+
+                </div><!-- end column -->
+
+                <div class="basis-1/3 md:border-linework md:pb-4 md:border-r md:pr-4 md:pl-4"><!-- this wraps a column -->
+
+                
+                <a href="/communities" class="flex-1 pb-4 md:min-h-38 block md:max-h-38">
+                    <h2 class="hidden md:block uppercase font-condensed text-primary md:text-accent1 text-sm md:font-semibold mb-0">Find</h2>
+                    <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1"><span class="inline-flex items-center gap-1">Communities <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
+                    <p class="hidden md:block text-sm text-primary-light md:text-primary-dark leading-[1.4] mb-8">Get involved with other people like you doing acts of science!</p>
+                    </a>
+
+                    <hr class="border-0 h-[2px] bg-accent1 w-[33%] mb-8 hidden md:block" />
+
+                    <h2 class="hidden md:block uppercase font-condensed text-primary md:text-accent1 text-sm md:font-semibold mb-4">Join in</h2>
+                    <a href="/citizensciencemonth" class="flex-1 pb-4">
+                    <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] mb-4 md:mb-0"><span class="inline-flex items-center gap-1">Citizen Science Month <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
+                    </a>
+
+                </div><!-- end column -->
+
+                <div class="basis-1/3 md:border-linework md:pb-4 md:pl-4"><!-- this wraps a column -->
+
+                
+                <a href="/training" class="flex-1 pb-4 md:min-h-38 block md:max-h-38">
+                    <h2 class="hidden md:block uppercase font-condensed text-primary md:text-accent1 text-sm md:font-semibold mb-0">Learn more with</h2>
+                    <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] mb-1"><span class="inline-flex items-center gap-1">Free Trainings <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
+                    <p class="hidden md:block text-sm text-primary-light md:text-primary-dark leading-[1.4] mb-8">Earn badges while learning about doing acts of science!</p>
+                    </a>
+
+                    <hr class="border-0 h-[2px] bg-accent1 w-[33%] mb-8 hidden md:block" />
+
+                    <h2 class="hidden md:block uppercase font-condensed text-primary md:text-accent1 text-sm md:font-semibold mb-0">More ways to get involved</h2>
+                    <a href="/ambassadors" class="flex-1 pb-4">
+                    <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1"><span class="inline-flex items-center gap-1">Ambassador Program <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
+                    </a>
+
+                </div><!-- end column -->
+
+            </div><!-- end row -->
+
+
+
+
+            
+
+        </div>
+        </div>
+
+</div>
+
+
+<!--About-->
+<div class="order-4 md:order-2 z-50">
+
+    <!-- main navigation item-->
+    <button id="about-button" class="main-nav-btn text-base md:text-lg block cursor-pointer font-semibold md:hover:text-primary-action py-4 md:py-0 border-b border-white-alpha" aria-haspopup="true" aria-expanded="false" aria-controls="about-menu" data-dropdown-button>About <svg class="closed fill-primary-action" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M201.4 374.6c12.5 12.5 32.8 12.5 45.3 0l160-160c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L224 306.7 86.6 169.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l160 160z"/></svg><svg class="open fill-primary-action" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M201.4 137.4c12.5-12.5 32.8-12.5 45.3 0l160 160c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L224 205.3 86.6 342.6c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3l160-160z"/></svg></button>
+
+    <!-- dropdown menu -->
+    <div id="about-menu" role="menu" aria-labelledby="about-button"  class="hidden p-4 mega-menu md:shadow-xl md:mt-6">
+        <div class="ss-container mx-auto">
+            
+          <div class="flex flex-col md:flex-row md:gap-4 md:border-b-[0] md:border-linework"><!-- this wraps a row-->
+
+          <div class="basis-3/4 py-2 md:pb-4 md:pt-0 flex flex-wrap content-start">
+
+            <!-- NEWSLETTER -->
+            <div class="basis-full pb-4 md:basis-1/2 md:border-r md:border-linework md:pt-4 md:pr-4 md:border-b"><a href="https://visitor.r20.constantcontact.com/d.jsp?llr=l4yex5cab&p=oi&m=1102690018283&sit=rly6c5neb&f=6b302af4-fe5e-4b2a-9a69-054897d2ffa8" class="basis-1/2  mb-1 block md:pt-0">
+              <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1"><span class="inline-flex items-center gap-1">Newsletter <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
+              <p class="hidden md:block text-sm text-primary-light md:text-primary-dark leading-[1.4] mb-8">Find out the latest news and read great articles on citizen science.</p>
+            </a></div>
+
+            <!-- VIDEO -->
+            <div class="basis-full md:basis-1/2 md:pl-4 md:pt-4 md:border-b md:border-linework"><a href="/videos" class="basis-1/2 mb-1 block pb-4 md:pt-0">
+
+              <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1"><span class="inline-flex items-center gap-1">Videos <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
+              <p class="hidden md:block text-sm text-primary-light md:text-primary-dark leading-[1.4] mb-8">Find out the latest news and read great articles on citizen science.</p>
+            </a></div>
+
+            <!-- LIVE -->
+            <div class="basis-full md:basis-1/2 md:pr-4 md:border-r md:border-linework" ><a href="https://blog.scistarter.org/2022/08/scistarter-live/" class="basis-1/2 block pb-4 md:pt-4">
+              <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1"><span class="inline-flex items-center gap-1">SciStarter LIVE <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
+              <p class="hidden md:block text-sm text-primary-light md:text-primary-dark leading-[1.4] mb-8">SciStarter LIVE is an informal web series, where we go LIVE and work through a citizen science project.</p>
+            </a></div>
+
+            <!-- BLOG -->
+            <div class="basis-full md:basis-1/2 md:border-linework"><a href="https://blog.scistarter.org/" class="basis-1/2 pb-4 block md:pt-0 md:pl-4  md:pt-4">
+              <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1"><span class="inline-flex items-center gap-1">Blog <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
+              <p class="hidden md:block text-sm text-primary-light md:text-primary-dark leading-[1.4] mb-8">Find out the latest news and read great articles on citizen science.</p>
+            </a></div>
+
+            
+
+          </div>
+          <div class="basis-1/4  py-2 md:pb-4 md:pt-0 md:border-l md:pl-4 md:border-linework "><!-- this wraps a section-->
+            <h3 class="uppercase font-condensed text-primary md:text-accent1 text-sm md:font-semibold mb-4 md:mb-2">Connect</h3>
+            <ul class="no-li-space">
+              <li><a href="https://visitor.r20.constantcontact.com/d.jsp?llr=l4yex5cab&p=oi&m=1102690018283&sit=rly6c5neb&f=6b302af4-fe5e-4b2a-9a69-054897d2ffa8" class="text-light-blue md:text-primary-action  text-base md:font-semibold"><span class="inline-flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="fill-primary-action w-4 h-4 inline-block mr-2"><path d="M48 64C21.5 64 0 85.5 0 112c0 15.1 7.1 29.3 19.2 38.4L236.8 313.6c11.4 8.5 27 8.5 38.4 0L492.8 150.4c12.1-9.1 19.2-23.3 19.2-38.4c0-26.5-21.5-48-48-48L48 64zM0 176L0 384c0 35.3 28.7 64 64 64l384 0c35.3 0 64-28.7 64-64l0-208L294.4 339.2c-22.8 17.1-54 17.1-76.8 0L0 176z"/></svg> Get Our Newsletter <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></a></li>
+              <li><a href="/go/facebook" class="text-light-blue md:text-primary-action  text-base md:font-semibold align-middle"><span class="inline-flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-4 h-4 inline-block mr-2"><path d="M64 32C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64h98.2V334.2H109.4V256h52.8V222.3c0-87.1 39.4-127.5 125-127.5c16.2 0 44.2 3.2 55.7 6.4V172c-6-.6-16.5-1-29.6-1c-42 0-58.2 15.9-58.2 57.2V256h83.6l-14.4 78.2H255V480H384c35.3 0 64-28.7 64-64V96c0-35.3-28.7-64-64-64H64z"/></svg> Facebook <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></a></li>
+              <li><a href="/go/linkedin" class="text-light-blue md:text-primary-action  text-base md:font-semibold"><span class="inline-flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-4 h-4 inline-block mr-2"><path d="M416 32H31.9C14.3 32 0 46.5 0 64.3v383.4C0 465.5 14.3 480 31.9 480H416c17.6 0 32-14.5 32-32.3V64.3c0-17.8-14.4-32.3-32-32.3zM135.4 416H69V202.2h66.5V416zm-33.2-243c-21.3 0-38.5-17.3-38.5-38.5S80.9 96 102.2 96c21.2 0 38.5 17.3 38.5 38.5 0 21.3-17.2 38.5-38.5 38.5zm282.1 243h-66.4V312c0-24.8-.5-56.7-34.5-56.7-34.6 0-39.9 27-39.9 54.9V416h-66.4V202.2h63.7v29.2h.9c8.9-16.8 30.6-34.5 62.9-34.5 67.2 0 79.7 44.3 79.7 101.9V416z"/></svg> LinkedIn <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></a></li>
+              <li><a href="/go/instagram" class="text-light-blue md:text-primary-action  text-base md:font-semibold"><span class="inline-flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-4 h-4 inline-block mr-2"><path d="M194.4 211.7a53.3 53.3 0 1 0 59.3 88.7 53.3 53.3 0 1 0 -59.3-88.7zm142.3-68.4c-5.2-5.2-11.5-9.3-18.4-12c-18.1-7.1-57.6-6.8-83.1-6.5c-4.1 0-7.9 .1-11.2 .1c-3.3 0-7.2 0-11.4-.1c-25.5-.3-64.8-.7-82.9 6.5c-6.9 2.7-13.1 6.8-18.4 12s-9.3 11.5-12 18.4c-7.1 18.1-6.7 57.7-6.5 83.2c0 4.1 .1 7.9 .1 11.1s0 7-.1 11.1c-.2 25.5-.6 65.1 6.5 83.2c2.7 6.9 6.8 13.1 12 18.4s11.5 9.3 18.4 12c18.1 7.1 57.6 6.8 83.1 6.5c4.1 0 7.9-.1 11.2-.1c3.3 0 7.2 0 11.4 .1c25.5 .3 64.8 .7 82.9-6.5c6.9-2.7 13.1-6.8 18.4-12s9.3-11.5 12-18.4c7.2-18 6.8-57.4 6.5-83c0-4.2-.1-8.1-.1-11.4s0-7.1 .1-11.4c.3-25.5 .7-64.9-6.5-83l0 0c-2.7-6.9-6.8-13.1-12-18.4zm-67.1 44.5A82 82 0 1 1 178.4 324.2a82 82 0 1 1 91.1-136.4zm29.2-1.3c-3.1-2.1-5.6-5.1-7.1-8.6s-1.8-7.3-1.1-11.1s2.6-7.1 5.2-9.8s6.1-4.5 9.8-5.2s7.6-.4 11.1 1.1s6.5 3.9 8.6 7s3.2 6.8 3.2 10.6c0 2.5-.5 5-1.4 7.3s-2.4 4.4-4.1 6.2s-3.9 3.2-6.2 4.2s-4.8 1.5-7.3 1.5l0 0c-3.8 0-7.5-1.1-10.6-3.2zM448 96c0-35.3-28.7-64-64-64H64C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V96zM357 389c-18.7 18.7-41.4 24.6-67 25.9c-26.4 1.5-105.6 1.5-132 0c-25.6-1.3-48.3-7.2-67-25.9s-24.6-41.4-25.8-67c-1.5-26.4-1.5-105.6 0-132c1.3-25.6 7.1-48.3 25.8-67s41.5-24.6 67-25.8c26.4-1.5 105.6-1.5 132 0c25.6 1.3 48.3 7.1 67 25.8s24.6 41.4 25.8 67c1.5 26.3 1.5 105.4 0 131.9c-1.3 25.6-7.1 48.3-25.8 67z"/></svg>Instagram <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></a></li>
+              <li><a href="/go/twitter" class="text-light-blue md:text-primary-action  text-base md:font-semibold"><span class="inline-flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-4 h-4 inline-block mr-2"><path d="M64 32C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V96c0-35.3-28.7-64-64-64H64zm297.1 84L257.3 234.6 379.4 396H283.8L209 298.1 123.3 396H75.8l111-126.9L69.7 116h98l67.7 89.5L313.6 116h47.5zM323.3 367.6L153.4 142.9H125.1L296.9 367.6h26.3z"/></svg> X <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></a></li>
+              <li><a href="/go/tiktok" class="text-light-blue md:text-primary-action  text-base md:font-semibold"><span class="inline-flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-4 h-4 inline-block mr-2"><path d="M448 209.9a210.1 210.1 0 0 1 -122.8-39.3V349.4A162.6 162.6 0 1 1 185 188.3V278.2a74.6 74.6 0 1 0 52.2 71.2V0l88 0a121.2 121.2 0 0 0 1.9 22.2h0A122.2 122.2 0 0 0 381 102.4a121.4 121.4 0 0 0 67 20.1z"/></svg>TikTok <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></a></li>
+            </ul>
+            <h3 class="leading-[1.2] uppercase font-condensed text-primary md:text-accent1 text-sm md:font-semibold mb-4 md:mb-4 mt-8 md:mt-4">More Media</h3>
+              <ul>
+                <li><a href="/podcast" class="text-light-blue md:text-primary-action text-base md:font-semibold"><span class="inline-flex items-center gap-1"><svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" class="fill-primary-action w-4 h-4 inline-block mr-2"><path d="m260.264 0h2.526a95.007 95.007 0 0 1 95.01 95.007v155.5a0 0 0 0 1 0 0h-192.543a0 0 0 0 1 0 0v-155.5a95.007 95.007 0 0 1 95.007-95.007z"></path><path d="m165.257 268.055h192.543a0 0 0 0 1 0 0v30.131a95.007 95.007 0 0 1 -95.007 95.007h-2.526a95.007 95.007 0 0 1 -95.007-95.007v-30.131a0 0 0 0 1 -.003 0z"></path><path d="m390.437 239.729a17.5 17.5 0 0 0 -17.5 17.5v38.654a111.41 111.41 0 0 1 -222.819 0v-38.654a17.5 17.5 0 0 0 -35 0v38.654c0 74.809 56.4 136.683 128.909 145.36v34.248h-65.327a17.5 17.5 0 0 0 0 35h165.658a17.5 17.5 0 0 0 0-35h-65.331v-34.248c72.51-8.677 128.91-70.551 128.91-145.36v-38.654a17.5 17.5 0 0 0 -17.5-17.5z"></path></svg> Podcast <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></a></li>
+              </ul>
+            </div>
+            </div>
+    
+
+        </div>
+      </div>
+
+</div>
+
+
+<!-- More -->
+<div class="order-5 md:order-3 z-50">
+
+    <!-- main navigation item-->
+    <button id="more-button" class="main-nav-btn text-base md:text-lg block cursor-pointer font-semibold md:hover:text-primary-action py-4 md:py-0" aria-haspopup="true" aria-expanded="false" aria-controls="more-menu" data-dropdown-button>More <svg class="closed fill-primary-action" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M201.4 374.6c12.5 12.5 32.8 12.5 45.3 0l160-160c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L224 306.7 86.6 169.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l160 160z"/></svg><svg class="open fill-primary-action" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M201.4 137.4c12.5-12.5 32.8-12.5 45.3 0l160 160c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L224 205.3 86.6 342.6c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3l160-160z"/></svg></button>
+
+    <!-- dropdown menu -->
+     <div id="more-menu" role="menu" aria-labelledby="more-button" class="hidden p-4 mega-menu md:shadow-xl md:mt-6">
+        <div class="ss-container mx-auto">
+
+          <div class="flex flex-col md:flex-row md:gap-4"><!-- this wraps a row-->
+              <div class="basis-3/4 md:pb-4 flex flex-col md:flex-row flex-wrap"><!-- this wraps a section-->
+               
+                <!-- What is Citizen Science? -->
+                <a href="/citizen-science" class="pb-4 md:basis-1/2 lg:basis-1/3 md:pr-2 md:border-b md:border-r md:border-linework">
+                  <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1"><span class="inline-flex items-center gap-1">What is Citizen Science? <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
+                  <p class="hidden md:block text-sm text-primary-light md:text-primary-dark leading-[1.4] mb-8">Learn how you can help scientists by doing science</p>
+                </a>
+
+                <!-- What is SciStarter? -->
+                <a href="/about" class="pb-4 md:basis-1/2 lg:basis-1/3 pr-4 md:pl-4 md:border-linework md:border-b lg:border-r">
+                  <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1"><span class="inline-flex items-center gap-1">What is SciStarter? <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
+                  <p class="hidden md:block text-sm text-primary-light md:text-primary-dark leading-[1.4] mb-8">Learn what is this website's purpose and how you use it</p>
+                </a>
+
+                <!-- Our Research -->
+                <a href="/research" class="pb-4 md:basis-1/2 lg:basis-1/3 md:pr-2 md:border-linework md:border-b md:border-r md:pt-4 lg:pt-0 lg:border-r-0 lg:pl-4">
+                  <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1"><span class="inline-flex items-center gap-1">Our Research <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
+                  <p class="hidden md:block text-sm text-primary-light md:text-primary-dark leading-[1.4] mb-8">See our mission and meet our team!</p>
+                </a>
+
+                <!-- How to get started -->
+                <a href="/get-started" class="pb-4 md:basis-1/2 lg:basis-1/3 md:pl-4 md:border-linework md:border-b md:pt-4 lg:border-b-0 lg:pl-0 lg:border-r">
+                  <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1"><span class="inline-flex items-center gap-1">How to Get Started <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
+                  <p class="hidden md:block text-sm text-primary-light md:text-primary-dark leading-[1.4] mb-8">Learn how to begin making acts of science</p>
+                </a>
+
+                <!-- Our Team -->
+                <a href="/about#team" class="pb-4 md:basis-1/2 lg:basis-1/3 pr-2 md:border-linework md:border-r md:pt-4 lg:pl-4">
+                  <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1"><span class="inline-flex items-center gap-1">Our Team <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
+                  <p class="hidden md:block text-sm text-primary-light md:text-primary-dark leading-[1.4] mb-8">Meet the team behind SciStarter</p>
+                </a>
+
+                <!-- Data Explorer -->
+                <a href="/data" class="pb-4 md:basis-1/2 lg:basis-1/3 md:pl-4 md:border-linework md:pt-4">
+                  <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1"><span class="inline-flex items-center gap-1">Data Explorer <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
+                  <p class="hidden md:block text-sm text-primary-light md:text-primary-dark leading-[1.4] mb-8">Gain insight into our project data and traffic</p>
+                </a>
+
+              </div>
+              <div class="basis-1/4  py-2 md:pb-4 md:pt-0 md:border-l md:pl-4 md:border-linework"><!-- this wraps a section-->
+                <h3 class="uppercase font-condensed text-primary md:text-accent1 text-sm md:font-semibold mb-4">More Links</h3>
+                <ul class="no-li-space">
+                  <li><a href="/faq" class="text-light-blue md:text-primary-action text-base md:font-semibold"><span class="inline-flex items-center gap-1">Frequently Asked Questions <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></a></li>
+                  <li><a href="mailto:info@scistarter.org" class="text-light-blue md:text-primary-action  text-base md:font-semibold align-middle"><span class="inline-flex items-center gap-1">Contact Us <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></a></li>
+                  <li><a href="/funders" class="text-light-blue md:text-primary-action  text-base md:font-semibold"><span class="inline-flex items-center gap-1">Our Sponsors and Partners <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></a></li>
+                </ul>
+              </div>
+          </div>
+
+    
+
+
+        </div>
+      </div>
+
+</div>
+
+
+              <!-- Search -->
+              <div class="main-nav-btn2 md:py-0 border-b border-white-alpha order-2 md:order-4">
+    <div class="relative w-full md:max-w-md my-4 md:my-0">
+    <input
+        type="text"
+        class="w-full pl-10 pr-4 py-2 rounded-lg border border-linework focus:outline-none focus:border-primary-action text-base text-primary-dark"
+        placeholder="Search..."
+    />
+    <span class="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="fill-primary-action w-[15px] md:mr-3"><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352a144 144 0 1 0 0-288 144 144 0 1 0 0 288z"/></svg>
+    </span>
+    </div>
+</div>
+
+
+          
+              <!-- Necessary mobile menu items-->
+               <!-- this is the mobile version of nav-part__users-bar-->
+            <div class="md:hidden order-6">
+             <h6 class="uppercase text-xs border-b border-white-alpha bg-primary-action my-2 -ml-4 -mr-4 py-2 px-4 text-white font-semibold flex gap-2 tracking-wide">Special Participant Sections</h6>
+             <ul class="flex flex-col text-white gap-0">
+               <li class="py-2 border-b border-white-alpha"><a href="/for-project-leaders" class="text-white">Project Leaders</a></li>
+               <li class="py-2 border-b border-white-alpha"><a href="https://pages.scistarter.org/for-educators-integrating-citizen-science-projects-into-social-studies-curriculum/" class="text-white">Educators</a></li>
+               <li class="py-2 border-b border-white-alpha"><a href="/library" class="text-white">Libraries</a></li>
+               <li class="py-2"><a href="/gateways" class="text-white">Communities</a></li>
+           </ul>
+            </div>
+       
+            <div id="mobile-nav-close" class="h-6 w-6 m-4 absolute top-[0] right-[10px] md:hidden fill-white"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><path d="M342.6 150.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L192 210.7 86.6 105.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L146.7 256 41.4 361.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L192 301.3 297.4 406.6c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L237.3 256 342.6 150.6z"/></svg></div> 
+            
+            
+           </div><!-- end main navigation elements-->
+
+
+             </div><!-- end ss-container -->
+           </nav>
+ 
+         </header>
+
+
+     <nav id="logged-in-sidebar" class="bg-primary-dark flex" role="navigation">
+
+    <!-- LOGO -->
+           <div class="relative block">
+             <a href="/" class="py-3 md:pt-4 md:mb-8 md:px-4  block"><img src="/-static/img/logo/svg/Standard__tagline-white.svg" alt="SciStarter logo" id="logged-in-nav-logo" /><img src="/-static/img/logo/svg/short.svg" alt="SciStarter Alternate logo" id="logged-in-nav-logo-short" class="hidden" /></a>
+           </div>
+           <!---->
+
+
+    <!-- ONLY SHOW 'set username' if they have not set a public usernam-->
+    <div class="logged-in-username text-sm p-4 text-white pb-0">Hi, scistarter123 &lpar;<a href="/settings" class="text-sm">set username</a>&rpar;</div>
+
+    <ul id="logged-in-sidebar-menu" class="flex md:flex-col">
+        <li>
+            <a href="/" class="active">
+                <svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 24 24" alt="Home Icon" class="fill-white">
+                    <path class="st0" d="M23.4,10.4s0,0,0,0L13.6.6c-.4-.4-1-.6-1.6-.6s-1.1.2-1.6.6L.7,10.4s0,0,0,0c-.9.9-.9,2.3,0,3.1.4.4.9.6,1.5.6,0,0,0,0,0,0h.4v7.2c0,1.4,1.2,2.6,2.6,2.6h3.8c.4,0,.7-.3.7-.7v-5.6c0-.7.5-1.2,1.2-1.2h2.3c.7,0,1.2.5,1.2,1.2v5.6c0,.4.3.7.7.7h3.8c1.4,0,2.6-1.2,2.6-2.6v-7.2h.4c.6,0,1.1-.2,1.6-.6.9-.9.9-2.3,0-3.1ZM22.4,12.6c-.2.2-.4.2-.6.2h-1.1c-.4,0-.7.3-.7.7v7.9c0,.7-.5,1.2-1.2,1.2h-3.1v-4.9c0-1.4-1.2-2.6-2.6-2.6h-2.3c-1.4,0-2.6,1.2-2.6,2.6v4.9h-3.1c-.7,0-1.2-.5-1.2-1.2v-7.9c0-.4-.3-.7-.7-.7h-1s0,0,0,0c-.2,0-.4,0-.6-.2-.3-.3-.3-.8,0-1.1,0,0,0,0,0,0h0S11.4,1.6,11.4,1.6c.2-.2.4-.2.6-.2s.4,0,.6.2l9.8,9.8s0,0,0,0c.3.3.3.8,0,1.1Z"/>
+                </svg>
+                <span>Home</span>
+            </a>
+        </li>
+        <li>
+            <a href="/dashboard/communties">
+                <svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 24 24" alt="Communities Icon" class="fill-white">
+                    <path d="M19.9.9c-1.1-.1-2.3.2-3.2.9-.9.8-1.5,1.8-1.7,3.1-.2,1.6.5,3,1.6,4l-3.1,5.5c-.3,0-.5-.2-.8-.2-.8-.1-1.5,0-2.2.2l-3.1-5.6c.1,0,.2-.2.3-.3,1.7-1.8,1.7-4.6,0-6.4-.8-.9-1.9-1.3-3.1-1.3-1.2,0-2.3.5-3.1,1.3C-.2,4-.2,6.8,1.5,8.6c.8.9,1.9,1.3,3.1,1.3h0c.5,0,1-.1,1.5-.3l3.1,5.6c-.8.7-1.4,1.6-1.5,2.7-.4,2.5,1.2,4.8,3.6,5.2.2,0,.5,0,.7,0,.9,0,1.8-.3,2.5-.8,1-.7,1.6-1.8,1.8-3,.3-1.6-.4-3.2-1.5-4.2l3.1-5.6c.3.1.7.2,1,.3.2,0,.3,0,.5,0,1,0,1.9-.3,2.7-1,.9-.8,1.5-1.8,1.7-3.1.3-2.5-1.5-4.7-3.9-5ZM4.6,8.4c-.8,0-1.5-.3-2-.9-1.1-1.2-1.1-3.1,0-4.3.5-.6,1.3-.9,2-.9.8,0,1.5.3,2,.9,1.1,1.2,1.1,3.1,0,4.3-.5.6-1.3.9-2,.9h0ZM14.9,19.1c-.1.8-.6,1.5-1.2,2-.6.4-1.4.6-2.1.5-1.6-.3-2.7-1.8-2.4-3.5.1-.8.6-1.5,1.2-2,.5-.4,1.1-.5,1.6-.5s.3,0,.5,0h0c1.6.3,2.7,1.8,2.4,3.5ZM22.3,5.7c0,.8-.5,1.5-1.1,2.1-.6.5-1.3.7-2.1.6-1.6-.2-2.7-1.7-2.6-3.3,0-.8.5-1.5,1.1-2,.5-.4,1.1-.6,1.8-.6s.2,0,.3,0c1.6.2,2.7,1.7,2.6,3.3Z"/>
+                </svg>
+                <span class="add-my">Communities</span>
+            </a>
+            <ul>
+                <li><a href="">Ben Franklin</a></li>
+                <li><a href="">Education</a></li>
+            </ul>
+        </li>
+        <li>
+            <a href="/dashboard">
+                <svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 24 24" alt="Project and Events Icon" class="fill-white">
+                    <path class="st0" d="M23.4,22.9h-8.8c-.1,0-.3-.1-.3-.3v-2.8c0-.1.1-.3.3-.3h.8v-3.5h-1.5c-.1.4-.5.6-.9.6h-1.9c-.3,0-.7-.2-.9-.6h-1.6v3.5h.8c.1,0,.3.1.3.3v2.8c0,.1-.1.3-.3.3H.6c-.1,0-.3-.1-.3-.3v-2.8c0-.1.1-.3.3-.3h.8l.7-13.8v-2.8c.1,0,.3,0,.3,0h1v-1.5c0-.1.1-.3.3-.3h3.4c.1,0,.3.1.3.3v1.5h1c.1,0,.3.1.3.3v4.3h1.6c.1-.4.5-.6.9-.6h1.9c.3,0,.7.2.9.6h1.5V3.1c0-.1.1-.3.3-.3h1v-1.5c0-.1.1-.3.3-.3h3.4c.1,0,.3.1.3.3v1.5h.8c.1,0,.3.1.3.2l.8,16.6h.8c.1,0,.3.1.3.3v2.8c0,.1-.1.2-.3.2ZM14.9,22.4h8.3v-2.3h-8.3v2.3ZM.8,22.4h8.3v-2.3H.8v2.3ZM15.8,19.7h6.3l-.7-13.5h-5.6v13.5ZM1.8,19.7h6.3V6.2H2.5l-.7,13.5ZM10.7,16c0,.1.2.2.4.2h1.9c.1,0,.3,0,.4-.2v-.2c0,0,0-.2,0-.3v-7.5c0,0,0-.2,0-.3v-.2c0-.1-.2-.2-.4-.2h-1.9c-.1,0-.3,0-.4.2v.2c0,0,0,.2,0,.3v7.4c0,0,0,.2,0,.3v.3ZM13.9,15.7h1.5v-7.8h-1.5v7.8ZM8.6,15.7h1.5v-7.8h-1.5v7.8ZM15.8,5.6h5.6v-2.3h-5.6v2.3ZM2.5,5.6h5.6v-2.3H2.7v2.3ZM17.1,2.8h2.9v-1.2h-2.9v1.2ZM3.9,2.8h2.9v-1.2h-2.9v1.2Z"/>
+                    <path class="st0" d="M9.4,23.3H.6c-.3,0-.6-.3-.6-.7v-2.8c0-.4.3-.7.6-.7h.4L1.9,3.1c0-.4.3-.6.6-.6h.6v-1.2c0-.4.3-.7.6-.7h3.4c.3,0,.6.3.6.7v1.2h.6c.3,0,.6.3.6.7v3.9h1c.2-.4.6-.6,1-.6h1.9c.4,0,.8.2,1,.6h1v-4c0-.4.3-.7.6-.7h.6v-1.1c0-.4.3-.7.6-.7h3.4c.3,0,.6.3.6.7v1.2h.6c.3,0,.6.3.6.6l.8,16.2h.4c.3,0,.6.3.6.7v2.8c0,.1,0,.3-.1.4-.1.1-.3.2-.4.2h-8.8c-.3,0-.6-.3-.6-.7v-2.8c0-.4.3-.7.6-.7h.4v-2.8h-1c-.2.4-.6.6-1,.6h-1.9c-.4,0-.8-.2-1-.6h-1v2.8h.4c.3,0,.6.3.6.7v2.8c0,.4-.3.6-.6.6ZM15.2,22h7.6v-1.5h-7.6v1.5ZM1.2,22h7.6v-1.5H1.2v1.5ZM16.2,19.3h5.6l-.6-12.8h-4.9v12.8ZM2.2,19.3h5.6V6.5H2.9l-.7,12.8ZM11.1,15.8h1.9c0,0,0-.1,0-.2,0,0,0,0,0-.1v-7.5q0,0,0-.1c0,0,0-.1,0-.2h-1.9c0,0,0,.1,0,.2,0,0,0,0,0,.1v7.4q0,0,0,.1c0,.1,0,.2,0,.3ZM14.3,15.3h.8v-7h-.8v7ZM9,15.3h.8v-7h-.8v7ZM16.2,5.2h4.8v-1.5h-4.8v1.5ZM3,5.2h4.8v-1.5H3.1v1.5ZM17.5,2.4h2.2v-.5h-2.2v.5ZM4.3,2.4h2.2v-.5h-2.2v.5Z"/>
+                </svg>
+                <span class="add-my">Projects &amp; Events</span>
+            </a>
+        </li>
+        <li>
+            <a href="/dashboard/lists">
+                <svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 24 24" class="fill-white" alt="Lists Icon">
+                <path d="M5.9,7h-2.1c-.7,0-1.2-.6-1.2-1.2v-2.3c0-.6.4-1.2,1.1-1.2h2.1c.7,0,1.2.6,1.2,1.2v2.2c0,.6-.5,1.2-1.1,1.2h0ZM5.8,3.5h-2.1v2.2h2v-2.2h0ZM5.9,5.7h0ZM21.4,4.8c0-.4-.2-.6-.6-.6h-11.3c-.4,0-.6.2-.6.6s.2.6.6.6h11.3c.4,0,.6-.3.6-.6ZM5.9,14.3h-2.1c-.7,0-1.2-.6-1.2-1.2v-2.1c0-.7.6-1.2,1.2-1.2h2.1c.7,0,1.2.6,1.2,1.2v2.1c0,.6-.6,1.2-1.2,1.2ZM5.8,10.9h-2.1v2.2h2v-2.2h0ZM5.9,13.1h0ZM21.4,12.2c0-.4-.2-.6-.6-.6h-11.3c-.4,0-.6.2-.6.6s.2.6.6.6h11.3c.4,0,.6-.3.6-.6ZM5.9,21.7h-2.1c-.7,0-1.3-.6-1.3-1.2v-2.2c0-.7.6-1.2,1.2-1.2h2.1c.7,0,1.2.6,1.2,1.2v2.2c0,.6-.5,1.2-1.1,1.2ZM5.8,18.3h-2.1v2.2h2v-2.2h0ZM5.9,20.4h0ZM21.4,19.6c0-.4-.2-.6-.6-.6h-11.3c-.4,0-.6.2-.6.6s.2.6.6.6h11.3c.4,0,.6-.3.6-.6Z"/>
+                </svg>
+                <span class="add-my">Lists</span>
+            </a>
+        </li>
+        <li class="mobile-hidden">
+            <a href="/dashboard/messages">
+                <svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 24 24" class="fill-white" alt="Messages Icon">
+                    <path d="M23.9,5.5c-.1-.4-.3-.7-.5-1-.5-.6-1.3-1-2.2-1H2.9c-.8,0-1.6.4-2.2,1-.3.3-.4.6-.5,1C0,5.7,0,6,0,6.3v11.4C0,19.3,1.3,20.6,2.9,20.6h18.3c1.6,0,2.9-1.3,2.9-2.9V6.3c0-.3,0-.6-.1-.8ZM2.9,4.6h18.3c.5,0,.9.2,1.2.5l-10.1,7.1c-.2.1-.5.1-.7,0L1.6,5.1c.3-.3.8-.5,1.2-.5ZM22.9,17.7c0,.9-.8,1.7-1.7,1.7H2.9c-.9,0-1.7-.8-1.7-1.7V6.3s0,0,0-.1l9.9,7c.6.4,1.4.4,2,0l9.9-7s0-.6,0,11.5Z"/>
+                </svg>
+                <span class="add-my">Messages <span class="ss-notification-badge">10</span></span>
+            </a>
+        </li>
+        <li class="mobile-hidden">
+            <a href="/dashboard/profile">
+                <svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 24 24" alt="Profile Icon" class="fill-white">
+                    <path class="st0" d="M20.5,3.5C18.2,1.2,15.2,0,12,0S5.8,1.2,3.5,3.5C1.2,5.8,0,8.8,0,12s1.2,6.2,3.5,8.5c2.3,2.3,5.3,3.5,8.5,3.5s6.2-1.2,8.5-3.5c2.3-2.3,3.5-5.3,3.5-8.5s-1.2-6.2-3.5-8.5ZM5.2,20.1c.4-3.4,3.3-6,6.8-6s3.5.7,4.8,2c1.1,1.1,1.8,2.5,2,4-1.8,1.5-4.2,2.5-6.8,2.5s-5-.9-6.8-2.5ZM12,12.6c-2,0-3.6-1.6-3.6-3.6s1.6-3.6,3.6-3.6,3.6,1.6,3.6,3.6-1.6,3.6-3.6,3.6ZM20,18.9c-.4-1.4-1.1-2.8-2.2-3.8-.9-.9-1.9-1.5-3-1.9,1.3-.9,2.2-2.4,2.2-4.2,0-2.8-2.3-5.1-5.1-5.1s-5.1,2.3-5.1,5.1.9,3.3,2.2,4.2c-1,.4-2,1-2.8,1.7-1.2,1.1-2,2.5-2.4,4-1.6-1.9-2.6-4.3-2.6-6.9C1.4,6.2,6.2,1.4,12,1.4s10.6,4.8,10.6,10.6-1,5.1-2.6,6.9Z"/>
+                </svg>
+                <span>Public Profile</span>
+            </a>
+        </li>
+        <li class="mobile-hidden">
+            <a href="/dashboard/settings">
+                <svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 24 24" alt="Settings Icon" class="fill-white">
+                    <path class="st0" d="M21.7,8.8h0c-.1,0-.3,0-.4-.1-.1,0-.2-.2-.3-.3,0-.1,0-.3,0-.4,0-.1,0-.3.2-.4h0c.4-.5.7-1.1.7-1.7s-.2-1.2-.7-1.7l-1.2-1.2c-.4-.4-1-.7-1.6-.7s-1.2.2-1.6.7h0c-.1.2-.2.2-.4.3-.1,0-.3,0-.4,0-.1,0-.2-.2-.3-.3,0-.1-.1-.3-.1-.4h0c0-.7-.2-1.3-.7-1.8-.4-.4-1-.7-1.6-.7h-1.7c-.6,0-1.2.2-1.6.7-.4.4-.7,1-.7,1.7h0c0,.3,0,.4-.1.5,0,.1-.2.2-.3.3-.1,0-.3,0-.4,0s-.3,0-.4-.2h0c-.4-.5-1-.8-1.6-.8s-1.2.2-1.6.7l-1.2,1.2c-.4.4-.7,1-.7,1.7s.2,1.2.7,1.7h0c.1.2.2.3.2.5,0,.1,0,.3,0,.4,0,.1-.1.3-.3.3-.1,0-.3.1-.4.1h0c-.6,0-1.2.2-1.6.7-.4.4-.7,1-.7,1.7v1.7c0,.6.2,1.2.7,1.7.4.4,1,.7,1.6.7h0c.1,0,.3,0,.4.1.1,0,.2.2.3.3,0,.1,0,.3,0,.4,0,.1,0,.3-.2.4h0c-.4.5-.7,1.1-.7,1.7s.2,1.2.7,1.7l1.2,1.2c.4.4,1,.7,1.6.7s1.2-.2,1.6-.7h0c.1-.2.2-.2.4-.3.1,0,.3,0,.4,0,.1,0,.2.1.3.3,0,.1.1.3.1.4h0c0,.4,0,.7.2,1s.3.5.5.8c.2.2.5.4.7.5.3.1.6.2.9.2h1.7c.6,0,1.2-.2,1.6-.7.4-.4.7-1,.7-1.7h0c0-.3,0-.4.1-.5,0-.1.2-.2.3-.3.1,0,.3,0,.4,0,.1,0,.3,0,.4.2h0c.4.5,1,.8,1.6.8s1.2-.2,1.6-.7l1.2-1.2c.4-.4.7-1,.7-1.7s-.2-1.2-.7-1.7h0c-.1-.2-.2-.3-.2-.5,0-.1,0-.3,0-.4,0-.1.1-.3.3-.3.1,0,.3-.1.4-.1h0c.6,0,1.2-.2,1.6-.7.4-.4.7-1,.7-1.7v-1.7c0-.6-.2-1.2-.7-1.7-.4-.4-1-.7-1.6-.7ZM22.4,12.9c0,.2,0,.4-.2.5-.1.1-.3.2-.5.2h0c-.5,0-.9.1-1.3.4-.4.3-.7.6-.8,1.1s-.2.9-.1,1.4c0,.5.3.9.6,1.2h0c.1.2.2.4.2.6s0,.4-.2.5l-1.2,1.2c-.1.1-.3.2-.5.2s-.4,0-.5-.2h0c-.3-.4-.7-.6-1.2-.7-.4,0-.9,0-1.3.1-.4.2-.8.5-1,.9-.3.4-.4.8-.4,1.3h0c0,.3,0,.5-.2.6s-.3.2-.5.2h-1.7c-.2,0-.4,0-.5-.2s-.2-.3-.2-.5h0c0-.6-.1-1-.4-1.4-.3-.4-.6-.7-1-.9-.4-.2-.9-.2-1.3-.1-.4,0-.9.3-1.2.6h0c-.1.2-.3.3-.5.3s-.4,0-.5-.2l-1.2-1.2c-.1-.1-.2-.3-.2-.5s0-.4.2-.5h0c.3-.4.5-.8.6-1.3,0-.5,0-.9-.1-1.4-.2-.4-.5-.8-.8-1.1-.4-.3-.8-.4-1.3-.4h0c-.2,0-.4,0-.5-.2-.1-.1-.2-.3-.2-.5v-1.7c0-.2,0-.4.2-.5.1-.1.3-.2.5-.2h0c.5,0,.9-.1,1.3-.4.4-.3.7-.6.8-1.1.2-.4.2-.9.1-1.4,0-.5-.3-.9-.6-1.2h0c-.1-.2-.2-.4-.2-.6s0-.4.2-.5l1.2-1.2c.1-.1.3-.2.5-.2s.4,0,.5.2h0c.3.4.7.6,1.2.7.4,0,.9,0,1.3-.1.4-.2.8-.5,1-.9.3-.4.4-.8.4-1.3h0c0-.3,0-.5.2-.6.1-.1.3-.2.5-.2h1.7c.2,0,.4,0,.5.2.1.1.2.3.2.5h0c0,.6.1,1,.4,1.4.3.4.6.7,1,.9s.9.2,1.3.1c.4,0,.8-.3,1.2-.6h0c.1-.2.3-.3.5-.3s.4,0,.5.2l1.2,1.2c.1.1.2.3.2.5s0,.4-.2.5h0c-.3.4-.5.8-.6,1.3,0,.5,0,.9.1,1.4.2.4.5.8.8,1.1.4.3.8.4,1.3.4h0c.2,0,.4,0,.5.2.1.1.2.3.2.5v1.7Z"/>
+                    <path class="st0" d="M12.4,6.4c-1.1,0-2.1.3-3,.9-.9.6-1.6,1.5-2,2.5-.4,1-.5,2.1-.3,3.2.2,1.1.7,2.1,1.5,2.9.8.8,1.7,1.3,2.8,1.5,1.1.2,2.1.1,3.1-.3,1-.4,1.8-1.1,2.4-2.1.6-.9.9-2,.9-3.1,0-1.5-.6-2.9-1.6-4-1-1-2.4-1.6-3.8-1.6ZM12.4,16c-.8,0-1.5-.2-2.2-.7-.6-.4-1.1-1.1-1.4-1.8-.3-.7-.4-1.5-.2-2.3.1-.8.5-1.5,1.1-2,.5-.6,1.2-.9,2-1.1.8-.2,1.5,0,2.2.2.7.3,1.3.8,1.7,1.5.4.7.7,1.4.7,2.2,0,1.1-.4,2.1-1.1,2.8-.7.7-1.7,1.2-2.7,1.2Z"/>
+                </svg>
+                <span>Account Settings</span>
+            </a>
+        </li>
+        <li class="mobile-hidden">
+            <button class="btn btn-icon border border-white bg-primary-dark hover:bg-primary text-white">
+                <svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 24 24" alt="Logout Icon" class="fill-white">
+                    <path class="st0" d="M10.2,1.7c.5,0,.8-.4.8-.9s-.4-.9-.8-.9H3.8C1.8,0,.2,1.7.2,3.7v16.6c0,2,1.6,3.7,3.6,3.7h6.4c.5,0,.8-.4.8-.9s-.4-.9-.8-.9H3.8c-1.1,0-1.9-.9-1.9-2V3.7c0-1.1.9-2,1.9-2h6.4Z"/>
+                    <path class="st0" d="M18.1,5.4c-.3-.3-.8-.3-1.2,0-.3.3-.3.9,0,1.2l4.1,4.2H5.9c-.5,0-.8.4-.8.9s.4.9.8.9h15l-4,4.2c-.3.3-.3.9,0,1.2.3.3.8.3,1.2,0l5.5-5.6c.2-.2.2-.4.2-.6h0s0,0,0,0c0-.2,0-.5-.2-.6l-5.5-5.6Z"/>
+                </svg>
+                <span>Log Out</span>
+            </button>
+        </li>
+    </ul>
+    <ul id="logged-in-nav-mobile">
+        <li>
+        <button id="logged-in-nav-mobile-more">
+            <svg version="1.1" id="fi_512222" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 384 384" xml:space="preserve" alt="More icon" class="w-5 fill-white">
+            <g>
+                <circle cx="192" cy="42.667" r="42.667"></circle>
+            </g>
+            <g>
+                <circle cx="192" cy="192" r="42.667"></circle>
+            </g>
+            <g>
+                <circle cx="192" cy="341.333" r="42.667"></circle>
+            </g>
+        </svg>
+        </button>
+        <ul id="logged-in-nav-mobile-hidden">
+            <li>
+            <a href="/dashboard/messages">
+                <svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 24 24" class="fill-white">
+                    <path d="M14.9,14.5c0,.3-.3.6-.6.6H4.1c-.3,0-.6-.3-.6-.6s.3-.6.6-.6h10.2c.3,0,.6.3.6.6Z"/>
+                    <path d="M21.5,1h-13.4c-1.4,0-2.5,1.1-2.5,2.5v1.8h-3c-1.4,0-2.5,1.1-2.5,2.5v8.3c0,1.4,1.1,2.5,2.5,2.5h2.2v3.7c0,.2.1.5.4.5,0,0,.1,0,.2,0,.2,0,.3,0,.4-.2l3.8-4.1h6.5c1.2,0,2.3-.9,2.5-2.1l1.8,1.9c.1.1.3.2.4.2s.1,0,.2,0c.2,0,.4-.3.4-.5v-3.7h.2c1.4,0,2.5-1.1,2.5-2.5V3.5c0-1.4-1.1-2.5-2.5-2.5ZM17.3,16.1c0,.8-.6,1.3-1.4,1.3h-6.7c-.2,0-.3.1-.4.2l-2.9,3.2v-2.8c0-.3-.3-.6-.6-.6h-2.8c-.7,0-1.3-.6-1.3-1.3V7.9c0-.7.6-1.3,1.3-1.3h3.6s9.9,0,9.9,0c.8,0,1.4.6,1.4,1.3v8.3ZM22.8,11.8c0,.8-.6,1.4-1.3,1.4h-.8c-.3,0-.6.3-.6.6v2.8l-1.6-1.7v-7c0-1.4-1.1-2.5-2.5-2.5H6.7s0-1.8,0-1.8c0-.8.6-1.4,1.3-1.4h13.4c.7,0,1.3.6,1.3,1.4v8.3Z"/>
+                    <path d="M14.9,12.2c0,.3-.3.6-.6.6H4.1c-.3,0-.6-.3-.6-.6s.3-.6.6-.6h10.2c.3,0,.6.3.6.6Z"/>
+                    <path d="M9.8,9.8c0,.3-.3.6-.6.6h-5.1c-.3,0-.6-.3-.6-.6s.3-.6.6-.6h5.1c.3,0,.6.3.6.6Z"/>
+                </svg>
+                <span>Messages <span class="ss-notification-badge">10</span></span>
+            </a>
+        </li>
+            <li>
+            <a href="/dashboard/profile">
+                <svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 24 24" alt="Profile Icon" class="fill-white">
+                    <path class="st0" d="M20.5,3.5C18.2,1.2,15.2,0,12,0S5.8,1.2,3.5,3.5C1.2,5.8,0,8.8,0,12s1.2,6.2,3.5,8.5c2.3,2.3,5.3,3.5,8.5,3.5s6.2-1.2,8.5-3.5c2.3-2.3,3.5-5.3,3.5-8.5s-1.2-6.2-3.5-8.5ZM5.2,20.1c.4-3.4,3.3-6,6.8-6s3.5.7,4.8,2c1.1,1.1,1.8,2.5,2,4-1.8,1.5-4.2,2.5-6.8,2.5s-5-.9-6.8-2.5ZM12,12.6c-2,0-3.6-1.6-3.6-3.6s1.6-3.6,3.6-3.6,3.6,1.6,3.6,3.6-1.6,3.6-3.6,3.6ZM20,18.9c-.4-1.4-1.1-2.8-2.2-3.8-.9-.9-1.9-1.5-3-1.9,1.3-.9,2.2-2.4,2.2-4.2,0-2.8-2.3-5.1-5.1-5.1s-5.1,2.3-5.1,5.1.9,3.3,2.2,4.2c-1,.4-2,1-2.8,1.7-1.2,1.1-2,2.5-2.4,4-1.6-1.9-2.6-4.3-2.6-6.9C1.4,6.2,6.2,1.4,12,1.4s10.6,4.8,10.6,10.6-1,5.1-2.6,6.9Z"/>
+                </svg>
+                <span>Public Profile</span>
+            </a>
+        </li>
+        <li>
+            <a href="/dashboard/settings">
+                <svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 24 24" alt="Settings Icon" class="fill-white">
+                    <path class="st0" d="M21.7,8.8h0c-.1,0-.3,0-.4-.1-.1,0-.2-.2-.3-.3,0-.1,0-.3,0-.4,0-.1,0-.3.2-.4h0c.4-.5.7-1.1.7-1.7s-.2-1.2-.7-1.7l-1.2-1.2c-.4-.4-1-.7-1.6-.7s-1.2.2-1.6.7h0c-.1.2-.2.2-.4.3-.1,0-.3,0-.4,0-.1,0-.2-.2-.3-.3,0-.1-.1-.3-.1-.4h0c0-.7-.2-1.3-.7-1.8-.4-.4-1-.7-1.6-.7h-1.7c-.6,0-1.2.2-1.6.7-.4.4-.7,1-.7,1.7h0c0,.3,0,.4-.1.5,0,.1-.2.2-.3.3-.1,0-.3,0-.4,0s-.3,0-.4-.2h0c-.4-.5-1-.8-1.6-.8s-1.2.2-1.6.7l-1.2,1.2c-.4.4-.7,1-.7,1.7s.2,1.2.7,1.7h0c.1.2.2.3.2.5,0,.1,0,.3,0,.4,0,.1-.1.3-.3.3-.1,0-.3.1-.4.1h0c-.6,0-1.2.2-1.6.7-.4.4-.7,1-.7,1.7v1.7c0,.6.2,1.2.7,1.7.4.4,1,.7,1.6.7h0c.1,0,.3,0,.4.1.1,0,.2.2.3.3,0,.1,0,.3,0,.4,0,.1,0,.3-.2.4h0c-.4.5-.7,1.1-.7,1.7s.2,1.2.7,1.7l1.2,1.2c.4.4,1,.7,1.6.7s1.2-.2,1.6-.7h0c.1-.2.2-.2.4-.3.1,0,.3,0,.4,0,.1,0,.2.1.3.3,0,.1.1.3.1.4h0c0,.4,0,.7.2,1s.3.5.5.8c.2.2.5.4.7.5.3.1.6.2.9.2h1.7c.6,0,1.2-.2,1.6-.7.4-.4.7-1,.7-1.7h0c0-.3,0-.4.1-.5,0-.1.2-.2.3-.3.1,0,.3,0,.4,0,.1,0,.3,0,.4.2h0c.4.5,1,.8,1.6.8s1.2-.2,1.6-.7l1.2-1.2c.4-.4.7-1,.7-1.7s-.2-1.2-.7-1.7h0c-.1-.2-.2-.3-.2-.5,0-.1,0-.3,0-.4,0-.1.1-.3.3-.3.1,0,.3-.1.4-.1h0c.6,0,1.2-.2,1.6-.7.4-.4.7-1,.7-1.7v-1.7c0-.6-.2-1.2-.7-1.7-.4-.4-1-.7-1.6-.7ZM22.4,12.9c0,.2,0,.4-.2.5-.1.1-.3.2-.5.2h0c-.5,0-.9.1-1.3.4-.4.3-.7.6-.8,1.1s-.2.9-.1,1.4c0,.5.3.9.6,1.2h0c.1.2.2.4.2.6s0,.4-.2.5l-1.2,1.2c-.1.1-.3.2-.5.2s-.4,0-.5-.2h0c-.3-.4-.7-.6-1.2-.7-.4,0-.9,0-1.3.1-.4.2-.8.5-1,.9-.3.4-.4.8-.4,1.3h0c0,.3,0,.5-.2.6s-.3.2-.5.2h-1.7c-.2,0-.4,0-.5-.2s-.2-.3-.2-.5h0c0-.6-.1-1-.4-1.4-.3-.4-.6-.7-1-.9-.4-.2-.9-.2-1.3-.1-.4,0-.9.3-1.2.6h0c-.1.2-.3.3-.5.3s-.4,0-.5-.2l-1.2-1.2c-.1-.1-.2-.3-.2-.5s0-.4.2-.5h0c.3-.4.5-.8.6-1.3,0-.5,0-.9-.1-1.4-.2-.4-.5-.8-.8-1.1-.4-.3-.8-.4-1.3-.4h0c-.2,0-.4,0-.5-.2-.1-.1-.2-.3-.2-.5v-1.7c0-.2,0-.4.2-.5.1-.1.3-.2.5-.2h0c.5,0,.9-.1,1.3-.4.4-.3.7-.6.8-1.1.2-.4.2-.9.1-1.4,0-.5-.3-.9-.6-1.2h0c-.1-.2-.2-.4-.2-.6s0-.4.2-.5l1.2-1.2c.1-.1.3-.2.5-.2s.4,0,.5.2h0c.3.4.7.6,1.2.7.4,0,.9,0,1.3-.1.4-.2.8-.5,1-.9.3-.4.4-.8.4-1.3h0c0-.3,0-.5.2-.6.1-.1.3-.2.5-.2h1.7c.2,0,.4,0,.5.2.1.1.2.3.2.5h0c0,.6.1,1,.4,1.4.3.4.6.7,1,.9s.9.2,1.3.1c.4,0,.8-.3,1.2-.6h0c.1-.2.3-.3.5-.3s.4,0,.5.2l1.2,1.2c.1.1.2.3.2.5s0,.4-.2.5h0c-.3.4-.5.8-.6,1.3,0,.5,0,.9.1,1.4.2.4.5.8.8,1.1.4.3.8.4,1.3.4h0c.2,0,.4,0,.5.2.1.1.2.3.2.5v1.7Z"/>
+                    <path class="st0" d="M12.4,6.4c-1.1,0-2.1.3-3,.9-.9.6-1.6,1.5-2,2.5-.4,1-.5,2.1-.3,3.2.2,1.1.7,2.1,1.5,2.9.8.8,1.7,1.3,2.8,1.5,1.1.2,2.1.1,3.1-.3,1-.4,1.8-1.1,2.4-2.1.6-.9.9-2,.9-3.1,0-1.5-.6-2.9-1.6-4-1-1-2.4-1.6-3.8-1.6ZM12.4,16c-.8,0-1.5-.2-2.2-.7-.6-.4-1.1-1.1-1.4-1.8-.3-.7-.4-1.5-.2-2.3.1-.8.5-1.5,1.1-2,.5-.6,1.2-.9,2-1.1.8-.2,1.5,0,2.2.2.7.3,1.3.8,1.7,1.5.4.7.7,1.4.7,2.2,0,1.1-.4,2.1-1.1,2.8-.7.7-1.7,1.2-2.7,1.2Z"/>
+                </svg>
+                <span>Account Settings</span>
+            </a>
+        </li>
+        <li>
+            <button class="flex gap-4 w-full">
+                <svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 24 24" alt="Logout Icon" class="fill-white w-[24px]">
+                    <path class="st0" d="M10.2,1.7c.5,0,.8-.4.8-.9s-.4-.9-.8-.9H3.8C1.8,0,.2,1.7.2,3.7v16.6c0,2,1.6,3.7,3.6,3.7h6.4c.5,0,.8-.4.8-.9s-.4-.9-.8-.9H3.8c-1.1,0-1.9-.9-1.9-2V3.7c0-1.1.9-2,1.9-2h6.4Z"/>
+                    <path class="st0" d="M18.1,5.4c-.3-.3-.8-.3-1.2,0-.3.3-.3.9,0,1.2l4.1,4.2H5.9c-.5,0-.8.4-.8.9s.4.9.8.9h15l-4,4.2c-.3.3-.3.9,0,1.2.3.3.8.3,1.2,0l5.5-5.6c.2-.2.2-.4.2-.6h0s0,0,0,0c0-.2,0-.5-.2-.6l-5.5-5.6Z"/>
+                </svg>
+                <span>Log Out</span>
+            </button>
+        </li>
+        </ul>
+    </li>
+    </ul>
+    <button>
+        
+</nav>
+
+  <button type="button" id="logged-in-toggle" aria-controls="logged-in-sidebar" aria-expanded="false" aria-label="Open sidebar">
+        <svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 24 24">
+            <path  d="M22.9,12c0,.6-.5,1.1-1.1,1.1H7l5.8,5.8c.4.4.4,1.1,0,1.5-.4.4-1.1.4-1.5,0l-7.6-7.6c-.2-.2-.3-.5-.3-.8v10.9c0,.6-.5,1.1-1.1,1.1s-1.1-.5-1.1-1.1V1.1c0-.6.5-1.1,1.1-1.1s1.1.5,1.1,1.1v10.9c0-.3.1-.6.3-.8l7.6-7.6c.4-.4,1.1-.4,1.5,0,.4.4.4,1.1,0,1.5l-5.8,5.8h14.8c.6,0,1.1.5,1.1,1.1Z"/>
+        </svg>
+    </button>
+
+    <!-- main page content-->
+    <main id="main-content" class="ss-page">
+
+
+            
+            <!-- COMMUNITY/PROGRAM PAGE SPECIFIC -->
+
+
+            <div class="program-page-header flex flex-col-reverse lg:flex-row lg:min-h-[400px]">
+                <div class="program-page-header-intro flex flex-col">
+                    <div class="flex">
+                        <h3 class="partner-tag text-sm font-bold">Partner or Other</h3>
+                    </div>
+                    <div class="program-page-header-intro-content flex flex-col justify-center grow-1 text-center p-4">
+                        <h1 class="text-2xl text-primary-dark">Program or Community Title</h1>
+                        <p class="intro text-primary-dark italic">This is an optional second line that seems to be needed</p>
+                        <hr class="molecule-hr" />
+                        <p class="text-primary">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla eget odio aliquet, feugiat ipsum sit amet, semper est. In luctus ligula a dui porttitor dictum. Proin eu augue libero.</p>
+                    </div>
+                </div>
+                <div class="program-page-header-img">
+                    <img src="/-static/img/fpo/program-header-fpo.jpg" alt="description of program page hero image" />
+                </div>
+            </div>
+
+            <div class="ss-container">
+
+
+                <div class="community-bar flex justify-between bg-primary-dark text-white p-4 lg:mt-[-30px] z-50 relative mb-16 shadow-md w-full md:max-w-[80%] mx-auto">
+                    <div class="community-count flex items-baseline md:gap-2 flex-col md:flex-row">
+                        <span class="font-header-lg text-xl mb-0">156</span><span class="leading-[1] block md:inline"> members</span>
+                    </div>
+                    <button class="btn btn-primary self-center">Join Community</button>
+                </div>
+
+                <div class="tabs tabs-bar-wrapper">
+
+                    <nav class="tabs-wrapper sticky" aria-label="Primary">
+                        <!-- scrollable tab row -->
+                        <div class="tabs tabs-bar" role="tablist" aria-label="Main tabs" id="tabRow">
+                            <button class="tab tab-icon" role="tab" aria-selected="true" aria-controls="panel-1" id="tab-1">
+                                 <svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 24 24">
+                                <path d="M12,.5C5.7.5.5,5.7.5,12s5.2,11.5,11.5,11.5,11.5-5.2,11.5-11.5S18.3.5,12,.5ZM12,21.2c-5.1,0-9.2-4.1-9.2-9.2S6.9,2.8,12,2.8s9.2,4.1,9.2,9.2-4.1,9.2-9.2,9.2Z"/>
+                                <path d="M9.7,9.7l-3.5,8.1,8.1-3.5,3.5-8.1-8.1,3.5ZM12,13.2c-.6,0-1.2-.5-1.2-1.2s.5-1.2,1.2-1.2,1.2.5,1.2,1.2-.5,1.2-1.2,1.2Z"/>
+                            </svg>
+                            <span>Overview</span>
+                           </button>
+                            <button class="tab tab-icon" role="tab" aria-selected="false" aria-controls="panel-2" id="tab-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 24 24">
+    <path d="M9,20.5H3.6c-.9,0-1.6-.7-1.6-1.6v-10.1h20.1v2.7c0,.4.3.7.7.7s.7-.3.7-.7v-6.3c0-1.7-1.3-3-3-3H3.6c-1.7,0-3,1.3-3,3v13.7c0,1.7,1.4,3,3,3h5.4c.4,0,.7-.3.7-.7s-.3-.7-.7-.7h0ZM3.6,3.5h16.8c.9,0,1.6.7,1.6,1.6v2.2H1.9v-2.2c0-.9.7-1.6,1.6-1.6Z"/>
+    <path d="M4.5,6.1c.4,0,.7-.3.7-.7s-.3-.7-.7-.7-.7.3-.7.7.3.7.7.7Z"/>
+    <path d="M6.9,6.1c.4,0,.7-.3.7-.7s-.3-.7-.7-.7-.7.3-.7.7.3.7.7.7Z"/>
+    <path d="M9.2,6.1c.4,0,.7-.3.7-.7s-.3-.7-.7-.7-.7.3-.7.7.3.7.7.7Z"/>
+    <path d="M23,14.3c-.8-.7-1.8-1.1-3-1.1s-2,.3-2.7.8c-.7-.5-1.7-.8-2.7-.8s-2.2.4-3,1.1c-.2.2-.4.6-.4.9v4.9c0,.4.2.8.6,1,.4.2.8.2,1.2,0,.5-.2,1-.4,1.6-.4.9,0,1.7.3,2.2.8.1.1.3.2.5.2s.4,0,.5-.2c.5-.5,1.3-.8,2.2-.8s1.1.1,1.6.4c.4.2.9.2,1.2,0,.4-.2.6-.6.6-1v-4.9c0-.3-.1-.7-.4-.9ZM12.6,19.9v-4.6c.5-.4,1.2-.7,2-.7s1.5.3,2,.7v4.6c-.6-.3-1.3-.4-2-.4-.7,0-1.4.1-2,.4h0ZM22,19.9c-1.2-.6-2.8-.5-4,0v-4.6c.5-.4,1.2-.7,2-.7s1.5.2,2,.7v4.6Z"/>
+</svg>
+                                <span>Training Modules</span></button>
+                            <button class="tab tab-icon" role="tab" aria-selected="false" aria-controls="panel-3" id="tab-3">
+                                <svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 24 24" alt="Project and Events Icon" class="fill-white">
+                                    <path class="st0" d="M23.4,22.9h-8.8c-.1,0-.3-.1-.3-.3v-2.8c0-.1.1-.3.3-.3h.8v-3.5h-1.5c-.1.4-.5.6-.9.6h-1.9c-.3,0-.7-.2-.9-.6h-1.6v3.5h.8c.1,0,.3.1.3.3v2.8c0,.1-.1.3-.3.3H.6c-.1,0-.3-.1-.3-.3v-2.8c0-.1.1-.3.3-.3h.8l.7-13.8v-2.8c.1,0,.3,0,.3,0h1v-1.5c0-.1.1-.3.3-.3h3.4c.1,0,.3.1.3.3v1.5h1c.1,0,.3.1.3.3v4.3h1.6c.1-.4.5-.6.9-.6h1.9c.3,0,.7.2.9.6h1.5V3.1c0-.1.1-.3.3-.3h1v-1.5c0-.1.1-.3.3-.3h3.4c.1,0,.3.1.3.3v1.5h.8c.1,0,.3.1.3.2l.8,16.6h.8c.1,0,.3.1.3.3v2.8c0,.1-.1.2-.3.2ZM14.9,22.4h8.3v-2.3h-8.3v2.3ZM.8,22.4h8.3v-2.3H.8v2.3ZM15.8,19.7h6.3l-.7-13.5h-5.6v13.5ZM1.8,19.7h6.3V6.2H2.5l-.7,13.5ZM10.7,16c0,.1.2.2.4.2h1.9c.1,0,.3,0,.4-.2v-.2c0,0,0-.2,0-.3v-7.5c0,0,0-.2,0-.3v-.2c0-.1-.2-.2-.4-.2h-1.9c-.1,0-.3,0-.4.2v.2c0,0,0,.2,0,.3v7.4c0,0,0,.2,0,.3v.3ZM13.9,15.7h1.5v-7.8h-1.5v7.8ZM8.6,15.7h1.5v-7.8h-1.5v7.8ZM15.8,5.6h5.6v-2.3h-5.6v2.3ZM2.5,5.6h5.6v-2.3H2.7v2.3ZM17.1,2.8h2.9v-1.2h-2.9v1.2ZM3.9,2.8h2.9v-1.2h-2.9v1.2Z"/>
+                                    <path class="st0" d="M9.4,23.3H.6c-.3,0-.6-.3-.6-.7v-2.8c0-.4.3-.7.6-.7h.4L1.9,3.1c0-.4.3-.6.6-.6h.6v-1.2c0-.4.3-.7.6-.7h3.4c.3,0,.6.3.6.7v1.2h.6c.3,0,.6.3.6.7v3.9h1c.2-.4.6-.6,1-.6h1.9c.4,0,.8.2,1,.6h1v-4c0-.4.3-.7.6-.7h.6v-1.1c0-.4.3-.7.6-.7h3.4c.3,0,.6.3.6.7v1.2h.6c.3,0,.6.3.6.6l.8,16.2h.4c.3,0,.6.3.6.7v2.8c0,.1,0,.3-.1.4-.1.1-.3.2-.4.2h-8.8c-.3,0-.6-.3-.6-.7v-2.8c0-.4.3-.7.6-.7h.4v-2.8h-1c-.2.4-.6.6-1,.6h-1.9c-.4,0-.8-.2-1-.6h-1v2.8h.4c.3,0,.6.3.6.7v2.8c0,.4-.3.6-.6.6ZM15.2,22h7.6v-1.5h-7.6v1.5ZM1.2,22h7.6v-1.5H1.2v1.5ZM16.2,19.3h5.6l-.6-12.8h-4.9v12.8ZM2.2,19.3h5.6V6.5H2.9l-.7,12.8ZM11.1,15.8h1.9c0,0,0-.1,0-.2,0,0,0,0,0-.1v-7.5q0,0,0-.1c0,0,0-.1,0-.2h-1.9c0,0,0,.1,0,.2,0,0,0,0,0,.1v7.4q0,0,0,.1c0,.1,0,.2,0,.3ZM14.3,15.3h.8v-7h-.8v7ZM9,15.3h.8v-7h-.8v7ZM16.2,5.2h4.8v-1.5h-4.8v1.5ZM3,5.2h4.8v-1.5H3.1v1.5ZM17.5,2.4h2.2v-.5h-2.2v.5ZM4.3,2.4h2.2v-.5h-2.2v.5Z"/>
+                                </svg>
+                                <span>Projects By Grade Level</span></button>
+                            <button class="tab tab-icon" role="tab" aria-selected="false" aria-controls="panel-4" id="tab-4">
+                                <svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 24 24">
+  <path d="M23.3,9.7c-.5-.6-1.2-1-2-1h-.4v-1.3c0-1.4-1.1-2.5-2.5-2.5h-6.7c-.3,0-.7-.1-.9-.4l-1-1c-.5-.5-1.1-.7-1.8-.7H2.8C1.5,2.8.4,3.9.4,5.3v13.3c0,.6.2,1.1.5,1.6.5.7,1.2,1,2,1h16.1c1.1,0,2-.7,2.4-1.8l2.3-7.5c.2-.8,0-1.6-.4-2.2ZM22.5,11.6l-2.3,7.5c-.2.5-.6.9-1.2.9H2.9c-.4,0-.8-.2-1-.5-.2-.3-.3-.8-.2-1.1l2.3-7.5c.2-.5.6-.9,1.2-.9h16.1c.4,0,.8.2,1,.5.2.3.3.7.2,1.1ZM1.6,5.3c0-.7.6-1.2,1.2-1.2h5.2c.3,0,.6.1.9.4l1,1c.5.5,1.1.7,1.8.7h6.7c.7,0,1.2.6,1.2,1.2v1.3H5.2c-1.1,0-2,.7-2.4,1.7l-1.2,3.9V5.3Z"/>
+</svg>
+                                    <span>Resources</span></button>
+                            <button class="tab tab-icon" role="tab" aria-selected="false" aria-controls="panel-5" id="tab-5">
+                                 <svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 24 24" class="fill-white" alt="Forum Icon">
+                                    <path d="M14.9,14.5c0,.3-.3.6-.6.6H4.1c-.3,0-.6-.3-.6-.6s.3-.6.6-.6h10.2c.3,0,.6.3.6.6Z"/>
+                                    <path d="M21.5,1h-13.4c-1.4,0-2.5,1.1-2.5,2.5v1.8h-3c-1.4,0-2.5,1.1-2.5,2.5v8.3c0,1.4,1.1,2.5,2.5,2.5h2.2v3.7c0,.2.1.5.4.5,0,0,.1,0,.2,0,.2,0,.3,0,.4-.2l3.8-4.1h6.5c1.2,0,2.3-.9,2.5-2.1l1.8,1.9c.1.1.3.2.4.2s.1,0,.2,0c.2,0,.4-.3.4-.5v-3.7h.2c1.4,0,2.5-1.1,2.5-2.5V3.5c0-1.4-1.1-2.5-2.5-2.5ZM17.3,16.1c0,.8-.6,1.3-1.4,1.3h-6.7c-.2,0-.3.1-.4.2l-2.9,3.2v-2.8c0-.3-.3-.6-.6-.6h-2.8c-.7,0-1.3-.6-1.3-1.3V7.9c0-.7.6-1.3,1.3-1.3h3.6s9.9,0,9.9,0c.8,0,1.4.6,1.4,1.3v8.3ZM22.8,11.8c0,.8-.6,1.4-1.3,1.4h-.8c-.3,0-.6.3-.6.6v2.8l-1.6-1.7v-7c0-1.4-1.1-2.5-2.5-2.5H6.7s0-1.8,0-1.8c0-.8.6-1.4,1.3-1.4h13.4c.7,0,1.3.6,1.3,1.4v8.3Z"/>
+                                    <path d="M14.9,12.2c0,.3-.3.6-.6.6H4.1c-.3,0-.6-.3-.6-.6s.3-.6.6-.6h10.2c.3,0,.6.3.6.6Z"/>
+                                    <path d="M9.8,9.8c0,.3-.3.6-.6.6h-5.1c-.3,0-.6-.3-.6-.6s.3-.6.6-.6h5.1c.3,0,.6.3.6.6Z"/>
+                                </svg>
+                               <span>Talk</span></button>
+                        </div>
+
+                        <!-- chevron indicator on the right -->
+                        <div class="chevron" id="chevron">
+                            <button class="chev-btn" id="chevBtn" aria-hidden="false" aria-label="Show more tabs">
+                            <!-- simple right chevron SVG -->
+                            <svg class="chev-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M9 6l6 6-6 6"></path>
+                            </svg>
+                            </button>
+                        </div>
+                    </nav>
+
+                    <div class="tab-panels border-linework border mb-8 border-t-0 p-4">
+                        <div class="tab-panel py-8" id="panel-1" role="tabpanel" aria-hidden="false">
+                            <p>Content 1 here</p>
+                        </div>
+                        <div class="tab-panel py-8" id="panel-2" role="tabpanel" aria-hidden="true">
+                            <p>Content 2 here</p>
+                        </div>
+                        <div class="tab-panel py-8" id="panel-3" role="tabpanel" aria-hidden="true">
+                            <p>Content 3 here</p>
+                        </div>
+                        <div class="tab-panel py-8" id="panel-4" role="tabpanel" aria-hidden="true">
+                            <p>Content 4 here</p>
+                        </div>
+                        <div class="tab-panel py-8" id="panel-5" role="tabpanel" aria-hidden="true">
+                            <p>Content 5 here</p>
+                        </div>
+                     </div>
+
+
+
+                </div>
+
+            </div>
+
+
+            <!-- END COMMUNITY/PROGRAM PAGE SPECIFIC -->
+
+
+    </main>
+
+
+    <footer class="bg-primary-light">
+  <div class="ss-container mx-auto py-4! md:flex gap-4">
+    <div class="basis-1/4 mb-0">
+      <h3 class="uppercase font-condensed text-primary text-sm md:font-semibold mb-4">Learn More</h3>
+      <ul class="no-li-space">
+        <li><a href="#" class="text-primary-dark text-base py-1 block">How do I start?</a></li>
+        <li><a href="#" class="text-primary-dark text-base py-1 block">What is Citizen Science?</a></li>
+        <li><a href="#" class="text-primary-dark text-base py-1 block">SciStarter Research</a></li>
+        <li><a href="#" class="text-primary-dark text-base py-1 block">SciStarter Data</a></li>
+        <li><a href="#" class="text-primary-dark text-base py-1 block">FAQs</a></li>
+      </ul>
+    </div>
+    <div class="basis-1/4  pb-0 md:pt-8">
+      <!-- <h3 class="text-primary-dark uppercase font-semibold">Participate</h3> -->
+      <ul class="no-li-space">
+        <li><a href="#" class="text-primary-dark text-base py-1 block">Opportunity Finder</a></li>
+        <li><a href="#" class="text-primary-dark text-base py-1 block">Theme Calendar</a></li>
+        <li><a href="#" class="text-primary-dark text-base py-1 block">Training</a></li>
+      </ul>
+    </div>
+    <div class="basis-1/4  pb-4 md:pt-8">
+      <!-- <h3 class="text-primary-dark uppercase font-semibold">For Project Leaders</h3> -->
+      <ul class="no-li-space">
+        <li><a href="#" class="text-primary-dark text-base py-1 block">Project Leader Info</a></li>
+        <li><a href="#" class="text-primary-dark text-base py-1 block">Add your Project or Event</a></li>
+        <li><a href="#" class="text-primary-dark text-base py-1 block">Opportunity Finder Widget</a></li>
+        <li><a href="#" class="text-primary-dark text-base py-1 block">API</a></li>
+      </ul>
+    </div>
+    <div class="basis-1/4 border-b border-line-blue md:border-b-[0] pb-4 mb-4 md:pb-0 md:mb-0">
+      <h3 class="uppercase font-condensed text-primary text-sm md:font-semibold mb-4">Connect</h3>
+      <ul class="no-li-space">
+        <li class="text-base text-primary-dark">Contact: <a href="#" class="text-primary-dark underline">info@scistarter.org</a></li>
+        <li><a href="#" class="text-primary-dark">Newsletter</a></li>
+        <li><a href="#" class="text-primary-dark">Issue Tracker</a></li>
+        <li>
+          <ul class="flex items-start">
+            <li><a href=""><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-purple w-4 h-4 inline-block mr-2"><path d="M64 32C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64h98.2V334.2H109.4V256h52.8V222.3c0-87.1 39.4-127.5 125-127.5c16.2 0 44.2 3.2 55.7 6.4V172c-6-.6-16.5-1-29.6-1c-42 0-58.2 15.9-58.2 57.2V256h83.6l-14.4 78.2H255V480H384c35.3 0 64-28.7 64-64V96c0-35.3-28.7-64-64-64H64z"/></svg></a></li>
+            <li><a href=""><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-purple w-4 h-4 inline-block mr-2"><path d="M416 32H31.9C14.3 32 0 46.5 0 64.3v383.4C0 465.5 14.3 480 31.9 480H416c17.6 0 32-14.5 32-32.3V64.3c0-17.8-14.4-32.3-32-32.3zM135.4 416H69V202.2h66.5V416zm-33.2-243c-21.3 0-38.5-17.3-38.5-38.5S80.9 96 102.2 96c21.2 0 38.5 17.3 38.5 38.5 0 21.3-17.2 38.5-38.5 38.5zm282.1 243h-66.4V312c0-24.8-.5-56.7-34.5-56.7-34.6 0-39.9 27-39.9 54.9V416h-66.4V202.2h63.7v29.2h.9c8.9-16.8 30.6-34.5 62.9-34.5 67.2 0 79.7 44.3 79.7 101.9V416z"/></svg></a></li>
+            <li><a href=""><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-purple w-4 h-4 inline-block mr-2"><path d="M194.4 211.7a53.3 53.3 0 1 0 59.3 88.7 53.3 53.3 0 1 0 -59.3-88.7zm142.3-68.4c-5.2-5.2-11.5-9.3-18.4-12c-18.1-7.1-57.6-6.8-83.1-6.5c-4.1 0-7.9 .1-11.2 .1c-3.3 0-7.2 0-11.4-.1c-25.5-.3-64.8-.7-82.9 6.5c-6.9 2.7-13.1 6.8-18.4 12s-9.3 11.5-12 18.4c-7.1 18.1-6.7 57.7-6.5 83.2c0 4.1 .1 7.9 .1 11.1s0 7-.1 11.1c-.2 25.5-.6 65.1 6.5 83.2c2.7 6.9 6.8 13.1 12 18.4s11.5 9.3 18.4 12c18.1 7.1 57.6 6.8 83.1 6.5c4.1 0 7.9-.1 11.2-.1c3.3 0 7.2 0 11.4 .1c25.5 .3 64.8 .7 82.9-6.5c6.9-2.7 13.1-6.8 18.4-12s9.3-11.5 12-18.4c7.2-18 6.8-57.4 6.5-83c0-4.2-.1-8.1-.1-11.4s0-7.1 .1-11.4c.3-25.5 .7-64.9-6.5-83l0 0c-2.7-6.9-6.8-13.1-12-18.4zm-67.1 44.5A82 82 0 1 1 178.4 324.2a82 82 0 1 1 91.1-136.4zm29.2-1.3c-3.1-2.1-5.6-5.1-7.1-8.6s-1.8-7.3-1.1-11.1s2.6-7.1 5.2-9.8s6.1-4.5 9.8-5.2s7.6-.4 11.1 1.1s6.5 3.9 8.6 7s3.2 6.8 3.2 10.6c0 2.5-.5 5-1.4 7.3s-2.4 4.4-4.1 6.2s-3.9 3.2-6.2 4.2s-4.8 1.5-7.3 1.5l0 0c-3.8 0-7.5-1.1-10.6-3.2zM448 96c0-35.3-28.7-64-64-64H64C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V96zM357 389c-18.7 18.7-41.4 24.6-67 25.9c-26.4 1.5-105.6 1.5-132 0c-25.6-1.3-48.3-7.2-67-25.9s-24.6-41.4-25.8-67c-1.5-26.4-1.5-105.6 0-132c1.3-25.6 7.1-48.3 25.8-67s41.5-24.6 67-25.8c26.4-1.5 105.6-1.5 132 0c25.6 1.3 48.3 7.1 67 25.8s24.6 41.4 25.8 67c1.5 26.3 1.5 105.4 0 131.9c-1.3 25.6-7.1 48.3-25.8 67z"/></svg></a></li>
+            <li><a href=""><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-purple w-4 h-4 inline-block mr-2"><path d="M64 32C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V96c0-35.3-28.7-64-64-64H64zm297.1 84L257.3 234.6 379.4 396H283.8L209 298.1 123.3 396H75.8l111-126.9L69.7 116h98l67.7 89.5L313.6 116h47.5zM323.3 367.6L153.4 142.9H125.1L296.9 367.6h26.3z"/></svg></a></li>
+            <li><a href=""><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-purple w-4 h-4 inline-block mr-2"><path d="M448 209.9a210.1 210.1 0 0 1 -122.8-39.3V349.4A162.6 162.6 0 1 1 185 188.3V278.2a74.6 74.6 0 1 0 52.2 71.2V0l88 0a121.2 121.2 0 0 0 1.9 22.2h0A122.2 122.2 0 0 0 381 102.4a121.4 121.4 0 0 0 67 20.1z"/></svg></a></li>
+          </ul>
+        </li>
+      </ul>
+    </div>
+</div>
+<div class="ss-container mx-auto pb-4! flex items-start ">
+  <img src="/-static/img/nsf_subtle.png" alt="nsf logo" class="mr-4" />
+  <p class="text-xs max-w-[500px]">Development of this site was supported under grant DRL-1516703 awarded to Arizona State University and SciStarter. Any opinions, findings, and conclusions or recommendations expressed in this site are those of the authors or of the citizen science community and do not necessarily reflect the views of the National Science Foundation or Arizona State University.</p>
+</div>
+<div class="bg-primary-action">
+  <div class="ss-container mx-auto py-2! md:flex justify-between">
+    <ul class="md:flex gap-2 text-white mb-4 md:mb-0 no-li-space">
+      <li class="text-sm"><a href="#" class="text-white hover:underline leading-[1.2]">Terms of Use and Consent</a></li>
+      <li class="hidden md:block text-sm">|</li>
+      <li class="text-sm"><a href="#" class="text-white hover:underline leading-[1.2]">Privacy Policy</a></li>
+      <li class="hidden md:block text-sm">|</li>
+      <li class="text-sm"><a href="#" class="text-white hover:underline leading-[1.2]">Cookie Policy</a></li>
+    </ul>
+    <p  class="text-white mb-0 text-sm">&copy; 2024 SciStarter</p>
+  </div>
+</div>
+</footer>
+
+
+    <script src="/-static/js/scripts.js"></script>
+
+    <script>
+(function(){
+  const tabRow = document.getElementById('tabRow');
+  const chevron = document.getElementById('chevron');
+  const chevBtn = document.getElementById('chevBtn');
+  const tabs = Array.from(tabRow.querySelectorAll('.tab'));
+  const panels = Array.from(document.querySelectorAll('.tab-panel'));
+
+  function updateChevron(){
+    const overflowRight = tabRow.scrollWidth - (tabRow.scrollLeft + tabRow.clientWidth);
+    if (overflowRight > 1) chevron.classList.remove('hidden');
+    else chevron.classList.add('hidden');
+  }
+  chevBtn.addEventListener('click', () => {
+    tabRow.scrollBy({ left: tabRow.clientWidth*0.7, behavior: 'smooth' });
+  });
+  tabRow.addEventListener('scroll', updateChevron, { passive:true });
+  window.addEventListener('resize', updateChevron);
+  window.addEventListener('load', updateChevron);
+
+  // Tab switching
+  tabRow.addEventListener('click', (e) => {
+    const btn = e.target.closest('.tab');
+    if (!btn) return;
+    tabs.forEach(t => t.setAttribute('aria-selected','false'));
+    panels.forEach(p => p.setAttribute('aria-hidden','true'));
+    btn.setAttribute('aria-selected','true');
+    const panel = document.getElementById(btn.getAttribute('aria-controls'));
+    if (panel) panel.setAttribute('aria-hidden','false');
+  });
+})();
+</script>
+
+</body>
+</html>

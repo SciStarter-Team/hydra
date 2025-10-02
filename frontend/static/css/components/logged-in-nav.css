@@ -6,13 +6,25 @@
     display: none;
 }
 
+.logged-in-username {
+    display: none;
+}
+@media (min-width:768px) {
+    .logged-in-username {
+        display: block;
+    }
+    .logged-in-collapsed .logged-in-username {
+        display: none;
+    }
+}
+
 #logged-in-sidebar {
     position: fixed;
     bottom: 0;
     left:0;
     width:100%;
     height: 44px;
-    z-index: 99;
+    z-index: 999;
 }
 
 #logged-in-sidebar-menu span {
@@ -49,6 +61,7 @@
     text-decoration: none;
     width: 100%;
      height: 100%;
+     position: relative;
 }
 
 #logged-in-sidebar-menu > li > a > span , #logged-in-nav-mobile > li > a > span {
@@ -152,6 +165,7 @@
     }
     .logged-in-collapsed.logged-in #logged-in-nav-logo-short {
         display: block;
+        max-width:52px;
     }
     .add-my::before {
         content:'My ';
@@ -290,3 +304,22 @@
         left:280px
     }
 }
+
+.ss-notification-badge {
+    @apply bg-accent1 text-white !text-xs;
+    border-radius: 100%;
+    width:20px;
+    height: 20px;
+    line-height: 20px!important;
+    text-align: center;
+    display: inline-block;
+}
+ .logged-in-collapsed #logged-in-sidebar-menu .ss-notification-badge {
+        visibility: visible;
+        width:20px;
+        margin: 0;
+        padding: 0;
+        position: absolute;
+        bottom: 0;
+        right: 0;
+    }

@@ -2,11 +2,13 @@
 header nav a {
   text-decoration: none;
 }
+
 #nav--users a {
   font-size: 18.66px;
   font-weight: bold;
   @apply font-header-lg;
   letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 header #nav--users a:hover{
@@ -22,15 +24,14 @@ header #nav--users a:hover{
 }
 
 #nav-main, #menu {
-  z-index: 100;
+  z-index: 9999;
 }
 
 
 
 /** Main nav **/
 [data-dropdown-button] {
-    display: flex;
-    @apply gap-2;
+    @apply flex gap-2 items-center;
 }
 
 /* [data-dropdown-button]:hover {
@@ -85,6 +86,10 @@ header #nav--users a:hover{
     @apply w-36;
   }
 
+  .logged-in .main-nav-btn2  {
+    @apply mt-8;
+  }
+
 
   @media (min-width:768px){
 
@@ -102,7 +107,30 @@ header #nav--users a:hover{
       height: auto;
       overflow: visible;
       position: static;
+      align-self: stretch;
     }
+    #menu > div {
+      height: 100%;
+    }
+    .main-nav-btn, .main-nav-btn2 {
+      display: flex;
+      align-items: center;
+      height: 100%;
+    }
+     .main-nav-btn:hover, .main-nav-btn[aria-expanded=true], .main-nav-btn.active {
+      @apply border-b-2 border-accent1;
+     }
+
+
+
+     .logged-in .main-nav-btn2 input {
+        @apply my-4;
+     }
+
+      .logged-in .main-nav-btn2  {
+        @apply mt-0;
+      }
+
     #menu.off-canvas, #menu:not(.off-canvas) {
       left: auto;
       top: auto;
@@ -242,4 +270,26 @@ header #nav--users a:hover{
     margin-left:280px;
   }
 
+}
+
+
+
+.with-arrow {
+  position: relative;
+  display: inline-block;
+  padding-right: 1.5em; /* space for the icon */
+  white-space: normal; /* allow wrapping */
+  vertical-align: middle;
+}
+
+.with-arrow::after {
+  content: "<span></span>";
+  display: inline-block;
+  vertical-align: middle;
+  width: 0.5em;
+  height: 0.5em;
+  margin-left: 0.25em;
+  background: url('data:image/svg+xml;utf8,<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg>') no-repeat center center;
+  background-size: contain;
+  color:red;
 }

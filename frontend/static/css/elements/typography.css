@@ -120,7 +120,7 @@ small {
   }
 
   ol li {
-    @apply text-base; 
+    @apply text-base mb-4; 
     line-height: 1.6; 
     max-width: 80ch; 
   }
@@ -130,6 +130,26 @@ small {
   }
 
  a {
-    @apply text-base text-primary-action underline hover:text-primary-action-dark;
+    @apply text-primary-action hover:text-primary-action-dark;
   }
+
+  a:hover {
+    @apply underline;
+  }
+
+}
+
+ul.icon-list li {
+  @apply text-base flex gap-4 mb-4;
+}
+
+ul.icon-list li svg {
+  @apply w-[18px] fill-neutral-dark shrink-0;
+  align-self: flex-start;
+    position: relative;
+    bottom: -4px;
+}
+
+.pull-quote {
+  @apply border-l-4 border-primary-dark p-4 text-lg italic;
 }

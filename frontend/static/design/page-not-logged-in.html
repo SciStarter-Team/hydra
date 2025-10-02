@@ -21,10 +21,10 @@
          <nav id="nav--users" class="bg-primary-action py-2 text-sm hidden md:block">
          <div class="ss-container mx-auto">
            <ul class="flex text-white gap-5 justify-end no-li-space">
-             <li class="ss-small"><a href="/for-project-leaders" class="hover:underline text-white">Project Leaders</a></li>
-             <li class="ss-small"><a href="https://pages.scistarter.org/for-educators-integrating-citizen-science-projects-into-social-studies-curriculum/" class="hover:underline text-white">Educators</a></li>
-             <li class="ss-small"><a href="/library" class="hover:underline text-white">Libraries</a></li>
-             <li class="ss-small"><a href="/gateways" class="hover:underline text-white">Communities</a></li>
+             <li><a href="/for-project-leaders" class="hover:underline text-white">Project Leaders</a></li>
+             <li><a href="https://pages.scistarter.org/for-educators-integrating-citizen-science-projects-into-social-studies-curriculum/" class="hover:underline text-white">Educators</a></li>
+             <li><a href="/library" class="hover:underline text-white">Libraries</a></li>
+             <li><a href="/gateways" class="hover:underline text-white">Communities</a></li>
              </ul>
          </div>
     </nav>
@@ -35,7 +35,7 @@
 
 
           <!-- LOGO -->
-           <div class="relative block">
+           <div class="relative block mr-4">
              <a href="/" class="py-3 lg:py-8 block"><img src="/-static/img/logo/svg/Standard__tagline-dark.svg" alt="SciStarter logo" id="main-nav-logo" /></a>
            </div>
            <!---->
@@ -47,15 +47,18 @@
            <!---->
  
            <!-- MAIN NAVIGATION ELEMENTS -->
-           <div id="menu" class="off-canvas absolute transition-all flex flex-col bg-primary-dark text-white p-4 md:flex-row md:w-full  md:static md:bg-white md:text-primary-action md:text-lg md:gap-6 md:px-0 md:items-center md:justify-end md:relative md:z-50">
+           <div id="menu" class="off-canvas absolute transition-all flex flex-col bg-primary-dark text-white p-4 md:flex-row md:w-full  md:static md:bg-white md:text-primary-action md:text-lg md:gap-6 md:p-0 md:items-center md:justify-end md:relative md:z-50">
              
 
               <!-- Participate, Media, More-->
-              <!--Participate-->
+              <!-- When on a page within a section (participate, about, more) add a class of active to the button.main-nav-btn -->
+
+
+<!--Participate-->
 <div class="order-3 md:order-1 z-50">
 
     <!-- main navigation item-->
-    <button id="participate-button" class="text-base md:text-lg block cursor-pointer font-semibold md:md:hover:text-primary-action py-4 md:py-0 border-b border-white-alpha" aria-haspopup="true" aria-expanded="false" aria-controls="participate-menu" data-dropdown-button>Participate <svg class="closed fill-primary-action" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M201.4 374.6c12.5 12.5 32.8 12.5 45.3 0l160-160c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L224 306.7 86.6 169.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l160 160z"/></svg><svg class="open fill-primary-action" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M201.4 137.4c12.5-12.5 32.8-12.5 45.3 0l160 160c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L224 205.3 86.6 342.6c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3l160-160z"/></svg></button>
+    <button id="participate-button" class="main-nav-btn text-base md:text-lg block cursor-pointer font-semibold md:hover:text-primary-action py-4 md:py-0 border-b border-white-alpha" aria-haspopup="true" aria-expanded="false" aria-controls="participate-menu" data-dropdown-button>Participate <svg class="closed fill-primary-action" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M201.4 374.6c12.5 12.5 32.8 12.5 45.3 0l160-160c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L224 306.7 86.6 169.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l160 160z"/></svg><svg class="open fill-primary-action" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M201.4 137.4c12.5-12.5 32.8-12.5 45.3 0l160 160c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L224 205.3 86.6 342.6c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3l160-160z"/></svg></button>
 
     <!-- dropdown menu -->
     <div id="participate-menu" role="menu" aria-labelledby="participate-button" class="hidden p-4 mega-menu md:shadow-xl md:mt-6">
@@ -69,7 +72,7 @@
                 
                 <a href="/finder" class="flex-1 pb-4 md:min-h-38 block md:max-h-38">
                     <h2 class="uppercase font-condensed text-primary md:text-accent1 text-sm md:font-semibold mb-0 hidden md:block">Find</h2>
-                    <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1">Projects &amp; Events <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></h3>
+                    <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1"><span class="inline-flex items-center gap-1">Projects &amp; Events <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
                     <p class="hidden md:block text-sm text-primary-light md:text-primary-dark leading-[1.4] mb-8">Find the perfect project or event to do acts of science!</p>
                     </a>
 
@@ -77,10 +80,10 @@
 
                     <h2 class="hidden md:block uppercase font-condensed text-primary md:text-accent1 text-sm md:font-semibold mb-4">More ways to find projects &amp; events</h2>
                     <a href="/affiliates" class="flex-1 pb-4">
-                    <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] mb-4">Affiliates <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></h3>
+                    <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] mb-4"><span class="inline-flex items-center gap-1">Affiliates <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
                     </a>
                     <a href="/calendar" class="flex-1 pb-4">
-                    <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] mb-4 md:mb-0">Theme Calendar <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></h3>
+                    <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] mb-4 md:mb-0"><span class="inline-flex items-center gap-1">Theme Calendar <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
                     </a>
 
                 </div><!-- end column -->
@@ -90,7 +93,7 @@
                 
                 <a href="/communities" class="flex-1 pb-4 md:min-h-38 block md:max-h-38">
                     <h2 class="hidden md:block uppercase font-condensed text-primary md:text-accent1 text-sm md:font-semibold mb-0">Find</h2>
-                    <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1">Communities <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></h3>
+                    <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1"><span class="inline-flex items-center gap-1">Communities <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
                     <p class="hidden md:block text-sm text-primary-light md:text-primary-dark leading-[1.4] mb-8">Get involved with other people like you doing acts of science!</p>
                     </a>
 
@@ -98,7 +101,7 @@
 
                     <h2 class="hidden md:block uppercase font-condensed text-primary md:text-accent1 text-sm md:font-semibold mb-4">Join in</h2>
                     <a href="/citizensciencemonth" class="flex-1 pb-4">
-                    <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] mb-4 md:mb-0">Citizen Science Month <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></h3>
+                    <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] mb-4 md:mb-0"><span class="inline-flex items-center gap-1">Citizen Science Month <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
                     </a>
 
                 </div><!-- end column -->
@@ -108,15 +111,15 @@
                 
                 <a href="/training" class="flex-1 pb-4 md:min-h-38 block md:max-h-38">
                     <h2 class="hidden md:block uppercase font-condensed text-primary md:text-accent1 text-sm md:font-semibold mb-0">Learn more with</h2>
-                    <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] mb-1">Free Trainings <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></h3>
+                    <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] mb-1"><span class="inline-flex items-center gap-1">Free Trainings <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
                     <p class="hidden md:block text-sm text-primary-light md:text-primary-dark leading-[1.4] mb-8">Earn badges while learning about doing acts of science!</p>
                     </a>
 
                     <hr class="border-0 h-[2px] bg-accent1 w-[33%] mb-8 hidden md:block" />
 
                     <h2 class="hidden md:block uppercase font-condensed text-primary md:text-accent1 text-sm md:font-semibold mb-0">More ways to get involved</h2>
-                    <a href="/ambassador" class="flex-1 pb-4">
-                    <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1">Ambassador Program <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></h3>
+                    <a href="/ambassadors" class="flex-1 pb-4">
+                    <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1"><span class="inline-flex items-center gap-1">Ambassador Program <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
                     </a>
 
                 </div><!-- end column -->
@@ -138,7 +141,7 @@
 <div class="order-4 md:order-2 z-50">
 
     <!-- main navigation item-->
-    <button id="about-button" class="text-base md:text-lg block cursor-pointer font-semibold md:hover:text-primary-action py-4 md:py-0 border-b border-white-alpha" aria-haspopup="true" aria-expanded="false" aria-controls="about-menu" data-dropdown-button>About <svg class="closed fill-primary-action" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M201.4 374.6c12.5 12.5 32.8 12.5 45.3 0l160-160c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L224 306.7 86.6 169.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l160 160z"/></svg><svg class="open fill-primary-action" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M201.4 137.4c12.5-12.5 32.8-12.5 45.3 0l160 160c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L224 205.3 86.6 342.6c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3l160-160z"/></svg></button>
+    <button id="about-button" class="main-nav-btn text-base md:text-lg block cursor-pointer font-semibold md:hover:text-primary-action py-4 md:py-0 border-b border-white-alpha" aria-haspopup="true" aria-expanded="false" aria-controls="about-menu" data-dropdown-button>About <svg class="closed fill-primary-action" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M201.4 374.6c12.5 12.5 32.8 12.5 45.3 0l160-160c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L224 306.7 86.6 169.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l160 160z"/></svg><svg class="open fill-primary-action" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M201.4 137.4c12.5-12.5 32.8-12.5 45.3 0l160 160c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L224 205.3 86.6 342.6c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3l160-160z"/></svg></button>
 
     <!-- dropdown menu -->
     <div id="about-menu" role="menu" aria-labelledby="about-button"  class="hidden p-4 mega-menu md:shadow-xl md:mt-6">
@@ -149,27 +152,27 @@
           <div class="basis-3/4 py-2 md:pb-4 md:pt-0 flex flex-wrap content-start">
 
             <!-- NEWSLETTER -->
-            <div class="basis-full pb-4 md:basis-1/2 md:border-r md:border-linework md:pt-4 md:pr-4 md:border-b"><a href="https://blog.scistarter.org/" class="basis-1/2  mb-1 block md:pt-0">
-              <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1">Newsletter <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></h3>
+            <div class="basis-full pb-4 md:basis-1/2 md:border-r md:border-linework md:pt-4 md:pr-4 md:border-b"><a href="https://visitor.r20.constantcontact.com/d.jsp?llr=l4yex5cab&p=oi&m=1102690018283&sit=rly6c5neb&f=6b302af4-fe5e-4b2a-9a69-054897d2ffa8" class="basis-1/2  mb-1 block md:pt-0">
+              <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1"><span class="inline-flex items-center gap-1">Newsletter <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
               <p class="hidden md:block text-sm text-primary-light md:text-primary-dark leading-[1.4] mb-8">Find out the latest news and read great articles on citizen science.</p>
             </a></div>
 
             <!-- VIDEO -->
-            <div class="basis-full md:basis-1/2 md:pl-4 md:pt-4 md:border-b md:border-linework"><a href="https://blog.scistarter.org/" class="basis-1/2 mb-1 block pb-4 md:pt-0">
+            <div class="basis-full md:basis-1/2 md:pl-4 md:pt-4 md:border-b md:border-linework"><a href="/videos" class="basis-1/2 mb-1 block pb-4 md:pt-0">
 
-              <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1">Videos <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></h3>
+              <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1"><span class="inline-flex items-center gap-1">Videos <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
               <p class="hidden md:block text-sm text-primary-light md:text-primary-dark leading-[1.4] mb-8">Find out the latest news and read great articles on citizen science.</p>
             </a></div>
 
             <!-- LIVE -->
             <div class="basis-full md:basis-1/2 md:pr-4 md:border-r md:border-linework" ><a href="https://blog.scistarter.org/2022/08/scistarter-live/" class="basis-1/2 block pb-4 md:pt-4">
-              <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1">SciStarter Live <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></h3>
+              <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1"><span class="inline-flex items-center gap-1">SciStarter LIVE <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
               <p class="hidden md:block text-sm text-primary-light md:text-primary-dark leading-[1.4] mb-8">SciStarter LIVE is an informal web series, where we go LIVE and work through a citizen science project.</p>
             </a></div>
 
             <!-- BLOG -->
             <div class="basis-full md:basis-1/2 md:border-linework"><a href="https://blog.scistarter.org/" class="basis-1/2 pb-4 block md:pt-0 md:pl-4  md:pt-4">
-              <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1">Blog <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></h3>
+              <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1"><span class="inline-flex items-center gap-1">Blog <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
               <p class="hidden md:block text-sm text-primary-light md:text-primary-dark leading-[1.4] mb-8">Find out the latest news and read great articles on citizen science.</p>
             </a></div>
 
@@ -177,18 +180,18 @@
 
           </div>
           <div class="basis-1/4  py-2 md:pb-4 md:pt-0 md:border-l md:pl-4 md:border-linework "><!-- this wraps a section-->
-            <h3 class="uppercase font-condensed text-primary md:text-accent1 text-sm md:font-semibold mb-4 md:mb-0">Connect</h3>
+            <h3 class="uppercase font-condensed text-primary md:text-accent1 text-sm md:font-semibold mb-4 md:mb-2">Connect</h3>
             <ul class="no-li-space">
-              <li><a href="/go/newsletter" class="text-light-blue md:text-primary-action  text-md md:font-semibold"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="fill-primary-action w-4 h-4 inline-block mr-2"><path d="M48 64C21.5 64 0 85.5 0 112c0 15.1 7.1 29.3 19.2 38.4L236.8 313.6c11.4 8.5 27 8.5 38.4 0L492.8 150.4c12.1-9.1 19.2-23.3 19.2-38.4c0-26.5-21.5-48-48-48L48 64zM0 176L0 384c0 35.3 28.7 64 64 64l384 0c35.3 0 64-28.7 64-64l0-208L294.4 339.2c-22.8 17.1-54 17.1-76.8 0L0 176z"/></svg> Get Our Newsletter <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></a></li>
-              <li><a href="/go/facebook" class="text-light-blue md:text-primary-action  text-md md:font-semibold align-middle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-4 h-4 inline-block mr-2"><path d="M64 32C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64h98.2V334.2H109.4V256h52.8V222.3c0-87.1 39.4-127.5 125-127.5c16.2 0 44.2 3.2 55.7 6.4V172c-6-.6-16.5-1-29.6-1c-42 0-58.2 15.9-58.2 57.2V256h83.6l-14.4 78.2H255V480H384c35.3 0 64-28.7 64-64V96c0-35.3-28.7-64-64-64H64z"/></svg> Facebook <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></a></li>
-              <li><a href="/go/linkedin" class="text-light-blue md:text-primary-action  text-md md:font-semibold"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-4 h-4 inline-block mr-2"><path d="M416 32H31.9C14.3 32 0 46.5 0 64.3v383.4C0 465.5 14.3 480 31.9 480H416c17.6 0 32-14.5 32-32.3V64.3c0-17.8-14.4-32.3-32-32.3zM135.4 416H69V202.2h66.5V416zm-33.2-243c-21.3 0-38.5-17.3-38.5-38.5S80.9 96 102.2 96c21.2 0 38.5 17.3 38.5 38.5 0 21.3-17.2 38.5-38.5 38.5zm282.1 243h-66.4V312c0-24.8-.5-56.7-34.5-56.7-34.6 0-39.9 27-39.9 54.9V416h-66.4V202.2h63.7v29.2h.9c8.9-16.8 30.6-34.5 62.9-34.5 67.2 0 79.7 44.3 79.7 101.9V416z"/></svg> LinkedIn <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></a></li>
-              <li><a href="/go/instagram" class="text-light-blue md:text-primary-action  text-md md:font-semibold"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-4 h-4 inline-block mr-2"><path d="M194.4 211.7a53.3 53.3 0 1 0 59.3 88.7 53.3 53.3 0 1 0 -59.3-88.7zm142.3-68.4c-5.2-5.2-11.5-9.3-18.4-12c-18.1-7.1-57.6-6.8-83.1-6.5c-4.1 0-7.9 .1-11.2 .1c-3.3 0-7.2 0-11.4-.1c-25.5-.3-64.8-.7-82.9 6.5c-6.9 2.7-13.1 6.8-18.4 12s-9.3 11.5-12 18.4c-7.1 18.1-6.7 57.7-6.5 83.2c0 4.1 .1 7.9 .1 11.1s0 7-.1 11.1c-.2 25.5-.6 65.1 6.5 83.2c2.7 6.9 6.8 13.1 12 18.4s11.5 9.3 18.4 12c18.1 7.1 57.6 6.8 83.1 6.5c4.1 0 7.9-.1 11.2-.1c3.3 0 7.2 0 11.4 .1c25.5 .3 64.8 .7 82.9-6.5c6.9-2.7 13.1-6.8 18.4-12s9.3-11.5 12-18.4c7.2-18 6.8-57.4 6.5-83c0-4.2-.1-8.1-.1-11.4s0-7.1 .1-11.4c.3-25.5 .7-64.9-6.5-83l0 0c-2.7-6.9-6.8-13.1-12-18.4zm-67.1 44.5A82 82 0 1 1 178.4 324.2a82 82 0 1 1 91.1-136.4zm29.2-1.3c-3.1-2.1-5.6-5.1-7.1-8.6s-1.8-7.3-1.1-11.1s2.6-7.1 5.2-9.8s6.1-4.5 9.8-5.2s7.6-.4 11.1 1.1s6.5 3.9 8.6 7s3.2 6.8 3.2 10.6c0 2.5-.5 5-1.4 7.3s-2.4 4.4-4.1 6.2s-3.9 3.2-6.2 4.2s-4.8 1.5-7.3 1.5l0 0c-3.8 0-7.5-1.1-10.6-3.2zM448 96c0-35.3-28.7-64-64-64H64C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V96zM357 389c-18.7 18.7-41.4 24.6-67 25.9c-26.4 1.5-105.6 1.5-132 0c-25.6-1.3-48.3-7.2-67-25.9s-24.6-41.4-25.8-67c-1.5-26.4-1.5-105.6 0-132c1.3-25.6 7.1-48.3 25.8-67s41.5-24.6 67-25.8c26.4-1.5 105.6-1.5 132 0c25.6 1.3 48.3 7.1 67 25.8s24.6 41.4 25.8 67c1.5 26.3 1.5 105.4 0 131.9c-1.3 25.6-7.1 48.3-25.8 67z"/></svg>Instagram <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></a></li>
-              <li><a href="/go/twitter" class="text-light-blue md:text-primary-action  text-md md:font-semibold"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-4 h-4 inline-block mr-2"><path d="M64 32C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V96c0-35.3-28.7-64-64-64H64zm297.1 84L257.3 234.6 379.4 396H283.8L209 298.1 123.3 396H75.8l111-126.9L69.7 116h98l67.7 89.5L313.6 116h47.5zM323.3 367.6L153.4 142.9H125.1L296.9 367.6h26.3z"/></svg> X <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></a></li>
-              <li><a href="/go/tiktok" class="text-light-blue md:text-primary-action  text-md md:font-semibold"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-4 h-4 inline-block mr-2"><path d="M448 209.9a210.1 210.1 0 0 1 -122.8-39.3V349.4A162.6 162.6 0 1 1 185 188.3V278.2a74.6 74.6 0 1 0 52.2 71.2V0l88 0a121.2 121.2 0 0 0 1.9 22.2h0A122.2 122.2 0 0 0 381 102.4a121.4 121.4 0 0 0 67 20.1z"/></svg>TikTok <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></a></li>
+              <li><a href="https://visitor.r20.constantcontact.com/d.jsp?llr=l4yex5cab&p=oi&m=1102690018283&sit=rly6c5neb&f=6b302af4-fe5e-4b2a-9a69-054897d2ffa8" class="text-light-blue md:text-primary-action  text-base md:font-semibold"><span class="inline-flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="fill-primary-action w-4 h-4 inline-block mr-2"><path d="M48 64C21.5 64 0 85.5 0 112c0 15.1 7.1 29.3 19.2 38.4L236.8 313.6c11.4 8.5 27 8.5 38.4 0L492.8 150.4c12.1-9.1 19.2-23.3 19.2-38.4c0-26.5-21.5-48-48-48L48 64zM0 176L0 384c0 35.3 28.7 64 64 64l384 0c35.3 0 64-28.7 64-64l0-208L294.4 339.2c-22.8 17.1-54 17.1-76.8 0L0 176z"/></svg> Get Our Newsletter <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></a></li>
+              <li><a href="/go/facebook" class="text-light-blue md:text-primary-action  text-base md:font-semibold align-middle"><span class="inline-flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-4 h-4 inline-block mr-2"><path d="M64 32C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64h98.2V334.2H109.4V256h52.8V222.3c0-87.1 39.4-127.5 125-127.5c16.2 0 44.2 3.2 55.7 6.4V172c-6-.6-16.5-1-29.6-1c-42 0-58.2 15.9-58.2 57.2V256h83.6l-14.4 78.2H255V480H384c35.3 0 64-28.7 64-64V96c0-35.3-28.7-64-64-64H64z"/></svg> Facebook <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></a></li>
+              <li><a href="/go/linkedin" class="text-light-blue md:text-primary-action  text-base md:font-semibold"><span class="inline-flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-4 h-4 inline-block mr-2"><path d="M416 32H31.9C14.3 32 0 46.5 0 64.3v383.4C0 465.5 14.3 480 31.9 480H416c17.6 0 32-14.5 32-32.3V64.3c0-17.8-14.4-32.3-32-32.3zM135.4 416H69V202.2h66.5V416zm-33.2-243c-21.3 0-38.5-17.3-38.5-38.5S80.9 96 102.2 96c21.2 0 38.5 17.3 38.5 38.5 0 21.3-17.2 38.5-38.5 38.5zm282.1 243h-66.4V312c0-24.8-.5-56.7-34.5-56.7-34.6 0-39.9 27-39.9 54.9V416h-66.4V202.2h63.7v29.2h.9c8.9-16.8 30.6-34.5 62.9-34.5 67.2 0 79.7 44.3 79.7 101.9V416z"/></svg> LinkedIn <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></a></li>
+              <li><a href="/go/instagram" class="text-light-blue md:text-primary-action  text-base md:font-semibold"><span class="inline-flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-4 h-4 inline-block mr-2"><path d="M194.4 211.7a53.3 53.3 0 1 0 59.3 88.7 53.3 53.3 0 1 0 -59.3-88.7zm142.3-68.4c-5.2-5.2-11.5-9.3-18.4-12c-18.1-7.1-57.6-6.8-83.1-6.5c-4.1 0-7.9 .1-11.2 .1c-3.3 0-7.2 0-11.4-.1c-25.5-.3-64.8-.7-82.9 6.5c-6.9 2.7-13.1 6.8-18.4 12s-9.3 11.5-12 18.4c-7.1 18.1-6.7 57.7-6.5 83.2c0 4.1 .1 7.9 .1 11.1s0 7-.1 11.1c-.2 25.5-.6 65.1 6.5 83.2c2.7 6.9 6.8 13.1 12 18.4s11.5 9.3 18.4 12c18.1 7.1 57.6 6.8 83.1 6.5c4.1 0 7.9-.1 11.2-.1c3.3 0 7.2 0 11.4 .1c25.5 .3 64.8 .7 82.9-6.5c6.9-2.7 13.1-6.8 18.4-12s9.3-11.5 12-18.4c7.2-18 6.8-57.4 6.5-83c0-4.2-.1-8.1-.1-11.4s0-7.1 .1-11.4c.3-25.5 .7-64.9-6.5-83l0 0c-2.7-6.9-6.8-13.1-12-18.4zm-67.1 44.5A82 82 0 1 1 178.4 324.2a82 82 0 1 1 91.1-136.4zm29.2-1.3c-3.1-2.1-5.6-5.1-7.1-8.6s-1.8-7.3-1.1-11.1s2.6-7.1 5.2-9.8s6.1-4.5 9.8-5.2s7.6-.4 11.1 1.1s6.5 3.9 8.6 7s3.2 6.8 3.2 10.6c0 2.5-.5 5-1.4 7.3s-2.4 4.4-4.1 6.2s-3.9 3.2-6.2 4.2s-4.8 1.5-7.3 1.5l0 0c-3.8 0-7.5-1.1-10.6-3.2zM448 96c0-35.3-28.7-64-64-64H64C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V96zM357 389c-18.7 18.7-41.4 24.6-67 25.9c-26.4 1.5-105.6 1.5-132 0c-25.6-1.3-48.3-7.2-67-25.9s-24.6-41.4-25.8-67c-1.5-26.4-1.5-105.6 0-132c1.3-25.6 7.1-48.3 25.8-67s41.5-24.6 67-25.8c26.4-1.5 105.6-1.5 132 0c25.6 1.3 48.3 7.1 67 25.8s24.6 41.4 25.8 67c1.5 26.3 1.5 105.4 0 131.9c-1.3 25.6-7.1 48.3-25.8 67z"/></svg>Instagram <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></a></li>
+              <li><a href="/go/twitter" class="text-light-blue md:text-primary-action  text-base md:font-semibold"><span class="inline-flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-4 h-4 inline-block mr-2"><path d="M64 32C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V96c0-35.3-28.7-64-64-64H64zm297.1 84L257.3 234.6 379.4 396H283.8L209 298.1 123.3 396H75.8l111-126.9L69.7 116h98l67.7 89.5L313.6 116h47.5zM323.3 367.6L153.4 142.9H125.1L296.9 367.6h26.3z"/></svg> X <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></a></li>
+              <li><a href="/go/tiktok" class="text-light-blue md:text-primary-action  text-base md:font-semibold"><span class="inline-flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-4 h-4 inline-block mr-2"><path d="M448 209.9a210.1 210.1 0 0 1 -122.8-39.3V349.4A162.6 162.6 0 1 1 185 188.3V278.2a74.6 74.6 0 1 0 52.2 71.2V0l88 0a121.2 121.2 0 0 0 1.9 22.2h0A122.2 122.2 0 0 0 381 102.4a121.4 121.4 0 0 0 67 20.1z"/></svg>TikTok <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></a></li>
             </ul>
-            <h3 class="leading-[1.2] uppercase font-condensed text-primary md:text-accent1 text-sm md:font-semibold mb-4 md:mb-0 mt-8 md:mt-4">More Media</h3>
+            <h3 class="leading-[1.2] uppercase font-condensed text-primary md:text-accent1 text-sm md:font-semibold mb-4 md:mb-4 mt-8 md:mt-4">More Media</h3>
               <ul>
-                <li><a href="/go/newsletter" class="text-light-blue md:text-primary-action text-md md:font-semibold"><svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" class="fill-primary-action w-4 h-4 inline-block mr-2"><path d="m260.264 0h2.526a95.007 95.007 0 0 1 95.01 95.007v155.5a0 0 0 0 1 0 0h-192.543a0 0 0 0 1 0 0v-155.5a95.007 95.007 0 0 1 95.007-95.007z"></path><path d="m165.257 268.055h192.543a0 0 0 0 1 0 0v30.131a95.007 95.007 0 0 1 -95.007 95.007h-2.526a95.007 95.007 0 0 1 -95.007-95.007v-30.131a0 0 0 0 1 -.003 0z"></path><path d="m390.437 239.729a17.5 17.5 0 0 0 -17.5 17.5v38.654a111.41 111.41 0 0 1 -222.819 0v-38.654a17.5 17.5 0 0 0 -35 0v38.654c0 74.809 56.4 136.683 128.909 145.36v34.248h-65.327a17.5 17.5 0 0 0 0 35h165.658a17.5 17.5 0 0 0 0-35h-65.331v-34.248c72.51-8.677 128.91-70.551 128.91-145.36v-38.654a17.5 17.5 0 0 0 -17.5-17.5z"></path></svg> Podcast <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></a></li>
+                <li><a href="/podcast" class="text-light-blue md:text-primary-action text-base md:font-semibold"><span class="inline-flex items-center gap-1"><svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" class="fill-primary-action w-4 h-4 inline-block mr-2"><path d="m260.264 0h2.526a95.007 95.007 0 0 1 95.01 95.007v155.5a0 0 0 0 1 0 0h-192.543a0 0 0 0 1 0 0v-155.5a95.007 95.007 0 0 1 95.007-95.007z"></path><path d="m165.257 268.055h192.543a0 0 0 0 1 0 0v30.131a95.007 95.007 0 0 1 -95.007 95.007h-2.526a95.007 95.007 0 0 1 -95.007-95.007v-30.131a0 0 0 0 1 -.003 0z"></path><path d="m390.437 239.729a17.5 17.5 0 0 0 -17.5 17.5v38.654a111.41 111.41 0 0 1 -222.819 0v-38.654a17.5 17.5 0 0 0 -35 0v38.654c0 74.809 56.4 136.683 128.909 145.36v34.248h-65.327a17.5 17.5 0 0 0 0 35h165.658a17.5 17.5 0 0 0 0-35h-65.331v-34.248c72.51-8.677 128.91-70.551 128.91-145.36v-38.654a17.5 17.5 0 0 0 -17.5-17.5z"></path></svg> Podcast <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></a></li>
               </ul>
             </div>
             </div>
@@ -204,7 +207,7 @@
 <div class="order-5 md:order-3 z-50">
 
     <!-- main navigation item-->
-    <button id="more-button" class="text-base md:text-lg block cursor-pointer font-semibold md:hover:text-primary-action py-4 md:py-0 aria-haspopup="true" aria-expanded="false" aria-controls="more-menu" data-dropdown-button>More <svg class="closed fill-primary-action" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M201.4 374.6c12.5 12.5 32.8 12.5 45.3 0l160-160c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L224 306.7 86.6 169.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l160 160z"/></svg><svg class="open fill-primary-action" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M201.4 137.4c12.5-12.5 32.8-12.5 45.3 0l160 160c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L224 205.3 86.6 342.6c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3l160-160z"/></svg></button>
+    <button id="more-button" class="main-nav-btn text-base md:text-lg block cursor-pointer font-semibold md:hover:text-primary-action py-4 md:py-0" aria-haspopup="true" aria-expanded="false" aria-controls="more-menu" data-dropdown-button>More <svg class="closed fill-primary-action" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M201.4 374.6c12.5 12.5 32.8 12.5 45.3 0l160-160c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L224 306.7 86.6 169.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l160 160z"/></svg><svg class="open fill-primary-action" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M201.4 137.4c12.5-12.5 32.8-12.5 45.3 0l160 160c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L224 205.3 86.6 342.6c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3l160-160z"/></svg></button>
 
     <!-- dropdown menu -->
      <div id="more-menu" role="menu" aria-labelledby="more-button" class="hidden p-4 mega-menu md:shadow-xl md:mt-6">
@@ -215,37 +218,37 @@
                
                 <!-- What is Citizen Science? -->
                 <a href="/citizen-science" class="pb-4 md:basis-1/2 lg:basis-1/3 md:pr-2 md:border-b md:border-r md:border-linework">
-                  <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1">What is Citizen Science? <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></h3>
+                  <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1"><span class="inline-flex items-center gap-1">What is Citizen Science? <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
                   <p class="hidden md:block text-sm text-primary-light md:text-primary-dark leading-[1.4] mb-8">Learn how you can help scientists by doing science</p>
                 </a>
 
                 <!-- What is SciStarter? -->
                 <a href="/about" class="pb-4 md:basis-1/2 lg:basis-1/3 pr-4 md:pl-4 md:border-linework md:border-b lg:border-r">
-                  <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1">What is SciStarter? <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></h3>
+                  <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1"><span class="inline-flex items-center gap-1">What is SciStarter? <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
                   <p class="hidden md:block text-sm text-primary-light md:text-primary-dark leading-[1.4] mb-8">Learn what is this website's purpose and how you use it</p>
                 </a>
 
                 <!-- Our Research -->
                 <a href="/research" class="pb-4 md:basis-1/2 lg:basis-1/3 md:pr-2 md:border-linework md:border-b md:border-r md:pt-4 lg:pt-0 lg:border-r-0 lg:pl-4">
-                  <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1">Our Research <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></h3>
+                  <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1"><span class="inline-flex items-center gap-1">Our Research <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
                   <p class="hidden md:block text-sm text-primary-light md:text-primary-dark leading-[1.4] mb-8">See our mission and meet our team!</p>
                 </a>
 
                 <!-- How to get started -->
-                <a href="/getting-started" class="pb-4 md:basis-1/2 lg:basis-1/3 md:pl-4 md:border-linework md:border-b md:pt-4 lg:border-b-0 lg:pl-0 lg:border-r">
-                  <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1">How to Get Started <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></h3>
+                <a href="/get-started" class="pb-4 md:basis-1/2 lg:basis-1/3 md:pl-4 md:border-linework md:border-b md:pt-4 lg:border-b-0 lg:pl-0 lg:border-r">
+                  <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1"><span class="inline-flex items-center gap-1">How to Get Started <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
                   <p class="hidden md:block text-sm text-primary-light md:text-primary-dark leading-[1.4] mb-8">Learn how to begin making acts of science</p>
                 </a>
 
                 <!-- Our Team -->
                 <a href="/about#team" class="pb-4 md:basis-1/2 lg:basis-1/3 pr-2 md:border-linework md:border-r md:pt-4 lg:pl-4">
-                  <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1">Our Team <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></h3>
+                  <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1"><span class="inline-flex items-center gap-1">Our Team <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
                   <p class="hidden md:block text-sm text-primary-light md:text-primary-dark leading-[1.4] mb-8">Meet the team behind SciStarter</p>
                 </a>
 
                 <!-- Data Explorer -->
                 <a href="/data" class="pb-4 md:basis-1/2 lg:basis-1/3 md:pl-4 md:border-linework md:pt-4">
-                  <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1">Data Explorer <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></h3>
+                  <h3 class="text-xl md:text-lg text-primary-light md:text-primary-action md:font-semibold leading-[1.2] !mb-1"><span class="inline-flex items-center gap-1">Data Explorer <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="inline-block align-middle fill-primary-action w-4 h-4"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></h3>
                   <p class="hidden md:block text-sm text-primary-light md:text-primary-dark leading-[1.4] mb-8">Gain insight into our project data and traffic</p>
                 </a>
 
@@ -253,9 +256,9 @@
               <div class="basis-1/4  py-2 md:pb-4 md:pt-0 md:border-l md:pl-4 md:border-linework"><!-- this wraps a section-->
                 <h3 class="uppercase font-condensed text-primary md:text-accent1 text-sm md:font-semibold mb-4">More Links</h3>
                 <ul class="no-li-space">
-                  <li><a href="/faq" class="text-light-blue md:text-primary-action text-md md:font-semibold">Frequently Asked Questions <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></a></li>
-                  <li><a href="mailto:info@scistarter.org" class="text-light-blue md:text-primary-action  text-md md:font-semibold align-middle">Contact Us <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></a></li>
-                  <li><a href="/funders" class="text-light-blue md:text-primary-action  text-md md:font-semibold">Our Sponsors and Partners <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></a></li>
+                  <li><a href="/faq" class="text-light-blue md:text-primary-action text-base md:font-semibold"><span class="inline-flex items-center gap-1">Frequently Asked Questions <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></a></li>
+                  <li><a href="mailto:info@scistarter.org" class="text-light-blue md:text-primary-action  text-base md:font-semibold align-middle"><span class="inline-flex items-center gap-1">Contact Us <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></a></li>
+                  <li><a href="/funders" class="text-light-blue md:text-primary-action  text-base md:font-semibold"><span class="inline-flex items-center gap-1">Our Sponsors and Partners <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action w-3 h-3 inline-block"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span></a></li>
                 </ul>
               </div>
           </div>
@@ -268,34 +271,31 @@
 
 </div>
 
+
               <!-- Search -->
-                 <!-- Search -->
-             <div class="md:py-0 border-b border-white-alpha order-2 md:order-4">
-                 <button id="search-button" data-dropdown-button class="text-base md:text-lg block cursor-pointer font-semibold hover:text-primary-action py-4 md:py-0 mb-0 border-white-alpha" aria-haspopup="true" aria-expanded="false" aria-controls="search-nav" >
-                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-8 fill-white md:fill-primary-action md:w-5! md:mr-3"><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352a144 144 0 1 0 0-288 144 144 0 1 0 0 288z"/></svg> <span class="md:hidden"> Search</span></button>
+              <div class="main-nav-btn2 md:py-0 border-b border-white-alpha order-2 md:order-4">
+    <div class="relative w-full md:max-w-md my-4 md:my-0">
+    <input
+        type="text"
+        class="w-full pl-10 pr-4 py-2 rounded-lg border border-linework focus:outline-none focus:border-primary-action text-base text-primary-dark"
+        placeholder="Search..."
+    />
+    <span class="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="fill-primary-action w-[15px] md:mr-3"><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352a144 144 0 1 0 0-288 144 144 0 1 0 0 288z"/></svg>
+    </span>
+    </div>
+</div>
 
 
-                 <div id="search-nav" role="menu" aria-labelledby="search-button"  class="mega-menu pb-4 border-b border-white-alpha !bg-primary-dark">
-                    <div>
-                   <h3 class="hidden md:block text-white font-semibold mb-4">Search for Projects and Events</h3>
-                   <div class="flex mx-auto w-[600px] max-w-full">
-                     <input type="text" placeholder="location or keyword" class="grow p-2 rounded-tl rounded-bl px-4" />
-                     <button class="bg-accent1 hover:bg-accent1-dark border-0 py-2 px-4 rounded-tr rounded-br text-white font-semibold">Search</button>
-                   </div>
-                   <div id="search-close" class="h-6 w-6 m-4 absolute top-[0] right-[10px] hidden md:block fill-white"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" class="fill-white"><path d="M342.6 150.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L192 210.7 86.6 105.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L146.7 256 41.4 361.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L192 301.3 297.4 406.6c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L237.3 256 342.6 150.6z"/></svg></div>
-                  </div>
-                </div>
-             </div>
-             <!-- end Search -->
 
               <!-- Sign in/up -->
               <!-- Sign in -->
- <div class="pt-1 pb-4 md:py-0 border-b border-white-alpha order-1 md:order-5"><button class="btn btn-primary btn-small !flex gap-1 items-center"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="fill-white w-4 mr-2"><path d="M399 384.2C376.9 345.8 335.4 320 288 320l-64 0c-47.4 0-88.9 25.8-111 64.2c35.2 39.2 86.2 63.8 143 63.8s107.8-24.7 143-63.8zM0 256a256 256 0 1 1 512 0A256 256 0 1 1 0 256zm256 16a72 72 0 1 0 0-144 72 72 0 1 0 0 144z"/></svg><span class="underline">log in</span> <span class="text-xs">or</span> <span class="underline">sign up</span></button></div>
+ <div class="main-nav-btn2 pt-1 pb-4 md:py-0 border-b border-white-alpha order-1 md:order-5"><button class="btn btn-primary btn-small !flex gap-1 items-center"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="fill-white w-4 mr-2"><path d="M399 384.2C376.9 345.8 335.4 320 288 320l-64 0c-47.4 0-88.9 25.8-111 64.2c35.2 39.2 86.2 63.8 143 63.8s107.8-24.7 143-63.8zM0 256a256 256 0 1 1 512 0A256 256 0 1 1 0 256zm256 16a72 72 0 1 0 0-144 72 72 0 1 0 0 144z"/></svg><span class="underline">log in</span> <span class="text-xs">or</span> <span class="underline">sign up</span></button></div>
           
               <!-- Necessary mobile menu items-->
                <!-- this is the mobile version of nav-part__users-bar-->
             <div class="md:hidden order-6">
-             <h6 class="uppercase text-xs border-b border-white-alpha bg-primary-action my-2 -ml-4 -mr-4 py-2 px-4 text-white font-semibold flex gap-2 tracking-wide">Special Participant Sections <svg class="closed fill-purple w-[10px]" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M201.4 374.6c12.5 12.5 32.8 12.5 45.3 0l160-160c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L224 306.7 86.6 169.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l160 160z"/></svg></h6>
+             <h6 class="uppercase text-xs border-b border-white-alpha bg-primary-action my-2 -ml-4 -mr-4 py-2 px-4 text-white font-semibold flex gap-2 tracking-wide">Special Participant Sections</h6>
              <ul class="flex flex-col text-white gap-0">
                <li class="py-2 border-b border-white-alpha"><a href="/for-project-leaders" class="text-white">Project Leaders</a></li>
                <li class="py-2 border-b border-white-alpha"><a href="https://pages.scistarter.org/for-educators-integrating-citizen-science-projects-into-social-studies-curriculum/" class="text-white">Educators</a></li>
@@ -317,7 +317,7 @@
 
 
     <!-- main page content-->
-    <main id="main-content" class="ss-page ss-page-not-logged-in">
+    <main id="main-content" class="ss-page">
 
         <div class="ss-container !pt-8 !pb-8 mx-auto ">
             <h1>Most page content here.</h1>
@@ -330,7 +330,7 @@
     <footer class="bg-primary-light">
   <div class="ss-container mx-auto py-4! md:flex gap-4">
     <div class="basis-1/4 mb-0">
-      <h3 class="uppercase font-condensed text-primary md:text-accent1 text-sm md:font-semibold mb-0">Learn More</h3>
+      <h3 class="uppercase font-condensed text-primary text-sm md:font-semibold mb-4">Learn More</h3>
       <ul class="no-li-space">
         <li><a href="#" class="text-primary-dark text-base py-1 block">How do I start?</a></li>
         <li><a href="#" class="text-primary-dark text-base py-1 block">What is Citizen Science?</a></li>
@@ -339,7 +339,7 @@
         <li><a href="#" class="text-primary-dark text-base py-1 block">FAQs</a></li>
       </ul>
     </div>
-    <div class="basis-1/4  pb-0 md:pt-[20px]">
+    <div class="basis-1/4  pb-0 md:pt-8">
       <!-- <h3 class="text-primary-dark uppercase font-semibold">Participate</h3> -->
       <ul class="no-li-space">
         <li><a href="#" class="text-primary-dark text-base py-1 block">Opportunity Finder</a></li>
@@ -347,7 +347,7 @@
         <li><a href="#" class="text-primary-dark text-base py-1 block">Training</a></li>
       </ul>
     </div>
-    <div class="basis-1/4  pb-4 md:pt-[20px]">
+    <div class="basis-1/4  pb-4 md:pt-8">
       <!-- <h3 class="text-primary-dark uppercase font-semibold">For Project Leaders</h3> -->
       <ul class="no-li-space">
         <li><a href="#" class="text-primary-dark text-base py-1 block">Project Leader Info</a></li>
@@ -357,7 +357,7 @@
       </ul>
     </div>
     <div class="basis-1/4 border-b border-line-blue md:border-b-[0] pb-4 mb-4 md:pb-0 md:mb-0">
-      <h3 class="uppercase font-condensed text-primary md:text-accent1 text-sm md:font-semibold mb-0">Connect</h3>
+      <h3 class="uppercase font-condensed text-primary text-sm md:font-semibold mb-4">Connect</h3>
       <ul class="no-li-space">
         <li class="text-base text-primary-dark">Contact: <a href="#" class="text-primary-dark underline">info@scistarter.org</a></li>
         <li><a href="#" class="text-primary-dark">Newsletter</a></li>

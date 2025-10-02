@@ -1,0 +1,81 @@
+
+    <div class="ss-accordion2 w-full mx-auto border border-linework shadow mb-8">
+        <button
+          type="button"
+          class="w-full flex justify-between items-center px-4 py-3 text-left font-semibold focus:outline-none focus-visible:ring focus-visible:ring-primary-action"
+          aria-expanded="false"
+          aria-controls="accordion-panel-1"
+          id="accordion-header-1"
+        >
+          <h2 class="text-lg mb-0 text-primary">Accordion Title 1</h2>
+          <svg class="w-5 h-5 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+          </svg>
+        </button>
+     
+      <div
+        id="accordion-panel-1"
+        role="region"
+        aria-labelledby="accordion-header-1"
+        class="px-4 py-3 hidden mx-auto">
+         <div class="mx-auto max-w-[960px]">
+
+                <!-- editable part-->
+                 <p>Accordion panel content 2 goes here.</p>
+                 <!---->
+
+            </div>
+      </div>
+    </div>
+
+    <div class="ss-accordion2 w-full mx-auto border border-linework shadow mb-8">
+        <button
+          type="button"
+          class="w-full flex justify-between items-center px-4 py-3 text-left font-semibold focus:outline-none focus-visible:ring focus-visible:ring-primary-action"
+          aria-expanded="false"
+          aria-controls="accordion-panel-2"
+          id="accordion-header-2"
+        >
+          <h2 class="text-lg mb-0 text-primary">Accordion Title 2</h2>
+          <svg class="w-5 h-5 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+          </svg>
+        </button>
+     
+      <div
+        id="accordion-panel-2"
+        role="region"
+        aria-labelledby="accordion-header-2"
+        class="px-4 py-3 hidden mx-auto"
+      >
+            <div class="mx-auto max-w-[960px]">
+
+                <!-- editable part-->
+                 <p>Accordion panel content 2 goes here.</p>
+                 <!---->
+
+            </div>
+       
+      </div>
+    </div>
+
+
+
+<script>
+  document.querySelectorAll('.ss-accordion2 button').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const panel = document.getElementById(this.getAttribute('aria-controls'));
+      const expanded = this.getAttribute('aria-expanded') === 'true';
+
+      if (expanded) {
+        this.setAttribute('aria-expanded', 'false');
+        this.querySelector('svg').classList.remove('rotate-180');
+        panel.classList.add('hidden');
+      } else {
+        this.setAttribute('aria-expanded', 'true');
+        this.querySelector('svg').classList.add('rotate-180');
+        panel.classList.remove('hidden');
+      }
+    });
+  });
+</script>
