@@ -19,7 +19,6 @@ pub enum EventFieldValue {
     EventId(Ulid),
     Status(EventStatus),
     Created(TimeString),
-    Publish(bool),
     Flagged(bool),
     AdminNotes(String),
     Welcomed(bool),
@@ -63,7 +62,6 @@ impl EventField {
             EventFieldValue::EventId(_) => EventFieldType::EventId,
             EventFieldValue::Status(_) => EventFieldType::Status,
             EventFieldValue::Created(_) => EventFieldType::Created,
-            EventFieldValue::Publish(_) => EventFieldType::Publish,
             EventFieldValue::Flagged(_) => EventFieldType::Flagged,
             EventFieldValue::AdminNotes(_) => EventFieldType::AdminNotes,
             EventFieldValue::Welcomed(_) => EventFieldType::Welcomed,
@@ -126,21 +124,6 @@ impl EventField {
         sqlx::query!(
             "UPDATE events SET created = ? WHERE event_id = ?",
             created_str,
-            event_id_str
-        )
-        .execute(db())
-        .await?;
-
-        Ok(())
-    }
-
-    async fn save_publish(&self, publish: &bool) -> Result<(), Error> {
-        use common::shared::db;
-
-        let event_id_str = self.event_id.to_string();
-        sqlx::query!(
-            "UPDATE events SET publish = ? WHERE event_id = ?",
-            publish,
             event_id_str
         )
         .execute(db())
@@ -605,18 +588,6 @@ impl EventField {
         Ok(EventField::new(event_id, EventFieldValue::Created(created)))
     }
 
-    async fn read_publish(event_id: Ulid) -> Result<Self, Error> {
-        use common::shared::db;
-        let event_id_str = event_id.to_string();
-        let publish = sqlx::query_scalar!(
-            "SELECT publish FROM events WHERE event_id = ?",
-            event_id_str
-        )
-        .fetch_one(db())
-        .await?;
-        Ok(EventField::new(event_id, EventFieldValue::Publish(publish)))
-    }
-
     async fn read_flagged(event_id: Ulid) -> Result<Self, Error> {
         use common::shared::db;
         let event_id_str = event_id.to_string();
@@ -1011,7 +982,6 @@ impl LoadStorePeered for EventField {
         match &self.field {
             EventFieldValue::Status(status) => self.save_status(status).await,
             EventFieldValue::Created(created) => self.save_created(created).await,
-            EventFieldValue::Publish(publish) => self.save_publish(publish).await,
             EventFieldValue::Flagged(flagged) => self.save_flagged(flagged).await,
             EventFieldValue::AdminNotes(notes) => self.save_admin_notes(notes).await,
             EventFieldValue::Welcomed(welcomed) => self.save_welcomed(welcomed).await,
@@ -1077,7 +1047,6 @@ impl LoadStorePeered for EventField {
             )),
             EventFieldType::Status => Self::read_status(event_id).await,
             EventFieldType::Created => Self::read_created(event_id).await,
-            EventFieldType::Publish => Self::read_publish(event_id).await,
             EventFieldType::Flagged => Self::read_flagged(event_id).await,
             EventFieldType::AdminNotes => Self::read_admin_notes(event_id).await,
             EventFieldType::Welcomed => Self::read_welcomed(event_id).await,

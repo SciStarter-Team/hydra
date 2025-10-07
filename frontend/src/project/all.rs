@@ -20,13 +20,13 @@ use super::{ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus};
 /// Only use when you actually need most/all fields. For common operations, use direct SQL queries:
 ///
 /// ```rust
-/// // ❌ DON'T: Loading full object just for name and publish status
+/// // ❌ DON'T: Loading full object just for name and status
 /// let project = ProjectAll::load(ulid).await?;
-/// println!("{}: {}", project.name, project.publish);
+/// println!("{}: {}", project.name, project.status);
 ///
 /// // ✅ DO: Direct query for specific fields
 /// let result = sqlx::query!(
-///     r#"SELECT "name", "publish" FROM "projects" WHERE "project_id" = ?"#,
+///     r#"SELECT "name", "status" FROM "projects" WHERE "project_id" = ?"#,
 ///     ulid_str
 /// ).fetch_one(db()).await?;
 /// ```
@@ -47,7 +47,6 @@ pub struct ProjectAll {
     pub foreign_id: Option<String>,
 
     // section Admin
-    pub publish: bool,
     pub duplicate: bool,
     pub authoritative: bool,
     pub flagged: bool,
@@ -230,7 +229,6 @@ impl LoadStorePeered for ProjectAll {
           "legacy_v1_project_id",
           "legacy_v2_project_id",
           "foreign_id",
-          "publish",
           "duplicate",
           "authoritative",
           "flagged",
@@ -451,7 +449,14 @@ impl LoadStorePeered for ProjectAll {
           ?108,
           ?109,
           ?110,
-          ?111,
+          case
+            when ?111 is null then
+              null
+            when substr(?111, 1, 1) == '{' and substr(?111, -1, 1) == '}' then
+              GeomFromGeoJSON(?111)
+            else
+              GeomFromEWKT(?111)
+          end,
           case
             when ?112 is null then
               null
@@ -459,21 +464,12 @@ impl LoadStorePeered for ProjectAll {
               GeomFromGeoJSON(?112)
             else
               GeomFromEWKT(?112)
-          end,
-          case
-            when ?113 is null then
-              null
-            when substr(?113, 1, 1) == '{' and substr(?113, -1, 1) == '}' then
-              GeomFromGeoJSON(?113)
-            else
-              GeomFromEWKT(?113)
           end
         )"#,
             project_id,
             self.legacy_v1_project_id,
             self.legacy_v2_project_id,
             self.foreign_id,
-            self.publish,
             self.duplicate,
             self.authoritative,
             self.flagged,
@@ -1106,7 +1102,7 @@ impl LoadStorePeered for ProjectAll {
         let project_row = sqlx::query!(
             r#"SELECT
                 project_id, legacy_id, legacy_v1_project_id, legacy_v2_project_id, foreign_id,
-                publish, duplicate, authoritative, flagged, is_test, status,
+                duplicate, authoritative, flagged, is_test, status,
                 promotion_time, promotion_target, admin_notes, created, wild_hope,
                 exchange, origin, suborigin, guid, opengraph_description,
                 is_affiliate, is_inaturalist, inat_project_id, welcomed,
@@ -1277,7 +1273,6 @@ impl LoadStorePeered for ProjectAll {
             foreign_id: project_row.foreign_id,
 
             // Admin section
-            publish: project_row.publish.unwrap_or(false),
             duplicate: project_row.duplicate,
             authoritative: project_row.authoritative,
             flagged: project_row.flagged,

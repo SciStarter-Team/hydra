@@ -130,6 +130,7 @@ pub fn routes() -> impl Endpoint {
             "/entities/edit/*slug",
             get(entities_edit).post(entities_update).delete(entities_delete),
         )
+        .at("/entities/publish/*slug", post(entities_publish_toggle))
         .at("/wysiwyg", get(wysiwyg_list))
         .at("/wysiwyg/search", get(wysiwyg_search))
         .at("/wysiwyg/new", get(wysiwyg_new))
@@ -578,7 +579,6 @@ pub struct AdminProjectFull {
     pub id: String,
     pub title: String,
     pub status: String,
-    pub publish: bool,
     pub created_date: String,
     pub page_creator_id: String,
     pub page_creator_email: Option<String>,
@@ -735,7 +735,6 @@ impl AdminProjectFull {
             id: project.project_id.to_string(),
             title: project.name,
             status: format!("{:?}", project.status).to_lowercase(),
-            publish: project.publish,
             draft: project.draft,
             authoritative: project.authoritative,
             description: project.description,
@@ -899,21 +898,24 @@ async fn fetch_projects_page(
 
     if let Some(search_term) = search.filter(|s| !s.trim().is_empty()) {
         query.push(
-            "SELECT p.project_id, p.name, p.status, p.publish, p.created, p.presenter, 
-                    p.origin, p.flagged, p.duplicate, p.is_test, p.goal, p.task, p.image, 
-                    p.url, p.admin_notes, p.draft, p.description 
-             FROM projects p 
-             JOIN projects_fts f ON p.project_id = f.project_id 
+            "SELECT p.project_id, p.name, p.status, COALESCE(ent.publish, 0) as publish, p.created, p.presenter,
+                    p.origin, p.flagged, p.duplicate, p.is_test, p.goal, p.task, p.image,
+                    p.url, p.admin_notes, p.draft, p.description
+             FROM projects p
+             JOIN projects_fts f ON p.project_id = f.project_id
+             LEFT JOIN entities ent ON ent.target = p.project_id AND ent.kind = 'Project'
              WHERE projects_fts MATCH ",
         );
         // With porter stemming enabled, use simple term matching for better flexibility
         query.push_bind(search_term);
     } else {
         query.push(
-            "SELECT p.project_id, p.name, p.status, p.publish, p.created, p.presenter, 
-                    p.origin, p.flagged, p.duplicate, p.is_test, p.goal, p.task, p.image, 
-                    p.url, p.admin_notes, p.draft, p.description 
-             FROM projects p WHERE 1=1",
+            "SELECT p.project_id, p.name, p.status, COALESCE(ent.publish, 0) as publish, p.created, p.presenter,
+                    p.origin, p.flagged, p.duplicate, p.is_test, p.goal, p.task, p.image,
+                    p.url, p.admin_notes, p.draft, p.description
+             FROM projects p
+             LEFT JOIN entities ent ON ent.target = p.project_id AND ent.kind = 'Project'
+             WHERE 1=1",
         );
     }
 
@@ -923,9 +925,14 @@ async fn fetch_projects_page(
     }
 
     if let Some(publish) = publish_filter.filter(|s| !s.is_empty()) {
-        let publish_bool = publish == "true";
-        query.push(" AND p.publish = ");
-        query.push_bind(publish_bool);
+        if publish == "true" {
+            query.push(" AND ent.publish = ");
+            query.push_bind(1);
+        } else {
+            query.push(" AND (ent.publish = ");
+            query.push_bind(0);
+            query.push(" OR ent.publish IS NULL)");
+        }
     }
 
     if let Some(flagged) = flagged_filter.filter(|s| !s.is_empty()) {
@@ -1063,14 +1070,15 @@ async fn count_projects(
 
     if let Some(search_term) = search.filter(|s| !s.trim().is_empty()) {
         query.push(
-            "SELECT COUNT(*) FROM projects p 
-             JOIN projects_fts f ON p.project_id = f.project_id 
+            "SELECT COUNT(*) FROM projects p
+             JOIN projects_fts f ON p.project_id = f.project_id
+             LEFT JOIN entities ent ON ent.target = p.project_id AND ent.kind = 'Project'
              WHERE projects_fts MATCH ",
         );
         // With porter stemming enabled, use simple term matching for better flexibility
         query.push_bind(search_term);
     } else {
-        query.push("SELECT COUNT(*) FROM projects p WHERE 1=1");
+        query.push("SELECT COUNT(*) FROM projects p LEFT JOIN entities ent ON ent.target = p.project_id AND ent.kind = 'Project' WHERE 1=1");
     }
 
     if let Some(status) = status_filter.filter(|s| !s.is_empty()) {
@@ -1080,7 +1088,7 @@ async fn count_projects(
 
     if let Some(publish) = publish_filter.filter(|s| !s.is_empty()) {
         let publish_bool = publish == "true";
-        query.push(" AND p.publish = ");
+        query.push(" AND ent.publish = ");
         query.push_bind(publish_bool);
     }
 
@@ -1164,23 +1172,25 @@ async fn fetch_events_page(
 
     if let Some(search_term) = search.filter(|s| !s.trim().is_empty()) {
         query.push(
-            "SELECT e.event_id, e.name, e.publish, e.created, e.location_name, e.event_type, e.entirely_online,
+            "SELECT e.event_id, e.name, COALESCE(ent.publish, 0) as publish, e.created, e.location_name, e.event_type, e.entirely_online,
                     MIN(CASE WHEN ei.begin > datetime('now') THEN ei.begin END) as next_instance_begin,
                     COUNT(ei.begin) as instance_count,
                     CASE WHEN EXISTS(SELECT 1 FROM event_instances ei2 WHERE ei2.event_id = e.event_id AND ei2.begin <= datetime('now') AND ei2.end > datetime('now')) THEN 1 ELSE 0 END as is_currently_ongoing
              FROM events e
              JOIN events_fts f ON e.event_id = f.event_id
+             LEFT JOIN entities ent ON ent.target = e.event_id AND ent.kind = 'Event'
              LEFT JOIN event_instances ei ON e.event_id = ei.event_id
              WHERE events_fts MATCH "
         );
         query.push_bind(search_term);
     } else {
         query.push(
-            "SELECT e.event_id, e.name, e.publish, e.created, e.location_name, e.event_type, e.entirely_online,
+            "SELECT e.event_id, e.name, COALESCE(ent.publish, 0) as publish, e.created, e.location_name, e.event_type, e.entirely_online,
                     MIN(CASE WHEN ei.begin > datetime('now') THEN ei.begin END) as next_instance_begin,
                     COUNT(ei.begin) as instance_count,
                     CASE WHEN EXISTS(SELECT 1 FROM event_instances ei2 WHERE ei2.event_id = e.event_id AND ei2.begin <= datetime('now') AND ei2.end > datetime('now')) THEN 1 ELSE 0 END as is_currently_ongoing
              FROM events e
+             LEFT JOIN entities ent ON ent.target = e.event_id AND ent.kind = 'Event'
              LEFT JOIN event_instances ei ON e.event_id = ei.event_id
              WHERE 1=1"
         );
@@ -1201,12 +1211,17 @@ async fn fetch_events_page(
     }
 
     if let Some(publish) = publish_filter.filter(|s| !s.is_empty()) {
-        let publish_bool = publish == "true";
-        query.push(" AND e.publish = ");
-        query.push_bind(publish_bool);
+        if publish == "true" {
+            query.push(" AND ent.publish = ");
+            query.push_bind(1);
+        } else {
+            query.push(" AND (ent.publish = ");
+            query.push_bind(0);
+            query.push(" OR ent.publish IS NULL)");
+        }
     }
 
-    query.push(" GROUP BY e.event_id, e.name, e.publish, e.created, e.location_name, e.event_type, e.entirely_online");
+    query.push(" GROUP BY e.event_id, e.name, ent.publish, e.created, e.location_name, e.event_type, e.entirely_online");
     query.push(" ORDER BY e.created DESC LIMIT ");
     query.push_bind(per_page);
     query.push(" OFFSET ");
@@ -1261,13 +1276,14 @@ async fn count_events(
 
     if let Some(search_term) = search.filter(|s| !s.trim().is_empty()) {
         query.push(
-            "SELECT COUNT(*) FROM events e 
-             JOIN events_fts f ON e.event_id = f.event_id 
+            "SELECT COUNT(*) FROM events e
+             JOIN events_fts f ON e.event_id = f.event_id
+             LEFT JOIN entities ent ON ent.target = e.event_id AND ent.kind = 'Event'
              WHERE events_fts MATCH ",
         );
         query.push_bind(search_term);
     } else {
-        query.push("SELECT COUNT(*) FROM events e WHERE 1=1");
+        query.push("SELECT COUNT(*) FROM events e LEFT JOIN entities ent ON ent.target = e.event_id AND ent.kind = 'Event' WHERE 1=1");
     }
 
     if let Some(status) = status_filter.filter(|s| !s.is_empty()) {
@@ -1285,9 +1301,14 @@ async fn count_events(
     }
 
     if let Some(publish) = publish_filter.filter(|s| !s.is_empty()) {
-        let publish_bool = publish == "true";
-        query.push(" AND e.publish = ");
-        query.push_bind(publish_bool);
+        if publish == "true" {
+            query.push(" AND ent.publish = ");
+            query.push_bind(1);
+        } else {
+            query.push(" AND (ent.publish = ");
+            query.push_bind(0);
+            query.push(" OR ent.publish IS NULL)");
+        }
     }
 
     let count: (i64,) = query.build_query_as::<(i64,)>().fetch_one(db()).await?;
@@ -1412,7 +1433,6 @@ pub struct AdminEvent {
 pub struct AdminEventFull {
     pub id: String,
     pub name: String,
-    pub publish: bool,
     pub created_date: String,
     pub page_creator_id: String,
     pub page_creator_email: Option<String>,
@@ -1445,7 +1465,6 @@ impl AdminEventFull {
         Ok(AdminEventFull {
             id: event.event_id.to_string(),
             name: event.name,
-            publish: event.publish,
             created_date: event.created.to_string(),
             page_creator_id: event.page_creator_id.to_string(),
             page_creator_email,
@@ -1578,13 +1597,23 @@ impl Component for AnalyticsPage {
     async fn prepare(self, param: Self::Param) -> Result<Self::Prepared, anyhow::Error> {
         // Fetch database statistics for frontend data
         let total_projects_result =
-            sqlx::query!("SELECT COUNT(*) as count FROM projects WHERE publish = true")
+            sqlx::query!(r#"
+                SELECT COUNT(*) as count
+                FROM projects p
+                LEFT JOIN entities ent ON ent.target = p.project_id AND ent.kind = 'Project'
+                WHERE ent.publish = 1
+            "#)
                 .fetch_one(db())
                 .await?;
         let total_projects = total_projects_result.count as u32;
 
         let total_events_result =
-            sqlx::query!("SELECT COUNT(*) as count FROM events WHERE publish = true")
+            sqlx::query!(r#"
+                SELECT COUNT(*) as count
+                FROM events e
+                LEFT JOIN entities ent ON ent.target = e.event_id AND ent.kind = 'Event'
+                WHERE ent.publish = 1
+            "#)
                 .fetch_one(db())
                 .await?;
         let total_events = total_events_result.count as u32;
@@ -1801,12 +1830,12 @@ impl Component for DashboardPage {
             Err(_) => "N/A".to_string(),
         };
 
-        let project_count = sqlx::query!("SELECT COUNT(*) as count FROM projects WHERE publish = true AND flagged = false AND duplicate = false AND is_test = false")
+        let project_count = sqlx::query!(r#"SELECT COUNT(*) as count FROM projects p LEFT JOIN entities ent ON ent.target = p.project_id AND ent.kind = 'Project' WHERE ent.publish = 1 AND p.flagged = false AND p.duplicate = false AND p.is_test = false"#)
             .fetch_one(common::shared::db())
             .await?
             .count;
 
-        let upcoming_events_count = sqlx::query!("SELECT COUNT(DISTINCT e.event_id) as count FROM events e JOIN event_instances ei ON e.event_id = ei.event_id WHERE e.publish = true AND e.flagged = false AND ei.begin > datetime('now')")
+        let upcoming_events_count = sqlx::query!(r#"SELECT COUNT(DISTINCT e.event_id) as count FROM events e JOIN event_instances ei ON e.event_id = ei.event_id LEFT JOIN entities ent ON ent.target = e.event_id AND ent.kind = 'Event' WHERE ent.publish = 1 AND e.flagged = false AND ei.begin > datetime('now')"#)
             .fetch_one(common::shared::db())
             .await?
             .count;
@@ -2293,7 +2322,7 @@ async fn users_edit(
 #[handler]
 async fn users_delete(
     Path(user_id): Path<String>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     // Parse user ID
     let parsed_user_id = user_id
@@ -2309,6 +2338,18 @@ async fn users_delete(
     {
         Ok(response) => {
             if response.success {
+                // Log the activity
+                if let Some(user_info) = &user_info {
+                    common::service::log_activity(
+                        None,
+                        "user-delete",
+                        user_info.user_id,
+                        parsed_user_id,
+                        None,
+                    )
+                    .await?;
+                }
+
                 // Success - return empty response to remove the table row
                 Ok(poem::Response::builder().content_type("text/html").body(""))
             } else {
@@ -2404,7 +2445,7 @@ async fn users_password_reset(
 #[handler]
 async fn users_create(
     Form(form): Form<CreateUserForm>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     // Map role string to boolean flags
     let (_is_staff, _is_page_manager) = match form.role.as_str() {
@@ -2414,17 +2455,28 @@ async fn users_create(
     };
 
     let create_request = AdminUserCreateRequest {
-        handle: form.handle,
+        handle: form.handle.clone(),
         first_name: form.first_name,
         last_name: form.last_name,
         primary_email: form.email,
         password: form.password,
-        role: form.role,
+        role: form.role.clone(),
         verified: form.verified,
     };
 
     match request_with_retry::<AdminUserResponse>("user.admin.user_create", create_request).await {
-        Ok(_response) => {
+        Ok(response) => {
+            // Log the activity
+            if let Some(user_info) = &user_info {
+                common::service::log_activity(
+                    None,
+                    "user-create",
+                    user_info.user_id,
+                    response.user.user_id,
+                    format!("handle={} role={}", form.handle, form.role),
+                )
+                .await?;
+            }
             // Success - close modal and refresh users table with updated data
             match request::<AdminUserListResponse>(
                 "user.admin.user_list",
@@ -2554,6 +2606,18 @@ async fn users_update(
 
     match request_with_retry::<AdminUserResponse>("user.admin.user_update", update_request).await {
         Ok(_response) => {
+            // Log the activity
+            if let Some(user_info) = &user_info {
+                common::service::log_activity(
+                    None,
+                    "user-update",
+                    user_info.user_id,
+                    parsed_user_id,
+                    format!("handle={} role={}", form.handle, form.role),
+                )
+                .await?;
+            }
+
             // Redirect back to list page
             Ok(poem::Response::builder()
                 .status(poem::http::StatusCode::SEE_OTHER)
@@ -2694,7 +2758,7 @@ struct EmailRow {
 async fn users_emails_add(
     Path(user_id): Path<String>,
     Form(form): Form<AddEmailForm>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     let parsed_user_id = user_id
         .parse::<ulid::Ulid>()
@@ -2702,12 +2766,24 @@ async fn users_emails_add(
 
     let email_request = UserEmailAddRequest {
         user_id: parsed_user_id,
-        email: form.new_email,
+        email: form.new_email.clone(),
     };
 
     match request_with_retry::<UserEmailResponse>("user.admin.email_add", email_request).await {
         Ok(response) => {
             if response.success {
+                // Log the activity
+                if let Some(user_info) = &user_info {
+                    common::service::log_activity(
+                        None,
+                        "user-email-add",
+                        user_info.user_id,
+                        parsed_user_id,
+                        format!("email={}", form.new_email),
+                    )
+                    .await?;
+                }
+
                 // Find the newly added email and render just that row
                 if let Some(new_email) = response.emails.last() {
                     let new_index = response.emails.len() - 1;
@@ -2746,13 +2822,14 @@ async fn users_emails_add(
 async fn users_emails_update(
     Path((user_id, _email)): Path<(String, String)>,
     Form(form): Form<UpdateEmailForm>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     let parsed_user_id = user_id
         .parse::<ulid::Ulid>()
         .map_err(|_| anyhow::anyhow!("Invalid user ID format"))?;
 
     let new_email_clone = form.new_email.clone();
+    let old_email_clone = form.old_email.clone();
     let email_request = UserEmailUpdateRequest {
         user_id: parsed_user_id,
         old_email: form.old_email,
@@ -2762,6 +2839,17 @@ async fn users_emails_update(
     match request_with_retry::<UserEmailResponse>("user.admin.email_update", email_request).await {
         Ok(response) => {
             if response.success {
+                // Log the activity
+                if let Some(user_info) = &user_info {
+                    common::service::log_activity(
+                        None,
+                        "user-email-update",
+                        user_info.user_id,
+                        parsed_user_id,
+                        format!("old={} new={}", old_email_clone, new_email_clone),
+                    )
+                    .await?;
+                }
                 // Find the updated email and render just that row
                 if let Some((index, updated_email)) = response
                     .emails
@@ -2803,7 +2891,7 @@ async fn users_emails_update(
 #[handler]
 async fn users_emails_delete(
     Path((user_id, email)): Path<(String, String)>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     let parsed_user_id = user_id
         .parse::<ulid::Ulid>()
@@ -2817,6 +2905,17 @@ async fn users_emails_delete(
     match request_with_retry::<UserEmailResponse>("user.admin.email_delete", email_request).await {
         Ok(response) => {
             if response.success {
+                // Log the activity
+                if let Some(user_info) = &user_info {
+                    common::service::log_activity(
+                        None,
+                        "user-email-delete",
+                        user_info.user_id,
+                        parsed_user_id,
+                        format!("email={}", email),
+                    )
+                    .await?;
+                }
                 // Return empty content to remove the row
                 Ok(poem::Response::builder()
                     .content_type("text/html")
@@ -3587,7 +3686,7 @@ async fn events_edit(
 #[handler]
 async fn events_delete(
     Path(event_id): Path<String>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     let event_ulid = event_id
         .parse::<Ulid>()
@@ -3597,6 +3696,18 @@ async fn events_delete(
     sqlx::query!(r#"DELETE FROM events WHERE event_id = ?"#, event_id_str)
         .execute(db())
         .await?;
+
+    // Log the activity
+    if let Some(user_info) = &user_info {
+        common::service::log_activity(
+            None,
+            "event-delete",
+            user_info.user_id,
+            event_ulid,
+            None,
+        )
+        .await?;
+    }
 
     // Check if there are any events left
     let exists: bool = sqlx::query_scalar!(
@@ -3636,7 +3747,7 @@ struct UpdateEventFieldForm {
 async fn events_update_field(
     Path((event_id, field_type)): Path<(String, String)>,
     Form(form): Form<UpdateEventFieldForm>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     use crate::event::field::{EventField, EventFieldValue};
 
@@ -3662,7 +3773,6 @@ async fn events_update_field(
         "zip" => EventFieldValue::Zip(form.value),
         "country" => EventFieldValue::Country(form.value),
         "admin_notes" => EventFieldValue::AdminNotes(form.value),
-        "publish" => EventFieldValue::Publish(form.value == "true"),
         "flagged" => EventFieldValue::Flagged(form.value == "true"),
         "entirely_online" => EventFieldValue::EntirelyOnline(form.value == "true"),
         _ => return Err(anyhow::anyhow!("Unknown field type: {}", field_type)),
@@ -3670,6 +3780,18 @@ async fn events_update_field(
 
     let event_field = EventField::new(event_ulid, field_value);
     event_field.store().await?;
+
+    // Log the activity
+    if let Some(user_info) = &user_info {
+        common::service::log_activity(
+            None,
+            "event-edit",
+            user_info.user_id,
+            event_ulid,
+            field_type,
+        )
+        .await?;
+    }
 
     Ok(poem::Response::builder()
         .content_type("text/html")
@@ -3713,7 +3835,6 @@ async fn projects_update_field(
         "legacy_v1_project_id" => crate::project::field::ProjectFieldType::LegacyV1ProjectId,
         "legacy_v2_project_id" => crate::project::field::ProjectFieldType::LegacyV2ProjectId,
         "foreign_id" => crate::project::field::ProjectFieldType::ForeignId,
-        "publish" => crate::project::field::ProjectFieldType::Publish,
         "duplicate" => crate::project::field::ProjectFieldType::Duplicate,
         "authoritative" => crate::project::field::ProjectFieldType::Authoritative,
         "flagged" => crate::project::field::ProjectFieldType::Flagged,
@@ -3923,14 +4044,6 @@ async fn projects_update_field(
                     Some(form.value)
                 };
                 crate::project::field::ProjectFieldValue::ForeignId(option_value)
-            }
-            crate::project::field::ProjectFieldType::Publish => {
-                let bool_value = form.value.parse::<bool>().unwrap_or_else(|_| {
-                    form.value.to_lowercase() == "true"
-                        || form.value == "1"
-                        || form.value.to_lowercase() == "on"
-                });
-                crate::project::field::ProjectFieldValue::Publish(bool_value)
             }
             crate::project::field::ProjectFieldType::Duplicate => {
                 let bool_value = form.value.parse::<bool>().unwrap_or_else(|_| {
@@ -4732,7 +4845,7 @@ async fn projects_update_field(
             if let Some(user_info) = &user_info {
                 common::service::log_activity(
                     None,
-                    "staff-edit",
+                    "project-edit",
                     user_info.user_id,
                     parsed_project_id,
                     format!("{:?}", field_type),
@@ -4823,7 +4936,7 @@ fn get_field_label(field_type: &str) -> &str {
 async fn projects_update_multiselect_field(
     Path((project_id, field_type)): Path<(String, String)>,
     body: poem::Body,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     use crate::project::field::{ProjectField, ProjectFieldType, ProjectFieldValue};
 
@@ -4873,6 +4986,18 @@ async fn projects_update_multiselect_field(
 
     match project_field.store().await {
         Ok(_) => {
+            // Log the activity
+            if let Some(user_info) = &user_info {
+                common::service::log_activity(
+                    None,
+                    "project-edit",
+                    user_info.user_id,
+                    project_ulid,
+                    field_type.clone(),
+                )
+                .await?;
+            }
+
             let trigger_data = serde_json::json!({
                 "field-updated": {
                     "field": field_type,
@@ -4929,7 +5054,7 @@ async fn projects_get_array_items(
 async fn projects_add_array_item(
     Path((project_id, field_type)): Path<(String, String)>,
     Form(form): Form<AddArrayItemForm>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     let project_ulid = project_id
         .parse::<Ulid>()
@@ -4941,7 +5066,7 @@ async fn projects_add_array_item(
 
     let new_item = form.value.trim().to_string();
     if !new_item.is_empty() && !items.contains(&new_item) {
-        items.push(new_item);
+        items.push(new_item.clone());
     }
 
     let new_project_field = ProjectField::new_array(project_ulid, field_enum, items.clone())?;
@@ -4949,6 +5074,17 @@ async fn projects_add_array_item(
 
     match new_project_field.store().await {
         Ok(_) => {
+            // Log the activity
+            if let Some(user_info) = &user_info {
+                common::service::log_activity(
+                    None,
+                    "project-edit",
+                    user_info.user_id,
+                    project_ulid,
+                    format!("add={}[{}]", field_type, new_item),
+                )
+                .await?;
+            }
             let array_items =
                 ArrayItems::new_with_resolved_names(project_ulid, field_enum, items).await?;
             let items_html = array_items.render_once()?;
@@ -4988,7 +5124,7 @@ async fn projects_add_array_item(
 async fn projects_update_array_item(
     Path((project_id, field_type, index)): Path<(String, String, String)>,
     Form(form): Form<UpdateArrayItemForm>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     let project_ulid = project_id
         .parse::<Ulid>()
@@ -5013,6 +5149,17 @@ async fn projects_update_array_item(
 
     match new_project_field.store().await {
         Ok(_) => {
+            // Log the activity
+            if let Some(user_info) = &user_info {
+                common::service::log_activity(
+                    None,
+                    "project-edit",
+                    user_info.user_id,
+                    project_ulid,
+                    format!("{}[{}]", field_type, item_index),
+                )
+                .await?;
+            }
             let array_items =
                 ArrayItems::new_with_resolved_names(project_ulid, field_enum, items).await?;
             let items_html = array_items.render_once()?;
@@ -5051,7 +5198,7 @@ async fn projects_update_array_item(
 #[handler]
 async fn projects_remove_array_item(
     Path((project_id, field_type, index)): Path<(String, String, String)>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     let project_ulid = project_id
         .parse::<Ulid>()
@@ -5073,6 +5220,17 @@ async fn projects_remove_array_item(
 
     match new_project_field.store().await {
         Ok(_) => {
+            // Log the activity
+            if let Some(user_info) = &user_info {
+                common::service::log_activity(
+                    None,
+                    "project-edit",
+                    user_info.user_id,
+                    project_ulid,
+                    format!("remove={}[{}]", field_type, item_index),
+                )
+                .await?;
+            }
             let array_items =
                 ArrayItems::new_with_resolved_names(project_ulid, field_enum, items).await?;
             let items_html = array_items.render_once()?;
@@ -5229,7 +5387,6 @@ async fn projects_create(
     new_project.image = form.image;
     new_project.admin_notes = form.admin_notes;
     new_project.draft = form.draft;
-    new_project.publish = form.publish;
     new_project.page_creator_id = user_info.user_id;
     new_project.created = current_time.clone();
     new_project.origin = "scistarter".to_string();
@@ -5239,6 +5396,33 @@ async fn projects_create(
     // Save the new project to the database using LoadStorePeered
     match new_project.store().await {
         Ok(_) => {
+            // Create entity for the project
+            let entity = crate::entity::Entity::new_by_name(
+                &form.name,
+                crate::entity::EntityKind::Project,
+                crate::entity::EntityTarget::Ulid(project_id),
+            )
+            .await?;
+
+            // Set publish status on entity
+            let entity_with_publish = crate::entity::Entity::with_publish(
+                entity.slug(),
+                *entity.kind(),
+                entity.target().clone(),
+                form.publish,
+            );
+            entity_with_publish.store().await?;
+
+            // Log the activity
+            common::service::log_activity(
+                None,
+                "project-create",
+                user_info.user_id,
+                project_id,
+                format!("name={}", form.name),
+            )
+            .await?;
+
             // Redirect to the project edit page
             Ok(poem::Response::builder()
                 .status(poem::http::StatusCode::SEE_OTHER)
@@ -5271,7 +5455,7 @@ async fn projects_create(
 async fn projects_add_tag(
     Path(project_id): Path<String>,
     Form(form): Form<AddTagForm>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     let project_ulid = project_id
         .parse::<Ulid>()
@@ -5283,11 +5467,23 @@ async fn projects_add_tag(
 
     let new_tag = form.tag.trim().to_string();
     if !new_tag.is_empty() && !tags.contains(&new_tag) {
-        tags.push(new_tag);
+        tags.push(new_tag.clone());
     }
 
     let new_project_field = ProjectField::new_array(project_ulid, field_enum, tags.clone())?;
     new_project_field.store().await?;
+
+    // Log the activity
+    if let Some(user_info) = &user_info {
+        common::service::log_activity(
+            None,
+            "project-edit",
+            user_info.user_id,
+            project_ulid,
+            format!("add=tags[{}]", new_tag),
+        )
+        .await?;
+    }
 
     // Return the updated tags display
     use sailfish::TemplateOnce;
@@ -5304,7 +5500,7 @@ async fn projects_add_tag(
 #[handler]
 async fn projects_remove_tag(
     Path((project_id, tag)): Path<(String, String)>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     let project_ulid = project_id
         .parse::<Ulid>()
@@ -5319,6 +5515,18 @@ async fn projects_remove_tag(
 
     let new_project_field = ProjectField::new_array(project_ulid, field_enum, tags.clone())?;
     new_project_field.store().await?;
+
+    // Log the activity
+    if let Some(user_info) = &user_info {
+        common::service::log_activity(
+            None,
+            "project-edit",
+            user_info.user_id,
+            project_ulid,
+            format!("remove=tags[{}]", tag),
+        )
+        .await?;
+    }
 
     // Return the updated tags display
     use sailfish::TemplateOnce;
@@ -5368,6 +5576,7 @@ async fn projects_get_contacts(
 async fn projects_add_contact(
     Path(project_id): Path<String>,
     poem::web::Form(form): poem::web::Form<ContactForm>,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, poem::Error> {
     let project_ulid: Ulid = project_id
         .parse()
@@ -5387,6 +5596,7 @@ async fn projects_add_contact(
     let new_contact = form
         .to_contact(Ulid::new())
         .map_err(|_| poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST))?;
+    let new_contact_id = new_contact.contact_id;
 
     contacts.push(new_contact);
 
@@ -5399,6 +5609,18 @@ async fn projects_add_contact(
         .store()
         .await
         .map_err(|_| poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR))?;
+
+    // Log the activity
+    if let Some(user_info) = &user_info {
+        let _ = common::service::log_activity(
+            None,
+            "project-edit",
+            user_info.user_id,
+            project_ulid,
+            format!("add=contact[{}]", new_contact_id),
+        )
+        .await;
+    }
 
     // Return updated contact list
     use sailfish::TemplateOnce;
@@ -5415,6 +5637,7 @@ async fn projects_add_contact(
 async fn projects_update_contact(
     Path((project_id, contact_id)): Path<(String, String)>,
     poem::web::Form(form): poem::web::Form<ContactForm>,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, poem::Error> {
     let project_ulid: Ulid = project_id
         .parse()
@@ -5452,6 +5675,18 @@ async fn projects_update_contact(
         .await
         .map_err(|_| poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR))?;
 
+    // Log the activity
+    if let Some(user_info) = &user_info {
+        let _ = common::service::log_activity(
+            None,
+            "project-edit",
+            user_info.user_id,
+            project_ulid,
+            format!("contact[{}]", contact_ulid),
+        )
+        .await;
+    }
+
     // Return updated contact list
     use sailfish::TemplateOnce;
     let contact_items = ContactItems::new(project_ulid, contacts);
@@ -5466,6 +5701,7 @@ async fn projects_update_contact(
 #[handler]
 async fn projects_remove_contact(
     Path((project_id, contact_id)): Path<(String, String)>,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, poem::Error> {
     let project_ulid: Ulid = project_id
         .parse()
@@ -5496,6 +5732,18 @@ async fn projects_remove_contact(
         .store()
         .await
         .map_err(|_| poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR))?;
+
+    // Log the activity
+    if let Some(user_info) = &user_info {
+        let _ = common::service::log_activity(
+            None,
+            "project-edit",
+            user_info.user_id,
+            project_ulid,
+            format!("remove=contact[{}]", contact_ulid),
+        )
+        .await;
+    }
 
     // Return updated contact list
     use sailfish::TemplateOnce;
@@ -5643,7 +5891,7 @@ struct CreateRedirectRequest {
 #[handler]
 async fn files_links_create_redirect(
     Form(request): Form<CreateRedirectRequest>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<impl IntoResponse, poem::Error> {
     // Validate slug
     if !GoUrl::is_valid_slug(&request.slug) {
@@ -5686,6 +5934,18 @@ async fn files_links_create_redirect(
             .body(r#"<div class="text-red-600">Failed to create redirect</div>"#));
     }
 
+    // Log the activity
+    if let Some(user_info) = &user_info {
+        let _ = common::service::log_activity(
+            None,
+            "gourl-create",
+            user_info.user_id,
+            None,
+            Some(slug.clone()),
+        )
+        .await;
+    }
+
     // Return success message with form clearing and go URLs list update
     let go_urls_list = get_go_urls_with_file_info().await.map_err(|e| {
         tracing::error!("Failed to get go URLs: {}", e);
@@ -5709,7 +5969,7 @@ async fn files_links_create_redirect(
 #[handler]
 async fn files_links_delete_go_url(
     Path(slug): Path<String>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<impl IntoResponse, poem::Error> {
     // Check if the go URL exists (case-insensitive) before attempting deletion
     match GoUrl::slug_exists(&slug).await {
@@ -5738,6 +5998,18 @@ async fn files_links_delete_go_url(
             .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
             .content_type("text/html")
             .body(r#"<div class="text-red-600">Failed to delete go URL</div>"#));
+    }
+
+    // Log the activity
+    if let Some(user_info) = &user_info {
+        let _ = common::service::log_activity(
+            None,
+            "gourl-delete",
+            user_info.user_id,
+            None,
+            Some(slug.clone()),
+        )
+        .await;
     }
 
     // Return empty response - HTMX will remove the targeted element
@@ -6254,10 +6526,10 @@ async fn entities_new(
 #[handler]
 async fn entities_create(
     Form(form): Form<CreateEntityForm>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     // Validate and create entity
-    match (async || -> Result<(), anyhow::Error> {
+    match (async || -> Result<String, anyhow::Error> {
         // Validate form
         if form.slug.trim().is_empty() {
             return Err(anyhow::anyhow!("Slug is required"));
@@ -6275,9 +6547,22 @@ async fn entities_create(
         let target = parse_target_for_kind(&kind, form.target.as_deref())?;
 
         let entity = Entity::new(&form.slug, kind, target);
-        entity.store().await
+        entity.store().await?;
+
+        Ok(form.slug.clone())
     })().await {
-        Ok(_) => {
+        Ok(slug) => {
+            // Log the activity
+            if let Some(user_info) = &user_info {
+                common::service::log_activity(
+                    None,
+                    "entity-create",
+                    user_info.user_id,
+                    None,
+                    format!("slug={} kind={}", slug, form.kind),
+                )
+                .await?;
+            }
             // Success: Update entities list via OOB and close modal
             let entities_content = fetch_entities_content(&EntitySearchQuery {
                 search: None,
@@ -6422,6 +6707,18 @@ async fn entities_update(
     let updated_entity = Entity::new(&slug, kind, target);
     match updated_entity.store().await {
         Ok(_) => {
+            // Log the activity
+            if let Some(user_info) = &user_info {
+                common::service::log_activity(
+                    None,
+                    "entity-update",
+                    user_info.user_id,
+                    None,
+                    format!("slug={} kind={}", slug, form.kind),
+                )
+                .await?;
+            }
+
             // Redirect back to list page
             Ok(poem::Response::builder()
                 .status(poem::http::StatusCode::SEE_OTHER)
@@ -6464,11 +6761,27 @@ async fn entities_update(
 #[handler]
 async fn entities_delete(
     Path(slug): Path<String>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
+    // Load entity before deletion for logging
+    let entity = Entity::load(slug.clone()).await.ok();
+
     sqlx::query!(r#"DELETE FROM "entities" WHERE "slug" = ?"#, slug)
         .execute(db())
         .await?;
+
+    // Log the activity
+    if let Some(user_info) = &user_info {
+        let extra = entity.as_ref().map(|e| format!("slug={} kind={:?}", slug, e.kind()));
+        common::service::log_activity(
+            None,
+            "entity-delete",
+            user_info.user_id,
+            None,
+            extra,
+        )
+        .await?;
+    }
 
     // Check if there are any entities left
     let exists: bool = sqlx::query_scalar!(
@@ -6497,6 +6810,67 @@ async fn entities_delete(
     Ok(poem::Response::builder()
         .content_type("text/html")
         .body(html))
+}
+
+#[derive(serde::Deserialize)]
+struct EntityPublishForm {
+    publish: Option<String>,
+}
+
+#[handler]
+async fn entities_publish_toggle(
+    Path(slug): Path<String>,
+    Form(form): Form<EntityPublishForm>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, poem::Error> {
+    // Parse the publish value - hx-vals sends "true" or "false" based on switch checked state
+    let publish = form.publish.as_deref() == Some("true");
+
+    // Load the entity
+    let mut entity = Entity::load(slug.clone())
+        .await
+        .map_err(|_| poem::Error::from_status(poem::http::StatusCode::NOT_FOUND))?;
+
+    // Update the publish field using Entity::with_publish to create a new instance
+    let updated_entity = Entity::with_publish(
+        entity.slug(),
+        *entity.kind(),
+        entity.target().clone(),
+        publish,
+    );
+
+    // Store the updated entity
+    updated_entity
+        .store()
+        .await
+        .map_err(|_| poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR))?;
+
+    // Log the activity
+    if let Some(user_info) = &user_info {
+        let _ = common::service::log_activity(
+            None,
+            if publish { "entity-publish" } else { "entity-unpublish" },
+            user_info.user_id,
+            None,
+            Some(slug.clone()),
+        )
+        .await;
+    }
+
+    // Return updated entity row with out-of-band swap
+    let entity_with_info = create_entity_with_info(&updated_entity)
+        .await
+        .map_err(|_| poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR))?;
+
+    let entity_row = EntityRow {
+        entity: entity_with_info,
+        oob: true,
+        oob_swap: "true".to_string(),
+    };
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(entity_row.render_once().unwrap()))
 }
 
 // Helper Functions
@@ -6622,6 +6996,7 @@ struct EntityDbRow {
     slug: String,
     kind: EntityKind,
     target: String,
+    publish: bool,
 }
 
 async fn fetch_entities_content(query: &EntitySearchQuery) -> Result<EntitiesContent, anyhow::Error> {
@@ -6635,7 +7010,7 @@ async fn fetch_entities_content(query: &EntitySearchQuery) -> Result<EntitiesCon
     // Fetch all entities and filter/paginate in Rust to avoid SQLx Record conflicts
     let all_rows = sqlx::query_as!(
         EntityDbRow,
-        r#"SELECT "slug", "kind" as "kind: EntityKind", "target" FROM "entities" ORDER BY "slug""#
+        r#"SELECT "slug", "kind" as "kind: EntityKind", "target", "publish" FROM "entities" ORDER BY "slug""#
     ).fetch_all(db()).await?;
 
     // Filter
@@ -6662,7 +7037,7 @@ async fn fetch_entities_content(query: &EntitySearchQuery) -> Result<EntitiesCon
     let mut entity_list = Vec::new();
     for row in entity_rows {
         let target = parse_database_target(row.kind, &row.target)?;
-        let entity = Entity::new(&row.slug, row.kind, target);
+        let entity = Entity::with_publish(&row.slug, row.kind, target, row.publish);
         let entity_with_info = create_entity_with_info(&entity).await?;
         entity_list.push(entity_with_info);
     }
@@ -6718,53 +7093,47 @@ fn parse_database_target(kind: EntityKind, target_str: &str) -> Result<EntityTar
 
 async fn create_entity_with_info(entity: &Entity) -> Result<EntityWithInfo, anyhow::Error> {
     use common::shared::db;
-    let (target_info, published) = match (entity.kind(), entity.target()) {
+
+    // Fetch target_info (display name) based on entity type
+    let target_info = match (entity.kind(), entity.target()) {
         (EntityKind::Project, EntityTarget::Ulid(ulid)) => {
-            // Fetch only name and publish fields from projects table
+            // Fetch only name from projects table
             let ulid_str = ulid.to_string();
             let result = sqlx::query!(
-                r#"SELECT "name", "publish" FROM "projects" WHERE "project_id" = ?"#,
+                r#"SELECT "name" FROM "projects" WHERE "project_id" = ?"#,
                 ulid_str
             )
             .fetch_optional(db())
             .await?;
 
-            if let Some(row) = result {
-                (Some(row.name), row.publish.unwrap_or(false))
-            } else {
-                (Some("Project not found".to_string()), false)
-            }
+            result.map(|row| row.name).or(Some("Project not found".to_string()))
         },
         (EntityKind::Event, EntityTarget::Ulid(ulid)) => {
-            // Fetch only name and publish fields from events table
+            // Fetch only name from events table
             let ulid_str = ulid.to_string();
             let result = sqlx::query!(
-                r#"SELECT "name", "publish" FROM "events" WHERE "event_id" = ?"#,
+                r#"SELECT "name" FROM "events" WHERE "event_id" = ?"#,
                 ulid_str
             )
             .fetch_optional(db())
             .await?;
 
-            if let Some(row) = result {
-                (Some(row.name), row.publish)
-            } else {
-                (Some("Event not found".to_string()), false)
-            }
+            result.map(|row| row.name).or(Some("Event not found".to_string()))
         },
         (EntityKind::Redirect, EntityTarget::Url(url)) => {
-            (Some(url.to_string()), true) // Default to published for redirects/proxied
+            Some(url.to_string())
         },
         (EntityKind::WordPress, EntityTarget::String(s)) => {
-            (Some(format!("WordPress: {}", s)), true) // Default to published for WordPress
+            Some(format!("WordPress: {}", s))
         },
         (EntityKind::RawHtml | EntityKind::DressedHtml | EntityKind::Wysiwyg | EntityKind::PageBuilder | EntityKind::Form, _) => {
-            (Some("Static content".to_string()), true) // Default to published for static content
+            Some("Static content".to_string())
         },
         (_, EntityTarget::Nil) => {
-            (None, false) // Unpublished if no target
+            None
         },
         _ => {
-            (Some("Invalid target type".to_string()), true) // Default to published
+            Some("Invalid target type".to_string())
         }
     };
 
@@ -6773,7 +7142,7 @@ async fn create_entity_with_info(entity: &Entity) -> Result<EntityWithInfo, anyh
         kind: *entity.kind(),
         target: entity.target().to_string(),
         target_info,
-        published,
+        published: entity.publish(), // Use entity's publish field directly
     })
 }
 
@@ -6990,7 +7359,7 @@ async fn wysiwyg_new(
 #[handler]
 async fn pagecontent_create(
     Form(form): Form<CreatePageContentForm>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     let kind: crate::pagecontent::PageContentKind = form.kind.parse()?;
 
@@ -7003,7 +7372,7 @@ async fn pagecontent_create(
         let pagecontent = crate::pagecontent::PageContent::new_with_id(
             id,
             kind,
-            form.name,
+            form.name.clone(),
             form.content.as_bytes(),
         );
         pagecontent.store().await?;
@@ -7012,7 +7381,18 @@ async fn pagecontent_create(
     })()
     .await
     {
-        Ok(_id) => {
+        Ok(id) => {
+            // Log the activity
+            if let Some(user_info) = &user_info {
+                common::service::log_activity(
+                    None,
+                    "pagecontent-create",
+                    user_info.user_id,
+                    id,
+                    format!("kind={} name={}", form.kind, form.name),
+                )
+                .await?;
+            }
             // Close modal and refresh list via OOB
             let (content, target_id) = match kind {
                 crate::pagecontent::PageContentKind::Wysiwyg => {
@@ -7171,10 +7551,22 @@ async fn pagecontent_update(
 
     // Update
     let mut pagecontent = crate::pagecontent::PageContent::load((kind, id)).await?;
-    pagecontent.set_name(form.name);
+    pagecontent.set_name(form.name.clone());
     pagecontent.clear();
     pagecontent.extend_from_slice(form.content.as_bytes());
     pagecontent.store().await?;
+
+    // Log the activity
+    if let Some(user_info) = &user_info {
+        common::service::log_activity(
+            None,
+            "pagecontent-update",
+            user_info.user_id,
+            id,
+            format!("kind={:?} name={}", kind, form.name),
+        )
+        .await?;
+    }
 
     // Redirect back to list page
     Ok(poem::Response::builder()
@@ -7186,7 +7578,7 @@ async fn pagecontent_update(
 #[handler]
 async fn pagecontent_delete(
     Path((kind_str, id_str)): Path<(String, String)>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     let kind: crate::pagecontent::PageContentKind = kind_str.parse()?;
     let id: Ulid = id_str.parse()?;
@@ -7200,6 +7592,18 @@ async fn pagecontent_delete(
     )
     .execute(db())
     .await?;
+
+    // Log the activity
+    if let Some(user_info) = &user_info {
+        common::service::log_activity(
+            None,
+            "pagecontent-delete",
+            user_info.user_id,
+            id,
+            format!("kind={:?}", kind),
+        )
+        .await?;
+    }
 
     // Check if there are any items left
     let exists: bool = sqlx::query_scalar!(
@@ -7494,6 +7898,18 @@ async fn dressed_html_update(
     pagecontent.extend_from_slice(form.content.as_bytes());
     pagecontent.store().await?;
 
+    // Log the activity
+    if let Some(user_info) = &user_info {
+        let _ = common::service::log_activity(
+            None,
+            "dressedhtml-edit",
+            user_info.user_id,
+            id,
+            None,
+        )
+        .await;
+    }
+
     // Redirect back to list page
     Ok(poem::Response::builder()
         .status(poem::http::StatusCode::SEE_OTHER)
@@ -7504,7 +7920,7 @@ async fn dressed_html_update(
 #[handler]
 async fn dressed_html_delete(
     Path(id_str): Path<String>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     let kind = crate::pagecontent::PageContentKind::DressedHtml;
     let id: Ulid = id_str.parse()?;
@@ -7518,6 +7934,18 @@ async fn dressed_html_delete(
     )
     .execute(db())
     .await?;
+
+    // Log the activity
+    if let Some(user_info) = &user_info {
+        let _ = common::service::log_activity(
+            None,
+            "dressedhtml-delete",
+            user_info.user_id,
+            id,
+            None,
+        )
+        .await;
+    }
 
     // Check if there are any items left
     let exists: bool = sqlx::query_scalar!(
@@ -7692,6 +8120,18 @@ async fn raw_html_update(
     pagecontent.extend_from_slice(form.content.as_bytes());
     pagecontent.store().await?;
 
+    // Log the activity
+    if let Some(user_info) = &user_info {
+        let _ = common::service::log_activity(
+            None,
+            "rawhtml-edit",
+            user_info.user_id,
+            id,
+            None,
+        )
+        .await;
+    }
+
     // Redirect back to list page
     Ok(poem::Response::builder()
         .status(poem::http::StatusCode::SEE_OTHER)
@@ -7702,7 +8142,7 @@ async fn raw_html_update(
 #[handler]
 async fn raw_html_delete(
     Path(id_str): Path<String>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     let kind = crate::pagecontent::PageContentKind::RawHtml;
     let id: Ulid = id_str.parse()?;
@@ -7716,6 +8156,18 @@ async fn raw_html_delete(
     )
     .execute(db())
     .await?;
+
+    // Log the activity
+    if let Some(user_info) = &user_info {
+        let _ = common::service::log_activity(
+            None,
+            "rawhtml-delete",
+            user_info.user_id,
+            id,
+            None,
+        )
+        .await;
+    }
 
     // Check if there are any items left
     let exists: bool = sqlx::query_scalar!(
@@ -7807,6 +8259,20 @@ struct SchedulesContentTemplate {
     total_count: usize,
 }
 
+struct ScheduleRow {
+    schedule_id: String,
+    schedule_type: String,
+    target_type: Option<String>,
+    target: Option<String>,
+    featured_entity: Option<String>,
+    title: String,
+    content: Option<String>,
+    url: Option<String>,
+    start_date: String,
+    end_date: String,
+    active: i64,
+}
+
 #[derive(serde::Deserialize)]
 struct SchedulesSearchQuery {
     search: Option<String>,
@@ -7859,9 +8325,10 @@ async fn schedules_search_impl(query: &SchedulesSearchQuery) -> Result<String, a
     let per_page: i64 = 25;
     let offset = (page - 1) as i64 * per_page;
 
-    let items = if let Some(ref search) = query.search {
+    let items_raw = if let Some(ref search) = query.search {
         let pattern = format!("%{}%", search);
-        let items_raw = sqlx::query!(
+        sqlx::query_as!(
+            ScheduleRow,
             r#"SELECT schedule_id,
                       schedule_type,
                       target_type,
@@ -7882,25 +8349,10 @@ async fn schedules_search_impl(query: &SchedulesSearchQuery) -> Result<String, a
             offset
         )
         .fetch_all(db())
-        .await?;
-
-        items_raw.into_iter().map(|row| -> Result<_, anyhow::Error> {
-            Ok(crate::schedule::Schedule {
-                schedule_id: row.schedule_id.parse()?,
-                schedule_type: row.schedule_type.parse()?,
-                target_type: row.target_type.as_deref().map(|s| s.parse()).transpose()?,
-                target: row.target,
-                featured_entity: row.featured_entity,
-                title: row.title,
-                content: row.content,
-                url: row.url,
-                start_date: row.start_date,
-                end_date: row.end_date,
-                active: row.active != 0,
-            })
-        }).collect::<Result<Vec<_>, _>>()?
+        .await?
     } else {
-        let items_raw = sqlx::query!(
+        sqlx::query_as!(
+            ScheduleRow,
             r#"SELECT schedule_id,
                       schedule_type,
                       target_type,
@@ -7919,24 +8371,24 @@ async fn schedules_search_impl(query: &SchedulesSearchQuery) -> Result<String, a
             offset
         )
         .fetch_all(db())
-        .await?;
-
-        items_raw.into_iter().map(|row| -> Result<_, anyhow::Error> {
-            Ok(crate::schedule::Schedule {
-                schedule_id: row.schedule_id.parse()?,
-                schedule_type: row.schedule_type.parse()?,
-                target_type: row.target_type.as_deref().map(|s| s.parse()).transpose()?,
-                target: row.target,
-                featured_entity: row.featured_entity,
-                title: row.title,
-                content: row.content,
-                url: row.url,
-                start_date: row.start_date,
-                end_date: row.end_date,
-                active: row.active != 0,
-            })
-        }).collect::<Result<Vec<_>, _>>()?
+        .await?
     };
+
+    let items = items_raw.into_iter().map(|row| -> Result<_, anyhow::Error> {
+        Ok(crate::schedule::Schedule {
+            schedule_id: row.schedule_id.parse()?,
+            schedule_type: row.schedule_type.parse()?,
+            target_type: row.target_type.as_deref().map(|s| s.parse()).transpose()?,
+            target: row.target,
+            featured_entity: row.featured_entity,
+            title: row.title,
+            content: row.content,
+            url: row.url,
+            start_date: row.start_date,
+            end_date: row.end_date,
+            active: row.active != 0,
+        })
+    }).collect::<Result<Vec<_>, _>>()?;
 
     let total_count: i64 = if let Some(ref search) = query.search {
         let pattern = format!("%{}%", search);
@@ -7999,7 +8451,7 @@ struct CreateScheduleForm {
 #[handler]
 async fn schedules_create(
     Form(form): Form<CreateScheduleForm>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     use crate::schedule::{Schedule, ScheduleType, TargetType};
     use crate::peering::LoadStorePeered;
@@ -8014,7 +8466,7 @@ async fn schedules_create(
             .as_ref()
             .and_then(|t| if t.is_empty() { None } else { Some(t.parse().ok()) })
             .flatten();
-        
+
         let target = form.target.as_ref()
             .and_then(|t| if t.is_empty() { None } else { Some(t.clone()) });
 
@@ -8026,7 +8478,7 @@ async fn schedules_create(
             target_type,
             target,
             featured_entity,
-            form.title,
+            form.title.clone(),
             form.content,
             form.url,
             form.start_date,
@@ -8040,6 +8492,18 @@ async fn schedules_create(
 
         let id = schedule.schedule_id;
         schedule.store().await?;
+
+        // Log the activity
+        if let Some(user_info) = &user_info {
+            common::service::log_activity(
+                None,
+                "schedule-create",
+                user_info.user_id,
+                id,
+                format!("type={} title={}", schedule_type, form.title),
+            )
+            .await?;
+        }
 
         Ok(id)
     })()
@@ -8158,7 +8622,7 @@ async fn schedules_update(
             target_type,
             target,
             featured_entity,
-            title: form.title,
+            title: form.title.clone(),
             content: form.content,
             url: form.url,
             start_date: form.start_date,
@@ -8167,6 +8631,19 @@ async fn schedules_update(
         };
 
         schedule.store().await?;
+
+        // Log the activity
+        if let Some(user_info) = &user_info {
+            common::service::log_activity(
+                None,
+                "schedule-update",
+                user_info.user_id,
+                schedule_id,
+                format!("type={} title={}", schedule_type, form.title),
+            )
+            .await?;
+        }
+
         Ok(())
     })()
     .await
@@ -8204,14 +8681,30 @@ async fn schedules_update(
 #[handler]
 async fn schedules_delete(
     Path(id_str): Path<String>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     use crate::peering::LoadStorePeered;
 
     let schedule_id: Ulid = id_str.parse()?;
 
+    // Load schedule before deletion for logging
+    let schedule = crate::schedule::Schedule::load(schedule_id).await.ok();
+
     // Use LoadStorePeered delete to properly notify peers
     crate::schedule::Schedule::delete(schedule_id).await?;
+
+    // Log the activity
+    if let Some(user_info) = &user_info {
+        let extra = schedule.as_ref().map(|s| format!("type={} title={}", s.schedule_type, s.title));
+        common::service::log_activity(
+            None,
+            "schedule-delete",
+            user_info.user_id,
+            schedule_id,
+            extra,
+        )
+        .await?;
+    }
 
     // Check if there are any schedules left
     let exists: bool = sqlx::query_scalar!(

@@ -659,7 +659,6 @@ mod sync {
                 proj.legacy_v1_project_id = data.legacy_v1_project_id.map(|x| x as i64);
                 proj.legacy_v2_project_id = Some(data.legacy_v2_project_id as i64);
                 proj.foreign_id = data.foreign_id.empty_as_none();
-                proj.publish = data.publish;
                 proj.duplicate = data.duplicate;
                 proj.authoritative = data.authoritative;
                 proj.flagged = data.flagged;
@@ -1025,10 +1024,11 @@ mod sync {
                     // Continue processing - don't fail the sync for this
                 }
 
-                let entity = Entity::new(
+                let entity = Entity::with_publish(
                     data.slug,
                     crate::entity::EntityKind::Project,
                     crate::entity::EntityTarget::Ulid(proj.project_id),
+                    data.publish,
                 );
 
                 if let Err(err) = entity.store().await {
@@ -1243,7 +1243,6 @@ mod sync {
                 };
 
                 evt.created = data.created.into();
-                evt.publish = data.publish;
                 evt.flagged = data.flagged;
                 evt.admin_notes = data.admin_notes;
                 evt.welcomed = data.welcomed;
@@ -1371,10 +1370,11 @@ mod sync {
                     // Continue processing - don't fail the sync for this
                 }
 
-                let entity = Entity::new(
+                let entity = Entity::with_publish(
                     data.slug,
                     crate::entity::EntityKind::Event,
                     crate::entity::EntityTarget::Ulid(evt.event_id),
+                    data.publish,
                 );
 
                 if let Err(err) = entity.store().await {

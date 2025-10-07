@@ -48,14 +48,16 @@
     <!-- Published -->
     <div class="lg:col-span-1">
         <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Published</div>
-        <% let published_class = if self.entity.published {
-            "bg-green-100 text-green-800"
-        } else {
-            "bg-red-100 text-red-800"
-        }; %>
-        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full <%= published_class %>">
+        <wa-switch
+            name="publish"
+            <% if self.entity.published { %>checked<% } %>
+            hx-post="/-admin/entities/publish/<%= self.entity.slug %>"
+            hx-trigger="change"
+            hx-vals='{"publish": "<% if self.entity.published { %>false<% } else { %>true<% } %>"}'
+            hx-swap="none"
+        >
             <% if self.entity.published { %>Published<% } else { %>Unpublished<% } %>
-        </span>
+        </wa-switch>
     </div>
 
     <!-- Actions -->

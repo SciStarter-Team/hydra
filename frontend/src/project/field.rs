@@ -219,7 +219,6 @@ pub enum ProjectFieldValue {
     LegacyV1ProjectId(Option<i64>),
     LegacyV2ProjectId(Option<i64>),
     ForeignId(Option<String>),
-    Publish(bool),
     Duplicate(bool),
     Authoritative(bool),
     Flagged(bool),
@@ -512,7 +511,6 @@ impl ProjectField {
             ProjectFieldValue::LegacyV1ProjectId(_) => ProjectFieldType::LegacyV1ProjectId,
             ProjectFieldValue::LegacyV2ProjectId(_) => ProjectFieldType::LegacyV2ProjectId,
             ProjectFieldValue::ForeignId(_) => ProjectFieldType::ForeignId,
-            ProjectFieldValue::Publish(_) => ProjectFieldType::Publish,
             ProjectFieldValue::Duplicate(_) => ProjectFieldType::Duplicate,
             ProjectFieldValue::Authoritative(_) => ProjectFieldType::Authoritative,
             ProjectFieldValue::Flagged(_) => ProjectFieldType::Flagged,
@@ -801,21 +799,6 @@ impl ProjectField {
         Ok(())
     }
 
-    async fn save_publish(&self, publish: bool) -> Result<(), Error> {
-        let project_id_str = self.project_id.to_string();
-        let publish_int = if publish { 1 } else { 0 };
-
-        sqlx::query!(
-            "UPDATE projects SET publish = ? WHERE project_id = ?",
-            publish_int,
-            project_id_str
-        )
-        .execute(db())
-        .await?;
-
-        Ok(())
-    }
-
     async fn save_flagged(&self, flagged: bool) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
         let flagged_int = if flagged { 1 } else { 0 };
@@ -1037,20 +1020,6 @@ impl ProjectField {
         Ok(ProjectField::new(
             project_id,
             ProjectFieldValue::Draft(draft),
-        ))
-    }
-
-    async fn read_publish(project_id: Ulid) -> Result<Self, Error> {
-        let project_id_str = project_id.to_string();
-        let publish = sqlx::query_scalar!(
-            "SELECT publish FROM projects WHERE project_id = ?",
-            project_id_str
-        )
-        .fetch_one(db())
-        .await?;
-        Ok(ProjectField::new(
-            project_id,
-            ProjectFieldValue::Publish(publish.unwrap_or(false)),
         ))
     }
 
@@ -3756,7 +3725,6 @@ impl LoadStorePeered for ProjectField {
             ProjectFieldValue::Image(image) => self.save_image(image).await,
             ProjectFieldValue::AdminNotes(notes) => self.save_admin_notes(notes).await,
             ProjectFieldValue::Draft(draft) => self.save_draft(*draft).await,
-            ProjectFieldValue::Publish(publish) => self.save_publish(*publish).await,
             ProjectFieldValue::Flagged(flagged) => self.save_flagged(*flagged).await,
             ProjectFieldValue::Duplicate(duplicate) => self.save_duplicate(*duplicate).await,
             ProjectFieldValue::IsTest(is_test) => self.save_is_test(*is_test).await,
@@ -4059,7 +4027,6 @@ impl LoadStorePeered for ProjectField {
             ProjectFieldType::Image => Self::read_image(project_id).await,
             ProjectFieldType::AdminNotes => Self::read_admin_notes(project_id).await,
             ProjectFieldType::Draft => Self::read_draft(project_id).await,
-            ProjectFieldType::Publish => Self::read_publish(project_id).await,
             ProjectFieldType::Flagged => Self::read_flagged(project_id).await,
             ProjectFieldType::Duplicate => Self::read_duplicate(project_id).await,
             ProjectFieldType::IsTest => Self::read_is_test(project_id).await,

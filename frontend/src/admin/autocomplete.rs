@@ -214,19 +214,20 @@ pub async fn search_projects(query: &AutocompleteQuery) -> Result<Vec<Autocomple
     let publish_filter = query.publish.as_ref().unwrap_or(&PublishFilter::All);
 
     let mut query_builder = sqlx::QueryBuilder::new(
-        "SELECT p.project_id, p.name FROM projects_fts f JOIN projects p ON f.project_id = p.project_id WHERE f.name MATCH ",
+        "SELECT p.project_id, p.name FROM projects_fts f JOIN projects p ON f.project_id = p.project_id LEFT JOIN entities ent ON ent.target = p.project_id AND ent.kind = 'Project' WHERE f.name MATCH ",
     );
     query_builder.push_bind(format!("{}*", search_term));
 
-    // Add publish filter
+    // Add publish filter - checking entities.publish (NULL means no entity = unpublished)
     match publish_filter {
         PublishFilter::Published => {
-            query_builder.push(" AND p.publish = ");
+            query_builder.push(" AND ent.publish = ");
             query_builder.push_bind(1);
         }
         PublishFilter::Unpublished => {
-            query_builder.push(" AND p.publish = ");
+            query_builder.push(" AND (ent.publish = ");
             query_builder.push_bind(0);
+            query_builder.push(" OR ent.publish IS NULL)");
         }
         PublishFilter::All => {} // no additional filter
     }
@@ -262,19 +263,20 @@ pub async fn search_events(query: &AutocompleteQuery) -> Result<Vec<Autocomplete
     let publish_filter = query.publish.as_ref().unwrap_or(&PublishFilter::All);
 
     let mut query_builder = sqlx::QueryBuilder::new(
-        "SELECT e.event_id, e.name FROM events_fts f JOIN events e ON f.event_id = e.event_id WHERE f.name MATCH ",
+        "SELECT e.event_id, e.name FROM events_fts f JOIN events e ON f.event_id = e.event_id LEFT JOIN entities ent ON ent.target = e.event_id AND ent.kind = 'Event' WHERE f.name MATCH ",
     );
     query_builder.push_bind(format!("{}*", search_term));
 
-    // Add publish filter
+    // Add publish filter - checking entities.publish (NULL means no entity = unpublished)
     match publish_filter {
         PublishFilter::Published => {
-            query_builder.push(" AND e.publish = ");
+            query_builder.push(" AND ent.publish = ");
             query_builder.push_bind(1);
         }
         PublishFilter::Unpublished => {
-            query_builder.push(" AND e.publish = ");
+            query_builder.push(" AND (ent.publish = ");
             query_builder.push_bind(0);
+            query_builder.push(" OR ent.publish IS NULL)");
         }
         PublishFilter::All => {} // no additional filter
     }

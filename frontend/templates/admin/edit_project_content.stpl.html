@@ -225,27 +225,8 @@
         </div>
       </div>
 
+      <!-- Note: Publish status is now managed via Entities (/-admin/entities) -->
       <div class="flex flex-wrap gap-6 mt-4">
-          <div class="flex items-center">
-            <form class="flex items-center" hx-put="/-admin/projects/<%= self.project.id %>/field/publish" hx-target="this" hx-swap="none">
-              <input 
-                  name="value"
-                  value="true"
-                  id="project-publish" 
-                  type="checkbox"
-                  <% if self.project.publish { %>checked<% } %>
-              class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-              >
-              <label for="project-publish" class="ml-2 block text-sm text-gray-900">Published</label>
-              <button
-                  type="submit"
-                  class="ml-2 inline-flex items-center px-2 py-1 border border-gray-300 rounded text-xs text-gray-700 bg-gray-50 hover:bg-gray-100"
-              >
-                Save
-              </button>
-            </form>
-          </div>
-
           <div class="flex items-center">
             <form class="flex items-center" hx-put="/-admin/projects/<%= self.project.id %>/field/draft" hx-target="this" hx-swap="none">
               <input

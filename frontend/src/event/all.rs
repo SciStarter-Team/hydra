@@ -16,13 +16,13 @@ use super::{EventInstance, EventType};
 /// Only use when you actually need most/all fields. For common operations, use direct SQL queries:
 ///
 /// ```rust
-/// // ❌ DON'T: Loading full object just for name and publish status
+/// // ❌ DON'T: Loading full object just for name and type
 /// let event = EventAll::load(ulid).await?;
-/// println!("{}: {}", event.name, event.publish);
+/// println!("{}: {}", event.name, event.event_type);
 ///
 /// // ✅ DO: Direct query for specific fields
 /// let result = sqlx::query!(
-///     r#"SELECT "name", "publish" FROM "events" WHERE "event_id" = ?"#,
+///     r#"SELECT "name", "event_type" FROM "events" WHERE "event_id" = ?"#,
 ///     ulid_str
 /// ).fetch_one(db()).await?;
 /// ```
@@ -38,7 +38,6 @@ use super::{EventInstance, EventType};
 pub struct EventAll {
     pub event_id: Ulid,
     pub created: TimeString,
-    pub publish: bool,
     pub flagged: bool,
     pub admin_notes: String,
     pub welcomed: bool,
@@ -96,7 +95,6 @@ impl LoadStorePeered for EventAll {
             r#"insert or replace into "events" (
               "event_id",
               "created",
-              "publish",
               "flagged",
               "admin_notes",
               "welcomed",
@@ -157,7 +155,14 @@ impl LoadStorePeered for EventAll {
               ?27,
               ?28,
               ?29,
-              ?30,
+              case
+                when ?30 is null then
+                  null
+                when substr(?30, 1, 1) == '{' and substr(?30, -1, 1) == '}' then
+                  GeomFromGeoJSON(?30)
+                else
+                  GeomFromEWKT(?30)
+              end,
               case
                 when ?31 is null then
                   null
@@ -165,19 +170,10 @@ impl LoadStorePeered for EventAll {
                   GeomFromGeoJSON(?31)
                 else
                   GeomFromEWKT(?31)
-              end,
-              case
-                when ?32 is null then
-                  null
-                when substr(?32, 1, 1) == '{' and substr(?32, -1, 1) == '}' then
-                  GeomFromGeoJSON(?32)
-                else
-                  GeomFromEWKT(?32)
               end
             )"#,
             event_id,
             self.created,
-            self.publish,
             self.flagged,
             self.admin_notes,
             self.welcomed,
@@ -368,7 +364,7 @@ impl LoadStorePeered for EventAll {
         // Read main event data from events table
         let event_row = sqlx::query!(
             r#"SELECT
-                event_id, created, publish, flagged, admin_notes, welcomed,
+                event_id, created, flagged, admin_notes, welcomed,
                 page_creator_id, name, description, origin, presenter, url,
                 image, image_credit, how_to_join, part_of, location_type,
                 entirely_online, location_name, location_description, address,
@@ -469,7 +465,6 @@ impl LoadStorePeered for EventAll {
             event_id,
             created: TimeString::try_from(event_row.created)
                 .map_err(|e| anyhow::anyhow!("Invalid created TimeString: {}", e))?,
-            publish: event_row.publish,
             flagged: event_row.flagged,
             admin_notes: event_row.admin_notes,
             welcomed: event_row.welcomed,

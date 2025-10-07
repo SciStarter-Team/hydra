@@ -109,6 +109,7 @@ pub struct Entity {
     slug: String,
     kind: EntityKind,
     target: EntityTarget,
+    publish: bool,
 }
 
 #[derive(sailfish::TemplateOnce)]
@@ -123,6 +124,7 @@ struct EntityDB {
     slug: String,
     kind: EntityKind,
     target: String,
+    publish: bool,
 }
 
 impl TryFrom<EntityDB> for Entity {
@@ -156,7 +158,70 @@ impl TryFrom<EntityDB> for Entity {
             slug: value.slug,
             kind: value.kind,
             target,
+            publish: value.publish,
         })
+    }
+}
+
+/// Check if a user can access an unpublished entity
+/// Returns true if:
+/// - Entity is published (everyone can access)
+/// - User is staff/superuser (can access all unpublished entities)
+/// - User is a page manager for the entity's target (project/event)
+async fn can_user_access_entity(entity: &Entity, user_info: Option<&BasicInfo>) -> Result<bool, Error> {
+    // Published entities are accessible to everyone
+    if entity.publish {
+        return Ok(true);
+    }
+
+    // Unpublished entities require authentication
+    let Some(user_info) = user_info else {
+        return Ok(false);
+    };
+
+    // Staff and superusers can access all unpublished entities
+    if user_info.is_staff || user_info.is_superuser {
+        return Ok(true);
+    }
+
+    // Check if user is a page manager for this entity's target
+    match (&entity.kind, &entity.target) {
+        (EntityKind::Project, EntityTarget::Ulid(project_id)) => {
+            let user_id_str = user_info.user_id.to_string();
+            let project_id_str = project_id.to_string();
+
+            let is_manager = sqlx::query_scalar!(
+                r#"SELECT EXISTS(
+                    SELECT 1 FROM project_page_editors
+                    WHERE project_id = ? AND user_id = ?
+                ) as "exists: bool""#,
+                project_id_str,
+                user_id_str
+            )
+            .fetch_one(db())
+            .await?;
+
+            Ok(is_manager)
+        }
+        (EntityKind::Event, EntityTarget::Ulid(event_id)) => {
+            let user_id_str = user_info.user_id.to_string();
+            let event_id_str = event_id.to_string();
+
+            let is_manager = sqlx::query_scalar!(
+                r#"SELECT EXISTS(
+                    SELECT 1 FROM event_page_editors
+                    WHERE event_id = ? AND user_id = ?
+                ) as "exists: bool""#,
+                event_id_str,
+                user_id_str
+            )
+            .fetch_one(db())
+            .await?;
+
+            Ok(is_manager)
+        }
+        // Other entity kinds don't have page managers, only staff can access
+        _ => Ok(false),
     }
 }
 
@@ -167,6 +232,17 @@ impl Entity {
             slug: slug.into(),
             kind,
             target,
+            publish: true,
+        }
+    }
+
+    #[tracing::instrument(skip(slug))]
+    pub fn with_publish(slug: impl Into<String>, kind: EntityKind, target: EntityTarget, publish: bool) -> Entity {
+        Entity {
+            slug: slug.into(),
+            kind,
+            target,
+            publish,
         }
     }
 
@@ -234,6 +310,11 @@ impl Entity {
         &self,
         user_info: Option<Arc<BasicInfo>>,
     ) -> poem::Result<poem::Response> {
+        // Check access permissions for unpublished entities
+        if !can_user_access_entity(self, user_info.as_deref()).await? {
+            return Err(poem::Error::from_status(StatusCode::NOT_FOUND));
+        }
+
         Ok(match self.kind {
             EntityKind::Redirect => {
                 if let Some(url) = self.target.as_url() {
@@ -368,6 +449,10 @@ impl Entity {
         &self.target
     }
 
+    pub fn publish(&self) -> bool {
+        self.publish
+    }
+
     /// Check if an entity slug exists in the database (case-insensitive)
     /// More efficient than loading the full object for uniqueness checks
     #[tracing::instrument]
@@ -397,7 +482,8 @@ impl LoadStorePeered for Entity {
             r#"select
                  "slug",
                  "kind" as "kind: EntityKind",
-                 "target"
+                 "target",
+                 "publish"
                from "entities"
                where LOWER("slug") = LOWER(?)"#,
             slug,
@@ -439,17 +525,20 @@ impl LoadStorePeered for Entity {
             r#"insert or replace into "entities" (
                  "slug",
                  "kind",
-                 "target"
+                 "target",
+                 "publish"
                )
                values (
                  ?1,
                  ?2,
-                 ?3
+                 ?3,
+                 ?4
                )
             "#,
             self.slug,
             self.kind,
             target,
+            self.publish,
         )
         .execute(db())
         .await?;
