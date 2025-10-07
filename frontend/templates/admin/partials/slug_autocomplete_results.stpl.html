@@ -1,0 +1,20 @@
+<% if self.results.is_empty() { %>
+<div data-part=display class="hidden"></div>
+<% } else { %>
+<div data-part=display class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+    <ul class="py-1">
+        <% for result in &self.results { %>
+        <li class="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+            hx-on:click="
+                let widget = htmx.closest(this, '[data-part=widget]');
+                htmx.find(widget, '[data-part=storage]').value = '<%= result.slug %>';
+                htmx.find(widget, '[data-part=input]').value = '<%= result.name %>';
+                htmx.find(widget, '[data-part=display]').classList.add('hidden');
+            ">
+            <div class="font-medium"><%= result.name %></div>
+            <div class="text-sm text-gray-500"><%= result.slug %></div>
+        </li>
+        <% } %>
+    </ul>
+</div>
+<% } %>

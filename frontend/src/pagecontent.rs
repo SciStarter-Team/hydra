@@ -7,7 +7,7 @@ use crate::peering::LoadStorePeered;
     Debug, Clone, Copy, serde::Serialize, serde::Deserialize, strum::AsRefStr, strum::EnumString,
 )]
 pub enum PageContentKind {
-    RawHTML,
+    RawHtml,
     DressedHtml,
     Wysiwyg,
     PageBuilder,

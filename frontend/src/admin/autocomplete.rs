@@ -14,6 +14,7 @@ pub enum AutocompleteEntityType {
     Events,
     Users,
     PageContent,
+    EntitySlugs,
 }
 
 impl std::fmt::Display for AutocompleteEntityType {
@@ -23,6 +24,7 @@ impl std::fmt::Display for AutocompleteEntityType {
             AutocompleteEntityType::Events => write!(f, "events"),
             AutocompleteEntityType::Users => write!(f, "users"),
             AutocompleteEntityType::PageContent => write!(f, "pagecontent"),
+            AutocompleteEntityType::EntitySlugs => write!(f, "entityslugs"),
         }
     }
 }
@@ -534,16 +536,149 @@ pub async fn resolve_pagecontent_names(ids: Vec<Ulid>) -> Result<Vec<(Ulid, Stri
     Ok(results)
 }
 
+// Entity slug autocomplete (returns slug strings, not ULIDs)
+#[derive(Debug)]
+pub struct SlugAutocompleteResult {
+    pub slug: String,
+    pub name: String,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/partials/slug_autocomplete_results.stpl.html")]
+pub struct SlugAutocompleteResults {
+    pub results: Vec<SlugAutocompleteResult>,
+    pub field_name: String,
+}
+
+impl SlugAutocompleteResults {
+    pub fn new(results: Vec<SlugAutocompleteResult>, field_name: String) -> Self {
+        Self {
+            results,
+            field_name,
+        }
+    }
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/partials/slug_autocomplete.stpl.html")]
+pub struct SlugAutocomplete {
+    pub field_name: String,
+    pub field_label: String,
+    pub placeholder: String,
+    pub selected_slug: Option<String>,
+    pub selected_name: Option<String>,
+    pub read_only: bool,
+}
+
+impl SlugAutocomplete {
+    pub fn new(
+        field_name: impl Into<String>,
+        field_label: impl Into<String>,
+        placeholder: impl Into<String>,
+    ) -> Self {
+        Self {
+            field_name: field_name.into(),
+            field_label: field_label.into(),
+            placeholder: placeholder.into(),
+            selected_slug: None,
+            selected_name: None,
+            read_only: false,
+        }
+    }
+
+    pub fn with_selected(mut self, slug: impl Into<String>, name: impl Into<String>) -> Self {
+        self.selected_slug = Some(slug.into());
+        self.selected_name = Some(name.into());
+        self
+    }
+
+    pub fn with_selected_slug(mut self, slug: Option<String>) -> Self {
+        self.selected_slug = slug;
+        self.selected_name = None; // Will be resolved via endpoint
+        self
+    }
+
+    pub fn with_read_only(mut self, read_only: bool) -> Self {
+        self.read_only = read_only;
+        self
+    }
+}
+
+pub async fn search_entity_slugs(query: &AutocompleteQuery) -> Result<Vec<SlugAutocompleteResult>, Error> {
+    use common::shared::db;
+
+    let search_term = query.search.as_deref().unwrap_or("").trim();
+    if search_term.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let search_pattern = format!("%{}%", search_term);
+
+    let rows = sqlx::query!(
+        r#"SELECT e.slug,
+                  COALESCE(p.name, ev.name, '') as "entity_name: String"
+           FROM entities e
+           LEFT JOIN projects p ON e.kind = 'Project' AND e.target = p.project_id
+           LEFT JOIN events ev ON e.kind = 'Event' AND e.target = ev.event_id
+           WHERE (e.slug LIKE ?1 OR COALESCE(p.name, ev.name, '') LIKE ?1)
+           ORDER BY e.slug LIMIT 10"#,
+        search_pattern
+    )
+    .fetch_all(db())
+    .await?;
+
+    let results = rows
+        .into_iter()
+        .filter_map(|row| {
+            if row.entity_name.is_empty() {
+                return None;
+            }
+            Some(SlugAutocompleteResult {
+                slug: row.slug,
+                name: row.entity_name,
+            })
+        })
+        .collect();
+
+    Ok(results)
+}
+
+pub async fn resolve_entity_slug_name(slug: &str) -> Result<Option<String>, Error> {
+    use common::shared::db;
+
+    let row = sqlx::query!(
+        r#"SELECT COALESCE(p.name, ev.name, '') as "entity_name: String"
+           FROM entities e
+           LEFT JOIN projects p ON e.kind = 'Project' AND e.target = p.project_id
+           LEFT JOIN events ev ON e.kind = 'Event' AND e.target = ev.event_id
+           WHERE e.slug = ?1"#,
+        slug
+    )
+    .fetch_optional(db())
+    .await?;
+
+    Ok(row.and_then(|r| {
+        let name = r.entity_name?;
+        if name.is_empty() {
+            None
+        } else {
+            Some(name)
+        }
+    }))
+}
+
 pub fn routes() -> impl Endpoint {
     Route::new()
         .at("/projects", get(handle_projects_autocomplete))
         .at("/events", get(handle_events_autocomplete))
         .at("/users", get(handle_users_autocomplete))
         .at("/pagecontent", get(handle_pagecontent_autocomplete))
+        .at("/entityslugs", get(handle_entityslugs_autocomplete))
         .at("/resolve/projects/:id", get(handle_resolve_project_widget))
         .at("/resolve/events/:id", get(handle_resolve_event_widget))
         .at("/resolve/users/:id", get(handle_resolve_user_widget))
         .at("/resolve/pagecontent/:id", get(handle_resolve_pagecontent_widget))
+        .at("/resolve/entityslugs/:slug", get(handle_resolve_entityslug_widget))
 }
 
 #[handler]
@@ -721,6 +856,61 @@ async fn handle_resolve_pagecontent_widget(
         .with_selected(id, pagecontent_name)
     } else {
         EntityAutocomplete::new_pagecontent_selector(
+            query.field_name,
+            query.field_label,
+            query.placeholder,
+        )
+    };
+
+    if let Some(read_only) = query.read_only {
+        widget = widget.with_read_only(read_only);
+    }
+
+    let html = widget.render_once().map_err(|e| {
+        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+
+    Ok(Response::builder().content_type("text/html").body(html))
+}
+
+#[handler]
+async fn handle_entityslugs_autocomplete(Query(query): Query<AutocompleteQuery>) -> Result<Response> {
+    let results = search_entity_slugs(&query).await.map_err(|e| {
+        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+
+    let template = SlugAutocompleteResults::new(results, query.field_name.unwrap_or_default());
+    let html = template.render_once().map_err(|e| {
+        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+
+    Ok(Response::builder().content_type("text/html").body(html))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SlugResolveQuery {
+    pub field_name: String,
+    pub field_label: String,
+    pub placeholder: String,
+    pub read_only: Option<bool>,
+}
+
+#[handler]
+async fn handle_resolve_entityslug_widget(
+    Path(slug): Path<String>,
+    Query(query): Query<SlugResolveQuery>,
+) -> Result<Response> {
+    let name = resolve_entity_slug_name(&slug).await.ok().flatten();
+
+    let mut widget = if let Some(entity_name) = name {
+        SlugAutocomplete::new(
+            query.field_name,
+            query.field_label,
+            query.placeholder,
+        )
+        .with_selected(slug, entity_name)
+    } else {
+        SlugAutocomplete::new(
             query.field_name,
             query.field_label,
             query.placeholder,

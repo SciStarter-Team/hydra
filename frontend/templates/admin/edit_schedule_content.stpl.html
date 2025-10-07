@@ -1,0 +1,187 @@
+<!-- Edit Schedule Form Content -->
+<div class="bg-white rounded-lg shadow border border-gray-200">
+    <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+        <h3 class="text-lg font-medium text-gray-900">Edit Schedule</h3>
+        <a
+            href="/-admin/schedules"
+            class="text-sm text-gray-600 hover:text-gray-900"
+        >
+            Back to Schedules
+        </a>
+    </div>
+
+    <div class="p-6">
+        <% if let Some(error) = &self.error_message { %>
+            <div class="mb-4 p-3 text-sm text-red-700 bg-red-100 rounded-lg border border-red-200">
+                <%= error %>
+            </div>
+        <% } %>
+
+        <form
+            hx-post="/-admin/schedules/<%= self.schedule.schedule_id|disp %>"
+            hx-target="body"
+        >
+            <div class="grid grid-cols-1 gap-6">
+                <!-- Title -->
+                <div>
+                    <label for="title" class="block text-sm font-medium text-gray-700 mb-2">
+                        Title <span class="text-red-500">*</span>
+                    </label>
+                    <input
+                        type="text"
+                        id="title"
+                        name="title"
+                        required
+                        value="<%= self.schedule.title %>"
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        placeholder="Enter schedule title..."
+                    >
+                </div>
+
+                <!-- Schedule Type -->
+                <div>
+                    <label for="schedule_type" class="block text-sm font-medium text-gray-700 mb-2">
+                        Type <span class="text-red-500">*</span>
+                    </label>
+                    <select
+                        id="schedule_type"
+                        name="schedule_type"
+                        required
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    >
+                        <option value="featured" <% if matches!(&self.schedule.schedule_type, crate::schedule::ScheduleType::Featured) { %>selected<% } %>>Featured</option>
+                        <option value="notification" <% if matches!(&self.schedule.schedule_type, crate::schedule::ScheduleType::Notification) { %>selected<% } %>>Notification</option>
+                        <option value="advertisement" <% if matches!(&self.schedule.schedule_type, crate::schedule::ScheduleType::Advertisement) { %>selected<% } %>>Advertisement</option>
+                    </select>
+                </div>
+
+                <!-- Target Type -->
+                <div>
+                    <label for="target_type" class="block text-sm font-medium text-gray-700 mb-2">
+                        Target Type
+                    </label>
+                    <select
+                        id="target_type"
+                        name="target_type"
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    >
+                        <option value="" <% if self.schedule.target_type.is_none() { %>selected<% } %>>Global</option>
+                        <option value="slug" <% if matches!(&self.schedule.target_type, Some(crate::schedule::TargetType::Slug)) { %>selected<% } %>>Slug</option>
+                    </select>
+                    <p class="mt-1 text-sm text-gray-500">Not used for "featured" schedule type</p>
+                </div>
+
+                <!-- Target -->
+                <div>
+                    <% if let Some(ref target_slug) = self.schedule.target { %>
+                        <%+ crate::admin::autocomplete::SlugAutocomplete::new(
+                            "target",
+                            "Target (where to display)",
+                            "Search for entity..."
+                        ).with_selected_slug(Some(target_slug.clone())) %>
+                    <% } else { %>
+                        <%+ crate::admin::autocomplete::SlugAutocomplete::new(
+                            "target",
+                            "Target (where to display)",
+                            "Search for entity..."
+                        ) %>
+                    <% } %>
+                    <p class="mt-1 text-sm text-gray-500">Leave empty for global targeting</p>
+                </div>
+
+                <!-- Featured Entity -->
+                <div>
+                    <% if let Some(ref featured_slug) = self.schedule.featured_entity { %>
+                        <%+ crate::admin::autocomplete::SlugAutocomplete::new(
+                            "featured_entity",
+                            "Featured Entity (what to feature)",
+                            "Search for entity to feature..."
+                        ).with_selected_slug(Some(featured_slug.clone())) %>
+                    <% } else { %>
+                        <%+ crate::admin::autocomplete::SlugAutocomplete::new(
+                            "featured_entity",
+                            "Featured Entity (what to feature)",
+                            "Search for entity to feature..."
+                        ) %>
+                    <% } %>
+                    <p class="mt-1 text-sm text-gray-500">Entity slug of the project or event to feature</p>
+                </div>
+
+                <!-- Content -->
+                <div>
+                    <label for="content" class="block text-sm font-medium text-gray-700 mb-2">
+                        Content
+                    </label>
+                    <textarea
+                        id="content"
+                        name="content"
+                        rows="4"
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        placeholder="Enter content..."
+                    ><% if let Some(ref c) = self.schedule.content { %><%= c %><% } %></textarea>
+                </div>
+
+                <!-- URL -->
+                <div>
+                    <label for="url" class="block text-sm font-medium text-gray-700 mb-2">
+                        URL
+                    </label>
+                    <input
+                        type="url"
+                        id="url"
+                        name="url"
+                        value="<% if let Some(ref u) = self.schedule.url { %><%= u %><% } %>"
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        placeholder="https://example.com"
+                    >
+                </div>
+
+                <!-- Date Range -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="start_date" class="block text-sm font-medium text-gray-700 mb-2">
+                            Start Date <span class="text-red-500">*</span>
+                        </label>
+                        <wa-input type="date" id="start_date" name="start_date" value="<%= self.schedule.start_date %>" required></wa-input>
+                    </div>
+                    <div>
+                        <label for="end_date" class="block text-sm font-medium text-gray-700 mb-2">
+                            End Date <span class="text-red-500">*</span>
+                        </label>
+                        <wa-input type="date" id="end_date" name="end_date" value="<%= self.schedule.end_date %>" required></wa-input>
+                    </div>
+                </div>
+
+                <!-- Active -->
+                <div>
+                    <label class="flex items-center">
+                        <input
+                            type="checkbox"
+                            name="active"
+                            value="1"
+                            <% if self.schedule.active { %>checked<% } %>
+                            class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                        >
+                        <span class="ml-2 text-sm text-gray-700">Active</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="flex items-center justify-end pt-6 space-x-2 border-t border-gray-200 mt-6">
+                <a
+                    href="/-admin/schedules"
+                    class="px-4 py-2 bg-gray-300 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300"
+                >
+                    Cancel
+                </a>
+                <button
+                    type="submit"
+                    class="relative px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                    <span>Update Schedule</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>

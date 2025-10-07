@@ -59,9 +59,14 @@
                         <span>Users</span>
                     </a>
 
+                    <a href="/-admin/schedules" class="<%= if self.sidebar_active == "schedules" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
+                        <wa-icon name="clock" class="w-5 h-5 flex-shrink-0"></wa-icon>
+                        <span>Scheduling</span>
+                    </a>
+
                     <a href="/-admin/entities" class="<%= if self.sidebar_active == "entities" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
                         <wa-icon name="globe-americas" class="w-5 h-5 flex-shrink-0"></wa-icon>
-                        <span>Entities</span>
+                        <span>Slugs</span>
                     </a>
 
                     <a href="/-admin/projects" class="<%= if self.sidebar_active == "projects" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
@@ -93,6 +98,12 @@
                         <div class="ml-8 mt-1 space-y-1">
                             <a href="/-admin/engine-room" class="<%= if self.sidebar_active == "engine-room" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
                                 <span>Controls</span>
+                            </a>
+                            <a href="/-admin/pagecontent/DressedHtml" class="<%= if self.sidebar_active == "engine-room-dressed-html" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
+                                <span>Dressed HTML</span>
+                            </a>
+                            <a href="/-admin/pagecontent/RawHtml" class="<%= if self.sidebar_active == "engine-room-raw-html" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
+                                <span>Raw HTML</span>
                             </a>
                         </div>
                     </details>

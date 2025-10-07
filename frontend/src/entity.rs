@@ -42,7 +42,7 @@ struct ContentPageContent<'a> {
 )]
 pub enum EntityKind {
     Redirect,
-    RawHTML,
+    RawHtml,
     DressedHtml,
     WordPress, // Used for publishing WordPress pages
     Wysiwyg,
@@ -138,7 +138,7 @@ impl TryFrom<EntityDB> for Entity {
                     Err(_) => EntityTarget::Nil,
                 },
                 EntityKind::WordPress => EntityTarget::String(value.target),
-                EntityKind::RawHTML
+                EntityKind::RawHtml
                 | EntityKind::DressedHtml
                 | EntityKind::Wysiwyg
                 | EntityKind::PageBuilder
@@ -242,9 +242,9 @@ impl Entity {
                     return Err(poem::Error::from_status(StatusCode::NOT_FOUND));
                 }
             }
-            EntityKind::RawHTML => {
+            EntityKind::RawHtml => {
                 if let Some(ulid) = self.target.as_ulid() {
-                    let content = PageContent::load((PageContentKind::RawHTML, ulid)).await?;
+                    let content = PageContent::load((PageContentKind::RawHtml, ulid)).await?;
                     Html(content.as_utf8()?).into_response()
                 } else {
                     return Err(poem::Error::from_status(StatusCode::NOT_FOUND));

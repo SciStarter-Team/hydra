@@ -1,0 +1,42 @@
+<% if self.selected_slug.is_some() && self.selected_name.is_none() { %>
+<div class="relative"
+     hx-get="/-admin/autocomplete/resolve/entityslugs/<%= self.selected_slug.as_ref().unwrap() %>"
+     hx-vals='{"field_name": "<%= self.field_name %>", "field_label": "<%= self.field_label %>", "placeholder": "<%= self.placeholder %>", "read_only": "<%= self.read_only %>"}'
+     hx-trigger=load
+     hx-swap=outerHTML
+     hx-target=this>
+    Loading...
+</div>
+<% } else { %>
+<div class="relative">
+    <label class="block text-sm font-medium text-gray-700"><%= self.field_label %></label>
+    <div class="mt-1 relative" data-part=widget>
+      <!-- Hidden field to store the actual slug value -->
+      <input data-part=storage
+             type=hidden
+             name="<%= self.field_name %>"
+             <% if let Some(selected_slug) = &self.selected_slug { %>value="<%= selected_slug %>"<% } %> />
+
+      <input data-part=input
+             type=text
+             class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500<% if self.read_only { %> bg-gray-100<% } %>"
+             placeholder="<%= self.placeholder %>"
+             autocomplete=off
+             <% if self.read_only { %>readonly<% } else { %>
+             hx-get="/-admin/autocomplete/entityslugs"
+             hx-vals='js:{"search": this.value, "field_name": "<%= self.field_name %>"}'
+             hx-trigger="input changed delay:300ms"
+             hx-target=next
+             hx-swap=outerHTML<% } %>
+             <% if !self.read_only { %>hx-on:input="if (this.value === '') {
+                   let widget = htmx.closest(this, '[data-part=widget]');
+                   htmx.find(widget, '[data-part=storage]').value = '';
+                   htmx.find(widget, '[data-part=display]').classList.add('hidden');
+               }"<% } %>
+             <% if let Some(selected_name) = &self.selected_name { %>value="<%= selected_name %>"<% } %> />
+
+        <!-- Autocomplete results dropdown -->
+        <div data-part=display class="hidden"></div>
+    </div>
+</div>
+<% } %>

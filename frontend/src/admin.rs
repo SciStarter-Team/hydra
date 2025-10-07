@@ -104,7 +104,7 @@ pub fn routes() -> impl Endpoint {
         )
         .at("/events", get(events))
         .at("/events/search", get(events_search))
-        .at("/events/:id", get(events_edit))
+        .at("/events/:id", get(events_edit).delete(events_delete))
         .at("/events/:id/field/:field", put(events_update_field))
         .at("/analytics", get(analytics))
         .at("/help", get(help))
@@ -133,11 +133,23 @@ pub fn routes() -> impl Endpoint {
         .at("/wysiwyg", get(wysiwyg_list))
         .at("/wysiwyg/search", get(wysiwyg_search))
         .at("/wysiwyg/new", get(wysiwyg_new))
+        .at("/pagecontent/DressedHtml", get(dressed_html_list))
+        .at("/pagecontent/DressedHtml/search", get(dressed_html_search))
+        .at("/pagecontent/DressedHtml/new", get(dressed_html_new))
+        .at("/pagecontent/DressedHtml/:id", get(dressed_html_edit).post(dressed_html_update).delete(dressed_html_delete))
+        .at("/pagecontent/RawHtml", get(raw_html_list))
+        .at("/pagecontent/RawHtml/search", get(raw_html_search))
+        .at("/pagecontent/RawHtml/new", get(raw_html_new))
+        .at("/pagecontent/RawHtml/:id", get(raw_html_edit).post(raw_html_update).delete(raw_html_delete))
         .at("/pagecontent", post(pagecontent_create))
         .at(
             "/pagecontent/:kind/:id",
             get(pagecontent_edit).post(pagecontent_update).delete(pagecontent_delete),
         )
+        .at("/schedules", get(schedules_list).post(schedules_create))
+        .at("/schedules/search", get(schedules_search))
+        .at("/schedules/new", get(schedules_new))
+        .at("/schedules/:id", get(schedules_edit).post(schedules_update).delete(schedules_delete))
         .nest("/autocomplete", autocomplete::routes())
         .with(StaffOnly)
 }
@@ -3572,6 +3584,49 @@ async fn events_edit(
     Ok(edit_event_page.into_response(user_info).await?)
 }
 
+#[handler]
+async fn events_delete(
+    Path(event_id): Path<String>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let event_ulid = event_id
+        .parse::<Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid event ID format"))?;
+    let event_id_str = event_ulid.to_string();
+
+    sqlx::query!(r#"DELETE FROM events WHERE event_id = ?"#, event_id_str)
+        .execute(db())
+        .await?;
+
+    // Check if there are any events left
+    let exists: bool = sqlx::query_scalar!(
+        r#"SELECT EXISTS(SELECT 1 FROM events) as "exists: bool""#
+    )
+    .fetch_one(db())
+    .await?;
+
+    let html = if !exists {
+        // If no items left, return OOB swap with empty state
+        let content = events_search_internal(EventSearchQuery {
+            search: None,
+            status: None,
+            publish: None,
+            page: Some(1),
+        }).await?;
+        format!(
+            r#"<div id="events-content" hx-swap-oob="outerHTML">{}</div>"#,
+            content.render_once()?
+        )
+    } else {
+        // Otherwise just return empty to remove the row
+        String::new()
+    };
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(html))
+}
+
 #[derive(Debug, Deserialize)]
 struct UpdateEventFieldForm {
     value: String,
@@ -6033,7 +6088,7 @@ impl EntityKind {
         match self {
             EntityKind::WordPress => "WordPress Page",
             EntityKind::Redirect => "Redirect",
-            EntityKind::RawHTML => "Raw HTML",
+            EntityKind::RawHtml => "Raw HTML",
             EntityKind::DressedHtml => "Dressed HTML",
             EntityKind::Wysiwyg => "Simple Editor",
             EntityKind::PageBuilder => "Page Builder",
@@ -6050,7 +6105,7 @@ impl EntityKind {
             EntityKind::Event,
             EntityKind::WordPress,
             EntityKind::Redirect,
-            EntityKind::RawHTML,
+            EntityKind::RawHtml,
             EntityKind::Wysiwyg,
             EntityKind::PageBuilder,
             EntityKind::Form,
@@ -6079,8 +6134,8 @@ async fn entities(
     let page = EntitiesPage { entities_content };
     let content = page.render_once()?;
 
-    let prepared = AdminLayout::new("Entity Management")
-        .with_breadcrumb("Entities", None)
+    let prepared = AdminLayout::new("Slug Management")
+        .with_breadcrumb("Slugs", None)
         .with_sidebar_active("entities")
         .with_content(content)
         .prepare(Some(user_info))
@@ -6144,8 +6199,8 @@ async fn entities_target_input(
             };
             (None, Some(widget), None)
         },
-        EntityKind::RawHTML => {
-            let widget = create_pagecontent_widget(&current_value, crate::pagecontent::PageContentKind::RawHTML).await;
+        EntityKind::RawHtml => {
+            let widget = create_pagecontent_widget(&current_value, crate::pagecontent::PageContentKind::RawHtml).await;
             (None, None, Some(widget))
         },
         EntityKind::DressedHtml => {
@@ -6275,9 +6330,9 @@ async fn entities_edit(
 
     let content_html = content.render_once()?;
 
-    let prepared = crate::component::AdminLayout::new("Edit Entity")
+    let prepared = crate::component::AdminLayout::new("Edit Slug")
         .with_sidebar_active("entities")
-        .with_breadcrumb("Entities", Some("/-admin/entities"))
+        .with_breadcrumb("Slugs", Some("/-admin/entities"))
         .with_breadcrumb("Edit", None)
         .with_content(content_html)
         .prepare(user_info)
@@ -6315,9 +6370,9 @@ async fn entities_update(
             };
 
             let content_html = content.render_once()?;
-            let prepared = crate::component::AdminLayout::new("Edit Entity")
+            let prepared = crate::component::AdminLayout::new("Edit Slug")
                 .with_sidebar_active("entities")
-                .with_breadcrumb("Entities", Some("/-admin/entities"))
+                .with_breadcrumb("Slugs", Some("/-admin/entities"))
                 .with_breadcrumb("Edit", None)
                 .with_content(content_html)
                 .prepare(user_info)
@@ -6349,9 +6404,9 @@ async fn entities_update(
             };
 
             let content_html = content.render_once()?;
-            let prepared = crate::component::AdminLayout::new("Edit Entity")
+            let prepared = crate::component::AdminLayout::new("Edit Slug")
                 .with_sidebar_active("entities")
-                .with_breadcrumb("Entities", Some("/-admin/entities"))
+                .with_breadcrumb("Slugs", Some("/-admin/entities"))
                 .with_breadcrumb("Edit", None)
                 .with_content(content_html)
                 .prepare(user_info)
@@ -6391,9 +6446,9 @@ async fn entities_update(
             };
 
             let content_html = content.render_once()?;
-            let prepared = crate::component::AdminLayout::new("Edit Entity")
+            let prepared = crate::component::AdminLayout::new("Edit Slug")
                 .with_sidebar_active("entities")
-                .with_breadcrumb("Entities", Some("/-admin/entities"))
+                .with_breadcrumb("Slugs", Some("/-admin/entities"))
                 .with_breadcrumb("Edit", None)
                 .with_content(content_html)
                 .prepare(user_info)
@@ -6415,9 +6470,33 @@ async fn entities_delete(
         .execute(db())
         .await?;
 
+    // Check if there are any entities left
+    let exists: bool = sqlx::query_scalar!(
+        r#"SELECT EXISTS(SELECT 1 FROM entities) as "exists: bool""#
+    )
+    .fetch_one(db())
+    .await?;
+
+    let html = if !exists {
+        // If no items left, return OOB swap with empty state
+        let content = fetch_entities_content(&EntitySearchQuery {
+            search: None,
+            kind: None,
+            page: Some(1),
+            per_page: None,
+        }).await?;
+        format!(
+            r#"<div id="entities-content" hx-swap-oob="outerHTML">{}</div>"#,
+            content.render_once()?
+        )
+    } else {
+        // Otherwise just return empty to remove the row
+        String::new()
+    };
+
     Ok(poem::Response::builder()
         .content_type("text/html")
-        .body(""))
+        .body(html))
 }
 
 // Helper Functions
@@ -6481,8 +6560,8 @@ async fn create_target_input_template(kind: &EntityKind, current_value: &str) ->
             };
             (None, Some(widget), None)
         },
-        EntityKind::RawHTML => {
-            let widget = create_pagecontent_widget(current_value, crate::pagecontent::PageContentKind::RawHTML).await;
+        EntityKind::RawHtml => {
+            let widget = create_pagecontent_widget(current_value, crate::pagecontent::PageContentKind::RawHtml).await;
             (None, None, Some(widget))
         },
         EntityKind::DressedHtml => {
@@ -6524,7 +6603,7 @@ fn parse_target_for_kind(kind: &EntityKind, target_str: Option<&str>) -> Result<
                 EntityKind::WordPress => {
                     Ok(EntityTarget::String(s.to_string()))
                 },
-                EntityKind::RawHTML | EntityKind::DressedHtml | EntityKind::Wysiwyg | EntityKind::PageBuilder |
+                EntityKind::RawHtml | EntityKind::DressedHtml | EntityKind::Wysiwyg | EntityKind::PageBuilder |
                 EntityKind::Form | EntityKind::Project | EntityKind::Event => {
                     let ulid = s.parse::<Ulid>()?;
                     Ok(EntityTarget::Ulid(ulid))
@@ -6624,7 +6703,7 @@ fn parse_database_target(kind: EntityKind, target_str: &str) -> Result<EntityTar
         EntityKind::WordPress => {
             Ok(EntityTarget::String(target_str.to_string()))
         },
-        EntityKind::RawHTML | EntityKind::DressedHtml | EntityKind::Wysiwyg | EntityKind::PageBuilder |
+        EntityKind::RawHtml | EntityKind::DressedHtml | EntityKind::Wysiwyg | EntityKind::PageBuilder |
         EntityKind::Form | EntityKind::Project | EntityKind::Event => {
             match target_str.parse() {
                 Ok(ulid) => Ok(EntityTarget::Ulid(ulid)),
@@ -6678,7 +6757,7 @@ async fn create_entity_with_info(entity: &Entity) -> Result<EntityWithInfo, anyh
         (EntityKind::WordPress, EntityTarget::String(s)) => {
             (Some(format!("WordPress: {}", s)), true) // Default to published for WordPress
         },
-        (EntityKind::RawHTML | EntityKind::DressedHtml | EntityKind::Wysiwyg | EntityKind::PageBuilder | EntityKind::Form, _) => {
+        (EntityKind::RawHtml | EntityKind::DressedHtml | EntityKind::Wysiwyg | EntityKind::PageBuilder | EntityKind::Form, _) => {
             (Some("Static content".to_string()), true) // Default to published for static content
         },
         (_, EntityTarget::Nil) => {
@@ -6710,7 +6789,9 @@ async fn clear_modal(
 
 #[derive(sailfish::TemplateOnce)]
 #[template(path = "admin/wysiwyg.stpl.html")]
-struct WysiwygPage {
+struct PageContentWrapper {
+    title: String,
+    new_endpoint: String,
     content: String,
 }
 
@@ -6753,7 +6834,11 @@ async fn wysiwyg_list(
 
     let content = format!(r#"<div id="wysiwyg-content">{}</div>"#, search_results);
 
-    let page = WysiwygPage { content };
+    let page = PageContentWrapper {
+        title: "Simple Pages".to_string(),
+        new_endpoint: "/-admin/wysiwyg/new".to_string(),
+        content,
+    };
     let page_html = page.render_once()?;
 
     let prepared = crate::component::AdminLayout::new("Simple Content")
@@ -6929,15 +7014,37 @@ async fn pagecontent_create(
     {
         Ok(_id) => {
             // Close modal and refresh list via OOB
-            let content = wysiwyg_search_impl(&WysiwygSearchQuery {
-                search: None,
-                page: Some(1),
-                per_page: Some(25),
-            }).await?;
+            let (content, target_id) = match kind {
+                crate::pagecontent::PageContentKind::Wysiwyg => {
+                    let content = wysiwyg_search_impl(&WysiwygSearchQuery {
+                        search: None,
+                        page: Some(1),
+                        per_page: Some(25),
+                    }).await?;
+                    (content, "wysiwyg-content")
+                }
+                crate::pagecontent::PageContentKind::DressedHtml => {
+                    let content = html_search_impl("DressedHtml", &HtmlSearchQuery {
+                        search: None,
+                        page: Some(1),
+                        per_page: Some(25),
+                    }).await?;
+                    (content, "dressed-html-content")
+                }
+                crate::pagecontent::PageContentKind::RawHtml => {
+                    let content = html_search_impl("RawHtml", &HtmlSearchQuery {
+                        search: None,
+                        page: Some(1),
+                        per_page: Some(25),
+                    }).await?;
+                    (content, "raw-html-content")
+                }
+                _ => return Err(anyhow::anyhow!("Unsupported page content kind")),
+            };
 
             let html = format!(
-                r#"<div id="wysiwyg-content" hx-swap-oob="innerHTML">{}</div>"#,
-                content
+                r#"<div id="{}" hx-swap-oob="innerHTML">{}</div>"#,
+                target_id, content
             );
 
             Ok(poem::Response::builder()
@@ -6945,14 +7052,34 @@ async fn pagecontent_create(
                 .body(html))
         }
         Err(e) => {
-            let form = NewWysiwygForm {
-                title: "Create New Simple Page".to_string(),
-                error_message: Some(e.to_string()),
+            let html = match kind {
+                crate::pagecontent::PageContentKind::Wysiwyg => {
+                    let form = NewWysiwygForm {
+                        title: "Create New Simple Page".to_string(),
+                        error_message: Some(e.to_string()),
+                    };
+                    form.render_once()?
+                }
+                crate::pagecontent::PageContentKind::DressedHtml => {
+                    let form = NewDressedHtmlForm {
+                        title: "Create New Dressed HTML Page".to_string(),
+                        error_message: Some(e.to_string()),
+                    };
+                    form.render_once()?
+                }
+                crate::pagecontent::PageContentKind::RawHtml => {
+                    let form = NewRawHtmlForm {
+                        title: "Create New Raw HTML Page".to_string(),
+                        error_message: Some(e.to_string()),
+                    };
+                    form.render_once()?
+                }
+                _ => return Err(anyhow::anyhow!("Unsupported page content kind")),
             };
 
             Ok(poem::Response::builder()
                 .content_type("text/html")
-                .body(form.render_once()?))
+                .body(html))
         }
     }
 }
@@ -7074,16 +7201,1039 @@ async fn pagecontent_delete(
     .execute(db())
     .await?;
 
-    let content = wysiwyg_search_impl(&WysiwygSearchQuery {
+    // Check if there are any items left
+    let exists: bool = sqlx::query_scalar!(
+        r#"SELECT EXISTS(SELECT 1 FROM pagecontent WHERE kind = ?) as "exists: bool""#,
+        kind_string
+    )
+    .fetch_one(db())
+    .await?;
+
+    let html = if !exists {
+        // If no items left, return OOB swap with empty state
+        let content = wysiwyg_search_impl(&WysiwygSearchQuery {
+            search: None,
+            page: Some(1),
+            per_page: Some(25),
+        }).await?;
+        format!(
+            r#"<div id="wysiwyg-content" hx-swap-oob="innerHTML">{}</div>"#,
+            content
+        )
+    } else {
+        // Otherwise just return empty to remove the row
+        String::new()
+    };
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(html))
+}
+
+// ==================== DressedHtml Handlers ====================
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/dressed_html_content.stpl.html")]
+struct DressedHtmlContentTemplate {
+    items: Vec<HtmlListItem>,
+    search_query: Option<String>,
+    page: usize,
+    per_page: usize,
+    total_count: usize,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/pages/edit_dressed_html.stpl.html")]
+struct EditDressedHtmlPage {
+    id: Ulid,
+    kind: crate::pagecontent::PageContentKind,
+    name: String,
+    content: String,
+    error_message: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct HtmlListItem {
+    id: Ulid,
+    name: String,
+    excerpt: String,
+    created_at: String,
+}
+
+#[derive(serde::Deserialize)]
+struct HtmlSearchQuery {
+    search: Option<String>,
+    page: Option<usize>,
+    per_page: Option<usize>,
+}
+
+#[handler]
+async fn dressed_html_list(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    let search_results = html_search_impl("DressedHtml", &HtmlSearchQuery {
         search: None,
         page: Some(1),
         per_page: Some(25),
     }).await?;
 
-    let html = format!(
-        r#"<div id="wysiwyg-content" hx-swap-oob="innerHTML">{}</div>"#,
-        content
-    );
+    let content = format!(r#"<div id="dressed-html-content">{}</div>"#, search_results);
+
+    let page = PageContentWrapper {
+        title: "Dressed HTML Pages".to_string(),
+        new_endpoint: "/-admin/pagecontent/DressedHtml/new".to_string(),
+        content,
+    };
+    let page_html = page.render_once()?;
+
+    let prepared = crate::component::AdminLayout::new("Dressed HTML")
+        .with_sidebar_active("engine-room-dressed-html")
+        .with_breadcrumb("Engine Room", None)
+        .with_breadcrumb("Dressed HTML", None)
+        .with_content(page_html)
+        .prepare(Some(user_info))
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+async fn html_search_impl(kind: &str, query: &HtmlSearchQuery) -> Result<String, anyhow::Error> {
+    let page = query.page.unwrap_or(1).max(1);
+    let per_page = query.per_page.unwrap_or(25).clamp(10, 100);
+    let offset = ((page - 1) * per_page) as i64;
+    let per_page_i64 = per_page as i64;
+
+    let search_pattern = query.search.as_ref().map(|s| format!("%{}%", s));
+
+    struct QueryRow {
+        pagecontent_id: String,
+        name: String,
+        content: Vec<u8>,
+    }
+
+    let items: Vec<QueryRow> = if let Some(ref pattern) = search_pattern {
+        sqlx::query_as!(
+            QueryRow,
+            r#"SELECT pagecontent_id, name, content FROM pagecontent
+               WHERE kind = ? AND name LIKE ?
+               ORDER BY pagecontent_id DESC
+               LIMIT ? OFFSET ?"#,
+            kind,
+            pattern,
+            per_page_i64,
+            offset
+        )
+        .fetch_all(db())
+        .await?
+    } else {
+        sqlx::query_as!(
+            QueryRow,
+            r#"SELECT pagecontent_id, name, content FROM pagecontent
+               WHERE kind = ?
+               ORDER BY pagecontent_id DESC
+               LIMIT ? OFFSET ?"#,
+            kind,
+            per_page_i64,
+            offset
+        )
+        .fetch_all(db())
+        .await?
+    };
+
+    let total_count = if let Some(ref pattern) = search_pattern {
+        sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count: i64" FROM pagecontent WHERE kind = ? AND name LIKE ?"#,
+            kind,
+            pattern
+        )
+        .fetch_one(db())
+        .await? as usize
+    } else {
+        sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count: i64" FROM pagecontent WHERE kind = ?"#,
+            kind
+        )
+        .fetch_one(db())
+        .await? as usize
+    };
+
+    let items = items
+        .into_iter()
+        .map(|row| {
+            let id: Ulid = row.pagecontent_id.parse().unwrap_or(Ulid::nil());
+            let timestamp = jiff::Timestamp::from_millisecond(id.timestamp_ms() as i64).unwrap();
+            let created_at = timestamp.strftime("%Y-%m-%d %H:%M").to_string();
+
+            // Extract text excerpt from HTML
+            let excerpt = if let Ok(content_str) = std::str::from_utf8(&row.content) {
+                let text = content_str.chars().take(100).collect::<String>();
+                text.trim().to_string()
+            } else {
+                String::new()
+            };
+
+            HtmlListItem {
+                id,
+                name: row.name,
+                excerpt,
+                created_at,
+            }
+        })
+        .collect();
+
+    let content = if kind == "DressedHtml" {
+        DressedHtmlContentTemplate {
+            items,
+            search_query: query.search.clone(),
+            page,
+            per_page,
+            total_count,
+        }.render_once()?
+    } else {
+        RawHtmlContentTemplate {
+            items,
+            search_query: query.search.clone(),
+            page,
+            per_page,
+            total_count,
+        }.render_once()?
+    };
+
+    Ok(content)
+}
+
+#[handler]
+async fn dressed_html_search(
+    Query(query): Query<HtmlSearchQuery>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let html = html_search_impl("DressedHtml", &query).await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(html))
+}
+
+#[handler]
+async fn dressed_html_edit(
+    Path(id_str): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let kind = crate::pagecontent::PageContentKind::DressedHtml;
+    let id: Ulid = id_str.parse()?;
+
+    let pagecontent = crate::pagecontent::PageContent::load((kind, id)).await?;
+
+    let content = EditDressedHtmlPage {
+        id,
+        kind,
+        name: pagecontent.name().to_string(),
+        content: pagecontent.as_utf8()?.to_string(),
+        error_message: None,
+    };
+
+    let content_html = content.render_once()?;
+
+    let prepared = crate::component::AdminLayout::new("Edit Dressed HTML")
+        .with_sidebar_active("engine-room-dressed-html")
+        .with_breadcrumb("Engine Room", None)
+        .with_breadcrumb("Dressed HTML", Some("/-admin/pagecontent/DressedHtml"))
+        .with_breadcrumb("Edit", None)
+        .with_content(content_html)
+        .prepare(user_info)
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+#[handler]
+async fn dressed_html_update(
+    Path(id_str): Path<String>,
+    Form(form): Form<UpdatePageContentForm>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let kind = crate::pagecontent::PageContentKind::DressedHtml;
+    let id: Ulid = id_str.parse()?;
+
+    // Validate
+    if form.name.trim().is_empty() {
+        let content = EditDressedHtmlPage {
+            id,
+            kind,
+            name: form.name,
+            content: form.content,
+            error_message: Some("Name is required".to_string()),
+        };
+
+        let content_html = content.render_once()?;
+
+        let prepared = crate::component::AdminLayout::new("Edit Dressed HTML")
+            .with_sidebar_active("engine-room-dressed-html")
+            .with_breadcrumb("Engine Room", None)
+            .with_breadcrumb("Dressed HTML", Some("/-admin/pagecontent/DressedHtml"))
+            .with_breadcrumb("Edit", None)
+            .with_content(content_html)
+            .prepare(user_info)
+            .await?;
+
+        return Ok(poem::Response::builder()
+            .content_type("text/html")
+            .body(prepared.render_once()?));
+    }
+
+    // Update
+    let mut pagecontent = crate::pagecontent::PageContent::load((kind, id)).await?;
+    pagecontent.set_name(form.name);
+    pagecontent.clear();
+    pagecontent.extend_from_slice(form.content.as_bytes());
+    pagecontent.store().await?;
+
+    // Redirect back to list page
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::SEE_OTHER)
+        .header("Location", "/-admin/pagecontent/DressedHtml")
+        .finish())
+}
+
+#[handler]
+async fn dressed_html_delete(
+    Path(id_str): Path<String>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let kind = crate::pagecontent::PageContentKind::DressedHtml;
+    let id: Ulid = id_str.parse()?;
+    let id_string = id.to_string();
+    let kind_string = kind.as_ref();
+
+    sqlx::query!(
+        r#"DELETE FROM pagecontent WHERE pagecontent_id = ? AND kind = ?"#,
+        id_string,
+        kind_string
+    )
+    .execute(db())
+    .await?;
+
+    // Check if there are any items left
+    let exists: bool = sqlx::query_scalar!(
+        r#"SELECT EXISTS(SELECT 1 FROM pagecontent WHERE kind = ?) as "exists: bool""#,
+        kind_string
+    )
+    .fetch_one(db())
+    .await?;
+
+    let html = if !exists {
+        // If no items left, return OOB swap with empty state
+        let content = html_search_impl("DressedHtml", &HtmlSearchQuery {
+            search: None,
+            page: Some(1),
+            per_page: Some(25),
+        }).await?;
+        format!(
+            r#"<div id="dressed-html-content" hx-swap-oob="innerHTML">{}</div>"#,
+            content
+        )
+    } else {
+        // Otherwise just return empty to remove the row
+        String::new()
+    };
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(html))
+}
+
+// ==================== RawHtml Handlers ====================
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/raw_html_content.stpl.html")]
+struct RawHtmlContentTemplate {
+    items: Vec<HtmlListItem>,
+    search_query: Option<String>,
+    page: usize,
+    per_page: usize,
+    total_count: usize,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/pages/edit_raw_html.stpl.html")]
+struct EditRawHtmlPage {
+    id: Ulid,
+    kind: crate::pagecontent::PageContentKind,
+    name: String,
+    content: String,
+    error_message: Option<String>,
+}
+
+#[handler]
+async fn raw_html_list(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    let search_results = html_search_impl("RawHtml", &HtmlSearchQuery {
+        search: None,
+        page: Some(1),
+        per_page: Some(25),
+    }).await?;
+
+    let content = format!(r#"<div id="raw-html-content">{}</div>"#, search_results);
+
+    let page = PageContentWrapper {
+        title: "Raw HTML Pages".to_string(),
+        new_endpoint: "/-admin/pagecontent/RawHtml/new".to_string(),
+        content,
+    };
+    let page_html = page.render_once()?;
+
+    let prepared = crate::component::AdminLayout::new("Raw HTML")
+        .with_sidebar_active("engine-room-raw-html")
+        .with_breadcrumb("Engine Room", None)
+        .with_breadcrumb("Raw HTML", None)
+        .with_content(page_html)
+        .prepare(Some(user_info))
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+#[handler]
+async fn raw_html_search(
+    Query(query): Query<HtmlSearchQuery>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let html = html_search_impl("RawHtml", &query).await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(html))
+}
+
+#[handler]
+async fn raw_html_edit(
+    Path(id_str): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let kind = crate::pagecontent::PageContentKind::RawHtml;
+    let id: Ulid = id_str.parse()?;
+
+    let pagecontent = crate::pagecontent::PageContent::load((kind, id)).await?;
+
+    let content = EditRawHtmlPage {
+        id,
+        kind,
+        name: pagecontent.name().to_string(),
+        content: pagecontent.as_utf8()?.to_string(),
+        error_message: None,
+    };
+
+    let content_html = content.render_once()?;
+
+    let prepared = crate::component::AdminLayout::new("Edit Raw HTML")
+        .with_sidebar_active("engine-room-raw-html")
+        .with_breadcrumb("Engine Room", None)
+        .with_breadcrumb("Raw HTML", Some("/-admin/pagecontent/RawHtml"))
+        .with_breadcrumb("Edit", None)
+        .with_content(content_html)
+        .prepare(user_info)
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+#[handler]
+async fn raw_html_update(
+    Path(id_str): Path<String>,
+    Form(form): Form<UpdatePageContentForm>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let kind = crate::pagecontent::PageContentKind::RawHtml;
+    let id: Ulid = id_str.parse()?;
+
+    // Validate
+    if form.name.trim().is_empty() {
+        let content = EditRawHtmlPage {
+            id,
+            kind,
+            name: form.name,
+            content: form.content,
+            error_message: Some("Name is required".to_string()),
+        };
+
+        let content_html = content.render_once()?;
+
+        let prepared = crate::component::AdminLayout::new("Edit Raw HTML")
+            .with_sidebar_active("engine-room-raw-html")
+            .with_breadcrumb("Engine Room", None)
+            .with_breadcrumb("Raw HTML", Some("/-admin/pagecontent/RawHtml"))
+            .with_breadcrumb("Edit", None)
+            .with_content(content_html)
+            .prepare(user_info)
+            .await?;
+
+        return Ok(poem::Response::builder()
+            .content_type("text/html")
+            .body(prepared.render_once()?));
+    }
+
+    // Update
+    let mut pagecontent = crate::pagecontent::PageContent::load((kind, id)).await?;
+    pagecontent.set_name(form.name);
+    pagecontent.clear();
+    pagecontent.extend_from_slice(form.content.as_bytes());
+    pagecontent.store().await?;
+
+    // Redirect back to list page
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::SEE_OTHER)
+        .header("Location", "/-admin/pagecontent/RawHtml")
+        .finish())
+}
+
+#[handler]
+async fn raw_html_delete(
+    Path(id_str): Path<String>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let kind = crate::pagecontent::PageContentKind::RawHtml;
+    let id: Ulid = id_str.parse()?;
+    let id_string = id.to_string();
+    let kind_string = kind.as_ref();
+
+    sqlx::query!(
+        r#"DELETE FROM pagecontent WHERE pagecontent_id = ? AND kind = ?"#,
+        id_string,
+        kind_string
+    )
+    .execute(db())
+    .await?;
+
+    // Check if there are any items left
+    let exists: bool = sqlx::query_scalar!(
+        r#"SELECT EXISTS(SELECT 1 FROM pagecontent WHERE kind = ?) as "exists: bool""#,
+        kind_string
+    )
+    .fetch_one(db())
+    .await?;
+
+    let html = if !exists {
+        // If no items left, return OOB swap with empty state
+        let content = html_search_impl("RawHtml", &HtmlSearchQuery {
+            search: None,
+            page: Some(1),
+            per_page: Some(25),
+        }).await?;
+        format!(
+            r#"<div id="raw-html-content" hx-swap-oob="innerHTML">{}</div>"#,
+            content
+        )
+    } else {
+        // Otherwise just return empty to remove the row
+        String::new()
+    };
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(html))
+}
+
+// ==================== New Pagecontent Handlers ====================
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/modals/new_dressed_html.stpl.html")]
+struct NewDressedHtmlForm {
+    title: String,
+    error_message: Option<String>,
+}
+
+#[handler]
+async fn dressed_html_new(
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let form = NewDressedHtmlForm {
+        title: "Create New Dressed HTML Page".to_string(),
+        error_message: None,
+    };
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(form.render_once()?))
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/modals/new_raw_html.stpl.html")]
+struct NewRawHtmlForm {
+    title: String,
+    error_message: Option<String>,
+}
+
+#[handler]
+async fn raw_html_new(
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let form = NewRawHtmlForm {
+        title: "Create New Raw HTML Page".to_string(),
+        error_message: None,
+    };
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(form.render_once()?))
+}
+// ==================== Schedule Handlers ====================
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/schedules.stpl.html")]
+struct SchedulesPage {
+    schedules_content: String,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/schedules_content.stpl.html")]
+struct SchedulesContentTemplate {
+    items: Vec<crate::schedule::Schedule>,
+    search_query: Option<String>,
+    page: usize,
+    per_page: usize,
+    total_count: usize,
+}
+
+#[derive(serde::Deserialize)]
+struct SchedulesSearchQuery {
+    search: Option<String>,
+    page: Option<usize>,
+}
+
+#[handler]
+async fn schedules_list(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    let search_results = schedules_search_impl(&SchedulesSearchQuery {
+        search: None,
+        page: Some(1),
+    }).await?;
+
+    let content = format!(r#"<div id="schedules-content">{}</div>"#, search_results);
+
+    let page = SchedulesPage {
+        schedules_content: content,
+    };
+    let page_html = page.render_once()?;
+
+    let prepared = crate::component::AdminLayout::new("Scheduling")
+        .with_sidebar_active("schedules")
+        .with_breadcrumb("Scheduling", None)
+        .with_content(page_html)
+        .prepare(Some(user_info))
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+#[handler]
+async fn schedules_search(
+    Query(query): Query<SchedulesSearchQuery>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let content = schedules_search_impl(&query).await?;
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(content))
+}
+
+async fn schedules_search_impl(query: &SchedulesSearchQuery) -> Result<String, anyhow::Error> {
+    let page = query.page.unwrap_or(1).max(1);
+    let per_page: i64 = 25;
+    let offset = (page - 1) as i64 * per_page;
+
+    let items = if let Some(ref search) = query.search {
+        let pattern = format!("%{}%", search);
+        let items_raw = sqlx::query!(
+            r#"SELECT schedule_id,
+                      schedule_type,
+                      target_type,
+                      target,
+                      featured_entity,
+                      title,
+                      content,
+                      url,
+                      start_date,
+                      end_date,
+                      active
+               FROM schedules
+               WHERE title LIKE ?1
+               ORDER BY start_date DESC
+               LIMIT ?2 OFFSET ?3"#,
+            pattern,
+            per_page,
+            offset
+        )
+        .fetch_all(db())
+        .await?;
+
+        items_raw.into_iter().map(|row| -> Result<_, anyhow::Error> {
+            Ok(crate::schedule::Schedule {
+                schedule_id: row.schedule_id.parse()?,
+                schedule_type: row.schedule_type.parse()?,
+                target_type: row.target_type.as_deref().map(|s| s.parse()).transpose()?,
+                target: row.target,
+                featured_entity: row.featured_entity,
+                title: row.title,
+                content: row.content,
+                url: row.url,
+                start_date: row.start_date,
+                end_date: row.end_date,
+                active: row.active != 0,
+            })
+        }).collect::<Result<Vec<_>, _>>()?
+    } else {
+        let items_raw = sqlx::query!(
+            r#"SELECT schedule_id,
+                      schedule_type,
+                      target_type,
+                      target,
+                      featured_entity,
+                      title,
+                      content,
+                      url,
+                      start_date,
+                      end_date,
+                      active
+               FROM schedules
+               ORDER BY start_date DESC
+               LIMIT ?1 OFFSET ?2"#,
+            per_page,
+            offset
+        )
+        .fetch_all(db())
+        .await?;
+
+        items_raw.into_iter().map(|row| -> Result<_, anyhow::Error> {
+            Ok(crate::schedule::Schedule {
+                schedule_id: row.schedule_id.parse()?,
+                schedule_type: row.schedule_type.parse()?,
+                target_type: row.target_type.as_deref().map(|s| s.parse()).transpose()?,
+                target: row.target,
+                featured_entity: row.featured_entity,
+                title: row.title,
+                content: row.content,
+                url: row.url,
+                start_date: row.start_date,
+                end_date: row.end_date,
+                active: row.active != 0,
+            })
+        }).collect::<Result<Vec<_>, _>>()?
+    };
+
+    let total_count: i64 = if let Some(ref search) = query.search {
+        let pattern = format!("%{}%", search);
+        sqlx::query_scalar!(
+            "SELECT COUNT(*) FROM schedules WHERE title LIKE ?",
+            pattern
+        )
+        .fetch_one(db())
+        .await?
+    } else {
+        sqlx::query_scalar!("SELECT COUNT(*) FROM schedules")
+            .fetch_one(db())
+            .await?
+    };
+
+    let template = SchedulesContentTemplate {
+        items,
+        search_query: query.search.clone(),
+        page,
+        per_page: per_page as usize,
+        total_count: total_count as usize,
+    };
+
+    Ok(template.render_once()?)
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/modals/new_schedule.stpl.html")]
+struct NewScheduleForm {
+    error_message: Option<String>,
+}
+
+#[handler]
+async fn schedules_new(
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let form = NewScheduleForm {
+        error_message: None,
+    };
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(form.render_once()?))
+}
+
+#[derive(serde::Deserialize)]
+struct CreateScheduleForm {
+    title: String,
+    schedule_type: String,
+    target_type: Option<String>,
+    target: Option<String>,
+    featured_entity: Option<String>,
+    content: Option<String>,
+    url: Option<String>,
+    start_date: String,
+    end_date: String,
+    active: Option<String>,
+}
+
+#[handler]
+async fn schedules_create(
+    Form(form): Form<CreateScheduleForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::schedule::{Schedule, ScheduleType, TargetType};
+    use crate::peering::LoadStorePeered;
+
+    match (async || -> Result<Ulid, anyhow::Error> {
+        if form.title.trim().is_empty() {
+            return Err(anyhow::anyhow!("Title is required"));
+        }
+
+        let schedule_type: ScheduleType = form.schedule_type.parse()?;
+        let target_type: Option<TargetType> = form.target_type
+            .as_ref()
+            .and_then(|t| if t.is_empty() { None } else { Some(t.parse().ok()) })
+            .flatten();
+        
+        let target = form.target.as_ref()
+            .and_then(|t| if t.is_empty() { None } else { Some(t.clone()) });
+
+        let featured_entity = form.featured_entity.as_ref()
+            .and_then(|t| if t.is_empty() { None } else { Some(t.clone()) });
+
+        let mut schedule = Schedule::new(
+            schedule_type,
+            target_type,
+            target,
+            featured_entity,
+            form.title,
+            form.content,
+            form.url,
+            form.start_date,
+            form.end_date,
+        );
+
+        // Override active status if checkbox was unchecked
+        if form.active.is_none() {
+            schedule.active = false;
+        }
+
+        let id = schedule.schedule_id;
+        schedule.store().await?;
+
+        Ok(id)
+    })()
+    .await
+    {
+        Ok(_id) => {
+            // Return OOB swap with refreshed list
+            let content = schedules_search_impl(&SchedulesSearchQuery {
+                search: None,
+                page: Some(1),
+            }).await?;
+
+            let html = format!(
+                r#"<div id="schedules-content" hx-swap-oob="innerHTML">{}</div>"#,
+                content
+            );
+
+            Ok(poem::Response::builder()
+                .content_type("text/html")
+                .body(html))
+        }
+        Err(e) => {
+            let form = NewScheduleForm {
+                error_message: Some(e.to_string()),
+            };
+
+            Ok(poem::Response::builder()
+                .content_type("text/html")
+                .body(form.render_once()?))
+        }
+    }
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/edit_schedule_content.stpl.html")]
+struct EditScheduleContent {
+    schedule: crate::schedule::Schedule,
+    error_message: Option<String>,
+}
+
+#[handler]
+async fn schedules_edit(
+    Path(id_str): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::peering::LoadStorePeered;
+
+    let schedule_id: Ulid = id_str.parse()?;
+    let schedule = crate::schedule::Schedule::load(schedule_id).await?;
+
+    let content = EditScheduleContent {
+        schedule,
+        error_message: None,
+    };
+
+    let layout = AdminLayout::new("Edit Schedule")
+        .with_breadcrumb("Schedules", Some("/-admin/schedules"))
+        .with_breadcrumb("Edit", None)
+        .with_sidebar_active("schedules")
+        .with_content(content.render_once()?)
+        .prepare(user_info)
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(layout.render_once()?))
+}
+
+#[derive(serde::Deserialize)]
+struct UpdateScheduleForm {
+    title: String,
+    schedule_type: String,
+    target_type: Option<String>,
+    target: Option<String>,
+    featured_entity: Option<String>,
+    content: Option<String>,
+    url: Option<String>,
+    start_date: String,
+    end_date: String,
+    active: Option<String>,
+}
+
+#[handler]
+async fn schedules_update(
+    Path(id_str): Path<String>,
+    Form(form): Form<UpdateScheduleForm>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::schedule::{Schedule, ScheduleType, TargetType};
+    use crate::peering::LoadStorePeered;
+
+    let schedule_id: Ulid = id_str.parse()?;
+
+    match (async || -> Result<(), anyhow::Error> {
+        if form.title.trim().is_empty() {
+            return Err(anyhow::anyhow!("Title is required"));
+        }
+
+        let schedule_type: ScheduleType = form.schedule_type.parse()?;
+        let target_type: Option<TargetType> = form.target_type
+            .as_ref()
+            .and_then(|t| if t.is_empty() { None } else { Some(t.parse().ok()) })
+            .flatten();
+
+        let target = form.target.as_ref()
+            .and_then(|t| if t.is_empty() { None } else { Some(t.clone()) });
+
+        let featured_entity = form.featured_entity.as_ref()
+            .and_then(|t| if t.is_empty() { None } else { Some(t.clone()) });
+
+        let active = form.active.is_some();
+
+        let schedule = Schedule {
+            schedule_id,
+            schedule_type,
+            target_type,
+            target,
+            featured_entity,
+            title: form.title,
+            content: form.content,
+            url: form.url,
+            start_date: form.start_date,
+            end_date: form.end_date,
+            active,
+        };
+
+        schedule.store().await?;
+        Ok(())
+    })()
+    .await
+    {
+        Ok(()) => {
+            // Redirect back to schedules list
+            Ok(poem::Response::builder()
+                .status(poem::http::StatusCode::SEE_OTHER)
+                .header("Location", "/-admin/schedules")
+                .finish())
+        }
+        Err(e) => {
+            // Reload the page with error message
+            let schedule = Schedule::load(schedule_id).await?;
+            let content = EditScheduleContent {
+                schedule,
+                error_message: Some(e.to_string()),
+            };
+
+            let layout = AdminLayout::new("Edit Schedule")
+                .with_breadcrumb("Schedules", Some("/-admin/schedules"))
+                .with_breadcrumb("Edit", None)
+                .with_sidebar_active("schedules")
+                .with_content(content.render_once()?)
+                .prepare(user_info)
+                .await?;
+
+            Ok(poem::Response::builder()
+                .content_type("text/html")
+                .body(layout.render_once()?))
+        }
+    }
+}
+
+#[handler]
+async fn schedules_delete(
+    Path(id_str): Path<String>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::peering::LoadStorePeered;
+
+    let schedule_id: Ulid = id_str.parse()?;
+
+    // Use LoadStorePeered delete to properly notify peers
+    crate::schedule::Schedule::delete(schedule_id).await?;
+
+    // Check if there are any schedules left
+    let exists: bool = sqlx::query_scalar!(
+        r#"SELECT EXISTS(SELECT 1 FROM schedules) as "exists: bool""#
+    )
+    .fetch_one(db())
+    .await?;
+
+    let html = if !exists {
+        // If no items left, return OOB swap with empty state
+        let content = schedules_search_impl(&SchedulesSearchQuery {
+            search: None,
+            page: Some(1),
+        }).await?;
+        format!(
+            r#"<div id="schedules-content" hx-swap-oob="outerHTML">{}</div>"#,
+            content
+        )
+    } else {
+        // Otherwise just return empty to remove the row
+        String::new()
+    };
 
     Ok(poem::Response::builder()
         .content_type("text/html")

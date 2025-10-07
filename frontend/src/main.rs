@@ -17,6 +17,7 @@ pub mod pages;
 pub mod peering;
 pub mod project;
 pub mod quill;
+pub mod schedule;
 pub mod session;
 pub mod ui;
 pub mod upload;

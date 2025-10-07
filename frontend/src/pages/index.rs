@@ -19,6 +19,7 @@ struct IndexPage {
 struct IndexPageContent {
     #[allow(dead_code)]
     user_info: Option<Arc<BasicInfo>>,
+    featured_items: Vec<crate::schedule::FeaturedItem>,
 }
 
 #[handler]
@@ -37,8 +38,13 @@ pub async fn index_page(
         LocationInfo::default()
     };
 
+    let featured_items = crate::schedule::Schedule::get_current_featured_items()
+        .await
+        .unwrap_or_default();
+
     let layout = StandardLayout::new(IndexPageContent {
         user_info: user_info.clone(),
+        featured_items,
     })
     .prepare(user_info.clone())
     .await?;
@@ -65,8 +71,13 @@ pub async fn index_page_pseudo_handler(
         LocationInfo::default()
     };
 
+    let featured_items = crate::schedule::Schedule::get_current_featured_items()
+        .await
+        .unwrap_or_default();
+
     let layout = StandardLayout::new(IndexPageContent {
         user_info: user_info.clone(),
+        featured_items,
     })
     .prepare(user_info.clone())
     .await?;

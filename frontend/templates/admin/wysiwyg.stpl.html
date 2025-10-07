@@ -1,8 +1,8 @@
 <div class="bg-white rounded-lg shadow border border-gray-200">
     <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-        <h3 class="text-lg font-medium text-gray-900">Simple Pages</h3>
+        <h3 class="text-lg font-medium text-gray-900"><%= self.title %></h3>
         <button
-            hx-get="/-admin/wysiwyg/new"
+            hx-get="<%= self.new_endpoint %>"
             hx-target="body"
             hx-swap="beforeend"
             class="relative inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"

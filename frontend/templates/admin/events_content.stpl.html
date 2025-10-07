@@ -70,7 +70,7 @@
     
     <div class="divide-y divide-gray-200">
         <% for event in &self.events { %>
-            <div class="flex flex-col lg:grid lg:grid-cols-7 gap-3 lg:gap-4 lg:items-center px-6 py-4 hover:bg-gray-50 transition-colors">
+            <div id="event-<%= event.id %>" class="flex flex-col lg:grid lg:grid-cols-7 gap-3 lg:gap-4 lg:items-center px-6 py-4 hover:bg-gray-50 transition-colors">
               
                 <!-- Event Name -->
                 <div class="lg:col-span-1">
@@ -133,7 +133,7 @@
                         <a href="/-admin/events/<%= event.id %>" class="text-indigo-600 hover:text-indigo-900 transition-colors no-underline">
                             <wa-icon name="pencil" class="w-4 h-4"></wa-icon>
                         </a>
-                        <button hx-delete="/-admin/events/<%= event.id %>" hx-confirm="Are you sure?" class="text-red-600 hover:text-red-900 transition-colors">
+                        <button hx-delete="/-admin/events/<%= event.id %>" hx-confirm="Are you sure?" hx-target="#event-<%= event.id %>" hx-swap="outerHTML swap:0s" class="text-red-600 hover:text-red-900 transition-colors">
                             <wa-icon name="trash" class="w-4 h-4"></wa-icon>
                         </button>
                     </div>
