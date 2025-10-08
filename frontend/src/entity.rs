@@ -1,7 +1,7 @@
 use std::{fmt::Display, sync::Arc};
 
 use anyhow::Error;
-use common::{message::user::BasicInfo, shared::db};
+use common::{message::user::BasicInfo, shared::db, timestring::TimeString};
 use poem::{
     IntoResponse,
     http::StatusCode,
@@ -110,6 +110,7 @@ pub struct Entity {
     kind: EntityKind,
     target: EntityTarget,
     publish: bool,
+    created: TimeString,
 }
 
 #[derive(sailfish::TemplateOnce)]
@@ -125,6 +126,7 @@ struct EntityDB {
     kind: EntityKind,
     target: String,
     publish: bool,
+    created: TimeString,
 }
 
 impl TryFrom<EntityDB> for Entity {
@@ -159,6 +161,7 @@ impl TryFrom<EntityDB> for Entity {
             kind: value.kind,
             target,
             publish: value.publish,
+            created: value.created,
         })
     }
 }
@@ -233,6 +236,7 @@ impl Entity {
             kind,
             target,
             publish: true,
+            created: TimeString::now(),
         }
     }
 
@@ -243,6 +247,18 @@ impl Entity {
             kind,
             target,
             publish,
+            created: TimeString::now(),
+        }
+    }
+
+    #[tracing::instrument(skip(slug))]
+    pub fn with_created(slug: impl Into<String>, kind: EntityKind, target: EntityTarget, publish: bool, created: TimeString) -> Entity {
+        Entity {
+            slug: slug.into(),
+            kind,
+            target,
+            publish,
+            created,
         }
     }
 
@@ -293,7 +309,7 @@ impl Entity {
         }
 
         sqlx::query!(
-            r#"insert into "entities" ("slug", "kind", "target") values (?, ?, '00000000000000000000000000')"#,
+            r#"insert into "entities" ("slug", "kind", "target", "created") values (?, ?, '00000000000000000000000000', datetime('now'))"#,
             slug,
             EntityKind::Placeholder,
         )
@@ -483,7 +499,8 @@ impl LoadStorePeered for Entity {
                  "slug",
                  "kind" as "kind: EntityKind",
                  "target",
-                 "publish"
+                 "publish",
+                 "created" as "created: TimeString"
                from "entities"
                where LOWER("slug") = LOWER(?)"#,
             slug,
@@ -526,19 +543,22 @@ impl LoadStorePeered for Entity {
                  "slug",
                  "kind",
                  "target",
-                 "publish"
+                 "publish",
+                 "created"
                )
                values (
                  ?1,
                  ?2,
                  ?3,
-                 ?4
+                 ?4,
+                 ?5
                )
             "#,
             self.slug,
             self.kind,
             target,
             self.publish,
+            self.created,
         )
         .execute(db())
         .await?;

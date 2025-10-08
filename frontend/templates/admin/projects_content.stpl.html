@@ -19,7 +19,7 @@
                         <button type="button"
                                 hx-get="/-admin/projects/search"
                                 hx-target="#projects-content"
-                                hx-vals='{"search": "", "status": "<%= self.selected_status %>", "publish": "<%= self.selected_publish %>", "flagged": "<%= self.flagged %>", "page": "1"}'
+                                hx-vals='{"search": "", "status": "<%= self.selected_status %>", "flagged": "<%= self.flagged %>", "page": "1"}'
                                 class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
                             <wa-icon name="xmark" class="w-4 h-4"></wa-icon>
                         </button>
@@ -42,18 +42,6 @@
                         <option value="Hidden"<% if self.selected_status == "Hidden" { %> selected<% } %>>Hidden</option>
                     </select>
                     <select
-                        name="publish"
-                        class="block px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                        hx-get="/-admin/projects/search"
-                        hx-target="#projects-content"
-                        hx-trigger="change"
-                        hx-include="#project-search-form"
-                    >
-                        <option value=""<% if self.selected_publish.is_empty() { %> selected<% } %>>All Publish</option>
-                        <option value="true"<% if self.selected_publish == "true" { %> selected<% } %>>Published</option>
-                        <option value="false"<% if self.selected_publish == "false" { %> selected<% } %>>Unpublished</option>
-                    </select>
-                    <select
                         name="flagged"
                         class="block px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                         hx-get="/-admin/projects/search"
@@ -73,11 +61,10 @@
 <!-- Projects List -->
 <div class="bg-white">
     <!-- Header Row - Hidden on mobile, visible on larger screens -->
-    <div class="hidden lg:grid lg:grid-cols-7 bg-gray-50 px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
+    <div class="hidden lg:grid lg:grid-cols-6 bg-gray-50 px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
         <div>Project</div>
         <div>Presenter</div>
         <div>Status</div>
-        <div>Published</div>
         <div>Origin</div>
         <div>Created</div>
         <div>Actions</div>

@@ -495,7 +495,6 @@ pub struct AdminProject {
     pub id: String,
     pub title: String,
     pub status: String,
-    pub publish: bool,
     pub created_date: String,
     pub page_creator_id: String,
     pub page_creator_email: Option<String>,
@@ -879,7 +878,6 @@ impl AdminProjectFull {
 async fn fetch_projects_page(
     search: Option<&str>,
     status_filter: Option<&str>,
-    publish_filter: Option<&str>,
     flagged_filter: Option<&str>,
     spatial_overlap: Option<&str>, // GeoJSON geometry for overlap search
     spatial_point: Option<(f64, f64, f64)>, // (lat, lng, radius_meters) circle for intersection search
@@ -898,23 +896,21 @@ async fn fetch_projects_page(
 
     if let Some(search_term) = search.filter(|s| !s.trim().is_empty()) {
         query.push(
-            "SELECT p.project_id, p.name, p.status, COALESCE(ent.publish, 0) as publish, p.created, p.presenter,
+            "SELECT p.project_id, p.name, p.status, p.created, p.presenter,
                     p.origin, p.flagged, p.duplicate, p.is_test, p.goal, p.task, p.image,
                     p.url, p.admin_notes, p.draft, p.description
              FROM projects p
              JOIN projects_fts f ON p.project_id = f.project_id
-             LEFT JOIN entities ent ON ent.target = p.project_id AND ent.kind = 'Project'
              WHERE projects_fts MATCH ",
         );
         // With porter stemming enabled, use simple term matching for better flexibility
         query.push_bind(search_term);
     } else {
         query.push(
-            "SELECT p.project_id, p.name, p.status, COALESCE(ent.publish, 0) as publish, p.created, p.presenter,
+            "SELECT p.project_id, p.name, p.status, p.created, p.presenter,
                     p.origin, p.flagged, p.duplicate, p.is_test, p.goal, p.task, p.image,
                     p.url, p.admin_notes, p.draft, p.description
              FROM projects p
-             LEFT JOIN entities ent ON ent.target = p.project_id AND ent.kind = 'Project'
              WHERE 1=1",
         );
     }
@@ -922,17 +918,6 @@ async fn fetch_projects_page(
     if let Some(status) = status_filter.filter(|s| !s.is_empty()) {
         query.push(" AND p.status = ");
         query.push_bind(status);
-    }
-
-    if let Some(publish) = publish_filter.filter(|s| !s.is_empty()) {
-        if publish == "true" {
-            query.push(" AND ent.publish = ");
-            query.push_bind(1);
-        } else {
-            query.push(" AND (ent.publish = ");
-            query.push_bind(0);
-            query.push(" OR ent.publish IS NULL)");
-        }
     }
 
     if let Some(flagged) = flagged_filter.filter(|s| !s.is_empty()) {
@@ -1006,7 +991,6 @@ async fn fetch_projects_page(
         project_id: String,
         name: String,
         status: String,
-        publish: bool,
         created: String,
         presenter: String,
         origin: String,
@@ -1031,7 +1015,6 @@ async fn fetch_projects_page(
                 id: row.project_id,
                 title: row.name,
                 status: row.status,
-                publish: row.publish,
                 created_date: row.created,
                 page_creator_id: String::new(), // Not selected in ProjectRow query
                 page_creator_email: None,       // Not needed for project list
@@ -1058,7 +1041,6 @@ async fn fetch_projects_page(
 async fn count_projects(
     search: Option<&str>,
     status_filter: Option<&str>,
-    publish_filter: Option<&str>,
     flagged_filter: Option<&str>,
     spatial_overlap: Option<&str>,
     spatial_point: Option<(f64, f64, f64)>,
@@ -1072,24 +1054,17 @@ async fn count_projects(
         query.push(
             "SELECT COUNT(*) FROM projects p
              JOIN projects_fts f ON p.project_id = f.project_id
-             LEFT JOIN entities ent ON ent.target = p.project_id AND ent.kind = 'Project'
              WHERE projects_fts MATCH ",
         );
         // With porter stemming enabled, use simple term matching for better flexibility
         query.push_bind(search_term);
     } else {
-        query.push("SELECT COUNT(*) FROM projects p LEFT JOIN entities ent ON ent.target = p.project_id AND ent.kind = 'Project' WHERE 1=1");
+        query.push("SELECT COUNT(*) FROM projects p WHERE 1=1");
     }
 
     if let Some(status) = status_filter.filter(|s| !s.is_empty()) {
         query.push(" AND p.status = ");
         query.push_bind(status);
-    }
-
-    if let Some(publish) = publish_filter.filter(|s| !s.is_empty()) {
-        let publish_bool = publish == "true";
-        query.push(" AND ent.publish = ");
-        query.push_bind(publish_bool);
     }
 
     if let Some(flagged) = flagged_filter.filter(|s| !s.is_empty()) {
@@ -1142,7 +1117,6 @@ fn humanize_event_date(datetime_str: Option<String>) -> String {
 async fn fetch_events_page(
     search: Option<&str>,
     status_filter: Option<&str>,
-    publish_filter: Option<&str>,
     page: Option<u32>,
     per_page: Option<u32>,
 ) -> Result<Vec<AdminEvent>, anyhow::Error> {
@@ -1157,7 +1131,6 @@ async fn fetch_events_page(
     struct EventRow {
         event_id: String,
         name: String,
-        publish: i32,
         #[allow(dead_code)]
         created: String,
         location_name: String,
@@ -1172,25 +1145,23 @@ async fn fetch_events_page(
 
     if let Some(search_term) = search.filter(|s| !s.trim().is_empty()) {
         query.push(
-            "SELECT e.event_id, e.name, COALESCE(ent.publish, 0) as publish, e.created, e.location_name, e.event_type, e.entirely_online,
+            "SELECT e.event_id, e.name, e.created, e.location_name, e.event_type, e.entirely_online,
                     MIN(CASE WHEN ei.begin > datetime('now') THEN ei.begin END) as next_instance_begin,
                     COUNT(ei.begin) as instance_count,
                     CASE WHEN EXISTS(SELECT 1 FROM event_instances ei2 WHERE ei2.event_id = e.event_id AND ei2.begin <= datetime('now') AND ei2.end > datetime('now')) THEN 1 ELSE 0 END as is_currently_ongoing
              FROM events e
              JOIN events_fts f ON e.event_id = f.event_id
-             LEFT JOIN entities ent ON ent.target = e.event_id AND ent.kind = 'Event'
              LEFT JOIN event_instances ei ON e.event_id = ei.event_id
              WHERE events_fts MATCH "
         );
         query.push_bind(search_term);
     } else {
         query.push(
-            "SELECT e.event_id, e.name, COALESCE(ent.publish, 0) as publish, e.created, e.location_name, e.event_type, e.entirely_online,
+            "SELECT e.event_id, e.name, e.created, e.location_name, e.event_type, e.entirely_online,
                     MIN(CASE WHEN ei.begin > datetime('now') THEN ei.begin END) as next_instance_begin,
                     COUNT(ei.begin) as instance_count,
                     CASE WHEN EXISTS(SELECT 1 FROM event_instances ei2 WHERE ei2.event_id = e.event_id AND ei2.begin <= datetime('now') AND ei2.end > datetime('now')) THEN 1 ELSE 0 END as is_currently_ongoing
              FROM events e
-             LEFT JOIN entities ent ON ent.target = e.event_id AND ent.kind = 'Event'
              LEFT JOIN event_instances ei ON e.event_id = ei.event_id
              WHERE 1=1"
         );
@@ -1210,18 +1181,7 @@ async fn fetch_events_page(
         }
     }
 
-    if let Some(publish) = publish_filter.filter(|s| !s.is_empty()) {
-        if publish == "true" {
-            query.push(" AND ent.publish = ");
-            query.push_bind(1);
-        } else {
-            query.push(" AND (ent.publish = ");
-            query.push_bind(0);
-            query.push(" OR ent.publish IS NULL)");
-        }
-    }
-
-    query.push(" GROUP BY e.event_id, e.name, ent.publish, e.created, e.location_name, e.event_type, e.entirely_online");
+    query.push(" GROUP BY e.event_id, e.name, e.created, e.location_name, e.event_type, e.entirely_online");
     query.push(" ORDER BY e.created DESC LIMIT ");
     query.push_bind(per_page);
     query.push(" OFFSET ");
@@ -1248,11 +1208,6 @@ async fn fetch_events_page(
             AdminEvent {
                 id: row.event_id,
                 title: row.name,
-                published: if row.publish != 0 {
-                    "Published".to_string()
-                } else {
-                    "Unpublished".to_string()
-                },
                 instances: row.instance_count as u32,
                 event_date,
                 location,
@@ -1267,7 +1222,6 @@ async fn fetch_events_page(
 async fn count_events(
     search: Option<&str>,
     status_filter: Option<&str>,
-    publish_filter: Option<&str>,
 ) -> Result<u64, anyhow::Error> {
     use common::shared::db;
     use sqlx::QueryBuilder;
@@ -1278,12 +1232,11 @@ async fn count_events(
         query.push(
             "SELECT COUNT(*) FROM events e
              JOIN events_fts f ON e.event_id = f.event_id
-             LEFT JOIN entities ent ON ent.target = e.event_id AND ent.kind = 'Event'
              WHERE events_fts MATCH ",
         );
         query.push_bind(search_term);
     } else {
-        query.push("SELECT COUNT(*) FROM events e LEFT JOIN entities ent ON ent.target = e.event_id AND ent.kind = 'Event' WHERE 1=1");
+        query.push("SELECT COUNT(*) FROM events e WHERE 1=1");
     }
 
     if let Some(status) = status_filter.filter(|s| !s.is_empty()) {
@@ -1300,17 +1253,6 @@ async fn count_events(
         }
     }
 
-    if let Some(publish) = publish_filter.filter(|s| !s.is_empty()) {
-        if publish == "true" {
-            query.push(" AND ent.publish = ");
-            query.push_bind(1);
-        } else {
-            query.push(" AND (ent.publish = ");
-            query.push_bind(0);
-            query.push(" OR ent.publish IS NULL)");
-        }
-    }
-
     let count: (i64,) = query.build_query_as::<(i64,)>().fetch_one(db()).await?;
 
     Ok(count.0 as u64)
@@ -1321,7 +1263,6 @@ pub struct ProjectsPage {
     page: Option<u32>,
     search: Option<String>,
     status: Option<String>,
-    publish: Option<String>,
     flagged: Option<String>,
 }
 
@@ -1340,7 +1281,6 @@ pub struct ProjectsPagePrepared {
     pagination_include: String,
     search_term: String,
     selected_status: String,
-    selected_publish: String,
     flagged: String,
 }
 
@@ -1354,13 +1294,10 @@ impl Component for ProjectsPage {
 
         let search_ref = self.search.as_deref();
         let status_ref = self.status.as_deref();
-        let publish_ref = self.publish.as_deref();
-
         let flagged_ref = self.flagged.as_deref();
         let projects_list = match fetch_projects_page(
             search_ref,
             status_ref,
-            publish_ref,
             flagged_ref,
             None, // spatial_overlap
             None, // spatial_point
@@ -1380,7 +1317,6 @@ impl Component for ProjectsPage {
         let total_projects = count_projects(
             search_ref,
             status_ref,
-            publish_ref,
             flagged_ref,
             None, // spatial_overlap
             None, // spatial_point
@@ -1400,10 +1336,9 @@ impl Component for ProjectsPage {
             end_item: std::cmp::min(page * per_page, total_projects as u32),
             pagination_url: "/-admin/projects".to_string(),
             pagination_include:
-                "[name='search'], [name='status'], [name='publish'], [name='flagged']".to_string(),
+                "[name='search'], [name='status'], [name='flagged']".to_string(),
             search_term: self.search.unwrap_or_default(),
             selected_status: self.status.unwrap_or_default(),
-            selected_publish: self.publish.unwrap_or_default(),
             flagged: self.flagged.unwrap_or_default(),
         };
 
@@ -1422,7 +1357,6 @@ impl Component for ProjectsPage {
 pub struct AdminEvent {
     pub id: String,
     pub title: String,
-    pub published: String,
     pub instances: u32, // Number of scheduled instances
     pub event_date: String,
     pub location: String,
@@ -1506,7 +1440,6 @@ pub struct EventsPagePrepared {
     end_item: u32,
     search_term: String,
     selected_status: String,
-    selected_publish: String,
 }
 
 #[derive(Debug, TemplateOnce)]
@@ -1524,7 +1457,6 @@ pub struct EventsContent {
     pub pagination_include: String,
     pub search_term: String,
     pub selected_status: String,
-    pub selected_publish: String,
 }
 
 impl Component for EventsPage {
@@ -1536,7 +1468,7 @@ impl Component for EventsPage {
         let per_page = 10u32; // Show top 10 recent events
 
         let events_list =
-            match fetch_events_page(None, None, None, Some(page), Some(per_page)).await {
+            match fetch_events_page(None, None, Some(page), Some(per_page)).await {
                 Ok(event_results) => event_results,
                 Err(e) => {
                     tracing::warn!("Failed to fetch events from database: {}", e);
@@ -1544,7 +1476,7 @@ impl Component for EventsPage {
                 }
             };
 
-        let total_events = count_events(None, None, None).await.unwrap_or(0);
+        let total_events = count_events(None, None).await.unwrap_or(0);
 
         let events_content = EventsPagePrepared {
             events: events_list.clone(),
@@ -1556,7 +1488,6 @@ impl Component for EventsPage {
             end_item: std::cmp::min(per_page, total_events as u32),
             search_term: "".to_string(),
             selected_status: "".to_string(),
-            selected_publish: "".to_string(),
         };
 
         let content = events_content.render_once()?;
@@ -1637,7 +1568,6 @@ impl Component for AnalyticsPage {
         let top_projects = fetch_projects_page(
             None,           // no search
             Some("active"), // only active
-            Some("true"),   // only published
             None,           // no flagged filter
             None,           // spatial_overlap
             None,           // spatial_point
@@ -2149,13 +2079,11 @@ async fn projects(
     // If any search parameters are provided, perform a search instead of the default list
     if query.search.is_some()
         || query.status.is_some()
-        || query.publish.is_some()
         || query.flagged.is_some()
     {
         let search_query = ProjectSearchQuery {
             search: query.search,
             status: query.status,
-            publish: query.publish,
             flagged: query.flagged,
             page: query.page,
         };
@@ -2174,7 +2102,6 @@ async fn projects(
         page: query.page,
         search: query.search,
         status: query.status,
-        publish: query.publish,
         flagged: query.flagged,
     }
     .into_response(user_info)
@@ -3004,7 +2931,6 @@ struct ProjectPageQuery {
     page: Option<u32>,
     search: Option<String>,
     status: Option<String>,
-    publish: Option<String>,
     flagged: Option<String>,
 }
 
@@ -3012,7 +2938,6 @@ struct ProjectPageQuery {
 struct ProjectSearchQuery {
     search: Option<String>,
     status: Option<String>,
-    publish: Option<String>,
     flagged: Option<String>,
     page: Option<u32>,
 }
@@ -3021,7 +2946,6 @@ struct ProjectSearchQuery {
 struct EventSearchQuery {
     search: Option<String>,
     status: Option<String>,
-    publish: Option<String>,
     page: Option<u32>,
 }
 
@@ -3040,7 +2964,6 @@ pub struct ProjectsContent {
     pub pagination_include: String,
     pub search_term: String,
     pub selected_status: String,
-    pub selected_publish: String,
     pub flagged: String,
 }
 
@@ -3432,7 +3355,6 @@ async fn projects_search_internal(
     let filtered_projects = fetch_projects_page(
         query.search.as_deref(),
         query.status.as_deref(),
-        query.publish.as_deref(),
         query.flagged.as_deref(),
         None, // spatial_overlap
         None, // spatial_point
@@ -3446,7 +3368,6 @@ async fn projects_search_internal(
     let total_count = count_projects(
         query.search.as_deref(),
         query.status.as_deref(),
-        query.publish.as_deref(),
         query.flagged.as_deref(),
         None, // spatial_overlap
         None, // spatial_point
@@ -3474,11 +3395,10 @@ async fn projects_search_internal(
         start_item: start_item as u32,
         end_item,
         pagination_url: "/-admin/projects".to_string(),
-        pagination_include: "[name='search'], [name='status'], [name='publish'], [name='flagged']"
+        pagination_include: "[name='search'], [name='status'], [name='flagged']"
             .to_string(),
         search_term: query.search.unwrap_or_default(),
         selected_status: query.status.unwrap_or_default(),
-        selected_publish: query.publish.unwrap_or_default(),
         flagged: query.flagged.unwrap_or_default(),
     })
 }
@@ -3504,7 +3424,6 @@ async fn projects_search(
         pagination_include: projects_page.pagination_include,
         search_term: query.search.clone().unwrap_or_default(),
         selected_status: query.status.clone().unwrap_or_default(),
-        selected_publish: query.publish.clone().unwrap_or_default(),
         flagged: query.flagged.clone().unwrap_or_default(),
     };
 
@@ -3520,11 +3439,6 @@ async fn projects_search(
     if let Some(status) = &query.status {
         if !status.trim().is_empty() {
             url_params.push(format!("status={}", urlencoding::encode(status)));
-        }
-    }
-    if let Some(publish) = &query.publish {
-        if !publish.trim().is_empty() {
-            url_params.push(format!("publish={}", urlencoding::encode(publish)));
         }
     }
     if let Some(flagged) = &query.flagged {
@@ -3558,7 +3472,6 @@ async fn events_search_internal(
     let events_list = match fetch_events_page(
         query.search.as_deref(),
         query.status.as_deref(),
-        query.publish.as_deref(),
         Some(page),
         Some(per_page),
     )
@@ -3575,7 +3488,6 @@ async fn events_search_internal(
     let total_events = count_events(
         query.search.as_deref(),
         query.status.as_deref(),
-        query.publish.as_deref(),
     )
     .await
     .unwrap_or(0) as u32;
@@ -3600,7 +3512,6 @@ async fn events_search_internal(
         end_item,
         search_term: query.search.as_deref().unwrap_or("").to_string(),
         selected_status: query.status.as_deref().unwrap_or("").to_string(),
-        selected_publish: query.publish.as_deref().unwrap_or("").to_string(),
     })
 }
 
@@ -3625,7 +3536,6 @@ async fn events_search(
         pagination_include: "#event-search-form".to_string(),
         search_term: query.search.as_deref().unwrap_or("").to_string(),
         selected_status: query.status.as_deref().unwrap_or("").to_string(),
-        selected_publish: query.publish.as_deref().unwrap_or("").to_string(),
     };
 
     let html = events_content.render_once()?;
@@ -3640,11 +3550,6 @@ async fn events_search(
     if let Some(status) = &query.status {
         if !status.trim().is_empty() {
             url_params.push(format!("status={}", status));
-        }
-    }
-    if let Some(publish) = &query.publish {
-        if !publish.trim().is_empty() {
-            url_params.push(format!("publish={}", publish));
         }
     }
     let page = query.page.unwrap_or(1);
@@ -3721,7 +3626,6 @@ async fn events_delete(
         let content = events_search_internal(EventSearchQuery {
             search: None,
             status: None,
-            publish: None,
             page: Some(1),
         }).await?;
         format!(
@@ -6997,6 +6901,7 @@ struct EntityDbRow {
     kind: EntityKind,
     target: String,
     publish: bool,
+    created: common::timestring::TimeString,
 }
 
 async fn fetch_entities_content(query: &EntitySearchQuery) -> Result<EntitiesContent, anyhow::Error> {
@@ -7010,7 +6915,7 @@ async fn fetch_entities_content(query: &EntitySearchQuery) -> Result<EntitiesCon
     // Fetch all entities and filter/paginate in Rust to avoid SQLx Record conflicts
     let all_rows = sqlx::query_as!(
         EntityDbRow,
-        r#"SELECT "slug", "kind" as "kind: EntityKind", "target", "publish" FROM "entities" ORDER BY "slug""#
+        r#"SELECT "slug", "kind" as "kind: EntityKind", "target", "publish", "created" as "created: common::timestring::TimeString" FROM "entities" ORDER BY "created" DESC"#
     ).fetch_all(db()).await?;
 
     // Filter
@@ -7037,7 +6942,7 @@ async fn fetch_entities_content(query: &EntitySearchQuery) -> Result<EntitiesCon
     let mut entity_list = Vec::new();
     for row in entity_rows {
         let target = parse_database_target(row.kind, &row.target)?;
-        let entity = Entity::with_publish(&row.slug, row.kind, target, row.publish);
+        let entity = Entity::with_created(&row.slug, row.kind, target, row.publish, row.created);
         let entity_with_info = create_entity_with_info(&entity).await?;
         entity_list.push(entity_with_info);
     }

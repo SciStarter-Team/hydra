@@ -34,14 +34,79 @@
     <div class="lg:col-span-1">
         <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Target</div>
         <div class="text-sm text-gray-600">
-            <% if let Some(ref info) = self.entity.target_info { %>
-                <div class="truncate" title="<%= info %>"><%= info %></div>
-                <% if info != &self.entity.target { %>
-                    <div class="text-xs text-gray-400 font-mono mt-1 truncate" title="<%= self.entity.target %>"><%= self.entity.target %></div>
-                <% } %>
-            <% } else { %>
-                <div class="text-xs text-gray-400 font-mono truncate" title="<%= self.entity.target %>"><%= self.entity.target %></div>
-            <% } %>
+            <% match self.entity.kind {
+                crate::entity::EntityKind::Project => { %>
+                    <a href="/-admin/projects/<%= self.entity.target %>" class="hover:text-indigo-600 transition-colors no-underline">
+                        <% if let Some(ref info) = self.entity.target_info { %>
+                            <div class="truncate" title="<%= info %>"><%= info %></div>
+                            <% if info != &self.entity.target { %>
+                                <div class="text-xs text-gray-400 font-mono mt-1 truncate" title="<%= self.entity.target %>"><%= self.entity.target %></div>
+                            <% } %>
+                        <% } else { %>
+                            <div class="text-xs text-gray-400 font-mono truncate" title="<%= self.entity.target %>"><%= self.entity.target %></div>
+                        <% } %>
+                    </a>
+                <% },
+                crate::entity::EntityKind::Event => { %>
+                    <a href="/-admin/events/<%= self.entity.target %>" class="hover:text-indigo-600 transition-colors no-underline">
+                        <% if let Some(ref info) = self.entity.target_info { %>
+                            <div class="truncate" title="<%= info %>"><%= info %></div>
+                            <% if info != &self.entity.target { %>
+                                <div class="text-xs text-gray-400 font-mono mt-1 truncate" title="<%= self.entity.target %>"><%= self.entity.target %></div>
+                            <% } %>
+                        <% } else { %>
+                            <div class="text-xs text-gray-400 font-mono truncate" title="<%= self.entity.target %>"><%= self.entity.target %></div>
+                        <% } %>
+                    </a>
+                <% },
+                crate::entity::EntityKind::Wysiwyg => { %>
+                    <a href="/-admin/pagecontent/Wysiwyg/<%= self.entity.target %>" class="hover:text-indigo-600 transition-colors no-underline">
+                        <% if let Some(ref info) = self.entity.target_info { %>
+                            <div class="truncate" title="<%= info %>"><%= info %></div>
+                            <% if info != &self.entity.target { %>
+                                <div class="text-xs text-gray-400 font-mono mt-1 truncate" title="<%= self.entity.target %>"><%= self.entity.target %></div>
+                            <% } %>
+                        <% } else { %>
+                            <div class="text-xs text-gray-400 font-mono truncate" title="<%= self.entity.target %>"><%= self.entity.target %></div>
+                        <% } %>
+                    </a>
+                <% },
+                crate::entity::EntityKind::DressedHtml => { %>
+                    <a href="/-admin/pagecontent/DressedHtml/<%= self.entity.target %>" class="hover:text-indigo-600 transition-colors no-underline">
+                        <% if let Some(ref info) = self.entity.target_info { %>
+                            <div class="truncate" title="<%= info %>"><%= info %></div>
+                            <% if info != &self.entity.target { %>
+                                <div class="text-xs text-gray-400 font-mono mt-1 truncate" title="<%= self.entity.target %>"><%= self.entity.target %></div>
+                            <% } %>
+                        <% } else { %>
+                            <div class="text-xs text-gray-400 font-mono truncate" title="<%= self.entity.target %>"><%= self.entity.target %></div>
+                        <% } %>
+                    </a>
+                <% },
+                crate::entity::EntityKind::RawHtml => { %>
+                    <a href="/-admin/pagecontent/RawHtml/<%= self.entity.target %>" class="hover:text-indigo-600 transition-colors no-underline">
+                        <% if let Some(ref info) = self.entity.target_info { %>
+                            <div class="truncate" title="<%= info %>"><%= info %></div>
+                            <% if info != &self.entity.target { %>
+                                <div class="text-xs text-gray-400 font-mono mt-1 truncate" title="<%= self.entity.target %>"><%= self.entity.target %></div>
+                            <% } %>
+                        <% } else { %>
+                            <div class="text-xs text-gray-400 font-mono truncate" title="<%= self.entity.target %>"><%= self.entity.target %></div>
+                        <% } %>
+                    </a>
+                <% },
+                _ => { %>
+                    <!-- TODO: Add links for other entity types once edit pages exist -->
+                    <% if let Some(ref info) = self.entity.target_info { %>
+                        <div class="truncate" title="<%= info %>"><%= info %></div>
+                        <% if info != &self.entity.target { %>
+                            <div class="text-xs text-gray-400 font-mono mt-1 truncate" title="<%= self.entity.target %>"><%= self.entity.target %></div>
+                        <% } %>
+                    <% } else { %>
+                        <div class="text-xs text-gray-400 font-mono truncate" title="<%= self.entity.target %>"><%= self.entity.target %></div>
+                    <% } %>
+                <% }
+            } %>
         </div>
     </div>
 
