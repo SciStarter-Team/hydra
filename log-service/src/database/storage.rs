@@ -23,7 +23,8 @@ use std::sync::Arc;
 
 use crate::database::table::Table;
 use crate::database::tables::{
-    ActivityLogRow, BookmarkRow, ClickthroughRow, JoinRow, PageViewRow, ParticipationRow,
+    ActivityLogRow, BookmarkRow, ClickthroughRow, EmailEventRow, JoinRow, PageViewRow,
+    ParticipationRow,
 };
 use std::path::PathBuf;
 use url::Url;
@@ -307,6 +308,7 @@ pub struct Database {
     pub join_table: Table<JoinRow>,
     pub participation: Table<ParticipationRow>,
     pub bookmark: Table<BookmarkRow>,
+    pub email_events: Table<EmailEventRow>,
 }
 
 impl Database {
@@ -329,6 +331,7 @@ impl Database {
             join_table: Table::new(&path).await?,
             participation: Table::new(&path).await?,
             bookmark: Table::new(&path).await?,
+            email_events: Table::new(&path).await?,
         };
 
         // Register all tables with DataFusion
@@ -356,11 +359,12 @@ impl Database {
             self.join_table.shutdown(),
             self.participation.shutdown(),
             self.bookmark.shutdown(),
+            self.email_events.shutdown(),
         );
 
         // Check if any shutdown failed
         for result in [
-            results.0, results.1, results.2, results.3, results.4, results.5,
+            results.0, results.1, results.2, results.3, results.4, results.5, results.6,
         ] {
             result?;
         }

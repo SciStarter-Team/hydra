@@ -8,3 +8,4 @@ open_in_workspace "$LAUNCHER fish -C 'cd user-service && direnv exec . cargo run
 open_in_workspace "$LAUNCHER fish -C 'cd log-service && direnv exec . cargo run'" 4
 open_in_workspace "$LAUNCHER fish -C 'cd forum-service && direnv exec . cargo run'" 5
 open_in_workspace "$LAUNCHER fish -C 'cd location-service && direnv exec . cargo run'" 6
+open_in_workspace "$LAUNCHER fish -C 'cd emailer-service && direnv exec . cargo run'" 7

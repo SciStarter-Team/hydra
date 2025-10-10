@@ -1,0 +1,51 @@
+.ss-feature-project-card {
+    @apply border border-linework mb-4 bg-primary-light justify-start;
+    border-radius: 4px;
+}
+.ss-feature-project-card > div {
+    @apply p-4;
+}
+.ss-feature-project-card > div:first-child {
+    @apply bg-white;
+}
+.ss-feature-project-card > div:first-child, .ss-feature-project-card > div:first-child span,.ss-feature-project-card > div:first-child h3 {
+    line-height: 1.2;
+}
+.ss-feature-project-card > div:first-child span {
+    display: block;
+    @apply mb-1;
+}
+.ss-feature-project-card > div:first-child h3 {
+    @apply mb-2;
+}
+.ss-feature-project-card > div:last-child {
+    @apply bg-primary-light;
+}
+.ss-feature-project-card ul, .ss-feature-project-card ul > li:last-child {
+    margin-bottom: 0;
+}
+
+.ss-feature-project-card ul > li {
+    @apply text-sm;
+}
+
+.ss-feature-project-card.ss-fpc-comm {
+    @apply flex flex-col justify-between;
+}
+
+/* .ss-feature-project-card.ss-fpc-event {
+    @apply bg-white;
+} */
+
+.ss-feature-project-card.ss-fpc-event .ss-ec-info {
+    flex-basis: 100px;
+}
+
+
+.news {
+    @apply border border-linework mb-4 bg-white justify-start p-4;
+    border-radius: 4px;
+}
+.news h3 {
+    @apply text-lg mb-1;
+}

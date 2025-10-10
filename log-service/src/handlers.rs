@@ -281,3 +281,37 @@ pub async fn handle_go_url_stats(
         .await
         .map_err(Into::into)
 }
+
+pub async fn handle_email_event(req: &async_nats::service::Request) -> Result<()> {
+    let (when, event_type, sending_id, email_address, user_id, reason): (
+        String,
+        String,
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+    ) = decode_structured_message(req.message.clone())?;
+
+    use log_service::database::tables::EmailEventRow;
+
+    let row = EmailEventRow {
+        when,
+        event_type,
+        sending_id,
+        email_address,
+        user_id,
+        reason,
+    };
+
+    // Clone database reference and drop it immediately after use
+    {
+        let database = DATABASE
+            .read()
+            .as_ref()
+            .expect("Database not initialized")
+            .clone();
+        database.email_events.insert(row).await?
+    };
+
+    Ok(())
+}

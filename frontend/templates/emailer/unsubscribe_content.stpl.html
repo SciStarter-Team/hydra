@@ -1,0 +1,15 @@
+<h1>Unsubscribe from Email Communications</h1>
+
+<p>You are about to unsubscribe from future email communications from SciStarter.</p>
+
+<% if let Some(email) = &self.email { %>
+  <p>Email address: <strong><%= email %></strong></p>
+<% } %>
+
+<p>If you continue, you will no longer receive emails from us.</p>
+
+<form method="post">
+  <input type="submit" class="btn btn-primary" value="Confirm Unsubscribe">
+</form>
+
+<p><a href="/">Return to homepage</a></p>

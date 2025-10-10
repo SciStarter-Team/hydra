@@ -224,3 +224,35 @@ inventory::submit! {
         schema: BookmarkRow::schema,
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmailEventRow {
+    pub when: String,
+    pub event_type: String,
+    pub sending_id: String,
+    pub email_address: String,
+    pub user_id: Option<String>,
+    pub reason: Option<String>,
+}
+
+impl TableRow for EmailEventRow {
+    const TABLE_NAME: &'static str = "email_events";
+
+    fn schema() -> Schema {
+        Schema::new(vec![
+            Field::new("when", DataType::Utf8, false),
+            Field::new("event_type", DataType::Utf8, false),
+            Field::new("sending_id", DataType::Utf8, false),
+            Field::new("email_address", DataType::Utf8, false),
+            Field::new("user_id", DataType::Utf8, true),
+            Field::new("reason", DataType::Utf8, true),
+        ])
+    }
+}
+
+inventory::submit! {
+    TableRegistration {
+        name: EmailEventRow::TABLE_NAME,
+        schema: EmailEventRow::schema,
+    }
+}

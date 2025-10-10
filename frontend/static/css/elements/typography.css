@@ -150,6 +150,19 @@ ul.icon-list li svg {
     bottom: -4px;
 }
 
+ul.icon-list.icon-list-small li {
+  @apply mb-2;
+}
+
+ul.icon-list.icon-list-small li svg {
+  @apply w-[14px] fill-primary-action;
+    bottom: -4px;
+}
+
 .pull-quote {
   @apply border-l-4 border-primary-dark p-4 text-lg italic;
+}
+
+.header-underlined {
+  @apply border-b border-b-3 border-accent1 pb-3 inline-block;
 }

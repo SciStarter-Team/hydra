@@ -425,6 +425,74 @@ pub async fn log_clickthrough(
     .await
 }
 
+/// A convenience wrapper around [`common::service::request`] for sending
+/// emails via the emailer service.
+///
+/// Returns the sending_id which can be used to track the email delivery status.
+///
+/// # Example
+///
+/// ```no_run
+/// use common::message::email::EmailRecipient;
+/// use ulid::Ulid;
+///
+/// let sending_id = send_email(
+///     vec![EmailRecipient::UserId(user_id)],
+///     "Welcome to SciStarter",
+///     "<h1>Welcome!</h1><p>Thanks for joining.</p>",
+///     vec!["user_profile".to_string()],
+///     None,
+/// ).await?;
+/// ```
+pub async fn send_email(
+    recipients: impl Into<Vec<crate::message::email::EmailRecipient>>,
+    subject: impl Into<String>,
+    template_html: impl Into<String>,
+    data_sets: impl Into<Vec<String>>,
+    additional_data: impl Into<Option<Vec<(String, String)>>>,
+) -> Result<Ulid, Error> {
+    use crate::message::email::{SendEmailRequest, SendEmailResponse};
+
+    let email_request = SendEmailRequest {
+        template_html: template_html.into(),
+        subject: subject.into(),
+        recipients: recipients.into(),
+        data_sets: data_sets.into(),
+        additional_data: additional_data.into(),
+    };
+
+    let response: SendEmailResponse = request("emailer.send", email_request).await?;
+    Ok(response.sending_id)
+}
+
+/// A convenience wrapper around [`common::service::send`] for logging
+/// email events to the log service.
+///
+/// Event types: "sent", "bounce", "complaint", "open", "unsubscribe"
+pub fn log_email_event(
+    when: impl Into<Option<TimeString>>,
+    event_type: impl Into<String>,
+    sending_id: impl Into<Ulid>,
+    email_address: impl Into<String>,
+    user_id: impl Into<Option<Ulid>>,
+    reason: impl Into<Option<String>>,
+) -> impl Future<Output = Result<(), Error>> {
+    let when: String = when.into().unwrap_or_else(|| TimeString::now()).into();
+    let event_type: String = event_type.into();
+    let sending_id: String = sending_id.into().to_string();
+    let email_address: String = email_address.into();
+    let user_id: Option<String> = user_id
+        .into()
+        .and_then(|u| u.as_ulid().ok())
+        .map(|u| u.to_string());
+    let reason: Option<String> = reason.into();
+
+    send(
+        "log.email_event",
+        (when, event_type, sending_id, email_address, user_id, reason),
+    )
+}
+
 pub mod errors {
     use std::str::FromStr;
 

@@ -4,6 +4,7 @@ pub mod channel;
 pub mod component;
 pub mod contact;
 pub mod dev;
+pub mod emailer;
 pub mod entity;
 pub mod event;
 pub mod gourl;
@@ -249,6 +250,7 @@ async fn main() -> Result<(), Error> {
         .at("/favicon.ico", StaticFile::new("favicon.ico"))
         .nest("/-static", StaticFiles::new())
         .nest("/-uploaded", upload::anonymous_routes())
+        .nest("/messaging/emailer", emailer::routes())
         .nest_no_strip("/", dynamic())
         .with_if(
             cfg!(not(debug_assertions)),

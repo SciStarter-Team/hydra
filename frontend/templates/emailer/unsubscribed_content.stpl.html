@@ -1,0 +1,11 @@
+<h1>Unsubscribed Successfully</h1>
+
+<p>You have been successfully unsubscribed from email communications.</p>
+
+<% if let Some(email) = &self.email { %>
+  <p>Email address: <strong><%= email %></strong></p>
+<% } %>
+
+<p>You will no longer receive emails from us at this address.</p>
+
+<p><a href="/">Return to homepage</a></p>

@@ -50,6 +50,14 @@
     border-color: transparent transparent transparent #0071C2;
   }
 
+  .ribbon.ribbon-primary::before {
+    @apply border-t-primary border-r-transparent border-b-transparent border-l-transparent;
+  }
+
+  .ribbon.ribbon-primary::after {
+    @apply border-l-primary border-r-transparent border-b-transparent border-t-transparent;
+  }
+
 
   .double-ribbon {
     position: relative;
@@ -60,12 +68,13 @@
     content: '';
     position: absolute;
     top: -0.1em;
-    left: -2.74em;
+    /* left: -2.74em; */
+    left:  -1.64em;
     display: block;
     width: 0;
     height: 0;
     border-style: solid;
-    border-color: transparent #0071C2 transparent transparent  ;
+    @apply border-t-transparent border-r-primary border-b-transparent border-l-transparent;
     border-width: 0 1em 1em 0;
   }
 
@@ -73,22 +82,43 @@
     content: '';
     position: absolute;
     bottom: -0.1em;
-    left: -2.74em;
+    /* left: -2.74em; */
+    left:  -1.64em;
     display: block;
     width: 0;
     height: 0;
     border-style: solid;
-    border-color: transparent #0071C2 transparent transparent;
+    @apply border-t-transparent border-r-primary border-b-transparent border-l-transparent;
     border-width: 1em 1em 0 0;
   }
 
+  .ribbon-primary-dark .double-ribbon::after, .ribbon-primary-dark .double-ribbon::before  {
+     @apply border-t-transparent border-r-primary-dark border-b-transparent border-l-transparent;
+  }
+
+  .ribbon-lg-4xl.ribbon-contain {
+    @apply text-sm;
+  }
+
+  @media (min-width:450px) {
+    .ribbon-lg-4xl.ribbon-contain {
+      @apply text-base;
+    }
+  }
+  @media (min-width:768px) {
+    .ribbon-lg-4xl.ribbon-contain {
+      @apply text-xl;
+    }
+  }
+
+
   @media (min-width:768px) {
     .ribbon-lg-4xl::before {
-        right: -0.74em;
+        right: -0.75em;
         border-width: 0.75em 0.75em 0 0;
       }
       .ribbon-lg-4xl::after {
-        right: -0.74em;
+        right: -0.75em;
         border-width: 0.75em 0 0 0.75em;
       }
       .ribbon-lg-4xl .double-ribbon::before, .ribbon-lg-4xl .double-ribbon::after {

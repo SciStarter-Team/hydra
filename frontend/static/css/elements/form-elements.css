@@ -1,0 +1,56 @@
+form input[type=text] {
+    @apply bg-white px-4 py-2 border border-linework w-full;
+    border-radius: 4px;
+}
+form label {
+    @apply text-base block mb-2;
+}
+
+form select {
+    @apply bg-white px-4 py-2 border border-linework w-full;
+    border-radius: 4px;
+}
+
+/* form .form-toggle label {
+    display: inline-block;
+} */
+
+input:where([type="checkbox"][role="switch"]) {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  position: relative;
+  font-size: 24px;
+  width: 2em;
+  height: 1em;
+  box-sizing: content-box;
+  border-radius: 1em;
+  vertical-align: text-bottom;
+  margin: auto;
+  color: inherit;
+  @apply bg-neutral-light;
+}
+
+input:where([type="checkbox"][role="switch"])::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  transform: translate(0, -50%);
+  box-sizing: border-box;
+  width: 0.7em;
+  height: 0.7em;
+  margin: 0 0.15em;
+  border-radius: 50%;
+  background: currentcolor;
+  transition: all 200ms ease-in-out;
+}
+
+input:where([type="checkbox"][role="switch"]):checked {
+    @apply bg-accent2;
+}
+
+input:where([type="checkbox"][role="switch"]):checked::before {
+  left: 1em;
+  /* @apply bg-accent2-dark; */
+}

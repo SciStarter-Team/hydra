@@ -1,0 +1,357 @@
+use anyhow::Error;
+use aws_sdk_sesv2::Client as SesClient;
+use common::{
+    message::user::{AdminUser, AdminUserGetRequest},
+    service::request,
+    shared::db,
+    timestring::TimeString,
+};
+use std::time::Duration;
+use ulid::Ulid;
+
+use crate::{
+    datasets::DATASET_REGISTRY,
+    format::{add_footer_to_plain_text, html_to_markdown, wrap_html_layout},
+    ratelimit::{mark_sent, wait_until_can_send},
+    ses::{from_email, send_email},
+    template::merge_template,
+};
+
+/// Background task to process the email queue
+pub async fn run_queue_processor(ses_client: SesClient) {
+    loop {
+        match process_next_email(&ses_client).await {
+            Ok(processed) => {
+                if !processed {
+                    // No emails in queue, wait before checking again
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                }
+            }
+            Err(e) => {
+                tracing::error!("Error processing email: {:?}", e);
+                tokio::time::sleep(Duration::from_secs(10)).await;
+            }
+        }
+    }
+}
+
+/// Background task to process scheduled sends
+pub async fn run_scheduled_processor() {
+    loop {
+        match process_scheduled_sends().await {
+            Ok(processed) => {
+                if !processed {
+                    // No scheduled sends due, wait before checking again
+                    tokio::time::sleep(Duration::from_secs(30)).await;
+                } else {
+                    // Process next one immediately
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                }
+            }
+            Err(e) => {
+                tracing::error!("Error processing scheduled sends: {:?}", e);
+                tokio::time::sleep(Duration::from_secs(60)).await;
+            }
+        }
+    }
+}
+
+/// Process the next email in the queue
+/// Returns Ok(true) if an email was processed, Ok(false) if queue was empty
+async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
+    // Fetch next pending email from queue
+    let queue_item = sqlx::query!(
+        r#"SELECT queue_id, sending_id, target_type, target_value, data_sets, template_html, subject, additional_data
+           FROM send_queue
+           WHERE status = 'pending'
+           LIMIT 1"#
+    )
+    .fetch_optional(db())
+    .await?;
+
+    let Some(item) = queue_item else {
+        return Ok(false); // Queue is empty
+    };
+
+    // Mark as processing
+    sqlx::query!(
+        r#"UPDATE send_queue SET status = 'processing' WHERE queue_id = ?"#,
+        item.queue_id
+    )
+    .execute(db())
+    .await?;
+
+    // Resolve email address
+    let (email_address, user_id_opt) = match item.target_type.as_str() {
+        "email" => (item.target_value.clone(), None),
+        "user_id" => {
+            let user_id = item.target_value.parse::<Ulid>()?;
+            let user =
+                request::<AdminUser>("user.admin.get", AdminUserGetRequest { user_id }).await?;
+            (user.primary_email, Some(user_id))
+        }
+        _ => anyhow::bail!("Invalid target_type: {}", item.target_type),
+    };
+
+    // Check do_not_send table
+    let is_blocked = sqlx::query!(
+        r#"SELECT email_address FROM do_not_send WHERE email_address = ?"#,
+        email_address
+    )
+    .fetch_optional(db())
+    .await?;
+
+    if is_blocked.is_some() {
+        // Email is blocked, skip sending
+        let queue_id = item.queue_id.as_deref().ok_or_else(|| anyhow::anyhow!("queue_id is NULL"))?;
+        record_skip(queue_id, &item.sending_id, &email_address, "blocked").await?;
+        delete_from_queue(queue_id).await?;
+        update_sending_skipped(&item.sending_id).await?;
+        return Ok(true);
+    }
+
+    // Load data sets and collect merge fields
+    let data_set_names: Vec<String> = serde_json::from_str(&item.data_sets)?;
+    let mut all_field_names = Vec::new();
+    let mut all_field_values = Vec::new();
+
+    if let Some(uid) = user_id_opt {
+        for dataset_name in &data_set_names {
+            if let Some(dataset) = DATASET_REGISTRY.get(dataset_name) {
+                let (field_names, field_values) = dataset.get_values(uid).await?;
+                all_field_names.extend(field_names);
+                all_field_values.extend(field_values);
+            } else {
+                tracing::warn!("Unknown dataset: {}", dataset_name);
+            }
+        }
+    }
+
+    // Add additional custom merge fields
+    let additional_data: Vec<(String, String)> = serde_json::from_str(&item.additional_data)?;
+    let (add_names, add_values): (Vec<String>, Vec<String>) = additional_data.into_iter().unzip();
+    all_field_names.extend(add_names);
+    all_field_values.extend(add_values);
+
+    // Add unsubscribe URL field
+    // Use user_id if available, otherwise use email address for non-user recipients
+    let unsubscribe_param = user_id_opt
+        .map(|id| id.to_string())
+        .unwrap_or_else(|| email_address.clone());
+    let unsubscribe_path = format!(
+        "/messaging/emailer/unsubscribe?a={}&b={}",
+        item.sending_id,
+        unsubscribe_param
+    );
+    let open_path = format!(
+        "/messaging/emailer/open?a={}&b={}",
+        item.sending_id,
+        unsubscribe_param
+    );
+    all_field_names.push("UNSUBSCRIBE_URL".to_string());
+    all_field_values.push(format!("https://{}{}", env!("DOMAIN"), unsubscribe_path));
+
+    // Merge template
+    let merged_html = merge_template(&item.template_html, &all_field_names, &all_field_values)?;
+
+    // Merge subject
+    let merged_subject = merge_template(&item.subject, &all_field_names, &all_field_values)?;
+
+    // Wrap in layout
+    let final_html = wrap_html_layout(&merged_html, &unsubscribe_path, &open_path);
+
+    // Convert to plain text
+    let plain_text = html_to_markdown(&merged_html);
+    let final_text = add_footer_to_plain_text(&plain_text);
+
+    // Wait for rate limit and quota
+    wait_until_can_send().await;
+
+    // Send via SES
+    let sending_ulid = item.sending_id.parse::<Ulid>()?;
+    let ses_message_id = send_email(
+        ses_client,
+        from_email(),
+        &email_address,
+        &merged_subject,
+        &final_html,
+        &final_text,
+        sending_ulid,
+        user_id_opt,
+    )
+    .await?;
+
+    // Record success
+    let queue_id = item.queue_id.as_deref().ok_or_else(|| anyhow::anyhow!("queue_id is NULL"))?;
+    record_sent(queue_id, &item.sending_id, &email_address, &ses_message_id).await?;
+
+    // Delete from queue
+    delete_from_queue(queue_id).await?;
+
+    // Update sending metrics
+    update_sending_sent(&item.sending_id).await?;
+
+    // Mark as sent for quota tracking
+    mark_sent().await;
+
+    tracing::info!(
+        queue_id = %queue_id,
+        email = %email_address,
+        "Email sent successfully"
+    );
+
+    Ok(true)
+}
+
+async fn record_sent(
+    queue_id: &str,
+    sending_id: &str,
+    email_address: &str,
+    ses_message_id: &str,
+) -> Result<(), Error> {
+    let history_id = Ulid::new().to_string();
+    let sent_at = TimeString::now();
+
+    sqlx::query!(
+        r#"INSERT INTO send_history
+           (history_id, queue_id, sending_id, email_address, sent_at, status, ses_message_id)
+           VALUES (?, ?, ?, ?, ?, 'sent', ?)"#,
+        history_id,
+        queue_id,
+        sending_id,
+        email_address,
+        sent_at,
+        ses_message_id
+    )
+    .execute(db())
+    .await?;
+
+    Ok(())
+}
+
+async fn record_skip(
+    queue_id: &str,
+    sending_id: &str,
+    email_address: &str,
+    reason: &str,
+) -> Result<(), Error> {
+    let history_id = Ulid::new().to_string();
+
+    sqlx::query!(
+        r#"INSERT INTO send_history
+           (history_id, queue_id, sending_id, email_address, sent_at, status, skip_reason)
+           VALUES (?, ?, ?, ?, NULL, 'skipped', ?)"#,
+        history_id,
+        queue_id,
+        sending_id,
+        email_address,
+        reason
+    )
+    .execute(db())
+    .await?;
+
+    Ok(())
+}
+
+async fn delete_from_queue(queue_id: &str) -> Result<(), Error> {
+    sqlx::query!(r#"DELETE FROM send_queue WHERE queue_id = ?"#, queue_id)
+        .execute(db())
+        .await?;
+    Ok(())
+}
+
+async fn update_sending_sent(sending_id: &str) -> Result<(), Error> {
+    sqlx::query!(
+        r#"UPDATE sendings SET messages_sent = messages_sent + 1 WHERE sending_id = ?"#,
+        sending_id
+    )
+    .execute(db())
+    .await?;
+    Ok(())
+}
+
+async fn update_sending_skipped(sending_id: &str) -> Result<(), Error> {
+    sqlx::query!(
+        r#"UPDATE sendings SET messages_skipped = messages_skipped + 1 WHERE sending_id = ?"#,
+        sending_id
+    )
+    .execute(db())
+    .await?;
+    Ok(())
+}
+
+/// Process scheduled sends that are due
+/// Returns Ok(true) if a send was processed, Ok(false) if no sends are due
+async fn process_scheduled_sends() -> Result<bool, Error> {
+    let now = TimeString::now();
+
+    // Fetch next scheduled send that is due
+    let scheduled = sqlx::query!(
+        r#"SELECT scheduled_id, user_id, hook, template_html, subject, data_sets, additional_data
+           FROM scheduled_sends
+           WHERE scheduled_time <= ?
+           ORDER BY scheduled_time ASC
+           LIMIT 1"#,
+        now
+    )
+    .fetch_optional(db())
+    .await?;
+
+    let Some(item) = scheduled else {
+        return Ok(false); // No scheduled sends are due
+    };
+
+    // Create a new sending record
+    let sending_id = Ulid::new();
+    let sending_id_str = sending_id.to_string();
+    let created_at = TimeString::now();
+
+    sqlx::query!(
+        r#"INSERT INTO sendings (sending_id, created_at, subject, total_queued)
+           VALUES (?, ?, ?, 1)"#,
+        sending_id_str,
+        created_at,
+        item.subject
+    )
+    .execute(db())
+    .await?;
+
+    // Queue the email
+    let queue_id = Ulid::new();
+    let queue_id_str = queue_id.to_string();
+    let queued_at = TimeString::now();
+
+    sqlx::query!(
+        r#"INSERT INTO send_queue
+           (queue_id, sending_id, target_type, target_value, data_sets, template_html, subject, additional_data, queued_at, status)
+           VALUES (?, ?, 'user_id', ?, ?, ?, ?, ?, ?, 'pending')"#,
+        queue_id_str,
+        sending_id_str,
+        item.user_id,
+        item.data_sets,
+        item.template_html,
+        item.subject,
+        item.additional_data,
+        queued_at
+    )
+    .execute(db())
+    .await?;
+
+    // Delete the scheduled send record
+    sqlx::query!(
+        r#"DELETE FROM scheduled_sends WHERE scheduled_id = ?"#,
+        item.scheduled_id
+    )
+    .execute(db())
+    .await?;
+
+    tracing::info!(
+        scheduled_id = %item.scheduled_id,
+        user_id = %item.user_id,
+        hook = %item.hook,
+        sending_id = %sending_id,
+        "Scheduled send queued for delivery"
+    );
+
+    Ok(true)
+}

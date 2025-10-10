@@ -10,9 +10,10 @@ mod handlers;
 mod sync;
 
 use handlers::{
-    handle_activity_log, handle_clickthrough, handle_clickthrough_analytics, handle_go_url_stats,
-    handle_health_check, handle_join, handle_join_analytics, handle_page_view,
-    handle_recent_activity, handle_user_emails_update, handle_user_tags_update,
+    handle_activity_log, handle_clickthrough, handle_clickthrough_analytics,
+    handle_email_event, handle_go_url_stats, handle_health_check, handle_join,
+    handle_join_analytics, handle_page_view, handle_recent_activity, handle_user_emails_update,
+    handle_user_tags_update,
 };
 use log_service::{Database, run_compactor_service};
 use parking_lot::RwLock;
@@ -113,6 +114,7 @@ async fn main() -> Result<()> {
         handle_clickthrough
     ));
     toplevel.spawn(recv_handler!(log_group, "join", handle_join));
+    toplevel.spawn(recv_handler!(log_group, "email_event", handle_email_event));
     toplevel.spawn(handler!(
         log_group,
         "clickthrough_analytics",
@@ -151,6 +153,7 @@ async fn main() -> Result<()> {
     println!("  - log.pageview");
     println!("  - log.clickthrough");
     println!("  - log.join");
+    println!("  - log.email_event");
     println!("  - log.clickthrough_analytics");
     println!("  - log.join_analytics");
     println!("  - log.recent_activity");

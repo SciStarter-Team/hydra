@@ -28,7 +28,7 @@
 /** Load Elements **/
 @import "./elements/typography.css";
 @import "./elements/btn.css";
-
+@import "./elements/form-elements.css";
 
 
 /** Load Components **/
@@ -49,6 +49,7 @@
 @import "./components/project-card.css";
 @import "./components/event-card.css";
 @import "./components/media-object.css";
+@import "./components/feature-card.css";
 
 
 /** Load Templates (page patterns) **/
@@ -56,8 +57,8 @@
 
 
 /** Load Page Specific **/
- @import "./components/home.css";
-
+ /* @import "./components/home.css"; */
+ @import "./components/home-2.css";
 
 
 @import "./main.css";
