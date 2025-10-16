@@ -37,6 +37,8 @@ There's something for everyone.
 
 During events, and anytime in April, everyone, everywhere, is encouraged to participate in projects. No prior experience is required.
 
+Visit [https://scistarter.org/citizensciencemonth](https://scistarter.org/citizensciencemonth) to learn more about participating in and being recognized for your contribution during Citizen Science Month.
+
 ****
 ## What is SciStarter?
 SciStarter is a globally acclaimed, online citizen science hub where millions of people connect with thousands of scientific research projects in need of their help.  
@@ -46,8 +48,4 @@ SciStarter is supported by the National Science Foundation, NASA, the National L
 SciStarter is a research affiliate of Arizona State University and North Carolina State University.
 
 Visit [https://scistarter.org/](https://scistarter.org/) to learn more.
-****
-## Earn the One Million Acts of Science badge
-The One Million Acts of Science website will help you discover where you can participate in impactful citizen science projects from anywhere in the world!
 
-Visit [https://scistarter.org/citizensciencemonth](https://scistarter.org/citizensciencemonth) to learn more about participating in and being recognized for your contribution during Citizen Science Month.

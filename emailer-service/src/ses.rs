@@ -1,8 +1,8 @@
 use anyhow::Error;
 use aws_sdk_sesv2::{
+    Client as SesClient,
     config::{Credentials, Region},
     types::{Body, Content, Destination, EmailContent, Message},
-    Client as SesClient,
 };
 use ulid::Ulid;
 
@@ -48,16 +48,21 @@ pub async fn send_email(
         .unwrap_or_else(|| to_email.to_string());
     let unsubscribe_url = format!(
         "https://scistarter.org/messaging/emailer/unsubscribe?a={}&b={}",
-        sending_id,
-        unsubscribe_param
+        sending_id, unsubscribe_param
     );
 
     // Build destination
     let destination = Destination::builder().to_addresses(to_email).build();
 
     // Build message content
-    let html_content = Content::builder().data(html_body).charset("UTF-8").build()?;
-    let text_content = Content::builder().data(text_body).charset("UTF-8").build()?;
+    let html_content = Content::builder()
+        .data(html_body)
+        .charset("UTF-8")
+        .build()?;
+    let text_content = Content::builder()
+        .data(text_body)
+        .charset("UTF-8")
+        .build()?;
     let body = Body::builder()
         .html(html_content)
         .text(text_content)

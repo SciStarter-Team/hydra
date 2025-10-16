@@ -1,7 +1,7 @@
 #!/bin/fish
 set LAUNCHER term.sh
 
-open_in_workspace "$LAUNCHER nats-server -js -sd ~/tmp/nats" 10
+open_in_workspace "$LAUNCHER nats-server -V -js -sd ~/tmp/nats" 10
 sleep 1
 open_in_workspace "$LAUNCHER fish -C 'cd frontend && direnv exec . shenzi && direnv exec . cargo run'" 2
 open_in_workspace "$LAUNCHER fish -C 'cd user-service && direnv exec . cargo run'" 3

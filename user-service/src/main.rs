@@ -12,11 +12,13 @@ use futures::StreamExt;
 use tokio::{spawn, task::JoinSet, time::sleep};
 use ulid::Ulid;
 
+pub mod address_sets;
 pub mod auth;
 pub mod health;
 pub mod sessions;
 pub mod stats;
 pub mod sync;
+pub mod user_sets;
 pub mod users;
 pub mod webauthn;
 
@@ -1101,6 +1103,27 @@ async fn main() {
         "credential_delete",
         webauthn::credential_delete
     ));
+
+    // Address sets endpoints
+    let address_sets = service.group("user.address_sets");
+    toplevel.spawn(handler!(address_sets, "list", address_sets::list));
+    toplevel.spawn(handler!(address_sets, "get", address_sets::get));
+    toplevel.spawn(handler!(address_sets, "create", address_sets::create));
+    toplevel.spawn(handler!(address_sets, "update", address_sets::update));
+    toplevel.spawn(handler!(address_sets, "delete", address_sets::delete));
+    toplevel.spawn(handler!(address_sets, "add_member", address_sets::add_member));
+    toplevel.spawn(handler!(address_sets, "remove_member", address_sets::remove_member));
+
+    // User sets endpoints
+    let user_sets = service.group("user.user_sets");
+    toplevel.spawn(handler!(user_sets, "list", user_sets::list));
+    toplevel.spawn(handler!(user_sets, "get", user_sets::get));
+    toplevel.spawn(handler!(user_sets, "create", user_sets::create));
+    toplevel.spawn(handler!(user_sets, "update", user_sets::update));
+    toplevel.spawn(handler!(user_sets, "delete", user_sets::delete));
+    toplevel.spawn(handler!(user_sets, "get_detail", user_sets::get_detail));
+    toplevel.spawn(handler!(user_sets, "add_criterion", user_sets::add_criterion));
+    toplevel.spawn(handler!(user_sets, "remove_criterion", user_sets::remove_criterion));
 
     // Set up graceful shutdown
     use tokio::signal::unix::{SignalKind, signal};

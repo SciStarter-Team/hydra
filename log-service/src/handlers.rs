@@ -1,11 +1,14 @@
 use anyhow::Result;
 use common::{
     message::log::{
-        AnalyticsQuery, AnalyticsResponse, GoUrlStatsRequest, GoUrlStatsResponse,
-        RecentActivityRequest, RecentActivityResponse,
+        AffiliateParticipantsRequest, AffiliateParticipantsResponse, AnalyticsQuery,
+        AnalyticsResponse, GoUrlStatsRequest, GoUrlStatsResponse, RecentActivityRequest,
+        RecentActivityResponse,
     },
     service::decode_structured_message,
 };
+use datafusion::prelude::*;
+use ulid::Ulid;
 
 use log_service::{
     analytics::{
@@ -314,4 +317,63 @@ pub async fn handle_email_event(req: &async_nats::service::Request) -> Result<()
     };
 
     Ok(())
+}
+
+pub async fn handle_affiliate_participation(
+    req: &async_nats::service::Request,
+) -> Result<AffiliateParticipantsResponse, anyhow::Error> {
+    let request: AffiliateParticipantsRequest = decode_structured_message(req.message.clone())?;
+
+    // Clone database reference and use it in scope
+    let database = DATABASE
+        .read()
+        .as_ref()
+        .expect("Database not initialized")
+        .clone();
+
+    let ctx = database.context();
+
+    // Convert ULID and TimeString to strings for the query
+    let affiliate_id_str = request.affiliate_id.to_string();
+    let start_str = request.start.to_string();
+    let end_str = request.end.to_string();
+
+    // Query participation table for users who participated in this affiliate within the date range
+    let df = ctx
+        .table("participation")
+        .await?
+        .filter(col("entity_id").eq(lit(&affiliate_id_str)))?
+        .filter(col("when").gt_eq(lit(&start_str)))?
+        .filter(col("when").lt_eq(lit(&end_str)))?
+        .filter(col("user_id").is_not_null())?
+        .select(vec![col("user_id")])?
+        .distinct()?;
+
+    let batches = df.collect().await?;
+
+    // Extract user IDs from the result batches
+    let mut user_ids = Vec::new();
+    use datafusion::arrow::array::{Array, StringArray};
+
+    for batch in batches {
+        if batch.num_rows() == 0 {
+            continue;
+        }
+
+        let user_id_array = batch
+            .column(0)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .expect("user_id column should be StringArray");
+
+        for i in 0..user_id_array.len() {
+            if !user_id_array.is_null(i) {
+                if let Ok(user_id) = user_id_array.value(i).parse::<Ulid>() {
+                    user_ids.push(user_id);
+                }
+            }
+        }
+    }
+
+    Ok(AffiliateParticipantsResponse { user_ids })
 }

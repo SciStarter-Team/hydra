@@ -196,3 +196,167 @@ pub struct VariableInfo {
 pub struct GetDatasetVariablesResponse {
     pub variables: Vec<VariableInfo>,
 }
+
+// ============================================================================
+// Stored Email Messages
+// ============================================================================
+
+#[cfg(feature = "database")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StoredEmail {
+    pub stored_email_id: Ulid,
+    pub slug: String,
+    pub subject: String,
+    pub body_delta: String, // Quill Delta JSON
+    pub datasets: Vec<String>, // Dataset names
+    pub created_at: TimeString,
+    pub updated_at: TimeString,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListStoredEmailsRequest {
+    pub page: u32,
+    pub per_page: u32,
+    pub search: Option<String>,
+}
+
+#[cfg(feature = "database")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListStoredEmailsResponse {
+    pub emails: Vec<StoredEmail>,
+    pub total: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetStoredEmailRequest {
+    pub stored_email_id: Ulid,
+}
+
+#[cfg(feature = "database")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetStoredEmailResponse {
+    pub email: StoredEmail,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateStoredEmailRequest {
+    pub slug: String,
+    pub subject: String,
+    pub body_delta: String, // Quill Delta JSON
+    pub datasets: Vec<String>, // Dataset names
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateStoredEmailResponse {
+    pub stored_email_id: Ulid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateStoredEmailRequest {
+    pub stored_email_id: Ulid,
+    pub slug: Option<String>,
+    pub subject: Option<String>,
+    pub body_delta: Option<String>, // Quill Delta JSON
+    pub datasets: Option<Vec<String>>, // Dataset names
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateStoredEmailResponse {
+    pub success: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeleteStoredEmailRequest {
+    pub stored_email_id: Ulid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeleteStoredEmailResponse {
+    pub success: bool,
+}
+
+// ============================================================================
+// Oneoff Email Messages
+// ============================================================================
+
+#[cfg(feature = "database")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OneoffEmail {
+    pub oneoff_email_id: Ulid,
+    pub subject: String,
+    pub body_delta: String, // Quill Delta JSON
+    pub datasets: Vec<String>, // Dataset names
+    pub created_at: TimeString,
+    pub archived: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListOneoffEmailsRequest {
+    pub page: u32,
+    pub per_page: u32,
+    pub include_archived: bool,
+}
+
+#[cfg(feature = "database")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListOneoffEmailsResponse {
+    pub emails: Vec<OneoffEmail>,
+    pub total: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetOneoffEmailRequest {
+    pub oneoff_email_id: Ulid,
+}
+
+#[cfg(feature = "database")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetOneoffEmailResponse {
+    pub email: OneoffEmail,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateOneoffEmailRequest {
+    pub subject: String,
+    pub body_delta: String, // Quill Delta JSON
+    pub datasets: Vec<String>, // Dataset names
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateOneoffEmailResponse {
+    pub oneoff_email_id: Ulid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateOneoffEmailRequest {
+    pub oneoff_email_id: Ulid,
+    pub subject: Option<String>,
+    pub body_delta: Option<String>, // Quill Delta JSON
+    pub datasets: Option<Vec<String>>, // Dataset names
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateOneoffEmailResponse {
+    pub success: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeleteOneoffEmailRequest {
+    pub oneoff_email_id: Ulid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeleteOneoffEmailResponse {
+    pub success: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArchiveOneoffEmailRequest {
+    pub oneoff_email_id: Ulid,
+    pub archived: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArchiveOneoffEmailResponse {
+    pub success: bool,
+}

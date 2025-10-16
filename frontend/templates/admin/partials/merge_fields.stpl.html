@@ -1,0 +1,15 @@
+<% if self.fields.is_empty() { %>
+    <p class="text-sm text-gray-500 italic col-span-2">Select data sets above to see available merge fields</p>
+<% } else { %>
+    <% for field in &self.fields { %>
+        <button
+            type="button"
+            class="text-left px-3 py-2 bg-gray-50 hover:bg-indigo-50 border border-gray-300 hover:border-indigo-400 rounded text-sm transition-colors"
+            @click="insertMergeField('<%= field.name %>', $event)"
+            title="<%= field.description %>"
+        >
+            <div class="font-mono text-indigo-600">{{<%= field.name %>}}</div>
+            <div class="text-xs text-gray-500 mt-1"><%= field.example %></div>
+        </button>
+    <% } %>
+<% } %>

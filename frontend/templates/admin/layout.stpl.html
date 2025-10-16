@@ -89,6 +89,34 @@
                         <span>Files &amp; Links</span>
                     </a>
 
+                    <details class="group" <% if self.sidebar_active.starts_with("email-") { %>open<% } %>>
+                        <summary class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200 cursor-pointer list-none">
+                            <wa-icon name="envelope" class="w-5 h-5 flex-shrink-0"></wa-icon>
+                            <span class="flex-1">Emails</span>
+                            <wa-icon name="chevron-down" class="w-4 h-4 transition-transform group-open:rotate-180"></wa-icon>
+                        </summary>
+                        <div class="ml-8 mt-1 space-y-1">
+                            <a href="/-admin/email/oneoff" class="<%= if self.sidebar_active == "email-oneoff" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
+                                <span>One-off Emails</span>
+                            </a>
+                            <a href="/-admin/email/stored" class="<%= if self.sidebar_active == "email-stored" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
+                                <span>Stored Emails</span>
+                            </a>
+                            <a href="/-admin/email/triggers" class="<%= if self.sidebar_active == "email-triggers" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
+                                <span>Email Triggers</span>
+                            </a>
+                            <a href="/-admin/email/queue" class="<%= if self.sidebar_active == "email-queue" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
+                                <span>Email Queue</span>
+                            </a>
+                            <a href="/-admin/email/user-sets" class="<%= if self.sidebar_active == "email-user-sets" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
+                                <span>User Sets</span>
+                            </a>
+                            <a href="/-admin/email/address-sets" class="<%= if self.sidebar_active == "email-address-sets" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
+                                <span>Address Sets</span>
+                            </a>
+                        </div>
+                    </details>
+
                     <details class="group" <% if self.sidebar_active == "engine-room" || self.sidebar_active.starts_with("engine-room-") { %>open<% } %>>
                         <summary class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200 cursor-pointer list-none">
                             <wa-icon name="screwdriver-wrench" class="w-5 h-5 flex-shrink-0"></wa-icon>

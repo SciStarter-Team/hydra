@@ -1,0 +1,215 @@
+<!-- Edit Stored Email -->
+<div class="max-w-4xl mx-auto">
+    <div class="bg-white rounded-lg shadow border border-gray-200">
+        <!-- Page Header -->
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-2xl font-bold text-gray-900">Edit Stored Email</h2>
+        </div>
+
+        <!-- Message Container -->
+        <% if let Some(error) = &self.error_message { %>
+            <div class="mx-6 mt-4 p-3 text-sm text-red-700 bg-red-100 rounded-lg border border-red-200">
+                <%= error %>
+            </div>
+        <% } %>
+
+        <!-- Page Body -->
+        <div class="p-6">
+            <form
+                method="post"
+                action="/-admin/email/stored/<%= self.stored_email_id|disp %>"
+            >
+                <div class="grid grid-cols-1 gap-6">
+                    <!-- Slug -->
+                    <div>
+                        <label for="slug" class="block text-sm font-medium text-gray-700 mb-2">
+                            Slug <span class="text-red-500">*</span>
+                        </label>
+                        <input
+                            type="text"
+                            id="slug"
+                            name="slug"
+                            value="<%= self.slug %>"
+                            required
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            placeholder="email-template-slug"
+                        >
+                        <p class="mt-1 text-sm text-gray-500">A unique identifier for this email template (e.g., welcome-email, newsletter-template)</p>
+                    </div>
+
+                    <!-- Subject -->
+                    <div>
+                        <label for="subject" class="block text-sm font-medium text-gray-700 mb-2">
+                            Subject <span class="text-red-500">*</span>
+                        </label>
+                        <input
+                            type="text"
+                            id="subject"
+                            name="subject"
+                            value="<%= self.subject %>"
+                            required
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            placeholder="Enter email subject..."
+                        >
+                    </div>
+
+                    <!-- Body Editor -->
+                    <div>
+                        <label for="body_delta" class="block text-sm font-medium text-gray-700 mb-2">
+                            Email Body
+                        </label>
+                        <ss-rich-text
+                            name="body_delta"
+                            value='<%= self.body_delta %>'
+                            placeholder="Compose your email...">
+                        </ss-rich-text>
+                    </div>
+
+                    <!-- Dataset Selection -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            Data Sets
+                        </label>
+                        <p class="text-sm text-gray-500 mb-3">Select data sets to enable merge fields in your email subject and body.</p>
+                        <div class="space-y-2" id="dataset-checkboxes">
+                            <% if self.available_datasets.is_empty() { %>
+                                <p class="text-sm text-gray-500 italic">No data sets available</p>
+                            <% } else { %>
+                                <% for dataset in &self.available_datasets { %>
+                                    <label class="flex items-start">
+                                        <input
+                                            type="checkbox"
+                                            name="datasets"
+                                            value="<%= dataset.name %>"
+                                            <% if self.selected_datasets.contains(&dataset.name) { %>checked<% } %>
+                                            class="dataset-checkbox rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 mt-1"
+                                            hx-get="/-admin/email/merge-fields"
+                                            hx-include="#dataset-checkboxes input[type=checkbox]:checked"
+                                            hx-target="#merge-fields-list"
+                                            hx-swap="innerHTML"
+                                            hx-trigger="change"
+                                        >
+                                        <span class="ml-2">
+                                            <span class="text-sm font-medium text-gray-900"><%= dataset.label %></span>
+                                            <span class="block text-xs text-gray-500"><%= dataset.description %></span>
+                                        </span>
+                                    </label>
+                                <% } %>
+                            <% } %>
+                        </div>
+                    </div>
+
+                    <!-- Merge Fields -->
+                    <div x-data="mergeFieldInserter()" x-init="init()">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            Available Merge Fields
+                        </label>
+                        <p class="text-sm text-gray-500 mb-3">Click a merge field to insert it at the cursor position.</p>
+                        <div id="merge-fields-list" class="grid grid-cols-2 gap-2"
+                            hx-get="/-admin/email/merge-fields"
+                            hx-include="#dataset-checkboxes input[type=checkbox]:checked"
+                            hx-trigger="load"
+                            hx-swap="innerHTML">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Form Footer -->
+                <div class="flex items-center justify-end pt-6 space-x-2 border-t border-gray-200 mt-6">
+                    <a
+                        href="/-admin/email/stored"
+                        class="px-4 py-2 bg-gray-300 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300"
+                    >
+                        Cancel
+                    </a>
+                    <button
+                        type="submit"
+                        name="action"
+                        value="delete"
+                        class="relative px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500"
+                        hx-on:click="return confirm('Are you sure you want to delete this stored email?')"
+                    >
+                        <span>Delete</span>
+                    </button>
+                    <button
+                        type="submit"
+                        name="action"
+                        value="save"
+                        class="relative px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                        <span>Save Changes</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function mergeFieldInserter() {
+    return {
+        lastFocusedField: 'body', // Default to body
+        init() {
+            // Track focus on subject field
+            const subject = document.getElementById('subject');
+            if (subject) {
+                subject.addEventListener('focus', () => {
+                    this.lastFocusedField = 'subject';
+                });
+            }
+
+            // Track when Quill editor is focused
+            const quillElement = document.querySelector('ss-rich-text');
+            if (quillElement) {
+                // Wait for Quill to initialize
+                const checkQuill = setInterval(() => {
+                    const quill = quillElement.quill;
+                    if (quill) {
+                        clearInterval(checkQuill);
+                        quill.on('selection-change', (range) => {
+                            if (range) {
+                                // Quill has focus
+                                this.lastFocusedField = 'body';
+                            }
+                        });
+                    }
+                }, 100);
+            }
+        },
+        insertMergeField(fieldName, event) {
+            // Prevent double-firing
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+
+            const mergeTag = `{{${fieldName}}}`;
+
+            if (this.lastFocusedField === 'subject') {
+                // Insert into subject field at cursor position
+                const subject = document.getElementById('subject');
+                if (subject) {
+                    // Focus to ensure we have current cursor position
+                    subject.focus();
+                    const start = subject.selectionStart;
+                    const end = subject.selectionEnd;
+                    const value = subject.value;
+                    subject.value = value.substring(0, start) + mergeTag + value.substring(end);
+                    subject.selectionStart = subject.selectionEnd = start + mergeTag.length;
+                }
+            } else {
+                // Insert into Quill editor (body)
+                const quill = document.querySelector('ss-rich-text')?.quill;
+                if (quill) {
+                    // Focus the editor to establish cursor position if needed
+                    quill.focus();
+                    const selection = quill.getSelection();
+                    const index = selection ? selection.index : 0;
+                    quill.insertText(index, mergeTag);
+                    quill.setSelection(index + mergeTag.length);
+                }
+            }
+        }
+    };
+}
+</script>

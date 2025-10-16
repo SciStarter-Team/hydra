@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use ulid::Ulid;
+use crate::timestring::TimeString;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JoinRequest {
@@ -11,6 +13,18 @@ pub struct JoinRequest {
     pub notified: bool,
     pub activity: String,
     pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AffiliateParticipantsRequest {
+    pub affiliate_id: Ulid,
+    pub start: TimeString,
+    pub end: TimeString,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AffiliateParticipantsResponse {
+    pub user_ids: Vec<Ulid>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

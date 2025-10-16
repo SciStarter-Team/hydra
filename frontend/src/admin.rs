@@ -43,6 +43,7 @@ use jiff::{Timestamp, ToSpan, tz::TimeZone};
 use poem::{
     Endpoint, EndpointExt, IntoResponse, Route, delete, get, handler, post, put,
     web::{Form, Path, Query},
+    Request, Result as PoemResult, FromRequest, RequestBody,
 };
 use sailfish::TemplateOnce;
 use serde::{Deserialize, Serialize};
@@ -151,6 +152,29 @@ pub fn routes() -> impl Endpoint {
         .at("/schedules/search", get(schedules_search))
         .at("/schedules/new", get(schedules_new))
         .at("/schedules/:id", get(schedules_edit).post(schedules_update).delete(schedules_delete))
+        .at("/email/oneoff", get(email_oneoff).post(email_oneoff_create))
+        .at("/email/oneoff/new", get(email_oneoff_new))
+        .at("/email/oneoff/:id", get(email_oneoff_edit).post(email_oneoff_update))
+        .at("/email/stored", get(email_stored).post(email_stored_create))
+        .at("/email/stored/new", get(email_stored_new))
+        .at("/email/stored/:id", get(email_stored_edit).post(email_stored_update))
+        .at("/email/triggers", get(email_triggers))
+        .at("/email/queue", get(email_queue))
+        .at("/email/dataset/:name/variables", get(email_dataset_variables))
+        .at("/email/merge-fields", get(email_merge_fields))
+        .at("/email/address-sets", get(address_sets_list))
+        .at("/email/address-sets/new", get(address_sets_new).post(address_sets_create))
+        .at("/email/address-sets/:slug", get(address_sets_edit).post(address_sets_update).delete(address_sets_delete))
+        .at("/email/address-sets/:slug/members", post(address_sets_add_member))
+        .at("/email/address-sets/:slug/members/:email", delete(address_sets_remove_member))
+        .at("/email/user-sets", get(user_sets_list))
+        .at("/email/user-sets/new", get(user_sets_new).post(user_sets_create))
+        .at("/email/user-sets/criterion-fields", get(user_sets_criterion_fields))
+        .at("/email/user-sets/explicit-list-widget", post(user_sets_explicit_list_add_user))
+        .at("/email/user-sets/explicit-list-widget/:user_id", delete(user_sets_explicit_list_remove_user))
+        .at("/email/user-sets/:slug", get(user_sets_edit).post(user_sets_update).delete(user_sets_delete))
+        .at("/email/user-sets/:slug/criteria", post(user_sets_add_criterion))
+        .at("/email/user-sets/:slug/criteria/:id", delete(user_sets_remove_criterion))
         .nest("/autocomplete", autocomplete::routes())
         .with(StaffOnly)
 }
@@ -8636,4 +8660,1609 @@ async fn schedules_delete(
     Ok(poem::Response::builder()
         .content_type("text/html")
         .body(html))
+}
+
+// Email admin pages
+
+// Query parameters for email pages
+#[derive(Debug, Deserialize)]
+pub struct EmailPageQuery {
+    page: Option<u32>,
+    search: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct OneoffEmailPageQuery {
+    page: Option<u32>,
+    include_archived: Option<bool>,
+}
+
+// Stored emails list
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/email_stored.stpl.html")]
+pub struct EmailStoredContent {
+    pub emails: Vec<common::message::email::StoredEmail>,
+    pub current_page: u32,
+    pub total: u32,
+    pub has_previous: bool,
+    pub has_next: bool,
+    pub per_page: u32,
+    pub start_item: u32,
+    pub end_item: u32,
+}
+
+#[handler]
+async fn email_stored(
+    Query(query): Query<EmailPageQuery>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let page = query.page.unwrap_or(1);
+    let per_page = 25;
+
+    let request = common::message::email::ListStoredEmailsRequest {
+        page,
+        per_page,
+        search: query.search,
+    };
+
+    let response: common::message::email::ListStoredEmailsResponse =
+        common::service::request("emailer.stored.list", request)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to list stored emails: {}", e))?;
+
+    let total_pages = (response.total + per_page - 1) / per_page;
+    let has_previous = page > 1;
+    let has_next = page < total_pages;
+    let start_item = if response.total == 0 {
+        0
+    } else {
+        ((page - 1) * per_page) + 1
+    };
+    let end_item = std::cmp::min(page * per_page, response.total);
+
+    let content = EmailStoredContent {
+        emails: response.emails,
+        current_page: page,
+        total: response.total,
+        has_previous,
+        has_next,
+        per_page,
+        start_item,
+        end_item,
+    };
+
+    let html = content.render_once()?;
+
+    AdminLayout::new("Stored Emails")
+        .with_breadcrumb("Stored Emails", None)
+        .with_sidebar_active("email-stored")
+        .with_content(html)
+        .into_response(user_info)
+        .await
+}
+
+// Oneoff emails list
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/email_oneoff.stpl.html")]
+pub struct EmailOneoffContent {
+    pub emails: Vec<common::message::email::OneoffEmail>,
+    pub current_page: u32,
+    pub total: u32,
+    pub has_previous: bool,
+    pub has_next: bool,
+    pub per_page: u32,
+    pub start_item: u32,
+    pub end_item: u32,
+    pub include_archived: bool,
+}
+
+#[handler]
+async fn email_oneoff(
+    Query(query): Query<OneoffEmailPageQuery>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let page = query.page.unwrap_or(1);
+    let per_page = 25;
+    let include_archived = query.include_archived.unwrap_or(false);
+
+    let request = common::message::email::ListOneoffEmailsRequest {
+        page,
+        per_page,
+        include_archived,
+    };
+
+    let response: common::message::email::ListOneoffEmailsResponse =
+        common::service::request("emailer.oneoff.list", request)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to list oneoff emails: {}", e))?;
+
+    let total_pages = (response.total + per_page - 1) / per_page;
+    let has_previous = page > 1;
+    let has_next = page < total_pages;
+    let start_item = if response.total == 0 {
+        0
+    } else {
+        ((page - 1) * per_page) + 1
+    };
+    let end_item = std::cmp::min(page * per_page, response.total);
+
+    let content = EmailOneoffContent {
+        emails: response.emails,
+        current_page: page,
+        total: response.total,
+        has_previous,
+        has_next,
+        per_page,
+        start_item,
+        end_item,
+        include_archived,
+    };
+
+    let html = content.render_once()?;
+
+    AdminLayout::new("One-off Emails")
+        .with_breadcrumb("One-off Emails", None)
+        .with_sidebar_active("email-oneoff")
+        .with_content(html)
+        .into_response(user_info)
+        .await
+}
+
+// Stored email new page
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/pages/new_stored_email.stpl.html")]
+pub struct NewStoredEmailPage {
+    pub error_message: Option<String>,
+    pub datasets: Vec<common::message::email::DatasetInfo>,
+}
+
+#[handler]
+async fn email_stored_new(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    // Fetch available datasets
+    let datasets_response = common::service::request::<common::message::email::ListDatasetsResponse>(
+        "emailer.datasets.list",
+        common::message::email::ListDatasetsRequest {},
+    )
+    .await
+    .unwrap_or(common::message::email::ListDatasetsResponse {
+        datasets: vec![],
+    });
+
+    let content = NewStoredEmailPage {
+        error_message: None,
+        datasets: datasets_response.datasets,
+    };
+    let html = content.render_once()?;
+    AdminLayout::new("Create Stored Email")
+        .with_breadcrumb("Stored Emails", Some("/-admin/email/stored"))
+        .with_breadcrumb("Create", None)
+        .with_sidebar_active("email-stored")
+        .with_quill()
+        .with_content(html)
+        .into_response(user_info)
+        .await
+}
+
+// Stored email create handler
+#[derive(Debug, Deserialize)]
+pub struct CreateStoredEmailForm {
+    slug: String,
+    subject: String,
+    body_delta: String,
+    #[serde(default, deserialize_with = "deserialize_string_or_vec")]
+    datasets: Vec<String>,
+}
+
+#[handler]
+async fn email_stored_create(
+    Form(form): Form<CreateStoredEmailForm>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let request = common::message::email::CreateStoredEmailRequest {
+        slug: form.slug,
+        subject: form.subject,
+        body_delta: form.body_delta,
+        datasets: form.datasets,
+    };
+
+    match common::service::request::<common::message::email::CreateStoredEmailResponse>(
+        "emailer.stored.create",
+        request,
+    )
+    .await
+    {
+        Ok(_response) => Ok(poem::Response::builder()
+            .status(poem::http::StatusCode::SEE_OTHER)
+            .header("Location", "/-admin/email/stored")
+            .finish()),
+        Err(e) => {
+            // Re-fetch datasets for error display
+            let datasets_response = common::service::request::<common::message::email::ListDatasetsResponse>(
+                "emailer.datasets.list",
+                common::message::email::ListDatasetsRequest {},
+            )
+            .await
+            .unwrap_or(common::message::email::ListDatasetsResponse {
+                datasets: vec![],
+            });
+
+            let content = NewStoredEmailPage {
+                error_message: Some(format!("Failed to create stored email: {}", e)),
+                datasets: datasets_response.datasets,
+            };
+            let html = content.render_once()?;
+            AdminLayout::new("Create Stored Email")
+                .with_breadcrumb("Stored Emails", Some("/-admin/email/stored"))
+                .with_breadcrumb("Create", None)
+                .with_sidebar_active("email-stored")
+                .with_content(html)
+                .into_response(user_info)
+                .await
+        }
+    }
+}
+
+// Stored email edit page
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/pages/edit_stored_email.stpl.html")]
+pub struct EditStoredEmailPage {
+    pub stored_email_id: ulid::Ulid,
+    pub slug: String,
+    pub subject: String,
+    pub body_delta: String,
+    pub selected_datasets: Vec<String>,
+    pub error_message: Option<String>,
+    pub available_datasets: Vec<common::message::email::DatasetInfo>,
+}
+
+#[handler]
+async fn email_stored_edit(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let stored_email_id = id
+        .parse::<ulid::Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid stored email ID format"))?;
+
+    let request = common::message::email::GetStoredEmailRequest { stored_email_id };
+
+    // Fetch datasets
+    let datasets_response = common::service::request::<common::message::email::ListDatasetsResponse>(
+        "emailer.datasets.list",
+        common::message::email::ListDatasetsRequest {},
+    )
+    .await
+    .unwrap_or(common::message::email::ListDatasetsResponse {
+        datasets: vec![],
+    });
+
+    match common::service::request::<common::message::email::GetStoredEmailResponse>(
+        "emailer.stored.get",
+        request,
+    )
+    .await
+    {
+        Ok(response) => {
+            let email = response.email;
+            let content = EditStoredEmailPage {
+                stored_email_id: email.stored_email_id,
+                slug: email.slug,
+                subject: email.subject,
+                body_delta: email.body_delta,
+                selected_datasets: email.datasets,
+                error_message: None,
+                available_datasets: datasets_response.datasets,
+            };
+            let html = content.render_once()?;
+            AdminLayout::new("Edit Stored Email")
+                .with_breadcrumb("Stored Emails", Some("/-admin/email/stored"))
+                .with_breadcrumb("Edit", None)
+                .with_sidebar_active("email-stored")
+                .with_quill()
+                .with_content(html)
+                .into_response(user_info)
+                .await
+        }
+        Err(e) => Err(anyhow::anyhow!("Failed to load stored email: {}", e)),
+    }
+}
+
+// Stored email update handler
+#[derive(Debug, Deserialize)]
+pub struct UpdateStoredEmailForm {
+    action: String,
+    slug: Option<String>,
+    subject: Option<String>,
+    body_delta: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_string_or_vec")]
+    datasets: Vec<String>,
+}
+
+#[handler]
+async fn email_stored_update(
+    Path(id): Path<String>,
+    Form(form): Form<UpdateStoredEmailForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let stored_email_id = id
+        .parse::<ulid::Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid stored email ID format"))?;
+
+    match form.action.as_str() {
+        "delete" => {
+            let request = common::message::email::DeleteStoredEmailRequest { stored_email_id };
+            common::service::request::<common::message::email::DeleteStoredEmailResponse>(
+                "emailer.stored.delete",
+                request,
+            )
+            .await?;
+        }
+        "save" => {
+            let request = common::message::email::UpdateStoredEmailRequest {
+                stored_email_id,
+                slug: form.slug,
+                subject: form.subject,
+                body_delta: form.body_delta,
+                datasets: if form.datasets.is_empty() {
+                    None
+                } else {
+                    Some(form.datasets)
+                },
+            };
+            common::service::request::<common::message::email::UpdateStoredEmailResponse>(
+                "emailer.stored.update",
+                request,
+            )
+            .await?;
+        }
+        _ => return Err(anyhow::anyhow!("Invalid action")),
+    }
+
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::SEE_OTHER)
+        .header("Location", "/-admin/email/stored")
+        .finish())
+}
+
+// Oneoff email new page
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/pages/new_oneoff_email.stpl.html")]
+pub struct NewOneoffEmailPage {
+    pub error_message: Option<String>,
+    pub datasets: Vec<common::message::email::DatasetInfo>,
+}
+
+#[handler]
+async fn email_oneoff_new(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    // Fetch available datasets
+    let datasets_response = common::service::request::<common::message::email::ListDatasetsResponse>(
+        "emailer.datasets.list",
+        common::message::email::ListDatasetsRequest {},
+    )
+    .await
+    .unwrap_or(common::message::email::ListDatasetsResponse {
+        datasets: vec![],
+    });
+
+    let content = NewOneoffEmailPage {
+        error_message: None,
+        datasets: datasets_response.datasets,
+    };
+    let html = content.render_once()?;
+    AdminLayout::new("Create One-off Email")
+        .with_breadcrumb("One-off Emails", Some("/-admin/email/oneoff"))
+        .with_breadcrumb("Create", None)
+        .with_sidebar_active("email-oneoff")
+        .with_quill()
+        .with_content(html)
+        .into_response(user_info)
+        .await
+}
+
+// Oneoff email create handler
+#[derive(Debug, Deserialize)]
+pub struct CreateOneoffEmailForm {
+    subject: String,
+    body_delta: String,
+    #[serde(default, deserialize_with = "deserialize_string_or_vec")]
+    datasets: Vec<String>,
+}
+
+#[handler]
+async fn email_oneoff_create(
+    Form(form): Form<CreateOneoffEmailForm>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let request = common::message::email::CreateOneoffEmailRequest {
+        subject: form.subject,
+        body_delta: form.body_delta,
+        datasets: form.datasets,
+    };
+
+    match common::service::request::<common::message::email::CreateOneoffEmailResponse>(
+        "emailer.oneoff.create",
+        request,
+    )
+    .await
+    {
+        Ok(_response) => Ok(poem::Response::builder()
+            .status(poem::http::StatusCode::SEE_OTHER)
+            .header("Location", "/-admin/email/oneoff")
+            .finish()),
+        Err(e) => {
+            // Re-fetch datasets for error display
+            let datasets_response = common::service::request::<common::message::email::ListDatasetsResponse>(
+                "emailer.datasets.list",
+                common::message::email::ListDatasetsRequest {},
+            )
+            .await
+            .unwrap_or(common::message::email::ListDatasetsResponse {
+                datasets: vec![],
+            });
+
+            let content = NewOneoffEmailPage {
+                error_message: Some(format!("Failed to create one-off email: {}", e)),
+                datasets: datasets_response.datasets,
+            };
+            let html = content.render_once()?;
+            AdminLayout::new("Create One-off Email")
+                .with_breadcrumb("One-off Emails", Some("/-admin/email/oneoff"))
+                .with_breadcrumb("Create", None)
+                .with_sidebar_active("email-oneoff")
+                .with_content(html)
+                .into_response(user_info)
+                .await
+        }
+    }
+}
+
+// Oneoff email edit page
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/pages/edit_oneoff_email.stpl.html")]
+pub struct EditOneoffEmailPage {
+    pub oneoff_email_id: ulid::Ulid,
+    pub subject: String,
+    pub body_delta: String,
+    pub archived: bool,
+    pub selected_datasets: Vec<String>,
+    pub error_message: Option<String>,
+    pub available_datasets: Vec<common::message::email::DatasetInfo>,
+}
+
+#[handler]
+async fn email_oneoff_edit(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let oneoff_email_id = id
+        .parse::<ulid::Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid oneoff email ID format"))?;
+
+    let request = common::message::email::GetOneoffEmailRequest { oneoff_email_id };
+
+    // Fetch datasets
+    let datasets_response = common::service::request::<common::message::email::ListDatasetsResponse>(
+        "emailer.datasets.list",
+        common::message::email::ListDatasetsRequest {},
+    )
+    .await
+    .unwrap_or(common::message::email::ListDatasetsResponse {
+        datasets: vec![],
+    });
+
+    match common::service::request::<common::message::email::GetOneoffEmailResponse>(
+        "emailer.oneoff.get",
+        request,
+    )
+    .await
+    {
+        Ok(response) => {
+            let email = response.email;
+            let content = EditOneoffEmailPage {
+                oneoff_email_id: email.oneoff_email_id,
+                subject: email.subject,
+                body_delta: email.body_delta,
+                archived: email.archived,
+                selected_datasets: email.datasets,
+                error_message: None,
+                available_datasets: datasets_response.datasets,
+            };
+            let html = content.render_once()?;
+            AdminLayout::new("Edit One-off Email")
+                .with_breadcrumb("One-off Emails", Some("/-admin/email/oneoff"))
+                .with_breadcrumb("Edit", None)
+                .with_sidebar_active("email-oneoff")
+                .with_quill()
+                .with_content(html)
+                .into_response(user_info)
+                .await
+        }
+        Err(e) => Err(anyhow::anyhow!("Failed to load one-off email: {}", e)),
+    }
+}
+
+// Oneoff email update handler
+#[derive(Debug, Deserialize)]
+pub struct UpdateOneoffEmailForm {
+    action: String,
+    subject: Option<String>,
+    body_delta: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_string_or_vec")]
+    datasets: Vec<String>,
+}
+
+#[handler]
+async fn email_oneoff_update(
+    Path(id): Path<String>,
+    Form(form): Form<UpdateOneoffEmailForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let oneoff_email_id = id
+        .parse::<ulid::Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid oneoff email ID format"))?;
+
+    match form.action.as_str() {
+        "delete" => {
+            let request = common::message::email::DeleteOneoffEmailRequest { oneoff_email_id };
+            common::service::request::<common::message::email::DeleteOneoffEmailResponse>(
+                "emailer.oneoff.delete",
+                request,
+            )
+            .await?;
+        }
+        "archive" => {
+            let request = common::message::email::ArchiveOneoffEmailRequest {
+                oneoff_email_id,
+                archived: true,
+            };
+            common::service::request::<common::message::email::ArchiveOneoffEmailResponse>(
+                "emailer.oneoff.archive",
+                request,
+            )
+            .await?;
+        }
+        "unarchive" => {
+            let request = common::message::email::ArchiveOneoffEmailRequest {
+                oneoff_email_id,
+                archived: false,
+            };
+            common::service::request::<common::message::email::ArchiveOneoffEmailResponse>(
+                "emailer.oneoff.archive",
+                request,
+            )
+            .await?;
+        }
+        "save" => {
+            let request = common::message::email::UpdateOneoffEmailRequest {
+                oneoff_email_id,
+                subject: form.subject,
+                body_delta: form.body_delta,
+                datasets: if form.datasets.is_empty() {
+                    None
+                } else {
+                    Some(form.datasets)
+                },
+            };
+            common::service::request::<common::message::email::UpdateOneoffEmailResponse>(
+                "emailer.oneoff.update",
+                request,
+            )
+            .await?;
+        }
+        _ => return Err(anyhow::anyhow!("Invalid action")),
+    }
+
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::SEE_OTHER)
+        .header("Location", "/-admin/email/oneoff")
+        .finish())
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/email_triggers.stpl.html")]
+pub struct EmailTriggersContent;
+
+#[handler]
+async fn email_triggers(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let content = EmailTriggersContent.render_once()?;
+    AdminLayout::new("Email Triggers")
+        .with_breadcrumb("Email Triggers", None)
+        .with_sidebar_active("email-triggers")
+        .with_content(content)
+        .into_response(user_info)
+        .await
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/email_queue.stpl.html")]
+pub struct EmailQueueContent;
+
+#[handler]
+async fn email_queue(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let content = EmailQueueContent.render_once()?;
+    AdminLayout::new("Email Queue")
+        .with_breadcrumb("Email Queue", None)
+        .with_sidebar_active("email-queue")
+        .with_content(content)
+        .into_response(user_info)
+        .await
+}
+
+// Helper to deserialize either a single string or array of strings
+fn deserialize_string_or_vec<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::Deserialize;
+
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum StringOrVec {
+        String(String),
+        Vec(Vec<String>),
+    }
+
+    match StringOrVec::deserialize(deserializer)? {
+        StringOrVec::String(s) => Ok(vec![s]),
+        StringOrVec::Vec(v) => Ok(v),
+    }
+}
+
+// Custom form extractor using serde_qs to support array notation (field[])
+pub struct QsForm<T>(pub T);
+
+impl<'a, T: serde::de::DeserializeOwned> FromRequest<'a> for QsForm<T> {
+    async fn from_request(_req: &'a Request, body: &mut RequestBody) -> PoemResult<Self> {
+        let data = body.take()?.into_vec().await?;
+        let config = serde_qs::Config::new(10, false); // max_depth=10, strict=false
+        let form = config.deserialize_bytes(&data)
+            .map_err(|e| poem::Error::from_string(
+                format!("Failed to parse form data: {}", e),
+                poem::http::StatusCode::BAD_REQUEST
+            ))?;
+        Ok(QsForm(form))
+    }
+}
+
+// HTMX endpoint to fetch merge fields HTML fragment for selected datasets
+#[derive(Debug, Deserialize)]
+pub struct MergeFieldsQuery {
+    #[serde(default, deserialize_with = "deserialize_string_or_vec")]
+    datasets: Vec<String>,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/partials/merge_fields.stpl.html")]
+pub struct MergeFieldsPartial {
+    pub fields: Vec<common::message::email::VariableInfo>,
+}
+
+#[handler]
+async fn email_merge_fields(
+    Query(query): Query<MergeFieldsQuery>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let mut all_fields = Vec::new();
+
+    // Fetch variables for each selected dataset
+    for dataset_name in query.datasets {
+        let request = common::message::email::GetDatasetVariablesRequest {
+            dataset_name: dataset_name.clone(),
+        };
+
+        if let Ok(response) = common::service::request::<common::message::email::GetDatasetVariablesResponse>(
+            "emailer.datasets.variables",
+            request,
+        )
+        .await
+        {
+            all_fields.extend(response.variables);
+        }
+    }
+
+    let content = MergeFieldsPartial { fields: all_fields };
+    let html = content.render_once()?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(html))
+}
+
+// API endpoint to fetch dataset variables
+#[handler]
+async fn email_dataset_variables(
+    Path(dataset_name): Path<String>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let request = common::message::email::GetDatasetVariablesRequest { dataset_name };
+
+    match common::service::request::<common::message::email::GetDatasetVariablesResponse>(
+        "emailer.datasets.variables",
+        request,
+    )
+    .await
+    {
+        Ok(response) => {
+            let json = serde_json::to_string(&response.variables)?;
+            Ok(poem::Response::builder()
+                .content_type("application/json")
+                .body(json))
+        }
+        Err(e) => Err(anyhow::anyhow!("Failed to fetch dataset variables: {}", e)),
+    }
+}
+
+// ============================================================================
+// Address Sets
+// ============================================================================
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/address_sets.stpl.html")]
+pub struct AddressSetsContent {
+    pub address_sets: Vec<common::message::user::AddressSetInfo>,
+}
+
+#[handler]
+async fn address_sets_list(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let request = common::message::user::AddressSetListRequest {};
+
+    let response: common::message::user::AddressSetListResponse =
+        common::service::request("user.address_sets.list", request)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to list address sets: {}", e))?;
+
+    let content = AddressSetsContent {
+        address_sets: response.address_sets,
+    };
+
+    let html = content.render_once()?;
+
+    AdminLayout::new("Address Sets")
+        .with_breadcrumb("Address Sets", None)
+        .with_sidebar_active("email-address-sets")
+        .with_content(html)
+        .into_response(user_info)
+        .await
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/pages/new_address_set.stpl.html")]
+pub struct NewAddressSetPage {
+    pub error_message: Option<String>,
+}
+
+#[handler]
+async fn address_sets_new(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let content = NewAddressSetPage {
+        error_message: None,
+    };
+
+    let html = content.render_once()?;
+
+    AdminLayout::new("New Address Set")
+        .with_breadcrumb("Address Sets", Some("/-admin/email/address-sets"))
+        .with_breadcrumb("New", None)
+        .with_sidebar_active("email-address-sets")
+        .with_content(html)
+        .into_response(user_info)
+        .await
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateAddressSetForm {
+    slug: String,
+    name: String,
+}
+
+#[handler]
+async fn address_sets_create(
+    Form(form): Form<CreateAddressSetForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let request = common::message::user::AddressSetCreateRequest {
+        slug: form.slug,
+        name: form.name,
+    };
+
+    common::service::request::<common::message::user::AddressSetResponse>(
+        "user.address_sets.create",
+        request,
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!("Failed to create address set: {}", e))?;
+
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::SEE_OTHER)
+        .header("Location", "/-admin/email/address-sets")
+        .finish())
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/pages/edit_address_set.stpl.html")]
+pub struct EditAddressSetPage {
+    pub slug: String,
+    pub name: String,
+    pub addresses: Vec<String>,
+    pub error_message: Option<String>,
+}
+
+#[handler]
+async fn address_sets_edit(
+    Path(slug): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let request = common::message::user::AddressSetGetRequest { slug: slug.clone() };
+
+    match common::service::request::<common::message::user::AddressSetGetResponse>(
+        "user.address_sets.get",
+        request,
+    )
+    .await
+    {
+        Ok(response) => {
+            let content = EditAddressSetPage {
+                slug: response.slug,
+                name: response.name,
+                addresses: response.addresses,
+                error_message: None,
+            };
+            let html = content.render_once()?;
+            AdminLayout::new("Edit Address Set")
+                .with_breadcrumb("Address Sets", Some("/-admin/email/address-sets"))
+                .with_breadcrumb("Edit", None)
+                .with_sidebar_active("email-address-sets")
+                .with_content(html)
+                .into_response(user_info)
+                .await
+        }
+        Err(e) => Err(anyhow::anyhow!("Failed to load address set: {}", e)),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateAddressSetForm {
+    name: String,
+}
+
+#[handler]
+async fn address_sets_update(
+    Path(slug): Path<String>,
+    Form(form): Form<UpdateAddressSetForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let request = common::message::user::AddressSetUpdateRequest {
+        slug: slug.clone(),
+        name: form.name,
+    };
+
+    common::service::request::<common::message::user::AddressSetResponse>(
+        "user.address_sets.update",
+        request,
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!("Failed to update address set: {}", e))?;
+
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::SEE_OTHER)
+        .header("Location", format!("/-admin/email/address-sets/{}", slug))
+        .finish())
+}
+
+#[handler]
+async fn address_sets_delete(
+    Path(slug): Path<String>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let request = common::message::user::AddressSetDeleteRequest { slug };
+
+    common::service::request::<common::message::user::AddressSetResponse>(
+        "user.address_sets.delete",
+        request,
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!("Failed to delete address set: {}", e))?;
+
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::OK)
+        .header("HX-Redirect", "/-admin/email/address-sets")
+        .finish())
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AddMemberForm {
+    email_address: String,
+}
+
+#[handler]
+async fn address_sets_add_member(
+    Path(slug): Path<String>,
+    Form(form): Form<AddMemberForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let email_address = form.email_address.clone();
+    let request = common::message::user::AddressSetAddMemberRequest {
+        slug: slug.clone(),
+        email_address: form.email_address,
+    };
+
+    common::service::request::<common::message::user::AddressSetMemberResponse>(
+        "user.address_sets.add_member",
+        request,
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!("Failed to add member: {}", e))?;
+
+    let html = format!(
+        r#"<li class="py-3 flex justify-between items-center">
+    <span class="text-sm text-gray-900">{}</span>
+    <button
+        hx-delete="/-admin/email/address-sets/{}/members/{}"
+        hx-confirm="Remove {} from this address set?"
+        hx-target="closest li"
+        hx-swap="outerHTML swap:500ms"
+        class="text-sm text-red-600 hover:text-red-900"
+    >
+        Remove
+    </button>
+</li>
+<div id="empty-state" hx-swap-oob="delete"></div>"#,
+        email_address, slug, email_address, email_address
+    );
+
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::OK)
+        .content_type("text/html")
+        .body(html))
+}
+
+#[handler]
+async fn address_sets_remove_member(
+    Path((slug, email)): Path<(String, String)>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let request = common::message::user::AddressSetRemoveMemberRequest {
+        slug: slug.clone(),
+        email_address: email,
+    };
+
+    common::service::request::<common::message::user::AddressSetMemberResponse>(
+        "user.address_sets.remove_member",
+        request,
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!("Failed to remove member: {}", e))?;
+
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::OK)
+        .finish())
+}
+
+// ============================================================================
+// User Sets
+// ============================================================================
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/user_sets.stpl.html")]
+pub struct UserSetsContent {
+    pub user_sets: Vec<common::message::user::UserSetInfo>,
+}
+
+#[handler]
+async fn user_sets_list(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let request = common::message::user::UserSetListRequest {};
+
+    let response: common::message::user::UserSetListResponse =
+        common::service::request("user.user_sets.list", request)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to list user sets: {}", e))?;
+
+    let content = UserSetsContent {
+        user_sets: response.user_sets,
+    };
+
+    let html = content.render_once()?;
+
+    AdminLayout::new("User Sets")
+        .with_breadcrumb("User Sets", None)
+        .with_sidebar_active("email-user-sets")
+        .with_content(html)
+        .into_response(user_info)
+        .await
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/pages/new_user_set.stpl.html")]
+pub struct NewUserSetPage {
+    pub error_message: Option<String>,
+}
+
+#[handler]
+async fn user_sets_new(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let content = NewUserSetPage {
+        error_message: None,
+    };
+
+    let html = content.render_once()?;
+
+    AdminLayout::new("New User Set")
+        .with_breadcrumb("User Sets", Some("/-admin/email/user-sets"))
+        .with_breadcrumb("New", None)
+        .with_sidebar_active("email-user-sets")
+        .with_content(html)
+        .into_response(user_info)
+        .await
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateUserSetForm {
+    slug: String,
+    name: String,
+}
+
+#[handler]
+async fn user_sets_create(
+    Form(form): Form<CreateUserSetForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let request = common::message::user::UserSetCreateRequest {
+        slug: form.slug,
+        name: form.name,
+    };
+
+    common::service::request::<common::message::user::UserSetResponse>(
+        "user.user_sets.create",
+        request,
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!("Failed to create user set: {}", e))?;
+
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::SEE_OTHER)
+        .header("Location", "/-admin/email/user-sets")
+        .finish())
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/pages/edit_user_set.stpl.html")]
+pub struct EditUserSetPage {
+    pub slug: String,
+    pub name: String,
+    pub criteria: Vec<common::message::user::UserSetCriterionWithId>,
+    pub project_names: std::collections::HashMap<Ulid, String>,
+    pub user_emails: std::collections::HashMap<Ulid, String>,
+    pub error_message: Option<String>,
+}
+
+#[handler]
+async fn user_sets_edit(
+    Path(slug): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let request = common::message::user::UserSetGetRequest { slug: slug.clone() };
+
+    match common::service::request::<common::message::user::UserSetDetailResponse>(
+        "user.user_sets.get_detail",
+        request,
+    )
+    .await
+    {
+        Ok(response) => {
+            // Extract all project IDs and user IDs from criteria
+            let mut project_ids = Vec::new();
+            let mut user_ids = Vec::new();
+
+            for criterion in &response.criteria {
+                match &criterion.criterion {
+                    common::message::user::UserSetCriterion::AffiliateParticipation { affiliate_id, .. } => {
+                        project_ids.push(*affiliate_id);
+                    }
+                    common::message::user::UserSetCriterion::ExplicitList { user_ids: ids } => {
+                        user_ids.extend(ids.iter().copied());
+                    }
+                    _ => {}
+                }
+            }
+
+            // Look up project names and user emails
+            let project_name_list = if !project_ids.is_empty() {
+                autocomplete::resolve_project_names(project_ids).await.unwrap_or_default()
+            } else {
+                vec![]
+            };
+
+            let user_email_list = if !user_ids.is_empty() {
+                autocomplete::resolve_user_names(user_ids).await.unwrap_or_default()
+            } else {
+                vec![]
+            };
+
+            // Convert to HashMaps for easy lookup
+            let project_names: std::collections::HashMap<Ulid, String> = project_name_list.into_iter().collect();
+            let user_emails: std::collections::HashMap<Ulid, String> = user_email_list.into_iter().collect();
+
+            let content = EditUserSetPage {
+                slug: response.slug,
+                name: response.name,
+                criteria: response.criteria,
+                project_names,
+                user_emails,
+                error_message: None,
+            };
+            let html = content.render_once()?;
+            AdminLayout::new("Edit User Set")
+                .with_breadcrumb("User Sets", Some("/-admin/email/user-sets"))
+                .with_breadcrumb("Edit", None)
+                .with_sidebar_active("email-user-sets")
+                .with_content(html)
+                .into_response(user_info)
+                .await
+        }
+        Err(e) => Err(anyhow::anyhow!("Failed to load user set: {}", e)),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateUserSetForm {
+    name: String,
+}
+
+// Criterion field templates
+#[derive(TemplateOnce)]
+#[template(path = "admin/partials/criterion_fields/has_tag.stpl.html")]
+pub struct HasTagCriterionFields;
+
+#[derive(TemplateOnce)]
+#[template(path = "admin/partials/criterion_fields/has_point_in_region.stpl.html")]
+pub struct HasPointInRegionCriterionFields;
+
+#[derive(TemplateOnce)]
+#[template(path = "admin/partials/criterion_fields/affiliate_participation.stpl.html")]
+pub struct AffiliateParticipationCriterionFields {
+    widget: autocomplete::EntityAutocomplete,
+}
+
+#[derive(TemplateOnce)]
+#[template(path = "admin/partials/criterion_fields/is_page_manager.stpl.html")]
+pub struct IsPageManagerCriterionFields;
+
+#[derive(TemplateOnce)]
+#[template(path = "admin/partials/criterion_fields/is_staff.stpl.html")]
+pub struct IsStaffCriterionFields;
+
+#[derive(TemplateOnce)]
+#[template(path = "admin/partials/explicit_list_widget.stpl.html")]
+pub struct ExplicitListWidget {
+    user_names: Vec<(Ulid, String)>,
+    widget: autocomplete::EntityAutocomplete,
+}
+
+#[derive(TemplateOnce)]
+#[template(path = "admin/partials/criterion_fields/explicit_list.stpl.html")]
+pub struct ExplicitListCriterionFields {
+    inner: ExplicitListWidget,
+}
+
+#[derive(TemplateOnce)]
+#[template(path = "admin/partials/user_set_criteria_list.stpl.html")]
+pub struct UserSetCriteriaList {
+    slug: String,
+    criteria: Vec<common::message::user::UserSetCriterionWithId>,
+    project_names: std::collections::HashMap<Ulid, String>,
+    user_emails: std::collections::HashMap<Ulid, String>,
+}
+
+#[handler]
+async fn user_sets_update(
+    Path(slug): Path<String>,
+    Form(form): Form<UpdateUserSetForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let request = common::message::user::UserSetUpdateRequest {
+        slug: slug.clone(),
+        name: form.name,
+    };
+
+    common::service::request::<common::message::user::UserSetResponse>(
+        "user.user_sets.update",
+        request,
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!("Failed to update user set: {}", e))?;
+
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::SEE_OTHER)
+        .header("Location", format!("/-admin/email/user-sets/{}", slug))
+        .finish())
+}
+
+#[handler]
+async fn user_sets_delete(
+    Path(slug): Path<String>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let request = common::message::user::UserSetDeleteRequest { slug };
+
+    common::service::request::<common::message::user::UserSetResponse>(
+        "user.user_sets.delete",
+        request,
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!("Failed to delete user set: {}", e))?;
+
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::OK)
+        .header("HX-Redirect", "/-admin/email/user-sets")
+        .finish())
+}
+
+#[derive(Debug, Deserialize)]
+struct CriterionFieldsQuery {
+    criterion_type: String,
+}
+
+#[handler]
+async fn user_sets_criterion_fields(
+    Query(query): Query<CriterionFieldsQuery>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    use common::message::user::UserSetCriterionType;
+    use std::str::FromStr;
+
+    let criterion_type = UserSetCriterionType::from_str(&query.criterion_type)
+        .map_err(|_| anyhow::anyhow!("Invalid criterion type: {}", query.criterion_type))?;
+
+    let html = match criterion_type {
+        UserSetCriterionType::HasTag => {
+            HasTagCriterionFields.render_once()?
+        },
+        UserSetCriterionType::HasPointInRegion => {
+            HasPointInRegionCriterionFields.render_once()?
+        },
+        UserSetCriterionType::AffiliateParticipation => {
+            let widget = autocomplete::EntityAutocomplete::new_project_selector(
+                "affiliate_id",
+                "Affiliate Project",
+                "Search for project..."
+            );
+            AffiliateParticipationCriterionFields { widget }.render_once()?
+        },
+        UserSetCriterionType::IsPageManager => {
+            IsPageManagerCriterionFields.render_once()?
+        },
+        UserSetCriterionType::IsStaff => {
+            IsStaffCriterionFields.render_once()?
+        },
+        UserSetCriterionType::ExplicitList => {
+            let widget = autocomplete::EntityAutocomplete::new_user_selector(
+                "new_user_id",
+                "",
+                "Search for user to add..."
+            );
+            let inner = ExplicitListWidget {
+                user_names: vec![],
+                widget,
+            };
+            ExplicitListCriterionFields { inner }.render_once()?
+        },
+    };
+
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::OK)
+        .content_type("text/html")
+        .body(html))
+}
+
+async fn render_explicit_list_widget(user_ids: Vec<Ulid>) -> Result<String, anyhow::Error> {
+    // Resolve user names
+    let user_names = if !user_ids.is_empty() {
+        autocomplete::resolve_user_names(user_ids.clone()).await?
+    } else {
+        vec![]
+    };
+
+    let widget = autocomplete::EntityAutocomplete::new_user_selector(
+        "new_user_id",
+        "",
+        "Search for user to add..."
+    );
+
+    let template = ExplicitListWidget {
+        user_names,
+        widget,
+    };
+
+    Ok(template.render_once()?)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ExplicitListAddForm {
+    new_user_id: Option<String>,
+    #[serde(default)]
+    user_ids: Vec<String>,
+}
+
+#[handler]
+async fn user_sets_explicit_list_add_user(
+    QsForm(form): QsForm<ExplicitListAddForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let mut user_ids: Vec<Ulid> = form
+        .user_ids
+        .iter()
+        .filter_map(|s| s.parse().ok())
+        .collect();
+
+    if let Some(new_id_str) = form.new_user_id {
+        if let Ok(new_id) = new_id_str.parse::<Ulid>() {
+            if !user_ids.contains(&new_id) {
+                user_ids.push(new_id);
+            }
+        }
+    }
+
+    let html = render_explicit_list_widget(user_ids).await?;
+
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::OK)
+        .content_type("text/html")
+        .body(html))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ExplicitListRemoveForm {
+    #[serde(default)]
+    user_ids: Vec<String>,
+}
+
+#[handler]
+async fn user_sets_explicit_list_remove_user(
+    Path(user_id_to_remove): Path<String>,
+    QsForm(form): QsForm<ExplicitListRemoveForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let remove_id = user_id_to_remove
+        .parse::<Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid user ID"))?;
+
+    let user_ids: Vec<Ulid> = form
+        .user_ids
+        .iter()
+        .filter_map(|s| s.parse().ok())
+        .filter(|id| *id != remove_id)
+        .collect();
+
+    let html = render_explicit_list_widget(user_ids).await?;
+
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::OK)
+        .content_type("text/html")
+        .body(html))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AddCriterionForm {
+    criterion_type: String,
+    operation: Option<String>,
+    tag: Option<String>,
+    geojson: Option<String>,
+    affiliate_id: Option<String>,
+    start: Option<String>,
+    end: Option<String>,
+    #[serde(default)]
+    user_ids: Vec<String>,
+}
+
+#[handler]
+async fn user_sets_add_criterion(
+    Path(slug): Path<String>,
+    QsForm(form): QsForm<AddCriterionForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    use common::message::user::UserSetCriterionType;
+    use std::str::FromStr;
+
+    // Parse the criterion type from string
+    let criterion_type = UserSetCriterionType::from_str(&form.criterion_type)
+        .map_err(|_| anyhow::anyhow!("Invalid criterion type: {}", form.criterion_type))?;
+
+    // Parse criterion data based on type
+    let criterion = match criterion_type {
+        UserSetCriterionType::HasTag => {
+            let tag = form.tag.ok_or_else(|| anyhow::anyhow!("Missing tag"))?;
+            common::message::user::UserSetCriterion::HasTag { tag }
+        }
+        UserSetCriterionType::HasPointInRegion => {
+            let geojson = form.geojson.ok_or_else(|| anyhow::anyhow!("Missing geojson"))?;
+            common::message::user::UserSetCriterion::HasPointInRegion { geojson }
+        }
+        UserSetCriterionType::AffiliateParticipation => {
+            let affiliate_id_str = form.affiliate_id.ok_or_else(|| anyhow::anyhow!("Missing affiliate_id"))?;
+            let affiliate_id = affiliate_id_str
+                .parse::<Ulid>()
+                .map_err(|e| anyhow::anyhow!("Invalid affiliate_id: {}", e))?;
+
+            let start_str = form.start.ok_or_else(|| anyhow::anyhow!("Missing start date"))?;
+            let start = TimeString::try_from(start_str)
+                .map_err(|e| anyhow::anyhow!("Invalid start time: {}", e))?;
+
+            let end_str = form.end.ok_or_else(|| anyhow::anyhow!("Missing end date"))?;
+            let end = TimeString::try_from(end_str)
+                .map_err(|e| anyhow::anyhow!("Invalid end time: {}", e))?;
+
+            common::message::user::UserSetCriterion::AffiliateParticipation {
+                affiliate_id,
+                start,
+                end,
+            }
+        }
+        UserSetCriterionType::IsPageManager => common::message::user::UserSetCriterion::IsPageManager,
+        UserSetCriterionType::IsStaff => common::message::user::UserSetCriterion::IsStaff,
+        UserSetCriterionType::ExplicitList => {
+            if form.user_ids.is_empty() {
+                return Err(anyhow::anyhow!("Missing user IDs"));
+            }
+            let parsed_ids: Result<Vec<Ulid>, _> = form.user_ids.iter().map(|s| s.parse::<Ulid>()).collect();
+            let user_ids = parsed_ids.map_err(|e| anyhow::anyhow!("Invalid ULID: {}", e))?;
+
+            common::message::user::UserSetCriterion::ExplicitList { user_ids }
+        }
+    };
+
+    // Parse the operation type
+    let operation = form.operation.as_deref().unwrap_or("union");
+    let operation = common::message::user::CriterionOperation::from_str(operation)
+        .map_err(|_| anyhow::anyhow!("Invalid operation: {}", form.operation.as_deref().unwrap_or("unknown")))?;
+
+    let request = common::message::user::UserSetAddCriterionRequest {
+        slug: slug.clone(),
+        criterion,
+        operation,
+    };
+
+    common::service::request::<common::message::user::UserSetCriterionResponse>(
+        "user.user_sets.add_criterion",
+        request,
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!("Failed to add criterion: {}", e))?;
+
+    // Fetch updated criteria list
+    let get_request = common::message::user::UserSetGetRequest { slug: slug.clone() };
+    let response = common::service::request::<common::message::user::UserSetDetailResponse>(
+        "user.user_sets.get_detail",
+        get_request,
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!("Failed to fetch updated user set: {}", e))?;
+
+    // Extract all project IDs and user IDs from criteria
+    let mut project_ids = Vec::new();
+    let mut user_ids = Vec::new();
+
+    for criterion in &response.criteria {
+        match &criterion.criterion {
+            common::message::user::UserSetCriterion::AffiliateParticipation { affiliate_id, .. } => {
+                project_ids.push(*affiliate_id);
+            }
+            common::message::user::UserSetCriterion::ExplicitList { user_ids: ids } => {
+                user_ids.extend(ids.iter().copied());
+            }
+            _ => {}
+        }
+    }
+
+    // Look up project names and user emails
+    let project_name_list = if !project_ids.is_empty() {
+        autocomplete::resolve_project_names(project_ids).await.unwrap_or_default()
+    } else {
+        vec![]
+    };
+
+    let user_email_list = if !user_ids.is_empty() {
+        autocomplete::resolve_user_names(user_ids).await.unwrap_or_default()
+    } else {
+        vec![]
+    };
+
+    // Convert to HashMaps for easy lookup
+    let project_names: std::collections::HashMap<Ulid, String> = project_name_list.into_iter().collect();
+    let user_emails: std::collections::HashMap<Ulid, String> = user_email_list.into_iter().collect();
+
+    // Render criteria list
+    let criteria_list = UserSetCriteriaList {
+        slug: slug.clone(),
+        criteria: response.criteria,
+        project_names,
+        user_emails,
+    };
+    let list_html = criteria_list.render_once()?;
+
+    // Render fresh criterion fields for the same type (OOB swap)
+    let fields_html = match criterion_type {
+        UserSetCriterionType::HasTag => {
+            HasTagCriterionFields.render_once()?
+        },
+        UserSetCriterionType::HasPointInRegion => {
+            HasPointInRegionCriterionFields.render_once()?
+        },
+        UserSetCriterionType::AffiliateParticipation => {
+            let widget = autocomplete::EntityAutocomplete::new_project_selector(
+                "affiliate_id",
+                "Affiliate Project",
+                "Search for project..."
+            );
+            AffiliateParticipationCriterionFields { widget }.render_once()?
+        },
+        UserSetCriterionType::IsPageManager => {
+            IsPageManagerCriterionFields.render_once()?
+        },
+        UserSetCriterionType::IsStaff => {
+            IsStaffCriterionFields.render_once()?
+        },
+        UserSetCriterionType::ExplicitList => {
+            let widget = autocomplete::EntityAutocomplete::new_user_selector(
+                "new_user_id",
+                "",
+                "Search for user to add..."
+            );
+            let inner = ExplicitListWidget {
+                user_names: vec![],
+                widget,
+            };
+            ExplicitListCriterionFields { inner }.render_once()?
+        },
+    };
+
+    // Combine with OOB swap
+    let response_html = format!(
+        "{}\n<div id=\"criterion-fields-container\" hx-swap-oob=\"true\">{}</div>",
+        list_html, fields_html
+    );
+
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::OK)
+        .content_type("text/html")
+        .body(response_html))
+}
+
+#[handler]
+async fn user_sets_remove_criterion(
+    Path((slug, id)): Path<(String, String)>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let criterion_id = id
+        .parse::<i64>()
+        .map_err(|_| anyhow::anyhow!("Invalid criterion ID"))?;
+
+    let request = common::message::user::UserSetRemoveCriterionRequest {
+        slug: slug.clone(),
+        criterion_id,
+    };
+
+    common::service::request::<common::message::user::UserSetCriterionResponse>(
+        "user.user_sets.remove_criterion",
+        request,
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!("Failed to remove criterion: {}", e))?;
+
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::OK)
+        .finish())
 }

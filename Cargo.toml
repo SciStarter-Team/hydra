@@ -1,3 +1,11 @@
 [workspace]
-resolver = "2"
-members = [ "common", "emailer-service", "forum-service","frontend", "location-service", "log-service", "user-service"]
+resolver = "3"
+members = [
+    "common",
+    "emailer-service",
+    "forum-service",
+    "frontend",
+    "location-service",
+    "log-service",
+    "user-service",
+]

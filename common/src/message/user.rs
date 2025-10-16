@@ -454,3 +454,212 @@ pub struct AdminAnalyticsResponse {
     pub weekly_signups: u32,
     pub daily_signups: u32,
 }
+
+// Address Sets
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AddressSetInfo {
+    pub slug: String,
+    pub name: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AddressSetListRequest {}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AddressSetListResponse {
+    pub address_sets: Vec<AddressSetInfo>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AddressSetGetRequest {
+    pub slug: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AddressSetGetResponse {
+    pub slug: String,
+    pub name: String,
+    pub addresses: Vec<String>,
+}
+
+// User Sets
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserSetInfo {
+    pub slug: String,
+    pub name: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserSetListRequest {}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserSetListResponse {
+    pub user_sets: Vec<UserSetInfo>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserSetGetRequest {
+    pub slug: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserSetGetResponse {
+    pub slug: String,
+    pub name: String,
+    pub user_ids: Vec<Ulid>,
+}
+
+// User Set Criteria
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, strum::EnumDiscriminants)]
+#[strum_discriminants(derive(strum::EnumString, strum::AsRefStr))]
+#[strum_discriminants(name(UserSetCriterionType))]
+pub enum UserSetCriterion {
+    HasTag { tag: String },
+    HasPointInRegion { geojson: String },
+    AffiliateParticipation {
+        affiliate_id: Ulid,
+        start: TimeString,
+        end: TimeString
+    },
+    IsPageManager,
+    IsStaff,
+    ExplicitList { user_ids: Vec<Ulid> },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, strum::EnumString, strum::AsRefStr)]
+#[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
+pub enum CriterionOperation {
+    Union,
+    Intersect,
+}
+
+impl Default for CriterionOperation {
+    fn default() -> Self {
+        CriterionOperation::Union
+    }
+}
+
+// Address Set CRUD
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AddressSetCreateRequest {
+    pub slug: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AddressSetUpdateRequest {
+    pub slug: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AddressSetDeleteRequest {
+    pub slug: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AddressSetResponse {
+    pub success: bool,
+    pub message: String,
+}
+
+// Address Set Member Management
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AddressSetAddMemberRequest {
+    pub slug: String,
+    pub email_address: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AddressSetRemoveMemberRequest {
+    pub slug: String,
+    pub email_address: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AddressSetMemberResponse {
+    pub success: bool,
+    pub message: String,
+}
+
+// User Set CRUD
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserSetCreateRequest {
+    pub slug: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserSetUpdateRequest {
+    pub slug: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserSetDeleteRequest {
+    pub slug: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserSetResponse {
+    pub success: bool,
+    pub message: String,
+}
+
+// User Set Criteria Management
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserSetAddCriterionRequest {
+    pub slug: String,
+    pub criterion: UserSetCriterion,
+    pub operation: CriterionOperation,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserSetRemoveCriterionRequest {
+    pub slug: String,
+    pub criterion_id: i64,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserSetCriterionResponse {
+    pub success: bool,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserSetCriterionWithId {
+    pub id: i64,
+    pub criterion: UserSetCriterion,
+    #[serde(default)]
+    pub operation: CriterionOperation,
+}
+
+impl UserSetCriterionWithId {
+    pub fn display_type(&self) -> &'static str {
+        match &self.criterion {
+            UserSetCriterion::HasTag { .. } => "HasTag",
+            UserSetCriterion::HasPointInRegion { .. } => "HasPointInRegion",
+            UserSetCriterion::AffiliateParticipation { .. } => "AffiliateParticipation",
+            UserSetCriterion::IsPageManager => "IsPageManager",
+            UserSetCriterion::IsStaff => "IsStaff",
+            UserSetCriterion::ExplicitList { .. } => "ExplicitList",
+        }
+    }
+
+    pub fn display_operation(&self) -> &'static str {
+        match self.operation {
+            CriterionOperation::Union => "OR",
+            CriterionOperation::Intersect => "AND",
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserSetDetailResponse {
+    pub slug: String,
+    pub name: String,
+    pub criteria: Vec<UserSetCriterionWithId>,
+}
