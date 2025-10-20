@@ -21,12 +21,24 @@ pub struct SendEmailRequest {
 pub enum EmailRecipient {
     Email(String),
     UserId(Ulid),
+    UserSet { slug: String },
+    AddressSet { slug: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SendEmailResponse {
     pub sending_id: Ulid,
-    pub total_queued: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddTargetsToSendingRequest {
+    pub sending_id: Ulid,
+    pub recipients: Vec<EmailRecipient>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddTargetsToSendingResponse {
+    pub success: bool,
 }
 
 // ============================================================================

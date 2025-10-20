@@ -89,6 +89,7 @@
                     <option value="AffiliateParticipation">Affiliate Participation</option>
                     <option value="IsPageManager">Is Page Manager</option>
                     <option value="IsStaff">Is Staff</option>
+                    <option value="IsVerified">Is Verified</option>
                     <option value="ExplicitList">Explicit List</option>
                 </select>
             </div>
@@ -169,6 +170,9 @@
                                             <% }
                                             common::message::user::UserSetCriterion::IsStaff => { %>
                                                 All staff users
+                                            <% }
+                                            common::message::user::UserSetCriterion::IsVerified => { %>
+                                                All users with verified primary email addresses
                                             <% }
                                             common::message::user::UserSetCriterion::ExplicitList { user_ids } => { %>
                                                 <%= user_ids.len() %> user<% if user_ids.len() != 1 { %>s<% } %><% if !user_ids.is_empty() { %>:

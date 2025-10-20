@@ -155,9 +155,11 @@ pub fn routes() -> impl Endpoint {
         .at("/email/oneoff", get(email_oneoff).post(email_oneoff_create))
         .at("/email/oneoff/new", get(email_oneoff_new))
         .at("/email/oneoff/:id", get(email_oneoff_edit).post(email_oneoff_update))
+        .at("/email/oneoff/:id/send", post(email_oneoff_send))
         .at("/email/stored", get(email_stored).post(email_stored_create))
         .at("/email/stored/new", get(email_stored_new))
         .at("/email/stored/:id", get(email_stored_edit).post(email_stored_update))
+        .at("/email/stored/:id/send", post(email_stored_send))
         .at("/email/triggers", get(email_triggers))
         .at("/email/queue", get(email_queue))
         .at("/email/dataset/:name/variables", get(email_dataset_variables))
@@ -175,6 +177,9 @@ pub fn routes() -> impl Endpoint {
         .at("/email/user-sets/:slug", get(user_sets_edit).post(user_sets_update).delete(user_sets_delete))
         .at("/email/user-sets/:slug/criteria", post(user_sets_add_criterion))
         .at("/email/user-sets/:slug/criteria/:id", delete(user_sets_remove_criterion))
+        .at("/api/recipient-search", get(api_recipient_search))
+        .at("/api/recipient-add", post(api_recipient_add))
+        .at("/api/recipient-remove", delete(api_recipient_remove))
         .nest("/autocomplete", autocomplete::routes())
         .with(StaffOnly)
 }
@@ -513,6 +518,10 @@ pub struct UserRow {
     pub oob: bool,
     pub oob_swap: String,
 }
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/partials/recipient_picker.stpl.html")]
+pub struct RecipientPickerPartial;
 
 #[derive(Debug, Clone)]
 pub struct AdminProject {
@@ -9026,6 +9035,75 @@ async fn email_stored_update(
         .finish())
 }
 
+#[handler]
+async fn email_stored_send(
+    Path(id): Path<String>,
+    QsForm(form): QsForm<SendOneoffEmailForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let stored_email_id = id
+        .parse::<ulid::Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid stored email ID format"))?;
+
+    // Get the email template
+    let email_response: common::message::email::GetStoredEmailResponse =
+        common::service::request(
+            "emailer.stored.get",
+            common::message::email::GetStoredEmailRequest { stored_email_id },
+        )
+        .await?;
+
+    // Build recipients from parallel arrays
+    if form.recipient_types.len() != form.recipient_values.len() {
+        return Err(anyhow::anyhow!("Mismatched recipient data"));
+    }
+
+    if form.recipient_types.is_empty() {
+        return Err(anyhow::anyhow!("No recipients specified"));
+    }
+
+    let mut recipients = Vec::new();
+    for (recipient_type, recipient_value) in form.recipient_types.iter().zip(form.recipient_values.iter()) {
+        let recipient = match recipient_type.as_str() {
+            "Email" => common::message::email::EmailRecipient::Email(recipient_value.clone()),
+            "User" => {
+                let user_id = recipient_value.parse::<ulid::Ulid>()
+                    .map_err(|_| anyhow::anyhow!("Invalid user ID"))?;
+                common::message::email::EmailRecipient::UserId(user_id)
+            }
+            "UserSet" => common::message::email::EmailRecipient::UserSet {
+                slug: recipient_value.clone(),
+            },
+            "AddressSet" => common::message::email::EmailRecipient::AddressSet {
+                slug: recipient_value.clone(),
+            },
+            _ => return Err(anyhow::anyhow!("Invalid recipient type")),
+        };
+        recipients.push(recipient);
+    }
+
+    // Convert delta to HTML
+    let template_html = crate::quill::delta_to_html(&email_response.email.body_delta)?;
+
+    // Send the email
+    let _response: common::message::email::SendEmailResponse = common::service::request(
+        "emailer.send",
+        common::message::email::SendEmailRequest {
+            template_html,
+            subject: email_response.email.subject,
+            recipients,
+            data_sets: email_response.email.datasets,
+            additional_data: None,
+        },
+    )
+    .await?;
+
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::SEE_OTHER)
+        .header("Location", format!("/-admin/email/stored/{}", id))
+        .finish())
+}
+
 // Oneoff email new page
 #[derive(Debug, TemplateOnce)]
 #[template(path = "admin/pages/new_oneoff_email.stpl.html")]
@@ -9259,6 +9337,83 @@ async fn email_oneoff_update(
     Ok(poem::Response::builder()
         .status(poem::http::StatusCode::SEE_OTHER)
         .header("Location", "/-admin/email/oneoff")
+        .finish())
+}
+
+#[derive(Debug, Deserialize)]
+struct SendOneoffEmailForm {
+    #[serde(default)]
+    recipient_types: Vec<String>,
+    #[serde(default)]
+    recipient_values: Vec<String>,
+}
+
+#[handler]
+async fn email_oneoff_send(
+    Path(id): Path<String>,
+    QsForm(form): QsForm<SendOneoffEmailForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let oneoff_email_id = id
+        .parse::<ulid::Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid oneoff email ID format"))?;
+
+    // Get the email template
+    let email_response: common::message::email::GetOneoffEmailResponse =
+        common::service::request(
+            "emailer.oneoff.get",
+            common::message::email::GetOneoffEmailRequest { oneoff_email_id },
+        )
+        .await?;
+
+    // Build recipients from parallel arrays
+    if form.recipient_types.len() != form.recipient_values.len() {
+        return Err(anyhow::anyhow!("Mismatched recipient data"));
+    }
+
+    if form.recipient_types.is_empty() {
+        return Err(anyhow::anyhow!("No recipients specified"));
+    }
+
+    let mut recipients = Vec::new();
+    for (recipient_type, recipient_value) in form.recipient_types.iter().zip(form.recipient_values.iter()) {
+        let recipient = match recipient_type.as_str() {
+            "Email" => common::message::email::EmailRecipient::Email(recipient_value.clone()),
+            "User" => {
+                let user_id = recipient_value.parse::<ulid::Ulid>()
+                    .map_err(|_| anyhow::anyhow!("Invalid user ID"))?;
+                common::message::email::EmailRecipient::UserId(user_id)
+            }
+            "UserSet" => common::message::email::EmailRecipient::UserSet {
+                slug: recipient_value.clone(),
+            },
+            "AddressSet" => common::message::email::EmailRecipient::AddressSet {
+                slug: recipient_value.clone(),
+            },
+            _ => return Err(anyhow::anyhow!("Invalid recipient type")),
+        };
+        recipients.push(recipient);
+    }
+
+    // Convert delta to HTML
+    let template_html = crate::quill::delta_to_html(&email_response.email.body_delta)?;
+
+    // Send the email
+    let _response: common::message::email::SendEmailResponse = common::service::request(
+        "emailer.send",
+        common::message::email::SendEmailRequest {
+            template_html,
+            subject: email_response.email.subject,
+            recipients,
+            data_sets: email_response.email.datasets,
+            additional_data: None,
+        },
+    )
+    .await?;
+
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::SEE_OTHER)
+        .header("Location", format!("/-admin/email/oneoff/{}", id))
         .finish())
 }
 
@@ -9503,7 +9658,11 @@ async fn address_sets_edit(
     Path(slug): Path<String>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    let request = common::message::user::AddressSetGetRequest { slug: slug.clone() };
+    let request = common::message::user::AddressSetGetRequest {
+        slug: slug.clone(),
+        page: None,
+        limit: None,
+    };
 
     match common::service::request::<common::message::user::AddressSetGetResponse>(
         "user.address_sets.get",
@@ -9754,7 +9913,12 @@ async fn user_sets_edit(
     Path(slug): Path<String>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    let request = common::message::user::UserSetGetRequest { slug: slug.clone() };
+    let request = common::message::user::UserSetGetRequest {
+        slug: slug.clone(),
+        page: None,
+        limit: None,
+        evaluation_id: None,
+    };
 
     match common::service::request::<common::message::user::UserSetDetailResponse>(
         "user.user_sets.get_detail",
@@ -9844,6 +10008,10 @@ pub struct IsPageManagerCriterionFields;
 #[derive(TemplateOnce)]
 #[template(path = "admin/partials/criterion_fields/is_staff.stpl.html")]
 pub struct IsStaffCriterionFields;
+
+#[derive(TemplateOnce)]
+#[template(path = "admin/partials/criterion_fields/is_verified.stpl.html")]
+pub struct IsVerifiedCriterionFields;
 
 #[derive(TemplateOnce)]
 #[template(path = "admin/partials/explicit_list_widget.stpl.html")]
@@ -9947,6 +10115,9 @@ async fn user_sets_criterion_fields(
         },
         UserSetCriterionType::IsStaff => {
             IsStaffCriterionFields.render_once()?
+        },
+        UserSetCriterionType::IsVerified => {
+            IsVerifiedCriterionFields.render_once()?
         },
         UserSetCriterionType::ExplicitList => {
             let widget = autocomplete::EntityAutocomplete::new_user_selector(
@@ -10113,6 +10284,7 @@ async fn user_sets_add_criterion(
         }
         UserSetCriterionType::IsPageManager => common::message::user::UserSetCriterion::IsPageManager,
         UserSetCriterionType::IsStaff => common::message::user::UserSetCriterion::IsStaff,
+        UserSetCriterionType::IsVerified => common::message::user::UserSetCriterion::IsVerified,
         UserSetCriterionType::ExplicitList => {
             if form.user_ids.is_empty() {
                 return Err(anyhow::anyhow!("Missing user IDs"));
@@ -10143,7 +10315,12 @@ async fn user_sets_add_criterion(
     .map_err(|e| anyhow::anyhow!("Failed to add criterion: {}", e))?;
 
     // Fetch updated criteria list
-    let get_request = common::message::user::UserSetGetRequest { slug: slug.clone() };
+    let get_request = common::message::user::UserSetGetRequest {
+        slug: slug.clone(),
+        page: None,
+        limit: None,
+        evaluation_id: None,
+    };
     let response = common::service::request::<common::message::user::UserSetDetailResponse>(
         "user.user_sets.get_detail",
         get_request,
@@ -10215,6 +10392,9 @@ async fn user_sets_add_criterion(
         UserSetCriterionType::IsStaff => {
             IsStaffCriterionFields.render_once()?
         },
+        UserSetCriterionType::IsVerified => {
+            IsVerifiedCriterionFields.render_once()?
+        },
         UserSetCriterionType::ExplicitList => {
             let widget = autocomplete::EntityAutocomplete::new_user_selector(
                 "new_user_id",
@@ -10265,4 +10445,144 @@ async fn user_sets_remove_criterion(
     Ok(poem::Response::builder()
         .status(poem::http::StatusCode::OK)
         .finish())
+}
+
+// Recipient Search API Query Structs
+#[derive(Debug, Deserialize)]
+struct RecipientSearchQuery {
+    q: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct RecipientAddForm {
+    #[serde(rename = "type")]
+    recipient_type: String,
+    #[serde(default)]
+    email: String,
+    #[serde(default)]
+    user_id: String,
+    #[serde(default)]
+    display_name: String,
+    #[serde(default)]
+    slug: String,
+    #[serde(default)]
+    name: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct RecipientRemoveQuery {
+    id: String,
+}
+
+// Recipient Search API Handlers
+#[handler]
+async fn api_recipient_search(
+    Query(query): Query<RecipientSearchQuery>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    if query.q.trim().len() < 2 {
+        return Ok(poem::Response::builder()
+            .content_type("text/html")
+            .body(""));
+    }
+
+    let request = common::message::user::RecipientSearchRequest {
+        query: query.q,
+        limit: Some(10),
+    };
+
+    let response: common::message::user::RecipientSearchResponse =
+        common::service::request("user.search.recipients", request).await?;
+
+    use common::message::user::RecipientSearchResult;
+
+    #[derive(TemplateOnce)]
+    #[template(path = "admin/partials/recipient_search_results.stpl.html")]
+    struct RecipientSearchResults {
+        results: Vec<RecipientSearchResult>,
+    }
+
+    let html = RecipientSearchResults {
+        results: response.results,
+    }
+    .render_once()?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(html))
+}
+
+#[handler]
+async fn api_recipient_add(
+    Form(form): Form<RecipientAddForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let (display, recipient_type, recipient_value) = match form.recipient_type.as_str() {
+        "Email" => {
+            let display = form.email.clone();
+            (display, "Email", form.email)
+        }
+        "User" => {
+            let display_name = form.display_name;
+            (display_name, "User", form.user_id)
+        }
+        "UserSet" => {
+            let name = form.name;
+            (name, "UserSet", form.slug)
+        }
+        "AddressSet" => {
+            let name = form.name;
+            (name, "AddressSet", form.slug)
+        }
+        _ => return Err(anyhow::anyhow!("Invalid recipient type")),
+    };
+
+    let id = ulid::Ulid::new().to_string();
+
+    #[derive(TemplateOnce)]
+    #[template(path = "admin/partials/recipient_badge.stpl.html")]
+    struct RecipientBadge {
+        display: String,
+        id: String,
+    }
+
+    let badge_html = RecipientBadge {
+        display,
+        id: id.clone(),
+    }
+    .render_once()?;
+
+    // Add hidden inputs wrapped in a container for OOB swap
+    let hidden_inputs = format!(
+        r##"<div hx-swap-oob="beforeend:#recipient-inputs"><input type="hidden" name="recipient_types[]" value="{}" id="recipient-type-{}"><input type="hidden" name="recipient_values[]" value="{}" id="recipient-value-{}"></div>"##,
+        recipient_type, id, recipient_value, id
+    );
+
+    // Clear the search results dropdown
+    let clear_results = r##"<div id="recipient-search-results" hx-swap-oob="true"></div>"##;
+
+    // Clear the search input
+    let clear_input = r##"<input type="text" id="recipient-search" name="q" value="" hx-swap-oob="true" hx-get="/-admin/api/recipient-search" hx-trigger="keyup changed delay:300ms" hx-target="#recipient-search-results" hx-include="this" class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Search for recipients..." autocomplete="off">"##;
+
+    let combined_html = format!("{}\n{}\n{}\n{}", badge_html, hidden_inputs, clear_results, clear_input);
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(combined_html))
+}
+
+#[handler]
+async fn api_recipient_remove(
+    Query(query): Query<RecipientRemoveQuery>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    // The delete button has hx-target="closest div" and hx-swap="outerHTML"
+    // Return empty content for the main swap (deletes the badge)
+    // The hidden inputs are now wrapped in a div, so we need to find and delete them individually
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(format!(
+            r#"<input hx-swap-oob="delete:#recipient-type-{}"><input hx-swap-oob="delete:#recipient-value-{}">"#,
+            query.id, query.id
+        )))
 }

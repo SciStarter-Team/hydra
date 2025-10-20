@@ -15,6 +15,7 @@ use ulid::Ulid;
 pub mod address_sets;
 pub mod auth;
 pub mod health;
+pub mod recipient_search;
 pub mod sessions;
 pub mod stats;
 pub mod sync;
@@ -1001,6 +1002,7 @@ async fn main() {
 
     let search = service.group("user.search");
     toplevel.spawn(handler!(search, "by_handle", users::search_by_handle));
+    toplevel.spawn(handler!(search, "recipients", recipient_search::search));
 
     let session = service.group("user.session");
     toplevel.spawn(recv_handler!(session, "store", sessions::store));
@@ -1124,6 +1126,7 @@ async fn main() {
     toplevel.spawn(handler!(user_sets, "get_detail", user_sets::get_detail));
     toplevel.spawn(handler!(user_sets, "add_criterion", user_sets::add_criterion));
     toplevel.spawn(handler!(user_sets, "remove_criterion", user_sets::remove_criterion));
+    toplevel.spawn(handler!(user_sets, "release_results", user_sets::release_results));
 
     // Set up graceful shutdown
     use tokio::signal::unix::{SignalKind, signal};

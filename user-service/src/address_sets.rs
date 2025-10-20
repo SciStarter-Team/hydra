@@ -30,6 +30,7 @@ pub async fn list(_req: &Request) -> Result<AddressSetListResponse> {
 }
 
 /// Get addresses for a specific address set
+/// Supports pagination to handle large address sets efficiently
 pub async fn get(req: &Request) -> Result<AddressSetGetResponse> {
     let request: AddressSetGetRequest = decode_structured_message(req.message.clone())?;
 
@@ -41,23 +42,46 @@ pub async fn get(req: &Request) -> Result<AddressSetGetResponse> {
     .fetch_one(db())
     .await?;
 
-    // Get all email addresses for this set
-    let address_rows = sqlx::query!(
-        "SELECT email_address FROM address_set_members WHERE address_set_slug = ? ORDER BY email_address",
+    // Get total count
+    let total_count = sqlx::query!(
+        r#"SELECT COUNT(*) as "count!" FROM address_set_members WHERE address_set_slug = ?"#,
         request.slug
+    )
+    .fetch_one(db())
+    .await?
+    .count as u64;
+
+    // Compute pagination
+    let (limit, offset) = if let (Some(page), Some(limit)) = (request.page, request.limit) {
+        (limit as i64, (page * limit) as i64)
+    } else {
+        // No pagination - return all results
+        (total_count as i64 + 1, 0)
+    };
+
+    // Get paginated email addresses
+    let address_rows = sqlx::query!(
+        "SELECT email_address FROM address_set_members WHERE address_set_slug = ? ORDER BY email_address LIMIT ? OFFSET ?",
+        request.slug,
+        limit,
+        offset
     )
     .fetch_all(db())
     .await?;
 
-    let addresses = address_rows
+    let addresses: Vec<String> = address_rows
         .into_iter()
         .map(|row| row.email_address)
         .collect();
+
+    let has_more = (offset as u64 + addresses.len() as u64) < total_count;
 
     Ok(AddressSetGetResponse {
         slug: set_row.slug,
         name: set_row.name,
         addresses,
+        total_count,
+        has_more,
     })
 }
 

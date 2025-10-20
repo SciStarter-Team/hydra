@@ -6,10 +6,10 @@ use common::message::user::{
     CriterionOperation, UserSetAddCriterionRequest, UserSetCreateRequest, UserSetCriterion,
     UserSetCriterionResponse, UserSetCriterionWithId, UserSetDeleteRequest,
     UserSetDetailResponse, UserSetGetRequest, UserSetGetResponse, UserSetInfo,
-    UserSetListResponse, UserSetRemoveCriterionRequest, UserSetResponse, UserSetUpdateRequest,
+    UserSetListResponse, UserSetReleaseResultsRequest, UserSetReleaseResultsResponse,
+    UserSetRemoveCriterionRequest, UserSetResponse, UserSetUpdateRequest,
 };
 use common::service::{decode_structured_message, request};
-use std::collections::HashSet;
 use ulid::Ulid;
 
 /// List all user sets
@@ -32,6 +32,8 @@ pub async fn list(_req: &Request) -> Result<UserSetListResponse> {
 }
 
 /// Get user IDs for a specific user set
+/// Uses SQL-based set operations with progressive intersection to handle large sets efficiently
+/// If evaluation_id is provided, uses existing results; otherwise computes new result set
 pub async fn get(req: &Request) -> Result<UserSetGetResponse> {
     let request: UserSetGetRequest = decode_structured_message(req.message.clone())?;
 
@@ -43,98 +45,233 @@ pub async fn get(req: &Request) -> Result<UserSetGetResponse> {
     .fetch_one(db())
     .await?;
 
-    // Get all criteria for this set
-    let criteria_rows = sqlx::query!(
-        "SELECT criterion_type, criterion_data, operation FROM user_set_criteria WHERE user_set_slug = ? ORDER BY id",
-        request.slug
-    )
-    .fetch_all(db())
-    .await?;
+    // Determine if we should use an existing result set or compute a new one
+    let evaluation_id = if let Some(existing_id) = request.evaluation_id {
+        // Check if the result set exists
+        let exists = sqlx::query!(
+            r#"SELECT COUNT(*) as "count!" FROM user_set_results WHERE evaluation_id = ? LIMIT 1"#,
+            existing_id
+        )
+        .fetch_one(db())
+        .await?
+        .count > 0;
 
-    // Process criteria with proper union/intersect logic
-    let mut union_set: HashSet<Ulid> = HashSet::new();
-    let mut intersect_set: Option<HashSet<Ulid>> = None;
+        if !exists {
+            return Err(anyhow!("Result set not found or has been released"));
+        }
 
-    for row in criteria_rows {
-        let criterion: UserSetCriterion =
-            flexbuffers::from_slice(&row.criterion_data).map_err(|e| {
-                anyhow!(
-                    "Failed to deserialize criterion data for type {}: {}",
-                    row.criterion_type,
-                    e
-                )
-            })?;
+        existing_id
+    } else {
+        // Compute new result set
+        let new_evaluation_id = Ulid::new().to_string();
 
-        let operation = row.operation.parse::<CriterionOperation>().unwrap_or_default();
-        let criterion_users = evaluate_criterion(&criterion).await?;
+        // Get all criteria for this set
+        let criteria_rows = sqlx::query!(
+            "SELECT criterion_type, criterion_data, operation FROM user_set_criteria WHERE user_set_slug = ? ORDER BY id",
+            request.slug
+        )
+        .fetch_all(db())
+        .await?;
 
-        match operation {
-            CriterionOperation::Union => {
-                // Union with the union intermediate set
-                union_set.extend(criterion_users);
-            }
-            CriterionOperation::Intersect => {
-                // If intersect_set exists, intersect it with the new criterion
-                // Otherwise, initialize it with the criterion's users
-                if let Some(ref mut set) = intersect_set {
-                    *set = set.intersection(&criterion_users).copied().collect();
-                } else {
-                    intersect_set = Some(criterion_users);
+        let mut has_intersect = false;
+
+        // Process each criterion
+        for (index, row) in criteria_rows.iter().enumerate() {
+            let criterion: UserSetCriterion =
+                flexbuffers::from_slice(&row.criterion_data).map_err(|e| {
+                    anyhow!(
+                        "Failed to deserialize criterion data for type {}: {}",
+                        row.criterion_type,
+                        e
+                    )
+                })?;
+
+            let operation = row.operation.parse::<CriterionOperation>().unwrap_or_default();
+
+            match operation {
+                CriterionOperation::Union => {
+                    // For union criteria, just insert users into the union set
+                    evaluate_criterion(&criterion, &new_evaluation_id, index as i64, "union").await?;
+                }
+                CriterionOperation::Intersect => {
+                    if !has_intersect {
+                        // First intersect criterion - initialize the intersect set
+                        evaluate_criterion(&criterion, &new_evaluation_id, index as i64, "intersect").await?;
+                        has_intersect = true;
+                    } else {
+                        // Subsequent intersect criteria - progressively narrow the intersect set
+                        // Create a temp table for this criterion's results
+                        let temp_eval_id = format!("{}_temp_{}", new_evaluation_id, index);
+                        evaluate_criterion(&criterion, &temp_eval_id, index as i64, "intersect").await?;
+
+                        // Delete from intersect set any users NOT in the new criterion
+                        sqlx::query!(
+                            r#"DELETE FROM user_set_evaluations
+                               WHERE evaluation_id = ?
+                                 AND operation = 'intersect'
+                                 AND user_id NOT IN (
+                                   SELECT user_id FROM user_set_evaluations
+                                   WHERE evaluation_id = ?
+                                 )"#,
+                            new_evaluation_id,
+                            temp_eval_id
+                        )
+                        .execute(db())
+                        .await?;
+
+                        // Clean up temp results
+                        sqlx::query!(
+                            "DELETE FROM user_set_evaluations WHERE evaluation_id = ?",
+                            temp_eval_id
+                        )
+                        .execute(db())
+                        .await?;
+                    }
                 }
             }
         }
-    }
 
-    // Final result: if intersect_set exists, intersect it with union_set
-    let all_users = if let Some(intersect) = intersect_set {
-        union_set.intersection(&intersect).copied().collect()
-    } else {
-        union_set
+        // Compute the final result set and store it in the results table
+        // This is done ONCE, then all pagination queries use the results table
+        let created_at = common::timestring::TimeString::now();
+
+        if has_intersect {
+            // Insert intersection of union and intersect sets into results
+            sqlx::query!(
+                r#"INSERT INTO user_set_results (evaluation_id, user_id, created_at)
+                   SELECT DISTINCT ?, user_id, ?
+                   FROM user_set_evaluations
+                   WHERE evaluation_id = ?
+                     AND operation = 'union'
+                     AND user_id IN (
+                       SELECT user_id FROM user_set_evaluations
+                       WHERE evaluation_id = ? AND operation = 'intersect'
+                     )"#,
+                new_evaluation_id,
+                created_at,
+                new_evaluation_id,
+                new_evaluation_id
+            )
+            .execute(db())
+            .await?;
+        } else {
+            // Insert all union users into results
+            sqlx::query!(
+                r#"INSERT INTO user_set_results (evaluation_id, user_id, created_at)
+                   SELECT DISTINCT ?, user_id, ?
+                   FROM user_set_evaluations
+                   WHERE evaluation_id = ? AND operation = 'union'"#,
+                new_evaluation_id,
+                created_at,
+                new_evaluation_id
+            )
+            .execute(db())
+            .await?;
+        }
+
+        // Clean up evaluations table immediately
+        sqlx::query!(
+            "DELETE FROM user_set_evaluations WHERE evaluation_id = ?",
+            new_evaluation_id
+        )
+        .execute(db())
+        .await?;
+
+        new_evaluation_id
     };
+
+    // Get total count from results table
+    let total_count = sqlx::query!(
+        r#"SELECT COUNT(*) as "count!" FROM user_set_results WHERE evaluation_id = ?"#,
+        evaluation_id
+    )
+    .fetch_one(db())
+    .await?
+    .count as u64;
+
+    // Compute pagination
+    let (limit, offset) = if let (Some(page), Some(limit)) = (request.page, request.limit) {
+        (limit as i64, (page * limit) as i64)
+    } else {
+        // No pagination - return all results
+        (total_count as i64 + 1, 0)
+    };
+
+    // Fetch paginated results from results table (fast indexed query)
+    let user_ids: Vec<Ulid> = sqlx::query!(
+        r#"SELECT user_id FROM user_set_results
+           WHERE evaluation_id = ?
+           LIMIT ? OFFSET ?"#,
+        evaluation_id,
+        limit,
+        offset
+    )
+    .fetch_all(db())
+    .await?
+    .into_iter()
+    .filter_map(|row| row.user_id.parse::<Ulid>().ok())
+    .collect();
+
+    let has_more = (offset as u64 + user_ids.len() as u64) < total_count;
 
     Ok(UserSetGetResponse {
         slug: set_row.slug,
         name: set_row.name,
-        user_ids: all_users.into_iter().collect(),
+        user_ids,
+        total_count,
+        has_more,
+        evaluation_id,
     })
 }
 
-/// Evaluate a single criterion and return matching user IDs
-async fn evaluate_criterion(criterion: &UserSetCriterion) -> Result<HashSet<Ulid>> {
+/// Evaluate a single criterion and insert matching user IDs into the evaluations table
+/// This processes results in chunks to avoid loading large sets into memory
+async fn evaluate_criterion(
+    criterion: &UserSetCriterion,
+    evaluation_id: &str,
+    criterion_index: i64,
+    operation: &str,
+) -> Result<()> {
+    let created_at = common::timestring::TimeString::now();
+
     match criterion {
         UserSetCriterion::HasTag { tag } => {
-            let rows = sqlx::query!("SELECT DISTINCT user_id FROM user_tags WHERE tag = ?", tag)
-                .fetch_all(db())
-                .await?;
+            // Insert directly from query result - no intermediate collection
+            sqlx::query!(
+                r#"INSERT INTO user_set_evaluations (evaluation_id, criterion_index, operation, user_id, created_at)
+                   SELECT ?, ?, ?, user_id, ?
+                   FROM user_tags
+                   WHERE tag = ?"#,
+                evaluation_id,
+                criterion_index,
+                operation,
+                created_at,
+                tag
+            )
+            .execute(db())
+            .await?;
 
-            let user_ids = rows
-                .into_iter()
-                .filter_map(|row| row.user_id.parse::<Ulid>().ok())
-                .collect();
-
-            Ok(user_ids)
+            Ok(())
         }
 
         UserSetCriterion::HasPointInRegion { geojson } => {
             // Use SpatiaLite to check if user's point is within the GeoJSON region
-            let rows = sqlx::query!(
-                r#"
-                SELECT user_id
-                FROM users
-                WHERE point IS NOT NULL
-                  AND ST_Within(point, GeomFromGeoJSON(?)) = 1
-                "#,
+            sqlx::query!(
+                r#"INSERT INTO user_set_evaluations (evaluation_id, criterion_index, operation, user_id, created_at)
+                   SELECT ?, ?, ?, user_id, ?
+                   FROM users
+                   WHERE point IS NOT NULL
+                     AND ST_Within(point, GeomFromGeoJSON(?)) = 1"#,
+                evaluation_id,
+                criterion_index,
+                operation,
+                created_at,
                 geojson
             )
-            .fetch_all(db())
+            .execute(db())
             .await?;
 
-            let user_ids = rows
-                .into_iter()
-                .filter_map(|row| row.user_id.parse::<Ulid>().ok())
-                .collect();
-
-            Ok(user_ids)
+            Ok(())
         }
 
         UserSetCriterion::AffiliateParticipation {
@@ -152,39 +289,101 @@ async fn evaluate_criterion(criterion: &UserSetCriterion) -> Result<HashSet<Ulid
             let response: AffiliateParticipantsResponse =
                 request("log.affiliate_participants", &req).await?;
 
-            Ok(response.user_ids.into_iter().collect())
+            // Insert the results in batches to avoid huge single inserts
+            const BATCH_SIZE: usize = 1000;
+            for chunk in response.user_ids.chunks(BATCH_SIZE) {
+                for user_id in chunk {
+                    let user_id_str = user_id.to_string();
+                    sqlx::query!(
+                        r#"INSERT INTO user_set_evaluations (evaluation_id, criterion_index, operation, user_id, created_at)
+                           VALUES (?, ?, ?, ?, ?)"#,
+                        evaluation_id,
+                        criterion_index,
+                        operation,
+                        user_id_str,
+                        created_at
+                    )
+                    .execute(db())
+                    .await?;
+                }
+            }
+
+            Ok(())
         }
 
         UserSetCriterion::IsPageManager => {
-            let rows = sqlx::query!("SELECT user_id FROM users WHERE is_page_manager = 1")
-                .fetch_all(db())
-                .await?;
+            sqlx::query!(
+                r#"INSERT INTO user_set_evaluations (evaluation_id, criterion_index, operation, user_id, created_at)
+                   SELECT ?, ?, ?, user_id, ?
+                   FROM users
+                   WHERE is_page_manager = 1"#,
+                evaluation_id,
+                criterion_index,
+                operation,
+                created_at
+            )
+            .execute(db())
+            .await?;
 
-            let user_ids = rows
-                .into_iter()
-                .filter_map(|row| row.user_id.parse::<Ulid>().ok())
-                .collect();
-
-            Ok(user_ids)
+            Ok(())
         }
 
         UserSetCriterion::IsStaff => {
-            let rows =
-                sqlx::query!("SELECT user_id FROM users WHERE is_staff = 1 OR is_superuser = 1")
-                    .fetch_all(db())
-                    .await?;
+            sqlx::query!(
+                r#"INSERT INTO user_set_evaluations (evaluation_id, criterion_index, operation, user_id, created_at)
+                   SELECT ?, ?, ?, user_id, ?
+                   FROM users
+                   WHERE is_staff = 1 OR is_superuser = 1"#,
+                evaluation_id,
+                criterion_index,
+                operation,
+                created_at
+            )
+            .execute(db())
+            .await?;
 
-            let user_ids = rows
-                .into_iter()
-                .filter_map(|row| row.user_id.parse::<Ulid>().ok())
-                .collect();
+            Ok(())
+        }
 
-            Ok(user_ids)
+        UserSetCriterion::IsVerified => {
+            sqlx::query!(
+                r#"INSERT INTO user_set_evaluations (evaluation_id, criterion_index, operation, user_id, created_at)
+                   SELECT ?, ?, ?, u.user_id, ?
+                   FROM users u
+                   JOIN emails e ON u.primary_email = e.email
+                   WHERE e.verified = 1"#,
+                evaluation_id,
+                criterion_index,
+                operation,
+                created_at
+            )
+            .execute(db())
+            .await?;
+
+            Ok(())
         }
 
         UserSetCriterion::ExplicitList { user_ids } => {
-            // Return the explicit list of user IDs
-            Ok(user_ids.iter().copied().collect())
+            // Insert the explicit list in batches
+            const BATCH_SIZE: usize = 1000;
+            for chunk in user_ids.chunks(BATCH_SIZE) {
+                for user_id in chunk {
+                    let user_id_str = user_id.to_string();
+                    sqlx::query!(
+                        r#"INSERT INTO user_set_evaluations (evaluation_id, criterion_index, operation, user_id, created_at)
+                           VALUES (?, ?, ?, ?, ?)"#,
+                        evaluation_id,
+                        criterion_index,
+                        operation,
+                        user_id_str,
+                        created_at
+                    )
+                    .execute(db())
+                    .await?;
+                }
+            }
+
+            Ok(())
         }
     }
 }
@@ -296,6 +495,7 @@ pub async fn add_criterion(req: &Request) -> Result<UserSetCriterionResponse> {
         UserSetCriterion::AffiliateParticipation { .. } => "AffiliateParticipation",
         UserSetCriterion::IsPageManager => "IsPageManager",
         UserSetCriterion::IsStaff => "IsStaff",
+        UserSetCriterion::IsVerified => "IsVerified",
         UserSetCriterion::ExplicitList { .. } => "ExplicitList",
     };
 
@@ -336,4 +536,56 @@ pub async fn remove_criterion(req: &Request) -> Result<UserSetCriterionResponse>
         success: true,
         message: "Criterion removed successfully".to_string(),
     })
+}
+
+/// Release (delete) a specific result set immediately
+/// Call this when you're done paginating through a result set to free up memory
+pub async fn release_results(req: &Request) -> Result<UserSetReleaseResultsResponse> {
+    let request: UserSetReleaseResultsRequest = decode_structured_message(req.message.clone())?;
+
+    sqlx::query!(
+        "DELETE FROM user_set_results WHERE evaluation_id = ?",
+        request.evaluation_id
+    )
+    .execute(db())
+    .await?;
+
+    // Also clean up any in-progress evaluations with this ID (shouldn't exist, but just in case)
+    sqlx::query!(
+        "DELETE FROM user_set_evaluations WHERE evaluation_id = ?",
+        request.evaluation_id
+    )
+    .execute(db())
+    .await?;
+
+    Ok(UserSetReleaseResultsResponse { success: true })
+}
+
+/// Clean up old result sets
+/// Should be called periodically (e.g., daily) to remove result sets older than 1 week
+pub async fn cleanup_old_results() -> Result<()> {
+    use jiff::{Timestamp, ToSpan};
+
+    // Compute cutoff time (1 week ago)
+    let now = Timestamp::now();
+    let one_week = 7.days();
+    let one_week_ago_ts = now.checked_sub(one_week)?;
+    let one_week_ago = common::timestring::TimeString::from(one_week_ago_ts);
+
+    // Clean up old result sets
+    let result = sqlx::query!(
+        "DELETE FROM user_set_results WHERE created_at < ?",
+        one_week_ago
+    )
+    .execute(db())
+    .await?;
+
+    if result.rows_affected() > 0 {
+        eprintln!(
+            "Cleaned up {} old user set result sets",
+            result.rows_affected()
+        );
+    }
+
+    Ok(())
 }

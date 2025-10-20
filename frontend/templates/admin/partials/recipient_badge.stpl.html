@@ -1,0 +1,12 @@
+<div class="inline-flex items-center px-3 py-1 rounded-full text-sm bg-indigo-100 text-indigo-800">
+    <span><%= self.display %></span>
+    <button
+        type="button"
+        hx-delete="/-admin/api/recipient-remove?id=<%= self.id %>"
+        hx-target="closest div"
+        hx-swap="outerHTML"
+        class="ml-2 text-indigo-600 hover:text-indigo-800"
+    >
+        <wa-icon name="x" class="w-4 h-4"></wa-icon>
+    </button>
+</div>

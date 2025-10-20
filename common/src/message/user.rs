@@ -474,6 +474,8 @@ pub struct AddressSetListResponse {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AddressSetGetRequest {
     pub slug: String,
+    pub page: Option<u32>,  // Page number (0-indexed), None = return all
+    pub limit: Option<u32>, // Items per page, None = return all
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -481,6 +483,8 @@ pub struct AddressSetGetResponse {
     pub slug: String,
     pub name: String,
     pub addresses: Vec<String>,
+    pub total_count: u64,    // Total number of addresses in the set
+    pub has_more: bool,       // Whether there are more pages available
 }
 
 // User Sets
@@ -502,6 +506,9 @@ pub struct UserSetListResponse {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct UserSetGetRequest {
     pub slug: String,
+    pub page: Option<u32>,  // Page number (0-indexed), None = return all
+    pub limit: Option<u32>, // Items per page, None = return all
+    pub evaluation_id: Option<String>, // If provided, use existing result set; if not, compute new one
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -509,6 +516,19 @@ pub struct UserSetGetResponse {
     pub slug: String,
     pub name: String,
     pub user_ids: Vec<Ulid>,
+    pub total_count: u64,    // Total number of users in the set
+    pub has_more: bool,       // Whether there are more pages available
+    pub evaluation_id: String, // Identifier for this result set, use to release it when done
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserSetReleaseResultsRequest {
+    pub evaluation_id: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserSetReleaseResultsResponse {
+    pub success: bool,
 }
 
 // User Set Criteria
@@ -525,6 +545,7 @@ pub enum UserSetCriterion {
     },
     IsPageManager,
     IsStaff,
+    IsVerified,
     ExplicitList { user_ids: Vec<Ulid> },
 }
 
@@ -645,6 +666,7 @@ impl UserSetCriterionWithId {
             UserSetCriterion::AffiliateParticipation { .. } => "AffiliateParticipation",
             UserSetCriterion::IsPageManager => "IsPageManager",
             UserSetCriterion::IsStaff => "IsStaff",
+            UserSetCriterion::IsVerified => "IsVerified",
             UserSetCriterion::ExplicitList { .. } => "ExplicitList",
         }
     }
@@ -662,4 +684,37 @@ pub struct UserSetDetailResponse {
     pub slug: String,
     pub name: String,
     pub criteria: Vec<UserSetCriterionWithId>,
+}
+
+// Recipient Search (for email sending UI)
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct RecipientSearchRequest {
+    pub query: String,
+    pub limit: Option<u32>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct RecipientSearchResponse {
+    pub results: Vec<RecipientSearchResult>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type")]
+pub enum RecipientSearchResult {
+    Email {
+        email: String,
+    },
+    User {
+        user_id: String,
+        display_name: String,
+        email: String,
+    },
+    UserSet {
+        slug: String,
+        name: String,
+    },
+    AddressSet {
+        slug: String,
+        name: String,
+    },
 }

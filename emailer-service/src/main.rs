@@ -44,8 +44,10 @@ async fn main() {
 
     let mut toplevel = JoinSet::<()>::new();
 
-    // Register send email handler
-    toplevel.spawn(handler!(service, "send", sends::handle_send_request));
+    // Register top-level send handlers
+    let emailer_group = service.group("emailer");
+    toplevel.spawn(handler!(emailer_group, "send", sends::handle_send_request));
+    toplevel.spawn(handler!(emailer_group, "add_targets", sends::handle_add_targets_request));
 
     // Register event handlers (fire-and-forget)
     let event_group = service.group("emailer.event");
@@ -67,8 +69,8 @@ async fn main() {
     toplevel.spawn(handler!(datasets_group, "variables", datasets_info::handle_get_dataset_variables));
 
     // Register scheduled send handlers
-    toplevel.spawn(handler!(service, "schedule", scheduled::handle_schedule_send));
-    toplevel.spawn(handler!(service, "cancel_scheduled", scheduled::handle_cancel_scheduled_send));
+    toplevel.spawn(handler!(emailer_group, "schedule", scheduled::handle_schedule_send));
+    toplevel.spawn(handler!(emailer_group, "cancel_scheduled", scheduled::handle_cancel_scheduled_send));
 
     // Register stored email handlers
     let stored_group = service.group("emailer.stored");
