@@ -178,7 +178,7 @@ pub fn routes() -> impl Endpoint {
         .at("/email/user-sets/:slug/criteria", post(user_sets_add_criterion))
         .at("/email/user-sets/:slug/criteria/:id", delete(user_sets_remove_criterion))
         .at("/api/recipient-search", get(api_recipient_search))
-        .at("/api/recipient-add", post(api_recipient_add))
+        .at("/api/recipient-select", post(api_recipient_select))
         .at("/api/recipient-remove", delete(api_recipient_remove))
         .nest("/autocomplete", autocomplete::routes())
         .with(StaffOnly)
@@ -8994,6 +8994,7 @@ async fn email_stored_update(
     Path(id): Path<String>,
     Form(form): Form<UpdateStoredEmailForm>,
     Authenticated(_user_info): Authenticated,
+    req: &poem::Request,
 ) -> Result<poem::Response, anyhow::Error> {
     let stored_email_id = id
         .parse::<ulid::Ulid>()
@@ -9029,10 +9030,18 @@ async fn email_stored_update(
         _ => return Err(anyhow::anyhow!("Invalid action")),
     }
 
-    Ok(poem::Response::builder()
-        .status(poem::http::StatusCode::SEE_OTHER)
-        .header("Location", "/-admin/email/stored")
-        .finish())
+    // If this is an HTMX request, just return 200 OK
+    if req.headers().get("HX-Request").is_some() {
+        Ok(poem::Response::builder()
+            .status(poem::http::StatusCode::OK)
+            .finish())
+    } else {
+        // Otherwise redirect to the list page
+        Ok(poem::Response::builder()
+            .status(poem::http::StatusCode::SEE_OTHER)
+            .header("Location", "/-admin/email/stored")
+            .finish())
+    }
 }
 
 #[handler]
@@ -9278,6 +9287,7 @@ async fn email_oneoff_update(
     Path(id): Path<String>,
     Form(form): Form<UpdateOneoffEmailForm>,
     Authenticated(_user_info): Authenticated,
+    req: &poem::Request,
 ) -> Result<poem::Response, anyhow::Error> {
     let oneoff_email_id = id
         .parse::<ulid::Ulid>()
@@ -9334,10 +9344,18 @@ async fn email_oneoff_update(
         _ => return Err(anyhow::anyhow!("Invalid action")),
     }
 
-    Ok(poem::Response::builder()
-        .status(poem::http::StatusCode::SEE_OTHER)
-        .header("Location", "/-admin/email/oneoff")
-        .finish())
+    // If this is an HTMX request, just return 200 OK
+    if req.headers().get("HX-Request").is_some() {
+        Ok(poem::Response::builder()
+            .status(poem::http::StatusCode::OK)
+            .finish())
+    } else {
+        // Otherwise redirect to the list page
+        Ok(poem::Response::builder()
+            .status(poem::http::StatusCode::SEE_OTHER)
+            .header("Location", "/-admin/email/oneoff")
+            .finish())
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -10454,22 +10472,6 @@ struct RecipientSearchQuery {
 }
 
 #[derive(Debug, Deserialize)]
-struct RecipientAddForm {
-    #[serde(rename = "type")]
-    recipient_type: String,
-    #[serde(default)]
-    email: String,
-    #[serde(default)]
-    user_id: String,
-    #[serde(default)]
-    display_name: String,
-    #[serde(default)]
-    slug: String,
-    #[serde(default)]
-    name: String,
-}
-
-#[derive(Debug, Deserialize)]
 struct RecipientRemoveQuery {
     id: String,
 }
@@ -10512,29 +10514,72 @@ async fn api_recipient_search(
         .body(html))
 }
 
+#[derive(Debug, Deserialize)]
+struct RecipientSelectForm {
+    q: String,
+}
+
 #[handler]
-async fn api_recipient_add(
-    Form(form): Form<RecipientAddForm>,
+async fn api_recipient_select(
+    Form(form): Form<RecipientSelectForm>,
     Authenticated(_user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    let (display, recipient_type, recipient_value) = match form.recipient_type.as_str() {
-        "Email" => {
-            let display = form.email.clone();
-            (display, "Email", form.email)
+    use common::message::user::{
+        UserEmailInfo, UserEmailInfoRequest,
+        UserSetGetRequest, UserSetGetResponse,
+        AddressSetGetRequest, AddressSetGetResponse,
+    };
+    use common::service::request;
+
+    // Determine what type of recipient this is
+    let (display, recipient_type, recipient_value) = if form.q.contains('@') {
+        // It's an email address
+        (form.q.clone(), "Email", form.q)
+    } else if let Ok(user_id) = form.q.parse::<ulid::Ulid>() {
+        // It's a user ID - look up the user
+        match request::<UserEmailInfo>("user.info.email_info", UserEmailInfoRequest { user_id }).await {
+            Ok(user) => {
+                let display_name = if !user.first_name.is_empty() || !user.last_name.is_empty() {
+                    format!("{} {}", user.first_name, user.last_name).trim().to_string()
+                } else {
+                    user.handle
+                };
+                (display_name, "User", user_id.to_string())
+            }
+            Err(_) => {
+                // User not found, treat as invalid
+                return Ok(poem::Response::builder()
+                    .status(poem::http::StatusCode::BAD_REQUEST)
+                    .body("User not found"));
+            }
         }
-        "User" => {
-            let display_name = form.display_name;
-            (display_name, "User", form.user_id)
+    } else {
+        // It's a slug - try user set first, then address set
+        if let Ok(user_set) = request::<UserSetGetResponse>(
+            "user.user_sets.get",
+            UserSetGetRequest {
+                slug: form.q.clone(),
+                page: None,
+                limit: Some(0),
+                evaluation_id: None,
+            },
+        ).await {
+            (user_set.name, "UserSet", form.q)
+        } else if let Ok(address_set) = request::<AddressSetGetResponse>(
+            "user.address_sets.get",
+            AddressSetGetRequest {
+                slug: form.q.clone(),
+                page: None,
+                limit: Some(0),
+            },
+        ).await {
+            (address_set.name, "AddressSet", form.q)
+        } else {
+            // Not found
+            return Ok(poem::Response::builder()
+                .status(poem::http::StatusCode::BAD_REQUEST)
+                .body("Recipient not found"));
         }
-        "UserSet" => {
-            let name = form.name;
-            (name, "UserSet", form.slug)
-        }
-        "AddressSet" => {
-            let name = form.name;
-            (name, "AddressSet", form.slug)
-        }
-        _ => return Err(anyhow::anyhow!("Invalid recipient type")),
     };
 
     let id = ulid::Ulid::new().to_string();
@@ -10559,12 +10604,12 @@ async fn api_recipient_add(
     );
 
     // Clear the search results dropdown
-    let clear_results = r##"<div id="recipient-search-results" hx-swap-oob="true"></div>"##;
+    let clear_dropdown = r##"<div id="recipient-search-results" role="listbox" class="hidden absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto" hx-swap-oob="true"></div>"##;
 
     // Clear the search input
-    let clear_input = r##"<input type="text" id="recipient-search" name="q" value="" hx-swap-oob="true" hx-get="/-admin/api/recipient-search" hx-trigger="keyup changed delay:300ms" hx-target="#recipient-search-results" hx-include="this" class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Search for recipients..." autocomplete="off">"##;
+    let clear_input = r##"<input type="text" id="recipient-search" name="q" value="" role="combobox" aria-autocomplete="list" aria-controls="recipient-search-results" aria-expanded="false" hx-get="/-admin/api/recipient-search" hx-trigger="keyup changed delay:300ms" hx-target="#recipient-search-results" hx-include="this" class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Search for recipients..." autocomplete="off" hx-swap-oob="true">"##;
 
-    let combined_html = format!("{}\n{}\n{}\n{}", badge_html, hidden_inputs, clear_results, clear_input);
+    let combined_html = format!("{}\n{}\n{}\n{}", badge_html, hidden_inputs, clear_dropdown, clear_input);
 
     Ok(poem::Response::builder()
         .content_type("text/html")

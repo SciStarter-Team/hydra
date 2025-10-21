@@ -83,10 +83,10 @@ impl DataSet for UserIdentity {
     }
 
     async fn get_values(&self, user_id: Ulid) -> Result<(Vec<String>, Vec<String>), Error> {
-        use common::message::user::{AdminUser, AdminUserGetRequest};
+        use common::message::user::{UserEmailInfo, UserEmailInfoRequest};
 
-        // NATS call to user-service to get detailed user info
-        let user = request::<AdminUser>("user.admin.get", AdminUserGetRequest { user_id }).await?;
+        // NATS call to user-service to get user info for email
+        let user = request::<UserEmailInfo>("user.info.email_info", UserEmailInfoRequest { user_id }).await?;
 
         // Derive friendly name: use first_name if not empty, otherwise handle
         let friendly_name = if !user.first_name.is_empty() {

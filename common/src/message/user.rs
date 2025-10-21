@@ -686,6 +686,21 @@ pub struct UserSetDetailResponse {
     pub criteria: Vec<UserSetCriterionWithId>,
 }
 
+// User Info for Email Sending (lightweight alternative to AdminUser)
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserEmailInfoRequest {
+    pub user_id: Ulid,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserEmailInfo {
+    pub user_id: Ulid,
+    pub handle: String,
+    pub first_name: String,
+    pub last_name: String,
+    pub primary_email: String,
+}
+
 // Recipient Search (for email sending UI)
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RecipientSearchRequest {

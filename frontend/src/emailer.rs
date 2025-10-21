@@ -338,11 +338,11 @@ async fn track_open(Query(params): Query<UnsubscribeParams>) -> Response {
             }
         } else if let Ok(uid) = params.b.parse::<Ulid>() {
             // b parameter is a user_id - look up the email
-            use common::message::user::{AdminUser, AdminUserGetRequest};
+            use common::message::user::{UserEmailInfo, UserEmailInfoRequest};
             use common::service::request;
 
             if let Ok(user) =
-                request::<AdminUser>("user.admin.get", AdminUserGetRequest { user_id: uid }).await
+                request::<UserEmailInfo>("user.info.email_info", UserEmailInfoRequest { user_id: uid }).await
             {
                 // Send open event to emailer service
                 let open_event = OpenEvent {

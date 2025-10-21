@@ -995,6 +995,9 @@ async fn main() {
     toplevel.spawn(handler!(info, "by_username", users::basic_info_by_username));
     toplevel.spawn(handler!(info, "by_user_id", users::basic_info_by_user_id));
 
+    let user_info = service.group("user.info");
+    toplevel.spawn(handler!(user_info, "email_info", users::user_email_info));
+
     let stats = service.group("user.stats");
     toplevel.spawn(handler!(stats, "total_count", stats::total_count));
     toplevel.spawn(handler!(stats, "verified_count", stats::verified_count));

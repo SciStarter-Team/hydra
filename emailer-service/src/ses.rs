@@ -2,7 +2,8 @@ use anyhow::Error;
 use aws_sdk_sesv2::{
     Client as SesClient,
     config::{Credentials, Region},
-    types::{Body, Content, Destination, EmailContent, Message},
+    types::{Destination, EmailContent, RawMessage},
+    primitives::Blob,
 };
 use ulid::Ulid;
 
@@ -54,46 +55,56 @@ pub async fn send_email(
     // Build destination
     let destination = Destination::builder().to_addresses(to_email).build();
 
-    // Build message content
-    let html_content = Content::builder()
-        .data(html_body)
-        .charset("UTF-8")
+    // Create MIME multipart message with proper headers
+    let boundary = format!("----=_Part_{}", ulid::Ulid::new());
+
+    // Build raw MIME message with List-Unsubscribe headers
+    let raw_email = format!(
+        "From: {}\r\n\
+         To: {}\r\n\
+         Subject: {}\r\n\
+         MIME-Version: 1.0\r\n\
+         List-Unsubscribe: <{}>\r\n\
+         List-Unsubscribe-Post: List-Unsubscribe=One-Click\r\n\
+         Content-Type: multipart/alternative; boundary=\"{}\"\r\n\
+         \r\n\
+         --{}\r\n\
+         Content-Type: text/plain; charset=UTF-8\r\n\
+         Content-Transfer-Encoding: quoted-printable\r\n\
+         \r\n\
+         {}\r\n\
+         --{}\r\n\
+         Content-Type: text/html; charset=UTF-8\r\n\
+         Content-Transfer-Encoding: quoted-printable\r\n\
+         \r\n\
+         {}\r\n\
+         --{}--\r\n",
+        from_email,
+        to_email,
+        subject,
+        unsubscribe_url,
+        boundary,
+        boundary,
+        quoted_printable_encode(text_body),
+        boundary,
+        quoted_printable_encode(html_body),
+        boundary
+    );
+
+    // Create raw message
+    let raw_message = RawMessage::builder()
+        .data(Blob::new(raw_email.as_bytes()))
         .build()?;
-    let text_content = Content::builder()
-        .data(text_body)
-        .charset("UTF-8")
-        .build()?;
-    let body = Body::builder()
-        .html(html_content)
-        .text(text_content)
-        .build();
-    let subject_content = Content::builder().data(subject).charset("UTF-8").build()?;
-    let message = Message::builder()
-        .subject(subject_content)
-        .body(body)
+
+    let email_content = EmailContent::builder()
+        .raw(raw_message)
         .build();
 
-    let email_content = EmailContent::builder().simple(message).build();
-
-    // Send email with custom headers for one-click unsubscribe
+    // Send email
     let result = client
         .send_email()
-        .from_email_address(from_email)
         .destination(destination)
         .content(email_content)
-        // RFC 8058 one-click unsubscribe headers
-        .email_tags(
-            aws_sdk_sesv2::types::MessageTag::builder()
-                .name("List-Unsubscribe")
-                .value(format!("<{}>", unsubscribe_url))
-                .build()?,
-        )
-        .email_tags(
-            aws_sdk_sesv2::types::MessageTag::builder()
-                .name("List-Unsubscribe-Post")
-                .value("List-Unsubscribe=One-Click")
-                .build()?,
-        )
         .send()
         .await?;
 
@@ -112,4 +123,42 @@ pub async fn send_email(
     .await;
 
     Ok(message_id)
+}
+
+/// Encode text using quoted-printable encoding for email bodies
+fn quoted_printable_encode(text: &str) -> String {
+    let mut result = String::new();
+    let mut line_len = 0;
+
+    for byte in text.bytes() {
+        // Characters that need to be encoded
+        if byte == b'=' || byte < 32 || byte > 126 {
+            let encoded = format!("={:02X}", byte);
+            // Soft line break if we're getting close to 76 chars
+            if line_len + encoded.len() > 75 {
+                result.push_str("=\r\n");
+                line_len = 0;
+            }
+            result.push_str(&encoded);
+            line_len += encoded.len();
+        } else {
+            // Handle line breaks
+            if byte == b'\n' {
+                result.push_str("\r\n");
+                line_len = 0;
+            } else if byte == b'\r' {
+                // Skip standalone CR, will be handled with LF
+            } else {
+                // Soft line break if needed
+                if line_len >= 75 {
+                    result.push_str("=\r\n");
+                    line_len = 0;
+                }
+                result.push(byte as char);
+                line_len += 1;
+            }
+        }
+    }
+
+    result
 }

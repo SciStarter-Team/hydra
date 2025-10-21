@@ -1,7 +1,7 @@
 use anyhow::Error;
 use aws_sdk_sesv2::Client as SesClient;
 use common::{
-    message::user::{AdminUser, AdminUserGetRequest},
+    message::user::{UserEmailInfo, UserEmailInfoRequest},
     service::request,
     shared::db,
     timestring::TimeString,
@@ -73,6 +73,14 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
         return Ok(false); // Queue is empty
     };
 
+    tracing::info!(
+        queue_id = %item.queue_id.as_deref().unwrap_or("unknown"),
+        sending_id = %item.sending_id,
+        target_type = %item.target_type,
+        target_value = %item.target_value,
+        "Processing email from queue"
+    );
+
     // Mark as processing
     sqlx::query!(
         r#"UPDATE send_queue SET status = 'processing' WHERE queue_id = ?"#,
@@ -83,12 +91,31 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
 
     // Resolve email address
     let (email_address, user_id_opt) = match item.target_type.as_str() {
-        "email" => (item.target_value.clone(), None),
+        "email" => {
+            tracing::debug!(email = %item.target_value, "Target is email address");
+            (item.target_value.clone(), None)
+        }
         "user_id" => {
             let user_id = item.target_value.parse::<Ulid>()?;
-            let user =
-                request::<AdminUser>("user.admin.get", AdminUserGetRequest { user_id }).await?;
-            (user.primary_email, Some(user_id))
+            tracing::debug!(user_id = %user_id, "Fetching user email info from user-service");
+            tracing::debug!("Calling NATS endpoint: user.info.email_info");
+            let user_info =
+                request::<UserEmailInfo>("user.info.email_info", UserEmailInfoRequest { user_id }).await
+                    .map_err(|e| {
+                        tracing::error!(
+                            user_id = %user_id,
+                            endpoint = "user.info.email_info",
+                            error = %e,
+                            "Failed to call user-service endpoint"
+                        );
+                        e
+                    })?;
+            tracing::debug!(
+                user_id = %user_id,
+                email = %user_info.primary_email,
+                "Resolved user to email address"
+            );
+            (user_info.primary_email, Some(user_id))
         }
         _ => anyhow::bail!("Invalid target_type: {}", item.target_type),
     };
@@ -103,6 +130,11 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
 
     if is_blocked.is_some() {
         // Email is blocked, skip sending
+        tracing::warn!(
+            email = %email_address,
+            sending_id = %item.sending_id,
+            "Email address is on do-not-send list, skipping"
+        );
         let queue_id = item.queue_id.as_deref().ok_or_else(|| anyhow::anyhow!("queue_id is NULL"))?;
         record_skip(queue_id, &item.sending_id, &email_address, "blocked").await?;
         delete_from_queue(queue_id).await?;
@@ -115,10 +147,21 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
     let mut all_field_names = Vec::new();
     let mut all_field_values = Vec::new();
 
+    tracing::debug!(
+        datasets = ?data_set_names,
+        has_user_id = user_id_opt.is_some(),
+        "Loading datasets for merge fields"
+    );
+
     if let Some(uid) = user_id_opt {
         for dataset_name in &data_set_names {
             if let Some(dataset) = DATASET_REGISTRY.get(dataset_name) {
                 let (field_names, field_values) = dataset.get_values(uid).await?;
+                tracing::debug!(
+                    dataset = %dataset_name,
+                    field_count = field_names.len(),
+                    "Loaded dataset values"
+                );
                 all_field_names.extend(field_names);
                 all_field_values.extend(field_values);
             } else {
@@ -167,9 +210,16 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
     // Wait for rate limit and quota
     wait_until_can_send().await;
 
+    tracing::info!(
+        email = %email_address,
+        subject = %merged_subject,
+        sending_id = %item.sending_id,
+        "Sending email via SES"
+    );
+
     // Send via SES
     let sending_ulid = item.sending_id.parse::<Ulid>()?;
-    let ses_message_id = send_email(
+    let ses_message_id = match send_email(
         ses_client,
         from_email(),
         &email_address,
@@ -179,7 +229,27 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
         sending_ulid,
         user_id_opt,
     )
-    .await?;
+    .await
+    {
+        Ok(msg_id) => {
+            tracing::info!(
+                email = %email_address,
+                ses_message_id = %msg_id,
+                sending_id = %item.sending_id,
+                "SES accepted email"
+            );
+            msg_id
+        }
+        Err(e) => {
+            tracing::error!(
+                email = %email_address,
+                sending_id = %item.sending_id,
+                error = %e,
+                "SES rejected email"
+            );
+            return Err(e);
+        }
+    };
 
     // Record success
     let queue_id = item.queue_id.as_deref().ok_or_else(|| anyhow::anyhow!("queue_id is NULL"))?;

@@ -12,15 +12,20 @@
         <!-- Selected recipients will be added here via hx-swap-oob -->
     </div>
 
-    <!-- Search Input -->
+    <!-- Search Input with Dropdown -->
     <div class="relative">
         <input
             type="text"
             id="recipient-search"
             name="q"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-controls="recipient-search-results"
+            aria-expanded="false"
             hx-get="/-admin/api/recipient-search"
             hx-trigger="keyup changed delay:300ms"
             hx-target="#recipient-search-results"
+            hx-swap="outerHTML"
             hx-include="this"
             class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
             placeholder="Search for recipients..."
@@ -28,8 +33,12 @@
         >
 
         <!-- Search Results Dropdown -->
-        <div id="recipient-search-results">
-            <!-- Results will be loaded here -->
+        <div
+            id="recipient-search-results"
+            role="listbox"
+            class="hidden absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto"
+        >
+            <!-- Options will be populated by HTMX -->
         </div>
     </div>
 

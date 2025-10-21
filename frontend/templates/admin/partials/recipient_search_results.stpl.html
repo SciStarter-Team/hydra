@@ -1,95 +1,67 @@
-<% if !self.results.is_empty() { %>
-<div class="absolute z-10 mt-1 w-full bg-white shadow-lg max-h-60 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto sm:text-sm">
-    <% for result in &self.results { %>
-        <% match result {
-            RecipientSearchResult::Email { email } => { %>
-                <form
-                    hx-post="/-admin/api/recipient-add"
-                    hx-target="#selected-recipients"
-                    hx-swap="beforeend"
-                    hx-trigger="click"
-                    class="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-indigo-600 hover:text-white text-gray-900"
-                >
-                    <input type="hidden" name="type" value="Email">
-                    <input type="hidden" name="email" value="<%= email %>">
-                    <div class="flex items-center justify-between">
-                        <div class="flex-1">
-                            <div class="font-medium"><%= email %></div>
-                        </div>
-                        <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                            Email
-                        </span>
-                    </div>
-                </form>
-            <%}
-            RecipientSearchResult::User { user_id, display_name, email } => { %>
-                <form
-                    hx-post="/-admin/api/recipient-add"
-                    hx-target="#selected-recipients"
-                    hx-swap="beforeend"
-                    hx-trigger="click"
-                    class="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-indigo-600 hover:text-white text-gray-900"
-                >
-                    <input type="hidden" name="type" value="User">
-                    <input type="hidden" name="user_id" value="<%= user_id %>">
-                    <input type="hidden" name="display_name" value="<%= display_name %>">
-                    <input type="hidden" name="email" value="<%= email %>">
-                    <div class="flex items-center justify-between">
-                        <div class="flex-1">
-                            <div class="font-medium"><%= display_name %></div>
-                            <div class="text-sm opacity-75"><%= email %></div>
-                        </div>
-                        <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                            User
-                        </span>
-                    </div>
-                </form>
-            <%}
-            RecipientSearchResult::UserSet { slug, name } => { %>
-                <form
-                    hx-post="/-admin/api/recipient-add"
-                    hx-target="#selected-recipients"
-                    hx-swap="beforeend"
-                    hx-trigger="click"
-                    class="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-indigo-600 hover:text-white text-gray-900"
-                >
-                    <input type="hidden" name="type" value="UserSet">
-                    <input type="hidden" name="slug" value="<%= slug %>">
-                    <input type="hidden" name="name" value="<%= name %>">
-                    <div class="flex items-center justify-between">
-                        <div class="flex-1">
-                            <div class="font-medium"><%= name %></div>
-                            <div class="text-sm opacity-75">Slug: <%= slug %></div>
-                        </div>
-                        <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                            User Set
-                        </span>
-                    </div>
-                </form>
-            <%}
-            RecipientSearchResult::AddressSet { slug, name } => { %>
-                <form
-                    hx-post="/-admin/api/recipient-add"
-                    hx-target="#selected-recipients"
-                    hx-swap="beforeend"
-                    hx-trigger="click"
-                    class="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-indigo-600 hover:text-white text-gray-900"
-                >
-                    <input type="hidden" name="type" value="AddressSet">
-                    <input type="hidden" name="slug" value="<%= slug %>">
-                    <input type="hidden" name="name" value="<%= name %>">
-                    <div class="flex items-center justify-between">
-                        <div class="flex-1">
-                            <div class="font-medium"><%= name %></div>
-                            <div class="text-sm opacity-75">Slug: <%= slug %></div>
-                        </div>
-                        <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
-                            Address Set
-                        </span>
-                    </div>
-                </form>
-            <%}
-        } %>
-    <% } %>
+<% if self.results.is_empty() { %>
+<div id="recipient-search-results" role="listbox" class="hidden absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto"></div>
+<% } else { %>
+<div id="recipient-search-results" role="listbox" class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+<% for result in &self.results { %>
+    <% match result {
+        RecipientSearchResult::Email { email } => { %>
+            <div
+                role="option"
+                tabindex="0"
+                class="px-3 py-2 cursor-pointer hover:bg-indigo-50 focus:bg-indigo-50 focus:outline-none flex items-center justify-between"
+                hx-post="/-admin/api/recipient-select"
+                hx-vals='{"q": "<%= email %>"}'
+                hx-target="#selected-recipients"
+                hx-swap="beforeend"
+            >
+                <span><%= email %></span>
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">Email</span>
+            </div>
+        <%}
+        RecipientSearchResult::User { user_id, display_name, email } => { %>
+            <div
+                role="option"
+                tabindex="0"
+                class="px-3 py-2 cursor-pointer hover:bg-indigo-50 focus:bg-indigo-50 focus:outline-none flex items-center justify-between"
+                hx-post="/-admin/api/recipient-select"
+                hx-vals='{"q": "<%= user_id %>"}'
+                hx-target="#selected-recipients"
+                hx-swap="beforeend"
+            >
+                <span><%= display_name %> (<%= email %>)</span>
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">User</span>
+            </div>
+        <%}
+        RecipientSearchResult::UserSet { name, slug } => { %>
+            <div
+                role="option"
+                tabindex="0"
+                class="px-3 py-2 cursor-pointer hover:bg-indigo-50 focus:bg-indigo-50 focus:outline-none flex items-center justify-between"
+                hx-post="/-admin/api/recipient-select"
+                hx-vals='{"q": "<%= slug %>"}'
+                hx-target="#selected-recipients"
+                hx-swap="beforeend"
+            >
+                <span><%= name %></span>
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">User Set</span>
+            </div>
+        <%}
+        RecipientSearchResult::AddressSet { name, slug } => { %>
+            <div
+                role="option"
+                tabindex="0"
+                class="px-3 py-2 cursor-pointer hover:bg-indigo-50 focus:bg-indigo-50 focus:outline-none flex items-center justify-between"
+                hx-post="/-admin/api/recipient-select"
+                hx-vals='{"q": "<%= slug %>"}'
+                hx-target="#selected-recipients"
+                hx-swap="beforeend"
+            >
+                <span><%= name %></span>
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">Address Set</span>
+            </div>
+        <%}
+    } %>
+<% } %>
 </div>
 <% } %>
+

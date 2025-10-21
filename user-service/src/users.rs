@@ -10,7 +10,7 @@ use common::{
         PageManagerSyncRequest, PageManagerSyncResponse, PageManagerUpdateRequest,
         PageManagerUpdateResponse, UserAndBadge, UserBadge, UserEmail, UserEmailAddRequest,
         UserEmailDeleteRequest, UserEmailResponse, UserEmailToggleVerifiedRequest,
-        UserEmailUpdateRequest, UserNameMapping,
+        UserEmailUpdateRequest, UserEmailInfo, UserEmailInfoRequest, UserNameMapping,
     },
     service::{decode_structured_message, log_activity, send},
     shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower},
@@ -764,6 +764,45 @@ pub async fn admin_user_get(req: &Request) -> Result<AdminUserResponse, Error> {
             };
 
             Ok(AdminUserResponse { user })
+        }
+        None => Err(anyhow::anyhow!("User not found").into()),
+    }
+}
+
+pub async fn user_email_info(req: &Request) -> Result<UserEmailInfo, Error> {
+    let request: UserEmailInfoRequest = decode_structured_message(req.message.clone())?;
+
+    let user_id_str = request.user_id.to_string();
+    let user_result = sqlx::query!(
+        r#"
+        SELECT
+            "user_id",
+            "handle",
+            "first_name",
+            "last_name",
+            "primary_email"
+        FROM "users"
+        WHERE "user_id" = ?
+        "#,
+        user_id_str
+    )
+    .fetch_optional(db())
+    .await?;
+
+    match user_result {
+        Some(row) => {
+            let user_id = row
+                .user_id
+                .as_ulid()
+                .map_err(|e| anyhow::anyhow!("Invalid user ID in database: {}", e))?;
+
+            Ok(UserEmailInfo {
+                user_id,
+                handle: row.handle,
+                first_name: row.first_name,
+                last_name: row.last_name,
+                primary_email: row.primary_email,
+            })
         }
         None => Err(anyhow::anyhow!("User not found").into()),
     }

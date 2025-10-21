@@ -2,6 +2,7 @@ use async_nats::service::ServiceExt;
 use common::{handler, recv_handler, shared::{db, nats}};
 use futures_util::stream::StreamExt;
 use tokio::task::JoinSet;
+use tracing::Level;
 
 mod analytics;
 mod datasets;
@@ -19,6 +20,43 @@ mod template;
 
 #[tokio::main]
 async fn main() {
+    // Set up tracing - check for LOG_LEVEL environment variable
+    let log_level = std::env::var("LOG_LEVEL")
+        .ok()
+        .and_then(|s| match s.to_lowercase().as_str() {
+            "trace" => Some(Level::TRACE),
+            "debug" => Some(Level::DEBUG),
+            "info" => Some(Level::INFO),
+            "warn" => Some(Level::WARN),
+            "error" => Some(Level::ERROR),
+            _ => None,
+        })
+        .unwrap_or_else(|| {
+            if cfg!(debug_assertions) {
+                Level::INFO
+            } else {
+                Level::WARN
+            }
+        });
+
+    // Use pretty formatting in debug mode
+    if cfg!(debug_assertions) {
+        let subscriber = tracing_subscriber::FmtSubscriber::builder()
+            .pretty()
+            .with_max_level(log_level)
+            .finish();
+        tracing::subscriber::set_global_default(subscriber)
+            .expect("setting default tracing subscriber failed");
+    } else {
+        let subscriber = tracing_subscriber::FmtSubscriber::builder()
+            .with_max_level(log_level)
+            .finish();
+        tracing::subscriber::set_global_default(subscriber)
+            .expect("setting default tracing subscriber failed");
+    }
+
+    println!("Log level: {:?}", log_level);
+
     common::shared::init("emailer").await;
 
     // Run database migrations
