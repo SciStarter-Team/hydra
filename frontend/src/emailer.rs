@@ -40,6 +40,7 @@ pub fn routes() -> impl Endpoint {
 #[serde(rename_all = "PascalCase")]
 struct SnsNotification {
     #[serde(rename = "Type")]
+    #[allow(dead_code)]
     notification_type: String,
     message: String,
 }
@@ -62,6 +63,7 @@ struct SesBounce {
 #[serde(rename_all = "camelCase")]
 struct SesBouncedRecipient {
     email_address: String,
+    #[allow(dead_code)]
     status: Option<String>,
     diagnostic_code: Option<String>,
 }
@@ -90,6 +92,7 @@ struct SesComplainedRecipient {
 #[serde(rename_all = "camelCase")]
 struct SesMail {
     message_id: String,
+    #[allow(dead_code)]
     tags: Option<std::collections::HashMap<String, Vec<String>>>,
 }
 
@@ -146,7 +149,8 @@ async fn handle_bounce(Json(notification): Json<SnsNotification>) -> Response {
                 };
 
                 let bounce_event = BounceEvent {
-                    sending_id: None, // We don't have this from SNS
+                    sending_id: None, // Will be looked up by emailer-service
+                    ses_message_id: Some(bounce.mail.message_id.clone()),
                     user_id,
                     email_address: recipient.email_address.clone(),
                     bounce_type: bounce.bounce.bounce_type.clone(),
@@ -206,7 +210,8 @@ async fn handle_complaint(Json(notification): Json<SnsNotification>) -> Response
                 };
 
                 let complaint_event = ComplaintEvent {
-                    sending_id: None, // We don't have this from SNS
+                    sending_id: None, // Will be looked up by emailer-service
+                    ses_message_id: Some(complaint.mail.message_id.clone()),
                     user_id,
                     email_address: recipient.email_address.clone(),
                     complaint_type: complaint.complaint.complaint_feedback_type.clone(),

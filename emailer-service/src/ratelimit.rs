@@ -74,13 +74,6 @@ impl QuotaTracker {
         *sent += 1;
     }
 
-    /// Get remaining quota for today
-    async fn remaining(&self) -> u32 {
-        self.check_and_reset().await;
-        let sent = self.sent_today.read().await;
-        self.quota_limit.saturating_sub(*sent)
-    }
-
     /// Check if we need to reset the counter (new day in UTC)
     async fn check_and_reset(&self) {
         let now = Zoned::now();
@@ -109,9 +102,4 @@ pub async fn wait_until_can_send() {
 /// Call this after successfully sending an email
 pub async fn mark_sent() {
     QUOTA_TRACKER.increment().await;
-}
-
-/// Get remaining quota for today
-pub async fn remaining_quota() -> u32 {
-    QUOTA_TRACKER.remaining().await
 }

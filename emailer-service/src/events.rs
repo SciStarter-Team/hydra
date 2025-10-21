@@ -10,8 +10,22 @@ use common::{
 /// Adds email to do_not_send and updates sending metrics
 #[tracing::instrument(skip_all)]
 pub async fn handle_bounce(req: &Request) -> Result<(), Error> {
-    let event: BounceEvent = flexbuffers::from_slice(&req.message.payload)?;
+    let mut event: BounceEvent = flexbuffers::from_slice(&req.message.payload)?;
     let suppressed_at = TimeString::now();
+
+    // Look up sending_id from ses_message_id if not already provided
+    if event.sending_id.is_none() && event.ses_message_id.is_some() {
+        let ses_msg_id = event.ses_message_id.as_ref().unwrap();
+        if let Some(row) = sqlx::query!(
+            r#"SELECT sending_id FROM send_history WHERE ses_message_id = ? LIMIT 1"#,
+            ses_msg_id
+        )
+        .fetch_optional(db())
+        .await?
+        {
+            event.sending_id = row.sending_id.parse().ok();
+        }
+    }
 
     // Add to do_not_send list
     sqlx::query!(
@@ -60,8 +74,22 @@ pub async fn handle_bounce(req: &Request) -> Result<(), Error> {
 /// Adds email to do_not_send and updates sending metrics
 #[tracing::instrument(skip_all)]
 pub async fn handle_complaint(req: &Request) -> Result<(), Error> {
-    let event: ComplaintEvent = flexbuffers::from_slice(&req.message.payload)?;
+    let mut event: ComplaintEvent = flexbuffers::from_slice(&req.message.payload)?;
     let suppressed_at = TimeString::now();
+
+    // Look up sending_id from ses_message_id if not already provided
+    if event.sending_id.is_none() && event.ses_message_id.is_some() {
+        let ses_msg_id = event.ses_message_id.as_ref().unwrap();
+        if let Some(row) = sqlx::query!(
+            r#"SELECT sending_id FROM send_history WHERE ses_message_id = ? LIMIT 1"#,
+            ses_msg_id
+        )
+        .fetch_optional(db())
+        .await?
+        {
+            event.sending_id = row.sending_id.parse().ok();
+        }
+    }
 
     // Add to do_not_send list
     sqlx::query!(

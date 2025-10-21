@@ -145,6 +145,7 @@ pub struct CheckSendabilityResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BounceEvent {
     pub sending_id: Option<Ulid>,
+    pub ses_message_id: Option<String>,
     pub user_id: Option<Ulid>,
     pub email_address: String,
     pub bounce_type: String, // 'permanent', 'temporary', 'undetermined'
@@ -154,6 +155,7 @@ pub struct BounceEvent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComplaintEvent {
     pub sending_id: Option<Ulid>,
+    pub ses_message_id: Option<String>,
     pub user_id: Option<Ulid>,
     pub email_address: String,
     pub complaint_type: Option<String>,
