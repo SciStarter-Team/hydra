@@ -20,8 +20,8 @@ use crate::project::field::{
 use common::{
     insensitivestring::InsensitiveString,
     message::health::{
-        ForumServiceHealthResponse, FrontendServiceHealthResponse, LocationServiceHealthResponse,
-        LogServiceHealthResponse, UserServiceHealthResponse,
+        EmailerServiceHealthResponse, ForumServiceHealthResponse, FrontendServiceHealthResponse,
+        LocationServiceHealthResponse, LogServiceHealthResponse, UserServiceHealthResponse,
     },
     message::log::{
         AnalyticsQuery, AnalyticsResponse, GoUrlStatsRequest, GoUrlStatsResponse,
@@ -162,6 +162,7 @@ pub fn routes() -> impl Endpoint {
         .at("/email/stored/:id/send", post(email_stored_send))
         .at("/email/triggers", get(email_triggers))
         .at("/email/queue", get(email_queue))
+        .at("/email/queue-content", get(email_queue_content))
         .at("/email/dataset/:name/variables", get(email_dataset_variables))
         .at("/email/merge-fields", get(email_merge_fields))
         .at("/email/address-sets", get(address_sets_list))
@@ -334,14 +335,17 @@ async fn fetch_service_health() -> Vec<ServiceHealth> {
         request_timeout::<FrontendServiceHealthResponse>("frontend.health.check", (), timeout);
     let forum_health_future =
         request_timeout::<ForumServiceHealthResponse>("forum.health.check", (), timeout);
+    let emailer_health_future =
+        request_timeout::<EmailerServiceHealthResponse>("emailer.health.check", (), timeout);
 
     // Wait for all health checks to complete
-    let (user_result, location_result, log_result, frontend_result, forum_result) = tokio::join!(
+    let (user_result, location_result, log_result, frontend_result, forum_result, emailer_result) = tokio::join!(
         user_health_future,
         location_health_future,
         log_health_future,
         frontend_health_future,
-        forum_health_future
+        forum_health_future,
+        emailer_health_future
     );
 
     let mut services = Vec::new();
@@ -464,6 +468,31 @@ async fn fetch_service_health() -> Vec<ServiceHealth> {
         Err(_) => {
             services.push(ServiceHealth {
                 name: "Forum Service".to_string(),
+                status: "unreachable".to_string(),
+                status_color: "red".to_string(),
+                response_time: 0,
+            });
+        }
+    }
+
+    // Process emailer service health result
+    match emailer_result {
+        Ok(health) => {
+            let status_color = match health.status.as_str() {
+                "healthy" => "green",
+                "degraded" => "yellow",
+                _ => "red",
+            };
+            services.push(ServiceHealth {
+                name: "Emailer Service".to_string(),
+                status: health.status,
+                status_color: status_color.to_string(),
+                response_time: health.response_time_ms,
+            });
+        }
+        Err(_) => {
+            services.push(ServiceHealth {
+                name: "Emailer Service".to_string(),
                 status: "unreachable".to_string(),
                 status_color: "red".to_string(),
                 response_time: 0,
@@ -1319,7 +1348,7 @@ pub struct ProjectsPagePrepared {
 
 impl Component for ProjectsPage {
     type Param = Option<Arc<BasicInfo>>;
-    type Prepared = AdminLayoutPrepared;
+    type Prepared = AdminLayoutPrepared<ProjectsPagePrepared>;
 
     async fn prepare(self, param: Self::Param) -> Result<Self::Prepared, anyhow::Error> {
         let page = self.page.unwrap_or(1);
@@ -1375,12 +1404,9 @@ impl Component for ProjectsPage {
             flagged: self.flagged.unwrap_or_default(),
         };
 
-        let content = projects_content.render_once()?;
-
-        AdminLayout::new("Projects")
+        AdminLayout::new("Projects", projects_content)
             .with_breadcrumb("Projects", None)
             .with_sidebar_active("projects")
-            .with_content(content)
             .prepare(param)
             .await
     }
@@ -1494,7 +1520,7 @@ pub struct EventsContent {
 
 impl Component for EventsPage {
     type Param = Option<Arc<BasicInfo>>;
-    type Prepared = AdminLayoutPrepared;
+    type Prepared = AdminLayoutPrepared<EventsPagePrepared>;
 
     async fn prepare(self, param: Self::Param) -> Result<Self::Prepared, anyhow::Error> {
         let page = 1u32; // For now, just show first page on dashboard
@@ -1523,12 +1549,9 @@ impl Component for EventsPage {
             selected_status: "".to_string(),
         };
 
-        let content = events_content.render_once()?;
-
-        AdminLayout::new("Events")
+        AdminLayout::new("Events", events_content)
             .with_breadcrumb("Events", None)
             .with_sidebar_active("events")
-            .with_content(content)
             .prepare(param)
             .await
     }
@@ -1556,7 +1579,7 @@ pub struct AnalyticsPagePrepared {
 
 impl Component for AnalyticsPage {
     type Param = Option<Arc<BasicInfo>>;
-    type Prepared = AdminLayoutPrepared;
+    type Prepared = AdminLayoutPrepared<AnalyticsPagePrepared>;
 
     async fn prepare(self, param: Self::Param) -> Result<Self::Prepared, anyhow::Error> {
         // Fetch database statistics for frontend data
@@ -1675,12 +1698,9 @@ impl Component for AnalyticsPage {
             user_growth_data,
         };
 
-        let content = analytics_content.render_once()?;
-
-        AdminLayout::new("Analytics")
+        AdminLayout::new("Analytics", analytics_content)
             .with_breadcrumb("Analytics", None)
             .with_sidebar_active("analytics")
-            .with_content(content)
             .prepare(param)
             .await
     }
@@ -1714,7 +1734,7 @@ pub struct UsersPage {
 
 impl Component for UsersPage {
     type Param = Option<Arc<BasicInfo>>;
-    type Prepared = AdminLayoutPrepared;
+    type Prepared = AdminLayoutPrepared<UsersPagePrepared>;
 
     async fn prepare(self, param: Self::Param) -> Result<Self::Prepared, anyhow::Error> {
         // Fetch real user data from user service
@@ -1763,12 +1783,9 @@ impl Component for UsersPage {
             selected_email_status: self.email_status.unwrap_or_default(),
         };
 
-        let content = users_page.render_once()?;
-
-        AdminLayout::new("Users")
+        AdminLayout::new("Users", users_page)
             .with_breadcrumb("Users", None)
             .with_sidebar_active("users")
-            .with_content(content)
             .prepare(param)
             .await
     }
@@ -1779,7 +1796,7 @@ pub struct DashboardPage;
 
 impl Component for DashboardPage {
     type Param = Option<Arc<BasicInfo>>;
-    type Prepared = AdminLayoutPrepared;
+    type Prepared = AdminLayoutPrepared<DashboardContent>;
 
     async fn prepare(self, param: Self::Param) -> Result<Self::Prepared, anyhow::Error> {
         // Fetch real data from services and database
@@ -1855,11 +1872,8 @@ impl Component for DashboardPage {
 
         let dashboard_content = DashboardContent { stats, sections };
 
-        let content = dashboard_content.render_once()?;
-
-        AdminLayout::new("Dashboard")
+        AdminLayout::new("Dashboard", dashboard_content)
             .with_sidebar_active("dashboard")
-            .with_content(content)
             .prepare(param)
             .await
     }
@@ -1886,12 +1900,10 @@ async fn users(
             page: query.page,
         };
         let users_page = users_search_internal(search_query).await?;
-        let content = users_page.render_once()?;
 
-        return AdminLayout::new("Users")
+        return AdminLayout::new("Users", users_page)
             .with_breadcrumb("Users", None)
             .with_sidebar_active("users")
-            .with_content(content)
             .into_response(user_info)
             .await;
     }
@@ -2121,12 +2133,10 @@ async fn projects(
             page: query.page,
         };
         let projects_page = projects_search_internal(search_query).await?;
-        let content = projects_page.render_once()?;
 
-        return AdminLayout::new("Projects")
+        return AdminLayout::new("Projects", projects_page)
             .with_breadcrumb("Projects", None)
             .with_sidebar_active("projects")
-            .with_content(content)
             .into_response(user_info)
             .await;
     }
@@ -2264,13 +2274,10 @@ async fn users_edit(
         }
     };
 
-    let content_html = content.render_once()?;
-
-    let prepared = crate::component::AdminLayout::new("Edit User")
+    let prepared = crate::component::AdminLayout::new("Edit User", content)
         .with_sidebar_active("users")
         .with_breadcrumb("Users", Some("/-admin/users"))
         .with_breadcrumb("Edit", None)
-        .with_content(content_html)
         .prepare(user_info)
         .await?;
 
@@ -2536,13 +2543,10 @@ async fn users_update(
             error_message: Some("Email is required".to_string()),
         };
 
-        let content_html = content.render_once()?;
-
-        let prepared = crate::component::AdminLayout::new("Edit User")
+        let prepared = crate::component::AdminLayout::new("Edit User", content)
             .with_sidebar_active("users")
             .with_breadcrumb("Users", Some("/-admin/users"))
             .with_breadcrumb("Edit", None)
-            .with_content(content_html)
             .prepare(user_info)
             .await?;
 
@@ -2598,13 +2602,10 @@ async fn users_update(
                 error_message: Some(format!("Failed to update user: {}", e)),
             };
 
-            let content_html = content.render_once()?;
-
-            let prepared = crate::component::AdminLayout::new("Edit User")
+            let prepared = crate::component::AdminLayout::new("Edit User", content)
                 .with_sidebar_active("users")
                 .with_breadcrumb("Users", Some("/-admin/users"))
                 .with_breadcrumb("Edit", None)
-                .with_content(content_html)
                 .prepare(user_info)
                 .await?;
 
@@ -2629,7 +2630,7 @@ pub struct EngineOperation {
 
 #[derive(sailfish::TemplateOnce)]
 #[template(path = "admin/engine_room.stpl.html")]
-struct EngineRoomPrepared {
+pub struct EngineRoomPrepared {
     operations: Vec<EngineOperation>,
 }
 
@@ -2638,7 +2639,7 @@ pub struct EngineRoomPage;
 
 impl Component for EngineRoomPage {
     type Param = Option<Arc<BasicInfo>>;
-    type Prepared = AdminLayoutPrepared;
+    type Prepared = AdminLayoutPrepared<EngineRoomPrepared>;
 
     async fn prepare(self, param: Self::Param) -> Result<Self::Prepared, anyhow::Error> {
         let operations = vec![
@@ -2656,12 +2657,10 @@ impl Component for EngineRoomPage {
         ];
 
         let engine_room_content = EngineRoomPrepared { operations };
-        let content = engine_room_content.render_once()?;
 
-        AdminLayout::new("Engine Room")
+        AdminLayout::new("Engine Room", engine_room_content)
             .with_breadcrumb("Engine Room", None)
             .with_sidebar_active("engine-room")
-            .with_content(content)
             .prepare(param)
             .await
     }
@@ -3030,20 +3029,18 @@ struct EditProjectPage {
 
 impl Component for EditProjectPage {
     type Param = Option<Arc<BasicInfo>>;
-    type Prepared = AdminLayoutPrepared;
+    type Prepared = AdminLayoutPrepared<EditProjectContent>;
 
     async fn prepare(self, user_info: Self::Param) -> anyhow::Result<Self::Prepared> {
         let title = self.project.title.clone();
         let content = EditProjectContent {
             project: self.project,
         };
-        let content_html = content.render_once()?;
 
-        AdminLayout::new(&format!("Edit Project: {}", title))
+        AdminLayout::new(&format!("Edit Project: {}", title), content)
             .with_breadcrumb("Projects", Some("/-admin/projects"))
             .with_breadcrumb(&title, None)
             .with_sidebar_active("projects")
-            .with_content(content_html)
             .prepare(user_info)
             .await
     }
@@ -3062,20 +3059,18 @@ struct EditEventPage {
 
 impl Component for EditEventPage {
     type Param = Option<Arc<BasicInfo>>;
-    type Prepared = AdminLayoutPrepared;
+    type Prepared = AdminLayoutPrepared<EditEventContent>;
 
     async fn prepare(self, user_info: Self::Param) -> anyhow::Result<Self::Prepared> {
         let title = self.event.name.clone();
         let content = EditEventContent {
             event: self.event,
         };
-        let content_html = content.render_once()?;
 
-        AdminLayout::new(&format!("Edit Event: {}", title))
+        AdminLayout::new(&format!("Edit Event: {}", title), content)
             .with_breadcrumb("Events", Some("/-admin/events"))
             .with_breadcrumb(&title, None)
             .with_sidebar_active("events")
-            .with_content(content_html)
             .prepare(user_info)
             .await
     }
@@ -5211,13 +5206,10 @@ async fn projects_new(
         error_message: None,
     };
 
-    let content_html = content.render_once()?;
-
-    let prepared = crate::component::AdminLayout::new("Add New Project")
+    let prepared = crate::component::AdminLayout::new("Add New Project", content)
         .with_sidebar_active("projects")
         .with_breadcrumb("Projects", Some("/-admin/projects"))
         .with_breadcrumb("Add Project", None)
-        .with_content(content_html)
         .prepare(user_info)
         .await?;
 
@@ -5253,13 +5245,10 @@ async fn projects_create(
             error_message: Some("Project name is required".to_string()),
         };
 
-        let content_html = content.render_once()?;
-
-        let prepared = crate::component::AdminLayout::new("Add New Project")
+        let prepared = crate::component::AdminLayout::new("Add New Project", content)
             .with_sidebar_active("projects")
             .with_breadcrumb("Projects", Some("/-admin/projects"))
             .with_breadcrumb("Add Project", None)
-            .with_content(content_html)
             .prepare(Some(user_info.clone().into()))
             .await?;
 
@@ -5273,13 +5262,10 @@ async fn projects_create(
             error_message: Some("Description is required".to_string()),
         };
 
-        let content_html = content.render_once()?;
-
-        let prepared = crate::component::AdminLayout::new("Add New Project")
+        let prepared = crate::component::AdminLayout::new("Add New Project", content)
             .with_sidebar_active("projects")
             .with_breadcrumb("Projects", Some("/-admin/projects"))
             .with_breadcrumb("Add Project", None)
-            .with_content(content_html)
             .prepare(Some(user_info.clone().into()))
             .await?;
 
@@ -5293,13 +5279,10 @@ async fn projects_create(
             error_message: Some("Presenter/Organization is required".to_string()),
         };
 
-        let content_html = content.render_once()?;
-
-        let prepared = crate::component::AdminLayout::new("Add New Project")
+        let prepared = crate::component::AdminLayout::new("Add New Project", content)
             .with_sidebar_active("projects")
             .with_breadcrumb("Projects", Some("/-admin/projects"))
             .with_breadcrumb("Add Project", None)
-            .with_content(content_html)
             .prepare(Some(user_info.clone().into()))
             .await?;
 
@@ -5371,13 +5354,10 @@ async fn projects_create(
                 error_message: Some(format!("Failed to create project: {}", e)),
             };
 
-            let content_html = content.render_once()?;
-
-            let prepared = crate::component::AdminLayout::new("Add New Project")
+            let prepared = crate::component::AdminLayout::new("Add New Project", content)
                 .with_sidebar_active("projects")
                 .with_breadcrumb("Projects", Some("/-admin/projects"))
                 .with_breadcrumb("Add Project", None)
-                .with_content(content_html)
                 .prepare(Some(user_info.into()))
                 .await?;
 
@@ -5751,12 +5731,10 @@ async fn files_links(
     let search = query.search.filter(|s| !s.trim().is_empty());
 
     let go_urls_list = get_go_urls_with_file_info_searched(page, per_page, search.clone()).await?;
-    let content = FilesLinksPage { go_urls_list }.render_once()?;
 
-    AdminLayout::new("Files & Links")
+    AdminLayout::new("Files & Links", FilesLinksPage { go_urls_list })
         .with_breadcrumb("Files & Links", None)
         .with_sidebar_active("files-links")
-        .with_content(content)
         .into_response(user_info)
         .await
 }
@@ -6341,12 +6319,9 @@ async fn entities(
     ).await?;
 
     let page = EntitiesPage { entities_content };
-    let content = page.render_once()?;
-
-    let prepared = AdminLayout::new("Slug Management")
+    let prepared = AdminLayout::new("Slug Management", page)
         .with_breadcrumb("Slugs", None)
         .with_sidebar_active("entities")
-        .with_content(content)
         .prepare(Some(user_info))
         .await?;
 
@@ -6550,13 +6525,10 @@ async fn entities_edit(
         error_message: None,
     };
 
-    let content_html = content.render_once()?;
-
-    let prepared = crate::component::AdminLayout::new("Edit Slug")
+    let prepared = crate::component::AdminLayout::new("Edit Slug", content)
         .with_sidebar_active("entities")
         .with_breadcrumb("Slugs", Some("/-admin/entities"))
         .with_breadcrumb("Edit", None)
-        .with_content(content_html)
         .prepare(user_info)
         .await?;
 
@@ -6591,12 +6563,10 @@ async fn entities_update(
                 error_message: Some(format!("Invalid entity kind: {}", e)),
             };
 
-            let content_html = content.render_once()?;
-            let prepared = crate::component::AdminLayout::new("Edit Slug")
+            let prepared = crate::component::AdminLayout::new("Edit Slug", content)
                 .with_sidebar_active("entities")
                 .with_breadcrumb("Slugs", Some("/-admin/entities"))
                 .with_breadcrumb("Edit", None)
-                .with_content(content_html)
                 .prepare(user_info)
                 .await?;
 
@@ -6625,12 +6595,10 @@ async fn entities_update(
                 error_message: Some(format!("Invalid target: {}", e)),
             };
 
-            let content_html = content.render_once()?;
-            let prepared = crate::component::AdminLayout::new("Edit Slug")
+            let prepared = crate::component::AdminLayout::new("Edit Slug", content)
                 .with_sidebar_active("entities")
                 .with_breadcrumb("Slugs", Some("/-admin/entities"))
                 .with_breadcrumb("Edit", None)
-                .with_content(content_html)
                 .prepare(user_info)
                 .await?;
 
@@ -6679,12 +6647,10 @@ async fn entities_update(
                 error_message: Some(format!("Error saving entity: {}", e)),
             };
 
-            let content_html = content.render_once()?;
-            let prepared = crate::component::AdminLayout::new("Edit Slug")
+            let prepared = crate::component::AdminLayout::new("Edit Slug", content)
                 .with_sidebar_active("entities")
                 .with_breadcrumb("Slugs", Some("/-admin/entities"))
                 .with_breadcrumb("Edit", None)
-                .with_content(content_html)
                 .prepare(user_info)
                 .await?;
 
@@ -7146,13 +7112,11 @@ async fn wysiwyg_list(
         new_endpoint: "/-admin/wysiwyg/new".to_string(),
         content,
     };
-    let page_html = page.render_once()?;
 
-    let prepared = crate::component::AdminLayout::new("Simple Content")
+    let prepared = crate::component::AdminLayout::new("Simple Content", page)
         .with_sidebar_active("wysiwyg")
         .with_breadcrumb("Simple Pages", None)
         .with_quill()
-        .with_content(page_html)
         .prepare(Some(user_info))
         .await?;
 
@@ -7430,14 +7394,11 @@ async fn pagecontent_edit(
         error_message: None,
     };
 
-    let content_html = content.render_once()?;
-
-    let prepared = crate::component::AdminLayout::new("Edit Simple Page")
+    let prepared = crate::component::AdminLayout::new("Edit Simple Page", content)
         .with_sidebar_active("wysiwyg")
         .with_breadcrumb("Simple Pages", Some("/-admin/wysiwyg"))
         .with_breadcrumb("Edit", None)
         .with_quill()
-        .with_content(content_html)
         .prepare(user_info)
         .await?;
 
@@ -7471,14 +7432,11 @@ async fn pagecontent_update(
             error_message: Some("Name is required".to_string()),
         };
 
-        let content_html = content.render_once()?;
-
-        let prepared = crate::component::AdminLayout::new("Edit Simple Page")
+        let prepared = crate::component::AdminLayout::new("Edit Simple Page", content)
             .with_sidebar_active("wysiwyg")
             .with_breadcrumb("Simple Pages", Some("/-admin/wysiwyg"))
             .with_breadcrumb("Edit", None)
             .with_quill()
-            .with_content(content_html)
             .prepare(user_info)
             .await?;
 
@@ -7628,13 +7586,11 @@ async fn dressed_html_list(
         new_endpoint: "/-admin/pagecontent/DressedHtml/new".to_string(),
         content,
     };
-    let page_html = page.render_once()?;
 
-    let prepared = crate::component::AdminLayout::new("Dressed HTML")
+    let prepared = crate::component::AdminLayout::new("Dressed HTML", page)
         .with_sidebar_active("engine-room-dressed-html")
         .with_breadcrumb("Engine Room", None)
         .with_breadcrumb("Dressed HTML", None)
-        .with_content(page_html)
         .prepare(Some(user_info))
         .await?;
 
@@ -7778,14 +7734,11 @@ async fn dressed_html_edit(
         error_message: None,
     };
 
-    let content_html = content.render_once()?;
-
-    let prepared = crate::component::AdminLayout::new("Edit Dressed HTML")
+    let prepared = crate::component::AdminLayout::new("Edit Dressed HTML", content)
         .with_sidebar_active("engine-room-dressed-html")
         .with_breadcrumb("Engine Room", None)
         .with_breadcrumb("Dressed HTML", Some("/-admin/pagecontent/DressedHtml"))
         .with_breadcrumb("Edit", None)
-        .with_content(content_html)
         .prepare(user_info)
         .await?;
 
@@ -7813,14 +7766,11 @@ async fn dressed_html_update(
             error_message: Some("Name is required".to_string()),
         };
 
-        let content_html = content.render_once()?;
-
-        let prepared = crate::component::AdminLayout::new("Edit Dressed HTML")
+        let prepared = crate::component::AdminLayout::new("Edit Dressed HTML", content)
             .with_sidebar_active("engine-room-dressed-html")
             .with_breadcrumb("Engine Room", None)
             .with_breadcrumb("Dressed HTML", Some("/-admin/pagecontent/DressedHtml"))
             .with_breadcrumb("Edit", None)
-            .with_content(content_html)
             .prepare(user_info)
             .await?;
 
@@ -7955,13 +7905,11 @@ async fn raw_html_list(
         new_endpoint: "/-admin/pagecontent/RawHtml/new".to_string(),
         content,
     };
-    let page_html = page.render_once()?;
 
-    let prepared = crate::component::AdminLayout::new("Raw HTML")
+    let prepared = crate::component::AdminLayout::new("Raw HTML", page)
         .with_sidebar_active("engine-room-raw-html")
         .with_breadcrumb("Engine Room", None)
         .with_breadcrumb("Raw HTML", None)
-        .with_content(page_html)
         .prepare(Some(user_info))
         .await?;
 
@@ -8000,14 +7948,11 @@ async fn raw_html_edit(
         error_message: None,
     };
 
-    let content_html = content.render_once()?;
-
-    let prepared = crate::component::AdminLayout::new("Edit Raw HTML")
+    let prepared = crate::component::AdminLayout::new("Edit Raw HTML", content)
         .with_sidebar_active("engine-room-raw-html")
         .with_breadcrumb("Engine Room", None)
         .with_breadcrumb("Raw HTML", Some("/-admin/pagecontent/RawHtml"))
         .with_breadcrumb("Edit", None)
-        .with_content(content_html)
         .prepare(user_info)
         .await?;
 
@@ -8035,14 +7980,11 @@ async fn raw_html_update(
             error_message: Some("Name is required".to_string()),
         };
 
-        let content_html = content.render_once()?;
-
-        let prepared = crate::component::AdminLayout::new("Edit Raw HTML")
+        let prepared = crate::component::AdminLayout::new("Edit Raw HTML", content)
             .with_sidebar_active("engine-room-raw-html")
             .with_breadcrumb("Engine Room", None)
             .with_breadcrumb("Raw HTML", Some("/-admin/pagecontent/RawHtml"))
             .with_breadcrumb("Edit", None)
-            .with_content(content_html)
             .prepare(user_info)
             .await?;
 
@@ -8233,12 +8175,10 @@ async fn schedules_list(
     let page = SchedulesPage {
         schedules_content: content,
     };
-    let page_html = page.render_once()?;
 
-    let prepared = crate::component::AdminLayout::new("Scheduling")
+    let prepared = crate::component::AdminLayout::new("Scheduling", page)
         .with_sidebar_active("schedules")
         .with_breadcrumb("Scheduling", None)
-        .with_content(page_html)
         .prepare(Some(user_info))
         .await?;
 
@@ -8497,11 +8437,10 @@ async fn schedules_edit(
         error_message: None,
     };
 
-    let layout = AdminLayout::new("Edit Schedule")
+    let layout = AdminLayout::new("Edit Schedule", content)
         .with_breadcrumb("Schedules", Some("/-admin/schedules"))
         .with_breadcrumb("Edit", None)
         .with_sidebar_active("schedules")
-        .with_content(content.render_once()?)
         .prepare(user_info)
         .await?;
 
@@ -8601,11 +8540,10 @@ async fn schedules_update(
                 error_message: Some(e.to_string()),
             };
 
-            let layout = AdminLayout::new("Edit Schedule")
+            let layout = AdminLayout::new("Edit Schedule", content)
                 .with_breadcrumb("Schedules", Some("/-admin/schedules"))
                 .with_breadcrumb("Edit", None)
                 .with_sidebar_active("schedules")
-                .with_content(content.render_once()?)
                 .prepare(user_info)
                 .await?;
 
@@ -8740,12 +8678,9 @@ async fn email_stored(
         end_item,
     };
 
-    let html = content.render_once()?;
-
-    AdminLayout::new("Stored Emails")
+    AdminLayout::new("Stored Emails", content)
         .with_breadcrumb("Stored Emails", None)
         .with_sidebar_active("email-stored")
-        .with_content(html)
         .into_response(user_info)
         .await
 }
@@ -8807,12 +8742,9 @@ async fn email_oneoff(
         include_archived,
     };
 
-    let html = content.render_once()?;
-
-    AdminLayout::new("One-off Emails")
+    AdminLayout::new("One-off Emails", content)
         .with_breadcrumb("One-off Emails", None)
         .with_sidebar_active("email-oneoff")
-        .with_content(html)
         .into_response(user_info)
         .await
 }
@@ -8843,13 +8775,11 @@ async fn email_stored_new(
         error_message: None,
         datasets: datasets_response.datasets,
     };
-    let html = content.render_once()?;
-    AdminLayout::new("Create Stored Email")
+    AdminLayout::new("Create Stored Email", content)
         .with_breadcrumb("Stored Emails", Some("/-admin/email/stored"))
         .with_breadcrumb("Create", None)
         .with_sidebar_active("email-stored")
         .with_quill()
-        .with_content(html)
         .into_response(user_info)
         .await
 }
@@ -8901,12 +8831,10 @@ async fn email_stored_create(
                 error_message: Some(format!("Failed to create stored email: {}", e)),
                 datasets: datasets_response.datasets,
             };
-            let html = content.render_once()?;
-            AdminLayout::new("Create Stored Email")
+            AdminLayout::new("Create Stored Email", content)
                 .with_breadcrumb("Stored Emails", Some("/-admin/email/stored"))
                 .with_breadcrumb("Create", None)
                 .with_sidebar_active("email-stored")
-                .with_content(html)
                 .into_response(user_info)
                 .await
         }
@@ -8964,13 +8892,11 @@ async fn email_stored_edit(
                 error_message: None,
                 available_datasets: datasets_response.datasets,
             };
-            let html = content.render_once()?;
-            AdminLayout::new("Edit Stored Email")
+            AdminLayout::new("Edit Stored Email", content)
                 .with_breadcrumb("Stored Emails", Some("/-admin/email/stored"))
                 .with_breadcrumb("Edit", None)
                 .with_sidebar_active("email-stored")
                 .with_quill()
-                .with_content(html)
                 .into_response(user_info)
                 .await
         }
@@ -9139,13 +9065,11 @@ async fn email_oneoff_new(
         error_message: None,
         datasets: datasets_response.datasets,
     };
-    let html = content.render_once()?;
-    AdminLayout::new("Create One-off Email")
+    AdminLayout::new("Create One-off Email", content)
         .with_breadcrumb("One-off Emails", Some("/-admin/email/oneoff"))
         .with_breadcrumb("Create", None)
         .with_sidebar_active("email-oneoff")
         .with_quill()
-        .with_content(html)
         .into_response(user_info)
         .await
 }
@@ -9195,12 +9119,10 @@ async fn email_oneoff_create(
                 error_message: Some(format!("Failed to create one-off email: {}", e)),
                 datasets: datasets_response.datasets,
             };
-            let html = content.render_once()?;
-            AdminLayout::new("Create One-off Email")
+            AdminLayout::new("Create One-off Email", content)
                 .with_breadcrumb("One-off Emails", Some("/-admin/email/oneoff"))
                 .with_breadcrumb("Create", None)
                 .with_sidebar_active("email-oneoff")
-                .with_content(html)
                 .into_response(user_info)
                 .await
         }
@@ -9258,13 +9180,11 @@ async fn email_oneoff_edit(
                 error_message: None,
                 available_datasets: datasets_response.datasets,
             };
-            let html = content.render_once()?;
-            AdminLayout::new("Edit One-off Email")
+            AdminLayout::new("Edit One-off Email", content)
                 .with_breadcrumb("One-off Emails", Some("/-admin/email/oneoff"))
                 .with_breadcrumb("Edit", None)
                 .with_sidebar_active("email-oneoff")
                 .with_quill()
-                .with_content(html)
                 .into_response(user_info)
                 .await
         }
@@ -9443,30 +9363,84 @@ pub struct EmailTriggersContent;
 async fn email_triggers(
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    let content = EmailTriggersContent.render_once()?;
-    AdminLayout::new("Email Triggers")
+    AdminLayout::new("Email Triggers", EmailTriggersContent)
         .with_breadcrumb("Email Triggers", None)
         .with_sidebar_active("email-triggers")
-        .with_content(content)
         .into_response(user_info)
         .await
 }
 
 #[derive(Debug, TemplateOnce)]
 #[template(path = "admin/email_queue.stpl.html")]
-pub struct EmailQueueContent;
+pub struct EmailQueueContent {
+    queue_status: common::message::email::QueueStatusResponse,
+    sendings: Vec<common::message::email::SendingMetrics>,
+    total: u32,
+}
 
 #[handler]
 async fn email_queue(
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    let content = EmailQueueContent.render_once()?;
-    AdminLayout::new("Email Queue")
+    use common::message::email::{ListSendingsRequest, ListSendingsResponse, QueueStatusResponse};
+    use common::service::request;
+
+    // Get queue status
+    let queue_status: QueueStatusResponse = request("emailer.analytics.queue_status", ()).await?;
+
+    // Get recent sendings (first page)
+    let sendings_response: ListSendingsResponse = request(
+        "emailer.analytics.list_sendings",
+        ListSendingsRequest {
+            page: 1,
+            per_page: 20,
+        },
+    )
+    .await?;
+
+    let content = EmailQueueContent {
+        queue_status,
+        sendings: sendings_response.sendings,
+        total: sendings_response.total,
+    };
+
+    AdminLayout::new("Email Queue", content)
         .with_breadcrumb("Email Queue", None)
         .with_sidebar_active("email-queue")
-        .with_content(content)
         .into_response(user_info)
         .await
+}
+
+#[handler]
+async fn email_queue_content(
+    Authenticated(_user_info): Authenticated,
+) -> Result<impl poem::IntoResponse, anyhow::Error> {
+    use common::message::email::{ListSendingsRequest, ListSendingsResponse, QueueStatusResponse};
+    use common::service::request;
+
+    // Get queue status
+    let queue_status: QueueStatusResponse = request("emailer.analytics.queue_status", ()).await?;
+
+    // Get recent sendings (first page)
+    let sendings_response: ListSendingsResponse = request(
+        "emailer.analytics.list_sendings",
+        ListSendingsRequest {
+            page: 1,
+            per_page: 20,
+        },
+    )
+    .await?;
+
+    let content = EmailQueueContent {
+        queue_status,
+        sendings: sendings_response.sendings,
+        total: sendings_response.total,
+    }
+    .render_once()?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(content))
 }
 
 // Helper to deserialize either a single string or array of strings
@@ -9598,12 +9572,9 @@ async fn address_sets_list(
         address_sets: response.address_sets,
     };
 
-    let html = content.render_once()?;
-
-    AdminLayout::new("Address Sets")
+    AdminLayout::new("Address Sets", content)
         .with_breadcrumb("Address Sets", None)
         .with_sidebar_active("email-address-sets")
-        .with_content(html)
         .into_response(user_info)
         .await
 }
@@ -9622,13 +9593,10 @@ async fn address_sets_new(
         error_message: None,
     };
 
-    let html = content.render_once()?;
-
-    AdminLayout::new("New Address Set")
+    AdminLayout::new("New Address Set", content)
         .with_breadcrumb("Address Sets", Some("/-admin/email/address-sets"))
         .with_breadcrumb("New", None)
         .with_sidebar_active("email-address-sets")
-        .with_content(html)
         .into_response(user_info)
         .await
 }
@@ -9695,12 +9663,10 @@ async fn address_sets_edit(
                 addresses: response.addresses,
                 error_message: None,
             };
-            let html = content.render_once()?;
-            AdminLayout::new("Edit Address Set")
+            AdminLayout::new("Edit Address Set", content)
                 .with_breadcrumb("Address Sets", Some("/-admin/email/address-sets"))
                 .with_breadcrumb("Edit", None)
                 .with_sidebar_active("email-address-sets")
-                .with_content(html)
                 .into_response(user_info)
                 .await
         }
@@ -9851,12 +9817,9 @@ async fn user_sets_list(
         user_sets: response.user_sets,
     };
 
-    let html = content.render_once()?;
-
-    AdminLayout::new("User Sets")
+    AdminLayout::new("User Sets", content)
         .with_breadcrumb("User Sets", None)
         .with_sidebar_active("email-user-sets")
-        .with_content(html)
         .into_response(user_info)
         .await
 }
@@ -9875,13 +9838,10 @@ async fn user_sets_new(
         error_message: None,
     };
 
-    let html = content.render_once()?;
-
-    AdminLayout::new("New User Set")
+    AdminLayout::new("New User Set", content)
         .with_breadcrumb("User Sets", Some("/-admin/email/user-sets"))
         .with_breadcrumb("New", None)
         .with_sidebar_active("email-user-sets")
-        .with_content(html)
         .into_response(user_info)
         .await
 }
@@ -9986,12 +9946,10 @@ async fn user_sets_edit(
                 user_emails,
                 error_message: None,
             };
-            let html = content.render_once()?;
-            AdminLayout::new("Edit User Set")
+            AdminLayout::new("Edit User Set", content)
                 .with_breadcrumb("User Sets", Some("/-admin/email/user-sets"))
                 .with_breadcrumb("Edit", None)
                 .with_sidebar_active("email-user-sets")
-                .with_content(html)
                 .into_response(user_info)
                 .await
         }

@@ -10,28 +10,28 @@ pub struct Breadcrumb {
 }
 
 #[derive(Debug)]
-pub struct AdminLayout {
+pub struct AdminLayout<C: TemplateOnce> {
     pub title: String,
     pub breadcrumbs: Vec<Breadcrumb>,
     pub sidebar_active: String,
-    pub content: String,
+    pub content: C,
     pub enable_quill: bool,
 }
 
 #[derive(Debug, TemplateOnce)]
 #[template(path = "admin/layout.stpl.html")]
-pub struct AdminLayoutPrepared {
+pub struct AdminLayoutPrepared<C: TemplateOnce> {
     pub head: Head,
     pub header: <Header as Component>::Prepared,
     pub footer: <Footer as Component>::Prepared,
     pub title: String,
     pub breadcrumbs: Vec<Breadcrumb>,
     pub sidebar_active: String,
-    pub content: String,
+    pub content: C,
 }
 
-impl AdminLayout {
-    pub fn new(title: &str) -> Self {
+impl<C: TemplateOnce> AdminLayout<C> {
+    pub fn new(title: &str, content: C) -> Self {
         Self {
             title: title.to_string(),
             breadcrumbs: vec![Breadcrumb {
@@ -39,7 +39,7 @@ impl AdminLayout {
                 url: Some("/-admin".to_string()),
             }],
             sidebar_active: String::new(),
-            content: String::new(),
+            content,
             enable_quill: false,
         }
     }
@@ -57,20 +57,15 @@ impl AdminLayout {
         self
     }
 
-    pub fn with_content(mut self, content: String) -> Self {
-        self.content = content;
-        self
-    }
-
     pub fn with_quill(mut self) -> Self {
         self.enable_quill = true;
         self
     }
 }
 
-impl Component for AdminLayout {
+impl<C: TemplateOnce> Component for AdminLayout<C> {
     type Param = Option<Arc<BasicInfo>>;
-    type Prepared = AdminLayoutPrepared;
+    type Prepared = AdminLayoutPrepared<C>;
 
     async fn prepare(self, param: Self::Param) -> Result<Self::Prepared, anyhow::Error> {
         let user_info = param.clone();

@@ -1,13 +1,91 @@
-<div class="bg-white rounded-lg shadow border border-gray-200">
-    <div class="px-6 py-4 border-b border-gray-200">
-        <h3 class="text-lg font-medium text-gray-900">Email Queue</h3>
+<div id="queue-content" hx-get="/-admin/email/queue-content" hx-trigger="every 60s" hx-swap="outerHTML">
+    <!-- Queue Status -->
+    <div class="bg-white rounded-lg shadow border border-gray-200 mb-6">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Queue Status</h3>
+            <p class="text-sm text-gray-500 mt-1">Updates every 60 seconds</p>
+        </div>
+        <div class="p-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div class="text-sm font-medium text-blue-900">Pending</div>
+                    <div class="text-2xl font-bold text-blue-700 mt-1"><%= self.queue_status.pending_count %></div>
+                </div>
+                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <div class="text-sm font-medium text-yellow-900">Processing</div>
+                    <div class="text-2xl font-bold text-yellow-700 mt-1"><%= self.queue_status.processing_count %></div>
+                </div>
+                <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div class="text-sm font-medium text-green-900">Est. Completion</div>
+                    <div class="text-2xl font-bold text-green-700 mt-1">
+                        <% if self.queue_status.estimated_completion_seconds < 60 { %>
+                            <%= self.queue_status.estimated_completion_seconds %>s
+                        <% } else if self.queue_status.estimated_completion_seconds < 3600 { %>
+                            <%= self.queue_status.estimated_completion_seconds / 60 %>m
+                        <% } else { %>
+                            <%= self.queue_status.estimated_completion_seconds / 3600 %>h <%= (self.queue_status.estimated_completion_seconds % 3600) / 60 %>m
+                        <% } %>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
-    <div class="p-6">
-        <p class="text-gray-600">
-            The email queue shows pending and recently sent emails from the emailer service.
-        </p>
-        <div class="mt-6">
-            <p class="text-sm text-gray-500">Email queue status and history will appear here.</p>
+
+    <!-- Recent Sendings -->
+    <div class="bg-white rounded-lg shadow border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Recent Sendings</h3>
+            <p class="text-sm text-gray-500 mt-1">
+                Showing <%= self.sendings.len() %> of <%= self.total %> total sendings
+            </p>
+        </div>
+        <div class="overflow-x-auto">
+            <% if self.sendings.is_empty() { %>
+                <div class="p-6 text-center text-gray-500">
+                    No sendings yet
+                </div>
+            <% } else { %>
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Queued</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Sent</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Opened</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Bounced</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Complaints</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        <% for sending in &self.sendings { %>
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-6 py-4 text-sm text-gray-900">
+                                    <%= sending.subject %>
+                                </td>
+                                <td class="px-6 py-4 text-sm text-gray-500">
+                                    <%= sending.created_at.format_display() %>
+                                </td>
+                                <td class="px-6 py-4 text-sm text-right text-gray-700">
+                                    <%= sending.total_queued %>
+                                </td>
+                                <td class="px-6 py-4 text-sm text-right text-gray-700">
+                                    <%= sending.messages_sent %>
+                                </td>
+                                <td class="px-6 py-4 text-sm text-right text-gray-700">
+                                    <%= sending.messages_opened %>
+                                </td>
+                                <td class="px-6 py-4 text-sm text-right <%= if sending.messages_bounced > 0 { "text-red-600 font-medium" } else { "text-gray-700" } %>">
+                                    <%= sending.messages_bounced %>
+                                </td>
+                                <td class="px-6 py-4 text-sm text-right <%= if sending.complaints > 0 { "text-red-600 font-medium" } else { "text-gray-700" } %>">
+                                    <%= sending.complaints %>
+                                </td>
+                            </tr>
+                        <% } %>
+                    </tbody>
+                </table>
+            <% } %>
         </div>
     </div>
 </div>

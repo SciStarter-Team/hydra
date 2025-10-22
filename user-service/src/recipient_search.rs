@@ -6,6 +6,7 @@ use common::service::decode_structured_message;
 
 /// Search for recipients across users, user sets, and address sets
 /// Supports email addresses, user handles/emails, and set names
+/// Exact matches for email addresses and slugs are prioritized
 pub async fn search(req: &Request) -> Result<RecipientSearchResponse> {
     let request: RecipientSearchRequest = decode_structured_message(req.message.clone())?;
     let query = request.query.trim();
@@ -17,12 +18,13 @@ pub async fn search(req: &Request) -> Result<RecipientSearchResponse> {
         });
     }
 
-    let mut results = Vec::new();
+    let mut exact_matches = Vec::new();
+    let mut partial_matches = Vec::new();
     let search_pattern = format!("%{}%", query);
 
     // If it looks like an email address, add it as an option
     if query.contains('@') {
-        results.push(RecipientSearchResult::Email {
+        exact_matches.push(RecipientSearchResult::Email {
             email: query.to_string(),
         });
     }
@@ -49,11 +51,18 @@ pub async fn search(req: &Request) -> Result<RecipientSearchResponse> {
             format!("{} {}", row.first_name, row.last_name).trim().to_string()
         };
 
-        results.push(RecipientSearchResult::User {
-            user_id: row.user_id,
+        let result = RecipientSearchResult::User {
+            user_id: row.user_id.clone(),
             display_name,
-            email: row.email,
-        });
+            email: row.email.clone(),
+        };
+
+        // Check if this is an exact match on email
+        if row.email.eq_ignore_ascii_case(query) {
+            exact_matches.push(result);
+        } else {
+            partial_matches.push(result);
+        }
     }
 
     // Search for user sets by name or slug
@@ -72,10 +81,17 @@ pub async fn search(req: &Request) -> Result<RecipientSearchResponse> {
     .await?;
 
     for row in user_set_rows {
-        results.push(RecipientSearchResult::UserSet {
-            slug: row.slug,
-            name: row.name,
-        });
+        let result = RecipientSearchResult::UserSet {
+            slug: row.slug.clone(),
+            name: row.name.clone(),
+        };
+
+        // Check if this is an exact match on slug
+        if row.slug.eq_ignore_ascii_case(query) {
+            exact_matches.push(result);
+        } else {
+            partial_matches.push(result);
+        }
     }
 
     // Search for address sets by name or slug
@@ -94,11 +110,22 @@ pub async fn search(req: &Request) -> Result<RecipientSearchResponse> {
     .await?;
 
     for row in address_set_rows {
-        results.push(RecipientSearchResult::AddressSet {
-            slug: row.slug,
-            name: row.name,
-        });
+        let result = RecipientSearchResult::AddressSet {
+            slug: row.slug.clone(),
+            name: row.name.clone(),
+        };
+
+        // Check if this is an exact match on slug
+        if row.slug.eq_ignore_ascii_case(query) {
+            exact_matches.push(result);
+        } else {
+            partial_matches.push(result);
+        }
     }
+
+    // Combine exact matches first, then partial matches
+    let mut results = exact_matches;
+    results.extend(partial_matches);
 
     // Limit total results
     results.truncate(limit as usize);

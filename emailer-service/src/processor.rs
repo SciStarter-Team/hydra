@@ -61,7 +61,7 @@ pub async fn run_scheduled_processor() {
 async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
     // Fetch next pending email from queue
     let queue_item = sqlx::query!(
-        r#"SELECT queue_id, sending_id, target_type, target_value, data_sets, template_html, subject, additional_data
+        r#"SELECT queue_id, sending_id, target_type, target_value, data_sets, template_html, subject, additional_data, retry_count
            FROM send_queue
            WHERE status = 'pending'
            LIMIT 1"#
@@ -73,23 +73,29 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
         return Ok(false); // Queue is empty
     };
 
+    let queue_id = item.queue_id.as_deref().unwrap_or("unknown");
+    let retry_count = item.retry_count;
+
     tracing::info!(
-        queue_id = %item.queue_id.as_deref().unwrap_or("unknown"),
+        queue_id = %queue_id,
         sending_id = %item.sending_id,
         target_type = %item.target_type,
         target_value = %item.target_value,
+        retry_count = retry_count,
         "Processing email from queue"
     );
 
     // Mark as processing
     sqlx::query!(
         r#"UPDATE send_queue SET status = 'processing' WHERE queue_id = ?"#,
-        item.queue_id
+        queue_id
     )
     .execute(db())
     .await?;
 
-    // Resolve email address
+    // Process the email, handling errors with retry logic
+    let result = async {
+        // Resolve email address
     let (email_address, user_id_opt) = match item.target_type.as_str() {
         "email" => {
             tracing::debug!(email = %item.target_value, "Target is email address");
@@ -271,6 +277,53 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
     );
 
     Ok(true)
+    }.await;
+
+    // Handle result with retry logic
+    match result {
+        Ok(success) => Ok(success),
+        Err(e) => {
+            tracing::error!(
+                queue_id = %queue_id,
+                error = %e,
+                retry_count = retry_count,
+                "Failed to process email"
+            );
+
+            const MAX_RETRIES: i64 = 3;
+            let new_retry_count = retry_count + 1;
+
+            if new_retry_count >= MAX_RETRIES {
+                // Too many failures, mark as failed and remove from queue
+                tracing::error!(
+                    queue_id = %queue_id,
+                    sending_id = %item.sending_id,
+                    "Max retries reached, marking as failed"
+                );
+
+                record_skip(queue_id, &item.sending_id, &item.target_value, &format!("max_retries: {}", e)).await?;
+                delete_from_queue(queue_id).await?;
+                update_sending_skipped(&item.sending_id).await?;
+            } else {
+                // Reset to pending with incremented retry count
+                if let Err(reset_err) = sqlx::query!(
+                    r#"UPDATE send_queue SET status = 'pending', retry_count = ? WHERE queue_id = ?"#,
+                    new_retry_count,
+                    queue_id
+                )
+                .execute(db())
+                .await
+                {
+                    tracing::error!(
+                        queue_id = %queue_id,
+                        error = %reset_err,
+                        "Failed to reset queue item back to pending"
+                    );
+                }
+            }
+            Err(e)
+        }
+    }
 }
 
 async fn record_sent(

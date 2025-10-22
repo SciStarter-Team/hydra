@@ -36,6 +36,14 @@ pub struct ForumServiceHealthResponse {
     pub response_time_ms: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmailerServiceHealthResponse {
+    pub status: String,
+    pub database: String,
+    pub queue_status: String,
+    pub response_time_ms: u64,
+}
+
 impl Default for UserServiceHealthResponse {
     fn default() -> Self {
         Self {
@@ -82,6 +90,17 @@ impl Default for ForumServiceHealthResponse {
             status: "unknown".to_string(),
             database: "unknown".to_string(),
             content_filter: "unknown".to_string(),
+            response_time_ms: 0,
+        }
+    }
+}
+
+impl Default for EmailerServiceHealthResponse {
+    fn default() -> Self {
+        Self {
+            status: "unknown".to_string(),
+            database: "unknown".to_string(),
+            queue_status: "unknown".to_string(),
             response_time_ms: 0,
         }
     }

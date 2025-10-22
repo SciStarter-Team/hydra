@@ -9,6 +9,7 @@ mod datasets;
 mod datasets_info;
 mod events;
 mod format;
+mod health;
 mod oneoff_emails;
 mod processor;
 mod ratelimit;
@@ -126,6 +127,10 @@ async fn main() {
     toplevel.spawn(handler!(oneoff_group, "update", oneoff_emails::handle_update_oneoff_email));
     toplevel.spawn(handler!(oneoff_group, "delete", oneoff_emails::handle_delete_oneoff_email));
     toplevel.spawn(handler!(oneoff_group, "archive", oneoff_emails::handle_archive_oneoff_email));
+
+    // Register health check handler
+    let health_group = service.group("emailer.health");
+    toplevel.spawn(handler!(health_group, "check", health::health_check));
 
     // Spawn queue processor background task
     toplevel.spawn(async move {
