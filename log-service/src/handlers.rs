@@ -12,7 +12,8 @@ use ulid::Ulid;
 
 use log_service::{
     analytics::{
-        get_clickthrough_analytics, get_go_url_stats, get_join_analytics, get_recent_activity,
+        get_clickthrough_analytics_realtime, get_go_url_stats,
+        get_participation_analytics_realtime, get_recent_activity,
     },
     cache::{update_user_emails_cache, update_user_tags_cache},
     health::HealthResponse,
@@ -187,12 +188,12 @@ pub async fn handle_clickthrough_analytics(
         .as_ref()
         .expect("Database not initialized")
         .clone();
-    get_clickthrough_analytics(database, query)
+    get_clickthrough_analytics_realtime(database, query)
         .await
         .map_err(Into::into)
 }
 
-pub async fn handle_join_analytics(
+pub async fn handle_participation_analytics(
     req: &async_nats::service::Request,
 ) -> Result<AnalyticsResponse, anyhow::Error> {
     let query: AnalyticsQuery = decode_structured_message(req.message.clone())?;
@@ -203,7 +204,7 @@ pub async fn handle_join_analytics(
         .as_ref()
         .expect("Database not initialized")
         .clone();
-    get_join_analytics(database, query)
+    get_participation_analytics_realtime(database, query)
         .await
         .map_err(Into::into)
 }

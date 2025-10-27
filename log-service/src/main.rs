@@ -12,7 +12,7 @@ mod sync;
 use handlers::{
     handle_activity_log, handle_affiliate_participation, handle_clickthrough,
     handle_clickthrough_analytics, handle_email_event, handle_go_url_stats, handle_health_check,
-    handle_join, handle_join_analytics, handle_page_view, handle_recent_activity,
+    handle_join, handle_page_view, handle_participation_analytics, handle_recent_activity,
     handle_user_emails_update, handle_user_tags_update,
 };
 use log_service::{Database, run_compactor_service};
@@ -120,7 +120,11 @@ async fn main() -> Result<()> {
         "clickthrough_analytics",
         handle_clickthrough_analytics
     ));
-    toplevel.spawn(handler!(log_group, "join_analytics", handle_join_analytics));
+    toplevel.spawn(handler!(
+        log_group,
+        "participation_analytics",
+        handle_participation_analytics
+    ));
     toplevel.spawn(handler!(
         log_group,
         "recent_activity",
@@ -160,7 +164,7 @@ async fn main() -> Result<()> {
     println!("  - log.join");
     println!("  - log.email_event");
     println!("  - log.clickthrough_analytics");
-    println!("  - log.join_analytics");
+    println!("  - log.participation_analytics");
     println!("  - log.recent_activity");
     println!("  - log.affiliate_participants");
     println!("  - log.stats.go_url");

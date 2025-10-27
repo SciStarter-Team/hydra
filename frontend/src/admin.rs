@@ -1561,23 +1561,56 @@ impl Component for EventsPage {
 }
 
 #[derive(Debug)]
-pub struct AnalyticsPage;
+pub struct AnalyticsPage {
+    start_date: String,
+    end_date: String,
+    selected_days: Option<u32>,
+    activity_page: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct GeographicStat {
+    pub country: String,
+    pub country_code: String,
+    pub user_count: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct ActivityStat {
+    pub date: String,
+    pub new_users: i64,
+    pub total_users_to_date: i64,
+    pub verified_users_to_date: i64,
+}
 
 #[derive(Debug, TemplateOnce)]
 #[template(path = "admin/analytics.stpl.html")]
 pub struct AnalyticsPagePrepared {
     total_users: u32,
-    #[allow(dead_code)]
     verified_users: u32,
     total_projects: u32,
     total_events: u32,
     monthly_signups: u32,
-    #[allow(dead_code)]
     weekly_signups: u32,
-    #[allow(dead_code)]
     daily_signups: u32,
     top_projects: Vec<AdminProject>,
     user_growth_data: String, // JSON for charts
+    geographic_stats: Vec<GeographicStat>,
+    activity_stats: Vec<ActivityStat>,
+    activity_page: u32,
+    activity_total_pages: u32,
+    activity_total_count: usize,
+    clickthrough_counts: Vec<WeeklyCount>,
+    participation_counts: Vec<WeeklyCount>,
+    selected_days: Option<u32>, // Time range filter (None if custom range)
+    start_date: String,
+    end_date: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct WeeklyCount {
+    pub week_start: String,
+    pub count: i64,
 }
 
 impl Component for AnalyticsPage {
@@ -1689,6 +1722,126 @@ impl Component for AnalyticsPage {
             }
         };
 
+        // Fetch geographic analytics using date range
+        let geographic_response = request_timeout(
+            "user.stats.geographic",
+            common::message::user::GeographicAnalyticsRequest {
+                start_date: self.start_date.clone(),
+                end_date: self.end_date.clone(),
+            },
+            Duration::from_secs(5),
+        )
+        .await
+        .unwrap_or(common::message::user::GeographicAnalyticsResponse { stats: vec![] });
+
+        let geographic_stats: Vec<GeographicStat> = geographic_response
+            .stats
+            .into_iter()
+            .map(|s| GeographicStat {
+                country: s.country,
+                country_code: s.country_code,
+                user_count: s.user_count,
+            })
+            .collect();
+
+        // Fetch activity analytics using date range with pagination
+        let per_page = 30;
+        let activity_result: Result<common::message::user::ActivityAnalyticsResponse, _> = request_timeout(
+            "user.stats.activity",
+            common::message::user::ActivityAnalyticsRequest {
+                start_date: self.start_date.clone(),
+                end_date: self.end_date.clone(),
+                page: self.activity_page,
+                per_page,
+            },
+            Duration::from_secs(5),
+        )
+        .await;
+
+        let activity_response = match activity_result {
+            Ok(response) => response,
+            Err(e) => {
+                eprintln!("Activity analytics error: {:?}", e);
+                common::message::user::ActivityAnalyticsResponse {
+                    stats: vec![],
+                    total_count: 0,
+                }
+            }
+        };
+
+        let activity_stats: Vec<ActivityStat> = activity_response
+            .stats
+            .into_iter()
+            .map(|s| ActivityStat {
+                date: s.date,
+                new_users: s.new_users,
+                total_users_to_date: s.total_users_to_date,
+                verified_users_to_date: s.verified_users_to_date,
+            })
+            .collect();
+
+        let activity_total_count = activity_response.total_count;
+        let activity_total_pages = ((activity_total_count + per_page as usize - 1) / per_page as usize) as u32;
+        let activity_page = self.activity_page.min(activity_total_pages.max(1));
+
+        // Fetch clickthrough analytics from log service
+        let clickthrough_analytics = request_timeout(
+            "log.clickthrough_analytics",
+            common::message::log::AnalyticsQuery {
+                start_date: self.start_date.clone(),
+                end_date: self.end_date.clone(),
+            },
+            Duration::from_secs(5),
+        )
+        .await;
+
+        let clickthrough_counts = match clickthrough_analytics {
+            Ok(common::message::log::AnalyticsResponse::WeeklyCounts(counts)) => counts
+                .into_iter()
+                .map(|c| WeeklyCount {
+                    week_start: c.week_start,
+                    count: c.count,
+                })
+                .collect(),
+            Err(e) => {
+                eprintln!("Clickthrough analytics error: {:?}", e);
+                Vec::new()
+            }
+            _ => {
+                eprintln!("Clickthrough analytics returned unexpected variant");
+                Vec::new()
+            }
+        };
+
+        // Fetch participation analytics from log service
+        let participation_analytics = request_timeout(
+            "log.participation_analytics",
+            common::message::log::AnalyticsQuery {
+                start_date: self.start_date.clone(),
+                end_date: self.end_date.clone(),
+            },
+            Duration::from_secs(5),
+        )
+        .await;
+
+        let participation_counts = match participation_analytics {
+            Ok(common::message::log::AnalyticsResponse::WeeklyCounts(counts)) => counts
+                .into_iter()
+                .map(|c| WeeklyCount {
+                    week_start: c.week_start,
+                    count: c.count,
+                })
+                .collect(),
+            Err(e) => {
+                eprintln!("Participation analytics error: {:?}", e);
+                Vec::new()
+            }
+            _ => {
+                eprintln!("Participation analytics returned unexpected variant");
+                Vec::new()
+            }
+        };
+
         let analytics_content = AnalyticsPagePrepared {
             total_users: user_analytics.total_users,
             verified_users: user_analytics.verified_users,
@@ -1699,6 +1852,16 @@ impl Component for AnalyticsPage {
             daily_signups: user_analytics.daily_signups,
             top_projects,
             user_growth_data,
+            geographic_stats,
+            activity_stats,
+            activity_page,
+            activity_total_pages,
+            activity_total_count,
+            clickthrough_counts,
+            participation_counts,
+            selected_days: self.selected_days,
+            start_date: self.start_date,
+            end_date: self.end_date,
         };
 
         AdminLayout::new("Analytics", analytics_content)
@@ -2159,11 +2322,45 @@ async fn events(Authenticated(user_info): Authenticated) -> Result<poem::Respons
     EventsPage.into_response(user_info).await
 }
 
+#[derive(Debug, serde::Deserialize)]
+struct AnalyticsPageQuery {
+    days: Option<u32>,
+    start_date: Option<String>,
+    end_date: Option<String>,
+    activity_page: Option<u32>,
+}
+
 #[handler]
 async fn analytics(
+    Query(query): Query<AnalyticsPageQuery>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    AnalyticsPage.into_response(user_info).await
+    use jiff::Timestamp;
+    use jiff::ToSpan;
+
+    // Determine the date range from query parameters
+    let (start_date, end_date, selected_days) = if let (Some(start), Some(end)) =
+        (query.start_date, query.end_date)
+    {
+        // Use custom date range
+        (start, end, None)
+    } else {
+        // Calculate date range from days parameter
+        // "last N days" means N days including today, so we subtract (N-1) to get the start date
+        let days = query.days.unwrap_or(30);
+        let end = Timestamp::now().to_zoned(jiff::tz::TimeZone::UTC).date();
+        let start = end.checked_sub(((days - 1) as i64).days()).unwrap_or(end);
+        (start.to_string(), end.to_string(), Some(days))
+    };
+
+    AnalyticsPage {
+        start_date,
+        end_date,
+        selected_days,
+        activity_page: query.activity_page.unwrap_or(1),
+    }
+    .into_response(user_info)
+    .await
 }
 
 #[derive(Debug, TemplateOnce)]

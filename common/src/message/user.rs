@@ -455,6 +455,46 @@ pub struct AdminAnalyticsResponse {
     pub daily_signups: u32,
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct GeographicAnalyticsRequest {
+    pub start_date: String, // Start date in YYYY-MM-DD format
+    pub end_date: String,   // End date in YYYY-MM-DD format
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct GeographicStat {
+    pub country: String,
+    pub country_code: String,
+    pub user_count: i64,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct GeographicAnalyticsResponse {
+    pub stats: Vec<GeographicStat>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct ActivityAnalyticsRequest {
+    pub start_date: String, // Start date in YYYY-MM-DD format
+    pub end_date: String,   // End date in YYYY-MM-DD format
+    pub page: u32,          // Page number (1-indexed)
+    pub per_page: u32,      // Items per page
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct ActivityStat {
+    pub date: String,
+    pub new_users: i64,
+    pub total_users_to_date: i64,
+    pub verified_users_to_date: i64,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct ActivityAnalyticsResponse {
+    pub stats: Vec<ActivityStat>,
+    pub total_count: usize, // Total number of days in date range
+}
+
 // Address Sets
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AddressSetInfo {

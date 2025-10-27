@@ -5,7 +5,6 @@ use common::message::log::{
     GoUrlViewEntry, RecentActivityItem, RecentActivityRequest, RecentActivityResponse, WeeklyCount,
 };
 use datafusion::arrow::record_batch::RecordBatch;
-use datafusion::functions::expr_fn::date_trunc;
 use datafusion::functions_aggregate::expr_fn::count;
 use datafusion::prelude::*;
 use std::str::FromStr;
@@ -59,7 +58,7 @@ pub async fn get_join_analytics(
 
 /// Helper function to extract WeeklyCount data from Arrow RecordBatches
 fn extract_weekly_counts_from_batches(batches: Vec<RecordBatch>) -> Result<Vec<WeeklyCount>> {
-    use datafusion::arrow::array::{Array, Date32Array, Int64Array, StringArray};
+    use datafusion::arrow::array::{Array, Date32Array, Int64Array, StringArray, StringViewArray, TimestampNanosecondArray};
     let mut weekly_counts = Vec::new();
 
     for batch in batches {
@@ -76,6 +75,10 @@ fn extract_weekly_counts_from_batches(batches: Vec<RecordBatch>) -> Result<Vec<W
                 week_start_array.as_any().downcast_ref::<StringArray>()
             {
                 string_array.value(i).to_string()
+            } else if let Some(string_view_array) =
+                week_start_array.as_any().downcast_ref::<StringViewArray>()
+            {
+                string_view_array.value(i).to_string()
             } else if let Some(date_array) = week_start_array.as_any().downcast_ref::<Date32Array>()
             {
                 // Convert Date32 to string format (YYYY-MM-DD) using jiff
@@ -91,6 +94,21 @@ fn extract_weekly_counts_from_batches(batches: Vec<RecordBatch>) -> Result<Vec<W
                         ))
                     })?;
                 date.to_string()
+            } else if let Some(timestamp_array) = week_start_array.as_any().downcast_ref::<TimestampNanosecondArray>()
+            {
+                // Convert TimestampNanosecond to string format (YYYY-MM-DD)
+                let nanoseconds = timestamp_array.value(i);
+                // Convert nanoseconds to seconds for Timestamp::from_second
+                let seconds = nanoseconds / 1_000_000_000;
+                let timestamp = jiff::Timestamp::from_second(seconds)
+                    .map_err(|_| {
+                        LogServiceError::Analytics(format!(
+                            "Invalid timestamp value: {}",
+                            nanoseconds
+                        ))
+                    })?;
+                // Convert to date string (just the date part, not time)
+                timestamp.to_zoned(jiff::tz::TimeZone::UTC).date().to_string()
             } else {
                 return Err(LogServiceError::UnsupportedDataType(format!(
                     "{:?}",
@@ -123,43 +141,49 @@ pub async fn get_clickthrough_analytics_realtime(
 ) -> Result<AnalyticsResponse> {
     let ctx = database.context();
 
-    // Use DataFrame API for complex aggregations with safe parameter binding
-    let df = ctx
-        .table("clickthroughs")
-        .await?
-        .filter(col("when").gt_eq(lit(&query.start_date)))?
-        .filter(col("when").lt_eq(lit(&query.end_date)))?
-        .aggregate(
-            vec![date_trunc(lit("week"), col("when")).alias("week_start")],
-            vec![count(lit(1)).alias("count")],
-        )?
-        .sort(vec![col("week_start").sort(true, true)])?;
+    // Use SQL directly for simpler string date handling
+    // Extract date part, then use date arithmetic to get week start (Monday)
+    // DataFusion's date_trunc requires a date/timestamp, so we use substr and date arithmetic
+    let sql = format!(
+        "SELECT \
+            DATE_TRUNC('week', CAST(substr(`when`, 1, 10) AS DATE)) as week_start, \
+            COUNT(*) as count \
+         FROM clickthroughs_realtime \
+         WHERE `when` >= '{}' AND `when` <= '{}' \
+         GROUP BY week_start \
+         ORDER BY week_start DESC",
+        query.start_date, query.end_date
+    );
 
+    let df = ctx.sql(&sql).await?;
     let batches = df.collect().await?;
     let weekly_counts = extract_weekly_counts_from_batches(batches)?;
 
     Ok(AnalyticsResponse::WeeklyCounts(weekly_counts))
 }
 
-/// Generate join analytics for real-time data directly from main tables
-pub async fn get_join_analytics_realtime(
+/// Generate participation analytics for real-time data directly from main tables
+pub async fn get_participation_analytics_realtime(
     database: Arc<Database>,
     query: AnalyticsQuery,
 ) -> Result<AnalyticsResponse> {
     let ctx = database.context();
 
-    // Use DataFrame API for complex aggregations with safe parameter binding
-    let df = ctx
-        .table("join_table")
-        .await?
-        .filter(col("when").gt_eq(lit(&query.start_date)))?
-        .filter(col("when").lt_eq(lit(&query.end_date)))?
-        .aggregate(
-            vec![date_trunc(lit("week"), col("when")).alias("week_start")],
-            vec![count(lit(1)).alias("count")],
-        )?
-        .sort(vec![col("week_start").sort(true, true)])?;
+    // Use SQL directly for simpler string date handling
+    // Extract date part, then use date arithmetic to get week start (Monday)
+    // DataFusion's date_trunc requires a date/timestamp, so we use substr and date arithmetic
+    let sql = format!(
+        "SELECT \
+            DATE_TRUNC('week', CAST(substr(`when`, 1, 10) AS DATE)) as week_start, \
+            COUNT(*) as count \
+         FROM participation_realtime \
+         WHERE `when` >= '{}' AND `when` <= '{}' \
+         GROUP BY week_start \
+         ORDER BY week_start DESC",
+        query.start_date, query.end_date
+    );
 
+    let df = ctx.sql(&sql).await?;
     let batches = df.collect().await?;
     let weekly_counts = extract_weekly_counts_from_batches(batches)?;
 
