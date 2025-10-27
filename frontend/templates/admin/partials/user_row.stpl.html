@@ -1,5 +1,5 @@
 <div id="user-<%= self.user.user_id |disp %>" class="flex flex-col lg:grid lg:grid-cols-5 gap-3 lg:gap-4 lg:items-center px-6 py-4 hover:bg-gray-50 transition-colors" <% if self.oob { %>hx-swap-oob="<%= self.oob_swap %>"<% } %>>
-  
+
   <!-- User Info - Always visible, spans full width on mobile -->
   <div class="lg:col-span-1">
     <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">User</div>
@@ -7,19 +7,19 @@
     <div class="text-sm text-gray-500"><%= self.user.primary_email %></div>
     <div class="text-xs text-gray-400">@<%= self.user.handle %></div>
   </div>
-  
+
   <!-- Role - Hidden label on desktop, visible on mobile -->
   <div class="lg:col-span-1">
     <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Role</div>
     <div class="text-sm text-gray-900"><%= self.user.display_role() %></div>
   </div>
-  
+
   <!-- Joined - Hidden label on desktop, visible on mobile -->
   <div class="lg:col-span-1">
     <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Joined</div>
     <div class="text-sm text-gray-500"><%= self.user.date_joined %></div>
   </div>
-  
+
   <!-- Email Status - Hidden label on desktop, visible on mobile -->
   <div class="lg:col-span-1">
     <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Email Status</div>
@@ -36,7 +36,7 @@
       <% } %>
     </span>
   </div>
-  
+
   <!-- Actions - Hidden label on desktop, visible on mobile -->
   <div class="lg:col-span-1">
     <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Actions</div>

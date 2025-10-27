@@ -373,7 +373,7 @@ impl Entity {
                 if let Some(ulid) = self.target.as_ulid() {
                     let content = PageContent::load((PageContentKind::Wysiwyg, ulid)).await?;
                     // Convert Quill Delta to HTML
-                    let html = crate::quill::delta_to_html(content.as_utf8()?)?;
+                    let html = common::quill::delta_to_html(content.as_utf8()?)?;
 
                     let content_wrapper = ContentPageContent {
                         content: Literal::new(&html),

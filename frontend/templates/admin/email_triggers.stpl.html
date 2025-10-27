@@ -1,21 +1,141 @@
 <div class="bg-white rounded-lg shadow border border-gray-200">
-    <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+    <div class="px-6 py-4 border-b border-gray-200">
         <h3 class="text-lg font-medium text-gray-900">Email Triggers</h3>
-        <button
-            class="relative inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
-        >
-            <span class="inline-flex items-center">
-                <wa-icon name="plus" class="w-4 h-4 mr-2"></wa-icon>
-                Create Trigger
-            </span>
-        </button>
-    </div>
-    <div class="p-6">
-        <p class="text-gray-600">
-            Email triggers are automated rules that send stored emails in response to specific events or conditions.
+        <p class="mt-1 text-sm text-gray-500">
+            Automate email sending based on specific events. Triggers can send immediately or after a delay.
         </p>
-        <div class="mt-6">
-            <p class="text-sm text-gray-500">Email trigger configurations will appear here.</p>
-        </div>
+    </div>
+
+    <!-- Create trigger form -->
+    <div class="px-6 py-4 bg-gray-50 border-b border-gray-200">
+        <form
+            hx-post="/-admin/email/triggers"
+            hx-target="#trigger-list-container"
+            hx-swap="innerHTML"
+            hx-on::after-request="if(event.detail.successful) this.reset(); actionType = 'immediate';"
+            class="space-y-4"
+            x-data="{ actionType: 'immediate' }"
+        >
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <!-- Trigger Event Select -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Trigger Event</label>
+                    <select
+                        name="trigger_name"
+                        required
+                        class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+                    >
+                        <option value="">Select a trigger event...</option>
+                        <% for (name, description, _category) in &self.available_trigger_events { %>
+                            <option value="<%= name %>"><%= description %></option>
+                        <% } %>
+                    </select>
+                </div>
+
+                <!-- Stored Email Autocomplete -->
+                <div data-widget="stored-email-autocomplete">
+                    <label class="block text-sm font-medium text-gray-700">Email Template</label>
+                    <div class="mt-1 relative">
+                        <input
+                            type="hidden"
+                            name="stored_email_id"
+                            required
+                            data-part="stored-email-id"
+                        />
+                        <input
+                            type="text"
+                            placeholder="Type to search stored emails..."
+                            autocomplete="off"
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            hx-get="/-admin/email/stored/autocomplete"
+                            hx-trigger="input changed delay:300ms, focus"
+                            hx-target="next"
+                            hx-swap="outerHTML"
+                            hx-vals='js:{"q": this.value}'
+                            data-part="stored-email-search"
+                            hx-on:input="if (this.value === '') {
+                                let widget = htmx.closest(this, '[data-widget=stored-email-autocomplete]');
+                                htmx.find(widget, '[data-part=stored-email-id]').value = '';
+                                htmx.find(widget, '[data-part=results]').classList.add('hidden');
+                            }"
+                            hx-on::after-request="
+                                let widget = htmx.closest(this, '[data-widget=stored-email-autocomplete]');
+                                htmx.find(widget, '[data-part=stored-email-id]').value = '';
+                            "
+                        />
+                        <div class="hidden" data-part="results"></div>
+                    </div>
+                </div>
+
+                <!-- Action Type -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Action Type</label>
+                    <select
+                        name="action_type"
+                        required
+                        x-model="actionType"
+                        class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+                    >
+                        <option value="immediate">Send Immediately</option>
+                        <option value="delayed">Send After Delay</option>
+                    </select>
+                </div>
+
+                <!-- Delay Duration (shown only for delayed) -->
+                <div x-show="actionType === 'delayed'">
+                    <label class="block text-sm font-medium text-gray-700">Delay Duration</label>
+                    <select
+                        name="delay_seconds"
+                        class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+                        x-bind:required="actionType === 'delayed'"
+                    >
+                        <option value="">Select delay...</option>
+                        <option value="3600">1 hour</option>
+                        <option value="28800">8 hours</option>
+                        <option value="86400">1 day</option>
+                        <option value="172800">2 days</option>
+                        <option value="259200">3 days</option>
+                        <option value="604800">1 week</option>
+                        <option value="1209600">2 weeks</option>
+                        <option value="1814400">3 weeks</option>
+                    </select>
+                </div>
+
+                <!-- Cancellation Trigger (optional, only for delayed) -->
+                <div class="md:col-span-2" x-show="actionType === 'delayed'">
+                    <label class="block text-sm font-medium text-gray-700">Cancellation Trigger (Optional)</label>
+                    <select
+                        name="cancellation_trigger_name"
+                        class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+                    >
+                        <option value="">None - do not cancel</option>
+                        <% for (name, description, _category) in &self.available_trigger_events { %>
+                            <option value="<%= name %>"><%= description %></option>
+                        <% } %>
+                    </select>
+                    <p class="mt-1 text-xs text-gray-500">
+                        If this trigger occurs, cancel any pending delayed emails from this trigger
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex justify-end">
+                <button
+                    type="submit"
+                    class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                >
+                    <wa-icon name="plus" class="w-4 h-4 mr-2"></wa-icon>
+                    Create Trigger
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Triggers List -->
+    <div id="trigger-list-container">
+        <%+ crate::admin::TriggerList {
+            triggers: self.triggers.clone(),
+            stored_emails: self.stored_emails.clone(),
+        } %>
     </div>
 </div>

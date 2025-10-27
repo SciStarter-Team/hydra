@@ -547,3 +547,84 @@ pub mod errors {
         }
     }
 }
+
+/// Email trigger events
+///
+/// Each variant represents a specific event that can trigger an automated email.
+/// To add a new trigger, simply add a new variant to this enum.
+///
+/// The string representation (Display/AsRefStr) is the trigger name stored in the database
+/// and used for NATS communication.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumString, strum::EnumIter, strum::AsRefStr)]
+#[strum(serialize_all = "kebab-case")]
+pub enum TriggerEvent {
+    /// Sent when a new user completes signup
+    UserWelcome,
+
+    /// Sent when a project is submitted for review
+    ProjectSubmitted,
+
+    /// Sent when a project is approved
+    ProjectApproved,
+}
+
+impl TriggerEvent {
+    /// Get a human-readable description of this trigger
+    pub fn description(&self) -> &'static str {
+        match self {
+            Self::UserWelcome => "When a new user completes signup",
+            Self::ProjectSubmitted => "When a project is submitted for review",
+            Self::ProjectApproved => "When a project is approved",
+        }
+    }
+
+    /// Get the category for this trigger (e.g., "user", "project")
+    pub fn category(&self) -> &'static str {
+        match self {
+            Self::UserWelcome => "user",
+            Self::ProjectSubmitted | Self::ProjectApproved => "project",
+        }
+    }
+}
+
+/// Fire an email trigger event with a user and optional additional data
+///
+/// This is a fire-and-forget operation that doesn't wait for email processing.
+/// The user_id is treated as a first-class parameter and will be available as a merge field.
+///
+/// # Arguments
+/// * `trigger` - The trigger event to fire
+/// * `user_id` - The user this event is for (will receive the email)
+/// * `additional_data` - Optional extra merge fields for the email template
+///
+/// # Example
+/// ```no_run
+/// use ulid::Ulid;
+/// use common::service::{trigger_email, TriggerEvent};
+///
+/// # async fn example(user_id: Ulid) -> Result<(), anyhow::Error> {
+/// trigger_email(
+///     TriggerEvent::UserWelcome,
+///     user_id,
+///     Some(&[
+///         ("username".to_string(), "alice".to_string()),
+///     ])
+/// ).await?;
+/// # Ok(())
+/// # }
+/// ```
+pub async fn trigger_email(
+    trigger: TriggerEvent,
+    user_id: ulid::Ulid,
+    additional_data: Option<&[(String, String)]>,
+) -> Result<(), anyhow::Error> {
+    send(
+        "emailer.trigger",
+        crate::message::email::TriggerEmailRequest {
+            trigger_name: trigger.as_ref().to_string(),
+            user_id,
+            additional_data: additional_data.map(|slice| slice.to_vec()),
+        },
+    )
+    .await
+}

@@ -25,3 +25,6 @@ ulid = { version = "1.2.1", features = ["serde"] }
 tracing = "0.1"
 uuid = "1.18"
 strum = { version = "0.27", features = ["derive"] }
+scraper = "0.24.0"
+pulldown-cmark = "0.13.0"
+ego-tree = "0.10.0"

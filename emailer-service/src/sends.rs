@@ -361,6 +361,65 @@ async fn process_address_set(
     Ok(())
 }
 
+/// Core logic for sending an email
+/// Creates a sending record and processes recipients in the background
+pub async fn send_email(
+    template_html: String,
+    subject: String,
+    recipients: Vec<EmailRecipient>,
+    data_sets: Vec<String>,
+    additional_data: Option<Vec<(String, String)>>,
+) -> Result<Ulid, Error> {
+    let sending_id = Ulid::new();
+    let sending_id_str = sending_id.to_string();
+    let created_at = TimeString::now();
+
+    // Serialize data for storage
+    let data_sets_json = serde_json::to_string(&data_sets)?;
+    let additional_data_json = serde_json::to_string(&additional_data.unwrap_or_default())?;
+
+    // Create sending record with total_queued = 0 initially
+    sqlx::query!(
+        r#"INSERT INTO sendings (sending_id, created_at, subject, total_queued, template_html, data_sets, additional_data)
+           VALUES (?, ?, ?, 0, ?, ?, ?)"#,
+        sending_id_str,
+        created_at,
+        subject,
+        template_html,
+        data_sets_json,
+        additional_data_json
+    )
+    .execute(db())
+    .await?;
+
+    tracing::info!(
+        sending_id = %sending_id,
+        subject = %subject,
+        "Email sending created, processing recipients in background"
+    );
+
+    // Spawn background task to process recipients
+    let sending_id_for_task = sending_id_str.clone();
+    tokio::spawn(async move {
+        if let Err(e) = process_recipients_background(
+            sending_id_for_task.clone(),
+            recipients,
+            template_html,
+            subject,
+            data_sets_json,
+            additional_data_json,
+        ).await {
+            tracing::error!(
+                sending_id = %sending_id_for_task,
+                error = %e,
+                "Error processing recipients in background"
+            );
+        }
+    });
+
+    Ok(sending_id)
+}
+
 /// Handle a request to send emails
 /// Creates a sending record and returns immediately, processing recipients in the background
 #[tracing::instrument(skip(req))]
@@ -375,52 +434,14 @@ pub async fn handle_send_request(req: &Request) -> Result<SendEmailResponse, Err
         "Parsed send request"
     );
 
-    let sending_id = Ulid::new();
-    let sending_id_str = sending_id.to_string();
-    let created_at = TimeString::now();
-
-    // Serialize data for storage
-    let data_sets_json = serde_json::to_string(&request.data_sets)?;
-    let additional_data_json = serde_json::to_string(&request.additional_data.unwrap_or_default())?;
-
-    // Create sending record with total_queued = 0 initially
-    sqlx::query!(
-        r#"INSERT INTO sendings (sending_id, created_at, subject, total_queued, template_html, data_sets, additional_data)
-           VALUES (?, ?, ?, 0, ?, ?, ?)"#,
-        sending_id_str,
-        created_at,
-        request.subject,
+    let sending_id = send_email(
         request.template_html,
-        data_sets_json,
-        additional_data_json
+        request.subject,
+        request.recipients,
+        request.data_sets,
+        request.additional_data,
     )
-    .execute(db())
     .await?;
-
-    tracing::info!(
-        sending_id = %sending_id,
-        subject = %request.subject,
-        "Email sending created, processing recipients in background"
-    );
-
-    // Spawn background task to process recipients
-    let sending_id_for_task = sending_id_str.clone();
-    tokio::spawn(async move {
-        if let Err(e) = process_recipients_background(
-            sending_id_for_task.clone(),
-            request.recipients,
-            request.template_html,
-            request.subject,
-            data_sets_json,
-            additional_data_json,
-        ).await {
-            tracing::error!(
-                sending_id = %sending_id_for_task,
-                error = %e,
-                "Error processing recipients in background"
-            );
-        }
-    });
 
     Ok(SendEmailResponse { sending_id })
 }

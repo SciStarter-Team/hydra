@@ -1,0 +1,147 @@
+<!-- Edit Trigger Modal -->
+<dialog id="edit-trigger-dialog" class="rounded-lg shadow-xl w-11/12 md:w-2/3 max-h-[90vh] overflow-y-auto p-5 backdrop:bg-gray-500 backdrop:opacity-75 m-auto"
+        hx-on::load="if (event.target === this) this.showModal()"
+        hx-on:click="if (event.target === this) this.remove()">
+    <div hx-on:click="event.stopPropagation()">
+        <!-- Modal Header -->
+        <div class="flex items-center justify-between pb-3">
+            <h3 class="text-lg font-bold text-gray-900">Edit Trigger</h3>
+            <button
+                class="text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm p-1.5 ml-auto inline-flex items-center"
+                hx-on:click="this.closest('dialog').remove()"
+            >
+                <wa-icon name="x" class="w-5 h-5"></wa-icon>
+            </button>
+        </div>
+
+        <!-- Modal Body -->
+        <form
+            hx-patch="/-admin/email/triggers/<%= self.trigger.trigger_id|disp %>"
+            hx-swap="none"
+            class="mt-4 space-y-4"
+            x-data="{ actionType: '<%= self.trigger.action_type.as_str() %>' }"
+        >
+            <div id="edit-trigger-error" class="hidden"></div>
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <!-- Trigger Event Select -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Trigger Event</label>
+                    <select
+                        name="trigger_name"
+                        required
+                        class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+                    >
+                        <% for (name, description, _category) in &self.available_trigger_events { %>
+                            <option value="<%= name %>" <% if name == &self.trigger.trigger_name { %>selected<% } %>><%= description %></option>
+                        <% } %>
+                    </select>
+                </div>
+
+                <!-- Stored Email Autocomplete -->
+<div data-widget="stored-email-autocomplete">
+                    <label class="block text-sm font-medium text-gray-700">Email Template</label>
+                    <div class="mt-1 relative">
+                        <input
+                            type="hidden"
+                            name="stored_email_id"
+                            required
+                            value="<%= self.trigger.stored_email_id|disp %>"
+                            data-part="stored-email-id"
+                        />
+                        <input
+                            type="text"
+                            placeholder="Type to search stored emails..."
+                            value="<% if let Some((slug, _)) = &self.stored_email { %><%= slug %><% } %>"
+                            autocomplete="off"
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            hx-get="/-admin/email/stored/autocomplete"
+                            hx-trigger="input changed delay:300ms"
+                            hx-target="next"
+                            hx-swap="outerHTML"
+                            hx-vals='js:{"q": this.value}'
+                            data-part="stored-email-search"
+                            hx-on:input="if (this.value === '') {
+                                let widget = htmx.closest(this, '[data-widget=stored-email-autocomplete]');
+                                htmx.find(widget, '[data-part=stored-email-id]').value = '';
+                                htmx.find(widget, '[data-part=results]').classList.add('hidden');
+                            }"
+                            hx-on::after-request="
+                                let widget = htmx.closest(this, '[data-widget=stored-email-autocomplete]');
+                                htmx.find(widget, '[data-part=stored-email-id]').value = '';
+                            "
+                        />
+                        <div class="hidden" data-part="results"></div>
+                    </div>
+                </div>
+
+                <!-- Action Type -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Action Type</label>
+                    <select
+                        name="action_type"
+                        required
+                        x-model="actionType"
+                        class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+                    >
+                        <option value="immediate">Send Immediately</option>
+                        <option value="delayed">Send After Delay</option>
+                    </select>
+                </div>
+
+                <!-- Delay Duration (shown only for delayed) -->
+                <div x-show="actionType === 'delayed'">
+                    <label class="block text-sm font-medium text-gray-700">Delay Duration</label>
+                    <select
+                        name="delay_seconds"
+                        class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+                        x-bind:required="actionType === 'delayed'"
+                    >
+                        <option value="">Select delay...</option>
+                        <option value="3600" <% if self.trigger.delay_seconds == Some(3600) { %>selected<% } %>>1 hour</option>
+                        <option value="28800" <% if self.trigger.delay_seconds == Some(28800) { %>selected<% } %>>8 hours</option>
+                        <option value="86400" <% if self.trigger.delay_seconds == Some(86400) { %>selected<% } %>>1 day</option>
+                        <option value="172800" <% if self.trigger.delay_seconds == Some(172800) { %>selected<% } %>>2 days</option>
+                        <option value="259200" <% if self.trigger.delay_seconds == Some(259200) { %>selected<% } %>>3 days</option>
+                        <option value="604800" <% if self.trigger.delay_seconds == Some(604800) { %>selected<% } %>>1 week</option>
+                        <option value="1209600" <% if self.trigger.delay_seconds == Some(1209600) { %>selected<% } %>>2 weeks</option>
+                        <option value="1814400" <% if self.trigger.delay_seconds == Some(1814400) { %>selected<% } %>>3 weeks</option>
+                    </select>
+                </div>
+
+                <!-- Cancellation Trigger (optional, only for delayed) -->
+                <div class="md:col-span-2" x-show="actionType === 'delayed'">
+                    <label class="block text-sm font-medium text-gray-700">Cancellation Trigger (Optional)</label>
+                    <select
+                        name="cancellation_trigger_name"
+                        class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+                    >
+                        <option value="">None - do not cancel</option>
+                        <% for (name, description, _category) in &self.available_trigger_events { %>
+                            <option value="<%= name %>" <% if let Some(ref cancellation) = self.trigger.cancellation_trigger_name { if name == cancellation { %>selected<% } } %>><%= description %></option>
+                        <% } %>
+                    </select>
+                    <p class="mt-1 text-xs text-gray-500">
+                        If this trigger occurs, cancel any pending delayed emails from this trigger
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-2 pt-4 border-t">
+                <button
+                    type="button"
+                    hx-on:click="this.closest('dialog').remove()"
+                    class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                >
+                    Cancel
+                </button>
+                <button
+                    type="submit"
+                    class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                >
+                    <wa-icon name="check" class="w-4 h-4 mr-2"></wa-icon>
+                    Save Changes
+                </button>
+            </div>
+        </form>
+    </div>
+</dialog>

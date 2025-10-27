@@ -18,6 +18,7 @@ mod sends;
 mod ses;
 mod stored_emails;
 mod template;
+mod triggers;
 
 #[tokio::main]
 async fn main() {
@@ -127,6 +128,17 @@ async fn main() {
     toplevel.spawn(handler!(oneoff_group, "update", oneoff_emails::handle_update_oneoff_email));
     toplevel.spawn(handler!(oneoff_group, "delete", oneoff_emails::handle_delete_oneoff_email));
     toplevel.spawn(handler!(oneoff_group, "archive", oneoff_emails::handle_archive_oneoff_email));
+
+    // Register trigger handlers
+    let triggers_group = service.group("emailer.triggers");
+    toplevel.spawn(handler!(triggers_group, "list", triggers::handle_list_triggers));
+    toplevel.spawn(handler!(triggers_group, "get", triggers::handle_get_trigger));
+    toplevel.spawn(handler!(triggers_group, "create", triggers::handle_create_trigger));
+    toplevel.spawn(handler!(triggers_group, "update", triggers::handle_update_trigger));
+    toplevel.spawn(handler!(triggers_group, "delete", triggers::handle_delete_trigger));
+
+    // Register trigger event handler (fire-and-forget)
+    toplevel.spawn(recv_handler!(emailer_group, "trigger", triggers::handle_trigger_event));
 
     // Register health check handler
     let health_group = service.group("emailer.health");

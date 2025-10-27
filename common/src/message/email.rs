@@ -91,6 +91,7 @@ pub struct QueueStatusResponse {
 pub struct ListSendingsRequest {
     pub page: u32,
     pub per_page: u32,
+    pub min_queued: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -373,4 +374,131 @@ pub struct ArchiveOneoffEmailRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArchiveOneoffEmailResponse {
     pub success: bool,
+}
+
+// ============================================================================
+// Email Trigger Messages
+// ============================================================================
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TriggerActionType {
+    Immediate,
+    Delayed,
+}
+
+impl TriggerActionType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Immediate => "immediate",
+            Self::Delayed => "delayed",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "immediate" => Some(Self::Immediate),
+            "delayed" => Some(Self::Delayed),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TriggerActionTaken {
+    SentImmediately,
+    Scheduled,
+    CancelledPending,
+    NoTrigger,
+}
+
+/// Fire a trigger event to potentially send an email
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TriggerEmailRequest {
+    pub trigger_name: String,
+    pub user_id: Ulid,
+    pub additional_data: Option<Vec<(String, String)>>, // Extra merge fields
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TriggerEmailResponse {
+    pub success: bool,
+    pub action_taken: TriggerActionTaken,
+}
+
+/// Trigger configuration
+#[cfg(feature = "database")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TriggerInfo {
+    pub trigger_id: Ulid,
+    pub trigger_name: String,
+    pub stored_email_id: Ulid,
+    pub action_type: TriggerActionType,
+    pub delay_seconds: Option<i64>,
+    pub cancellation_trigger_name: Option<String>,
+    pub active: bool,
+    pub created_at: TimeString,
+    pub updated_at: TimeString,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateTriggerRequest {
+    pub trigger_name: String,
+    pub stored_email_id: Ulid,
+    pub action_type: TriggerActionType,
+    pub delay_seconds: Option<i64>,
+    pub cancellation_trigger_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateTriggerResponse {
+    pub trigger_id: Ulid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateTriggerRequest {
+    pub trigger_id: Ulid,
+    pub stored_email_id: Option<Ulid>,
+    pub action_type: Option<TriggerActionType>,
+    pub delay_seconds: Option<i64>,
+    pub cancellation_trigger_name: Option<String>,
+    pub active: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateTriggerResponse {
+    pub success: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeleteTriggerRequest {
+    pub trigger_id: Ulid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeleteTriggerResponse {
+    pub success: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListTriggersRequest {
+    pub active_only: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListTriggersResponse {
+    #[cfg(feature = "database")]
+    pub triggers: Vec<TriggerInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetTriggerRequest {
+    pub trigger_id: Ulid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetTriggerResponse {
+    #[cfg(feature = "database")]
+    pub trigger: TriggerInfo,
 }

@@ -15,58 +15,65 @@
 
 <!-- Content Table -->
 <div class="bg-white shadow-md rounded-lg overflow-hidden">
-    <table class="min-w-full divide-y divide-gray-200">
-        <thead class="bg-gray-50">
-            <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Content</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-            </tr>
-        </thead>
-        <tbody class="bg-white divide-y divide-gray-200">
-            <% if self.items.is_empty() { %>
-                <tr>
-                    <td colspan="4" class="px-6 py-8 text-center text-gray-500">
-                        No Raw HTML pages found. <a href="#" hx-get="/-admin/pagecontent/RawHtml/new" hx-target="body" hx-swap="beforeend" class="text-indigo-600 hover:text-indigo-800">Create one now</a>
-                    </td>
-                </tr>
-            <% } else { %>
-                <% for item in &self.items { %>
-                    <tr id="raw-html-<%= item.id|disp %>">
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <div class="text-sm font-medium text-gray-900"><%= item.name %></div>
-                        </td>
-                        <td class="px-6 py-4">
-                            <div class="text-sm text-gray-500 line-clamp-2"><%= item.excerpt %></div>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <div class="text-sm text-gray-500"><%= item.created_at %></div>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <div class="flex items-center justify-end space-x-2">
-                                <a
-                                    href="/-admin/pagecontent/RawHtml/<%= item.id|disp %>"
-                                    class="text-indigo-600 hover:text-indigo-900 transition-colors no-underline"
-                                >
-                                    <wa-icon name="pencil" class="w-4 h-4"></wa-icon>
-                                </a>
-                                <button
-                                    class="text-red-600 hover:text-red-900 transition-colors"
-                                    hx-delete="/-admin/pagecontent/RawHtml/<%= item.id|disp %>"
-                                    hx-confirm="Are you sure you want to delete this content?"
-                                    hx-target="closest tr"
-                                    hx-swap="outerHTML swap:0s"
-                                >
-                                    <wa-icon name="trash" class="w-4 h-4"></wa-icon>
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                <% } %>
+    <% if self.items.is_empty() { %>
+        <div class="px-6 py-8 text-center text-gray-500">
+            No Raw HTML pages found. <a href="#" hx-get="/-admin/pagecontent/RawHtml/new" hx-target="body" hx-swap="beforeend" class="text-indigo-600 hover:text-indigo-800">Create one now</a>
+        </div>
+    <% } else { %>
+        <!-- Header Row - Hidden on mobile, visible on larger screens -->
+        <div class="hidden lg:grid lg:grid-cols-12 bg-gray-50 px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
+            <div class="col-span-3">Name</div>
+            <div class="col-span-5">Content</div>
+            <div class="col-span-3">Created</div>
+            <div class="col-span-1 text-right">Actions</div>
+        </div>
+
+        <div class="divide-y divide-gray-200">
+            <% for item in &self.items { %>
+                <div id="raw-html-<%= item.id|disp %>" class="flex flex-col lg:grid lg:grid-cols-12 gap-3 lg:gap-4 lg:items-center px-6 py-4 hover:bg-gray-50 transition-colors">
+                    <!-- Name -->
+                    <div class="lg:col-span-3">
+                        <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Name</div>
+                        <div class="text-sm font-medium text-gray-900"><%= item.name %></div>
+                    </div>
+
+                    <!-- Content -->
+                    <div class="lg:col-span-5">
+                        <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Content</div>
+                        <div class="text-sm text-gray-500 line-clamp-2"><%= item.excerpt %></div>
+                    </div>
+
+                    <!-- Created -->
+                    <div class="lg:col-span-3">
+                        <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Created</div>
+                        <div class="text-sm text-gray-500"><%= item.created_at %></div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="lg:col-span-1">
+                        <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Actions</div>
+                        <div class="flex items-center space-x-2 lg:justify-end">
+                            <a
+                                href="/-admin/pagecontent/RawHtml/<%= item.id|disp %>"
+                                class="text-indigo-600 hover:text-indigo-900 transition-colors no-underline"
+                            >
+                                <wa-icon name="pencil" class="w-4 h-4"></wa-icon>
+                            </a>
+                            <button
+                                class="text-red-600 hover:text-red-900 transition-colors"
+                                hx-delete="/-admin/pagecontent/RawHtml/<%= item.id|disp %>"
+                                hx-confirm="Are you sure you want to delete this content?"
+                                hx-target="#raw-html-<%= item.id|disp %>"
+                                hx-swap="outerHTML swap:0s"
+                            >
+                                <wa-icon name="trash" class="w-4 h-4"></wa-icon>
+                            </button>
+                        </div>
+                    </div>
+                </div>
             <% } %>
-        </tbody>
-    </table>
+        </div>
+    <% } %>
 </div>
 
 <!-- Pagination -->

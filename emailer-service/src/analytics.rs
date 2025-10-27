@@ -49,6 +49,20 @@ pub async fn handle_queue_status(_req: &Request) -> Result<QueueStatusResponse, 
     })
 }
 
+/// Query result row for sendings
+struct SendingRow {
+    sending_id: Option<String>,
+    created_at: String,
+    subject: String,
+    total_queued: i64,
+    messages_sent: i64,
+    messages_skipped: i64,
+    messages_opened: i64,
+    messages_bounced: i64,
+    unsubscribes: i64,
+    complaints: i64,
+}
+
 /// List sendings with pagination
 #[tracing::instrument(skip_all)]
 pub async fn handle_list_sendings(req: &Request) -> Result<ListSendingsResponse, Error> {
@@ -57,25 +71,54 @@ pub async fn handle_list_sendings(req: &Request) -> Result<ListSendingsResponse,
     // Calculate offset
     let offset = (request.page.saturating_sub(1)) * request.per_page;
 
-    // Get total count
-    let count_result = sqlx::query!(r#"SELECT COUNT(*) as count FROM sendings"#)
+    // Get total count with optional min_queued filter
+    let total = if let Some(min_queued) = request.min_queued {
+        let count_result = sqlx::query!(
+            r#"SELECT COUNT(*) as count FROM sendings WHERE total_queued >= ?"#,
+            min_queued
+        )
         .fetch_one(db())
         .await?;
-    let total = count_result.count as u32;
+        count_result.count as u32
+    } else {
+        let count_result = sqlx::query!(r#"SELECT COUNT(*) as count FROM sendings"#)
+            .fetch_one(db())
+            .await?;
+        count_result.count as u32
+    };
 
-    // Fetch sendings
-    let rows = sqlx::query!(
-        r#"SELECT sending_id, created_at, subject, total_queued,
-                  messages_sent, messages_skipped, messages_opened,
-                  messages_bounced, unsubscribes, complaints
-           FROM sendings
-           ORDER BY created_at DESC
-           LIMIT ? OFFSET ?"#,
-        request.per_page,
-        offset
-    )
-    .fetch_all(db())
-    .await?;
+    // Fetch sendings with optional min_queued filter
+    let rows: Vec<SendingRow> = if let Some(min_queued) = request.min_queued {
+        sqlx::query_as!(
+            SendingRow,
+            r#"SELECT sending_id, created_at, subject, total_queued,
+                      messages_sent, messages_skipped, messages_opened,
+                      messages_bounced, unsubscribes, complaints
+               FROM sendings
+               WHERE total_queued >= ?
+               ORDER BY created_at DESC
+               LIMIT ? OFFSET ?"#,
+            min_queued,
+            request.per_page,
+            offset
+        )
+        .fetch_all(db())
+        .await?
+    } else {
+        sqlx::query_as!(
+            SendingRow,
+            r#"SELECT sending_id, created_at, subject, total_queued,
+                      messages_sent, messages_skipped, messages_opened,
+                      messages_bounced, unsubscribes, complaints
+               FROM sendings
+               ORDER BY created_at DESC
+               LIMIT ? OFFSET ?"#,
+            request.per_page,
+            offset
+        )
+        .fetch_all(db())
+        .await?
+    };
 
     let mut sendings = Vec::new();
     for row in rows {

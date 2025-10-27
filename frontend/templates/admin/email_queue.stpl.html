@@ -31,61 +31,77 @@
         </div>
     </div>
 
-    <!-- Recent Sendings -->
+    <!-- Recent Mass Sendings -->
     <div class="bg-white rounded-lg shadow border border-gray-200">
         <div class="px-6 py-4 border-b border-gray-200">
-            <h3 class="text-lg font-medium text-gray-900">Recent Sendings</h3>
+            <h3 class="text-lg font-medium text-gray-900">Recent Mass Sendings</h3>
             <p class="text-sm text-gray-500 mt-1">
-                Showing <%= self.sendings.len() %> of <%= self.total %> total sendings
+                Showing <%= self.sendings.len() %> of <%= self.total %> mass sendings (2+ targets)
             </p>
         </div>
-        <div class="overflow-x-auto">
-            <% if self.sendings.is_empty() { %>
-                <div class="p-6 text-center text-gray-500">
-                    No sendings yet
-                </div>
-            <% } else { %>
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-50">
-                        <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
-                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Queued</th>
-                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Sent</th>
-                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Opened</th>
-                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Bounced</th>
-                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Complaints</th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white divide-y divide-gray-200">
-                        <% for sending in &self.sendings { %>
-                            <tr class="hover:bg-gray-50">
-                                <td class="px-6 py-4 text-sm text-gray-900">
-                                    <%= sending.subject %>
-                                </td>
-                                <td class="px-6 py-4 text-sm text-gray-500">
-                                    <%= sending.created_at.format_display() %>
-                                </td>
-                                <td class="px-6 py-4 text-sm text-right text-gray-700">
-                                    <%= sending.total_queued %>
-                                </td>
-                                <td class="px-6 py-4 text-sm text-right text-gray-700">
-                                    <%= sending.messages_sent %>
-                                </td>
-                                <td class="px-6 py-4 text-sm text-right text-gray-700">
-                                    <%= sending.messages_opened %>
-                                </td>
-                                <td class="px-6 py-4 text-sm text-right <%= if sending.messages_bounced > 0 { "text-red-600 font-medium" } else { "text-gray-700" } %>">
-                                    <%= sending.messages_bounced %>
-                                </td>
-                                <td class="px-6 py-4 text-sm text-right <%= if sending.complaints > 0 { "text-red-600 font-medium" } else { "text-gray-700" } %>">
-                                    <%= sending.complaints %>
-                                </td>
-                            </tr>
-                        <% } %>
-                    </tbody>
-                </table>
-            <% } %>
-        </div>
+        <% if self.sendings.is_empty() { %>
+            <div class="p-6 text-center text-gray-500">
+                No mass sendings yet
+            </div>
+        <% } else { %>
+            <!-- Header Row - Hidden on mobile, visible on larger screens -->
+            <div class="hidden xl:grid xl:grid-cols-20 bg-gray-50 px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
+                <div class="col-span-6">Subject</div>
+                <div class="col-span-3">Created</div>
+                <div class="col-span-2 text-right">Queued</div>
+                <div class="col-span-2 text-right">Sent</div>
+                <div class="col-span-2 text-right">Opened</div>
+                <div class="col-span-2 text-right">Bounced</div>
+                <div class="col-span-3 text-right">Complaints</div>
+            </div>
+
+            <div class="divide-y divide-gray-200">
+                <% for sending in &self.sendings { %>
+                    <div class="flex flex-col xl:grid xl:grid-cols-20 gap-3 xl:gap-4 xl:items-center px-6 py-4 hover:bg-gray-50 transition-colors">
+                        <!-- Subject -->
+                        <div class="xl:col-span-6">
+                            <div class="xl:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Subject</div>
+                            <div class="text-sm font-medium text-gray-900"><%= sending.subject %></div>
+                        </div>
+
+                        <!-- Created -->
+                        <div class="xl:col-span-3">
+                            <div class="xl:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Created</div>
+                            <div class="text-sm text-gray-500"><%= sending.created_at.format_display() %></div>
+                        </div>
+
+                        <!-- Queued -->
+                        <div class="xl:col-span-2">
+                            <div class="xl:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Queued</div>
+                            <div class="text-sm text-gray-700 xl:text-right"><%= sending.total_queued %></div>
+                        </div>
+
+                        <!-- Sent -->
+                        <div class="xl:col-span-2">
+                            <div class="xl:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Sent</div>
+                            <div class="text-sm text-gray-700 xl:text-right"><%= sending.messages_sent %></div>
+                        </div>
+
+                        <!-- Opened -->
+                        <div class="xl:col-span-2">
+                            <div class="xl:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Opened</div>
+                            <div class="text-sm text-gray-700 xl:text-right"><%= sending.messages_opened %></div>
+                        </div>
+
+                        <!-- Bounced -->
+                        <div class="xl:col-span-2">
+                            <div class="xl:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Bounced</div>
+                            <div class="text-sm xl:text-right <%= if sending.messages_bounced > 0 { "text-red-600 font-medium" } else { "text-gray-700" } %>"><%= sending.messages_bounced %></div>
+                        </div>
+
+                        <!-- Complaints -->
+                        <div class="xl:col-span-3">
+                            <div class="xl:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Complaints</div>
+                            <div class="text-sm xl:text-right <%= if sending.complaints > 0 { "text-red-600 font-medium" } else { "text-gray-700" } %>"><%= sending.complaints %></div>
+                        </div>
+                    </div>
+                <% } %>
+            </div>
+        <% } %>
     </div>
 </div>

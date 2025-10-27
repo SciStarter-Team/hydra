@@ -41,7 +41,7 @@ use common::{
 };
 use jiff::{Timestamp, ToSpan, tz::TimeZone};
 use poem::{
-    Endpoint, EndpointExt, IntoResponse, Route, delete, get, handler, post, put,
+    Endpoint, EndpointExt, IntoResponse, Route, delete, get, handler, patch, post, put,
     web::{Form, Path, Query},
     Request, Result as PoemResult, FromRequest, RequestBody,
 };
@@ -160,7 +160,10 @@ pub fn routes() -> impl Endpoint {
         .at("/email/stored/new", get(email_stored_new))
         .at("/email/stored/:id", get(email_stored_edit).post(email_stored_update))
         .at("/email/stored/:id/send", post(email_stored_send))
-        .at("/email/triggers", get(email_triggers))
+        .at("/email/stored/autocomplete", get(email_stored_autocomplete))
+        .at("/email/triggers", get(email_triggers).post(email_trigger_create))
+        .at("/email/triggers/:id/edit", get(email_trigger_edit))
+        .at("/email/triggers/:id", patch(email_trigger_update).delete(email_trigger_delete))
         .at("/email/queue", get(email_queue))
         .at("/email/queue-content", get(email_queue_content))
         .at("/email/dataset/:name/variables", get(email_dataset_variables))
@@ -7193,7 +7196,7 @@ async fn wysiwyg_search_impl(query: &WysiwygSearchQuery) -> Result<String, anyho
 
             // Extract text excerpt from Delta JSON
             let excerpt = if let Ok(content_str) = std::str::from_utf8(&row.content) {
-                crate::quill::delta_to_excerpt(content_str, 100)
+                common::quill::delta_to_excerpt(content_str, 100)
             } else {
                 String::new()
             };
@@ -9018,7 +9021,7 @@ async fn email_stored_send(
     }
 
     // Convert delta to HTML
-    let template_html = crate::quill::delta_to_html(&email_response.email.body_delta)?;
+    let template_html = common::quill::delta_to_html(&email_response.email.body_delta)?;
 
     // Send the email
     let _response: common::message::email::SendEmailResponse = common::service::request(
@@ -9334,7 +9337,7 @@ async fn email_oneoff_send(
     }
 
     // Convert delta to HTML
-    let template_html = crate::quill::delta_to_html(&email_response.email.body_delta)?;
+    let template_html = common::quill::delta_to_html(&email_response.email.body_delta)?;
 
     // Send the email
     let _response: common::message::email::SendEmailResponse = common::service::request(
@@ -9357,17 +9360,457 @@ async fn email_oneoff_send(
 
 #[derive(Debug, TemplateOnce)]
 #[template(path = "admin/email_triggers.stpl.html")]
-pub struct EmailTriggersContent;
+pub struct EmailTriggersContent {
+    pub triggers: Vec<common::message::email::TriggerInfo>,
+    pub available_trigger_events: Vec<(String, String, String)>, // (name, description, category)
+    pub stored_emails: std::collections::HashMap<ulid::Ulid, (String, String)>, // id -> (slug, subject)
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/partials/trigger_row.stpl.html")]
+pub struct TriggerRow {
+    pub trigger: common::message::email::TriggerInfo,
+    pub stored_email: Option<(String, String)>, // (slug, subject)
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/partials/trigger_list.stpl.html")]
+pub struct TriggerList {
+    pub triggers: Vec<common::message::email::TriggerInfo>,
+    pub stored_emails: std::collections::HashMap<ulid::Ulid, (String, String)>, // id -> (slug, subject)
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/modals/edit_trigger.stpl.html")]
+pub struct EditTriggerModal {
+    pub trigger: common::message::email::TriggerInfo,
+    pub available_trigger_events: Vec<(String, String, String)>, // (name, description, category)
+    pub stored_email: Option<(String, String)>, // (slug, subject)
+}
 
 #[handler]
 async fn email_triggers(
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    AdminLayout::new("Email Triggers", EmailTriggersContent)
+    use common::message::email::{GetStoredEmailRequest, GetStoredEmailResponse, ListTriggersRequest, ListTriggersResponse};
+    use common::service::{TriggerEvent, request};
+    use strum::IntoEnumIterator;
+    use std::collections::HashMap;
+
+    // Get all configured triggers
+    let triggers_response: ListTriggersResponse = request(
+        "emailer.triggers.list",
+        ListTriggersRequest { active_only: false },
+    )
+    .await?;
+
+    // Get all available trigger events from the enum
+    let available_trigger_events: Vec<(String, String, String)> = TriggerEvent::iter()
+        .map(|trigger| {
+            (
+                trigger.as_ref().to_string(),
+                trigger.description().to_string(),
+                trigger.category().to_string(),
+            )
+        })
+        .collect();
+
+    // Fetch stored email info for triggers (only the ones referenced)
+    let mut stored_emails = HashMap::new();
+    for trigger in &triggers_response.triggers {
+        if !stored_emails.contains_key(&trigger.stored_email_id) {
+            if let Ok(email_response) = request::<GetStoredEmailResponse>(
+                "emailer.stored.get",
+                GetStoredEmailRequest {
+                    stored_email_id: trigger.stored_email_id,
+                },
+            )
+            .await
+            {
+                stored_emails.insert(
+                    email_response.email.stored_email_id,
+                    (email_response.email.slug, email_response.email.subject),
+                );
+            }
+        }
+    }
+
+    let content = EmailTriggersContent {
+        triggers: triggers_response.triggers,
+        available_trigger_events,
+        stored_emails,
+    };
+
+    AdminLayout::new("Email Triggers", content)
         .with_breadcrumb("Email Triggers", None)
         .with_sidebar_active("email-triggers")
         .into_response(user_info)
         .await
+}
+
+// Stored email autocomplete for trigger forms
+#[derive(Debug, Deserialize)]
+pub struct StoredEmailAutocompleteQuery {
+    q: Option<String>,
+}
+
+#[handler]
+async fn email_stored_autocomplete(
+    Query(query): Query<StoredEmailAutocompleteQuery>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    use common::message::email::{ListStoredEmailsRequest, ListStoredEmailsResponse};
+    use common::service::request;
+
+    let search = query.q.filter(|s| !s.is_empty());
+
+    let response: ListStoredEmailsResponse = request(
+        "emailer.stored.list",
+        ListStoredEmailsRequest {
+            page: 1,
+            per_page: 20,
+            search,
+        },
+    )
+    .await?;
+
+    if response.emails.is_empty() {
+        return Ok(poem::Response::builder()
+            .content_type("text/html")
+            .body(r#"<div class="hidden"></div>"#));
+    }
+
+    let results = response
+        .emails
+        .iter()
+        .map(|email| {
+            format!(
+                r#"<div class="cursor-pointer px-3 py-2 hover:bg-gray-100 border-b border-gray-100 last:border-b-0"
+                     hx-on:click="
+                         let widget = htmx.closest(this, '[data-widget=stored-email-autocomplete]');
+                         htmx.find(widget, '[data-part=stored-email-id]').value = '{}';
+                         htmx.find(widget, '[data-part=stored-email-search]').value = '{} - {}';
+                         htmx.find(widget, '[data-part=results]').classList.add('hidden');
+                     ">
+                    <div class="font-medium text-gray-900">{}</div>
+                    <div class="text-sm text-gray-500">{}</div>
+                </div>"#,
+                email.stored_email_id,
+                email.slug,
+                email.subject,
+                email.slug,
+                email.subject
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let html = format!(
+        r#"<div data-part="results" class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+            {}
+        </div>"#,
+        results
+    );
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(html))
+}
+
+// Create email trigger
+#[derive(Debug, Deserialize)]
+pub struct CreateTriggerForm {
+    trigger_name: String,
+    stored_email_id: String,
+    action_type: String,
+    delay_seconds: Option<String>,
+    cancellation_trigger_name: Option<String>,
+}
+
+#[handler]
+async fn email_trigger_create(
+    Form(form): Form<CreateTriggerForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    use common::message::email::{CreateTriggerRequest, CreateTriggerResponse, GetStoredEmailRequest, GetStoredEmailResponse, ListTriggersRequest, ListTriggersResponse, TriggerActionType};
+    use common::service::request;
+    use std::collections::HashMap;
+
+    let stored_email_id = form
+        .stored_email_id
+        .parse::<ulid::Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid stored email ID"))?;
+
+    let action_type = TriggerActionType::from_str(&form.action_type)
+        .ok_or_else(|| anyhow::anyhow!("Invalid action type"))?;
+
+    let delay_seconds = if action_type == TriggerActionType::Delayed {
+        Some(
+            form.delay_seconds
+                .and_then(|s| s.parse::<i64>().ok())
+                .ok_or_else(|| anyhow::anyhow!("Delay seconds required for delayed triggers"))?,
+        )
+    } else {
+        None
+    };
+
+    let cancellation_trigger_name = form
+        .cancellation_trigger_name
+        .filter(|s| !s.is_empty());
+
+    let create_request = CreateTriggerRequest {
+        trigger_name: form.trigger_name,
+        stored_email_id,
+        action_type,
+        delay_seconds,
+        cancellation_trigger_name,
+    };
+
+    let _response: CreateTriggerResponse = request("emailer.triggers.create", create_request).await?;
+
+    // Fetch updated triggers list
+    let triggers_response: ListTriggersResponse = request(
+        "emailer.triggers.list",
+        ListTriggersRequest { active_only: false },
+    )
+    .await?;
+
+    // Fetch stored email info for triggers
+    let mut stored_emails = HashMap::new();
+    for trigger in &triggers_response.triggers {
+        if !stored_emails.contains_key(&trigger.stored_email_id) {
+            if let Ok(email_response) = request::<GetStoredEmailResponse>(
+                "emailer.stored.get",
+                GetStoredEmailRequest {
+                    stored_email_id: trigger.stored_email_id,
+                },
+            )
+            .await
+            {
+                stored_emails.insert(
+                    trigger.stored_email_id,
+                    (email_response.email.slug, email_response.email.subject),
+                );
+            }
+        }
+    }
+
+    // Render the updated list
+    let list = TriggerList {
+        triggers: triggers_response.triggers,
+        stored_emails,
+    };
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(list.render_once()?)
+    )
+}
+
+// Get edit trigger form
+#[handler]
+async fn email_trigger_edit(
+    Path(id): Path<String>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    use common::message::email::{GetStoredEmailRequest, GetStoredEmailResponse, GetTriggerRequest, GetTriggerResponse};
+    use common::service::{TriggerEvent, request};
+    use strum::IntoEnumIterator;
+
+    let trigger_id = id
+        .parse::<ulid::Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid trigger ID"))?;
+
+    // Fetch the trigger
+    let trigger_response: GetTriggerResponse = request(
+        "emailer.triggers.get",
+        GetTriggerRequest { trigger_id },
+    )
+    .await?;
+
+    let trigger = trigger_response.trigger;
+
+    // Get all available trigger events
+    let available_trigger_events: Vec<(String, String, String)> = TriggerEvent::iter()
+        .map(|trigger| {
+            (
+                trigger.as_ref().to_string(),
+                trigger.description().to_string(),
+                trigger.category().to_string(),
+            )
+        })
+        .collect();
+
+    // Fetch stored email info
+    let stored_email = if let Ok(email_response) = request::<GetStoredEmailResponse>(
+        "emailer.stored.get",
+        GetStoredEmailRequest {
+            stored_email_id: trigger.stored_email_id,
+        },
+    )
+    .await
+    {
+        Some((email_response.email.slug, email_response.email.subject))
+    } else {
+        None
+    };
+
+    // Render the modal
+    let modal = EditTriggerModal {
+        trigger,
+        available_trigger_events,
+        stored_email,
+    };
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(modal.render_once()?)
+    )
+}
+
+// Update email trigger
+#[derive(Debug, Deserialize)]
+pub struct UpdateTriggerForm {
+    stored_email_id: Option<String>,
+    action_type: Option<String>,
+    delay_seconds: Option<String>,
+    cancellation_trigger_name: Option<String>,
+    active: Option<String>,
+}
+
+#[handler]
+async fn email_trigger_update(
+    Path(id): Path<String>,
+    Form(form): Form<UpdateTriggerForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    use common::message::email::{GetStoredEmailRequest, GetStoredEmailResponse, GetTriggerRequest, GetTriggerResponse, UpdateTriggerRequest, UpdateTriggerResponse, TriggerActionType};
+    use common::service::request;
+
+    let trigger_id = match id.parse::<ulid::Ulid>() {
+        Ok(id) => id,
+        Err(_) => {
+            return Ok(poem::Response::builder()
+                .content_type("text/html")
+                .body(r#"<div id="edit-trigger-error" class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4" hx-swap-oob="true">Error: Invalid trigger ID</div>"#.to_string()));
+        }
+    };
+
+    // If stored_email_id is provided (even as empty string), validate it
+    let stored_email_id = if let Some(ref email_id_str) = form.stored_email_id {
+        if email_id_str.is_empty() {
+            return Ok(poem::Response::builder()
+                .content_type("text/html")
+                .body(r#"<div id="edit-trigger-error" class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4" hx-swap-oob="true">Error: Please select an email template</div>"#.to_string()));
+        }
+        match email_id_str.parse::<ulid::Ulid>() {
+            Ok(id) => Some(id),
+            Err(_) => {
+                return Ok(poem::Response::builder()
+                    .content_type("text/html")
+                    .body(r#"<div id="edit-trigger-error" class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4" hx-swap-oob="true">Error: Invalid stored email ID</div>"#.to_string()));
+            }
+        }
+    } else {
+        None
+    };
+
+    let action_type = form
+        .action_type
+        .and_then(|s| TriggerActionType::from_str(&s));
+
+    let delay_seconds = form
+        .delay_seconds
+        .and_then(|s| s.parse::<i64>().ok());
+
+    let cancellation_trigger_name = form
+        .cancellation_trigger_name
+        .filter(|s| !s.is_empty());
+
+    let active = form.active.map(|s| s == "true" || s == "1");
+
+    let update_request = UpdateTriggerRequest {
+        trigger_id,
+        stored_email_id,
+        action_type,
+        delay_seconds,
+        cancellation_trigger_name,
+        active,
+    };
+
+    let update_result: Result<UpdateTriggerResponse, _> = request("emailer.triggers.update", update_request).await;
+
+    if let Err(err) = update_result {
+        return Ok(poem::Response::builder()
+            .content_type("text/html")
+            .body(format!(r#"<div id="edit-trigger-error" class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4" hx-swap-oob="true">Error: {}</div>"#, err)));
+    }
+
+    // Fetch the updated trigger to return the row HTML
+    let trigger_response: GetTriggerResponse = request(
+        "emailer.triggers.get",
+        GetTriggerRequest { trigger_id },
+    )
+    .await?;
+
+    let trigger = trigger_response.trigger;
+
+    // Fetch stored email info
+    let stored_email = if let Ok(email_response) = request::<GetStoredEmailResponse>(
+        "emailer.stored.get",
+        GetStoredEmailRequest {
+            stored_email_id: trigger.stored_email_id,
+        },
+    )
+    .await
+    {
+        Some((email_response.email.slug, email_response.email.subject))
+    } else {
+        None
+    };
+
+    // Render the updated table row using template
+    let row = TriggerRow {
+        trigger: trigger.clone(),
+        stored_email,
+    };
+
+    let row_html = row.render_once()?;
+    let row_with_oob = row_html.replace(
+        &format!(r#"id="trigger-row-{}""#, trigger.trigger_id),
+        &format!(r#"id="trigger-row-{}" hx-swap-oob="true""#, trigger.trigger_id)
+    );
+
+    let body = format!(
+        r#"{}<div id="edit-trigger-dialog" hx-swap-oob="delete"></div>"#,
+        row_with_oob
+    );
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(body))
+}
+
+// Delete email trigger
+#[handler]
+async fn email_trigger_delete(
+    Path(id): Path<String>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    use common::message::email::{DeleteTriggerRequest, DeleteTriggerResponse};
+    use common::service::request;
+
+    let trigger_id = id
+        .parse::<ulid::Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid trigger ID"))?;
+
+    let _response: DeleteTriggerResponse =
+        request("emailer.triggers.delete", DeleteTriggerRequest { trigger_id }).await?;
+
+    // Return empty response - HTMX will delete the row with hx-swap="delete"
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::OK)
+        .body(""))
 }
 
 #[derive(Debug, TemplateOnce)]
@@ -9388,12 +9831,13 @@ async fn email_queue(
     // Get queue status
     let queue_status: QueueStatusResponse = request("emailer.analytics.queue_status", ()).await?;
 
-    // Get recent sendings (first page)
+    // Get recent mass sendings (2+ targets, first page)
     let sendings_response: ListSendingsResponse = request(
         "emailer.analytics.list_sendings",
         ListSendingsRequest {
             page: 1,
             per_page: 20,
+            min_queued: Some(2),
         },
     )
     .await?;
@@ -9421,12 +9865,13 @@ async fn email_queue_content(
     // Get queue status
     let queue_status: QueueStatusResponse = request("emailer.analytics.queue_status", ()).await?;
 
-    // Get recent sendings (first page)
+    // Get recent mass sendings (2+ targets, first page)
     let sendings_response: ListSendingsResponse = request(
         "emailer.analytics.list_sendings",
         ListSendingsRequest {
             page: 1,
             per_page: 20,
+            min_queued: Some(2),
         },
     )
     .await?;

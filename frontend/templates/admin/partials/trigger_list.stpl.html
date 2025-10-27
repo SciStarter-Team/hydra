@@ -1,0 +1,25 @@
+<% if self.triggers.is_empty() { %>
+    <div id="trigger-empty-state" class="p-12 text-center">
+        <wa-icon name="bolt" class="mx-auto h-12 w-12 text-gray-400"></wa-icon>
+        <h3 class="mt-2 text-sm font-medium text-gray-900">No triggers configured</h3>
+        <p class="mt-1 text-sm text-gray-500">Get started by creating your first email trigger above.</p>
+    </div>
+<% } else { %>
+    <!-- Header Row - Hidden on mobile, visible on larger screens -->
+    <div class="hidden xl:grid xl:grid-cols-12 bg-gray-50 px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
+        <div class="col-span-3">Trigger Event</div>
+        <div class="col-span-2">Action Type</div>
+        <div class="col-span-3">Email Template</div>
+        <div class="col-span-2">Status</div>
+        <div class="col-span-2">Actions</div>
+    </div>
+
+    <div id="trigger-tbody" class="divide-y divide-gray-200">
+        <% for trigger in &self.triggers { %>
+            <%+ crate::admin::TriggerRow {
+                trigger: trigger.clone(),
+                stored_email: self.stored_emails.get(&trigger.stored_email_id).cloned(),
+            } %>
+        <% } %>
+    </div>
+<% } %>
