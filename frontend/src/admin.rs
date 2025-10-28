@@ -24,13 +24,14 @@ use common::{
         LocationServiceHealthResponse, LogServiceHealthResponse, UserServiceHealthResponse,
     },
     message::log::{
-        AnalyticsQuery, AnalyticsResponse, GoUrlStatsRequest, GoUrlStatsResponse,
+        GoUrlStatsRequest, GoUrlStatsResponse,
         RecentActivityRequest, RecentActivityResponse,
     },
     message::user::{
         AdminAnalyticsRequest, AdminAnalyticsResponse, AdminPasswordResetRequest,
         AdminPasswordResetResponse, AdminUser, AdminUserCreateRequest, AdminUserDeleteRequest,
-        AdminUserDeleteResponse, AdminUserGetRequest, AdminUserListRequest, AdminUserListResponse,
+        AdminUserDeleteResponse, AdminUserExportRequest, AdminUserExportResponse,
+        AdminUserGetRequest, AdminUserListRequest, AdminUserListResponse,
         AdminUserResponse, AdminUserSearchRequest, AdminUserUpdateRequest, BasicInfo, UserEmail,
         UserEmailAddRequest, UserEmailDeleteRequest, UserEmailResponse,
         UserEmailToggleVerifiedRequest, UserEmailUpdateRequest,
@@ -39,10 +40,10 @@ use common::{
     shared::db,
     timestring::TimeString,
 };
-use jiff::{Timestamp, ToSpan, tz::TimeZone};
+use jiff::Timestamp;
 use poem::{
     Endpoint, EndpointExt, IntoResponse, Route, delete, get, handler, patch, post, put,
-    web::{Form, Path, Query},
+    web::{Form, Html, Path, Query},
     Request, Result as PoemResult, FromRequest, RequestBody,
 };
 use sailfish::TemplateOnce;
@@ -108,6 +109,10 @@ pub fn routes() -> impl Endpoint {
         .at("/events/:id", get(events_edit).delete(events_delete))
         .at("/events/:id/field/:field", put(events_update_field))
         .at("/analytics", get(analytics))
+        .at("/analytics/top-performers", get(analytics_top_performers))
+        .at("/analytics/export/users", get(analytics_export_users))
+        .at("/analytics/export/projects", get(analytics_export_projects))
+        .at("/analytics/export/events", get(analytics_export_events))
         .at("/help", get(help))
         .at("/engine-room", get(engine_room))
         .at(
@@ -1566,6 +1571,7 @@ pub struct AnalyticsPage {
     end_date: String,
     selected_days: Option<u32>,
     activity_page: u32,
+    top_performers_criterion: TopPerformersCriterion,
 }
 
 #[derive(Debug, Clone)]
@@ -1588,13 +1594,9 @@ pub struct ActivityStat {
 pub struct AnalyticsPagePrepared {
     total_users: u32,
     verified_users: u32,
-    total_projects: u32,
-    total_events: u32,
-    monthly_signups: u32,
     weekly_signups: u32,
     daily_signups: u32,
-    top_projects: Vec<AdminProject>,
-    user_growth_data: String, // JSON for charts
+    top_performers: Vec<TopPerformerItem>,
     geographic_stats: Vec<GeographicStat>,
     activity_stats: Vec<ActivityStat>,
     activity_page: u32,
@@ -1605,6 +1607,7 @@ pub struct AnalyticsPagePrepared {
     selected_days: Option<u32>, // Time range filter (None if custom range)
     start_date: String,
     end_date: String,
+    top_performers_criterion: TopPerformersCriterion,
 }
 
 #[derive(Debug, Clone)]
@@ -1613,34 +1616,73 @@ pub struct WeeklyCount {
     pub count: i64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TopPerformersCriterion {
+    Views,
+    Clickthroughs,
+    Participation,
+}
+
+impl TopPerformersCriterion {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Views => "views",
+            Self::Clickthroughs => "clickthroughs",
+            Self::Participation => "participation",
+        }
+    }
+
+    pub fn description(&self) -> &'static str {
+        match self {
+            Self::Views => "viewed pages",
+            Self::Clickthroughs => "clicked projects",
+            Self::Participation => "participated projects",
+        }
+    }
+
+    pub fn is_views(&self) -> bool {
+        matches!(self, Self::Views)
+    }
+
+    pub fn is_clickthroughs(&self) -> bool {
+        matches!(self, Self::Clickthroughs)
+    }
+
+    pub fn is_participation(&self) -> bool {
+        matches!(self, Self::Participation)
+    }
+}
+
+impl Default for TopPerformersCriterion {
+    fn default() -> Self {
+        Self::Clickthroughs
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TopPerformerItem {
+    pub identifier: String,
+    pub count: i64,
+    pub display_name: Option<String>, // Project name if found, None for paths
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/partials/top_performers_box.stpl.html")]
+pub struct TopPerformersBox {
+    criterion: TopPerformersCriterion,
+    items: Vec<TopPerformerItem>,
+    days: Option<u32>,
+    start_date: String,
+    end_date: String,
+}
+
 impl Component for AnalyticsPage {
     type Param = Option<Arc<BasicInfo>>;
     type Prepared = AdminLayoutPrepared<AnalyticsPagePrepared>;
 
     async fn prepare(self, param: Self::Param) -> Result<Self::Prepared, anyhow::Error> {
         // Fetch database statistics for frontend data
-        let total_projects_result =
-            sqlx::query!(r#"
-                SELECT COUNT(*) as count
-                FROM projects p
-                LEFT JOIN entities ent ON ent.target = p.project_id AND ent.kind = 'Project'
-                WHERE ent.publish = 1
-            "#)
-                .fetch_one(db())
-                .await?;
-        let total_projects = total_projects_result.count as u32;
-
-        let total_events_result =
-            sqlx::query!(r#"
-                SELECT COUNT(*) as count
-                FROM events e
-                LEFT JOIN entities ent ON ent.target = e.event_id AND ent.kind = 'Event'
-                WHERE ent.publish = 1
-            "#)
-                .fetch_one(db())
-                .await?;
-        let total_events = total_events_result.count as u32;
-
         // Fetch user analytics from user service
         let user_analytics = request_timeout(
             "user.stats.admin_analytics",
@@ -1656,69 +1698,62 @@ impl Component for AnalyticsPage {
             daily_signups: 0,
         });
 
-        // Get top projects by using the existing projects query
-        let top_projects = fetch_projects_page(
-            None,           // no search
-            Some("active"), // only active
-            None,           // no flagged filter
-            None,           // spatial_overlap
-            None,           // spatial_point
-            None,           // proximity_sort
-            Some(1),        // first page
-            Some(5),        // top 5
-        )
-        .await
-        .unwrap_or_default();
-
-        // Fetch user growth data from log service
-        let user_growth_data = match request_timeout(
-            "log.analytics.user_growth",
-            AnalyticsQuery {
-                start_date: Timestamp::now()
-                    .to_zoned(TimeZone::UTC)
-                    .date()
-                    .checked_sub(120.days())
-                    .unwrap()
-                    .to_string(),
-                end_date: Timestamp::now().to_zoned(TimeZone::UTC).date().to_string(),
+        // Get top performers using the selected criterion
+        let top_performers_response = request_timeout(
+            "log.top_performers_analytics",
+            common::message::log::TopPerformersQuery {
+                start_date: self.start_date.clone(),
+                end_date: self.end_date.clone(),
+                criterion: self.top_performers_criterion.as_str().to_string(),
+                limit: 5,
             },
             Duration::from_secs(5),
         )
-        .await
-        {
-            Ok(AnalyticsResponse::WeeklyCounts(counts)) => {
-                // Convert to JSON for frontend charts
-                let labels: Vec<String> = counts.iter().map(|c| c.week_start.clone()).collect();
-                let data: Vec<i64> = counts.iter().map(|c| c.count).collect();
-                serde_json::json!({
-                    "labels": labels,
-                    "data": data
-                })
-                .to_string()
+        .await;
+
+        let top_performers = match top_performers_response {
+            Ok(common::message::log::AnalyticsResponse::TopPerformers(items)) => {
+                let mut performers = Vec::new();
+
+                for item in items {
+                    // For clickthroughs and participation, try to look up project name
+                    let display_name = if self.top_performers_criterion == TopPerformersCriterion::Clickthroughs
+                        || self.top_performers_criterion == TopPerformersCriterion::Participation {
+                        // Try to parse as ULID and look up project
+                        if let Ok(_project_id) = item.identifier.parse::<Ulid>() {
+                            sqlx::query!(
+                                r#"SELECT name FROM projects WHERE project_id = ?"#,
+                                item.identifier
+                            )
+                            .fetch_optional(db())
+                            .await
+                            .ok()
+                            .flatten()
+                            .map(|row| row.name)
+                        } else {
+                            None
+                        }
+                    } else {
+                        // For views, just use the path as-is
+                        None
+                    };
+
+                    performers.push(TopPerformerItem {
+                        identifier: item.identifier,
+                        count: item.count,
+                        display_name,
+                    });
+                }
+
+                performers
             }
-            Ok(AnalyticsResponse::MonthlyCounts(counts)) => {
-                let labels: Vec<String> = counts.iter().map(|c| c.month_start.clone()).collect();
-                let data: Vec<i64> = counts.iter().map(|c| c.count).collect();
-                serde_json::json!({
-                    "labels": labels,
-                    "data": data
-                })
-                .to_string()
+            Err(e) => {
+                eprintln!("Top performers analytics error: {:?}", e);
+                Vec::new()
             }
             _ => {
-                // Fallback to basic growth simulation based on total users
-                let months = vec!["Jan", "Feb", "Mar", "Apr", "May", "Jun"];
-                let base_growth = if user_analytics.total_users > 6 {
-                    user_analytics.total_users / 6
-                } else {
-                    1
-                };
-                let data: Vec<u32> = (1..=6).map(|i| base_growth * i).collect();
-                serde_json::json!({
-                    "labels": months,
-                    "data": data
-                })
-                .to_string()
+                eprintln!("Top performers analytics returned unexpected variant");
+                Vec::new()
             }
         };
 
@@ -1845,13 +1880,9 @@ impl Component for AnalyticsPage {
         let analytics_content = AnalyticsPagePrepared {
             total_users: user_analytics.total_users,
             verified_users: user_analytics.verified_users,
-            total_projects,
-            total_events,
-            monthly_signups: user_analytics.monthly_signups,
             weekly_signups: user_analytics.weekly_signups,
             daily_signups: user_analytics.daily_signups,
-            top_projects,
-            user_growth_data,
+            top_performers,
             geographic_stats,
             activity_stats,
             activity_page,
@@ -1860,8 +1891,9 @@ impl Component for AnalyticsPage {
             clickthrough_counts,
             participation_counts,
             selected_days: self.selected_days,
-            start_date: self.start_date,
-            end_date: self.end_date,
+            start_date: self.start_date.clone(),
+            end_date: self.end_date.clone(),
+            top_performers_criterion: self.top_performers_criterion.clone(),
         };
 
         AdminLayout::new("Analytics", analytics_content)
@@ -2328,6 +2360,7 @@ struct AnalyticsPageQuery {
     start_date: Option<String>,
     end_date: Option<String>,
     activity_page: Option<u32>,
+    top_performers_criterion: Option<TopPerformersCriterion>,
 }
 
 #[handler]
@@ -2358,9 +2391,352 @@ async fn analytics(
         end_date,
         selected_days,
         activity_page: query.activity_page.unwrap_or(1),
+        top_performers_criterion: query.top_performers_criterion.unwrap_or_default(),
     }
     .into_response(user_info)
     .await
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct TopPerformersQuery {
+    days: Option<u32>,
+    start_date: Option<String>,
+    end_date: Option<String>,
+    criterion: Option<TopPerformersCriterion>,
+}
+
+#[handler]
+async fn analytics_top_performers(
+    Query(query): Query<TopPerformersQuery>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<impl IntoResponse, anyhow::Error> {
+    use jiff::ToSpan;
+
+    // Parse date range
+    let (start_date, end_date, days) = if let (Some(start), Some(end)) = (query.start_date, query.end_date) {
+        (start, end, None)
+    } else {
+        let days = query.days.unwrap_or(30);
+        let end = Timestamp::now().to_zoned(jiff::tz::TimeZone::UTC).date();
+        let start = end.checked_sub(((days - 1) as i64).days()).unwrap_or(end);
+        (start.to_string(), end.to_string(), Some(days))
+    };
+
+    let criterion = query.criterion.unwrap_or_default();
+
+    // Fetch top performers
+    let top_performers_response = request_timeout(
+        "log.top_performers_analytics",
+        common::message::log::TopPerformersQuery {
+            start_date: start_date.clone(),
+            end_date: end_date.clone(),
+            criterion: criterion.as_str().to_string(),
+            limit: 5,
+        },
+        Duration::from_secs(5),
+    )
+    .await;
+
+    let items = match top_performers_response {
+        Ok(common::message::log::AnalyticsResponse::TopPerformers(items)) => {
+            let mut performers = Vec::new();
+
+            for item in items {
+                // For clickthroughs and participation, try to look up project name
+                let display_name = if criterion == TopPerformersCriterion::Clickthroughs
+                    || criterion == TopPerformersCriterion::Participation {
+                    // Try to parse as ULID and look up project
+                    if let Ok(_project_id) = item.identifier.parse::<Ulid>() {
+                        sqlx::query!(
+                            r#"SELECT name FROM projects WHERE project_id = ?"#,
+                            item.identifier
+                        )
+                        .fetch_optional(db())
+                        .await
+                        .ok()
+                        .flatten()
+                        .map(|row| row.name)
+                    } else {
+                        None
+                    }
+                } else {
+                    // For views, just use the path as-is
+                    None
+                };
+
+                performers.push(TopPerformerItem {
+                    identifier: item.identifier,
+                    count: item.count,
+                    display_name,
+                });
+            }
+
+            performers
+        }
+        Err(e) => {
+            eprintln!("Top performers analytics error: {:?}", e);
+            Vec::new()
+        }
+        _ => {
+            eprintln!("Top performers analytics returned unexpected variant");
+            Vec::new()
+        }
+    };
+
+    Ok(Html(
+        TopPerformersBox {
+            criterion,
+            items,
+            days,
+            start_date,
+            end_date,
+        }
+        .render_once()?,
+    ))
+}
+
+/// Helper function to escape CSV field values
+fn escape_csv_field(value: &str) -> String {
+    if value.contains(',') || value.contains('"') || value.contains('\n') || value.contains('\r') {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_string()
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct ExportQuery {
+    days: Option<u32>,
+    start_date: Option<String>,
+    end_date: Option<String>,
+}
+
+#[handler]
+async fn analytics_export_users(
+    Query(query): Query<ExportQuery>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<impl IntoResponse, anyhow::Error> {
+    use jiff::ToSpan;
+
+    // Parse date range
+    let (start_date, end_date) = if let (Some(start), Some(end)) = (query.start_date, query.end_date) {
+        (start, end)
+    } else {
+        let days = query.days.unwrap_or(30);
+        let end = Timestamp::now().to_zoned(jiff::tz::TimeZone::UTC).date();
+        let start = end.checked_sub(((days - 1) as i64).days()).unwrap_or(end);
+        (start.to_string(), end.to_string())
+    };
+
+    // Build CSV incrementally, fetching users in pages to avoid NATS payload size limit
+    let mut csv = String::new();
+    csv.push_str("User ID,Handle,First Name,Last Name,Primary Email,Active,Staff,Superuser,Page Manager,Verified,Date Joined\n");
+
+    let page_size = 500; // Fetch 500 users at a time
+    let mut page = 1;
+
+    loop {
+        let export_response: AdminUserExportResponse = request_timeout(
+            "user.admin.user_export",
+            AdminUserExportRequest {
+                start_date: start_date.clone(),
+                end_date: end_date.clone(),
+                page: Some(page),
+                limit: Some(page_size),
+            },
+            Duration::from_secs(60),
+        )
+        .await?;
+
+        let count = export_response.users.len();
+
+        // Append this page's users to CSV immediately
+        for user in export_response.users {
+            csv.push_str(&format!(
+                "{},{},{},{},{},{},{},{},{},{},{}\n",
+                escape_csv_field(&user.user_id.to_string()),
+                escape_csv_field(&user.handle),
+                escape_csv_field(&user.first_name),
+                escape_csv_field(&user.last_name),
+                escape_csv_field(&user.primary_email),
+                user.is_active,
+                user.is_staff,
+                user.is_superuser,
+                user.is_page_manager,
+                user.verified,
+                escape_csv_field(&user.date_joined),
+            ));
+        }
+
+        // If we got fewer than page_size results, we're done
+        if count < page_size as usize {
+            break;
+        }
+
+        page += 1;
+    }
+
+    Ok(poem::Response::builder()
+        .content_type("text/csv")
+        .header("Content-Disposition", "attachment; filename=\"users.csv\"")
+        .body(csv))
+}
+
+#[handler]
+async fn analytics_export_projects(
+    Query(query): Query<ExportQuery>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<impl IntoResponse, anyhow::Error> {
+    use jiff::ToSpan;
+
+    // Parse date range
+    let (start_date, end_date) = if let (Some(start), Some(end)) = (query.start_date, query.end_date) {
+        (start, end)
+    } else {
+        let days = query.days.unwrap_or(30);
+        let end = Timestamp::now().to_zoned(jiff::tz::TimeZone::UTC).date();
+        let start = end.checked_sub(((days - 1) as i64).days()).unwrap_or(end);
+        (start.to_string(), end.to_string())
+    };
+
+    // Query projects from database
+    struct ProjectRow {
+        project_id: String,
+        name: String,
+        status: String,
+        created: String,
+        origin: String,
+        presenter: String,
+        url: String,
+        publish: Option<bool>,
+    }
+
+    let project_rows = sqlx::query_as!(
+        ProjectRow,
+        r#"
+        SELECT
+            p.project_id,
+            p.name,
+            p.status,
+            p.created,
+            p.origin,
+            p.presenter,
+            p.url,
+            e.publish
+        FROM projects p
+        LEFT JOIN entities e ON e.target = p.project_id AND e.kind = 'Project'
+        WHERE p.created >= ? AND p.created <= ?
+        ORDER BY p.created DESC
+        "#,
+        start_date,
+        end_date
+    )
+    .fetch_all(db())
+    .await?;
+
+    // Build CSV
+    let mut csv = String::new();
+    csv.push_str("Project ID,Name,Status,Created,Origin,Presenter,URL,Published\n");
+
+    for project in project_rows {
+        let published = project.publish.unwrap_or(false);
+        csv.push_str(&format!(
+            "{},{},{},{},{},{},{},{}\n",
+            escape_csv_field(&project.project_id),
+            escape_csv_field(&project.name),
+            escape_csv_field(&project.status),
+            escape_csv_field(&project.created),
+            escape_csv_field(&project.origin),
+            escape_csv_field(&project.presenter),
+            escape_csv_field(&project.url),
+            published,
+        ));
+    }
+
+    Ok(poem::Response::builder()
+        .content_type("text/csv")
+        .header("Content-Disposition", "attachment; filename=\"projects.csv\"")
+        .body(csv))
+}
+
+#[handler]
+async fn analytics_export_events(
+    Query(query): Query<ExportQuery>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<impl IntoResponse, anyhow::Error> {
+    use jiff::ToSpan;
+
+    // Parse date range
+    let (start_date, end_date) = if let (Some(start), Some(end)) = (query.start_date, query.end_date) {
+        (start, end)
+    } else {
+        let days = query.days.unwrap_or(30);
+        let end = Timestamp::now().to_zoned(jiff::tz::TimeZone::UTC).date();
+        let start = end.checked_sub(((days - 1) as i64).days()).unwrap_or(end);
+        (start.to_string(), end.to_string())
+    };
+
+    // Query events from database
+    struct EventRow {
+        event_id: String,
+        name: String,
+        created: String,
+        origin: String,
+        presenter: String,
+        url: String,
+        event_type: String,
+        location_type: String,
+        publish: Option<bool>,
+    }
+
+    let event_rows = sqlx::query_as!(
+        EventRow,
+        r#"
+        SELECT
+            ev.event_id,
+            ev.name,
+            ev.created,
+            ev.origin,
+            ev.presenter,
+            ev.url,
+            ev.event_type,
+            ev.location_type,
+            e.publish
+        FROM events ev
+        LEFT JOIN entities e ON e.target = ev.event_id AND e.kind = 'Event'
+        WHERE ev.created >= ? AND ev.created <= ?
+        ORDER BY ev.created DESC
+        "#,
+        start_date,
+        end_date
+    )
+    .fetch_all(db())
+    .await?;
+
+    // Build CSV
+    let mut csv = String::new();
+    csv.push_str("Event ID,Name,Created,Origin,Presenter,URL,Event Type,Location Type,Published\n");
+
+    for event in event_rows {
+        let published = event.publish.unwrap_or(false);
+        csv.push_str(&format!(
+            "{},{},{},{},{},{},{},{},{}\n",
+            escape_csv_field(&event.event_id),
+            escape_csv_field(&event.name),
+            escape_csv_field(&event.created),
+            escape_csv_field(&event.origin),
+            escape_csv_field(&event.presenter),
+            escape_csv_field(&event.url),
+            escape_csv_field(&event.event_type),
+            escape_csv_field(&event.location_type),
+            published,
+        ));
+    }
+
+    Ok(poem::Response::builder()
+        .content_type("text/csv")
+        .header("Content-Disposition", "attachment; filename=\"events.csv\"")
+        .body(csv))
 }
 
 #[derive(Debug, TemplateOnce)]

@@ -5,7 +5,8 @@ use common::{
     message::user::{
         AdminPasswordResetRequest, AdminPasswordResetResponse, AdminUser, AdminUserBatchGetRequest,
         AdminUserBatchGetResponse, AdminUserCreateRequest, AdminUserDeleteRequest,
-        AdminUserDeleteResponse, AdminUserGetRequest, AdminUserListRequest, AdminUserListResponse,
+        AdminUserDeleteResponse, AdminUserExportRequest, AdminUserExportResponse,
+        AdminUserGetRequest, AdminUserListRequest, AdminUserListResponse,
         AdminUserResponse, AdminUserSearchRequest, AdminUserUpdateRequest, BasicInfo,
         PageManagerSyncRequest, PageManagerSyncResponse, PageManagerUpdateRequest,
         PageManagerUpdateResponse, UserAndBadge, UserBadge, UserEmail, UserEmailAddRequest,
@@ -709,6 +710,69 @@ pub async fn admin_user_search(req: &Request) -> Result<AdminUserListResponse, E
         total_count,
         page,
         limit,
+    })
+}
+
+pub async fn admin_user_export(req: &Request) -> Result<AdminUserExportResponse, Error> {
+    let request: AdminUserExportRequest = decode_structured_message(req.message.clone())?;
+
+    let page = request.page.unwrap_or(1);
+    let limit = request.limit.unwrap_or(500);
+    let offset = (page - 1) * limit;
+
+    let users_result = sqlx::query!(
+        r#"
+        SELECT
+            "user_id",
+            "handle",
+            "first_name",
+            "last_name",
+            "primary_email",
+            "is_active" as "is_active: bool",
+            "is_staff" as "is_staff: bool",
+            "is_superuser" as "is_superuser: bool",
+            "is_page_manager" as "is_page_manager: bool",
+            "verified" as "verified: bool",
+            "date_joined"
+        FROM "users"
+        WHERE "date_joined" >= ? AND "date_joined" <= ?
+        ORDER BY "date_joined" DESC
+        LIMIT ? OFFSET ?
+        "#,
+        request.start_date,
+        request.end_date,
+        limit,
+        offset
+    )
+    .fetch_all(db())
+    .await?;
+
+    // Pre-allocate with exact capacity to avoid reallocations
+    let mut users = Vec::with_capacity(users_result.len());
+    for row in users_result {
+        let user_id = row
+            .user_id
+            .as_ulid()
+            .map_err(|e| anyhow::anyhow!("Invalid user ID in database: {}", e))?;
+
+        users.push(AdminUser {
+            user_id,
+            handle: row.handle,
+            first_name: row.first_name,
+            last_name: row.last_name,
+            primary_email: row.primary_email,
+            is_active: row.is_active,
+            is_staff: row.is_staff,
+            is_superuser: row.is_superuser,
+            is_page_manager: row.is_page_manager,
+            verified: row.verified,
+            date_joined: row.date_joined,
+            emails: vec![], // Empty for export operations
+        });
+    }
+
+    Ok(AdminUserExportResponse {
+        users,
     })
 }
 

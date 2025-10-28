@@ -199,9 +199,13 @@ where
 {
     let payload = flexbuffers::to_vec(message)?;
 
-    let msg = tokio::time::timeout(timeout, nats().request(subject, payload.into()))
+    // Use tokio::time::timeout to enforce our timeout, not NATS client's default
+    let msg = tokio::time::timeout(
+        timeout,
+        nats().request(subject, payload.into())
+    )
         .await
-        .map_err(|_| anyhow!("Request timeout"))?
+        .map_err(|_| anyhow!("request timed out: deadline has elapsed"))?
         .map_err(|e| anyhow!("NATS request failed: {}", e))?
         .decode_error()?;
 

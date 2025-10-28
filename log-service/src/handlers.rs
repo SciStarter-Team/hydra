@@ -13,7 +13,7 @@ use ulid::Ulid;
 use log_service::{
     analytics::{
         get_clickthrough_analytics_realtime, get_go_url_stats,
-        get_participation_analytics_realtime, get_recent_activity,
+        get_participation_analytics_realtime, get_recent_activity, get_top_performers,
     },
     cache::{update_user_emails_cache, update_user_tags_cache},
     health::HealthResponse,
@@ -54,7 +54,17 @@ pub async fn handle_activity_log(req: &async_nats::service::Request) -> Result<(
 }
 
 pub async fn handle_page_view(req: &async_nats::service::Request) -> Result<()> {
-    let (when, ip_address, device_id, interaction_id, user_id, path, referrer, query, geolocation): (String, String, String, String, Option<String>, String, Option<String>, Option<String>, String) = decode_structured_message(req.message.clone())?;
+    let (when, ip_address, device_id, interaction_id, user_id, path, referrer, query, geolocation): (
+        String,
+        String,
+        String,
+        String,
+        Option<String>,
+        String,
+        Option<String>,
+        Option<String>,
+        String,
+    ) = decode_structured_message(req.message.clone())?;
 
     use log_service::database::tables::PageViewRow;
 
@@ -207,6 +217,21 @@ pub async fn handle_participation_analytics(
     get_participation_analytics_realtime(database, query)
         .await
         .map_err(Into::into)
+}
+
+pub async fn handle_top_performers_analytics(
+    req: &async_nats::service::Request,
+) -> Result<AnalyticsResponse, anyhow::Error> {
+    let query: common::message::log::TopPerformersQuery =
+        decode_structured_message(req.message.clone())?;
+
+    // Clone database reference and use it in scope
+    let database = DATABASE
+        .read()
+        .as_ref()
+        .expect("Database not initialized")
+        .clone();
+    get_top_performers(database, query).await.map_err(Into::into)
 }
 
 pub async fn handle_user_tags_update(req: &async_nats::service::Request) -> Result<()> {

@@ -2,7 +2,8 @@ use crate::error::{LogServiceError, Result};
 use common::badge::Badge;
 use common::message::log::{
     AnalyticsQuery, AnalyticsResponse, GoUrlChartPoint, GoUrlStatsRequest, GoUrlStatsResponse,
-    GoUrlViewEntry, RecentActivityItem, RecentActivityRequest, RecentActivityResponse, WeeklyCount,
+    GoUrlViewEntry, TopItemCount, RecentActivityItem, RecentActivityRequest,
+    RecentActivityResponse, TopPerformersQuery, WeeklyCount,
 };
 use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::functions_aggregate::expr_fn::count;
@@ -812,4 +813,126 @@ pub async fn get_go_url_stats(
         date_range_start: start_date,
         date_range_end: end_date,
     })
+}
+
+/// Get top performers by a specified criterion (views, clickthroughs, or participation)
+pub async fn get_top_performers(
+    database: Arc<Database>,
+    query: TopPerformersQuery,
+) -> Result<AnalyticsResponse> {
+    let ctx = database.context();
+
+    let sql = match query.criterion.as_str() {
+        "views" => {
+            format!(
+                "SELECT \
+                    path as identifier, \
+                    COUNT(*) as count \
+                 FROM page_views_realtime \
+                 WHERE `when` >= '{}' AND `when` <= '{}' \
+                   AND path IS NOT NULL \
+                 GROUP BY path \
+                 ORDER BY count DESC \
+                 LIMIT {}",
+                query.start_date, query.end_date, query.limit
+            )
+        }
+        "clickthroughs" => {
+            format!(
+                "SELECT \
+                    program_id as identifier, \
+                    COUNT(*) as count \
+                 FROM clickthroughs_realtime \
+                 WHERE `when` >= '{}' AND `when` <= '{}' \
+                   AND program_id IS NOT NULL \
+                 GROUP BY program_id \
+                 ORDER BY count DESC \
+                 LIMIT {}",
+                query.start_date, query.end_date, query.limit
+            )
+        }
+        "participation" => {
+            format!(
+                "SELECT \
+                    entity_id as identifier, \
+                    COUNT(*) as count \
+                 FROM participation_realtime \
+                 WHERE `when` >= '{}' AND `when` <= '{}' \
+                   AND entity_id IS NOT NULL \
+                 GROUP BY entity_id \
+                 ORDER BY count DESC \
+                 LIMIT {}",
+                query.start_date, query.end_date, query.limit
+            )
+        }
+        _ => {
+            return Err(LogServiceError::Validation(format!(
+                "Invalid criterion: {}",
+                query.criterion
+            )))
+        }
+    };
+
+    let df = ctx.sql(&sql).await?;
+    let batches = df.collect().await?;
+
+    let mut item_counts = Vec::new();
+
+    for batch in batches {
+        let identifier_array = batch.column(0);
+        let count_array = batch.column(1);
+
+        for i in 0..batch.num_rows() {
+            if let Some(identifier) = extract_string_value(identifier_array, i) {
+                if let Some(count) = extract_count_value(count_array, i) {
+                    item_counts.push(TopItemCount {
+                        identifier,
+                        count,
+                    });
+                }
+            }
+        }
+    }
+
+    Ok(AnalyticsResponse::TopPerformers(item_counts))
+}
+
+// Helper function to extract string values from Arrow arrays
+fn extract_string_value(
+    array: &datafusion::arrow::array::ArrayRef,
+    index: usize,
+) -> Option<String> {
+    use datafusion::arrow::array::{Array, StringArray, StringViewArray};
+
+    if let Some(string_array) = array.as_any().downcast_ref::<StringArray>() {
+        if !string_array.is_null(index) {
+            return Some(string_array.value(index).to_string());
+        }
+    } else if let Some(string_view_array) = array.as_any().downcast_ref::<StringViewArray>() {
+        if !string_view_array.is_null(index) {
+            return Some(string_view_array.value(index).to_string());
+        }
+    }
+
+    None
+}
+
+// Helper function to extract count values from Arrow arrays
+fn extract_count_value(
+    array: &datafusion::arrow::array::ArrayRef,
+    index: usize,
+) -> Option<i64> {
+    use datafusion::arrow::array::{Array, Int64Array, UInt64Array};
+
+    if let Some(int64_array) = array.as_any().downcast_ref::<Int64Array>() {
+        if !int64_array.is_null(index) {
+            return Some(int64_array.value(index));
+        }
+    } else if let Some(uint64_array) = array.as_any().downcast_ref::<UInt64Array>() {
+        if !uint64_array.is_null(index) {
+            return Some(uint64_array.value(index) as i64);
+        }
+    }
+
+    None
 }

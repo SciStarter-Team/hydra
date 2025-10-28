@@ -13,7 +13,7 @@ use handlers::{
     handle_activity_log, handle_affiliate_participation, handle_clickthrough,
     handle_clickthrough_analytics, handle_email_event, handle_go_url_stats, handle_health_check,
     handle_join, handle_page_view, handle_participation_analytics, handle_recent_activity,
-    handle_user_emails_update, handle_user_tags_update,
+    handle_top_performers_analytics, handle_user_emails_update, handle_user_tags_update,
 };
 use log_service::{Database, run_compactor_service};
 use parking_lot::RwLock;
@@ -124,6 +124,11 @@ async fn main() -> Result<()> {
         log_group,
         "participation_analytics",
         handle_participation_analytics
+    ));
+    toplevel.spawn(handler!(
+        log_group,
+        "top_performers_analytics",
+        handle_top_performers_analytics
     ));
     toplevel.spawn(handler!(
         log_group,

@@ -14,9 +14,13 @@ pub fn nats() -> &'static async_nats::Client {
 }
 
 pub async fn extra_nats() -> async_nats::Client {
-    let nats = async_nats::connect_with_options(NATS_HOST, async_nats::ConnectOptions::default())
-        .await
-        .expect("Unable to connect to NATS");
+    let nats = async_nats::connect_with_options(
+        NATS_HOST,
+        async_nats::ConnectOptions::default()
+            .request_timeout(None), // Disable default request timeout
+    )
+    .await
+    .expect("Unable to connect to NATS");
     nats
 }
 
@@ -104,7 +108,8 @@ mod database {
 
         let nats = async_nats::connect_with_options(
             super::NATS_HOST,
-            async_nats::ConnectOptions::default(),
+            async_nats::ConnectOptions::default()
+                .request_timeout(None), // Disable default request timeout
         )
         .await
         .expect("Unable to connect to NATS");
@@ -141,9 +146,13 @@ pub use database::{db, extra_db, init};
 
 #[cfg(not(feature = "database"))]
 pub async fn init() {
-    let nats = async_nats::connect_with_options(NATS_HOST, async_nats::ConnectOptions::default())
-        .await
-        .expect("Unable to connect to NATS");
+    let nats = async_nats::connect_with_options(
+        NATS_HOST,
+        async_nats::ConnectOptions::default()
+            .request_timeout(None), // Disable default request timeout
+    )
+    .await
+    .expect("Unable to connect to NATS");
 
     NATS.set(nats)
         .expect("Unable to set shared NATS connection");

@@ -56,10 +56,25 @@ pub enum AnalyticsResponse {
     WeeklyCounts(Vec<WeeklyCount>),
     DailyCounts(Vec<DailyCount>),
     MonthlyCounts(Vec<MonthlyCount>),
+    TopPerformers(Vec<TopItemCount>),
     // Future analytics types can be added here:
     // UserActivitySummary(UserActivityData),
     // GeographicBreakdown(Vec<LocationCount>),
     // etc.
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TopPerformersQuery {
+    pub start_date: String, // ISO 8601 date (YYYY-MM-DD)
+    pub end_date: String,   // ISO 8601 date (YYYY-MM-DD)
+    pub criterion: String,  // "views", "clickthroughs", or "participation"
+    pub limit: usize,       // number of top performers to return
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TopItemCount {
+    pub identifier: String,  // Can be path, program_id, or entity_id depending on criterion
+    pub count: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

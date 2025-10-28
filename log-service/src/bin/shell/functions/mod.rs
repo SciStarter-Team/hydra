@@ -34,5 +34,13 @@ pub fn convert_analytics_response_to_table(
                 .collect();
             Ok((columns, rows))
         }
+        AnalyticsResponse::TopPerformers(item_counts) => {
+            let columns = vec!["Identifier".to_string(), "Count".to_string()];
+            let rows: Vec<Vec<String>> = item_counts
+                .into_iter()
+                .map(|ic| vec![ic.identifier, ic.count.to_string()])
+                .collect();
+            Ok((columns, rows))
+        }
     }
 }

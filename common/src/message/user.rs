@@ -469,6 +469,19 @@ pub struct GeographicStat {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct AdminUserExportRequest {
+    pub start_date: String, // Start date in YYYY-MM-DD format
+    pub end_date: String,   // End date in YYYY-MM-DD format
+    pub page: Option<u32>,  // Page number (1-indexed), for pagination
+    pub limit: Option<u32>, // Number of users per page
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct AdminUserExportResponse {
+    pub users: Vec<AdminUser>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct GeographicAnalyticsResponse {
     pub stats: Vec<GeographicStat>,
 }

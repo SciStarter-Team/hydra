@@ -1043,6 +1043,7 @@ async fn main() {
     let admin = service.group("user.admin");
     toplevel.spawn(handler!(admin, "user_list", users::admin_user_list));
     toplevel.spawn(handler!(admin, "user_search", users::admin_user_search));
+    toplevel.spawn(handler!(admin, "user_export", users::admin_user_export));
     toplevel.spawn(handler!(admin, "user_get", users::admin_user_get));
     toplevel.spawn(handler!(
         admin,

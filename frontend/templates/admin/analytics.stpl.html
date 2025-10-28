@@ -284,7 +284,7 @@
     <div class="bg-white rounded-lg shadow border border-gray-200">
         <div class="px-6 py-4 border-b border-gray-200">
             <h3 class="text-lg font-medium text-gray-900">Recent Verified Signups</h3>
-            <p class="text-sm text-gray-500 mt-1">Daily new verified users <% if self.activity_page == 1 { %>(last 14 days)<% } %></p>
+            <p class="text-sm text-gray-500 mt-1">Daily new verified users for the selected date range (up to 14 days shown)</p>
         </div>
         <div class="p-6">
             <% if !self.activity_stats.is_empty() { %>
@@ -294,10 +294,10 @@
                     <% for stat in &chart_stats { %>
                         <div class="flex-1 flex flex-col items-center group">
                             <div class="w-full bg-indigo-600 rounded-t transition-all group-hover:bg-indigo-700"
-                                 style="height: <%= if max_new_users > 0 { (stat.new_users as f64 / max_new_users as f64 * 240.0) as i32 } else { 0 } %>px"
+                                 style="height: <%= if max_new_users > 0 { (stat.new_users as f64 / max_new_users as f64 * 200.0) as i32 } else { 0 } %>px"
                                  title="<%= stat.date %>: <%= stat.new_users %> new verified users">
                             </div>
-                            <div class="text-xs text-gray-500 mt-4 transform -rotate-45 origin-top-left whitespace-nowrap"><%= &stat.date[5..] %></div>
+                            <div class="text-xs text-gray-500 mt-8 transform -rotate-45 origin-top-left whitespace-nowrap"><%= &stat.date[5..] %></div>
                         </div>
                     <% } %>
                 </div>
@@ -312,29 +312,14 @@
         </div>
     </div>
 
-    <!-- Active Projects -->
-    <div class="bg-white rounded-lg shadow border border-gray-200">
-        <div class="px-6 py-4 border-b border-gray-200">
-            <h3 class="text-lg font-medium text-gray-900">Active Projects</h3>
-            <p class="text-sm text-gray-500 mt-1">Recently listed active projects</p>
-        </div>
-        <div class="p-6">
-            <% if self.top_projects.is_empty() { %>
-                <div class="h-64 flex items-center justify-center">
-                    <p class="text-gray-500">No active projects available</p>
-                </div>
-            <% } else { %>
-                <div class="space-y-3">
-                    <% for project in &self.top_projects { %>
-                        <div class="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                            <h4 class="font-medium text-gray-900 text-sm"><%= project.title %></h4>
-                            <p class="text-xs text-gray-500 mt-1"><%= project.status %></p>
-                        </div>
-                    <% } %>
-                </div>
-            <% } %>
-        </div>
-    </div>
+    <!-- Top Performers -->
+    <%+ crate::admin::TopPerformersBox {
+        criterion: self.top_performers_criterion,
+        items: self.top_performers,
+        days: self.selected_days,
+        start_date: self.start_date.clone(),
+        end_date: self.end_date.clone(),
+    } %>
 </div>
 
 <!-- Activity Logs Section -->
@@ -403,24 +388,24 @@
     </div>
     <div class="p-6">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <button hx-get="/-admin/analytics/export/users" class="relative inline-flex items-center justify-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
+            <a href="/-admin/analytics/export/users?<% if let Some(d) = self.selected_days { %>days=<%= d %><% } else { %>start_date=<%-& self.start_date %>&end_date=<%-& self.end_date %><% } %>" class="relative inline-flex items-center justify-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
                 <span class="inline-flex items-center">
                     <wa-icon name="users" class="w-4 h-4 mr-2"></wa-icon>
                     Export Users
                 </span>
-            </button>
-            <button hx-get="/-admin/analytics/export/projects" class="relative inline-flex items-center justify-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
+            </a>
+            <a href="/-admin/analytics/export/projects?<% if let Some(d) = self.selected_days { %>days=<%= d %><% } else { %>start_date=<%-& self.start_date %>&end_date=<%-& self.end_date %><% } %>" class="relative inline-flex items-center justify-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
                 <span class="inline-flex items-center">
                     <wa-icon name="folder-open" class="w-4 h-4 mr-2"></wa-icon>
                     Export Projects
                 </span>
-            </button>
-            <button hx-get="/-admin/analytics/export/events" class="relative inline-flex items-center justify-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
+            </a>
+            <a href="/-admin/analytics/export/events?<% if let Some(d) = self.selected_days { %>days=<%= d %><% } else { %>start_date=<%-& self.start_date %>&end_date=<%-& self.end_date %><% } %>" class="relative inline-flex items-center justify-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
                 <span class="inline-flex items-center">
                     <wa-icon name="calendar" class="w-4 h-4 mr-2"></wa-icon>
                     Export Events
                 </span>
-            </button>
+            </a>
         </div>
     </div>
 </div>
