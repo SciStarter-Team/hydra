@@ -1,3 +1,8 @@
+<!-- Overall Site Statistics -->
+<div class="mb-4">
+    <h2 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Overall Site Statistics</h2>
+</div>
+
 <!-- Analytics Overview -->
 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
     <!-- Key Metrics -->
@@ -56,6 +61,11 @@
             </div>
         </div>
     </div>
+</div>
+
+<!-- Date Range Analytics Section -->
+<div class="mb-6 mt-8">
+    <h2 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Date Range Analytics</h2>
 </div>
 
 <!-- Time Range Filter -->
@@ -206,77 +216,17 @@
         <h3 class="text-lg font-medium text-gray-900">Daily Verified User Signups</h3>
         <p class="text-sm text-gray-500 mt-1">New verified users per day with cumulative total <% if let Some(days) = self.selected_days { %>(last <%= days %> days)<% } else { %>(custom range)<% } %></p>
     </div>
-    <% if self.activity_stats.is_empty() { %>
-        <div class="px-6 py-8 text-center text-gray-500">
-            No activity data available for the selected time range.
-        </div>
-    <% } else { %>
-        <!-- Header Row - Hidden on mobile, visible on larger screens -->
-        <div class="hidden lg:grid lg:grid-cols-12 bg-gray-50 px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
-            <div class="col-span-4">Date</div>
-            <div class="col-span-4 text-right">New Verified</div>
-            <div class="col-span-4 text-right">Total Verified</div>
-        </div>
-
-        <div class="divide-y divide-gray-200">
-            <% for stat in &self.activity_stats { %>
-                <div class="flex flex-col lg:grid lg:grid-cols-12 gap-3 lg:gap-4 lg:items-center px-6 py-4 hover:bg-gray-50 transition-colors">
-                    <!-- Date -->
-                    <div class="lg:col-span-4">
-                        <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Date</div>
-                        <div class="text-sm font-medium text-gray-900"><%= stat.date %></div>
-                    </div>
-
-                    <!-- New Verified Users -->
-                    <div class="lg:col-span-4">
-                        <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">New Verified</div>
-                        <div class="text-sm text-gray-900 lg:text-right">
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                +<%= stat.new_users %>
-                            </span>
-                        </div>
-                    </div>
-
-                    <!-- Total Verified Users to Date -->
-                    <div class="lg:col-span-4">
-                        <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Total Verified</div>
-                        <div class="text-sm font-semibold text-gray-900 lg:text-right"><%= stat.verified_users_to_date %></div>
-                    </div>
-                </div>
-            <% } %>
-        </div>
-
-        <!-- Pagination -->
-        <% if self.activity_total_pages > 1 { %>
-            <div class="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-                <div class="text-sm text-gray-700">
-                    Showing <%= ((self.activity_page - 1) * 30 + 1) %> to <%= std::cmp::min(self.activity_page * 30, self.activity_total_count as u32) %> of <%= self.activity_total_count %> days
-                </div>
-                <div class="flex space-x-2">
-                    <% if self.activity_page > 1 { %>
-                        <button
-                            class="px-3 py-2 border border-gray-300 rounded-md text-sm hover:bg-gray-50"
-                            hx-get="/-admin/analytics?<% if let Some(days) = self.selected_days { %>days=<%= days %><% } else { %>start_date=<%= self.start_date %>&end_date=<%= self.end_date %><% } %>&activity_page=<%= self.activity_page - 1 %>"
-                            hx-target="body"
-                            hx-push-url="true"
-                        >
-                            Previous
-                        </button>
-                    <% } %>
-                    <% if self.activity_page < self.activity_total_pages { %>
-                        <button
-                            class="px-3 py-2 border border-gray-300 rounded-md text-sm hover:bg-gray-50"
-                            hx-get="/-admin/analytics?<% if let Some(days) = self.selected_days { %>days=<%= days %><% } else { %>start_date=<%= self.start_date %>&end_date=<%= self.end_date %><% } %>&activity_page=<%= self.activity_page + 1 %>"
-                            hx-target="body"
-                            hx-push-url="true"
-                        >
-                            Next
-                        </button>
-                    <% } %>
-                </div>
-            </div>
-        <% } %>
-    <% } %>
+    <div id="recent-activity-table">
+        <%+ crate::admin::AnalyticsRecentActivityTable {
+            activity_stats: self.activity_stats.clone(),
+            activity_page: self.activity_page,
+            activity_total_pages: self.activity_total_pages,
+            activity_total_count: self.activity_total_count,
+            selected_days: self.selected_days,
+            start_date: self.start_date.clone(),
+            end_date: self.end_date.clone(),
+        } %>
+    </div>
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -287,9 +237,9 @@
             <p class="text-sm text-gray-500 mt-1">Daily new verified users for the selected date range (up to 14 days shown)</p>
         </div>
         <div class="p-6">
-            <% if !self.activity_stats.is_empty() { %>
-                <% let max_new_users = self.activity_stats.iter().map(|s| s.new_users).max().unwrap_or(1); %>
-                <% let chart_stats: Vec<_> = self.activity_stats.iter().take(14).rev().collect(); %>
+            <% if !self.recent_signups_chart.is_empty() { %>
+                <% let max_new_users = self.recent_signups_chart.iter().map(|s| s.new_users).max().unwrap_or(1); %>
+                <% let chart_stats: Vec<_> = self.recent_signups_chart.iter().rev().collect(); %>
                 <div class="h-64 flex items-end justify-between gap-1">
                     <% for stat in &chart_stats { %>
                         <div class="flex-1 flex flex-col items-center group">

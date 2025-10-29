@@ -109,6 +109,7 @@ pub fn routes() -> impl Endpoint {
         .at("/events/:id", get(events_edit).delete(events_delete))
         .at("/events/:id/field/:field", put(events_update_field))
         .at("/analytics", get(analytics))
+        .at("/analytics/recent-activity", get(analytics_recent_activity_table))
         .at("/analytics/top-performers", get(analytics_top_performers))
         .at("/analytics/export/users", get(analytics_export_users))
         .at("/analytics/export/projects", get(analytics_export_projects))
@@ -1590,6 +1591,18 @@ pub struct ActivityStat {
 }
 
 #[derive(Debug, TemplateOnce)]
+#[template(path = "admin/analytics_recent_activity_table.stpl.html")]
+pub struct AnalyticsRecentActivityTable {
+    pub activity_stats: Vec<ActivityStat>,
+    pub activity_page: u32,
+    pub activity_total_pages: u32,
+    pub activity_total_count: usize,
+    pub selected_days: Option<u32>,
+    pub start_date: String,
+    pub end_date: String,
+}
+
+#[derive(Debug, TemplateOnce)]
 #[template(path = "admin/analytics.stpl.html")]
 pub struct AnalyticsPagePrepared {
     total_users: u32,
@@ -1598,6 +1611,7 @@ pub struct AnalyticsPagePrepared {
     daily_signups: u32,
     top_performers: Vec<TopPerformerItem>,
     geographic_stats: Vec<GeographicStat>,
+    recent_signups_chart: Vec<ActivityStat>, // Last 14 days for chart, not paginated
     activity_stats: Vec<ActivityStat>,
     activity_page: u32,
     activity_total_pages: u32,
@@ -1779,6 +1793,35 @@ impl Component for AnalyticsPage {
             })
             .collect();
 
+        // Fetch last 14 days for the chart (not paginated)
+        let chart_result: Result<common::message::user::ActivityAnalyticsResponse, _> = request_timeout(
+            "user.stats.activity",
+            common::message::user::ActivityAnalyticsRequest {
+                start_date: self.start_date.clone(),
+                end_date: self.end_date.clone(),
+                page: 1,
+                per_page: 14,
+            },
+            Duration::from_secs(5),
+        )
+        .await;
+
+        let recent_signups_chart: Vec<ActivityStat> = match chart_result {
+            Ok(response) => response.stats
+                .into_iter()
+                .map(|s| ActivityStat {
+                    date: s.date,
+                    new_users: s.new_users,
+                    total_users_to_date: s.total_users_to_date,
+                    verified_users_to_date: s.verified_users_to_date,
+                })
+                .collect(),
+            Err(e) => {
+                eprintln!("Chart data error: {:?}", e);
+                Vec::new()
+            }
+        };
+
         // Fetch activity analytics using date range with pagination
         let per_page = 30;
         let activity_result: Result<common::message::user::ActivityAnalyticsResponse, _> = request_timeout(
@@ -1884,6 +1927,7 @@ impl Component for AnalyticsPage {
             daily_signups: user_analytics.daily_signups,
             top_performers,
             geographic_stats,
+            recent_signups_chart,
             activity_stats,
             activity_page,
             activity_total_pages,
@@ -2354,6 +2398,31 @@ async fn events(Authenticated(user_info): Authenticated) -> Result<poem::Respons
     EventsPage.into_response(user_info).await
 }
 
+/// Helper function to determine date range from query parameters
+/// Returns (start_date, end_date, selected_days)
+fn determine_date_range(
+    days: Option<u32>,
+    start_date: Option<String>,
+    end_date: Option<String>,
+) -> (String, String, Option<u32>) {
+    use jiff::Timestamp;
+    use jiff::ToSpan;
+
+    if let (Some(start), Some(end)) = (start_date, end_date) {
+        // Use custom date range
+        (start, end, None)
+    } else {
+        // Calculate date range from days parameter
+        // "last N days" means N days including today, so we subtract (N-1) to get the start date
+        let days_count = days.unwrap_or(30);
+        let end = Timestamp::now().to_zoned(jiff::tz::TimeZone::UTC).date();
+        let start = end
+            .checked_sub(((days_count - 1) as i64).days())
+            .unwrap_or(end);
+        (start.to_string(), end.to_string(), Some(days_count))
+    }
+}
+
 #[derive(Debug, serde::Deserialize)]
 struct AnalyticsPageQuery {
     days: Option<u32>,
@@ -2368,23 +2437,8 @@ async fn analytics(
     Query(query): Query<AnalyticsPageQuery>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    use jiff::Timestamp;
-    use jiff::ToSpan;
-
-    // Determine the date range from query parameters
-    let (start_date, end_date, selected_days) = if let (Some(start), Some(end)) =
-        (query.start_date, query.end_date)
-    {
-        // Use custom date range
-        (start, end, None)
-    } else {
-        // Calculate date range from days parameter
-        // "last N days" means N days including today, so we subtract (N-1) to get the start date
-        let days = query.days.unwrap_or(30);
-        let end = Timestamp::now().to_zoned(jiff::tz::TimeZone::UTC).date();
-        let start = end.checked_sub(((days - 1) as i64).days()).unwrap_or(end);
-        (start.to_string(), end.to_string(), Some(days))
-    };
+    let (start_date, end_date, selected_days) =
+        determine_date_range(query.days, query.start_date, query.end_date);
 
     AnalyticsPage {
         start_date,
@@ -2395,6 +2449,75 @@ async fn analytics(
     }
     .into_response(user_info)
     .await
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct RecentActivityTableQuery {
+    days: Option<u32>,
+    start_date: Option<String>,
+    end_date: Option<String>,
+    activity_page: Option<u32>,
+}
+
+#[handler]
+async fn analytics_recent_activity_table(
+    Query(query): Query<RecentActivityTableQuery>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<impl IntoResponse, anyhow::Error> {
+    let (start_date, end_date, selected_days) =
+        determine_date_range(query.days, query.start_date, query.end_date);
+
+    let activity_page = query.activity_page.unwrap_or(1);
+
+    // Fetch paginated activity data
+    let activity_result: Result<common::message::user::ActivityAnalyticsResponse, _> =
+        request_timeout(
+            "user.stats.activity",
+            common::message::user::ActivityAnalyticsRequest {
+                start_date: start_date.clone(),
+                end_date: end_date.clone(),
+                page: activity_page,
+                per_page: 30,
+            },
+            Duration::from_secs(5),
+        )
+        .await;
+
+    let (activity_stats, activity_total_count): (Vec<ActivityStat>, usize) =
+        match activity_result {
+            Ok(response) => {
+                let stats = response
+                    .stats
+                    .into_iter()
+                    .map(|s| ActivityStat {
+                        date: s.date,
+                        new_users: s.new_users,
+                        total_users_to_date: s.total_users_to_date,
+                        verified_users_to_date: s.verified_users_to_date,
+                    })
+                    .collect();
+                (stats, response.total_count)
+            }
+            Err(e) => {
+                eprintln!("Activity stats error: {:?}", e);
+                (Vec::new(), 0)
+            }
+        };
+
+    let activity_total_pages = (activity_total_count as f64 / 30.0).ceil() as u32;
+
+    Ok(Html(
+        AnalyticsRecentActivityTable {
+            activity_stats,
+            activity_page,
+            activity_total_pages,
+            activity_total_count,
+            selected_days,
+            start_date,
+            end_date,
+        }
+        .render_once()?,
+    ))
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -2410,17 +2533,8 @@ async fn analytics_top_performers(
     Query(query): Query<TopPerformersQuery>,
     Authenticated(_user_info): Authenticated,
 ) -> Result<impl IntoResponse, anyhow::Error> {
-    use jiff::ToSpan;
-
-    // Parse date range
-    let (start_date, end_date, days) = if let (Some(start), Some(end)) = (query.start_date, query.end_date) {
-        (start, end, None)
-    } else {
-        let days = query.days.unwrap_or(30);
-        let end = Timestamp::now().to_zoned(jiff::tz::TimeZone::UTC).date();
-        let start = end.checked_sub(((days - 1) as i64).days()).unwrap_or(end);
-        (start.to_string(), end.to_string(), Some(days))
-    };
+    let (start_date, end_date, days) =
+        determine_date_range(query.days, query.start_date, query.end_date);
 
     let criterion = query.criterion.unwrap_or_default();
 
