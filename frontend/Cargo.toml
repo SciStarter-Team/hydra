@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 common = { version = "0.1.0", path = "../common" }
 async-nats = "0.42.0"
+badgebuilder = { git = "https://git.sr.ht/~djarb/badgebuilder", version = "0.1.4" }
 flexbuffers = "25.2.10"
 jiff = { version = "0.2.15", features = ["serde"] }
 object_store = { version = "0.12.3", features = ["aws"] }
@@ -35,5 +36,6 @@ rand = "0.8"
 scraper = "0.22"
 regex = "1.11"
 pulldown-cmark = "0.12"
+markdown-ppp = "1.4.1"
 ego-tree = "0.10"
 

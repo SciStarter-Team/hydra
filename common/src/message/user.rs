@@ -752,6 +752,7 @@ pub struct UserEmailInfo {
     pub first_name: String,
     pub last_name: String,
     pub primary_email: String,
+    pub verified: bool,
 }
 
 // Recipient Search (for email sending UI)

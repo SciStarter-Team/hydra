@@ -65,24 +65,32 @@ impl Badge {
     /// Returns the template URL for the badge image
     pub fn template_url(&self) -> &'static str {
         match self {
-            Badge::FoundationsOfCitizenScience => "https://static.scistarter.org/img/badge.png",
+            Badge::FoundationsOfCitizenScience => {
+                "https://scistarter.org/-static/img/badges/badge-foundations.png"
+            }
             Badge::LibrariesAsHubsForCitizenScience => {
-                "https://static.scistarter.org/img/badge-libraries-hubs.png"
+                "https://scistarter.org/-static/img/badges/badge-libraries-hubs.png"
             }
             Badge::BuildingDataLiteracyThroughCommunityAndCitizenScience => {
-                "https://static.scistarter.org/img/badge-data-literacy.png"
+                "https://scistarter.org/-static/img/badges/badge-data-literacy.png"
             }
             Badge::TeachingInHigherEducationWithCitizenScience => {
-                "https://static.scistarter.org/img/badge-tcshe.png"
+                "https://scistarter.org/-static/img/badges/badge-tcshe.png"
             }
             Badge::DataEthicsForPractitioners => {
-                "https://static.scistarter.org/img/badge-data-ethics.png"
+                "https://scistarter.org/-static/img/badges/badge-data-ethics.png"
             }
-            Badge::IdealParticipatoryScience => "https://static.scistarter.org/img/badge-ideal.png",
-            Badge::OneMillionActsOfScience2024 => "https://static.scistarter.org/img/badge-1ma.png",
-            Badge::SciStarterAmbassador => "https://static.scistarter.org/img/badge-ambassador.png",
+            Badge::IdealParticipatoryScience => {
+                "https://scistarter.org/-static/img/badges/badge-ideal.png"
+            }
+            Badge::OneMillionActsOfScience2024 => {
+                "https://scistarter.org/-static/img/badges/badge-1ma.png"
+            }
+            Badge::SciStarterAmbassador => {
+                "https://scistarter.org/-static/img/badges/badge-ambassador.png"
+            }
             Badge::OneMillionActsOfScience2025 => {
-                "https://static.scistarter.org/img/badge-1ma-2025.png"
+                "https://scistarter.org/-static/img/badges/badge-1ma-2025.png"
             }
         }
     }
@@ -90,17 +98,17 @@ impl Badge {
     /// Returns the template path for the badge image
     pub fn template_path(&self) -> &'static str {
         match self {
-            Badge::FoundationsOfCitizenScience => "badges/badge-foundations.png",
-            Badge::LibrariesAsHubsForCitizenScience => "badges/badge-libraries-hubs.png",
+            Badge::FoundationsOfCitizenScience => "img/badges/badge-foundations.png",
+            Badge::LibrariesAsHubsForCitizenScience => "img/badges/badge-libraries-hubs.png",
             Badge::BuildingDataLiteracyThroughCommunityAndCitizenScience => {
-                "badges/badge-data-literacy.png"
+                "img/badges/badge-data-literacy.png"
             }
-            Badge::TeachingInHigherEducationWithCitizenScience => "badges/badge-tcshe.png",
-            Badge::DataEthicsForPractitioners => "badges/badge-data-ethics.png",
-            Badge::IdealParticipatoryScience => "badges/badge-ideal.png",
-            Badge::OneMillionActsOfScience2024 => "badges/badge-1ma.png",
-            Badge::SciStarterAmbassador => "badges/badge-ambassador.png",
-            Badge::OneMillionActsOfScience2025 => "badges/badge-1ma-2025.png",
+            Badge::TeachingInHigherEducationWithCitizenScience => "img/badges/badge-tcshe.png",
+            Badge::DataEthicsForPractitioners => "img/badges/badge-data-ethics.png",
+            Badge::IdealParticipatoryScience => "img/badges/badge-ideal.png",
+            Badge::OneMillionActsOfScience2024 => "img/badges/badge-1ma.png",
+            Badge::SciStarterAmbassador => "img/badges/badge-ambassador.png",
+            Badge::OneMillionActsOfScience2025 => "img/badges/badge-1ma-2025.png",
         }
     }
 
@@ -260,7 +268,6 @@ impl Badge {
     }
 }
 
-// Static arrays for alignments - these will be populated with data from the original file
 static FOUNDATIONS_ALIGNMENTS: [Alignment; 4] = [
     Alignment {
         name: "Data analysis",
@@ -300,15 +307,435 @@ static FOUNDATIONS_ALIGNMENTS: [Alignment; 4] = [
     },
 ];
 
-// Note: I'll create placeholder alignments for the other badges - these should be populated with actual data
-static LIBRARIES_ALIGNMENTS: [Alignment; 0] = [];
-static DATA_LITERACY_ALIGNMENTS: [Alignment; 0] = [];
-static TEACHING_ALIGNMENTS: [Alignment; 0] = [];
-static DATA_ETHICS_ALIGNMENTS: [Alignment; 0] = [];
-static IDEAL_ALIGNMENTS: [Alignment; 0] = [];
-static ONE_MILLION_2024_ALIGNMENTS: [Alignment; 0] = [];
-static AMBASSADOR_ALIGNMENTS: [Alignment; 0] = [];
-static ONE_MILLION_2025_ALIGNMENTS: [Alignment; 0] = [];
+static LIBRARIES_ALIGNMENTS: [Alignment; 11] = [
+    Alignment {
+        name: "Evidence-based practice",
+        url: "https://lightcast.io/open-skills/skills/KS123987840L8J17862K/evidence-based-practice",
+        description: Some("Evidence-Based Practice refers to the systematic approach of integrating the best available research evidence with clinical expertise and patient values to inform decision-making in healthcare and other fields."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS123987840L8J17862K"),
+    },
+    Alignment {
+        name: "Library And Information Services",
+        url: "https://lightcast.io/open-skills/skills/KS125RC6CTWJ5S7841WG/library-and-information-services",
+        description: Some("Library and Information Services refer to the specialized skills and techniques required to manage, collect, organize, and disseminate information resources to support research, learning, and other objectives."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS125RC6CTWJ5S7841WG"),
+    },
+    Alignment {
+        name: "Library Services",
+        url: "https://lightcast.io/open-skills/skills/KS125TG66T8TXK7B2VT3/library-services",
+        description: Some("Library services are specialized skills that involve managing, organizing, and preserving information resources, as well as providing access to those resources for individuals and organizations."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS125TG66T8TXK7B2VT3"),
+    },
+    Alignment {
+        name: "Communication",
+        url: "https://lightcast.io/open-skills/skills/KS122556LMQ829GZCCRV/communication",
+        description: Some("Communication is the ability to effectively interact, convey information, and collaborate with others in a clear and understandable manner."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS122556LMQ829GZCCRV"),
+    },
+    Alignment {
+        name: "Information literacy",
+        url: "https://lightcast.io/open-skills/skills/KS1254G6X37NS306Y596/information-literacy",
+        description: Some("Information literacy is a common skill that involves the ability to recognize, locate, evaluate, and effectively use information."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS1254G6X37NS306Y596"),
+    },
+    Alignment {
+        name: "Interdisciplinary Teaching",
+        url: "https://lightcast.io/open-skills/skills/KS125856JH9VGVNY0TBP/interdisciplinary-teaching",
+        description: Some("Interdisciplinary Teaching refers to an educational approach that integrates concepts and methods from multiple disciplines to enhance learning experiences."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS125856JH9VGVNY0TBP"),
+    },
+    Alignment {
+        name: "Library Instruction",
+        url: "https://lightcast.io/open-skills/skills/KS12100638C964SSQDJD/library-instruction",
+        description: Some("Library Instruction refers to the teaching of information literacy skills that enable individuals to effectively locate, evaluate, and use information resources."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS12100638C964SSQDJD"),
+    },
+    Alignment {
+        name: "Lifelong Learning",
+        url: "https://lightcast.io/open-skills/skills/KS125TX75XTZZXVJL8B5/lifelong-learning",
+        description: Some("Lifelong learning is the ongoing, voluntary, and self-motivated pursuit of knowledge for either personal or professional reasons."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS125TX75XTZZXVJL8B5"),
+    },
+    Alignment {
+        name: "Teaching",
+        url: "https://lightcast.io/open-skills/skills/KS120PQ6XD1JWMFQVJNW/teaching",
+        description: Some("Teaching is a common skill that involves the transfer of knowledge, skills, and values from one person to another."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS120PQ6XD1JWMFQVJNW"),
+    },
+    Alignment {
+        name: "Training and development",
+        url: "https://lightcast.io/open-skills/skills/KS122F96DJHT3ZXB8FCZ/training-and-development",
+        description: Some("Training And Development involves designing and implementing educational programs to enhance employees' skills and knowledge."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS122F96DJHT3ZXB8FCZ"),
+    },
+    Alignment {
+        name: "ALA's Core Competencies of Librarianship",
+        url: "https://www.ala.org/sites/default/files/educationcareers/content/2022%20ALA%20Core%20Competences%20of%20Librarianship_FINAL.pdf",
+        description: Some("Libraries and the communities they serve are continually evolving. As such, continuing education, professional growth, and a commitment to lifelong learning are key components of a well-informed library professional."),
+        framework: None,
+        code: None,
+    },
+];
+
+static DATA_LITERACY_ALIGNMENTS: [Alignment; 4] = [
+    Alignment {
+        name: "Data Literacy",
+        url: "https://lightcast.io/open-skills/skills/ES476D9219E938F5CB96/data-literacy",
+        description: Some("Data Literacy is the ability to read, understand, analyze and interpret data."),
+        framework: Some("LIGHTCAST"),
+        code: Some("ES476D9219E938F5CB96"),
+    },
+    Alignment {
+        name: "Data-Driven Decision Making",
+        url: "https://lightcast.io/open-skills/skills/ESF14A354DDD69B5FBD4/data-driven-decision-making",
+        description: Some("Data-Driven Decision Making is the process of utilizing relevant and reliable data to inform and guide decision-making within an organization."),
+        framework: Some("LIGHTCAST"),
+        code: Some("ESF14A354DDD69B5FBD4"),
+    },
+    Alignment {
+        name: "Critical thinking",
+        url: "https://lightcast.io/open-skills/skills/KS122J56PZMMFL1SVY1F/critical-thinking",
+        description: Some("Critical thinking is a skill that allows individuals to analyze and evaluate information to make sound judgements and decisions."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS122J56PZMMFL1SVY1F"),
+    },
+    Alignment {
+        name: "Data analysis",
+        url: "https://lightcast.io/open-skills/skills/KS120GV6C72JMSZKMTD7/data-analysis",
+        description: Some("Data Analysis is the ability to inspect, cleanse, transform, and model data with the goal to discover useful information, inform conclusions, and support decision-making."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS120GV6C72JMSZKMTD7"),
+    },
+];
+
+static TEACHING_ALIGNMENTS: [Alignment; 4] = [
+    Alignment {
+        name: "Constructivism",
+        url: "https://lightcast.io/open-skills/skills/KSLWYCD49AGA2P0SY8UE/constructivism",
+        description: Some("Constructivism refers to a learning theory that emphasizes the role of learners in actively constructing their own understanding and knowledge through experiences and reflection."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KSLWYCD49AGA2P0SY8UE"),
+    },
+    Alignment {
+        name: "Experiential Learning",
+        url: "https://lightcast.io/open-skills/skills/KS123R966Z5R6D81XZK4/experiential-learning",
+        description: Some("Experiential learning is a unique educational approach that emphasizes hands-on, practical experience as a means of acquiring knowledge and skills."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS123R966Z5R6D81XZK4"),
+    },
+    Alignment {
+        name: "Experiential Education",
+        url: "https://lightcast.io/open-skills/skills/KS123R9698P8RCDZJ7H8/experiential-education",
+        description: Some("Experiential education is a specialized approach to learning that emphasizes hands-on, real-world experiences as a primary means of teaching."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS123R9698P8RCDZJ7H8"),
+    },
+    Alignment {
+        name: "Formative And Summative Assessments",
+        url: "https://lightcast.io/open-skills/skills/ESAEA6B36CACC973C466/formative-and-summative-assessments",
+        description: Some("Formative and summative assessments are crucial components of the learning process that help educators gauge the effectiveness of their teaching practices and track their students' progress."),
+        framework: Some("LIGHTCAST"),
+        code: Some("ESAEA6B36CACC973C466"),
+    },
+];
+
+static DATA_ETHICS_ALIGNMENTS: [Alignment; 2] = [
+    Alignment {
+        name: "Data governance",
+        url: "https://lightcast.io/open-skills/skills/KS122P378DGNVX4NKQKN/data-governance",
+        description: Some("Data Governance is the ability to assess, manage, use, improve, monitor, maintain, and protect organizational information through a system of decision rights and accountabilities for information-related processes."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS122P378DGNVX4NKQKN"),
+    },
+    Alignment {
+        name: "Data integrity",
+        url: "https://lightcast.io/open-skills/skills/KS122P86NZFH1GP38G15/data-integrity",
+        description: Some("Data Integrity is the capability to maintain the accuracy, consistency, and reliability of data throughout its lifecycle, ensuring that the data remains free from errors and inconsistencies."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS122P86NZFH1GP38G15"),
+    },
+];
+
+static IDEAL_ALIGNMENTS: [Alignment; 13] = [
+    Alignment {
+        name: "Diversity Awareness",
+        url: "https://lightcast.io/open-skills/skills/KS123285XWQS1TVY0YJ4/diversity-awareness",
+        description: Some("Diversity awareness is an important skill to have in today's global and diverse society. It involves recognizing and respecting differences among people, including differences in race, ethnicity, gender, sexual orientation, religion, and culture."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS123285XWQS1TVY0YJ4"),
+    },
+    Alignment {
+        name: "Leadership",
+        url: "https://lightcast.io/open-skills/skills/KS124JB619VXG6RQ810C/leadership",
+        description: Some("Leadership is a skill that is common among successful individuals in various fields. It involves the ability to motivate and guide a team towards achieving common goals."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS124JB619VXG6RQ810C"),
+    },
+    Alignment {
+        name: "Self-awareness",
+        url: "https://lightcast.io/open-skills/skills/ES88C410DA4EE6A2FE77/self-awareness",
+        description: Some("Self-awareness is the ability to understand and be mindful of your own thoughts, emotions, and behaviors."),
+        framework: Some("LIGHTCAST"),
+        code: Some("ES88C410DA4EE6A2FE77"),
+    },
+    Alignment {
+        name: "Self-Directed Learning",
+        url: "https://lightcast.io/open-skills/skills/ES2F89D25BA6FFC32FA9/self-directed-learning",
+        description: Some("Self-Directed Learning refers to the process in which individuals take the initiative to identify their learning needs, set goals, and seek out resources to acquire knowledge and skills independently."),
+        framework: Some("LIGHTCAST"),
+        code: Some("ES2F89D25BA6FFC32FA9"),
+    },
+    Alignment {
+        name: "Decision making",
+        url: "https://lightcast.io/open-skills/skills/KS121W46CJXQ5ZQ506MS/decision-making",
+        description: Some("Decision making is the process of choosing between two or more options to reach a desired outcome."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS121W46CJXQ5ZQ506MS"),
+    },
+    Alignment {
+        name: "Intercultural Competence",
+        url: "https://lightcast.io/open-skills/skills/KS1258479NCTHZ20PFDH/intercultural-competence",
+        description: Some("Intercultural competence is the ability to communicate effectively and appropriately with people from different cultures."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS1258479NCTHZ20PFDH"),
+    },
+    Alignment {
+        name: "Stakeholder engagement",
+        url: "https://lightcast.io/open-skills/skills/KS440XG653B0ZK3926JF/stakeholder-engagement",
+        description: Some("Stakeholder Engagement is a critical skill that involves the ability to effectively interact with all parties associated with a company."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS440XG653B0ZK3926JF"),
+    },
+    Alignment {
+        name: "Good Governance",
+        url: "https://lightcast.io/open-skills/skills/KS124DZ6MTMB30HLXWGJ/good-governance",
+        description: Some("Good governance is a crucial skill that involves the efficient, transparent, and accountable management of public resources for the benefit of citizens."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS124DZ6MTMB30HLXWGJ"),
+    },
+    Alignment {
+        name: "Data collection",
+        url: "https://lightcast.io/open-skills/skills/KS122NR6NY1KB0TD40G4/data-collection",
+        description: Some("Data collection is the process of gathering and measuring information on targeted variables using established methods, in order to answer specific research questions or test hypotheses."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS122NR6NY1KB0TD40G4"),
+    },
+    Alignment {
+        name: "Diversity and Inclusion",
+        url: "https://lightcast.io/open-skills/skills/ES927EF31A5D2B127B50/diversity-and-inclusion",
+        description: Some("Diversity And Inclusion refers to the practice of creating an environment that values and respects individual differences, including but not limited to race, gender, age, sexual orientation, and abilities."),
+        framework: Some("LIGHTCAST"),
+        code: Some("ES927EF31A5D2B127B50"),
+    },
+    Alignment {
+        name: "Ethical leadership",
+        url: "https://lightcast.io/open-skills/skills/KS123P2667PGVD3D6FLQ/ethical-leadership",
+        description: Some("Ethical Leadership involves efficiently overseeing resources and operations to promote long-term environmental, social, and economic viability within an organization."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS123P2667PGVD3D6FLQ"),
+    },
+    Alignment {
+        name: "Universal design",
+        url: "https://lightcast.io/open-skills/skills/KS1253C69TGYYVPJNSRT/universal-design",
+        description: Some("Universal Design is a design approach that prioritizes creating products, environments, and experiences that are accessible and usable by everyone, regardless of their age, ability, or disability."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS1253C69TGYYVPJNSRT"),
+    },
+    Alignment {
+        name: "Community-Based Participatory Research",
+        url: "https://lightcast.io/open-skills/skills/KS121G75X4VFH83Z1KKH/community-based-participatory-research",
+        description: Some("Community-Based Participatory Research (CBPR) is a collaborative research approach that involves community members, researchers, and other stakeholders in all aspects of the research process."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS121G75X4VFH83Z1KKH"),
+    },
+];
+
+static ONE_MILLION_2024_ALIGNMENTS: [Alignment; 9] = [
+    Alignment {
+        name: "Data collection",
+        url: "https://lightcast.io/open-skills/skills/KS122NR6NY1KB0TD40G4/data-collection",
+        description: Some("Data collection is the process of gathering and measuring information on targeted variables using established methods, in order to answer specific research questions or test hypotheses."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS122NR6NY1KB0TD40G4"),
+    },
+    Alignment {
+        name: "Data analysis",
+        url: "https://lightcast.io/open-skills/skills/KS120GV6C72JMSZKMTD7/data-analysis",
+        description: Some("Data Analysis is the ability to inspect, cleanse, transform, and model data with the goal to discover useful information, inform conclusions, and support decision-making."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS120GV6C72JMSZKMTD7"),
+    },
+    Alignment {
+        name: "Critical thinking",
+        url: "https://lightcast.io/open-skills/skills/KS122J56PZMMFL1SVY1F/critical-thinking",
+        description: Some("Critical thinking is a skill that allows individuals to analyze and evaluate information to make sound judgements and decisions."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS122J56PZMMFL1SVY1F"),
+    },
+    Alignment {
+        name: "Digital literacy",
+        url: "https://lightcast.io/open-skills/skills/ESB04BCB6189A2CB271E/digital-literacy",
+        description: Some("Digital Literacy is the ability to use, understand, and navigate digital technologies and engage with digital devices, applications, and information sources in a meaningful and productive way."),
+        framework: Some("LIGHTCAST"),
+        code: Some("ESB04BCB6189A2CB271E"),
+    },
+    Alignment {
+        name: "Collaboration",
+        url: "https://lightcast.io/open-skills/skills/KS7AASDV6UOE7VFBGF4D/collaboration",
+        description: Some("Collaboration is a common skill that is essential for success in many fields. It involves working together with others to achieve a common goal, communicating effectively, and being open to new ideas and perspectives."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS7AASDV6UOE7VFBGF4D"),
+    },
+    Alignment {
+        name: "Scientific Literacy",
+        url: "https://lightcast.io/open-skills/skills/ESDECC52D71F603E3462/scientific-literacy",
+        description: Some("Scientific Literacy refers to the ability to understand, evaluate, and apply scientific information and concepts."),
+        framework: Some("LIGHTCAST"),
+        code: Some("ESDECC52D71F603E3462"),
+    },
+    Alignment {
+        name: "Problem solving",
+        url: "https://lightcast.io/open-skills/skills/KS125F678LV2KB3Z5XW0/problem-solving",
+        description: Some("Problem solving is the process of identifying, analyzing and resolving problems that can arise in any situation."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS125F678LV2KB3Z5XW0"),
+    },
+    Alignment {
+        name: "Communication",
+        url: "https://lightcast.io/open-skills/skills/KS122556LMQ829GZCCRV/communication",
+        description: Some("Communication is the ability to effectively interact, convey information, and collaborate with others in a clear and understandable manner."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS122556LMQ829GZCCRV"),
+    },
+    Alignment {
+        name: "Detail-oriented",
+        url: "https://lightcast.io/open-skills/skills/KSQPGV2XZO8UMNCC49LK/detail-oriented",
+        description: Some("Detail Oriented is a skill that involves a strong focus on precision and thoroughness when performing tasks or handling information."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KSQPGV2XZO8UMNCC49LK"),
+    },
+];
+
+static AMBASSADOR_ALIGNMENTS: [Alignment; 6] = [
+    Alignment {
+        name: "Community outreach",
+        url: "https://lightcast.io/open-skills/skills/BGS6F9F4F7DBABC95CE3/community-outreach",
+        description: Some("Community Outreach refers to the process of engaging with and providing support to local communities to address their needs and concerns."),
+        framework: Some("LIGHTCAST"),
+        code: Some("BGS6F9F4F7DBABC95CE3"),
+    },
+    Alignment {
+        name: "Event planning",
+        url: "https://lightcast.io/open-skills/skills/KS122CZ71K19596XHQ92/event-planning",
+        description: Some("Event Planning is a skill that involves the strategic organization and execution of events such as meetings, conferences, and parties."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS122CZ71K19596XHQ92"),
+    },
+    Alignment {
+        name: "Communication sciences",
+        url: "https://lightcast.io/open-skills/skills/KS1225B6W0FJQHLLG6R7/communication-sciences",
+        description: Some("Communication Sciences is a field of study that focuses on the processes of communication, including language, speech, hearing, and interpersonal interactions."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS1225B6W0FJQHLLG6R7"),
+    },
+    Alignment {
+        name: "Resource Management",
+        url: "https://lightcast.io/open-skills/skills/KS4401D6PYRMFQC4HR62/resource-management",
+        description: Some("Resource management refers to the process of planning, organizing, and allocating resources in order to achieve specific goals in the most efficient and effective manner possible."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS4401D6PYRMFQC4HR62"),
+    },
+    Alignment {
+        name: "Leadership",
+        url: "https://lightcast.io/open-skills/skills/KS124JB619VXG6RQ810C/leadership",
+        description: Some("Leadership is a skill that is common among successful individuals in various fields. It involves the ability to motivate and guide a team towards achieving common goals."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS124JB619VXG6RQ810C"),
+    },
+    Alignment {
+        name: "Curiosity",
+        url: "https://lightcast.io/open-skills/skills/ESA420F05EBBD34B3C2A/curiosity",
+        description: Some("Curiosity refers to the inclination to explore, seek out new information, and ask questions."),
+        framework: Some("LIGHTCAST"),
+        code: Some("ESA420F05EBBD34B3C2A"),
+    },
+];
+
+static ONE_MILLION_2025_ALIGNMENTS: [Alignment; 9] = [
+    Alignment {
+        name: "Data collection",
+        url: "https://lightcast.io/open-skills/skills/KS122NR6NY1KB0TD40G4/data-collection",
+        description: Some("Data collection is the process of gathering and measuring information on targeted variables using established methods, in order to answer specific research questions or test hypotheses."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS122NR6NY1KB0TD40G4"),
+    },
+    Alignment {
+        name: "Data analysis",
+        url: "https://lightcast.io/open-skills/skills/KS120GV6C72JMSZKMTD7/data-analysis",
+        description: Some("Data Analysis is the ability to inspect, cleanse, transform, and model data with the goal to discover useful information, inform conclusions, and support decision-making."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS120GV6C72JMSZKMTD7"),
+    },
+    Alignment {
+        name: "Critical thinking",
+        url: "https://lightcast.io/open-skills/skills/KS122J56PZMMFL1SVY1F/critical-thinking",
+        description: Some("Critical thinking is a skill that allows individuals to analyze and evaluate information to make sound judgements and decisions."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS122J56PZMMFL1SVY1F"),
+    },
+    Alignment {
+        name: "Digital literacy",
+        url: "https://lightcast.io/open-skills/skills/ESB04BCB6189A2CB271E/digital-literacy",
+        description: Some("Digital Literacy is the ability to use, understand, and navigate digital technologies and engage with digital devices, applications, and information sources in a meaningful and productive way."),
+        framework: Some("LIGHTCAST"),
+        code: Some("ESB04BCB6189A2CB271E"),
+    },
+    Alignment {
+        name: "Collaboration",
+        url: "https://lightcast.io/open-skills/skills/KS7AASDV6UOE7VFBGF4D/collaboration",
+        description: Some("Collaboration is a common skill that is essential for success in many fields. It involves working together with others to achieve a common goal, communicating effectively, and being open to new ideas and perspectives."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS7AASDV6UOE7VFBGF4D"),
+    },
+    Alignment {
+        name: "Scientific Literacy",
+        url: "https://lightcast.io/open-skills/skills/ESDECC52D71F603E3462/scientific-literacy",
+        description: Some("Scientific Literacy refers to the ability to understand, evaluate, and apply scientific information and concepts."),
+        framework: Some("LIGHTCAST"),
+        code: Some("ESDECC52D71F603E3462"),
+    },
+    Alignment {
+        name: "Problem solving",
+        url: "https://lightcast.io/open-skills/skills/KS125F678LV2KB3Z5XW0/problem-solving",
+        description: Some("Problem solving is the process of identifying, analyzing and resolving problems that can arise in any situation."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS125F678LV2KB3Z5XW0"),
+    },
+    Alignment {
+        name: "Communication",
+        url: "https://lightcast.io/open-skills/skills/KS122556LMQ829GZCCRV/communication",
+        description: Some("Communication is the ability to effectively interact, convey information, and collaborate with others in a clear and understandable manner."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KS122556LMQ829GZCCRV"),
+    },
+    Alignment {
+        name: "Detail-oriented",
+        url: "https://lightcast.io/open-skills/skills/KSQPGV2XZO8UMNCC49LK/detail-oriented",
+        description: Some("Detail Oriented is a skill that involves a strong focus on precision and thoroughness when performing tasks or handling information."),
+        framework: Some("LIGHTCAST"),
+        code: Some("KSQPGV2XZO8UMNCC49LK"),
+    },
+];
 
 static ALL_BADGES: [Badge; 9] = [
     Badge::FoundationsOfCitizenScience,

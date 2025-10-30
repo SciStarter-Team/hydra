@@ -1,5 +1,6 @@
 pub mod admin;
 pub mod auth;
+pub mod badge;
 pub mod channel;
 pub mod component;
 pub mod contact;
@@ -181,6 +182,7 @@ fn user_facing() -> impl Endpoint {
         .at("/logout", get(auth::logout_action))
         .at("/demo-forum", get(demo_forum))
         .at("/go/*friendly_url", get(gourl::handle_go_url))
+        .nest("/badges", badge::routes())
         .at("/*slug", get(entity_page))
         .with(middleware::analytics::AnalyticsMiddleware)
 }

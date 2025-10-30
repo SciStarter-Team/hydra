@@ -275,6 +275,21 @@ pub async fn get_user_emails(req: &Request) -> Result<Vec<String>, Error> {
     Ok(emails)
 }
 
+/// Check if a user has a specific email address (case-insensitive)
+pub async fn has_user_email(req: &Request) -> Result<bool, Error> {
+    let (user_id, email): (String, String) = flexbuffers::from_slice(&req.message.payload)?;
+
+    let count = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) as "count!" FROM "emails" WHERE "user_id" = ? AND LOWER("email") = LOWER(?)"#,
+        user_id,
+        email
+    )
+    .fetch_one(db())
+    .await?;
+
+    Ok(count > 0)
+}
+
 /// Set user email addresses (replaces all existing emails)
 pub async fn set_user_emails(req: &Request) -> Result<(), Error> {
     let (user_id, emails): (String, Vec<String>) = flexbuffers::from_slice(&req.message.payload)?;
@@ -307,6 +322,11 @@ pub async fn set_user_emails(req: &Request) -> Result<(), Error> {
 
     tx.commit().await?;
 
+    // Update user's verified status
+    if let Ok(user_ulid) = user_id.parse::<Ulid>() {
+        update_user_verified_status(user_ulid).await.ok();
+    }
+
     // Notify log service of email update
     send(
         "log.cache.user_emails_update",
@@ -338,6 +358,11 @@ pub async fn add_user_email(req: &Request) -> Result<(), Error> {
     .execute(db())
     .await?;
 
+    // Update user's verified status (new emails are unverified, so this likely won't change status)
+    if let Ok(user_ulid) = user_id.parse::<Ulid>() {
+        update_user_verified_status(user_ulid).await.ok();
+    }
+
     // Get all current emails and notify log service
     let emails = sqlx::query_scalar!(
         r#"SELECT "email" FROM "emails" WHERE "user_id" = ? ORDER BY "email""#,
@@ -363,6 +388,11 @@ pub async fn remove_user_email(req: &Request) -> Result<(), Error> {
     )
     .execute(db())
     .await?;
+
+    // Update user's verified status (removing verified email could change status)
+    if let Ok(user_ulid) = user_id.parse::<Ulid>() {
+        update_user_verified_status(user_ulid).await.ok();
+    }
 
     // Get all current emails and notify log service
     let emails = sqlx::query_scalar!(
@@ -477,6 +507,36 @@ pub async fn get_user_badges(req: &Request) -> Result<Vec<UserBadge>, Error> {
     }
 
     Ok(result)
+}
+
+pub async fn get_user_badge(req: &Request) -> Result<Option<UserBadge>, Error> {
+    let params: UserAndBadge = flexbuffers::from_slice(&req.message.payload)?;
+    let user_id_str = params.user_id.to_string();
+    let badgeclass = params.badge.badgeclass();
+
+    let badge_row = sqlx::query!(
+        r#"SELECT "badgeclass", "when", "image" FROM "user_badges" WHERE "user_id" = ? AND "badgeclass" = ?"#,
+        user_id_str,
+        badgeclass
+    )
+    .fetch_optional(db())
+    .await?;
+
+    let Some(row) = badge_row else {
+        return Ok(None);
+    };
+
+    match TimeString::try_from(row.when.clone()) {
+        Ok(when) => Ok(Some(UserBadge {
+            badge: params.badge,
+            when,
+            image: row.image,
+        })),
+        Err(e) => {
+            eprintln!("Failed to parse badge timestamp '{}': {}", row.when, e);
+            Ok(None)
+        }
+    }
 }
 
 pub async fn grant_user_badge(req: &Request) -> Result<(), Error> {
@@ -844,7 +904,8 @@ pub async fn user_email_info(req: &Request) -> Result<UserEmailInfo, Error> {
             "handle",
             "first_name",
             "last_name",
-            "primary_email"
+            "primary_email",
+            "verified"
         FROM "users"
         WHERE "user_id" = ?
         "#,
@@ -866,6 +927,7 @@ pub async fn user_email_info(req: &Request) -> Result<UserEmailInfo, Error> {
                 first_name: row.first_name,
                 last_name: row.last_name,
                 primary_email: row.primary_email,
+                verified: row.verified,
             })
         }
         None => Err(anyhow::anyhow!("User not found").into()),

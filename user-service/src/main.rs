@@ -1026,12 +1026,14 @@ async fn main() {
 
     let emails = service.group("user.emails");
     toplevel.spawn(handler!(emails, "get", users::get_user_emails));
+    toplevel.spawn(handler!(emails, "has", users::has_user_email));
     toplevel.spawn(recv_handler!(emails, "set", users::set_user_emails));
     toplevel.spawn(recv_handler!(emails, "add", users::add_user_email));
     toplevel.spawn(recv_handler!(emails, "remove", users::remove_user_email));
 
     let badges = service.group("user.badges");
-    toplevel.spawn(handler!(badges, "get", users::get_user_badges));
+    toplevel.spawn(handler!(badges, "all", users::get_user_badges));
+    toplevel.spawn(handler!(badges, "get", users::get_user_badge));
     toplevel.spawn(recv_handler!(badges, "grant", users::grant_user_badge));
     toplevel.spawn(handler!(badges, "has", users::has_user_badge));
 
