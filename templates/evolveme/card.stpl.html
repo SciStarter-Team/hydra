@@ -1,0 +1,27 @@
+<article class="u-mb-lg flex-grid__card">
+  <figure class="section project-image overflow-hidden u-txt-c u-mb-sm">
+    <a href="/evolveme/search-and-save/project?id=<%= project.id %>" class="project-frame project-frame-rect full-width"><img loading="lazy" src="<%= project.image %>" alt="project image" class="u-p-sm"></a>
+    <figcaption></figcaption>
+  </figure>
+  <h3 class="b-heading-5--lc"><a href="/evolveme/search-and-save/project?id=<%= project.id %>"><%= project.name %></a></h3>
+  <table class="table-finder">
+    <tbody>
+      <tr>
+        <th scope="row">Goal</th>
+        <td>
+          <div class="read-more">
+            <div style="height: 21px;"><%= project.goal %></div>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <th scope="row">Task</th>
+        <td>
+          <div class="read-more">
+            <div style="height: 21px;"><%= project.task %></div>
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</article>

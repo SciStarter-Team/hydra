@@ -66,31 +66,31 @@ impl Badge {
     pub fn template_url(&self) -> &'static str {
         match self {
             Badge::FoundationsOfCitizenScience => {
-                "https://scistarter.org/-static/img/badges/badge-foundations.png"
+                concat!("https://", env!("DOMAIN"), "/-static/img/badges/badge-foundations.png")
             }
             Badge::LibrariesAsHubsForCitizenScience => {
-                "https://scistarter.org/-static/img/badges/badge-libraries-hubs.png"
+                concat!("https://", env!("DOMAIN"), "/-static/img/badges/badge-libraries-hubs.png")
             }
             Badge::BuildingDataLiteracyThroughCommunityAndCitizenScience => {
-                "https://scistarter.org/-static/img/badges/badge-data-literacy.png"
+                concat!("https://", env!("DOMAIN"), "/-static/img/badges/badge-data-literacy.png")
             }
             Badge::TeachingInHigherEducationWithCitizenScience => {
-                "https://scistarter.org/-static/img/badges/badge-tcshe.png"
+                concat!("https://", env!("DOMAIN"), "/-static/img/badges/badge-tcshe.png")
             }
             Badge::DataEthicsForPractitioners => {
-                "https://scistarter.org/-static/img/badges/badge-data-ethics.png"
+                concat!("https://", env!("DOMAIN"), "/-static/img/badges/badge-data-ethics.png")
             }
             Badge::IdealParticipatoryScience => {
-                "https://scistarter.org/-static/img/badges/badge-ideal.png"
+                concat!("https://", env!("DOMAIN"), "/-static/img/badges/badge-ideal.png")
             }
             Badge::OneMillionActsOfScience2024 => {
-                "https://scistarter.org/-static/img/badges/badge-1ma.png"
+                concat!("https://", env!("DOMAIN"), "/-static/img/badges/badge-1ma.png")
             }
             Badge::SciStarterAmbassador => {
-                "https://scistarter.org/-static/img/badges/badge-ambassador.png"
+                concat!("https://", env!("DOMAIN"), "/-static/img/badges/badge-ambassador.png")
             }
             Badge::OneMillionActsOfScience2025 => {
-                "https://scistarter.org/-static/img/badges/badge-1ma-2025.png"
+                concat!("https://", env!("DOMAIN"), "/-static/img/badges/badge-1ma-2025.png")
             }
         }
     }

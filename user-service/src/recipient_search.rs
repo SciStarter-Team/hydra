@@ -1,7 +1,7 @@
 use crate::db;
 use anyhow::Result;
 use async_nats::service::Request;
-use common::message::user::{RecipientSearchRequest, RecipientSearchResponse, RecipientSearchResult};
+use common::message::user::{RecipientFilter, RecipientSearchRequest, RecipientSearchResponse, RecipientSearchResult};
 use common::service::decode_structured_message;
 
 /// Search for recipients across users, user sets, and address sets
@@ -22,8 +22,10 @@ pub async fn search(req: &Request) -> Result<RecipientSearchResponse> {
     let mut partial_matches = Vec::new();
     let search_pattern = format!("%{}%", query);
 
-    // If it looks like an email address, add it as an option
-    if query.contains('@') {
+    let filter_users_only = matches!(request.filter, Some(RecipientFilter::Users));
+
+    // If it looks like an email address, add it as an option (unless filtering for users only)
+    if !filter_users_only && query.contains('@') {
         exact_matches.push(RecipientSearchResult::Email {
             email: query.to_string(),
         });
@@ -65,61 +67,65 @@ pub async fn search(req: &Request) -> Result<RecipientSearchResponse> {
         }
     }
 
-    // Search for user sets by name or slug
-    let user_set_rows = sqlx::query!(
-        r#"
-        SELECT slug, name
-        FROM user_sets
-        WHERE name LIKE ? OR slug LIKE ?
-        LIMIT ?
-        "#,
-        search_pattern,
-        search_pattern,
-        limit
-    )
-    .fetch_all(db())
-    .await?;
+    // Search for user sets by name or slug (unless filtering for users only)
+    if !filter_users_only {
+        let user_set_rows = sqlx::query!(
+            r#"
+            SELECT slug, name
+            FROM user_sets
+            WHERE name LIKE ? OR slug LIKE ?
+            LIMIT ?
+            "#,
+            search_pattern,
+            search_pattern,
+            limit
+        )
+        .fetch_all(db())
+        .await?;
 
-    for row in user_set_rows {
-        let result = RecipientSearchResult::UserSet {
-            slug: row.slug.clone(),
-            name: row.name.clone(),
-        };
+        for row in user_set_rows {
+            let result = RecipientSearchResult::UserSet {
+                slug: row.slug.clone(),
+                name: row.name.clone(),
+            };
 
-        // Check if this is an exact match on slug
-        if row.slug.eq_ignore_ascii_case(query) {
-            exact_matches.push(result);
-        } else {
-            partial_matches.push(result);
+            // Check if this is an exact match on slug
+            if row.slug.eq_ignore_ascii_case(query) {
+                exact_matches.push(result);
+            } else {
+                partial_matches.push(result);
+            }
         }
     }
 
-    // Search for address sets by name or slug
-    let address_set_rows = sqlx::query!(
-        r#"
-        SELECT slug, name
-        FROM address_sets
-        WHERE name LIKE ? OR slug LIKE ?
-        LIMIT ?
-        "#,
-        search_pattern,
-        search_pattern,
-        limit
-    )
-    .fetch_all(db())
-    .await?;
+    // Search for address sets by name or slug (unless filtering for users only)
+    if !filter_users_only {
+        let address_set_rows = sqlx::query!(
+            r#"
+            SELECT slug, name
+            FROM address_sets
+            WHERE name LIKE ? OR slug LIKE ?
+            LIMIT ?
+            "#,
+            search_pattern,
+            search_pattern,
+            limit
+        )
+        .fetch_all(db())
+        .await?;
 
-    for row in address_set_rows {
-        let result = RecipientSearchResult::AddressSet {
-            slug: row.slug.clone(),
-            name: row.name.clone(),
-        };
+        for row in address_set_rows {
+            let result = RecipientSearchResult::AddressSet {
+                slug: row.slug.clone(),
+                name: row.name.clone(),
+            };
 
-        // Check if this is an exact match on slug
-        if row.slug.eq_ignore_ascii_case(query) {
-            exact_matches.push(result);
-        } else {
-            partial_matches.push(result);
+            // Check if this is an exact match on slug
+            if row.slug.eq_ignore_ascii_case(query) {
+                exact_matches.push(result);
+            } else {
+                partial_matches.push(result);
+            }
         }
     }
 

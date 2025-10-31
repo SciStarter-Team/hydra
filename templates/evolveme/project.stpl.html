@@ -1,0 +1,215 @@
+<%+ Header %>
+
+<!-- Wrapper -->
+<div class="o-wrapper">
+
+  <!-- STEPS - STATE: STEP TWO CURRENT - Step one complete-->
+  <ul class="em-steps">
+    <li class="step complete">
+      <div class="step-marker">
+        <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="22.734" height="16.634" viewBox="0 0 22.734 16.634">
+          <defs>
+            <clipPath id="clip-path">
+              <rect id="Rectangle_1825" data-name="Rectangle 1825" width="22.734" height="16.634" fill="#a9bb48"/>
+            </clipPath>
+          </defs>
+          <g id="Group_1025" data-name="Group 1025" clip-path="url(#clip-path)">
+            <path id="Path_1392" data-name="Path 1392" d="M8.011,16.634a1.9,1.9,0,0,1-1.351-.559l-6.1-6.1a1.91,1.91,0,1,1,2.7-2.7l4.75,4.75L19.474.559a1.91,1.91,0,1,1,2.7,2.7L9.361,16.074a1.9,1.9,0,0,1-1.351.559" transform="translate(0 0)" fill="#a9bb48"/>
+          </g>
+        </svg>
+        
+      </div>
+      <div class="step-text">
+        <h1>Sign Up for a<br />Free SciStarter Account</h1>
+        <h2>Or Link Your Existing Account</h2>
+      </div>
+    </li>
+    <li class="step complete">
+      <div class="step-marker">2</div>
+      <div class="step-text">
+        <h1>Find<br />a Citizen Science Project</h1>
+      </div>
+    </li>
+    <li class="step current">
+      <div class="step-marker">3</div>
+      <div class="step-text">
+        <h1>Save<br />a Citizen Science Project</h1>
+        <h2>Last Step</h2>
+      </div>
+    </li>
+  </ul>
+
+  <!-- INSTRUCTIONS/STEPS for STEP TWO - step one & two complete-->
+  <div class="step2-instructions">
+    <h2>Instructions</h2>
+    <ol>
+      <li class="complete itext"><span><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="22.734" height="16.634" viewBox="0 0 22.734 16.634">
+            <defs>
+              <clipPath id="clip-path">
+                <rect id="Rectangle_1825" data-name="Rectangle 1825" width="22.734" height="16.634" fill="#a9bb48"/>
+              </clipPath>
+            </defs>
+            <g id="Group_1025" data-name="Group 1025" clip-path="url(#clip-path)">
+              <path id="Path_1392" data-name="Path 1392" d="M8.011,16.634a1.9,1.9,0,0,1-1.351-.559l-6.1-6.1a1.91,1.91,0,1,1,2.7-2.7l4.75,4.75L19.474.559a1.91,1.91,0,1,1,2.7,2.7L9.361,16.074a1.9,1.9,0,0,1-1.351.559" transform="translate(0 0)" fill="#a9bb48"/>
+            </g>
+        </svg></span>Use the search below to find citizen science projects you might be interested in</li>
+      <li class="complete itext"><span><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="22.734" height="16.634" viewBox="0 0 22.734 16.634">
+            <defs>
+              <clipPath id="clip-path">
+                <rect id="Rectangle_1825" data-name="Rectangle 1825" width="22.734" height="16.634" fill="#a9bb48"/>
+              </clipPath>
+            </defs>
+            <g id="Group_1025" data-name="Group 1025" clip-path="url(#clip-path)">
+              <path id="Path_1392" data-name="Path 1392" d="M8.011,16.634a1.9,1.9,0,0,1-1.351-.559l-6.1-6.1a1.91,1.91,0,1,1,2.7-2.7l4.75,4.75L19.474.559a1.91,1.91,0,1,1,2.7,2.7L9.361,16.074a1.9,1.9,0,0,1-1.351.559" transform="translate(0 0)" fill="#a9bb48"/>
+            </g>
+        </svg></span>You'll be presented with lots of citizen science projects. Find one you might like and click on it to read more.</li>
+      <li class="itext"><span>3</span>When you find one you're interested in, use the “Save to Review Later” button.</li>
+    </ol>
+  </div>
+
+  <!-- PROJECT -->
+  <div class="frame ss-project">
+    <a onclick="history.back()" style="margin-bottom: 1rem; display:block;"><svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon icon--angle-left u-mr-xs v-align-middle" style="fill: currentcolor;"><use xlink:href="/img/icons.svg#icon--angle"></use></svg> Find More Projects</a>
+    <main>
+      <article class="u-clearfix u-mt-sm">
+        <div class="mobile-flex">
+          <div class="u-fl-r@bp2 u-width-2/3@bp2 u-pl-lg@bp2 u-mb@bp2 title-holder">
+            <h1><%= project.name.as_str() %></h1>
+            <p class="mobile-only" style="margin-bottom: 0px !important;"><%= project.presenter.as_str() %>
+            </p>
+            <div class="ss-project-thumb-wrap">
+              <div class="ss-project-vote">
+                <button type="button" class="el-button btn-subdued ss-project-thumbs el-button--default">
+                  <span>
+                    <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon icon--heart" style="fill: currentcolor;">
+                      <use xlink:href="/img/icons.svg#icon--heart"></use>
+                    </svg>
+                    <%= project.likes %><span class="u-visuallyhidden"> Likes</span>
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="u-fl-l@bp2 u-width-1/3@bp2 u-mb image-holder">
+            <figure class="section frame entity-image u-mb-sm">
+              <div class="entity-image__container">
+                <img src="<%= project.image %>" alt="project image">
+              </div>
+            </figure>
+          </div>
+        </div>
+        <div class="u-fl-r@bp2 u-width-2/3@bp2 u-pl-lg@bp2 info-holder">
+          <table class="table-project">
+            <caption class="u-visuallyhidden">Main Project Information</caption>
+            <tbody>
+              <tr class="no-mobile">
+                <th scope="row">Presented By</th>
+                <td><%= project.presenter.as_str() %></td>
+              </tr>
+              <tr class="mobile-1">
+                <th scope="row">Goal</th>
+                <td class="b">
+                  <div class="read-more">
+                    <div style="height: 24px;"><%= project.goal.as_str() %></div>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Task</th>
+                <td class="b">
+                  <div>
+                    <div style="height: 24px;"><%= project.task.as_str() %></div>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Description</th>
+                <td class="dont-break-out">
+                  <div class="ss-markdown reset-exempt">
+                    <div>
+                      <%- render_markdown(project.description.as_str()) %>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Ideal Age Group</th>
+                <td>
+                  <% for (id, name) in project.audience.iter() { %>
+                  <a href="/finder?audience=<%= id %>"><%= name %></a>,
+                  <% } %>
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Topics</th>
+                <td>
+                  <% for (id, name) in project.topics.iter() { %>
+                  <a href="/finder?topic=<%= id %>"><%= name %></a>,
+                  <% } %>
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Tags</th>
+                <td>
+                  <% for tag in project.tags.split("||") { if !tag.trim().is_empty() { %>
+                  <a href="/finder?phrase=<%= tag %>"><%= tag %></a>,
+                  <% } } %>
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Website</th>
+                <td class="dont-break-out"><a href="<%= project.url.as_ref().map(|x| x.as_str()).unwrap_or_default() %>"><%= project.name.as_str() %></a></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="u-fl-l@bp2 u-width-1/3@bp2">
+          <div class="mobile-overlay">
+            <div id="project-utility" class="u-mb-lg">
+              <div class="u-mb no-mobile el-row" style="margin-left: -2px; margin-right: -2px;">
+                <div class="el-col el-col-24 el-col-xs-18 el-col-sm-12" style="padding-left: 2px; padding-right: 2px;"><img loading="lazy" alt="this project is a SciStarter Affiliate" src="https://static.scistarter.org/img/affiliate-inline.svg"></div>
+                <div class="el-col el-col-24 el-col-xs-6 el-col-sm-12" style="padding-left: 2px; padding-right: 2px;">
+                  <a title="explanation of project affiliation" class="dot dot--secondary">
+                    <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="white-text icon icon--question" style="fill: currentcolor;">
+                      <use xlink:href="/img/icons.svg#icon--question"></use>
+                    </svg>
+                    <span class="u-visuallyhidden">explanation of affiliation</span>
+                  </a>
+                </div>
+              </div>
+              <div class="project-action-btns">
+                <div class="p-offsite p--not-logged-in">
+                  <div class="project-flex p-flex-mobile">
+                    <button onclick="window.open('<%= project.url.as_ref().map(|x| x.as_str()).unwrap_or_default() %>', '_blank')" type="button" class="el-button full-width btn-project el-button--primary">
+                      <span>
+                        Visit 
+                        <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon icon--external u-ml-xs svg-fill-white" style="fill: currentcolor;">
+                          <use xlink:href="/img/icons.svg#icon--external-link"></use>
+                        </svg>
+                      </span>
+                    </button>
+                    <form method="post" action="/evolveme/search-and-save/done">
+                      <input type="hidden" name="csrftoken" value="<%= csrftoken %>">
+                      <input type="hidden" name="id" value="<%= project.id %>">
+                      <button type="submit" class="el-button full-width btn-subdued btn-project el-button--default">
+                        <span>
+                          <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon icon--bookie u-mr-xs svg-fill-white" style="fill: currentcolor;">
+                            <use xlink:href="/img/icons.svg#icon--bookmark"></use>
+                          </svg>
+                          Save to Review Later
+                        </span>
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+    </main>
+  </div><!-- end .frame -->
+</div><!-- .o-wrapper -->
+
+
+<%+ Footer %>

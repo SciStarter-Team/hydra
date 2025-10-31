@@ -219,6 +219,33 @@ pub struct UserAndBadge {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct BadgeHoldersRequest {
+    pub badge: Badge,
+    pub search: Option<String>,
+    pub page: Option<u32>,
+    pub limit: Option<u32>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct BadgeHolderInfo {
+    pub user_id: Ulid,
+    pub handle: String,
+    pub first_name: String,
+    pub last_name: String,
+    pub primary_email: String,
+    pub verified: bool,
+    pub when: TimeString,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct BadgeHoldersResponse {
+    pub holders: Vec<BadgeHolderInfo>,
+    pub total_count: u32,
+    pub page: u32,
+    pub limit: u32,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct UserCountResponse {
     pub count: u64,
 }
@@ -757,9 +784,15 @@ pub struct UserEmailInfo {
 
 // Recipient Search (for email sending UI)
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub enum RecipientFilter {
+    Users,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RecipientSearchRequest {
     pub query: String,
     pub limit: Option<u32>,
+    pub filter: Option<RecipientFilter>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

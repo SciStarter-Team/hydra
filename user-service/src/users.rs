@@ -7,11 +7,12 @@ use common::{
         AdminUserBatchGetResponse, AdminUserCreateRequest, AdminUserDeleteRequest,
         AdminUserDeleteResponse, AdminUserExportRequest, AdminUserExportResponse,
         AdminUserGetRequest, AdminUserListRequest, AdminUserListResponse,
-        AdminUserResponse, AdminUserSearchRequest, AdminUserUpdateRequest, BasicInfo,
-        PageManagerSyncRequest, PageManagerSyncResponse, PageManagerUpdateRequest,
-        PageManagerUpdateResponse, UserAndBadge, UserBadge, UserEmail, UserEmailAddRequest,
-        UserEmailDeleteRequest, UserEmailResponse, UserEmailToggleVerifiedRequest,
-        UserEmailUpdateRequest, UserEmailInfo, UserEmailInfoRequest, UserNameMapping,
+        AdminUserResponse, AdminUserSearchRequest, AdminUserUpdateRequest, BadgeHolderInfo,
+        BadgeHoldersRequest, BadgeHoldersResponse, BasicInfo, PageManagerSyncRequest,
+        PageManagerSyncResponse, PageManagerUpdateRequest, PageManagerUpdateResponse,
+        UserAndBadge, UserBadge, UserEmail, UserEmailAddRequest, UserEmailDeleteRequest,
+        UserEmailResponse, UserEmailToggleVerifiedRequest, UserEmailUpdateRequest, UserEmailInfo,
+        UserEmailInfoRequest, UserNameMapping,
     },
     service::{decode_structured_message, log_activity, send},
     shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower},
@@ -571,6 +572,33 @@ pub async fn grant_user_badge(req: &Request) -> Result<(), Error> {
     Ok(())
 }
 
+pub async fn revoke_user_badge(req: &Request) -> Result<(), Error> {
+    let params: UserAndBadge = flexbuffers::from_slice(&req.message.payload)?;
+
+    let badgeclass = params.badge.badgeclass();
+    let user_id_str = params.user_id.to_string();
+
+    sqlx::query!(
+        r#"DELETE FROM "user_badges" WHERE "user_id" = ? AND "badgeclass" = ?"#,
+        user_id_str,
+        badgeclass,
+    )
+    .execute(db())
+    .await?;
+
+    // Log the badge revocation activity
+    log_activity(
+        None,
+        "badge_revoked",
+        Some(params.user_id),
+        None::<Ulid>,
+        Some(badgeclass.to_string()),
+    )
+    .await?;
+
+    Ok(())
+}
+
 pub async fn has_user_badge(req: &Request) -> Result<bool, Error> {
     let params: UserAndBadge = flexbuffers::from_slice(&req.message.payload)?;
 
@@ -585,6 +613,97 @@ pub async fn has_user_badge(req: &Request) -> Result<bool, Error> {
     .await?;
 
     Ok(result.is_some())
+}
+
+pub async fn get_badge_holders(req: &Request) -> Result<BadgeHoldersResponse, Error> {
+    let request: BadgeHoldersRequest = decode_structured_message(req.message.clone())?;
+
+    let page = request.page.unwrap_or(1);
+    let limit = request.limit.unwrap_or(50);
+    let offset = (page - 1) * limit;
+
+    let badgeclass = request.badge.badgeclass();
+    let search_pattern = request.search.as_deref().unwrap_or("");
+    let search_like = if search_pattern.is_empty() {
+        "%".to_string()
+    } else {
+        format!("%{}%", search_pattern)
+    };
+
+    // Get total count
+    let total_count = sqlx::query_scalar!(
+        r#"
+        SELECT COUNT(*) as count
+        FROM "user_badges" ub
+        INNER JOIN "users" u ON ub."user_id" = u."user_id"
+        WHERE ub."badgeclass" = ?
+            AND (u."handle" LIKE ? OR u."first_name" LIKE ? OR u."last_name" LIKE ? OR u."primary_email" LIKE ?)
+        "#,
+        badgeclass,
+        search_like,
+        search_like,
+        search_like,
+        search_like
+    )
+    .fetch_one(db())
+    .await?;
+
+    // Get paginated results
+    let holders_result = sqlx::query!(
+        r#"
+        SELECT
+            u."user_id",
+            u."handle",
+            u."first_name",
+            u."last_name",
+            u."primary_email",
+            u."verified" as "verified: bool",
+            ub."when"
+        FROM "user_badges" ub
+        INNER JOIN "users" u ON ub."user_id" = u."user_id"
+        WHERE ub."badgeclass" = ?
+            AND (u."handle" LIKE ? OR u."first_name" LIKE ? OR u."last_name" LIKE ? OR u."primary_email" LIKE ?)
+        ORDER BY ub."when" DESC
+        LIMIT ? OFFSET ?
+        "#,
+        badgeclass,
+        search_like,
+        search_like,
+        search_like,
+        search_like,
+        limit,
+        offset
+    )
+    .fetch_all(db())
+    .await?;
+
+    let mut holders = Vec::with_capacity(holders_result.len());
+    for row in holders_result {
+        let user_id = row
+            .user_id
+            .as_ulid()
+            .map_err(|e| anyhow::anyhow!("Invalid user ID in database: {}", e))?;
+
+        let when = TimeString::try_from(row.when.clone())
+            .unwrap_or_else(|_| TimeString::now());
+
+        holders.push(BadgeHolderInfo {
+            user_id,
+            handle: row.handle,
+            first_name: row.first_name,
+            last_name: row.last_name,
+            primary_email: row.primary_email,
+            verified: row.verified,
+            when,
+        });
+    }
+
+    Ok(BadgeHoldersResponse {
+        holders,
+        total_count: total_count as u32,
+        page,
+        limit,
+    })
 }
 
 pub async fn admin_user_list(req: &Request) -> Result<AdminUserListResponse, Error> {

@@ -1,0 +1,126 @@
+<%+ Header %>
+
+<!-- Wrapper -->
+<div class="o-wrapper">
+
+
+<!-- WELCOME MESSAGING - only shown if Steps State == ONE -->
+<div class="em-welcome">
+   <img src="<%= staticfile("/evolveme/img/evolve-robot.svg") %>" alt="SciStarter Robot welcoming you" />
+   <div>
+      <h1>Start Your Journey as a Citizen Scientist!</h1>
+      <p>You don’t have to be a scientist to contribute to science! You can collect data, do experiments, and play science games.</p>
+   </div>
+</div>
+
+<!-- STEPS - STATE: STEP ONE CURRENT-->
+<ul class="em-steps">
+   <li class="step current">
+      <div class="step-marker">1</div>
+      <div class="step-text">
+         <h1>Sign Up for a<br />Free SciStarter Account</h1>
+         <h2>Or Link Your Existing Account</h2>
+      </div>
+   </li>
+   <% for step in steps { %>
+   <li class="step">
+      <div class="step-marker"><%= step.0 %></div>
+      <div class="step-text">
+        <h1><%- step.1 %></h1>
+        <% if let Some(sub) = step.2 { %><h2><%- sub %></h2><% } %>
+      </div>
+   </li>
+   <% } %>
+</ul>
+
+
+
+<!-- SIGN UP -->
+
+<div class="frame sign-up">
+   <div class="tight-wrap">
+      <div class="signup-message">
+         <h1>Sign Up!</h1>
+         <p>Already have a SciStarter account?</p>
+         <p><a href="/evolveme/<%= task %>/login">Log in</a> to link your account to continue your journey.</p>
+      </div>
+
+      <form method="post" action="/core/signup?next=<%= next %>" class="el-form ss-signup" autocomplete="off">
+        <input type="hidden" name="csrftoken" value="<%= &csrftoken %>">
+         <div class="el-form-item">
+            <div class="el-form-item__content">
+               <label for="username" class="el-form-item__label">Username</label> 
+               <div class="el-input">
+                  <input name="handle" type="text" autocomplete="off" placeholder="What should we call you?" id="username" class="el-input__inner">
+               </div>
+            </div>
+         </div>
+         <div class="el-form-item is-required">
+            <div class="el-form-item__content">
+               <label for="email" class="el-form-item__label">Email</label> 
+               <div class="el-input">
+                  <input name="email" type="email" autocomplete="off" aria-label="Email" placeholder="Email address" id="email" class="el-input__inner">
+               </div>
+            </div>
+         </div>
+         <div class="el-form-item">
+            <div class="el-form-item__content">
+               <label for="zipcode" class="el-form-item__label">Zip Code</label> 
+               <div class="el-input">
+                  <input name="zipcode" type="text" autocomplete="off" placeholder="For finding projects in your area" id="zipcode" class="el-input__inner">
+               </div>
+            </div>
+         </div>
+         <div class="el-form-item is-required">
+            <div class="el-form-item__content">
+               <label for="password" class="el-form-item__label">Password</label> 
+               <div class="el-input">
+                  <input name="password" type="password" autocomplete="off" placeholder="Password" id="password" class="el-input__inner">
+               </div>
+            </div>
+         </div>
+         <div class="el-form-item is-required">
+            <div class="el-form-item__content">
+               <label for="repeat-password" class="el-form-item__label">Repeat password</label> 
+               <div class="el-input">
+                  <input name="password2" type="password" autocomplete="off" placeholder="Repeat password" id="repeat-password" class="el-input__inner">
+               </div>
+            </div>
+         </div>
+         <div class="el-form-item">
+            <label class="el-form-item__label">Sign up for our newsletter</label>
+            <div class="el-form-item__content">
+               <label class="switch" role="switch" aria-checked="true">
+                  <input name="newletter" value="true" type="checkbox" checked>
+                  <span class="slider round"></span>
+                </label>
+            </div>
+         </div>
+         <div class="el-form-item is-required">
+            <div class="el-form-item__content">
+               <label for="id_terms" class="this-required_label el-form-item__label">Agree to SciStarter's <a href="/terms">Terms of Use</a></label> 
+               <label class="switch" role="switch" aria-checked="true">
+                  <input name="terms" value="true" type="checkbox" checked>
+                  <span class="slider round"></span>
+               </label>
+            </div>
+         </div>
+         <div class="cf-turnstile" data-sitekey="0x4AAAAAABlEtInugALpUhFn"></div>
+         <div class="el-form-item">
+            <div class="el-form-item__content">
+               <button type="submit" class="el-button el-button--primary">
+                  <span>Sign up</span>
+               </button>
+            </div>
+         </div>
+      </form>
+   </div>
+
+</div>
+
+
+
+
+</div><!-- .o-wrapper -->
+
+<%+ Footer %>

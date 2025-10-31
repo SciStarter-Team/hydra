@@ -1,0 +1,206 @@
+<!-- Header Row -->
+<div class="hidden lg:grid lg:grid-cols-5 bg-gray-50 px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
+    <div class="col-span-2">Email</div>
+    <div>Status</div>
+    <div>Earned</div>
+    <div>Actions</div>
+</div>
+
+<!-- Badge Holders List -->
+<div class="divide-y divide-gray-200">
+    <% if self.holders.is_empty() { %>
+        <div class="px-6 py-12 text-center">
+            <wa-icon name="award" class="mx-auto h-12 w-12 text-gray-400"></wa-icon>
+            <h3 class="mt-2 text-sm font-medium text-gray-900">No badge holders found</h3>
+            <p class="mt-1 text-sm text-gray-500">
+                <% if !self.search_term.is_empty() { %>
+                    No users match your search criteria.
+                <% } else { %>
+                    No users have earned this badge yet.
+                <% } %>
+            </p>
+        </div>
+    <% } else { %>
+        <% for holder in &self.holders { %>
+            <div class="px-6 py-4 lg:grid lg:grid-cols-5 lg:gap-4 hover:bg-gray-50 transition-colors" id="holder-<%= holder.user_id |disp %>">
+                <!-- Email with user info -->
+                <div class="col-span-2 flex items-center">
+                    <div class="min-w-0 flex-1">
+                        <a href="/-admin/users/<%= holder.user_id |disp %>" class="text-sm font-medium text-indigo-600 hover:text-indigo-800 truncate block">
+                            <%= holder.primary_email %>
+                        </a>
+                        <p class="text-sm text-gray-500 truncate"><%= holder.first_name %> <%= holder.last_name %> (@<%= holder.handle %>)</p>
+                    </div>
+                </div>
+
+                <!-- Status -->
+                <div class="flex items-center mt-2 lg:mt-0">
+                    <% if holder.verified { %>
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <wa-icon name="check-circle" class="w-3 h-3 mr-1"></wa-icon>
+                            Verified
+                        </span>
+                    <% } else { %>
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            <wa-icon name="exclamation-circle" class="w-3 h-3 mr-1"></wa-icon>
+                            Unverified
+                        </span>
+                    <% } %>
+                </div>
+
+                <!-- Earned Date -->
+                <div class="flex items-center mt-2 lg:mt-0">
+                    <span class="text-sm text-gray-500"><%= holder.when.format_display() %></span>
+                </div>
+
+                <!-- Actions -->
+                <div class="flex items-center space-x-2 mt-2 lg:mt-0">
+                    <button
+                        hx-post="/-admin/badges/<%= self.badge.badgeclass() %>/<%= holder.user_id |disp %>/revoke"
+                        hx-confirm="Are you sure you want to revoke this badge from <%= holder.primary_email %>?"
+                        hx-target="#holder-<%= holder.user_id |disp %>"
+                        hx-swap="outerHTML"
+                        class="inline-flex items-center px-3 py-1.5 border border-red-300 text-xs font-medium rounded text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                    >
+                        <wa-icon name="trash" class="w-3 h-3 mr-1"></wa-icon>
+                        Revoke
+                    </button>
+                </div>
+            </div>
+        <% } %>
+    <% } %>
+</div>
+
+<!-- Pagination -->
+<% if self.total_count > 0 { %>
+    <div class="px-6 py-4 border-t border-gray-200 bg-gray-50">
+        <div class="flex items-center justify-between">
+            <div class="flex-1 flex justify-between sm:hidden">
+                <% if self.has_previous { %>
+                    <button
+                        hx-get="/-admin/badges/<%= self.badge.badgeclass() %>/holders-content?page=<%= self.current_page - 1 %>"
+                        hx-target="#badge-holders-content"
+                        hx-swap="innerHTML"
+                        hx-include="#badge-search-form"
+                        class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                    >
+                        Previous
+                    </button>
+                <% } %>
+                <% if self.has_next { %>
+                    <button
+                        hx-get="/-admin/badges/<%= self.badge.badgeclass() %>/holders-content?page=<%= self.current_page + 1 %>"
+                        hx-target="#badge-holders-content"
+                        hx-swap="innerHTML"
+                        hx-include="#badge-search-form"
+                        class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                    >
+                        Next
+                    </button>
+                <% } %>
+            </div>
+            <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                <div>
+                    <p class="text-sm text-gray-700">
+                        Showing <span class="font-medium"><%= self.start_item %></span> to <span class="font-medium"><%= self.end_item %></span> of <span class="font-medium"><%= self.total_count %></span> holders
+                    </p>
+                </div>
+                <div>
+                    <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
+                        <% if self.has_previous { %>
+                            <button
+                                hx-get="/-admin/badges/<%= self.badge.badgeclass() %>/holders-content?page=<%= self.current_page - 1 %>"
+                                hx-target="#badge-holders-content"
+                                hx-swap="innerHTML"
+                                hx-include="#badge-search-form"
+                                class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
+                            >
+                                <span class="sr-only">Previous</span>
+                                <wa-icon name="chevron-left" class="h-5 w-5"></wa-icon>
+                            </button>
+                        <% } else { %>
+                            <span class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-gray-50 text-sm font-medium text-gray-300">
+                                <span class="sr-only">Previous</span>
+                                <wa-icon name="chevron-left" class="h-5 w-5"></wa-icon>
+                            </span>
+                        <% } %>
+
+                        <% let total_pages = (self.total_count + self.per_page - 1) / self.per_page; %>
+                        <% let start_page = if self.current_page > 3 { self.current_page - 2 } else { 1 }; %>
+                        <% let end_page = if start_page + 4 < total_pages { start_page + 4 } else { total_pages }; %>
+
+                        <% if start_page > 1 { %>
+                            <button
+                                hx-get="/-admin/badges/<%= self.badge.badgeclass() %>/holders-content?page=1"
+                                hx-target="#badge-holders-content"
+                                hx-swap="innerHTML"
+                                hx-include="#badge-search-form"
+                                class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
+                            >
+                                1
+                            </button>
+                            <% if start_page > 2 { %>
+                                <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
+                                    ...
+                                </span>
+                            <% } %>
+                        <% } %>
+
+                        <% for page in start_page..=end_page { %>
+                            <% if page == self.current_page { %>
+                                <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-indigo-50 text-sm font-medium text-indigo-600">
+                                    <%= page %>
+                                </span>
+                            <% } else { %>
+                                <button
+                                    hx-get="/-admin/badges/<%= self.badge.badgeclass() %>/holders-content?page=<%= page %>"
+                                    hx-target="#badge-holders-content"
+                                    hx-swap="innerHTML"
+                                    hx-include="#badge-search-form"
+                                    class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
+                                >
+                                    <%= page %>
+                                </button>
+                            <% } %>
+                        <% } %>
+
+                        <% if end_page < total_pages { %>
+                            <% if end_page < total_pages - 1 { %>
+                                <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
+                                    ...
+                                </span>
+                            <% } %>
+                            <button
+                                hx-get="/-admin/badges/<%= self.badge.badgeclass() %>/holders-content?page=<%= total_pages %>"
+                                hx-target="#badge-holders-content"
+                                hx-swap="innerHTML"
+                                hx-include="#badge-search-form"
+                                class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
+                            >
+                                <%= total_pages %>
+                            </button>
+                        <% } %>
+
+                        <% if self.has_next { %>
+                            <button
+                                hx-get="/-admin/badges/<%= self.badge.badgeclass() %>/holders-content?page=<%= self.current_page + 1 %>"
+                                hx-target="#badge-holders-content"
+                                hx-swap="innerHTML"
+                                hx-include="#badge-search-form"
+                                class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
+                            >
+                                <span class="sr-only">Next</span>
+                                <wa-icon name="chevron-right" class="h-5 w-5"></wa-icon>
+                            </button>
+                        <% } else { %>
+                            <span class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-gray-50 text-sm font-medium text-gray-300">
+                                <span class="sr-only">Next</span>
+                                <wa-icon name="chevron-right" class="h-5 w-5"></wa-icon>
+                            </span>
+                        <% } %>
+                    </nav>
+                </div>
+            </div>
+        </div>
+    </div>
+<% } %>

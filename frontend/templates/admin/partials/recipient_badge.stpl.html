@@ -2,8 +2,10 @@
     <span><%= self.display %></span>
     <button
         type="button"
-        hx-delete="/-admin/api/recipient-remove?id=<%= self.id %>"
-        hx-target="closest div"
+        hx-post="/-admin/api/recipient-remove"
+        hx-vals='{"remove_id": "<%= self.id %>"}'
+        hx-include="#grant-badge-form"
+        hx-target="#grant-badge-form-container"
         hx-swap="outerHTML"
         class="ml-2 text-indigo-600 hover:text-indigo-800"
     >

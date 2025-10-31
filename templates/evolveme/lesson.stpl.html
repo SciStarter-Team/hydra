@@ -1,0 +1,52 @@
+<%+ HeaderWithRefresh {rate: Duration::from_secs(15)} %>
+
+<!-- Wrapper -->
+<div class="o-wrapper">
+
+  <div class="em-welcome">
+    <img src='<%= staticfile("/evolveme/img/evolve-robot.svg") %>' alt="SciStarter Robot welcoming you" />
+    <div>
+      <h1>Start Your Journey as a Citizen Scientist!</h1>
+      <h3>Take the Foundations of Citizen Science Challenge</h3>
+      <p>Train to be a citizen scientist by following a tutorial and taking part in two beginner citizen science projects.</p>
+    </div>
+  </div>
+
+  <ul class="em-steps">
+    <li class="step complete">
+      <div class="step-text">
+        <h1>Sign Up for a<br />Free SciStarter Account</h1>
+        <h2>Or Link Your Existing Account</h2>
+      </div>
+    </li>
+    <li class="step current">
+      <div class="step-marker">2</div>
+      <div class="step-text">
+        <h1>Follow the Tutorial &amp; Take the Quiz</h1>
+        <h2>To Show You Know How To Be a Citizen Scientist!</h2>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-marker">3</div>
+      <div class="step-text">
+        <h1>Task Complete</h1>
+        <h2>You've Earned Evolve Me points!</h2>
+      </div>
+    </li>
+  </ul>
+
+
+
+
+  <div class="step2-instructions">
+    <h2>Instructions</h2>
+    <p>Complete this self-guided tutorial and quiz by selected your preferred language below. Score an 80% or higher to pass the quiz and earn Evolve Me points. Return to this page to do the next steps.</p>
+  </div>
+
+  <div class="foundations-links">
+    <a target="_blank" href='https://media.scistarter.org/foundations/index.html?<%+ ArticulateParams::new("https://li287-138.members.linode.com/lrs/", user.clone()).with_activity("foundations-evolveme") %>'><img src='<%= staticfile("/evolveme/img/foundations-en.png") %>' alt="go to foundations training in English" /></a>
+    <a target="_blank" href='https://media.scistarter.org/fundamentos/index.html?<%+ ArticulateParams::new("https://li287-138.members.linode.com/lrs/", user.clone()).with_activity("fundamentos-evolveme") %>'><img src='<%= staticfile("/evolveme/img/foundations-es.png") %>' alt="ir a la formación de fundamentos en español" /></a>
+  </div>
+</div>
+
+<%+ Footer %>

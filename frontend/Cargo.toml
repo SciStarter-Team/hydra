@@ -38,4 +38,7 @@ regex = "1.11"
 pulldown-cmark = "0.12"
 markdown-ppp = "1.4.1"
 ego-tree = "0.10"
+hmac = "0.12.1"
+sha2 = "0.10.9"
+hex = "0.4.3"
 

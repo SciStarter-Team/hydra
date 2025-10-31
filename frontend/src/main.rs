@@ -8,6 +8,7 @@ pub mod dev;
 pub mod emailer;
 pub mod entity;
 pub mod event;
+pub mod evolveme;
 pub mod gourl;
 pub mod health;
 pub mod lru_cache;
@@ -183,6 +184,7 @@ fn user_facing() -> impl Endpoint {
         .at("/demo-forum", get(demo_forum))
         .at("/go/*friendly_url", get(gourl::handle_go_url))
         .nest("/badges", badge::routes())
+        .nest("/evolveme", evolveme::routes())
         .at("/*slug", get(entity_page))
         .with(middleware::analytics::AnalyticsMiddleware)
 }

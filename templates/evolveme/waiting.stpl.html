@@ -1,0 +1,55 @@
+<%+ HeaderWithRefresh {rate: Duration::from_secs(15)} %>
+
+<!-- Wrapper -->
+<div class="o-wrapper">
+
+  <div class="em-welcome">
+    <img style="aspect-ratio: 422 / 288" src='<%= staticfile("/evolveme/img/evolve-robot.svg") %>' alt="SciStarter Robot welcoming you" />
+    <div>
+      <h1>Do Some Citizen Science!</h1>
+      <h3>Participate in <%= &name %></h3>
+      <p>Do some real science by taking part in a project.</p>
+    </div>
+  </div>
+
+  <ul class="em-steps">
+    <li class="step complete">
+      <div class="step-text">
+        <h1>Sign Up for a<br />Free SciStarter Account</h1>
+        <h2>Or Link Your Existing Account</h2>
+      </div>
+    </li>
+    <li class="step current">
+      <div class="step-marker">2</div>
+      <div class="step-text">
+        <h1>Participate in the Project</h1>
+        <h2>To collect data for real science</h2>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-marker">3</div>
+      <div class="step-text">
+        <h1>Task Complete</h1>
+        <h2>You've Earned Evolve Me points!</h2>
+      </div>
+    </li>
+  </ul>
+
+  <div class="step2-instructions">
+    <h2>Participate in <%= &name %></h2>
+    <p>
+      <strong><a href="<%= url %>" target="_blank">Click here to participate</a></strong>
+      in <%= &name %>.
+    </p>
+    <p>
+      The SciStarter page for the project will open in a new browser
+      tab. Just follow the instructions on that page to participate in
+      the project. Once your participation is complete and recorded,
+      this step will be complete and this page will automatically
+      update to let you know.
+    </p>
+  </div>
+
+</div>
+
+<%+ Footer %>

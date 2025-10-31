@@ -1,0 +1,387 @@
+<%+ Header %>
+
+<!-- Wrapper -->
+<div class="o-wrapper">
+
+  <!-- WELCOME MESSAGING - only shown if Steps State == ONE -->
+  <div class="em-welcome">
+    <img src="<%= staticfile("/evolveme/img/evolve-robot.svg") %>" alt="SciStarter Robot welcoming you" />
+    <div>
+      <h1>Start Your Journey as a Citizen Scientist!</h1>
+      <p>You don't have to be a scientist to contribute to science! You can collect data, do experiments, and play science games.</p>
+    </div>
+  </div>
+
+  <!-- STEPS - STATE: STEP TWO CURRENT - Step one complete-->
+  <ul class="em-steps">
+    <li class="step complete">
+      <div class="step-marker">
+        <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="22.734" height="16.634" viewBox="0 0 22.734 16.634">
+          <defs>
+            <clipPath id="clip-path">
+              <rect id="Rectangle_1825" data-name="Rectangle 1825" width="22.734" height="16.634" fill="#a9bb48"/>
+            </clipPath>
+          </defs>
+          <g id="Group_1025" data-name="Group 1025" clip-path="url(#clip-path)">
+            <path id="Path_1392" data-name="Path 1392" d="M8.011,16.634a1.9,1.9,0,0,1-1.351-.559l-6.1-6.1a1.91,1.91,0,1,1,2.7-2.7l4.75,4.75L19.474.559a1.91,1.91,0,1,1,2.7,2.7L9.361,16.074a1.9,1.9,0,0,1-1.351.559" transform="translate(0 0)" fill="#a9bb48"/>
+          </g>
+        </svg>
+
+      </div>
+      <div class="step-text">
+        <h1>Sign Up for a<br />Free SciStarter Account</h1>
+        <h2>Or Link Your Existing Account</h2>
+      </div>
+    </li>
+    <li class="step current">
+      <div class="step-marker">2</div>
+      <div class="step-text">
+        <h1>Find<br />a Citizen Science Project</h1>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-marker">3</div>
+      <div class="step-text">
+        <h1>Save<br />a Citizen Science Project</h1>
+        <h2>Last Step</h2>
+      </div>
+    </li>
+  </ul>
+
+  <!-- INSTRUCTIONS/STEPS for STEP TWO-->
+  <div class="step2-instructions">
+    <h2>Instructions</h2>
+    <ol>
+      <li class="itext"><span>1</span>Use the search below to find citizen science projects you might be interested in</li>
+      <li class="itext"><span>2</span>You'll be presented with lots of citizen science projects. Find one you might like and click on it to read more.</li>
+      <li class="itext"><span>3</span>When you find one you're interested in, use the “Save to Review Later” button.</li>
+    </ol>
+  </div>
+
+  <!-- <% if results.is_some() { %> -->
+  <!-- <div class="advanced-search">Can't find what you're looking for? Use the <a href="?advanced=true">Advanced Search</a></div> -->
+  <!-- <% } %> -->
+  <div class="frame">
+    <% if let Some(results) = results { %>
+      <div id="search-results">
+        <div class="top-pagination">
+          <p class="b-small u-mb"><%= offset + 1 %>-<%= total.min(offset + limit) %> of <%= total %></p>
+          <div class="el-pagination">
+            <ul class="el-pager">
+              <% if page.gt(&4) { %>
+              <li class="number"><a href="<%= params.with_page(1).url() %>">1</a></li>
+              <% } %>
+              <% if page.gt(&5) { %>
+              <li class="el-icon more btn-quicknext el-icon-more"></li>
+              <% } %>
+              <% for i in 1.max(page - 3) .. page { %>
+              <li class="number"><a href="<%= params.with_page(i).url() %>"><%= i %></a></li>
+              <% } %>
+              <li class="number active" style="color: #333"><%= page %></li>
+              <% for i in (page+1) ..= max_page.min(page + 4) { %>
+              <li class="number"><a href="<%= params.with_page(i).url() %>"><%= i %></a></li>
+              <% } %>
+              <% if page.lt(&(max_page - 5)) { %>
+              <li class="el-icon more btn-quicknext el-icon-more"></li>
+              <% } %>
+              <% if page.lt(&(max_page - 4)) { %>
+              <li class="number"><a href="<%= params.with_page(max_page).url() %>"><%= max_page %></a></li>
+              <% } %>
+            </ul>
+          </div>
+
+        </div>
+        <div class="flex-grid">
+          <% for project in results.iter() { %>
+          <%+ ProjectCard { project } %>
+          <% } %>
+        </div>
+        <div class="u-txt-c">
+          <div class="el-pagination">
+            <ul class="el-pager">
+              <% if page.gt(&4) { %>
+              <li class="number"><a href="<%= params.with_page(1).url() %>">1</a></li>
+              <% } %>
+              <% if page.gt(&5) { %>
+              <li class="el-icon more btn-quicknext el-icon-more"></li>
+              <% } %>
+              <% for i in 1.max(page - 3) .. page { %>
+              <li class="number"><a href="<%= params.with_page(i).url() %>"><%= i %></a></li>
+              <% } %>
+              <li class="number active" style="color: #333"><%= page %></li>
+              <% for i in (page+1) ..= max_page.min(page + 4) { %>
+              <li class="number"><a href="<%= params.with_page(i).url() %>"><%= i %></a></li>
+              <% } %>
+              <% if page.lt(&(max_page - 5)) { %>
+              <li class="el-icon more btn-quicknext el-icon-more"></li>
+              <% } %>
+              <% if page.lt(&(max_page - 4)) { %>
+              <li class="number"><a href="<%= params.with_page(max_page).url() %>"><%= max_page %></a></li>
+              <% } %>
+            </ul>
+          </div>
+        </div>
+      </div>
+    <% } else if !advanced { %>
+    <div class="tight-wrap">
+      <div id="project-finder-form">
+        <h2><span id="hero-bookmark"><img loading="lazy" src="https://static.scistarter.org/img/hero-bookmark.svg" alt=""></span>Find a project</h2>
+        <form method="get" class="el-form el-form--label-top">
+          <div class="el-row" style="margin-left: -10px; margin-right: -10px;">
+            <div class="el-col el-col-24 el-col-xs-24 el-col-sm-12 el-col-md-24" style="padding-left: 10px; padding-right: 10px;">
+              <div class="el-form-item">
+                <label class="el-form-item__label">by Keyword</label>
+                <div class="el-form-item__content">
+                  <div class="el-input">
+                    <input name="phrase" type="text" autocomplete="off" placeholder="e.g. insect, space..." class="el-input__inner" value="<%= params.phrase("") %>">
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="el-col el-col-24 el-col-xs-24 el-col-sm-12 el-col-md-24" style="padding-left: 10px; padding-right: 10px;">
+              <div class="el-form-item" id="topic-select">
+                <label class="el-form-item__label">by Topic</label>
+                <div class="el-form-item__content">
+                  <div class="el-select">
+                    <select name="topic">
+                      <option value="" selected>Select a topic (optional)</option>
+                      <option value="3">Agriculture</option>
+                      <option value="20">Animals</option>
+                      <option value="15">Archeology &amp; Cultural</option>
+                      <option value="13">Astronomy &amp; Space</option>
+                      <option value="22">Awards</option>
+                      <option value="12">Biology</option>
+                      <option value="11">Birds</option>
+                      <option value="10">Chemistry</option>
+                      <option value="27">Climate &amp; Weather</option>
+                      <option value="18">Computers &amp; Technology</option>
+                      <option value="7">Crowd Funding</option>
+                      <option value="203">Disaster Response</option>
+                      <option value="9">Ecology &amp; Environment</option>
+                      <option value="24">Education</option>
+                      <option value="4">Events</option>
+                      <option value="25">Food</option>
+                      <option value="2">Geography</option>
+                      <option value="19">Geology &amp; Earth Science</option>
+                      <option value="23">Health &amp; Medicine</option>
+                      <option value="16">Insects &amp; Pollinators</option>
+                      <option value="21">Nature &amp; Outdoors</option>
+                      <option value="14">Ocean, Water, Marine &amp; Terrestrial</option>
+                      <option value="8">Physics</option>
+                      <option value="5">Psychology</option>
+                      <option value="1">Social Science</option>
+                      <option value="17">Sound</option>
+                      <option value="6">Transportation</option>
+                      <option value="26">Science Policy</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="el-row" style="margin-left: -10px; margin-right: -10px;">
+            <div class="el-col el-col-24 el-col-xs-12 el-col-sm-12" style="padding-left: 10px; padding-right: 10px;">
+              <div class="el-form-item">
+                <label class="el-form-item__label">Online only</label>
+                <div class="el-form-item__content">
+                  <label class="switch" role="switch" aria-checked="false">
+                    <input name="online" type="checkbox">
+                    <span class="slider round"></span>
+                  </label>
+                </div>
+              </div>
+            </div>
+            <!-- <div class="el-col el-col-24 el-col-xs-12 el-col-sm-12" style="padding-left: 10px; padding-right: 10px;"> -->
+            <!--   <div class="el-form-item"> -->
+            <!--     <label class="el-form-item__label">Near me</label> -->
+            <!--     <div class="el-form-item__content"> -->
+            <!--       <label class="switch" role="switch" aria-checked="true"> -->
+            <!--         <input type="checkbox" checked> -->
+            <!--         <span class="slider round"></span> -->
+            <!--       </label> -->
+            <!--     </div> -->
+            <!--   </div> -->
+            <!-- </div> -->
+          </div>
+          <div class="u-mt u-mt-lg@bp2">
+            <button type="submit" name="page" value="1" class="el-button el-button--primary">
+              <span>Find a Project</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <% } else { %>
+    <div class="tight-wrap">
+      <div class="signup-message">
+        <h1>Advanced Search</h1>
+      </div>
+
+      <form methpd="get" class="el-form compact-form">
+        <input type="hidden" name="advanced" value="true">
+        <div class="el-form-item">
+          <label for="phrase" class="el-form-item__label">search by word or phrase</label>
+          <div class="el-form-item__content">
+            <div class="el-input">
+              <input type="text" autocomplete="off" placeholder="plants, animals, weather, etc" class="el-input__inner">
+            </div>
+          </div>
+        </div>
+        <div class="el-form-item">
+          <label for="location " class="el-form-item__label">search by location</label>
+          <div class="el-form-item__content">
+            <div class="el-input">
+              <input type="text" autocomplete="off" placeholder="Enter a location" class="el-input__inner">
+            </div>
+          </div>
+        </div>
+        <div class="el-form-item">
+          <label for="activity" class="el-form-item__label">filter for projects based on activity</label>
+          <div class="el-form-item__content">
+            <div class="el-select">
+              <select required>
+                <option value="" disabled selected hidden>Projects to do while...</option>
+                <option value="">On a lunch break</option>
+                <option value="">At sports stadiums</option>
+                <option value="">At night</option>
+                <option value="">At a science center, zoo or aquarium</option>
+                <option value="">At school</option>
+                <option value="">On a walk, run</option>
+                <option value="">Exclusively online</option>
+                <option value="">At the beach</option>
+                <option value="">In snow or rain</option>
+                <option value="">At home</option>
+                <option value="">In the car</option>
+                <option value="">Emergency Response</option>
+                <option value="">On a hike</option>
+                <option value="">While fishing</option>
+                <option value="">In oceans, streams, rivers, lakes</option>
+              </select>
+          </div></div>
+        </div>
+        <div class="el-form-item">
+          <label for="topics" class="el-form-item__label">filter for projects based on activity</label>
+          <div class="el-form-item__content">
+            <div class="el-select">
+              <select required>
+                <option selected>Select a topic (optional)</option>
+                <option value="3">Agriculture</option>
+                <option value="20">Animals</option>
+                <option value="15">Archeology &amp; Cultural</option>
+                <option value="13">Astronomy &amp; Space</option>
+                <option value="22">Awards</option>
+                <option value="12">Biology</option>
+                <option value="11">Birds</option>
+                <option value="10">Chemistry</option>
+                <option value="27">Climate &amp; Weather</option>
+                <option value="18">Computers &amp; Technology</option>
+                <option value="7">Crowd Funding</option>
+                <option value="203">Disaster Response</option>
+                <option value="9">Ecology &amp; Environment</option>
+                <option value="24">Education</option>
+                <option value="4">Events</option>
+                <option value="25">Food</option>
+                <option value="2">Geography</option>
+                <option value="19">Geology &amp; Earth Science</option>
+                <option value="23">Health &amp; Medicine</option>
+                <option value="16">Insects &amp; Pollinators</option>
+                <option value="21">Nature &amp; Outdoors</option>
+                <option value="14">Ocean, Water, Marine &amp; Terrestrial</option>
+                <option value="8">Physics</option>
+                <option value="5">Psychology</option>
+                <option value="1">Social Science</option>
+                <option value="17">Sound</option>
+                <option value="6">Transportation</option>
+                <option value="26">Science Policy</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="el-form-item">
+          <label for="search_filters" class="el-form-item__label">filter for projects based on search filters</label>
+          <div class="el-form-item__content">
+            <div class="el-select">
+              <select required>
+                <option value="" disabled selected hidden>Only projects that...</option>
+                <option value="">can be done online</option>
+                <option value="">have classroom materials</option>
+                <option value="">use a smartphone or tablet app</option>
+                <option value="">are SciStarter affiliates</option>
+                <option value="">are U.S. Federally funded</option>
+                <option value="">are within the USA</option>
+                <option value="">are outside the USA</option>
+                <option value="">National Science Foundation</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="el-form-item">
+          <label for="audience" class="el-form-item__label">filter for projects based on ideal audience</label>
+          <div class="el-form-item__content">
+            <div class="el-select">
+              <select required>
+                <option value="" disabled selected hidden>Age Group(s)</option>
+                <option value="">Elementary school (6 - 10 years)</option>
+                <option value="">Middle school (11 - 13 years)</option>
+                <option value="">High school (14 - 17 years)</option>
+                <option value="">College</option>
+                <option value="">Graduate students</option>
+                <option value="">Adults</option>
+                <option value="">Families</option>
+                <option value="">Seniors</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="el-form-item">
+          <label for="sdg" class="el-form-item__label">sustainable development goal</label>
+          <div class="el-form-item__content">
+            <div class="el-select">
+              <select required>
+                <option value="" disabled selected hidden>Relevant sustainable development goal</option>
+                <option value="">No Poverty</option>
+                <option value="">Zero Hunger</option>
+                <option value="">Good Health and Well-Being</option>
+                <option value="">Quality Education</option>
+                <option value="">Gender Equality</option>
+                <option value="">Clean Water and Sanitation</option>
+                <option value="">Affordable and Clean Energy</option>
+                <option value="">Decent Work and Economic Growth</option>
+                <option value="">Industry, Innovation, and Infrastructure</option>
+                <option value="">Reduced Inequalities</option>
+                <option value="">Sustainable Cities and Communities</option>
+                <option value="">Responsible Consumption and Production</option>
+                <option value="">Climate Action</option>
+                <option value="">Life Below Water</option>
+                <option value="">Life on Land</option>
+                <option value="">Peace, Justice, and Strong Institutions</option>
+                <option value="">Partnerships</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="el-form-item">
+
+          <div role="switch" aria-checked="true" class="el-switch is-checked">
+            <label class="switch" role="switch" aria-checked="true">
+              <input type="checkbox" checked>
+              <span class="slider round"></span>
+            </label>
+            <span class="el-switch__label el-switch__label--right is-active">
+             <span>only active projects</span>
+            </span>
+          </div>
+
+        </div>
+        <div class="u-txt-r u-mb-lg">
+          <button type="submit" name="page" value="1" class="el-button el-button--primary">
+           <span>find projects</span>
+          </button>
+        </div>
+      </form>
+      <% } %>
+    </div>
+  </div><!-- end .frame -->
+</div><!-- .o-wrapper -->
+
+<%+ Footer %>

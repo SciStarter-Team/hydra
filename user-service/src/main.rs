@@ -1035,7 +1035,9 @@ async fn main() {
     toplevel.spawn(handler!(badges, "all", users::get_user_badges));
     toplevel.spawn(handler!(badges, "get", users::get_user_badge));
     toplevel.spawn(recv_handler!(badges, "grant", users::grant_user_badge));
+    toplevel.spawn(recv_handler!(badges, "revoke", users::revoke_user_badge));
     toplevel.spawn(handler!(badges, "has", users::has_user_badge));
+    toplevel.spawn(handler!(badges, "holders", users::get_badge_holders));
 
     let cache = service.group("user.cache");
     toplevel.spawn(handler!(cache, "user_tags", users::user_tags));

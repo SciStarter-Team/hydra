@@ -1,0 +1,70 @@
+<form id="grant-badge-form" hx-post="/-admin/badges/<%= self.badge.badgeclass() %>/grant" hx-target="#grant-badge-form-container" hx-swap="outerHTML">
+    <label class="block text-sm font-medium text-gray-700 mb-2">Grant badge to user</label>
+    <p class="text-sm text-gray-500 mb-3">Search for a user to grant this badge</p>
+
+    <!-- Selected Recipients -->
+    <div id="selected-recipients" class="mb-3 flex flex-wrap gap-2">
+        <% for (idx, recipient) in self.recipients.iter().enumerate() { %>
+            <%+ RecipientBadge { display: recipient.display.clone(), id: idx.to_string() } %>
+        <% } %>
+    </div>
+
+    <!-- User Search Input with Dropdown -->
+    <div class="relative mb-3">
+        <input type="hidden" name="filter" value="users">
+        <input type="hidden" name="badgeclass" value="<%= self.badge.badgeclass() %>">
+        <input
+            type="text"
+            id="recipient-search"
+            name="q"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-controls="recipient-search-results"
+            aria-expanded="false"
+            hx-get="/-admin/api/recipient-search"
+            hx-trigger="keyup changed delay:300ms"
+            hx-target="#recipient-search-results"
+            hx-swap="outerHTML"
+            hx-include="[name='filter'], this"
+            class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+            placeholder="Search for a user..."
+            autocomplete="off"
+        >
+
+        <!-- Search Results Dropdown -->
+        <div
+            id="recipient-search-results"
+            role="listbox"
+            class="hidden absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto"
+        >
+            <!-- Options will be populated by HTMX -->
+        </div>
+    </div>
+
+    <!-- Hidden inputs for form submission -->
+    <div id="recipient-inputs">
+        <% for (idx, recipient) in self.recipients.iter().enumerate() { %>
+            <input type="hidden" name="recipient_types[]" value="<%= recipient.recipient_type %>" id="recipient-type-<%= idx %>">
+            <input type="hidden" name="recipient_values[]" value="<%= recipient.recipient_value %>" id="recipient-value-<%= idx %>">
+        <% } %>
+    </div>
+
+    <% if self.recipients.is_empty() { %>
+        <button
+            type="submit"
+            disabled
+            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-gray-300 cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+        >
+            <wa-icon name="plus" class="w-4 h-4 mr-2"></wa-icon>
+            Grant Badge
+        </button>
+    <% } else { %>
+        <button
+            type="submit"
+            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+        >
+            <wa-icon name="plus" class="w-4 h-4 mr-2"></wa-icon>
+            Grant Badge
+        </button>
+    <% } %>
+</form>

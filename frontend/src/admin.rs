@@ -190,6 +190,11 @@ pub fn routes() -> impl Endpoint {
         .at("/api/recipient-search", get(api_recipient_search))
         .at("/api/recipient-select", post(api_recipient_select))
         .at("/api/recipient-remove", delete(api_recipient_remove))
+        .at("/badges", get(badges_list))
+        .at("/badges/:badgeclass/holders", get(badges_holders))
+        .at("/badges/:badgeclass/holders-content", get(badges_holders_content))
+        .at("/badges/:badgeclass/grant", post(badges_grant))
+        .at("/badges/:badgeclass/:user_id/revoke", post(badges_revoke))
         .nest("/autocomplete", autocomplete::routes())
         .with(StaffOnly)
 }
@@ -11559,11 +11564,20 @@ async fn user_sets_remove_criterion(
 #[derive(Debug, Deserialize)]
 struct RecipientSearchQuery {
     q: String,
+    #[serde(default)]
+    filter: Option<RecipientFilterQuery>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum RecipientFilterQuery {
+    Users,
 }
 
 #[derive(Debug, Deserialize)]
 struct RecipientRemoveQuery {
     id: String,
+    remaining: Option<u32>,
 }
 
 // Recipient Search API Handlers
@@ -11581,6 +11595,9 @@ async fn api_recipient_search(
     let request = common::message::user::RecipientSearchRequest {
         query: query.q,
         limit: Some(10),
+        filter: query.filter.map(|f| match f {
+            RecipientFilterQuery::Users => common::message::user::RecipientFilter::Users,
+        }),
     };
 
     let response: common::message::user::RecipientSearchResponse =
@@ -11607,6 +11624,11 @@ async fn api_recipient_search(
 #[derive(Debug, Deserialize)]
 struct RecipientSelectForm {
     q: String,
+    badgeclass: String,
+    #[serde(default)]
+    recipient_types: Vec<String>,
+    #[serde(default)]
+    recipient_values: Vec<String>,
 }
 
 #[handler]
@@ -11614,20 +11636,50 @@ async fn api_recipient_select(
     Form(form): Form<RecipientSelectForm>,
     Authenticated(_user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    use common::message::user::{
-        UserEmailInfo, UserEmailInfoRequest,
-        UserSetGetRequest, UserSetGetResponse,
-        AddressSetGetRequest, AddressSetGetResponse,
-    };
-    use common::service::request;
+    let badge = common::badge::Badge::from_badgeclass(&form.badgeclass)
+        .ok_or_else(|| anyhow::anyhow!("Invalid badge class"))?;
 
-    // Determine what type of recipient this is
-    let (display, recipient_type, recipient_value) = if form.q.contains('@') {
-        // It's an email address
-        (form.q.clone(), "Email", form.q)
-    } else if let Ok(user_id) = form.q.parse::<ulid::Ulid>() {
+    // Build current recipients list
+    let mut recipients = Vec::new();
+    for (idx, (recipient_type, recipient_value)) in form.recipient_types.iter().zip(form.recipient_values.iter()).enumerate() {
+        // Look up display name for existing recipients
+        let display = if recipient_type == "User" {
+            if let Ok(user_id) = recipient_value.parse::<ulid::Ulid>() {
+                match common::service::request::<common::message::user::UserEmailInfo>(
+                    "user.info.email_info",
+                    common::message::user::UserEmailInfoRequest { user_id }
+                ).await {
+                    Ok(user) => {
+                        if !user.first_name.is_empty() || !user.last_name.is_empty() {
+                            format!("{} {}", user.first_name, user.last_name).trim().to_string()
+                        } else {
+                            user.handle
+                        }
+                    }
+                    Err(_) => recipient_value.clone(),
+                }
+            } else {
+                recipient_value.clone()
+            }
+        } else {
+            recipient_value.clone()
+        };
+
+        recipients.push(RecipientInfo {
+            id: idx.to_string(),
+            display,
+            recipient_type: recipient_type.clone(),
+            recipient_value: recipient_value.clone(),
+        });
+    }
+
+    // Add new recipient
+    let (display, recipient_type, recipient_value) = if let Ok(user_id) = form.q.parse::<ulid::Ulid>() {
         // It's a user ID - look up the user
-        match request::<UserEmailInfo>("user.info.email_info", UserEmailInfoRequest { user_id }).await {
+        match common::service::request::<common::message::user::UserEmailInfo>(
+            "user.info.email_info",
+            common::message::user::UserEmailInfoRequest { user_id }
+        ).await {
             Ok(user) => {
                 let display_name = if !user.first_name.is_empty() || !user.last_name.is_empty() {
                     format!("{} {}", user.first_name, user.last_name).trim().to_string()
@@ -11637,87 +11689,396 @@ async fn api_recipient_select(
                 (display_name, "User", user_id.to_string())
             }
             Err(_) => {
-                // User not found, treat as invalid
                 return Ok(poem::Response::builder()
                     .status(poem::http::StatusCode::BAD_REQUEST)
                     .body("User not found"));
             }
         }
     } else {
-        // It's a slug - try user set first, then address set
-        if let Ok(user_set) = request::<UserSetGetResponse>(
-            "user.user_sets.get",
-            UserSetGetRequest {
-                slug: form.q.clone(),
-                page: None,
-                limit: Some(0),
-                evaluation_id: None,
-            },
-        ).await {
-            (user_set.name, "UserSet", form.q)
-        } else if let Ok(address_set) = request::<AddressSetGetResponse>(
-            "user.address_sets.get",
-            AddressSetGetRequest {
-                slug: form.q.clone(),
-                page: None,
-                limit: Some(0),
-            },
-        ).await {
-            (address_set.name, "AddressSet", form.q)
-        } else {
-            // Not found
-            return Ok(poem::Response::builder()
-                .status(poem::http::StatusCode::BAD_REQUEST)
-                .body("Recipient not found"));
-        }
+        return Ok(poem::Response::builder()
+            .status(poem::http::StatusCode::BAD_REQUEST)
+            .body("Invalid user ID"));
     };
 
-    let id = ulid::Ulid::new().to_string();
-
-    #[derive(TemplateOnce)]
-    #[template(path = "admin/partials/recipient_badge.stpl.html")]
-    struct RecipientBadge {
-        display: String,
-        id: String,
-    }
-
-    let badge_html = RecipientBadge {
+    recipients.push(RecipientInfo {
+        id: recipients.len().to_string(),
         display,
-        id: id.clone(),
-    }
-    .render_once()?;
+        recipient_type: recipient_type.to_string(),
+        recipient_value,
+    });
 
-    // Add hidden inputs wrapped in a container for OOB swap
-    let hidden_inputs = format!(
-        r##"<div hx-swap-oob="beforeend:#recipient-inputs"><input type="hidden" name="recipient_types[]" value="{}" id="recipient-type-{}"><input type="hidden" name="recipient_values[]" value="{}" id="recipient-value-{}"></div>"##,
-        recipient_type, id, recipient_value, id
-    );
-
-    // Clear the search results dropdown
-    let clear_dropdown = r##"<div id="recipient-search-results" role="listbox" class="hidden absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto" hx-swap-oob="true"></div>"##;
-
-    // Clear the search input
-    let clear_input = r##"<input type="text" id="recipient-search" name="q" value="" role="combobox" aria-autocomplete="list" aria-controls="recipient-search-results" aria-expanded="false" hx-get="/-admin/api/recipient-search" hx-trigger="keyup changed delay:300ms" hx-target="#recipient-search-results" hx-include="this" class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Search for recipients..." autocomplete="off" hx-swap-oob="true">"##;
-
-    let combined_html = format!("{}\n{}\n{}\n{}", badge_html, hidden_inputs, clear_dropdown, clear_input);
+    // Return the entire form
+    let form_html = GrantBadgeForm {
+        badge,
+        recipients,
+    }.render_once()?;
 
     Ok(poem::Response::builder()
         .content_type("text/html")
-        .body(combined_html))
+        .body(format!(r#"<div id="grant-badge-form-container" class="px-6 py-4 border-b border-gray-200" hx-swap-oob="true">{}</div>"#, form_html)))
+}
+
+#[derive(Debug, Deserialize)]
+struct RecipientRemoveForm {
+    remove_id: String,
+    badgeclass: String,
+    #[serde(default)]
+    recipient_types: Vec<String>,
+    #[serde(default)]
+    recipient_values: Vec<String>,
 }
 
 #[handler]
 async fn api_recipient_remove(
-    Query(query): Query<RecipientRemoveQuery>,
+    Form(form): Form<RecipientRemoveForm>,
     Authenticated(_user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    // The delete button has hx-target="closest div" and hx-swap="outerHTML"
-    // Return empty content for the main swap (deletes the badge)
-    // The hidden inputs are now wrapped in a div, so we need to find and delete them individually
+    let badge = common::badge::Badge::from_badgeclass(&form.badgeclass)
+        .ok_or_else(|| anyhow::anyhow!("Invalid badge class"))?;
+
+    // Build recipients list, filtering out all recipients at the position matching remove_id
+    let mut recipients = Vec::new();
+    let remove_idx = form.remove_id.parse::<usize>().unwrap_or(usize::MAX);
+
+    for (idx, (recipient_type, recipient_value)) in form.recipient_types.iter().zip(form.recipient_values.iter()).enumerate() {
+        // Skip the one being removed
+        if idx == remove_idx {
+            continue;
+        }
+
+        // Look up display name
+        let display = if recipient_type == "User" {
+            if let Ok(user_id) = recipient_value.parse::<ulid::Ulid>() {
+                match common::service::request::<common::message::user::UserEmailInfo>(
+                    "user.info.email_info",
+                    common::message::user::UserEmailInfoRequest { user_id }
+                ).await {
+                    Ok(user) => {
+                        if !user.first_name.is_empty() || !user.last_name.is_empty() {
+                            format!("{} {}", user.first_name, user.last_name).trim().to_string()
+                        } else {
+                            user.handle
+                        }
+                    }
+                    Err(_) => recipient_value.clone(),
+                }
+            } else {
+                recipient_value.clone()
+            }
+        } else {
+            recipient_value.clone()
+        };
+
+        recipients.push(RecipientInfo {
+            id: idx.to_string(),
+            display,
+            recipient_type: recipient_type.clone(),
+            recipient_value: recipient_value.clone(),
+        });
+    }
+
+    // Return the entire form
+    let form_html = GrantBadgeForm {
+        badge,
+        recipients,
+    }.render_once()?;
+
     Ok(poem::Response::builder()
         .content_type("text/html")
-        .body(format!(
-            r#"<input hx-swap-oob="delete:#recipient-type-{}"><input hx-swap-oob="delete:#recipient-value-{}">"#,
-            query.id, query.id
-        )))
+        .body(format!(r#"<div id="grant-badge-form-container" class="px-6 py-4 border-b border-gray-200" hx-swap-oob="true">{}</div>"#, form_html)))
+}
+
+// Badge Management
+#[derive(TemplateOnce)]
+#[template(path = "admin/partials/badge_holders_content.stpl.html")]
+struct BadgeHoldersContentPartial {
+    badge: common::badge::Badge,
+    search_term: String,
+    holders: Vec<common::message::user::BadgeHolderInfo>,
+    current_page: u32,
+    total_count: u32,
+    has_previous: bool,
+    has_next: bool,
+    per_page: u32,
+    start_item: u32,
+    end_item: u32,
+}
+
+#[derive(Clone)]
+struct RecipientInfo {
+    id: String,
+    display: String,
+    recipient_type: String,
+    recipient_value: String,
+}
+
+#[derive(TemplateOnce)]
+#[template(path = "admin/partials/grant_badge_form.stpl.html")]
+struct GrantBadgeForm {
+    badge: common::badge::Badge,
+    recipients: Vec<RecipientInfo>,
+}
+
+#[derive(TemplateOnce)]
+#[template(path = "admin/partials/recipient_badge.stpl.html")]
+struct RecipientBadge {
+    display: String,
+    id: String,
+}
+
+#[handler]
+async fn badges_list(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let content = BadgesListPage {};
+
+    let prepared = crate::component::AdminLayout::new("Badge Management", content)
+        .with_sidebar_active("badges")
+        .prepare(user_info)
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+#[derive(Debug, Deserialize)]
+struct BadgesHoldersQuery {
+    search: Option<String>,
+    page: Option<u32>,
+}
+
+#[handler]
+async fn badges_holders(
+    Path(badgeclass): Path<String>,
+    Query(query): Query<BadgesHoldersQuery>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let badge = common::badge::Badge::from_badgeclass(&badgeclass)
+        .ok_or_else(|| anyhow::anyhow!("Invalid badge class"))?;
+
+    let page = query.page.unwrap_or(1);
+    let limit = 50;
+
+    let request = common::message::user::BadgeHoldersRequest {
+        badge,
+        search: query.search.clone(),
+        page: Some(page),
+        limit: Some(limit),
+    };
+
+    let response = common::service::request::<common::message::user::BadgeHoldersResponse>(
+        "user.badges.holders",
+        request,
+    )
+    .await?;
+
+    let total_pages = (response.total_count + limit - 1) / limit;
+    let has_previous = page > 1;
+    let has_next = page < total_pages;
+    let start_item = if response.holders.is_empty() {
+        0
+    } else {
+        ((page - 1) * limit) + 1
+    };
+    let end_item = std::cmp::min(page * limit, response.total_count);
+
+    let content = BadgeHoldersPage {
+        badge,
+        search_term: query.search.clone().unwrap_or_default(),
+        holders: response.holders,
+        current_page: page,
+        total_count: response.total_count,
+        has_previous,
+        has_next,
+        per_page: limit,
+        start_item,
+        end_item,
+    };
+
+    let prepared = crate::component::AdminLayout::new(&format!("{} - Badge Holders", badge.name()), content)
+        .with_sidebar_active("badges")
+        .with_breadcrumb("Badges", Some("/-admin/badges"))
+        .with_breadcrumb(badge.name(), None)
+        .prepare(user_info)
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+#[handler]
+async fn badges_holders_content(
+    Path(badgeclass): Path<String>,
+    Query(query): Query<BadgesHoldersQuery>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let badge = common::badge::Badge::from_badgeclass(&badgeclass)
+        .ok_or_else(|| anyhow::anyhow!("Invalid badge class"))?;
+
+    let page = query.page.unwrap_or(1);
+    let limit = 50;
+
+    let request = common::message::user::BadgeHoldersRequest {
+        badge,
+        search: query.search.clone(),
+        page: Some(page),
+        limit: Some(limit),
+    };
+
+    let response = common::service::request::<common::message::user::BadgeHoldersResponse>(
+        "user.badges.holders",
+        request,
+    )
+    .await?;
+
+    let total_pages = (response.total_count + limit - 1) / limit;
+    let has_previous = page > 1;
+    let has_next = page < total_pages;
+    let start_item = if response.holders.is_empty() {
+        0
+    } else {
+        ((page - 1) * limit) + 1
+    };
+    let end_item = std::cmp::min(page * limit, response.total_count);
+
+    let partial = BadgeHoldersContentPartial {
+        badge,
+        search_term: query.search.clone().unwrap_or_default(),
+        holders: response.holders,
+        current_page: page,
+        total_count: response.total_count,
+        has_previous,
+        has_next,
+        per_page: limit,
+        start_item,
+        end_item,
+    };
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(partial.render_once()?))
+}
+
+#[derive(Debug, Deserialize)]
+struct BadgeGrantForm {
+    #[serde(default)]
+    recipient_types: Vec<String>,
+    #[serde(default)]
+    recipient_values: Vec<String>,
+}
+
+#[handler]
+async fn badges_grant(
+    Path(badgeclass): Path<String>,
+    QsForm(form): QsForm<BadgeGrantForm>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let badge = common::badge::Badge::from_badgeclass(&badgeclass)
+        .ok_or_else(|| anyhow::anyhow!("Invalid badge class"))?;
+
+    // Validate parallel arrays
+    if form.recipient_types.len() != form.recipient_values.len() {
+        return Err(anyhow::anyhow!("Mismatched recipient data"));
+    }
+
+    if form.recipient_types.is_empty() {
+        return Err(anyhow::anyhow!("No recipients specified"));
+    }
+
+    // Grant badge to all selected users
+    for (recipient_type, recipient_value) in form.recipient_types.iter().zip(form.recipient_values.iter()) {
+        if recipient_type == "User" {
+            let user_id = recipient_value
+                .parse::<Ulid>()
+                .map_err(|_| anyhow::anyhow!("Invalid user ID format"))?;
+
+            let request = common::message::user::UserAndBadge {
+                user_id,
+                badge: badge.clone(),
+            };
+
+            common::service::send("user.badges.grant", request).await?;
+
+            // Log the activity
+            if let Some(user_info) = &user_info {
+                common::service::log_activity(
+                    None,
+                    "badge-grant",
+                    user_info.user_id,
+                    user_id,
+                    Some(badgeclass.clone()),
+                )
+                .await?;
+            }
+        }
+    }
+
+    // Return empty form (cleared state) after successful grant
+    let form_html = GrantBadgeForm {
+        badge,
+        recipients: Vec::new(),
+    }.render_once()?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(format!(r#"<div id="grant-badge-form-container" class="px-6 py-4 border-b border-gray-200" hx-swap-oob="true">{}</div>"#, form_html)))
+}
+
+#[handler]
+async fn badges_revoke(
+    Path((badgeclass, user_id_str)): Path<(String, String)>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let badge = common::badge::Badge::from_badgeclass(&badgeclass)
+        .ok_or_else(|| anyhow::anyhow!("Invalid badge class"))?;
+
+    let user_id = user_id_str
+        .parse::<Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid user ID format"))?;
+
+    let request = common::message::user::UserAndBadge {
+        user_id,
+        badge,
+    };
+
+    common::service::send("user.badges.revoke", request).await?;
+
+    // Log the activity
+    if let Some(user_info) = &user_info {
+        common::service::log_activity(
+            None,
+            "badge-revoke",
+            user_info.user_id,
+            user_id,
+            Some(badgeclass.clone()),
+        )
+        .await?;
+    }
+
+    // Return empty response to delete the row via HTMX
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::OK)
+        .finish())
+}
+
+// Badge Management Templates
+#[derive(TemplateOnce)]
+#[template(path = "admin/badges.stpl.html")]
+struct BadgesListPage {}
+
+#[derive(TemplateOnce)]
+#[template(path = "admin/badges_holders.stpl.html")]
+struct BadgeHoldersPage {
+    badge: common::badge::Badge,
+    search_term: String,
+    holders: Vec<common::message::user::BadgeHolderInfo>,
+    current_page: u32,
+    total_count: u32,
+    has_previous: bool,
+    has_next: bool,
+    per_page: u32,
+    start_item: u32,
+    end_item: u32,
 }

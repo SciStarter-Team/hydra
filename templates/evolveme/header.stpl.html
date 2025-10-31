@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SciStarter & Evolve Me</title>
+    <script src='<%= staticfile("/htmx.js") %>'></script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js"></script>
+    <link href='<%= staticfile("/evolveme/css/styles.css") %>' rel="stylesheet">
+  </head>
+  <body class="evolve-me">
+    <header>
+      <div class="o-wrapper">
+        <img src='<%= staticfile("/evolveme/img/scistarter-logo-web-r.svg") %>' alt="SciStarter Logo" id="ss-logo" />
+        <div id="em-logo">
+          <img src='<%= staticfile("/evolveme/img/evolve-me.svg") %>' alt="Evolve Me Logo"  />
+        </div>
+      </div>
+    </header>

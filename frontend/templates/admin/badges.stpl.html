@@ -1,0 +1,33 @@
+<div class="bg-white rounded-lg shadow border border-gray-200">
+    <div class="px-6 py-4 border-b border-gray-200">
+        <h3 class="text-lg font-medium text-gray-900">Badge Management</h3>
+        <p class="mt-1 text-sm text-gray-500">Manage SciStarter badges and view badge holders</p>
+    </div>
+    <div class="p-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <% use common::badge::Badge; %>
+            <% for badge in Badge::all() { %>
+                <div class="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow">
+                    <div class="aspect-w-16 aspect-h-9 bg-gray-50">
+                        <img
+                            src="<%= badge.template_url() %>"
+                            alt="<%= badge.name() %>"
+                            class="w-full h-48 object-contain p-4"
+                        />
+                    </div>
+                    <div class="p-4">
+                        <h4 class="text-sm font-semibold text-gray-900 mb-2"><%= badge.name() %></h4>
+                        <p class="text-xs text-gray-600 mb-4 line-clamp-2"><%= badge.description() %></p>
+                        <a
+                            href="/-admin/badges/<%= badge.badgeclass() %>/holders"
+                            class="inline-flex items-center justify-center w-full px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                        >
+                            <wa-icon name="users" class="w-4 h-4 mr-2"></wa-icon>
+                            View Holders
+                        </a>
+                    </div>
+                </div>
+            <% } %>
+        </div>
+    </div>
+</div>
