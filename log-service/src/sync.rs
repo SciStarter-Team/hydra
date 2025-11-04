@@ -543,6 +543,31 @@ async fn insert_participation(database: &Database, event: &ParticipationEventDat
         database.participation.insert(row).await?;
     }
 
+    // Update cache and send SSE notification if user participated
+    if let Some(user_id_str) = &event.profile_user_ulid {
+        // Update cache (ignore if already exists)
+        sqlx::query!(
+            r#"
+            INSERT OR IGNORE INTO project_participations_cache (user_id, project_id)
+            VALUES (?, ?)
+            "#,
+            user_id_str,
+            event.entity_ulid
+        )
+        .execute(common::shared::db())
+        .await?;
+
+        // Send SSE notification to user
+        if let Ok(user_id) = user_id_str.parse::<ulid::Ulid>() {
+            let _ = common::channel::send_to_user(
+                user_id,
+                "completion",
+                common::channel::Event::new("project_participation", &event.entity_ulid),
+            )
+            .await;
+        }
+    }
+
     Ok(())
 }
 

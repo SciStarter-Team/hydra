@@ -6,7 +6,7 @@
 
 <!-- WELCOME MESSAGING - only shown if Steps State == ONE -->
 <div class="em-welcome">
-   <img src="<%= staticfile("/evolveme/img/evolve-robot.svg") %>" alt="SciStarter Robot welcoming you" />
+   <img src="/-static/evolveme/img/evolve-robot.svg" alt="SciStarter Robot welcoming you" />
    <div>
       <h1>Start Your Journey as a Citizen Scientist!</h1>
       <p>You don’t have to be a scientist to contribute to science! You can collect data, do experiments, and play science games.</p>
@@ -22,12 +22,12 @@
          <h2>Or Link Your Existing Account</h2>
       </div>
    </li>
-   <% for step in steps { %>
+   <% for step in &self.steps { %>
    <li class="step">
       <div class="step-marker"><%= step.0 %></div>
       <div class="step-text">
         <h1><%- step.1 %></h1>
-        <% if let Some(sub) = step.2 { %><h2><%- sub %></h2><% } %>
+        <% if let Some(sub) = &step.2 { %><h2><%- sub %></h2><% } %>
       </div>
    </li>
    <% } %>
@@ -42,11 +42,11 @@
       <div class="signup-message">
          <h1>Sign Up!</h1>
          <p>Already have a SciStarter account?</p>
-         <p><a href="/evolveme/<%= task %>/login">Log in</a> to link your account to continue your journey.</p>
+         <p><a href="/evolveme/<%= self.task %>/login">Log in</a> to link your account to continue your journey.</p>
       </div>
 
-      <form method="post" action="/core/signup?next=<%= next %>" class="el-form ss-signup" autocomplete="off">
-        <input type="hidden" name="csrftoken" value="<%= &csrftoken %>">
+      <form method="post" action="/signup?next=<%= self.next %>" class="el-form ss-signup" autocomplete="off">
+        <input type="hidden" name="csrftoken" value="<%= &self.csrftoken %>">
          <div class="el-form-item">
             <div class="el-form-item__content">
                <label for="username" class="el-form-item__label">Username</label> 

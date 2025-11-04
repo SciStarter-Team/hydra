@@ -820,3 +820,16 @@ pub enum RecipientSearchResult {
         name: String,
     },
 }
+
+// Bookmarks
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct BookmarkCreateRequest {
+    pub user_id: Ulid,
+    pub project_id: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct BookmarkCreateResponse {
+    pub success: bool,
+    pub message: String,
+}

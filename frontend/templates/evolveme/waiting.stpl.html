@@ -1,13 +1,19 @@
-<%+ HeaderWithRefresh {rate: Duration::from_secs(15)} %>
+<%+ Header %>
 
 <!-- Wrapper -->
-<div class="o-wrapper">
+<div class="o-wrapper"
+     hx-ext="sse"
+     sse-connect="/channel/me/completion">
+
+  <div sse-swap="project_participation"
+       hx-on::before-swap="window.location.reload(); event.preventDefault()">
+  </div>
 
   <div class="em-welcome">
-    <img style="aspect-ratio: 422 / 288" src='<%= staticfile("/evolveme/img/evolve-robot.svg") %>' alt="SciStarter Robot welcoming you" />
+    <img style="aspect-ratio: 422 / 288" src='/-static/evolveme/img/evolve-robot.svg' alt="SciStarter Robot welcoming you" />
     <div>
       <h1>Do Some Citizen Science!</h1>
-      <h3>Participate in <%= &name %></h3>
+      <h3>Participate in <%= &self.name %></h3>
       <p>Do some real science by taking part in a project.</p>
     </div>
   </div>
@@ -36,10 +42,10 @@
   </ul>
 
   <div class="step2-instructions">
-    <h2>Participate in <%= &name %></h2>
+    <h2>Participate in <%= &self.name %></h2>
     <p>
-      <strong><a href="<%= url %>" target="_blank">Click here to participate</a></strong>
-      in <%= &name %>.
+      <strong><a href="<%= &self.url %>" target="_blank">Click here to participate</a></strong>
+      in <%= &self.name %>.
     </p>
     <p>
       The SciStarter page for the project will open in a new browser

@@ -15,7 +15,7 @@
     <h2>More Evolve Me + SciStarter Tasks</h2>
     <div class="em-choices">
 
-      <% for (name, _desc, img, href) in links.iter() { %>
+      <% for (name, _desc, img, href) in &self.links { %>
       <div class="em-card">
         <img src="https://static.scistarter.org/evolveme/img/<%= img %>" alt="space, trees, and a microscope" />
         <div class="em-card-text">

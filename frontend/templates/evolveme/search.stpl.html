@@ -5,7 +5,7 @@
 
   <!-- WELCOME MESSAGING - only shown if Steps State == ONE -->
   <div class="em-welcome">
-    <img src="<%= staticfile("/evolveme/img/evolve-robot.svg") %>" alt="SciStarter Robot welcoming you" />
+    <img src="/-static/evolveme/img/evolve-robot.svg" alt="SciStarter Robot welcoming you" />
     <div>
       <h1>Start Your Journey as a Citizen Scientist!</h1>
       <p>You don't have to be a scientist to contribute to science! You can collect data, do experiments, and play science games.</p>
@@ -58,34 +58,34 @@
     </ol>
   </div>
 
-  <!-- <% if results.is_some() { %> -->
+  <!-- <% if self.results.is_some() { %> -->
   <!-- <div class="advanced-search">Can't find what you're looking for? Use the <a href="?advanced=true">Advanced Search</a></div> -->
   <!-- <% } %> -->
   <div class="frame">
-    <% if let Some(results) = results { %>
+    <% if let Some(results) = &self.results { %>
       <div id="search-results">
         <div class="top-pagination">
-          <p class="b-small u-mb"><%= offset + 1 %>-<%= total.min(offset + limit) %> of <%= total %></p>
+          <p class="b-small u-mb"><%= self.offset + 1 %>-<%= self.total.min(self.offset + self.limit) %> of <%= self.total %></p>
           <div class="el-pagination">
             <ul class="el-pager">
-              <% if page.gt(&4) { %>
-              <li class="number"><a href="<%= params.with_page(1).url() %>">1</a></li>
+              <% if self.page.gt(&4) { %>
+              <li class="number"><a href="<%= self.params.with_page(1).url() %>">1</a></li>
               <% } %>
-              <% if page.gt(&5) { %>
+              <% if self.page.gt(&5) { %>
               <li class="el-icon more btn-quicknext el-icon-more"></li>
               <% } %>
-              <% for i in 1.max(page - 3) .. page { %>
-              <li class="number"><a href="<%= params.with_page(i).url() %>"><%= i %></a></li>
+              <% for i in 1.max(self.page - 3) .. self.page { %>
+              <li class="number"><a href="<%= self.params.with_page(i).url() %>"><%= i %></a></li>
               <% } %>
-              <li class="number active" style="color: #333"><%= page %></li>
-              <% for i in (page+1) ..= max_page.min(page + 4) { %>
-              <li class="number"><a href="<%= params.with_page(i).url() %>"><%= i %></a></li>
+              <li class="number active" style="color: #333"><%= self.page %></li>
+              <% for i in (self.page+1) ..= self.max_page.min(self.page + 4) { %>
+              <li class="number"><a href="<%= self.params.with_page(i).url() %>"><%= i %></a></li>
               <% } %>
-              <% if page.lt(&(max_page - 5)) { %>
+              <% if self.page.lt(&(self.max_page - 5)) { %>
               <li class="el-icon more btn-quicknext el-icon-more"></li>
               <% } %>
-              <% if page.lt(&(max_page - 4)) { %>
-              <li class="number"><a href="<%= params.with_page(max_page).url() %>"><%= max_page %></a></li>
+              <% if self.page.lt(&(self.max_page - 4)) { %>
+              <li class="number"><a href="<%= self.params.with_page(self.max_page).url() %>"><%= self.max_page %></a></li>
               <% } %>
             </ul>
           </div>
@@ -99,30 +99,30 @@
         <div class="u-txt-c">
           <div class="el-pagination">
             <ul class="el-pager">
-              <% if page.gt(&4) { %>
-              <li class="number"><a href="<%= params.with_page(1).url() %>">1</a></li>
+              <% if self.page.gt(&4) { %>
+              <li class="number"><a href="<%= self.params.with_page(1).url() %>">1</a></li>
               <% } %>
-              <% if page.gt(&5) { %>
+              <% if self.page.gt(&5) { %>
               <li class="el-icon more btn-quicknext el-icon-more"></li>
               <% } %>
-              <% for i in 1.max(page - 3) .. page { %>
-              <li class="number"><a href="<%= params.with_page(i).url() %>"><%= i %></a></li>
+              <% for i in 1.max(self.page - 3) .. self.page { %>
+              <li class="number"><a href="<%= self.params.with_page(i).url() %>"><%= i %></a></li>
               <% } %>
-              <li class="number active" style="color: #333"><%= page %></li>
-              <% for i in (page+1) ..= max_page.min(page + 4) { %>
-              <li class="number"><a href="<%= params.with_page(i).url() %>"><%= i %></a></li>
+              <li class="number active" style="color: #333"><%= self.page %></li>
+              <% for i in (self.page+1) ..= self.max_page.min(self.page + 4) { %>
+              <li class="number"><a href="<%= self.params.with_page(i).url() %>"><%= i %></a></li>
               <% } %>
-              <% if page.lt(&(max_page - 5)) { %>
+              <% if self.page.lt(&(self.max_page - 5)) { %>
               <li class="el-icon more btn-quicknext el-icon-more"></li>
               <% } %>
-              <% if page.lt(&(max_page - 4)) { %>
-              <li class="number"><a href="<%= params.with_page(max_page).url() %>"><%= max_page %></a></li>
+              <% if self.page.lt(&(self.max_page - 4)) { %>
+              <li class="number"><a href="<%= self.params.with_page(self.max_page).url() %>"><%= self.max_page %></a></li>
               <% } %>
             </ul>
           </div>
         </div>
       </div>
-    <% } else if !advanced { %>
+    <% } else if !self.advanced { %>
     <div class="tight-wrap">
       <div id="project-finder-form">
         <h2><span id="hero-bookmark"><img loading="lazy" src="https://static.scistarter.org/img/hero-bookmark.svg" alt=""></span>Find a project</h2>
@@ -133,7 +133,7 @@
                 <label class="el-form-item__label">by Keyword</label>
                 <div class="el-form-item__content">
                   <div class="el-input">
-                    <input name="phrase" type="text" autocomplete="off" placeholder="e.g. insect, space..." class="el-input__inner" value="<%= params.phrase("") %>">
+                    <input name="phrase" type="text" autocomplete="off" placeholder="e.g. insect, space..." class="el-input__inner" value="<%= self.params.phrase("") %>">
                   </div>
                 </div>
               </div>

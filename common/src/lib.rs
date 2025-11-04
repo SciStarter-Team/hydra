@@ -1,4 +1,5 @@
 pub mod badge;
+pub mod channel;
 pub mod elect;
 pub mod insensitivestring;
 pub mod message;

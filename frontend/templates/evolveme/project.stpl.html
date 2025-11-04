@@ -74,8 +74,8 @@
       <article class="u-clearfix u-mt-sm">
         <div class="mobile-flex">
           <div class="u-fl-r@bp2 u-width-2/3@bp2 u-pl-lg@bp2 u-mb@bp2 title-holder">
-            <h1><%= project.name.as_str() %></h1>
-            <p class="mobile-only" style="margin-bottom: 0px !important;"><%= project.presenter.as_str() %>
+            <h1><%= self.project.name %></h1>
+            <p class="mobile-only" style="margin-bottom: 0px !important;"><%= self.project.presenter %>
             </p>
             <div class="ss-project-thumb-wrap">
               <div class="ss-project-vote">
@@ -84,7 +84,7 @@
                     <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon icon--heart" style="fill: currentcolor;">
                       <use xlink:href="/img/icons.svg#icon--heart"></use>
                     </svg>
-                    <%= project.likes %><span class="u-visuallyhidden"> Likes</span>
+                    <%= self.project.likes %><span class="u-visuallyhidden"> Likes</span>
                   </span>
                 </button>
               </div>
@@ -93,7 +93,7 @@
           <div class="u-fl-l@bp2 u-width-1/3@bp2 u-mb image-holder">
             <figure class="section frame entity-image u-mb-sm">
               <div class="entity-image__container">
-                <img src="<%= project.image %>" alt="project image">
+                <img src="<%= self.project.image %>" alt="project image">
               </div>
             </figure>
           </div>
@@ -104,13 +104,13 @@
             <tbody>
               <tr class="no-mobile">
                 <th scope="row">Presented By</th>
-                <td><%= project.presenter.as_str() %></td>
+                <td><%= self.project.presenter %></td>
               </tr>
               <tr class="mobile-1">
                 <th scope="row">Goal</th>
                 <td class="b">
                   <div class="read-more">
-                    <div style="height: 24px;"><%= project.goal.as_str() %></div>
+                    <div style="height: 24px;"><%= self.project.goal %></div>
                   </div>
                 </td>
               </tr>
@@ -118,7 +118,7 @@
                 <th scope="row">Task</th>
                 <td class="b">
                   <div>
-                    <div style="height: 24px;"><%= project.task.as_str() %></div>
+                    <div style="height: 24px;"><%= self.project.task %></div>
                   </div>
                 </td>
               </tr>
@@ -127,7 +127,7 @@
                 <td class="dont-break-out">
                   <div class="ss-markdown reset-exempt">
                     <div>
-                      <%- render_markdown(project.description.as_str()) %>
+                      <%= self.project.description %>
                     </div>
                   </div>
                 </td>
@@ -135,30 +135,30 @@
               <tr>
                 <th scope="row">Ideal Age Group</th>
                 <td>
-                  <% for (id, name) in project.audience.iter() { %>
-                  <a href="/finder?audience=<%= id %>"><%= name %></a>,
+                  <% for aud in &self.project.audience { %>
+                  <%= aud %>,
                   <% } %>
                 </td>
               </tr>
               <tr>
                 <th scope="row">Topics</th>
                 <td>
-                  <% for (id, name) in project.topics.iter() { %>
-                  <a href="/finder?topic=<%= id %>"><%= name %></a>,
+                  <% for topic in &self.project.topics { %>
+                  <%= topic %>,
                   <% } %>
                 </td>
               </tr>
               <tr>
                 <th scope="row">Tags</th>
                 <td>
-                  <% for tag in project.tags.split("||") { if !tag.trim().is_empty() { %>
+                  <% for tag in &self.project.tags { %>
                   <a href="/finder?phrase=<%= tag %>"><%= tag %></a>,
-                  <% } } %>
+                  <% } %>
                 </td>
               </tr>
               <tr>
                 <th scope="row">Website</th>
-                <td class="dont-break-out"><a href="<%= project.url.as_ref().map(|x| x.as_str()).unwrap_or_default() %>"><%= project.name.as_str() %></a></td>
+                <td class="dont-break-out"><a href="<%= self.project.url %>"><%= self.project.name %></a></td>
               </tr>
             </tbody>
           </table>
@@ -180,7 +180,7 @@
               <div class="project-action-btns">
                 <div class="p-offsite p--not-logged-in">
                   <div class="project-flex p-flex-mobile">
-                    <button onclick="window.open('<%= project.url.as_ref().map(|x| x.as_str()).unwrap_or_default() %>', '_blank')" type="button" class="el-button full-width btn-project el-button--primary">
+                    <button onclick="window.open('<%= self.project.url %>', '_blank')" type="button" class="el-button full-width btn-project el-button--primary">
                       <span>
                         Visit 
                         <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon icon--external u-ml-xs svg-fill-white" style="fill: currentcolor;">
@@ -189,8 +189,7 @@
                       </span>
                     </button>
                     <form method="post" action="/evolveme/search-and-save/done">
-                      <input type="hidden" name="csrftoken" value="<%= csrftoken %>">
-                      <input type="hidden" name="id" value="<%= project.id %>">
+                      <input type="hidden" name="id" value="<%= self.project.id %>">
                       <button type="submit" class="el-button full-width btn-subdued btn-project el-button--default">
                         <span>
                           <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon icon--bookie u-mr-xs svg-fill-white" style="fill: currentcolor;">

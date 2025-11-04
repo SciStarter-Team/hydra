@@ -24,17 +24,16 @@ use common::{
         LocationServiceHealthResponse, LogServiceHealthResponse, UserServiceHealthResponse,
     },
     message::log::{
-        GoUrlStatsRequest, GoUrlStatsResponse,
-        RecentActivityRequest, RecentActivityResponse,
+        GoUrlStatsRequest, GoUrlStatsResponse, RecentActivityRequest, RecentActivityResponse,
     },
     message::user::{
         AdminAnalyticsRequest, AdminAnalyticsResponse, AdminPasswordResetRequest,
         AdminPasswordResetResponse, AdminUser, AdminUserCreateRequest, AdminUserDeleteRequest,
         AdminUserDeleteResponse, AdminUserExportRequest, AdminUserExportResponse,
-        AdminUserGetRequest, AdminUserListRequest, AdminUserListResponse,
-        AdminUserResponse, AdminUserSearchRequest, AdminUserUpdateRequest, BasicInfo, UserEmail,
-        UserEmailAddRequest, UserEmailDeleteRequest, UserEmailResponse,
-        UserEmailToggleVerifiedRequest, UserEmailUpdateRequest,
+        AdminUserGetRequest, AdminUserListRequest, AdminUserListResponse, AdminUserResponse,
+        AdminUserSearchRequest, AdminUserUpdateRequest, BasicInfo, UserEmail, UserEmailAddRequest,
+        UserEmailDeleteRequest, UserEmailResponse, UserEmailToggleVerifiedRequest,
+        UserEmailUpdateRequest,
     },
     service::{request, request_timeout, request_with_retry},
     shared::db,
@@ -42,9 +41,9 @@ use common::{
 };
 use jiff::Timestamp;
 use poem::{
-    Endpoint, EndpointExt, IntoResponse, Route, delete, get, handler, patch, post, put,
+    Endpoint, EndpointExt, FromRequest, IntoResponse, Request, RequestBody, Result as PoemResult,
+    Route, delete, get, handler, patch, post, put,
     web::{Form, Html, Path, Query},
-    Request, Result as PoemResult, FromRequest, RequestBody,
 };
 use sailfish::TemplateOnce;
 use serde::{Deserialize, Serialize};
@@ -109,7 +108,10 @@ pub fn routes() -> impl Endpoint {
         .at("/events/:id", get(events_edit).delete(events_delete))
         .at("/events/:id/field/:field", put(events_update_field))
         .at("/analytics", get(analytics))
-        .at("/analytics/recent-activity", get(analytics_recent_activity_table))
+        .at(
+            "/analytics/recent-activity",
+            get(analytics_recent_activity_table),
+        )
         .at("/analytics/top-performers", get(analytics_top_performers))
         .at("/analytics/export/users", get(analytics_export_users))
         .at("/analytics/export/projects", get(analytics_export_projects))
@@ -135,7 +137,9 @@ pub fn routes() -> impl Endpoint {
         .at("/entities/target-input", get(entities_target_input))
         .at(
             "/entities/edit/*slug",
-            get(entities_edit).post(entities_update).delete(entities_delete),
+            get(entities_edit)
+                .post(entities_update)
+                .delete(entities_delete),
         )
         .at("/entities/publish/*slug", post(entities_publish_toggle))
         .at("/wysiwyg", get(wysiwyg_list))
@@ -144,55 +148,127 @@ pub fn routes() -> impl Endpoint {
         .at("/pagecontent/DressedHtml", get(dressed_html_list))
         .at("/pagecontent/DressedHtml/search", get(dressed_html_search))
         .at("/pagecontent/DressedHtml/new", get(dressed_html_new))
-        .at("/pagecontent/DressedHtml/:id", get(dressed_html_edit).post(dressed_html_update).delete(dressed_html_delete))
+        .at(
+            "/pagecontent/DressedHtml/:id",
+            get(dressed_html_edit)
+                .post(dressed_html_update)
+                .delete(dressed_html_delete),
+        )
         .at("/pagecontent/RawHtml", get(raw_html_list))
         .at("/pagecontent/RawHtml/search", get(raw_html_search))
         .at("/pagecontent/RawHtml/new", get(raw_html_new))
-        .at("/pagecontent/RawHtml/:id", get(raw_html_edit).post(raw_html_update).delete(raw_html_delete))
+        .at(
+            "/pagecontent/RawHtml/:id",
+            get(raw_html_edit)
+                .post(raw_html_update)
+                .delete(raw_html_delete),
+        )
         .at("/pagecontent", post(pagecontent_create))
         .at(
             "/pagecontent/:kind/:id",
-            get(pagecontent_edit).post(pagecontent_update).delete(pagecontent_delete),
+            get(pagecontent_edit)
+                .post(pagecontent_update)
+                .delete(pagecontent_delete),
         )
         .at("/schedules", get(schedules_list).post(schedules_create))
         .at("/schedules/search", get(schedules_search))
         .at("/schedules/new", get(schedules_new))
-        .at("/schedules/:id", get(schedules_edit).post(schedules_update).delete(schedules_delete))
+        .at(
+            "/schedules/:id",
+            get(schedules_edit)
+                .post(schedules_update)
+                .delete(schedules_delete),
+        )
         .at("/email/oneoff", get(email_oneoff).post(email_oneoff_create))
         .at("/email/oneoff/new", get(email_oneoff_new))
-        .at("/email/oneoff/:id", get(email_oneoff_edit).post(email_oneoff_update))
+        .at(
+            "/email/oneoff/:id",
+            get(email_oneoff_edit).post(email_oneoff_update),
+        )
         .at("/email/oneoff/:id/send", post(email_oneoff_send))
         .at("/email/stored", get(email_stored).post(email_stored_create))
         .at("/email/stored/new", get(email_stored_new))
-        .at("/email/stored/:id", get(email_stored_edit).post(email_stored_update))
+        .at(
+            "/email/stored/:id",
+            get(email_stored_edit).post(email_stored_update),
+        )
         .at("/email/stored/:id/send", post(email_stored_send))
         .at("/email/stored/autocomplete", get(email_stored_autocomplete))
-        .at("/email/triggers", get(email_triggers).post(email_trigger_create))
+        .at(
+            "/email/triggers",
+            get(email_triggers).post(email_trigger_create),
+        )
         .at("/email/triggers/:id/edit", get(email_trigger_edit))
-        .at("/email/triggers/:id", patch(email_trigger_update).delete(email_trigger_delete))
+        .at(
+            "/email/triggers/:id",
+            patch(email_trigger_update).delete(email_trigger_delete),
+        )
         .at("/email/queue", get(email_queue))
         .at("/email/queue-content", get(email_queue_content))
-        .at("/email/dataset/:name/variables", get(email_dataset_variables))
+        .at(
+            "/email/dataset/:name/variables",
+            get(email_dataset_variables),
+        )
         .at("/email/merge-fields", get(email_merge_fields))
         .at("/email/address-sets", get(address_sets_list))
-        .at("/email/address-sets/new", get(address_sets_new).post(address_sets_create))
-        .at("/email/address-sets/:slug", get(address_sets_edit).post(address_sets_update).delete(address_sets_delete))
-        .at("/email/address-sets/:slug/members", post(address_sets_add_member))
-        .at("/email/address-sets/:slug/members/:email", delete(address_sets_remove_member))
+        .at(
+            "/email/address-sets/new",
+            get(address_sets_new).post(address_sets_create),
+        )
+        .at(
+            "/email/address-sets/:slug",
+            get(address_sets_edit)
+                .post(address_sets_update)
+                .delete(address_sets_delete),
+        )
+        .at(
+            "/email/address-sets/:slug/members",
+            post(address_sets_add_member),
+        )
+        .at(
+            "/email/address-sets/:slug/members/:email",
+            delete(address_sets_remove_member),
+        )
         .at("/email/user-sets", get(user_sets_list))
-        .at("/email/user-sets/new", get(user_sets_new).post(user_sets_create))
-        .at("/email/user-sets/criterion-fields", get(user_sets_criterion_fields))
-        .at("/email/user-sets/explicit-list-widget", post(user_sets_explicit_list_add_user))
-        .at("/email/user-sets/explicit-list-widget/:user_id", delete(user_sets_explicit_list_remove_user))
-        .at("/email/user-sets/:slug", get(user_sets_edit).post(user_sets_update).delete(user_sets_delete))
-        .at("/email/user-sets/:slug/criteria", post(user_sets_add_criterion))
-        .at("/email/user-sets/:slug/criteria/:id", delete(user_sets_remove_criterion))
+        .at(
+            "/email/user-sets/new",
+            get(user_sets_new).post(user_sets_create),
+        )
+        .at(
+            "/email/user-sets/criterion-fields",
+            get(user_sets_criterion_fields),
+        )
+        .at(
+            "/email/user-sets/explicit-list-widget",
+            post(user_sets_explicit_list_add_user),
+        )
+        .at(
+            "/email/user-sets/explicit-list-widget/:user_id",
+            delete(user_sets_explicit_list_remove_user),
+        )
+        .at(
+            "/email/user-sets/:slug",
+            get(user_sets_edit)
+                .post(user_sets_update)
+                .delete(user_sets_delete),
+        )
+        .at(
+            "/email/user-sets/:slug/criteria",
+            post(user_sets_add_criterion),
+        )
+        .at(
+            "/email/user-sets/:slug/criteria/:id",
+            delete(user_sets_remove_criterion),
+        )
         .at("/api/recipient-search", get(api_recipient_search))
         .at("/api/recipient-select", post(api_recipient_select))
         .at("/api/recipient-remove", delete(api_recipient_remove))
         .at("/badges", get(badges_list))
         .at("/badges/:badgeclass/holders", get(badges_holders))
-        .at("/badges/:badgeclass/holders-content", get(badges_holders_content))
+        .at(
+            "/badges/:badgeclass/holders-content",
+            get(badges_holders_content),
+        )
         .at("/badges/:badgeclass/grant", post(badges_grant))
         .at("/badges/:badgeclass/:user_id/revoke", post(badges_revoke))
         .nest("/autocomplete", autocomplete::routes())
@@ -1257,7 +1333,9 @@ async fn fetch_events_page(
         }
     }
 
-    query.push(" GROUP BY e.event_id, e.name, e.created, e.location_name, e.event_type, e.entirely_online");
+    query.push(
+        " GROUP BY e.event_id, e.name, e.created, e.location_name, e.event_type, e.entirely_online",
+    );
     query.push(" ORDER BY e.created DESC LIMIT ");
     query.push_bind(per_page);
     query.push(" OFFSET ");
@@ -1411,8 +1489,7 @@ impl Component for ProjectsPage {
             start_item: ((page - 1) * per_page) + 1,
             end_item: std::cmp::min(page * per_page, total_projects as u32),
             pagination_url: "/-admin/projects".to_string(),
-            pagination_include:
-                "[name='search'], [name='status'], [name='flagged']".to_string(),
+            pagination_include: "[name='search'], [name='status'], [name='flagged']".to_string(),
             search_term: self.search.unwrap_or_default(),
             selected_status: self.status.unwrap_or_default(),
             flagged: self.flagged.unwrap_or_default(),
@@ -1540,14 +1617,13 @@ impl Component for EventsPage {
         let page = 1u32; // For now, just show first page on dashboard
         let per_page = 10u32; // Show top 10 recent events
 
-        let events_list =
-            match fetch_events_page(None, None, Some(page), Some(per_page)).await {
-                Ok(event_results) => event_results,
-                Err(e) => {
-                    tracing::warn!("Failed to fetch events from database: {}", e);
-                    vec![]
-                }
-            };
+        let events_list = match fetch_events_page(None, None, Some(page), Some(per_page)).await {
+            Ok(event_results) => event_results,
+            Err(e) => {
+                tracing::warn!("Failed to fetch events from database: {}", e);
+                vec![]
+            }
+        };
 
         let total_events = count_events(None, None).await.unwrap_or(0);
 
@@ -1736,8 +1812,10 @@ impl Component for AnalyticsPage {
 
                 for item in items {
                     // For clickthroughs and participation, try to look up project name
-                    let display_name = if self.top_performers_criterion == TopPerformersCriterion::Clickthroughs
-                        || self.top_performers_criterion == TopPerformersCriterion::Participation {
+                    let display_name = if self.top_performers_criterion
+                        == TopPerformersCriterion::Clickthroughs
+                        || self.top_performers_criterion == TopPerformersCriterion::Participation
+                    {
                         // Try to parse as ULID and look up project
                         if let Ok(_project_id) = item.identifier.parse::<Ulid>() {
                             sqlx::query!(
@@ -1799,20 +1877,22 @@ impl Component for AnalyticsPage {
             .collect();
 
         // Fetch last 14 days for the chart (not paginated)
-        let chart_result: Result<common::message::user::ActivityAnalyticsResponse, _> = request_timeout(
-            "user.stats.activity",
-            common::message::user::ActivityAnalyticsRequest {
-                start_date: self.start_date.clone(),
-                end_date: self.end_date.clone(),
-                page: 1,
-                per_page: 14,
-            },
-            Duration::from_secs(5),
-        )
-        .await;
+        let chart_result: Result<common::message::user::ActivityAnalyticsResponse, _> =
+            request_timeout(
+                "user.stats.activity",
+                common::message::user::ActivityAnalyticsRequest {
+                    start_date: self.start_date.clone(),
+                    end_date: self.end_date.clone(),
+                    page: 1,
+                    per_page: 14,
+                },
+                Duration::from_secs(5),
+            )
+            .await;
 
         let recent_signups_chart: Vec<ActivityStat> = match chart_result {
-            Ok(response) => response.stats
+            Ok(response) => response
+                .stats
                 .into_iter()
                 .map(|s| ActivityStat {
                     date: s.date,
@@ -1829,17 +1909,18 @@ impl Component for AnalyticsPage {
 
         // Fetch activity analytics using date range with pagination
         let per_page = 30;
-        let activity_result: Result<common::message::user::ActivityAnalyticsResponse, _> = request_timeout(
-            "user.stats.activity",
-            common::message::user::ActivityAnalyticsRequest {
-                start_date: self.start_date.clone(),
-                end_date: self.end_date.clone(),
-                page: self.activity_page,
-                per_page,
-            },
-            Duration::from_secs(5),
-        )
-        .await;
+        let activity_result: Result<common::message::user::ActivityAnalyticsResponse, _> =
+            request_timeout(
+                "user.stats.activity",
+                common::message::user::ActivityAnalyticsRequest {
+                    start_date: self.start_date.clone(),
+                    end_date: self.end_date.clone(),
+                    page: self.activity_page,
+                    per_page,
+                },
+                Duration::from_secs(5),
+            )
+            .await;
 
         let activity_response = match activity_result {
             Ok(response) => response,
@@ -1864,7 +1945,8 @@ impl Component for AnalyticsPage {
             .collect();
 
         let activity_total_count = activity_response.total_count;
-        let activity_total_pages = ((activity_total_count + per_page as usize - 1) / per_page as usize) as u32;
+        let activity_total_pages =
+            ((activity_total_count + per_page as usize - 1) / per_page as usize) as u32;
         let activity_page = self.activity_page.min(activity_total_pages.max(1));
 
         // Fetch clickthrough analytics from log service
@@ -2369,10 +2451,7 @@ async fn projects(
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     // If any search parameters are provided, perform a search instead of the default list
-    if query.search.is_some()
-        || query.status.is_some()
-        || query.flagged.is_some()
-    {
+    if query.search.is_some() || query.status.is_some() || query.flagged.is_some() {
         let search_query = ProjectSearchQuery {
             search: query.search,
             status: query.status,
@@ -2488,26 +2567,25 @@ async fn analytics_recent_activity_table(
         )
         .await;
 
-    let (activity_stats, activity_total_count): (Vec<ActivityStat>, usize) =
-        match activity_result {
-            Ok(response) => {
-                let stats = response
-                    .stats
-                    .into_iter()
-                    .map(|s| ActivityStat {
-                        date: s.date,
-                        new_users: s.new_users,
-                        total_users_to_date: s.total_users_to_date,
-                        verified_users_to_date: s.verified_users_to_date,
-                    })
-                    .collect();
-                (stats, response.total_count)
-            }
-            Err(e) => {
-                eprintln!("Activity stats error: {:?}", e);
-                (Vec::new(), 0)
-            }
-        };
+    let (activity_stats, activity_total_count): (Vec<ActivityStat>, usize) = match activity_result {
+        Ok(response) => {
+            let stats = response
+                .stats
+                .into_iter()
+                .map(|s| ActivityStat {
+                    date: s.date,
+                    new_users: s.new_users,
+                    total_users_to_date: s.total_users_to_date,
+                    verified_users_to_date: s.verified_users_to_date,
+                })
+                .collect();
+            (stats, response.total_count)
+        }
+        Err(e) => {
+            eprintln!("Activity stats error: {:?}", e);
+            (Vec::new(), 0)
+        }
+    };
 
     let activity_total_pages = (activity_total_count as f64 / 30.0).ceil() as u32;
 
@@ -2563,7 +2641,8 @@ async fn analytics_top_performers(
             for item in items {
                 // For clickthroughs and participation, try to look up project name
                 let display_name = if criterion == TopPerformersCriterion::Clickthroughs
-                    || criterion == TopPerformersCriterion::Participation {
+                    || criterion == TopPerformersCriterion::Participation
+                {
                     // Try to parse as ULID and look up project
                     if let Ok(_project_id) = item.identifier.parse::<Ulid>() {
                         sqlx::query!(
@@ -2638,14 +2717,15 @@ async fn analytics_export_users(
     use jiff::ToSpan;
 
     // Parse date range
-    let (start_date, end_date) = if let (Some(start), Some(end)) = (query.start_date, query.end_date) {
-        (start, end)
-    } else {
-        let days = query.days.unwrap_or(30);
-        let end = Timestamp::now().to_zoned(jiff::tz::TimeZone::UTC).date();
-        let start = end.checked_sub(((days - 1) as i64).days()).unwrap_or(end);
-        (start.to_string(), end.to_string())
-    };
+    let (start_date, end_date) =
+        if let (Some(start), Some(end)) = (query.start_date, query.end_date) {
+            (start, end)
+        } else {
+            let days = query.days.unwrap_or(30);
+            let end = Timestamp::now().to_zoned(jiff::tz::TimeZone::UTC).date();
+            let start = end.checked_sub(((days - 1) as i64).days()).unwrap_or(end);
+            (start.to_string(), end.to_string())
+        };
 
     // Build CSV incrementally, fetching users in pages to avoid NATS payload size limit
     let mut csv = String::new();
@@ -2709,14 +2789,15 @@ async fn analytics_export_projects(
     use jiff::ToSpan;
 
     // Parse date range
-    let (start_date, end_date) = if let (Some(start), Some(end)) = (query.start_date, query.end_date) {
-        (start, end)
-    } else {
-        let days = query.days.unwrap_or(30);
-        let end = Timestamp::now().to_zoned(jiff::tz::TimeZone::UTC).date();
-        let start = end.checked_sub(((days - 1) as i64).days()).unwrap_or(end);
-        (start.to_string(), end.to_string())
-    };
+    let (start_date, end_date) =
+        if let (Some(start), Some(end)) = (query.start_date, query.end_date) {
+            (start, end)
+        } else {
+            let days = query.days.unwrap_or(30);
+            let end = Timestamp::now().to_zoned(jiff::tz::TimeZone::UTC).date();
+            let start = end.checked_sub(((days - 1) as i64).days()).unwrap_or(end);
+            (start.to_string(), end.to_string())
+        };
 
     // Query projects from database
     struct ProjectRow {
@@ -2774,7 +2855,10 @@ async fn analytics_export_projects(
 
     Ok(poem::Response::builder()
         .content_type("text/csv")
-        .header("Content-Disposition", "attachment; filename=\"projects.csv\"")
+        .header(
+            "Content-Disposition",
+            "attachment; filename=\"projects.csv\"",
+        )
         .body(csv))
 }
 
@@ -2786,14 +2870,15 @@ async fn analytics_export_events(
     use jiff::ToSpan;
 
     // Parse date range
-    let (start_date, end_date) = if let (Some(start), Some(end)) = (query.start_date, query.end_date) {
-        (start, end)
-    } else {
-        let days = query.days.unwrap_or(30);
-        let end = Timestamp::now().to_zoned(jiff::tz::TimeZone::UTC).date();
-        let start = end.checked_sub(((days - 1) as i64).days()).unwrap_or(end);
-        (start.to_string(), end.to_string())
-    };
+    let (start_date, end_date) =
+        if let (Some(start), Some(end)) = (query.start_date, query.end_date) {
+            (start, end)
+        } else {
+            let days = query.days.unwrap_or(30);
+            let end = Timestamp::now().to_zoned(jiff::tz::TimeZone::UTC).date();
+            let start = end.checked_sub(((days - 1) as i64).days()).unwrap_or(end);
+            (start.to_string(), end.to_string())
+        };
 
     // Query events from database
     struct EventRow {
@@ -3758,9 +3843,7 @@ impl Component for EditEventPage {
 
     async fn prepare(self, user_info: Self::Param) -> anyhow::Result<Self::Prepared> {
         let title = self.event.name.clone();
-        let content = EditEventContent {
-            event: self.event,
-        };
+        let content = EditEventContent { event: self.event };
 
         AdminLayout::new(&format!("Edit Event: {}", title), content)
             .with_breadcrumb("Events", Some("/-admin/events"))
@@ -4118,8 +4201,7 @@ async fn projects_search_internal(
         start_item: start_item as u32,
         end_item,
         pagination_url: "/-admin/projects".to_string(),
-        pagination_include: "[name='search'], [name='status'], [name='flagged']"
-            .to_string(),
+        pagination_include: "[name='search'], [name='status'], [name='flagged']".to_string(),
         search_term: query.search.unwrap_or_default(),
         selected_status: query.status.unwrap_or_default(),
         flagged: query.flagged.unwrap_or_default(),
@@ -4208,12 +4290,9 @@ async fn events_search_internal(
     };
 
     // Get accurate total count using the count_events function
-    let total_events = count_events(
-        query.search.as_deref(),
-        query.status.as_deref(),
-    )
-    .await
-    .unwrap_or(0) as u32;
+    let total_events = count_events(query.search.as_deref(), query.status.as_deref())
+        .await
+        .unwrap_or(0) as u32;
 
     let has_previous = page > 1;
     let has_next = (page * per_page) < total_events;
@@ -4327,22 +4406,15 @@ async fn events_delete(
 
     // Log the activity
     if let Some(user_info) = &user_info {
-        common::service::log_activity(
-            None,
-            "event-delete",
-            user_info.user_id,
-            event_ulid,
-            None,
-        )
-        .await?;
+        common::service::log_activity(None, "event-delete", user_info.user_id, event_ulid, None)
+            .await?;
     }
 
     // Check if there are any events left
-    let exists: bool = sqlx::query_scalar!(
-        r#"SELECT EXISTS(SELECT 1 FROM events) as "exists: bool""#
-    )
-    .fetch_one(db())
-    .await?;
+    let exists: bool =
+        sqlx::query_scalar!(r#"SELECT EXISTS(SELECT 1 FROM events) as "exists: bool""#)
+            .fetch_one(db())
+            .await?;
 
     let html = if !exists {
         // If no items left, return OOB swap with empty state
@@ -4350,7 +4422,8 @@ async fn events_delete(
             search: None,
             status: None,
             page: Some(1),
-        }).await?;
+        })
+        .await?;
         format!(
             r#"<div id="events-content" hx-swap-oob="outerHTML">{}</div>"#,
             content.render_once()?
@@ -4420,9 +4493,7 @@ async fn events_update_field(
         .await?;
     }
 
-    Ok(poem::Response::builder()
-        .content_type("text/html")
-        .body(""))
+    Ok(poem::Response::builder().content_type("text/html").body(""))
 }
 
 #[handler]
@@ -6822,9 +6893,7 @@ async fn files_links_get_stats(
                 message: error_msg.clone(),
             };
             match error_modal.render_once() {
-                Ok(rendered) => {
-                    Ok(rendered)
-                }
+                Ok(rendered) => Ok(rendered),
                 Err(e) => {
                     tracing::error!("Failed to render error modal: {}", e);
                     Ok(format!(
@@ -6850,9 +6919,7 @@ async fn files_links_post_stats(
                 message: error_msg.clone(),
             };
             match error_modal.render_once() {
-                Ok(rendered) => {
-                    Ok(rendered)
-                }
+                Ok(rendered) => Ok(rendered),
                 Err(e) => {
                     tracing::error!("Failed to render error modal: {}", e);
                     Ok(format!(
@@ -6943,7 +7010,7 @@ pub struct EntityWithInfo {
     pub kind: EntityKind,
     pub target: String,
     pub target_info: Option<String>, // Display name of the target (project name, event name, etc.)
-    pub published: bool, // Published status from project/event or true for other types
+    pub published: bool,             // Published status from project/event or true for other types
 }
 
 #[derive(TemplateOnce)]
@@ -7004,14 +7071,13 @@ async fn entities(
 ) -> Result<poem::Response, anyhow::Error> {
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
 
-    let entities_content = fetch_entities_content(
-        &EntitySearchQuery {
-            search: None,
-            kind: None,
-            page: Some(1),
-            per_page: Some(25),
-        }
-    ).await?;
+    let entities_content = fetch_entities_content(&EntitySearchQuery {
+        search: None,
+        kind: None,
+        page: Some(1),
+        per_page: Some(25),
+    })
+    .await?;
 
     let page = EntitiesPage { entities_content };
     let prepared = AdminLayout::new("Slug Management", page)
@@ -7049,55 +7115,113 @@ async fn entities_target_input(
         EntityKind::Project => {
             let widget = if !current_value.is_empty() {
                 if let Ok(ulid) = current_value.parse::<Ulid>() {
-                    if let Ok(Some(name)) = crate::admin::autocomplete::resolve_project_name(ulid).await {
-                        crate::admin::autocomplete::EntityAutocomplete::new_project_selector("target", "Target", "Search for a project...").with_selected(ulid, name)
+                    if let Ok(Some(name)) =
+                        crate::admin::autocomplete::resolve_project_name(ulid).await
+                    {
+                        crate::admin::autocomplete::EntityAutocomplete::new_project_selector(
+                            "target",
+                            "Target",
+                            "Search for a project...",
+                        )
+                        .with_selected(ulid, name)
                     } else {
-                        crate::admin::autocomplete::EntityAutocomplete::new_project_selector("target", "Target", "Search for a project...")
+                        crate::admin::autocomplete::EntityAutocomplete::new_project_selector(
+                            "target",
+                            "Target",
+                            "Search for a project...",
+                        )
                     }
                 } else {
-                    crate::admin::autocomplete::EntityAutocomplete::new_project_selector("target", "Target", "Search for a project...")
+                    crate::admin::autocomplete::EntityAutocomplete::new_project_selector(
+                        "target",
+                        "Target",
+                        "Search for a project...",
+                    )
                 }
             } else {
-                crate::admin::autocomplete::EntityAutocomplete::new_project_selector("target", "Target", "Search for a project...")
+                crate::admin::autocomplete::EntityAutocomplete::new_project_selector(
+                    "target",
+                    "Target",
+                    "Search for a project...",
+                )
             };
             (Some(widget), None, None)
-        },
+        }
         EntityKind::Event => {
             let widget = if !current_value.is_empty() {
                 if let Ok(ulid) = current_value.parse::<Ulid>() {
-                    if let Ok(Some(name)) = crate::admin::autocomplete::resolve_event_name(ulid).await {
-                        crate::admin::autocomplete::EntityAutocomplete::new_event_selector("target", "Target", "Search for an event...").with_selected(ulid, name)
+                    if let Ok(Some(name)) =
+                        crate::admin::autocomplete::resolve_event_name(ulid).await
+                    {
+                        crate::admin::autocomplete::EntityAutocomplete::new_event_selector(
+                            "target",
+                            "Target",
+                            "Search for an event...",
+                        )
+                        .with_selected(ulid, name)
                     } else {
-                        crate::admin::autocomplete::EntityAutocomplete::new_event_selector("target", "Target", "Search for an event...")
+                        crate::admin::autocomplete::EntityAutocomplete::new_event_selector(
+                            "target",
+                            "Target",
+                            "Search for an event...",
+                        )
                     }
                 } else {
-                    crate::admin::autocomplete::EntityAutocomplete::new_event_selector("target", "Target", "Search for an event...")
+                    crate::admin::autocomplete::EntityAutocomplete::new_event_selector(
+                        "target",
+                        "Target",
+                        "Search for an event...",
+                    )
                 }
             } else {
-                crate::admin::autocomplete::EntityAutocomplete::new_event_selector("target", "Target", "Search for an event...")
+                crate::admin::autocomplete::EntityAutocomplete::new_event_selector(
+                    "target",
+                    "Target",
+                    "Search for an event...",
+                )
             };
             (None, Some(widget), None)
-        },
+        }
         EntityKind::RawHtml => {
-            let widget = create_pagecontent_widget(&current_value, crate::pagecontent::PageContentKind::RawHtml).await;
+            let widget = create_pagecontent_widget(
+                &current_value,
+                crate::pagecontent::PageContentKind::RawHtml,
+            )
+            .await;
             (None, None, Some(widget))
-        },
+        }
         EntityKind::DressedHtml => {
-            let widget = create_pagecontent_widget(&current_value, crate::pagecontent::PageContentKind::DressedHtml).await;
+            let widget = create_pagecontent_widget(
+                &current_value,
+                crate::pagecontent::PageContentKind::DressedHtml,
+            )
+            .await;
             (None, None, Some(widget))
-        },
+        }
         EntityKind::Wysiwyg => {
-            let widget = create_pagecontent_widget(&current_value, crate::pagecontent::PageContentKind::Wysiwyg).await;
+            let widget = create_pagecontent_widget(
+                &current_value,
+                crate::pagecontent::PageContentKind::Wysiwyg,
+            )
+            .await;
             (None, None, Some(widget))
-        },
+        }
         EntityKind::PageBuilder => {
-            let widget = create_pagecontent_widget(&current_value, crate::pagecontent::PageContentKind::PageBuilder).await;
+            let widget = create_pagecontent_widget(
+                &current_value,
+                crate::pagecontent::PageContentKind::PageBuilder,
+            )
+            .await;
             (None, None, Some(widget))
-        },
+        }
         EntityKind::Form => {
-            let widget = create_pagecontent_widget(&current_value, crate::pagecontent::PageContentKind::Form).await;
+            let widget = create_pagecontent_widget(
+                &current_value,
+                crate::pagecontent::PageContentKind::Form,
+            )
+            .await;
             (None, None, Some(widget))
-        },
+        }
         _ => (None, None, None),
     };
 
@@ -7157,7 +7281,9 @@ async fn entities_create(
         entity.store().await?;
 
         Ok(form.slug.clone())
-    })().await {
+    })()
+    .await
+    {
         Ok(slug) => {
             // Log the activity
             if let Some(user_info) = &user_info {
@@ -7176,12 +7302,16 @@ async fn entities_create(
                 kind: None,
                 page: Some(1),
                 per_page: Some(25),
-            }).await?;
+            })
+            .await?;
 
             Ok(poem::Response::builder()
                 .content_type("text/html")
-                .body(format!(r#"<div hx-swap-oob="innerHTML:#entities-content">{}</div>"#, entities_content.render_once()?)))
-        },
+                .body(format!(
+                    r#"<div hx-swap-oob="innerHTML:#entities-content">{}</div>"#,
+                    entities_content.render_once()?
+                )))
+        }
         Err(e) => {
             // Error: Return modal with error message
             let form = NewEntityForm {
@@ -7209,7 +7339,8 @@ async fn entities_edit(
     };
 
     // Create the target input template for initial rendering
-    let target_input_template = create_target_input_template(entity.kind(), &entity.target().to_string()).await;
+    let target_input_template =
+        create_target_input_template(entity.kind(), &entity.target().to_string()).await;
 
     let content = EditEntityPage {
         slug: slug.clone(),
@@ -7247,7 +7378,8 @@ async fn entities_update(
                 crate::entity::EntityTarget::Ulid(ulid) => Some(*ulid),
                 _ => None,
             };
-            let target_input_template = create_target_input_template(entity.kind(), &entity.target().to_string()).await;
+            let target_input_template =
+                create_target_input_template(entity.kind(), &entity.target().to_string()).await;
 
             let content = EditEntityPage {
                 slug: slug.clone(),
@@ -7279,7 +7411,8 @@ async fn entities_update(
                 crate::entity::EntityTarget::Ulid(ulid) => Some(*ulid),
                 _ => None,
             };
-            let target_input_template = create_target_input_template(&kind, form.target.as_deref().unwrap_or("")).await;
+            let target_input_template =
+                create_target_input_template(&kind, form.target.as_deref().unwrap_or("")).await;
 
             let content = EditEntityPage {
                 slug: slug.clone(),
@@ -7331,7 +7464,8 @@ async fn entities_update(
                 crate::entity::EntityTarget::Ulid(ulid) => Some(*ulid),
                 _ => None,
             };
-            let target_input_template = create_target_input_template(entity.kind(), &entity.target().to_string()).await;
+            let target_input_template =
+                create_target_input_template(entity.kind(), &entity.target().to_string()).await;
 
             let content = EditEntityPage {
                 slug: slug.clone(),
@@ -7370,23 +7504,18 @@ async fn entities_delete(
 
     // Log the activity
     if let Some(user_info) = &user_info {
-        let extra = entity.as_ref().map(|e| format!("slug={} kind={:?}", slug, e.kind()));
-        common::service::log_activity(
-            None,
-            "entity-delete",
-            user_info.user_id,
-            None,
-            extra,
-        )
-        .await?;
+        let extra = entity
+            .as_ref()
+            .map(|e| format!("slug={} kind={:?}", slug, e.kind()));
+        common::service::log_activity(None, "entity-delete", user_info.user_id, None, extra)
+            .await?;
     }
 
     // Check if there are any entities left
-    let exists: bool = sqlx::query_scalar!(
-        r#"SELECT EXISTS(SELECT 1 FROM entities) as "exists: bool""#
-    )
-    .fetch_one(db())
-    .await?;
+    let exists: bool =
+        sqlx::query_scalar!(r#"SELECT EXISTS(SELECT 1 FROM entities) as "exists: bool""#)
+            .fetch_one(db())
+            .await?;
 
     let html = if !exists {
         // If no items left, return OOB swap with empty state
@@ -7395,7 +7524,8 @@ async fn entities_delete(
             kind: None,
             page: Some(1),
             per_page: None,
-        }).await?;
+        })
+        .await?;
         format!(
             r#"<div id="entities-content" hx-swap-oob="outerHTML">{}</div>"#,
             content.render_once()?
@@ -7447,7 +7577,11 @@ async fn entities_publish_toggle(
     if let Some(user_info) = &user_info {
         let _ = common::service::log_activity(
             None,
-            if publish { "entity-publish" } else { "entity-unpublish" },
+            if publish {
+                "entity-publish"
+            } else {
+                "entity-unpublish"
+            },
             user_info.user_id,
             None,
             Some(slug.clone()),
@@ -7479,7 +7613,8 @@ async fn create_pagecontent_widget(
 ) -> crate::admin::autocomplete::EntityAutocomplete {
     if !current_value.is_empty() {
         if let Ok(ulid) = current_value.parse::<Ulid>() {
-            if let Ok(Some(name)) = crate::admin::autocomplete::resolve_pagecontent_name(ulid).await {
+            if let Ok(Some(name)) = crate::admin::autocomplete::resolve_pagecontent_name(ulid).await
+            {
                 return crate::admin::autocomplete::EntityAutocomplete::new_pagecontent_selector(
                     "target",
                     "Target",
@@ -7498,60 +7633,119 @@ async fn create_pagecontent_widget(
     .with_kind_filter(pagecontent_kind)
 }
 
-async fn create_target_input_template(kind: &EntityKind, current_value: &str) -> EntityTargetInputTemplate {
+async fn create_target_input_template(
+    kind: &EntityKind,
+    current_value: &str,
+) -> EntityTargetInputTemplate {
     let (project_widget, event_widget, pagecontent_widget) = match kind {
         EntityKind::Project => {
             let widget = if !current_value.is_empty() {
                 if let Ok(ulid) = current_value.parse::<Ulid>() {
-                    if let Ok(Some(name)) = crate::admin::autocomplete::resolve_project_name(ulid).await {
-                        crate::admin::autocomplete::EntityAutocomplete::new_project_selector("target", "Target", "Search for a project...").with_selected(ulid, name)
+                    if let Ok(Some(name)) =
+                        crate::admin::autocomplete::resolve_project_name(ulid).await
+                    {
+                        crate::admin::autocomplete::EntityAutocomplete::new_project_selector(
+                            "target",
+                            "Target",
+                            "Search for a project...",
+                        )
+                        .with_selected(ulid, name)
                     } else {
-                        crate::admin::autocomplete::EntityAutocomplete::new_project_selector("target", "Target", "Search for a project...")
+                        crate::admin::autocomplete::EntityAutocomplete::new_project_selector(
+                            "target",
+                            "Target",
+                            "Search for a project...",
+                        )
                     }
                 } else {
-                    crate::admin::autocomplete::EntityAutocomplete::new_project_selector("target", "Target", "Search for a project...")
+                    crate::admin::autocomplete::EntityAutocomplete::new_project_selector(
+                        "target",
+                        "Target",
+                        "Search for a project...",
+                    )
                 }
             } else {
-                crate::admin::autocomplete::EntityAutocomplete::new_project_selector("target", "Target", "Search for a project...")
+                crate::admin::autocomplete::EntityAutocomplete::new_project_selector(
+                    "target",
+                    "Target",
+                    "Search for a project...",
+                )
             };
             (Some(widget), None, None)
-        },
+        }
         EntityKind::Event => {
             let widget = if !current_value.is_empty() {
                 if let Ok(ulid) = current_value.parse::<Ulid>() {
-                    if let Ok(Some(name)) = crate::admin::autocomplete::resolve_event_name(ulid).await {
-                        crate::admin::autocomplete::EntityAutocomplete::new_event_selector("target", "Target", "Search for an event...").with_selected(ulid, name)
+                    if let Ok(Some(name)) =
+                        crate::admin::autocomplete::resolve_event_name(ulid).await
+                    {
+                        crate::admin::autocomplete::EntityAutocomplete::new_event_selector(
+                            "target",
+                            "Target",
+                            "Search for an event...",
+                        )
+                        .with_selected(ulid, name)
                     } else {
-                        crate::admin::autocomplete::EntityAutocomplete::new_event_selector("target", "Target", "Search for an event...")
+                        crate::admin::autocomplete::EntityAutocomplete::new_event_selector(
+                            "target",
+                            "Target",
+                            "Search for an event...",
+                        )
                     }
                 } else {
-                    crate::admin::autocomplete::EntityAutocomplete::new_event_selector("target", "Target", "Search for an event...")
+                    crate::admin::autocomplete::EntityAutocomplete::new_event_selector(
+                        "target",
+                        "Target",
+                        "Search for an event...",
+                    )
                 }
             } else {
-                crate::admin::autocomplete::EntityAutocomplete::new_event_selector("target", "Target", "Search for an event...")
+                crate::admin::autocomplete::EntityAutocomplete::new_event_selector(
+                    "target",
+                    "Target",
+                    "Search for an event...",
+                )
             };
             (None, Some(widget), None)
-        },
+        }
         EntityKind::RawHtml => {
-            let widget = create_pagecontent_widget(current_value, crate::pagecontent::PageContentKind::RawHtml).await;
+            let widget = create_pagecontent_widget(
+                current_value,
+                crate::pagecontent::PageContentKind::RawHtml,
+            )
+            .await;
             (None, None, Some(widget))
-        },
+        }
         EntityKind::DressedHtml => {
-            let widget = create_pagecontent_widget(current_value, crate::pagecontent::PageContentKind::DressedHtml).await;
+            let widget = create_pagecontent_widget(
+                current_value,
+                crate::pagecontent::PageContentKind::DressedHtml,
+            )
+            .await;
             (None, None, Some(widget))
-        },
+        }
         EntityKind::Wysiwyg => {
-            let widget = create_pagecontent_widget(current_value, crate::pagecontent::PageContentKind::Wysiwyg).await;
+            let widget = create_pagecontent_widget(
+                current_value,
+                crate::pagecontent::PageContentKind::Wysiwyg,
+            )
+            .await;
             (None, None, Some(widget))
-        },
+        }
         EntityKind::PageBuilder => {
-            let widget = create_pagecontent_widget(current_value, crate::pagecontent::PageContentKind::PageBuilder).await;
+            let widget = create_pagecontent_widget(
+                current_value,
+                crate::pagecontent::PageContentKind::PageBuilder,
+            )
+            .await;
             (None, None, Some(widget))
-        },
+        }
         EntityKind::Form => {
-            let widget = create_pagecontent_widget(current_value, crate::pagecontent::PageContentKind::Form).await;
+            let widget =
+                create_pagecontent_widget(current_value, crate::pagecontent::PageContentKind::Form)
+                    .await;
             (None, None, Some(widget))
-        },
+        }
         _ => (None, None, None),
     };
 
@@ -7564,26 +7758,28 @@ async fn create_target_input_template(kind: &EntityKind, current_value: &str) ->
     }
 }
 
-fn parse_target_for_kind(kind: &EntityKind, target_str: Option<&str>) -> Result<EntityTarget, anyhow::Error> {
+fn parse_target_for_kind(
+    kind: &EntityKind,
+    target_str: Option<&str>,
+) -> Result<EntityTarget, anyhow::Error> {
     match target_str {
-        Some(s) if !s.trim().is_empty() => {
-            match kind {
-                EntityKind::Redirect => {
-                    let url = s.parse::<url::Url>()?;
-                    Ok(EntityTarget::Url(url))
-                },
-                EntityKind::WordPress => {
-                    Ok(EntityTarget::String(s.to_string()))
-                },
-                EntityKind::RawHtml | EntityKind::DressedHtml | EntityKind::Wysiwyg | EntityKind::PageBuilder |
-                EntityKind::Form | EntityKind::Project | EntityKind::Event => {
-                    let ulid = s.parse::<Ulid>()?;
-                    Ok(EntityTarget::Ulid(ulid))
-                },
-                EntityKind::Placeholder => {
-                    Ok(EntityTarget::Nil)
-                },
+        Some(s) if !s.trim().is_empty() => match kind {
+            EntityKind::Redirect => {
+                let url = s.parse::<url::Url>()?;
+                Ok(EntityTarget::Url(url))
             }
+            EntityKind::WordPress => Ok(EntityTarget::String(s.to_string())),
+            EntityKind::RawHtml
+            | EntityKind::DressedHtml
+            | EntityKind::Wysiwyg
+            | EntityKind::PageBuilder
+            | EntityKind::Form
+            | EntityKind::Project
+            | EntityKind::Event => {
+                let ulid = s.parse::<Ulid>()?;
+                Ok(EntityTarget::Ulid(ulid))
+            }
+            EntityKind::Placeholder => Ok(EntityTarget::Nil),
         },
         _ => Ok(EntityTarget::Nil),
     }
@@ -7598,7 +7794,9 @@ struct EntityDbRow {
     created: common::timestring::TimeString,
 }
 
-async fn fetch_entities_content(query: &EntitySearchQuery) -> Result<EntitiesContent, anyhow::Error> {
+async fn fetch_entities_content(
+    query: &EntitySearchQuery,
+) -> Result<EntitiesContent, anyhow::Error> {
     let page = query.page.unwrap_or(1).max(1) as i64;
     let per_page = query.per_page.unwrap_or(25).min(100).max(1) as i64;
     let offset = (page - 1) * per_page;
@@ -7613,9 +7811,15 @@ async fn fetch_entities_content(query: &EntitySearchQuery) -> Result<EntitiesCon
     ).fetch_all(db()).await?;
 
     // Filter
-    let filtered_rows: Vec<_> = all_rows.into_iter()
+    let filtered_rows: Vec<_> = all_rows
+        .into_iter()
         .filter(|row| {
-            if !search_term.is_empty() && !row.slug.to_lowercase().contains(&search_term.to_lowercase()) {
+            if !search_term.is_empty()
+                && !row
+                    .slug
+                    .to_lowercase()
+                    .contains(&search_term.to_lowercase())
+            {
                 return false;
             }
             if !selected_kind.is_empty() && row.kind.as_ref() != selected_kind {
@@ -7628,7 +7832,8 @@ async fn fetch_entities_content(query: &EntitySearchQuery) -> Result<EntitiesCon
     let total_entities = filtered_rows.len() as i64;
 
     // Paginate
-    let entity_rows: Vec<_> = filtered_rows.into_iter()
+    let entity_rows: Vec<_> = filtered_rows
+        .into_iter()
         .skip(offset as usize)
         .take(per_page as usize)
         .collect();
@@ -7662,31 +7867,31 @@ async fn fetch_entities_content(query: &EntitySearchQuery) -> Result<EntitiesCon
     })
 }
 
-fn parse_database_target(kind: EntityKind, target_str: &str) -> Result<EntityTarget, anyhow::Error> {
+fn parse_database_target(
+    kind: EntityKind,
+    target_str: &str,
+) -> Result<EntityTarget, anyhow::Error> {
     if target_str.trim().is_empty() {
         return Ok(EntityTarget::Nil);
     }
 
     match kind {
-        EntityKind::Redirect => {
-            match target_str.parse() {
-                Ok(url) => Ok(EntityTarget::Url(url)),
-                Err(_) => Ok(EntityTarget::Nil),
-            }
+        EntityKind::Redirect => match target_str.parse() {
+            Ok(url) => Ok(EntityTarget::Url(url)),
+            Err(_) => Ok(EntityTarget::Nil),
         },
-        EntityKind::WordPress => {
-            Ok(EntityTarget::String(target_str.to_string()))
+        EntityKind::WordPress => Ok(EntityTarget::String(target_str.to_string())),
+        EntityKind::RawHtml
+        | EntityKind::DressedHtml
+        | EntityKind::Wysiwyg
+        | EntityKind::PageBuilder
+        | EntityKind::Form
+        | EntityKind::Project
+        | EntityKind::Event => match target_str.parse() {
+            Ok(ulid) => Ok(EntityTarget::Ulid(ulid)),
+            Err(_) => Ok(EntityTarget::Nil),
         },
-        EntityKind::RawHtml | EntityKind::DressedHtml | EntityKind::Wysiwyg | EntityKind::PageBuilder |
-        EntityKind::Form | EntityKind::Project | EntityKind::Event => {
-            match target_str.parse() {
-                Ok(ulid) => Ok(EntityTarget::Ulid(ulid)),
-                Err(_) => Ok(EntityTarget::Nil),
-            }
-        },
-        EntityKind::Placeholder => {
-            Ok(EntityTarget::Nil)
-        },
+        EntityKind::Placeholder => Ok(EntityTarget::Nil),
     }
 }
 
@@ -7705,8 +7910,10 @@ async fn create_entity_with_info(entity: &Entity) -> Result<EntityWithInfo, anyh
             .fetch_optional(db())
             .await?;
 
-            result.map(|row| row.name).or(Some("Project not found".to_string()))
-        },
+            result
+                .map(|row| row.name)
+                .or(Some("Project not found".to_string()))
+        }
         (EntityKind::Event, EntityTarget::Ulid(ulid)) => {
             // Fetch only name from events table
             let ulid_str = ulid.to_string();
@@ -7717,23 +7924,22 @@ async fn create_entity_with_info(entity: &Entity) -> Result<EntityWithInfo, anyh
             .fetch_optional(db())
             .await?;
 
-            result.map(|row| row.name).or(Some("Event not found".to_string()))
-        },
-        (EntityKind::Redirect, EntityTarget::Url(url)) => {
-            Some(url.to_string())
-        },
-        (EntityKind::WordPress, EntityTarget::String(s)) => {
-            Some(format!("WordPress: {}", s))
-        },
-        (EntityKind::RawHtml | EntityKind::DressedHtml | EntityKind::Wysiwyg | EntityKind::PageBuilder | EntityKind::Form, _) => {
-            Some("Static content".to_string())
-        },
-        (_, EntityTarget::Nil) => {
-            None
-        },
-        _ => {
-            Some("Invalid target type".to_string())
+            result
+                .map(|row| row.name)
+                .or(Some("Event not found".to_string()))
         }
+        (EntityKind::Redirect, EntityTarget::Url(url)) => Some(url.to_string()),
+        (EntityKind::WordPress, EntityTarget::String(s)) => Some(format!("WordPress: {}", s)),
+        (
+            EntityKind::RawHtml
+            | EntityKind::DressedHtml
+            | EntityKind::Wysiwyg
+            | EntityKind::PageBuilder
+            | EntityKind::Form,
+            _,
+        ) => Some("Static content".to_string()),
+        (_, EntityTarget::Nil) => None,
+        _ => Some("Invalid target type".to_string()),
     };
 
     Ok(EntityWithInfo {
@@ -7798,7 +8004,8 @@ async fn wysiwyg_list(
         search: None,
         page: Some(1),
         per_page: Some(25),
-    }).await?;
+    })
+    .await?;
 
     let content = format!(r#"<div id="wysiwyg-content">{}</div>"#, search_results);
 
@@ -7997,23 +8204,32 @@ async fn pagecontent_create(
                         search: None,
                         page: Some(1),
                         per_page: Some(25),
-                    }).await?;
+                    })
+                    .await?;
                     (content, "wysiwyg-content")
                 }
                 crate::pagecontent::PageContentKind::DressedHtml => {
-                    let content = html_search_impl("DressedHtml", &HtmlSearchQuery {
-                        search: None,
-                        page: Some(1),
-                        per_page: Some(25),
-                    }).await?;
+                    let content = html_search_impl(
+                        "DressedHtml",
+                        &HtmlSearchQuery {
+                            search: None,
+                            page: Some(1),
+                            per_page: Some(25),
+                        },
+                    )
+                    .await?;
                     (content, "dressed-html-content")
                 }
                 crate::pagecontent::PageContentKind::RawHtml => {
-                    let content = html_search_impl("RawHtml", &HtmlSearchQuery {
-                        search: None,
-                        page: Some(1),
-                        per_page: Some(25),
-                    }).await?;
+                    let content = html_search_impl(
+                        "RawHtml",
+                        &HtmlSearchQuery {
+                            search: None,
+                            page: Some(1),
+                            per_page: Some(25),
+                        },
+                    )
+                    .await?;
                     (content, "raw-html-content")
                 }
                 _ => return Err(anyhow::anyhow!("Unsupported page content kind")),
@@ -8210,7 +8426,8 @@ async fn pagecontent_delete(
             search: None,
             page: Some(1),
             per_page: Some(25),
-        }).await?;
+        })
+        .await?;
         format!(
             r#"<div id="wysiwyg-content" hx-swap-oob="innerHTML">{}</div>"#,
             content
@@ -8268,11 +8485,15 @@ async fn dressed_html_list(
 ) -> Result<poem::Response, anyhow::Error> {
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
 
-    let search_results = html_search_impl("DressedHtml", &HtmlSearchQuery {
-        search: None,
-        page: Some(1),
-        per_page: Some(25),
-    }).await?;
+    let search_results = html_search_impl(
+        "DressedHtml",
+        &HtmlSearchQuery {
+            search: None,
+            page: Some(1),
+            per_page: Some(25),
+        },
+    )
+    .await?;
 
     let content = format!(r#"<div id="dressed-html-content">{}</div>"#, search_results);
 
@@ -8385,7 +8606,8 @@ async fn html_search_impl(kind: &str, query: &HtmlSearchQuery) -> Result<String,
             page,
             per_page,
             total_count,
-        }.render_once()?
+        }
+        .render_once()?
     } else {
         RawHtmlContentTemplate {
             items,
@@ -8393,7 +8615,8 @@ async fn html_search_impl(kind: &str, query: &HtmlSearchQuery) -> Result<String,
             page,
             per_page,
             total_count,
-        }.render_once()?
+        }
+        .render_once()?
     };
 
     Ok(content)
@@ -8483,14 +8706,9 @@ async fn dressed_html_update(
 
     // Log the activity
     if let Some(user_info) = &user_info {
-        let _ = common::service::log_activity(
-            None,
-            "dressedhtml-edit",
-            user_info.user_id,
-            id,
-            None,
-        )
-        .await;
+        let _ =
+            common::service::log_activity(None, "dressedhtml-edit", user_info.user_id, id, None)
+                .await;
     }
 
     // Redirect back to list page
@@ -8520,14 +8738,9 @@ async fn dressed_html_delete(
 
     // Log the activity
     if let Some(user_info) = &user_info {
-        let _ = common::service::log_activity(
-            None,
-            "dressedhtml-delete",
-            user_info.user_id,
-            id,
-            None,
-        )
-        .await;
+        let _ =
+            common::service::log_activity(None, "dressedhtml-delete", user_info.user_id, id, None)
+                .await;
     }
 
     // Check if there are any items left
@@ -8540,11 +8753,15 @@ async fn dressed_html_delete(
 
     let html = if !exists {
         // If no items left, return OOB swap with empty state
-        let content = html_search_impl("DressedHtml", &HtmlSearchQuery {
-            search: None,
-            page: Some(1),
-            per_page: Some(25),
-        }).await?;
+        let content = html_search_impl(
+            "DressedHtml",
+            &HtmlSearchQuery {
+                search: None,
+                page: Some(1),
+                per_page: Some(25),
+            },
+        )
+        .await?;
         format!(
             r#"<div id="dressed-html-content" hx-swap-oob="innerHTML">{}</div>"#,
             content
@@ -8587,11 +8804,15 @@ async fn raw_html_list(
 ) -> Result<poem::Response, anyhow::Error> {
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
 
-    let search_results = html_search_impl("RawHtml", &HtmlSearchQuery {
-        search: None,
-        page: Some(1),
-        per_page: Some(25),
-    }).await?;
+    let search_results = html_search_impl(
+        "RawHtml",
+        &HtmlSearchQuery {
+            search: None,
+            page: Some(1),
+            per_page: Some(25),
+        },
+    )
+    .await?;
 
     let content = format!(r#"<div id="raw-html-content">{}</div>"#, search_results);
 
@@ -8697,14 +8918,8 @@ async fn raw_html_update(
 
     // Log the activity
     if let Some(user_info) = &user_info {
-        let _ = common::service::log_activity(
-            None,
-            "rawhtml-edit",
-            user_info.user_id,
-            id,
-            None,
-        )
-        .await;
+        let _ =
+            common::service::log_activity(None, "rawhtml-edit", user_info.user_id, id, None).await;
     }
 
     // Redirect back to list page
@@ -8734,14 +8949,8 @@ async fn raw_html_delete(
 
     // Log the activity
     if let Some(user_info) = &user_info {
-        let _ = common::service::log_activity(
-            None,
-            "rawhtml-delete",
-            user_info.user_id,
-            id,
-            None,
-        )
-        .await;
+        let _ = common::service::log_activity(None, "rawhtml-delete", user_info.user_id, id, None)
+            .await;
     }
 
     // Check if there are any items left
@@ -8754,11 +8963,15 @@ async fn raw_html_delete(
 
     let html = if !exists {
         // If no items left, return OOB swap with empty state
-        let content = html_search_impl("RawHtml", &HtmlSearchQuery {
-            search: None,
-            page: Some(1),
-            per_page: Some(25),
-        }).await?;
+        let content = html_search_impl(
+            "RawHtml",
+            &HtmlSearchQuery {
+                search: None,
+                page: Some(1),
+                per_page: Some(25),
+            },
+        )
+        .await?;
         format!(
             r#"<div id="raw-html-content" hx-swap-oob="innerHTML">{}</div>"#,
             content
@@ -8863,7 +9076,8 @@ async fn schedules_list(
     let search_results = schedules_search_impl(&SchedulesSearchQuery {
         search: None,
         page: Some(1),
-    }).await?;
+    })
+    .await?;
 
     let content = format!(r#"<div id="schedules-content">{}</div>"#, search_results);
 
@@ -8947,30 +9161,30 @@ async fn schedules_search_impl(query: &SchedulesSearchQuery) -> Result<String, a
         .await?
     };
 
-    let items = items_raw.into_iter().map(|row| -> Result<_, anyhow::Error> {
-        Ok(crate::schedule::Schedule {
-            schedule_id: row.schedule_id.parse()?,
-            schedule_type: row.schedule_type.parse()?,
-            target_type: row.target_type.as_deref().map(|s| s.parse()).transpose()?,
-            target: row.target,
-            featured_entity: row.featured_entity,
-            title: row.title,
-            content: row.content,
-            url: row.url,
-            start_date: row.start_date,
-            end_date: row.end_date,
-            active: row.active != 0,
+    let items = items_raw
+        .into_iter()
+        .map(|row| -> Result<_, anyhow::Error> {
+            Ok(crate::schedule::Schedule {
+                schedule_id: row.schedule_id.parse()?,
+                schedule_type: row.schedule_type.parse()?,
+                target_type: row.target_type.as_deref().map(|s| s.parse()).transpose()?,
+                target: row.target,
+                featured_entity: row.featured_entity,
+                title: row.title,
+                content: row.content,
+                url: row.url,
+                start_date: row.start_date,
+                end_date: row.end_date,
+                active: row.active != 0,
+            })
         })
-    }).collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<_>, _>>()?;
 
     let total_count: i64 = if let Some(ref search) = query.search {
         let pattern = format!("%{}%", search);
-        sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM schedules WHERE title LIKE ?",
-            pattern
-        )
-        .fetch_one(db())
-        .await?
+        sqlx::query_scalar!("SELECT COUNT(*) FROM schedules WHERE title LIKE ?", pattern)
+            .fetch_one(db())
+            .await?
     } else {
         sqlx::query_scalar!("SELECT COUNT(*) FROM schedules")
             .fetch_one(db())
@@ -9026,8 +9240,8 @@ async fn schedules_create(
     Form(form): Form<CreateScheduleForm>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    use crate::schedule::{Schedule, ScheduleType, TargetType};
     use crate::peering::LoadStorePeered;
+    use crate::schedule::{Schedule, ScheduleType, TargetType};
 
     match (async || -> Result<Ulid, anyhow::Error> {
         if form.title.trim().is_empty() {
@@ -9035,15 +9249,26 @@ async fn schedules_create(
         }
 
         let schedule_type: ScheduleType = form.schedule_type.parse()?;
-        let target_type: Option<TargetType> = form.target_type
+        let target_type: Option<TargetType> = form
+            .target_type
             .as_ref()
-            .and_then(|t| if t.is_empty() { None } else { Some(t.parse().ok()) })
+            .and_then(|t| {
+                if t.is_empty() {
+                    None
+                } else {
+                    Some(t.parse().ok())
+                }
+            })
             .flatten();
 
-        let target = form.target.as_ref()
+        let target = form
+            .target
+            .as_ref()
             .and_then(|t| if t.is_empty() { None } else { Some(t.clone()) });
 
-        let featured_entity = form.featured_entity.as_ref()
+        let featured_entity = form
+            .featured_entity
+            .as_ref()
             .and_then(|t| if t.is_empty() { None } else { Some(t.clone()) });
 
         let mut schedule = Schedule::new(
@@ -9087,7 +9312,8 @@ async fn schedules_create(
             let content = schedules_search_impl(&SchedulesSearchQuery {
                 search: None,
                 page: Some(1),
-            }).await?;
+            })
+            .await?;
 
             let html = format!(
                 r#"<div id="schedules-content" hx-swap-oob="innerHTML">{}</div>"#,
@@ -9164,8 +9390,8 @@ async fn schedules_update(
     Form(form): Form<UpdateScheduleForm>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    use crate::schedule::{Schedule, ScheduleType, TargetType};
     use crate::peering::LoadStorePeered;
+    use crate::schedule::{Schedule, ScheduleType, TargetType};
 
     let schedule_id: Ulid = id_str.parse()?;
 
@@ -9175,15 +9401,26 @@ async fn schedules_update(
         }
 
         let schedule_type: ScheduleType = form.schedule_type.parse()?;
-        let target_type: Option<TargetType> = form.target_type
+        let target_type: Option<TargetType> = form
+            .target_type
             .as_ref()
-            .and_then(|t| if t.is_empty() { None } else { Some(t.parse().ok()) })
+            .and_then(|t| {
+                if t.is_empty() {
+                    None
+                } else {
+                    Some(t.parse().ok())
+                }
+            })
             .flatten();
 
-        let target = form.target.as_ref()
+        let target = form
+            .target
+            .as_ref()
             .and_then(|t| if t.is_empty() { None } else { Some(t.clone()) });
 
-        let featured_entity = form.featured_entity.as_ref()
+        let featured_entity = form
+            .featured_entity
+            .as_ref()
             .and_then(|t| if t.is_empty() { None } else { Some(t.clone()) });
 
         let active = form.active.is_some();
@@ -9266,7 +9503,9 @@ async fn schedules_delete(
 
     // Log the activity
     if let Some(user_info) = &user_info {
-        let extra = schedule.as_ref().map(|s| format!("type={} title={}", s.schedule_type, s.title));
+        let extra = schedule
+            .as_ref()
+            .map(|s| format!("type={} title={}", s.schedule_type, s.title));
         common::service::log_activity(
             None,
             "schedule-delete",
@@ -9278,18 +9517,18 @@ async fn schedules_delete(
     }
 
     // Check if there are any schedules left
-    let exists: bool = sqlx::query_scalar!(
-        r#"SELECT EXISTS(SELECT 1 FROM schedules) as "exists: bool""#
-    )
-    .fetch_one(db())
-    .await?;
+    let exists: bool =
+        sqlx::query_scalar!(r#"SELECT EXISTS(SELECT 1 FROM schedules) as "exists: bool""#)
+            .fetch_one(db())
+            .await?;
 
     let html = if !exists {
         // If no items left, return OOB swap with empty state
         let content = schedules_search_impl(&SchedulesSearchQuery {
             search: None,
             page: Some(1),
-        }).await?;
+        })
+        .await?;
         format!(
             r#"<div id="schedules-content" hx-swap-oob="outerHTML">{}</div>"#,
             content
@@ -9457,14 +9696,13 @@ async fn email_stored_new(
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     // Fetch available datasets
-    let datasets_response = common::service::request::<common::message::email::ListDatasetsResponse>(
-        "emailer.datasets.list",
-        common::message::email::ListDatasetsRequest {},
-    )
-    .await
-    .unwrap_or(common::message::email::ListDatasetsResponse {
-        datasets: vec![],
-    });
+    let datasets_response =
+        common::service::request::<common::message::email::ListDatasetsResponse>(
+            "emailer.datasets.list",
+            common::message::email::ListDatasetsRequest {},
+        )
+        .await
+        .unwrap_or(common::message::email::ListDatasetsResponse { datasets: vec![] });
 
     let content = NewStoredEmailPage {
         error_message: None,
@@ -9513,14 +9751,13 @@ async fn email_stored_create(
             .finish()),
         Err(e) => {
             // Re-fetch datasets for error display
-            let datasets_response = common::service::request::<common::message::email::ListDatasetsResponse>(
-                "emailer.datasets.list",
-                common::message::email::ListDatasetsRequest {},
-            )
-            .await
-            .unwrap_or(common::message::email::ListDatasetsResponse {
-                datasets: vec![],
-            });
+            let datasets_response =
+                common::service::request::<common::message::email::ListDatasetsResponse>(
+                    "emailer.datasets.list",
+                    common::message::email::ListDatasetsRequest {},
+                )
+                .await
+                .unwrap_or(common::message::email::ListDatasetsResponse { datasets: vec![] });
 
             let content = NewStoredEmailPage {
                 error_message: Some(format!("Failed to create stored email: {}", e)),
@@ -9561,14 +9798,13 @@ async fn email_stored_edit(
     let request = common::message::email::GetStoredEmailRequest { stored_email_id };
 
     // Fetch datasets
-    let datasets_response = common::service::request::<common::message::email::ListDatasetsResponse>(
-        "emailer.datasets.list",
-        common::message::email::ListDatasetsRequest {},
-    )
-    .await
-    .unwrap_or(common::message::email::ListDatasetsResponse {
-        datasets: vec![],
-    });
+    let datasets_response =
+        common::service::request::<common::message::email::ListDatasetsResponse>(
+            "emailer.datasets.list",
+            common::message::email::ListDatasetsRequest {},
+        )
+        .await
+        .unwrap_or(common::message::email::ListDatasetsResponse { datasets: vec![] });
 
     match common::service::request::<common::message::email::GetStoredEmailResponse>(
         "emailer.stored.get",
@@ -9676,12 +9912,11 @@ async fn email_stored_send(
         .map_err(|_| anyhow::anyhow!("Invalid stored email ID format"))?;
 
     // Get the email template
-    let email_response: common::message::email::GetStoredEmailResponse =
-        common::service::request(
-            "emailer.stored.get",
-            common::message::email::GetStoredEmailRequest { stored_email_id },
-        )
-        .await?;
+    let email_response: common::message::email::GetStoredEmailResponse = common::service::request(
+        "emailer.stored.get",
+        common::message::email::GetStoredEmailRequest { stored_email_id },
+    )
+    .await?;
 
     // Build recipients from parallel arrays
     if form.recipient_types.len() != form.recipient_values.len() {
@@ -9693,11 +9928,16 @@ async fn email_stored_send(
     }
 
     let mut recipients = Vec::new();
-    for (recipient_type, recipient_value) in form.recipient_types.iter().zip(form.recipient_values.iter()) {
+    for (recipient_type, recipient_value) in form
+        .recipient_types
+        .iter()
+        .zip(form.recipient_values.iter())
+    {
         let recipient = match recipient_type.as_str() {
             "Email" => common::message::email::EmailRecipient::Email(recipient_value.clone()),
             "User" => {
-                let user_id = recipient_value.parse::<ulid::Ulid>()
+                let user_id = recipient_value
+                    .parse::<ulid::Ulid>()
                     .map_err(|_| anyhow::anyhow!("Invalid user ID"))?;
                 common::message::email::EmailRecipient::UserId(user_id)
             }
@@ -9747,14 +9987,13 @@ async fn email_oneoff_new(
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     // Fetch available datasets
-    let datasets_response = common::service::request::<common::message::email::ListDatasetsResponse>(
-        "emailer.datasets.list",
-        common::message::email::ListDatasetsRequest {},
-    )
-    .await
-    .unwrap_or(common::message::email::ListDatasetsResponse {
-        datasets: vec![],
-    });
+    let datasets_response =
+        common::service::request::<common::message::email::ListDatasetsResponse>(
+            "emailer.datasets.list",
+            common::message::email::ListDatasetsRequest {},
+        )
+        .await
+        .unwrap_or(common::message::email::ListDatasetsResponse { datasets: vec![] });
 
     let content = NewOneoffEmailPage {
         error_message: None,
@@ -9801,14 +10040,13 @@ async fn email_oneoff_create(
             .finish()),
         Err(e) => {
             // Re-fetch datasets for error display
-            let datasets_response = common::service::request::<common::message::email::ListDatasetsResponse>(
-                "emailer.datasets.list",
-                common::message::email::ListDatasetsRequest {},
-            )
-            .await
-            .unwrap_or(common::message::email::ListDatasetsResponse {
-                datasets: vec![],
-            });
+            let datasets_response =
+                common::service::request::<common::message::email::ListDatasetsResponse>(
+                    "emailer.datasets.list",
+                    common::message::email::ListDatasetsRequest {},
+                )
+                .await
+                .unwrap_or(common::message::email::ListDatasetsResponse { datasets: vec![] });
 
             let content = NewOneoffEmailPage {
                 error_message: Some(format!("Failed to create one-off email: {}", e)),
@@ -9849,14 +10087,13 @@ async fn email_oneoff_edit(
     let request = common::message::email::GetOneoffEmailRequest { oneoff_email_id };
 
     // Fetch datasets
-    let datasets_response = common::service::request::<common::message::email::ListDatasetsResponse>(
-        "emailer.datasets.list",
-        common::message::email::ListDatasetsRequest {},
-    )
-    .await
-    .unwrap_or(common::message::email::ListDatasetsResponse {
-        datasets: vec![],
-    });
+    let datasets_response =
+        common::service::request::<common::message::email::ListDatasetsResponse>(
+            "emailer.datasets.list",
+            common::message::email::ListDatasetsRequest {},
+        )
+        .await
+        .unwrap_or(common::message::email::ListDatasetsResponse { datasets: vec![] });
 
     match common::service::request::<common::message::email::GetOneoffEmailResponse>(
         "emailer.oneoff.get",
@@ -9992,12 +10229,11 @@ async fn email_oneoff_send(
         .map_err(|_| anyhow::anyhow!("Invalid oneoff email ID format"))?;
 
     // Get the email template
-    let email_response: common::message::email::GetOneoffEmailResponse =
-        common::service::request(
-            "emailer.oneoff.get",
-            common::message::email::GetOneoffEmailRequest { oneoff_email_id },
-        )
-        .await?;
+    let email_response: common::message::email::GetOneoffEmailResponse = common::service::request(
+        "emailer.oneoff.get",
+        common::message::email::GetOneoffEmailRequest { oneoff_email_id },
+    )
+    .await?;
 
     // Build recipients from parallel arrays
     if form.recipient_types.len() != form.recipient_values.len() {
@@ -10009,11 +10245,16 @@ async fn email_oneoff_send(
     }
 
     let mut recipients = Vec::new();
-    for (recipient_type, recipient_value) in form.recipient_types.iter().zip(form.recipient_values.iter()) {
+    for (recipient_type, recipient_value) in form
+        .recipient_types
+        .iter()
+        .zip(form.recipient_values.iter())
+    {
         let recipient = match recipient_type.as_str() {
             "Email" => common::message::email::EmailRecipient::Email(recipient_value.clone()),
             "User" => {
-                let user_id = recipient_value.parse::<ulid::Ulid>()
+                let user_id = recipient_value
+                    .parse::<ulid::Ulid>()
                     .map_err(|_| anyhow::anyhow!("Invalid user ID"))?;
                 common::message::email::EmailRecipient::UserId(user_id)
             }
@@ -10077,17 +10318,19 @@ pub struct TriggerList {
 pub struct EditTriggerModal {
     pub trigger: common::message::email::TriggerInfo,
     pub available_trigger_events: Vec<(String, String, String)>, // (name, description, category)
-    pub stored_email: Option<(String, String)>, // (slug, subject)
+    pub stored_email: Option<(String, String)>,                  // (slug, subject)
 }
 
 #[handler]
 async fn email_triggers(
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    use common::message::email::{GetStoredEmailRequest, GetStoredEmailResponse, ListTriggersRequest, ListTriggersResponse};
+    use common::message::email::{
+        GetStoredEmailRequest, GetStoredEmailResponse, ListTriggersRequest, ListTriggersResponse,
+    };
     use common::service::{TriggerEvent, request};
-    use strum::IntoEnumIterator;
     use std::collections::HashMap;
+    use strum::IntoEnumIterator;
 
     // Get all configured triggers
     let triggers_response: ListTriggersResponse = request(
@@ -10224,7 +10467,10 @@ async fn email_trigger_create(
     Form(form): Form<CreateTriggerForm>,
     Authenticated(_user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    use common::message::email::{CreateTriggerRequest, CreateTriggerResponse, GetStoredEmailRequest, GetStoredEmailResponse, ListTriggersRequest, ListTriggersResponse, TriggerActionType};
+    use common::message::email::{
+        CreateTriggerRequest, CreateTriggerResponse, GetStoredEmailRequest, GetStoredEmailResponse,
+        ListTriggersRequest, ListTriggersResponse, TriggerActionType,
+    };
     use common::service::request;
     use std::collections::HashMap;
 
@@ -10246,9 +10492,7 @@ async fn email_trigger_create(
         None
     };
 
-    let cancellation_trigger_name = form
-        .cancellation_trigger_name
-        .filter(|s| !s.is_empty());
+    let cancellation_trigger_name = form.cancellation_trigger_name.filter(|s| !s.is_empty());
 
     let create_request = CreateTriggerRequest {
         trigger_name: form.trigger_name,
@@ -10258,7 +10502,8 @@ async fn email_trigger_create(
         cancellation_trigger_name,
     };
 
-    let _response: CreateTriggerResponse = request("emailer.triggers.create", create_request).await?;
+    let _response: CreateTriggerResponse =
+        request("emailer.triggers.create", create_request).await?;
 
     // Fetch updated triggers list
     let triggers_response: ListTriggersResponse = request(
@@ -10295,8 +10540,7 @@ async fn email_trigger_create(
 
     Ok(poem::Response::builder()
         .content_type("text/html")
-        .body(list.render_once()?)
-    )
+        .body(list.render_once()?))
 }
 
 // Get edit trigger form
@@ -10305,7 +10549,9 @@ async fn email_trigger_edit(
     Path(id): Path<String>,
     Authenticated(_user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    use common::message::email::{GetStoredEmailRequest, GetStoredEmailResponse, GetTriggerRequest, GetTriggerResponse};
+    use common::message::email::{
+        GetStoredEmailRequest, GetStoredEmailResponse, GetTriggerRequest, GetTriggerResponse,
+    };
     use common::service::{TriggerEvent, request};
     use strum::IntoEnumIterator;
 
@@ -10314,11 +10560,8 @@ async fn email_trigger_edit(
         .map_err(|_| anyhow::anyhow!("Invalid trigger ID"))?;
 
     // Fetch the trigger
-    let trigger_response: GetTriggerResponse = request(
-        "emailer.triggers.get",
-        GetTriggerRequest { trigger_id },
-    )
-    .await?;
+    let trigger_response: GetTriggerResponse =
+        request("emailer.triggers.get", GetTriggerRequest { trigger_id }).await?;
 
     let trigger = trigger_response.trigger;
 
@@ -10356,8 +10599,7 @@ async fn email_trigger_edit(
 
     Ok(poem::Response::builder()
         .content_type("text/html")
-        .body(modal.render_once()?)
-    )
+        .body(modal.render_once()?))
 }
 
 // Update email trigger
@@ -10376,7 +10618,10 @@ async fn email_trigger_update(
     Form(form): Form<UpdateTriggerForm>,
     Authenticated(_user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    use common::message::email::{GetStoredEmailRequest, GetStoredEmailResponse, GetTriggerRequest, GetTriggerResponse, UpdateTriggerRequest, UpdateTriggerResponse, TriggerActionType};
+    use common::message::email::{
+        GetStoredEmailRequest, GetStoredEmailResponse, GetTriggerRequest, GetTriggerResponse,
+        TriggerActionType, UpdateTriggerRequest, UpdateTriggerResponse,
+    };
     use common::service::request;
 
     let trigger_id = match id.parse::<ulid::Ulid>() {
@@ -10411,13 +10656,9 @@ async fn email_trigger_update(
         .action_type
         .and_then(|s| TriggerActionType::from_str(&s));
 
-    let delay_seconds = form
-        .delay_seconds
-        .and_then(|s| s.parse::<i64>().ok());
+    let delay_seconds = form.delay_seconds.and_then(|s| s.parse::<i64>().ok());
 
-    let cancellation_trigger_name = form
-        .cancellation_trigger_name
-        .filter(|s| !s.is_empty());
+    let cancellation_trigger_name = form.cancellation_trigger_name.filter(|s| !s.is_empty());
 
     let active = form.active.map(|s| s == "true" || s == "1");
 
@@ -10430,7 +10671,8 @@ async fn email_trigger_update(
         active,
     };
 
-    let update_result: Result<UpdateTriggerResponse, _> = request("emailer.triggers.update", update_request).await;
+    let update_result: Result<UpdateTriggerResponse, _> =
+        request("emailer.triggers.update", update_request).await;
 
     if let Err(err) = update_result {
         return Ok(poem::Response::builder()
@@ -10439,11 +10681,8 @@ async fn email_trigger_update(
     }
 
     // Fetch the updated trigger to return the row HTML
-    let trigger_response: GetTriggerResponse = request(
-        "emailer.triggers.get",
-        GetTriggerRequest { trigger_id },
-    )
-    .await?;
+    let trigger_response: GetTriggerResponse =
+        request("emailer.triggers.get", GetTriggerRequest { trigger_id }).await?;
 
     let trigger = trigger_response.trigger;
 
@@ -10470,7 +10709,10 @@ async fn email_trigger_update(
     let row_html = row.render_once()?;
     let row_with_oob = row_html.replace(
         &format!(r#"id="trigger-row-{}""#, trigger.trigger_id),
-        &format!(r#"id="trigger-row-{}" hx-swap-oob="true""#, trigger.trigger_id)
+        &format!(
+            r#"id="trigger-row-{}" hx-swap-oob="true""#,
+            trigger.trigger_id
+        ),
     );
 
     let body = format!(
@@ -10496,8 +10738,11 @@ async fn email_trigger_delete(
         .parse::<ulid::Ulid>()
         .map_err(|_| anyhow::anyhow!("Invalid trigger ID"))?;
 
-    let _response: DeleteTriggerResponse =
-        request("emailer.triggers.delete", DeleteTriggerRequest { trigger_id }).await?;
+    let _response: DeleteTriggerResponse = request(
+        "emailer.triggers.delete",
+        DeleteTriggerRequest { trigger_id },
+    )
+    .await?;
 
     // Return empty response - HTMX will delete the row with hx-swap="delete"
     Ok(poem::Response::builder()
@@ -10607,11 +10852,12 @@ impl<'a, T: serde::de::DeserializeOwned> FromRequest<'a> for QsForm<T> {
     async fn from_request(_req: &'a Request, body: &mut RequestBody) -> PoemResult<Self> {
         let data = body.take()?.into_vec().await?;
         let config = serde_qs::Config::new(10, false); // max_depth=10, strict=false
-        let form = config.deserialize_bytes(&data)
-            .map_err(|e| poem::Error::from_string(
+        let form = config.deserialize_bytes(&data).map_err(|e| {
+            poem::Error::from_string(
                 format!("Failed to parse form data: {}", e),
-                poem::http::StatusCode::BAD_REQUEST
-            ))?;
+                poem::http::StatusCode::BAD_REQUEST,
+            )
+        })?;
         Ok(QsForm(form))
     }
 }
@@ -10642,10 +10888,9 @@ async fn email_merge_fields(
             dataset_name: dataset_name.clone(),
         };
 
-        if let Ok(response) = common::service::request::<common::message::email::GetDatasetVariablesResponse>(
-            "emailer.datasets.variables",
-            request,
-        )
+        if let Ok(response) = common::service::request::<
+            common::message::email::GetDatasetVariablesResponse,
+        >("emailer.datasets.variables", request)
         .await
         {
             all_fields.extend(response.variables);
@@ -11048,7 +11293,10 @@ async fn user_sets_edit(
 
             for criterion in &response.criteria {
                 match &criterion.criterion {
-                    common::message::user::UserSetCriterion::AffiliateParticipation { affiliate_id, .. } => {
+                    common::message::user::UserSetCriterion::AffiliateParticipation {
+                        affiliate_id,
+                        ..
+                    } => {
                         project_ids.push(*affiliate_id);
                     }
                     common::message::user::UserSetCriterion::ExplicitList { user_ids: ids } => {
@@ -11060,20 +11308,26 @@ async fn user_sets_edit(
 
             // Look up project names and user emails
             let project_name_list = if !project_ids.is_empty() {
-                autocomplete::resolve_project_names(project_ids).await.unwrap_or_default()
+                autocomplete::resolve_project_names(project_ids)
+                    .await
+                    .unwrap_or_default()
             } else {
                 vec![]
             };
 
             let user_email_list = if !user_ids.is_empty() {
-                autocomplete::resolve_user_names(user_ids).await.unwrap_or_default()
+                autocomplete::resolve_user_names(user_ids)
+                    .await
+                    .unwrap_or_default()
             } else {
                 vec![]
             };
 
             // Convert to HashMaps for easy lookup
-            let project_names: std::collections::HashMap<Ulid, String> = project_name_list.into_iter().collect();
-            let user_emails: std::collections::HashMap<Ulid, String> = user_email_list.into_iter().collect();
+            let project_names: std::collections::HashMap<Ulid, String> =
+                project_name_list.into_iter().collect();
+            let user_emails: std::collections::HashMap<Ulid, String> =
+                user_email_list.into_iter().collect();
 
             let content = EditUserSetPage {
                 slug: response.slug,
@@ -11209,41 +11463,31 @@ async fn user_sets_criterion_fields(
         .map_err(|_| anyhow::anyhow!("Invalid criterion type: {}", query.criterion_type))?;
 
     let html = match criterion_type {
-        UserSetCriterionType::HasTag => {
-            HasTagCriterionFields.render_once()?
-        },
-        UserSetCriterionType::HasPointInRegion => {
-            HasPointInRegionCriterionFields.render_once()?
-        },
+        UserSetCriterionType::HasTag => HasTagCriterionFields.render_once()?,
+        UserSetCriterionType::HasPointInRegion => HasPointInRegionCriterionFields.render_once()?,
         UserSetCriterionType::AffiliateParticipation => {
             let widget = autocomplete::EntityAutocomplete::new_project_selector(
                 "affiliate_id",
                 "Affiliate Project",
-                "Search for project..."
+                "Search for project...",
             );
             AffiliateParticipationCriterionFields { widget }.render_once()?
-        },
-        UserSetCriterionType::IsPageManager => {
-            IsPageManagerCriterionFields.render_once()?
-        },
-        UserSetCriterionType::IsStaff => {
-            IsStaffCriterionFields.render_once()?
-        },
-        UserSetCriterionType::IsVerified => {
-            IsVerifiedCriterionFields.render_once()?
-        },
+        }
+        UserSetCriterionType::IsPageManager => IsPageManagerCriterionFields.render_once()?,
+        UserSetCriterionType::IsStaff => IsStaffCriterionFields.render_once()?,
+        UserSetCriterionType::IsVerified => IsVerifiedCriterionFields.render_once()?,
         UserSetCriterionType::ExplicitList => {
             let widget = autocomplete::EntityAutocomplete::new_user_selector(
                 "new_user_id",
                 "",
-                "Search for user to add..."
+                "Search for user to add...",
             );
             let inner = ExplicitListWidget {
                 user_names: vec![],
                 widget,
             };
             ExplicitListCriterionFields { inner }.render_once()?
-        },
+        }
     };
 
     Ok(poem::Response::builder()
@@ -11263,13 +11507,10 @@ async fn render_explicit_list_widget(user_ids: Vec<Ulid>) -> Result<String, anyh
     let widget = autocomplete::EntityAutocomplete::new_user_selector(
         "new_user_id",
         "",
-        "Search for user to add..."
+        "Search for user to add...",
     );
 
-    let template = ExplicitListWidget {
-        user_names,
-        widget,
-    };
+    let template = ExplicitListWidget { user_names, widget };
 
     Ok(template.render_once()?)
 }
@@ -11372,20 +11613,28 @@ async fn user_sets_add_criterion(
             common::message::user::UserSetCriterion::HasTag { tag }
         }
         UserSetCriterionType::HasPointInRegion => {
-            let geojson = form.geojson.ok_or_else(|| anyhow::anyhow!("Missing geojson"))?;
+            let geojson = form
+                .geojson
+                .ok_or_else(|| anyhow::anyhow!("Missing geojson"))?;
             common::message::user::UserSetCriterion::HasPointInRegion { geojson }
         }
         UserSetCriterionType::AffiliateParticipation => {
-            let affiliate_id_str = form.affiliate_id.ok_or_else(|| anyhow::anyhow!("Missing affiliate_id"))?;
+            let affiliate_id_str = form
+                .affiliate_id
+                .ok_or_else(|| anyhow::anyhow!("Missing affiliate_id"))?;
             let affiliate_id = affiliate_id_str
                 .parse::<Ulid>()
                 .map_err(|e| anyhow::anyhow!("Invalid affiliate_id: {}", e))?;
 
-            let start_str = form.start.ok_or_else(|| anyhow::anyhow!("Missing start date"))?;
+            let start_str = form
+                .start
+                .ok_or_else(|| anyhow::anyhow!("Missing start date"))?;
             let start = TimeString::try_from(start_str)
                 .map_err(|e| anyhow::anyhow!("Invalid start time: {}", e))?;
 
-            let end_str = form.end.ok_or_else(|| anyhow::anyhow!("Missing end date"))?;
+            let end_str = form
+                .end
+                .ok_or_else(|| anyhow::anyhow!("Missing end date"))?;
             let end = TimeString::try_from(end_str)
                 .map_err(|e| anyhow::anyhow!("Invalid end time: {}", e))?;
 
@@ -11395,14 +11644,17 @@ async fn user_sets_add_criterion(
                 end,
             }
         }
-        UserSetCriterionType::IsPageManager => common::message::user::UserSetCriterion::IsPageManager,
+        UserSetCriterionType::IsPageManager => {
+            common::message::user::UserSetCriterion::IsPageManager
+        }
         UserSetCriterionType::IsStaff => common::message::user::UserSetCriterion::IsStaff,
         UserSetCriterionType::IsVerified => common::message::user::UserSetCriterion::IsVerified,
         UserSetCriterionType::ExplicitList => {
             if form.user_ids.is_empty() {
                 return Err(anyhow::anyhow!("Missing user IDs"));
             }
-            let parsed_ids: Result<Vec<Ulid>, _> = form.user_ids.iter().map(|s| s.parse::<Ulid>()).collect();
+            let parsed_ids: Result<Vec<Ulid>, _> =
+                form.user_ids.iter().map(|s| s.parse::<Ulid>()).collect();
             let user_ids = parsed_ids.map_err(|e| anyhow::anyhow!("Invalid ULID: {}", e))?;
 
             common::message::user::UserSetCriterion::ExplicitList { user_ids }
@@ -11411,8 +11663,13 @@ async fn user_sets_add_criterion(
 
     // Parse the operation type
     let operation = form.operation.as_deref().unwrap_or("union");
-    let operation = common::message::user::CriterionOperation::from_str(operation)
-        .map_err(|_| anyhow::anyhow!("Invalid operation: {}", form.operation.as_deref().unwrap_or("unknown")))?;
+    let operation =
+        common::message::user::CriterionOperation::from_str(operation).map_err(|_| {
+            anyhow::anyhow!(
+                "Invalid operation: {}",
+                form.operation.as_deref().unwrap_or("unknown")
+            )
+        })?;
 
     let request = common::message::user::UserSetAddCriterionRequest {
         slug: slug.clone(),
@@ -11447,7 +11704,10 @@ async fn user_sets_add_criterion(
 
     for criterion in &response.criteria {
         match &criterion.criterion {
-            common::message::user::UserSetCriterion::AffiliateParticipation { affiliate_id, .. } => {
+            common::message::user::UserSetCriterion::AffiliateParticipation {
+                affiliate_id,
+                ..
+            } => {
                 project_ids.push(*affiliate_id);
             }
             common::message::user::UserSetCriterion::ExplicitList { user_ids: ids } => {
@@ -11459,20 +11719,26 @@ async fn user_sets_add_criterion(
 
     // Look up project names and user emails
     let project_name_list = if !project_ids.is_empty() {
-        autocomplete::resolve_project_names(project_ids).await.unwrap_or_default()
+        autocomplete::resolve_project_names(project_ids)
+            .await
+            .unwrap_or_default()
     } else {
         vec![]
     };
 
     let user_email_list = if !user_ids.is_empty() {
-        autocomplete::resolve_user_names(user_ids).await.unwrap_or_default()
+        autocomplete::resolve_user_names(user_ids)
+            .await
+            .unwrap_or_default()
     } else {
         vec![]
     };
 
     // Convert to HashMaps for easy lookup
-    let project_names: std::collections::HashMap<Ulid, String> = project_name_list.into_iter().collect();
-    let user_emails: std::collections::HashMap<Ulid, String> = user_email_list.into_iter().collect();
+    let project_names: std::collections::HashMap<Ulid, String> =
+        project_name_list.into_iter().collect();
+    let user_emails: std::collections::HashMap<Ulid, String> =
+        user_email_list.into_iter().collect();
 
     // Render criteria list
     let criteria_list = UserSetCriteriaList {
@@ -11485,41 +11751,31 @@ async fn user_sets_add_criterion(
 
     // Render fresh criterion fields for the same type (OOB swap)
     let fields_html = match criterion_type {
-        UserSetCriterionType::HasTag => {
-            HasTagCriterionFields.render_once()?
-        },
-        UserSetCriterionType::HasPointInRegion => {
-            HasPointInRegionCriterionFields.render_once()?
-        },
+        UserSetCriterionType::HasTag => HasTagCriterionFields.render_once()?,
+        UserSetCriterionType::HasPointInRegion => HasPointInRegionCriterionFields.render_once()?,
         UserSetCriterionType::AffiliateParticipation => {
             let widget = autocomplete::EntityAutocomplete::new_project_selector(
                 "affiliate_id",
                 "Affiliate Project",
-                "Search for project..."
+                "Search for project...",
             );
             AffiliateParticipationCriterionFields { widget }.render_once()?
-        },
-        UserSetCriterionType::IsPageManager => {
-            IsPageManagerCriterionFields.render_once()?
-        },
-        UserSetCriterionType::IsStaff => {
-            IsStaffCriterionFields.render_once()?
-        },
-        UserSetCriterionType::IsVerified => {
-            IsVerifiedCriterionFields.render_once()?
-        },
+        }
+        UserSetCriterionType::IsPageManager => IsPageManagerCriterionFields.render_once()?,
+        UserSetCriterionType::IsStaff => IsStaffCriterionFields.render_once()?,
+        UserSetCriterionType::IsVerified => IsVerifiedCriterionFields.render_once()?,
         UserSetCriterionType::ExplicitList => {
             let widget = autocomplete::EntityAutocomplete::new_user_selector(
                 "new_user_id",
                 "",
-                "Search for user to add..."
+                "Search for user to add...",
             );
             let inner = ExplicitListWidget {
                 user_names: vec![],
                 widget,
             };
             ExplicitListCriterionFields { inner }.render_once()?
-        },
+        }
     };
 
     // Combine with OOB swap
@@ -11574,12 +11830,6 @@ enum RecipientFilterQuery {
     Users,
 }
 
-#[derive(Debug, Deserialize)]
-struct RecipientRemoveQuery {
-    id: String,
-    remaining: Option<u32>,
-}
-
 // Recipient Search API Handlers
 #[handler]
 async fn api_recipient_search(
@@ -11587,9 +11837,7 @@ async fn api_recipient_search(
     Authenticated(_user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     if query.q.trim().len() < 2 {
-        return Ok(poem::Response::builder()
-            .content_type("text/html")
-            .body(""));
+        return Ok(poem::Response::builder().content_type("text/html").body(""));
     }
 
     let request = common::message::user::RecipientSearchRequest {
@@ -11641,17 +11889,26 @@ async fn api_recipient_select(
 
     // Build current recipients list
     let mut recipients = Vec::new();
-    for (idx, (recipient_type, recipient_value)) in form.recipient_types.iter().zip(form.recipient_values.iter()).enumerate() {
+    for (idx, (recipient_type, recipient_value)) in form
+        .recipient_types
+        .iter()
+        .zip(form.recipient_values.iter())
+        .enumerate()
+    {
         // Look up display name for existing recipients
         let display = if recipient_type == "User" {
             if let Ok(user_id) = recipient_value.parse::<ulid::Ulid>() {
                 match common::service::request::<common::message::user::UserEmailInfo>(
                     "user.info.email_info",
-                    common::message::user::UserEmailInfoRequest { user_id }
-                ).await {
+                    common::message::user::UserEmailInfoRequest { user_id },
+                )
+                .await
+                {
                     Ok(user) => {
                         if !user.first_name.is_empty() || !user.last_name.is_empty() {
-                            format!("{} {}", user.first_name, user.last_name).trim().to_string()
+                            format!("{} {}", user.first_name, user.last_name)
+                                .trim()
+                                .to_string()
                         } else {
                             user.handle
                         }
@@ -11674,15 +11931,21 @@ async fn api_recipient_select(
     }
 
     // Add new recipient
-    let (display, recipient_type, recipient_value) = if let Ok(user_id) = form.q.parse::<ulid::Ulid>() {
+    let (display, recipient_type, recipient_value) = if let Ok(user_id) =
+        form.q.parse::<ulid::Ulid>()
+    {
         // It's a user ID - look up the user
         match common::service::request::<common::message::user::UserEmailInfo>(
             "user.info.email_info",
-            common::message::user::UserEmailInfoRequest { user_id }
-        ).await {
+            common::message::user::UserEmailInfoRequest { user_id },
+        )
+        .await
+        {
             Ok(user) => {
                 let display_name = if !user.first_name.is_empty() || !user.last_name.is_empty() {
-                    format!("{} {}", user.first_name, user.last_name).trim().to_string()
+                    format!("{} {}", user.first_name, user.last_name)
+                        .trim()
+                        .to_string()
                 } else {
                     user.handle
                 };
@@ -11708,10 +11971,7 @@ async fn api_recipient_select(
     });
 
     // Return the entire form
-    let form_html = GrantBadgeForm {
-        badge,
-        recipients,
-    }.render_once()?;
+    let form_html = GrantBadgeForm { badge, recipients }.render_once()?;
 
     Ok(poem::Response::builder()
         .content_type("text/html")
@@ -11740,7 +12000,12 @@ async fn api_recipient_remove(
     let mut recipients = Vec::new();
     let remove_idx = form.remove_id.parse::<usize>().unwrap_or(usize::MAX);
 
-    for (idx, (recipient_type, recipient_value)) in form.recipient_types.iter().zip(form.recipient_values.iter()).enumerate() {
+    for (idx, (recipient_type, recipient_value)) in form
+        .recipient_types
+        .iter()
+        .zip(form.recipient_values.iter())
+        .enumerate()
+    {
         // Skip the one being removed
         if idx == remove_idx {
             continue;
@@ -11751,11 +12016,15 @@ async fn api_recipient_remove(
             if let Ok(user_id) = recipient_value.parse::<ulid::Ulid>() {
                 match common::service::request::<common::message::user::UserEmailInfo>(
                     "user.info.email_info",
-                    common::message::user::UserEmailInfoRequest { user_id }
-                ).await {
+                    common::message::user::UserEmailInfoRequest { user_id },
+                )
+                .await
+                {
                     Ok(user) => {
                         if !user.first_name.is_empty() || !user.last_name.is_empty() {
-                            format!("{} {}", user.first_name, user.last_name).trim().to_string()
+                            format!("{} {}", user.first_name, user.last_name)
+                                .trim()
+                                .to_string()
                         } else {
                             user.handle
                         }
@@ -11778,10 +12047,7 @@ async fn api_recipient_remove(
     }
 
     // Return the entire form
-    let form_html = GrantBadgeForm {
-        badge,
-        recipients,
-    }.render_once()?;
+    let form_html = GrantBadgeForm { badge, recipients }.render_once()?;
 
     Ok(poem::Response::builder()
         .content_type("text/html")
@@ -11896,12 +12162,13 @@ async fn badges_holders(
         end_item,
     };
 
-    let prepared = crate::component::AdminLayout::new(&format!("{} - Badge Holders", badge.name()), content)
-        .with_sidebar_active("badges")
-        .with_breadcrumb("Badges", Some("/-admin/badges"))
-        .with_breadcrumb(badge.name(), None)
-        .prepare(user_info)
-        .await?;
+    let prepared =
+        crate::component::AdminLayout::new(&format!("{} - Badge Holders", badge.name()), content)
+            .with_sidebar_active("badges")
+            .with_breadcrumb("Badges", Some("/-admin/badges"))
+            .with_breadcrumb(badge.name(), None)
+            .prepare(user_info)
+            .await?;
 
     Ok(poem::Response::builder()
         .content_type("text/html")
@@ -11988,7 +12255,11 @@ async fn badges_grant(
     }
 
     // Grant badge to all selected users
-    for (recipient_type, recipient_value) in form.recipient_types.iter().zip(form.recipient_values.iter()) {
+    for (recipient_type, recipient_value) in form
+        .recipient_types
+        .iter()
+        .zip(form.recipient_values.iter())
+    {
         if recipient_type == "User" {
             let user_id = recipient_value
                 .parse::<Ulid>()
@@ -12019,7 +12290,8 @@ async fn badges_grant(
     let form_html = GrantBadgeForm {
         badge,
         recipients: Vec::new(),
-    }.render_once()?;
+    }
+    .render_once()?;
 
     Ok(poem::Response::builder()
         .content_type("text/html")
@@ -12038,10 +12310,7 @@ async fn badges_revoke(
         .parse::<Ulid>()
         .map_err(|_| anyhow::anyhow!("Invalid user ID format"))?;
 
-    let request = common::message::user::UserAndBadge {
-        user_id,
-        badge,
-    };
+    let request = common::message::user::UserAndBadge { user_id, badge };
 
     common::service::send("user.badges.revoke", request).await?;
 

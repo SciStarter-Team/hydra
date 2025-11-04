@@ -5,22 +5,32 @@ use poem::{
     Route,
     error::InternalServerError,
     handler,
+    http::StatusCode,
     web::{
         Path,
         sse::{self, SSE},
     },
 };
 
-use crate::middleware::authorization::SessionSubject;
+use crate::middleware::authorization::{Authenticated, SessionSubject};
+
+// Re-export common channel functions
+pub use common::channel::{send, send_to_user, Event};
 
 pub fn routes() -> Route {
-    Route::new().at("/:channel", listen)
+    Route::new()
+        .at("/:channel", listen)
+        .at("/me/:channel", listen_by_user)
 }
 
 #[handler]
 #[tracing::instrument]
 pub async fn listen(subject: SessionSubject, Path(channel): Path<String>) -> poem::Result<SSE> {
-    let subject = format!("{}.{}", subject.as_ref(), URL_SAFE_NO_PAD.encode(channel),);
+    let subject = format!(
+        "channel.session.{}.{}",
+        subject.as_ref(),
+        URL_SAFE_NO_PAD.encode(channel),
+    );
 
     let subscription = nats()
         .subscribe(subject)
@@ -29,49 +39,43 @@ pub async fn listen(subject: SessionSubject, Path(channel): Path<String>) -> poe
 
     Ok(SSE::new(
         subscription.map(|msg| match flexbuffers::from_slice::<Event>(&msg.payload) {
-            Ok(evt) => evt.into(),
+            Ok(evt) => event_to_sse(evt),
             Err(err) => sse::Event::message(err.to_string()).event_type("error"),
         }),
     )
     .keep_alive(std::time::Duration::from_secs(300)))
 }
 
-#[tracing::instrument(skip(to_session_subject, to_channel))]
-pub async fn send(
-    to_session_subject: impl AsRef<str>,
-    to_channel: impl AsRef<str>,
-    event: Event,
-) -> Result<(), anyhow::Error> {
+#[handler]
+#[tracing::instrument]
+pub async fn listen_by_user(
+    Authenticated(basic_info): Authenticated,
+    Path(channel): Path<String>,
+) -> poem::Result<SSE> {
+    let Some(basic_info) = basic_info else {
+        return Err(poem::Error::from_status(StatusCode::NOT_FOUND));
+    };
+
     let subject = format!(
-        "{}.{}",
-        to_session_subject.as_ref(),
-        URL_SAFE_NO_PAD.encode(to_channel.as_ref()),
+        "channel.user.{}.{}",
+        basic_info.user_id,
+        URL_SAFE_NO_PAD.encode(channel),
     );
 
-    let body = flexbuffers::to_vec(event)?;
+    let subscription = nats()
+        .subscribe(subject)
+        .await
+        .map_err(InternalServerError)?;
 
-    nats().publish(subject, body.into()).await?;
-
-    Ok(())
+    Ok(SSE::new(
+        subscription.map(|msg| match flexbuffers::from_slice::<Event>(&msg.payload) {
+            Ok(evt) => event_to_sse(evt),
+            Err(err) => sse::Event::message(err.to_string()).event_type("error"),
+        }),
+    )
+    .keep_alive(std::time::Duration::from_secs(300)))
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-pub struct Event {
-    pub event: String,
-    pub data: String,
-}
-
-impl Event {
-    pub fn new(event: impl Into<String>, data: impl Into<String>) -> Self {
-        Event {
-            event: event.into(),
-            data: data.into(),
-        }
-    }
-}
-
-impl Into<sse::Event> for Event {
-    fn into(self) -> sse::Event {
-        sse::Event::message(self.data).event_type(self.event)
-    }
+fn event_to_sse(evt: Event) -> sse::Event {
+    sse::Event::message(evt.data).event_type(evt.event)
 }

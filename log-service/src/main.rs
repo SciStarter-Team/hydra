@@ -10,10 +10,12 @@ mod handlers;
 mod sync;
 
 use handlers::{
-    handle_activity_log, handle_affiliate_participation, handle_clickthrough,
-    handle_clickthrough_analytics, handle_email_event, handle_go_url_stats, handle_health_check,
-    handle_join, handle_page_view, handle_participation_analytics, handle_recent_activity,
-    handle_top_performers_analytics, handle_user_emails_update, handle_user_tags_update,
+    handle_activity_log, handle_affiliate_participation, handle_articulate_completion,
+    handle_articulate_completion_record, handle_clickthrough, handle_clickthrough_analytics,
+    handle_email_event, handle_go_url_stats, handle_health_check, handle_join, handle_page_view,
+    handle_participation_analytics, handle_project_participation,
+    handle_project_participation_record, handle_recent_activity, handle_top_performers_analytics,
+    handle_user_emails_update, handle_user_tags_update,
 };
 use log_service::{Database, run_compactor_service};
 use parking_lot::RwLock;
@@ -139,6 +141,26 @@ async fn main() -> Result<()> {
         log_group,
         "affiliate_participants",
         handle_affiliate_participation
+    ));
+    toplevel.spawn(handler!(
+        log_group,
+        "articulate_completion",
+        handle_articulate_completion
+    ));
+    toplevel.spawn(handler!(
+        log_group,
+        "project_participation",
+        handle_project_participation
+    ));
+    toplevel.spawn(recv_handler!(
+        log_group,
+        "articulate_completion_record",
+        handle_articulate_completion_record
+    ));
+    toplevel.spawn(recv_handler!(
+        log_group,
+        "project_participation_record",
+        handle_project_participation_record
     ));
 
     // Stats endpoints

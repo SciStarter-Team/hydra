@@ -2,8 +2,10 @@ use anyhow::Result;
 use common::{
     message::log::{
         AffiliateParticipantsRequest, AffiliateParticipantsResponse, AnalyticsQuery,
-        AnalyticsResponse, GoUrlStatsRequest, GoUrlStatsResponse, RecentActivityRequest,
-        RecentActivityResponse,
+        AnalyticsResponse, ArticulateCompletionRecord, ArticulateCompletionRequest,
+        ArticulateCompletionResponse, GoUrlStatsRequest, GoUrlStatsResponse,
+        ProjectParticipationRecord, ProjectParticipationRequest, ProjectParticipationResponse,
+        RecentActivityRequest, RecentActivityResponse,
     },
     service::decode_structured_message,
 };
@@ -402,4 +404,162 @@ pub async fn handle_affiliate_participation(
     }
 
     Ok(AffiliateParticipantsResponse { user_ids })
+}
+
+pub async fn handle_articulate_completion(
+    req: &async_nats::service::Request,
+) -> Result<ArticulateCompletionResponse, anyhow::Error> {
+    let request: ArticulateCompletionRequest = decode_structured_message(req.message.clone())?;
+
+    // Convert ULID to string for the query
+    let user_id_str = request.user_id.to_string();
+
+    // Query cache table for completion
+    let result = sqlx::query_scalar!(
+        r#"
+        SELECT user_id
+        FROM articulate_completions_cache
+        WHERE user_id = ? AND activity = ?
+        LIMIT 1
+        "#,
+        user_id_str,
+        request.activity
+    )
+    .fetch_optional(common::shared::db())
+    .await?;
+
+    let completed = result.is_some();
+
+    Ok(ArticulateCompletionResponse { completed })
+}
+
+pub async fn handle_project_participation(
+    req: &async_nats::service::Request,
+) -> Result<ProjectParticipationResponse, anyhow::Error> {
+    let request: ProjectParticipationRequest = decode_structured_message(req.message.clone())?;
+
+    // Convert ULID to string for the query
+    let user_id_str = request.user_id.to_string();
+
+    // Query cache table for participation
+    let result = sqlx::query_scalar!(
+        r#"
+        SELECT user_id
+        FROM project_participations_cache
+        WHERE user_id = ? AND project_id = ?
+        LIMIT 1
+        "#,
+        user_id_str,
+        request.project_id
+    )
+    .fetch_optional(common::shared::db())
+    .await?;
+
+    let participated = result.is_some();
+
+    Ok(ProjectParticipationResponse { participated })
+}
+
+pub async fn handle_articulate_completion_record(
+    req: &async_nats::service::Request,
+) -> Result<()> {
+    let record: ArticulateCompletionRecord = decode_structured_message(req.message.clone())?;
+
+    let user_id_str = record.user_id.to_string();
+    let now = common::timestring::TimeString::now().to_string();
+
+    // Insert into cache (ignore if already exists)
+    sqlx::query!(
+        r#"
+        INSERT OR IGNORE INTO articulate_completions_cache (user_id, activity)
+        VALUES (?, ?)
+        "#,
+        user_id_str,
+        record.activity
+    )
+    .execute(common::shared::db())
+    .await?;
+
+    // Record to activity_log table for permanent record
+    use log_service::database::tables::ActivityLogRow;
+    let row = ActivityLogRow {
+        when: now.clone(),
+        action: "articulate_complete".to_string(),
+        user_id: Some(user_id_str.clone()),
+        target: None,
+        extra: Some(record.activity.clone()),
+    };
+
+    {
+        let database = DATABASE
+            .read()
+            .as_ref()
+            .expect("Database not initialized")
+            .clone();
+        database.activity_log.insert(row).await?;
+    }
+
+    // Send SSE notification to user
+    common::channel::send_to_user(
+        record.user_id,
+        "completion",
+        common::channel::Event::new("articulate_complete", &record.activity),
+    )
+    .await?;
+
+    Ok(())
+}
+
+pub async fn handle_project_participation_record(req: &async_nats::service::Request) -> Result<()> {
+    let record: ProjectParticipationRecord = decode_structured_message(req.message.clone())?;
+
+    let user_id_str = record.user_id.to_string();
+    let now = common::timestring::TimeString::now().to_string();
+
+    // Insert into cache (ignore if already exists)
+    sqlx::query!(
+        r#"
+        INSERT OR IGNORE INTO project_participations_cache (user_id, project_id)
+        VALUES (?, ?)
+        "#,
+        user_id_str,
+        record.project_id
+    )
+    .execute(common::shared::db())
+    .await?;
+
+    // Record to participation table for permanent record
+    use log_service::database::tables::ParticipationRow;
+    let row = ParticipationRow {
+        origin: record.origin.unwrap_or(0),                  // 0 = web
+        when: record.when.unwrap_or_else(|| now.clone()),
+        duration: record.duration.unwrap_or(1.0),
+        where_point: record.where_point,
+        magnitude: record.magnitude.unwrap_or(1),
+        authenticated: record.authenticated.unwrap_or(true),
+        extra: record.extra.unwrap_or_default(),
+        fidelity: record.fidelity.unwrap_or(1.0),
+        entity_id: record.project_id.clone(),
+        user_id: Some(user_id_str.clone()),
+        task_name: record.task_name,
+    };
+
+    {
+        let database = DATABASE
+            .read()
+            .as_ref()
+            .expect("Database not initialized")
+            .clone();
+        database.participation.insert(row).await?;
+    }
+
+    // Send SSE notification to user
+    common::channel::send_to_user(
+        record.user_id,
+        "completion",
+        common::channel::Event::new("project_participation", &record.project_id),
+    )
+    .await?;
+
+    Ok(())
 }

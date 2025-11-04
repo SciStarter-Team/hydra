@@ -366,3 +366,199 @@ inventory::submit! {
         function: &RegenerateSummaries,
     }
 }
+
+/// Initialize completion cache function - populates cache tables from existing data
+pub struct InitCompletionCache;
+
+impl AnalyticsFunction for InitCompletionCache {
+    fn name(&self) -> &'static str {
+        "init_completion_cache"
+    }
+
+    fn description(&self) -> &'static str {
+        "Initialize articulate_completions_cache and project_participations_cache from existing data"
+    }
+
+    fn usage_example(&self) -> &'static str {
+        "init_completion_cache()"
+    }
+
+    fn execute(
+        &self,
+        database: Arc<Database>,
+        _parameters: HashMap<String, String>,
+        progress: crate::query_engine::functions::ProgressCallback,
+    ) -> Pin<Box<dyn Future<Output = Result<(Vec<String>, Vec<Vec<String>>)>> + Send + '_>> {
+        Box::pin(async move {
+            use datafusion::arrow::array::{Array, StringArray};
+            use datafusion::prelude::*;
+
+            let ctx = database.context();
+            let db = common::shared::db();
+
+            progress("Initializing completion cache tables from existing data...".to_string());
+
+            // 1. Initialize articulate_completions_cache from activity_log
+            progress("Processing articulate completions from activity_log...".to_string());
+
+            let df = ctx
+                .table("activity_log")
+                .await?
+                .filter(col("action").eq(lit("articulate_complete")))?
+                .filter(col("user_id").is_not_null())?
+                .filter(col("extra").is_not_null())?
+                .select(vec![col("user_id"), col("extra").alias("activity")])?
+                .distinct()?;
+
+            let batches = df.collect().await?;
+            let mut articulate_count = 0;
+
+            for batch in batches {
+                if batch.num_rows() == 0 {
+                    continue;
+                }
+
+                let user_id_array = batch
+                    .column(0)
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .expect("user_id column should be StringArray");
+
+                let activity_array = batch
+                    .column(1)
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .expect("activity column should be StringArray");
+
+                for i in 0..batch.num_rows() {
+                    if !user_id_array.is_null(i) && !activity_array.is_null(i) {
+                        let user_id = user_id_array.value(i);
+                        let activity = activity_array.value(i);
+
+                        sqlx::query!(
+                            r#"
+                            INSERT OR IGNORE INTO articulate_completions_cache (user_id, activity)
+                            VALUES (?, ?)
+                            "#,
+                            user_id,
+                            activity
+                        )
+                        .execute(db)
+                        .await?;
+
+                        articulate_count += 1;
+                    }
+                }
+
+                if articulate_count % 100 == 0 {
+                    progress(format!("Processed {} articulate completions...", articulate_count));
+                }
+            }
+
+            progress(format!(
+                "Completed articulate completions: {} records",
+                articulate_count
+            ));
+
+            // 2. Initialize project_participations_cache from participation
+            progress("Processing project participations from participation table...".to_string());
+
+            let df = ctx
+                .table("participation")
+                .await?
+                .filter(col("user_id").is_not_null())?
+                .select(vec![col("user_id"), col("entity_id").alias("project_id")])?
+                .distinct()?;
+
+            let batches = df.collect().await?;
+            let mut participation_count = 0;
+
+            for batch in batches {
+                if batch.num_rows() == 0 {
+                    continue;
+                }
+
+                let user_id_array = batch
+                    .column(0)
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .expect("user_id column should be StringArray");
+
+                let project_id_array = batch
+                    .column(1)
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .expect("project_id column should be StringArray");
+
+                for i in 0..batch.num_rows() {
+                    if !user_id_array.is_null(i) && !project_id_array.is_null(i) {
+                        let user_id = user_id_array.value(i);
+                        let project_id = project_id_array.value(i);
+
+                        sqlx::query!(
+                            r#"
+                            INSERT OR IGNORE INTO project_participations_cache (user_id, project_id)
+                            VALUES (?, ?)
+                            "#,
+                            user_id,
+                            project_id
+                        )
+                        .execute(db)
+                        .await?;
+
+                        participation_count += 1;
+                    }
+                }
+
+                if participation_count % 100 == 0 {
+                    progress(format!(
+                        "Processed {} project participations...",
+                        participation_count
+                    ));
+                }
+            }
+
+            progress(format!(
+                "Completed project participations: {} records",
+                participation_count
+            ));
+
+            progress("Completion cache initialization completed!".to_string());
+
+            let headers = vec![
+                "Table".to_string(),
+                "Records Loaded".to_string(),
+                "Status".to_string(),
+            ];
+
+            let rows = vec![
+                vec![
+                    "articulate_completions_cache".to_string(),
+                    articulate_count.to_string(),
+                    "Initialized".to_string(),
+                ],
+                vec![
+                    "project_participations_cache".to_string(),
+                    participation_count.to_string(),
+                    "Initialized".to_string(),
+                ],
+            ];
+
+            Ok((headers, rows))
+        })
+    }
+
+    fn validate(&self, parameters: &HashMap<String, String>) -> Result<()> {
+        // This function takes no parameters
+        if !parameters.is_empty() {
+            return Err(anyhow::anyhow!("init_completion_cache takes no parameters"));
+        }
+        Ok(())
+    }
+}
+
+inventory::submit! {
+    AnalyticsFunctionRegistration {
+        function: &InitCompletionCache,
+    }
+}

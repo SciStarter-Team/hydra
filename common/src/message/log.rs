@@ -131,3 +131,48 @@ pub struct GoUrlStatsResponse {
     pub date_range_start: String, // The actual start date used (for display)
     pub date_range_end: String,   // The actual end date used (for display)
 }
+
+// Task Completion Checking
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArticulateCompletionRequest {
+    pub user_id: Ulid,
+    pub activity: String, // e.g., "foundations-evolveme", "fundamentos-evolveme"
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArticulateCompletionResponse {
+    pub completed: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectParticipationRequest {
+    pub user_id: Ulid,
+    pub project_id: String, // ULID as string
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectParticipationResponse {
+    pub participated: bool,
+}
+
+// Recording Completions/Participations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArticulateCompletionRecord {
+    pub user_id: Ulid,
+    pub activity: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectParticipationRecord {
+    pub user_id: Ulid,
+    pub project_id: String,
+    pub origin: Option<i16>,          // Source of participation (defaults to 0 = web)
+    pub when: Option<String>,         // Timestamp (defaults to now)
+    pub duration: Option<f64>,        // Duration in hours (defaults to 1.0)
+    pub where_point: Option<String>,  // GeoJSON point
+    pub magnitude: Option<i32>,       // Magnitude/intensity (defaults to 1)
+    pub authenticated: Option<bool>,  // Whether user was authenticated (defaults to true)
+    pub extra: Option<String>,        // Extra data (defaults to empty)
+    pub fidelity: Option<f64>,        // Fidelity score (defaults to 1.0)
+    pub task_name: Option<String>,    // Task name
+}

@@ -14,6 +14,7 @@ use ulid::Ulid;
 
 pub mod address_sets;
 pub mod auth;
+pub mod bookmarks;
 pub mod health;
 pub mod recipient_search;
 pub mod sessions;
@@ -1075,6 +1076,10 @@ async fn main() {
     let page_manager = service.group("user.page_manager");
     toplevel.spawn(handler!(page_manager, "sync", users::page_manager_sync));
     toplevel.spawn(handler!(page_manager, "update", users::page_manager_update));
+
+    // Bookmark endpoints
+    let bookmarks = service.group("user.bookmarks");
+    toplevel.spawn(handler!(bookmarks, "create", bookmarks::create_bookmark));
 
     let health = service.group("user.health");
     toplevel.spawn(handler!(health, "check", health::health_check));

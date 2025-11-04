@@ -1,10 +1,16 @@
-<%+ HeaderWithRefresh {rate: Duration::from_secs(15)} %>
+<%+ Header %>
 
 <!-- Wrapper -->
-<div class="o-wrapper">
+<div class="o-wrapper"
+     hx-ext="sse"
+     sse-connect="/channel/me/completion">
+
+  <div sse-swap="articulate_complete"
+       hx-on::before-swap="window.location.reload(); event.preventDefault()">
+  </div>
 
   <div class="em-welcome">
-    <img src='<%= staticfile("/evolveme/img/evolve-robot.svg") %>' alt="SciStarter Robot welcoming you" />
+    <img src='/-static/evolveme/img/evolve-robot.svg' alt="SciStarter Robot welcoming you" />
     <div>
       <h1>Start Your Journey as a Citizen Scientist!</h1>
       <h3>Take the Foundations of Citizen Science Challenge</h3>
@@ -44,8 +50,8 @@
   </div>
 
   <div class="foundations-links">
-    <a target="_blank" href='https://media.scistarter.org/foundations/index.html?<%+ ArticulateParams::new("https://li287-138.members.linode.com/lrs/", user.clone()).with_activity("foundations-evolveme") %>'><img src='<%= staticfile("/evolveme/img/foundations-en.png") %>' alt="go to foundations training in English" /></a>
-    <a target="_blank" href='https://media.scistarter.org/fundamentos/index.html?<%+ ArticulateParams::new("https://li287-138.members.linode.com/lrs/", user.clone()).with_activity("fundamentos-evolveme") %>'><img src='<%= staticfile("/evolveme/img/foundations-es.png") %>' alt="ir a la formación de fundamentos en español" /></a>
+    <a target="_blank" href='https://media.scistarter.org/foundations/index.html?<%= ArticulateParams::new("https://li287-138.members.linode.com/lrs/", self.user.clone()).with_activity("foundations-evolveme") |disp %>'><img src='/-static/evolveme/img/foundations-en.png' alt="go to foundations training in English" /></a>
+    <a target="_blank" href='https://media.scistarter.org/fundamentos/index.html?<%= ArticulateParams::new("https://li287-138.members.linode.com/lrs/", self.user.clone()).with_activity("fundamentos-evolveme") |disp %>'><img src='/-static/evolveme/img/foundations-es.png' alt="ir a la formación de fundamentos en español" /></a>
   </div>
 </div>
 

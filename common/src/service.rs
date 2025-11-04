@@ -200,10 +200,7 @@ where
     let payload = flexbuffers::to_vec(message)?;
 
     // Use tokio::time::timeout to enforce our timeout, not NATS client's default
-    let msg = tokio::time::timeout(
-        timeout,
-        nats().request(subject, payload.into())
-    )
+    let msg = tokio::time::timeout(timeout, nats().request(subject, payload.into()))
         .await
         .map_err(|_| anyhow!("request timed out: deadline has elapsed"))?
         .map_err(|e| anyhow!("NATS request failed: {}", e))?
@@ -559,7 +556,17 @@ pub mod errors {
 ///
 /// The string representation (Display/AsRefStr) is the trigger name stored in the database
 /// and used for NATS communication.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumString, strum::EnumIter, strum::AsRefStr)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    strum::Display,
+    strum::EnumString,
+    strum::EnumIter,
+    strum::AsRefStr,
+)]
 #[strum(serialize_all = "kebab-case")]
 pub enum TriggerEvent {
     /// Sent when a new user completes signup
