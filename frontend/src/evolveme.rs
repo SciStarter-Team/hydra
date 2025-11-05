@@ -117,6 +117,7 @@ pub fn routes() -> Route {
 
 /// Parameters for EvolveMe workflow state
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
+#[serde(default)]
 struct EvolveMeParams {
     user_id: i32,
     unique_task_key: Uuid,
@@ -174,6 +175,7 @@ impl EvolveMeParams {
 struct SearchParams {
     #[serde(default)]
     phrase: String,
+    #[serde(default, deserialize_with = "common::serde_utils::deserialize_empty_string_as_none")]
     topic: Option<i32>,
     #[serde(default)]
     online: bool,
@@ -371,11 +373,12 @@ struct WaitingPage {
 #[handler]
 async fn search_and_save_signup(
     session: &Session,
-    Query(params): Query<Option<EvolveMeParams>>,
+    Query(params): Query<EvolveMeParams>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, Error> {
     // Store params in session if provided (coming from ASA)
-    if let Some(params) = params {
+    // Check if params has meaningful values (not all defaults)
+    if params.unique_task_key != Uuid::nil() {
         session.set("evolveme_params", &params);
     }
 
@@ -411,11 +414,11 @@ async fn search_and_save_signup(
 #[handler]
 async fn search_and_save_login(
     session: &Session,
-    Query(params): Query<Option<EvolveMeParams>>,
+    Query(params): Query<EvolveMeParams>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, Error> {
     // Store params in session if provided (coming from ASA)
-    if let Some(params) = params {
+    if params.unique_task_key != Uuid::nil() {
         session.set("evolveme_params", &params);
     }
 
@@ -728,11 +731,11 @@ async fn search_and_save_done(
 #[handler]
 async fn lesson_quiz_signup(
     session: &Session,
-    Query(params): Query<Option<EvolveMeParams>>,
+    Query(params): Query<EvolveMeParams>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, Error> {
     // Store params in session if provided (coming from ASA)
-    if let Some(params) = params {
+    if params.unique_task_key != Uuid::nil() {
         session.set("evolveme_params", &params);
     }
 
@@ -764,11 +767,11 @@ async fn lesson_quiz_signup(
 #[handler]
 async fn lesson_quiz_login(
     session: &Session,
-    Query(params): Query<Option<EvolveMeParams>>,
+    Query(params): Query<EvolveMeParams>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, Error> {
     // Store params in session if provided (coming from ASA)
-    if let Some(params) = params {
+    if params.unique_task_key != Uuid::nil() {
         session.set("evolveme_params", &params);
     }
 
@@ -904,11 +907,11 @@ async fn lesson_quiz_done(
 #[handler]
 async fn project_squirrel_signup(
     session: &Session,
-    Query(params): Query<Option<EvolveMeParams>>,
+    Query(params): Query<EvolveMeParams>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, Error> {
     // Store params in session if provided (coming from ASA)
-    if let Some(params) = params {
+    if params.unique_task_key != Uuid::nil() {
         session.set("evolveme_params", &params);
     }
 
@@ -940,11 +943,11 @@ async fn project_squirrel_signup(
 #[handler]
 async fn project_squirrel_login(
     session: &Session,
-    Query(params): Query<Option<EvolveMeParams>>,
+    Query(params): Query<EvolveMeParams>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, Error> {
     // Store params in session if provided (coming from ASA)
-    if let Some(params) = params {
+    if params.unique_task_key != Uuid::nil() {
         session.set("evolveme_params", &params);
     }
 
@@ -1090,11 +1093,11 @@ async fn project_squirrel_done(
 #[handler]
 async fn great_sunflower_signup(
     session: &Session,
-    Query(params): Query<Option<EvolveMeParams>>,
+    Query(params): Query<EvolveMeParams>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, Error> {
     // Store params in session if provided (coming from ASA)
-    if let Some(params) = params {
+    if params.unique_task_key != Uuid::nil() {
         session.set("evolveme_params", &params);
     }
 
@@ -1126,11 +1129,11 @@ async fn great_sunflower_signup(
 #[handler]
 async fn great_sunflower_login(
     session: &Session,
-    Query(params): Query<Option<EvolveMeParams>>,
+    Query(params): Query<EvolveMeParams>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, Error> {
     // Store params in session if provided (coming from ASA)
-    if let Some(params) = params {
+    if params.unique_task_key != Uuid::nil() {
         session.set("evolveme_params", &params);
     }
 
@@ -1276,11 +1279,11 @@ async fn great_sunflower_done(
 #[handler]
 async fn stallcatchers_signup(
     session: &Session,
-    Query(params): Query<Option<EvolveMeParams>>,
+    Query(params): Query<EvolveMeParams>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, Error> {
     // Store params in session if provided (coming from ASA)
-    if let Some(params) = params {
+    if params.unique_task_key != Uuid::nil() {
         session.set("evolveme_params", &params);
     }
 
@@ -1312,11 +1315,11 @@ async fn stallcatchers_signup(
 #[handler]
 async fn stallcatchers_login(
     session: &Session,
-    Query(params): Query<Option<EvolveMeParams>>,
+    Query(params): Query<EvolveMeParams>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, Error> {
     // Store params in session if provided (coming from ASA)
-    if let Some(params) = params {
+    if params.unique_task_key != Uuid::nil() {
         session.set("evolveme_params", &params);
     }
 
@@ -1462,11 +1465,11 @@ async fn stallcatchers_done(
 #[handler]
 async fn instant_wild_signup(
     session: &Session,
-    Query(params): Query<Option<EvolveMeParams>>,
+    Query(params): Query<EvolveMeParams>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, Error> {
     // Store params in session if provided (coming from ASA)
-    if let Some(params) = params {
+    if params.unique_task_key != Uuid::nil() {
         session.set("evolveme_params", &params);
     }
 
@@ -1494,11 +1497,11 @@ async fn instant_wild_signup(
 #[handler]
 async fn instant_wild_login(
     session: &Session,
-    Query(params): Query<Option<EvolveMeParams>>,
+    Query(params): Query<EvolveMeParams>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, Error> {
     // Store params in session if provided (coming from ASA)
-    if let Some(params) = params {
+    if params.unique_task_key != Uuid::nil() {
         session.set("evolveme_params", &params);
     }
 

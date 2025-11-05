@@ -6,6 +6,7 @@ pub mod message;
 #[cfg(feature = "database")]
 pub mod misc;
 pub mod quill;
+pub mod serde_utils;
 pub mod service;
 pub mod shared;
 pub mod timestring;
