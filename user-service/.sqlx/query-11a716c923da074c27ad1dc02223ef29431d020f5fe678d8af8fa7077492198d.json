@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM \"emails\" WHERE \"user_id\" = ? AND \"email\" = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "11a716c923da074c27ad1dc02223ef29431d020f5fe678d8af8fa7077492198d"
+}

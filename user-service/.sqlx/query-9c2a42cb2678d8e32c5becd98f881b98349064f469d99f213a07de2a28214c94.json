@@ -1,0 +1,35 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT\n            COALESCE(country, 'Unknown') as country,\n            COALESCE(country_code, 'XX') as country_code,\n            COUNT(*) as user_count\n        FROM users\n        WHERE date(date_joined) >= ? AND date(date_joined) <= ?\n        AND verified = 1\n        GROUP BY country, country_code\n        ORDER BY user_count DESC\n        LIMIT 50\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "country",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "name": "country_code",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "name": "user_count",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "9c2a42cb2678d8e32c5becd98f881b98349064f469d99f213a07de2a28214c94"
+}

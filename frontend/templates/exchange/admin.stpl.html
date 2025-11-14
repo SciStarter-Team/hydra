@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= self.exchange.name %> - Admin</title>
+    <script src="/-static/htmx.js"></script>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; max-width: 1200px; margin: 0 auto; padding: 2rem; background: #f5f5f5; }
+        h1 { color: #333; }
+        .section { background: white; padding: 1.5rem; margin-bottom: 1.5rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .section h2 { margin-top: 0; color: #555; border-bottom: 2px solid #eee; padding-bottom: 0.5rem; }
+        .form-group { margin-bottom: 1rem; }
+        .form-group label { display: block; font-weight: 600; margin-bottom: 0.5rem; color: #555; }
+        .form-group input[type="text"], .form-group textarea { width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; }
+        .form-group input[type="checkbox"] { margin-right: 0.5rem; }
+        .form-group textarea { min-height: 100px; font-family: inherit; }
+        .btn { padding: 0.75rem 1.5rem; background: #4f46e5; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; }
+        .btn:hover { background: #4338ca; }
+        .btn-secondary { background: #6b7280; }
+        .btn-secondary:hover { background: #4b5563; }
+        .btn-danger { background: #dc2626; }
+        .btn-danger:hover { background: #b91c1c; }
+        .search-list { list-style: none; padding: 0; }
+        .search-item { padding: 1rem; border: 1px solid #e5e7eb; border-radius: 4px; margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center; }
+        .search-item strong { color: #333; }
+        .search-item code { background: #f3f4f6; padding: 0.25rem 0.5rem; border-radius: 3px; font-size: 0.875rem; }
+        .feedback { margin-top: 1rem; padding: 1rem; border-radius: 4px; }
+        .feedback.success { background: #d1fae5; color: #065f46; }
+        .feedback.error { background: #fee2e2; color: #991b1b; }
+    </style>
+</head>
+<body>
+    <h1><%= self.exchange.name %> - Administration</h1>
+    <p><a href="/exchange/<%= self.exchange.exchange_id %>">← Back to Exchange</a></p>
+
+    <div class="section">
+        <h2>Exchange Settings</h2>
+        <form hx-post="/exchange/<%= self.exchange.exchange_id %>/settings" hx-target="#settings-feedback">
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" name="allow_project_voting" value="true" <% if self.exchange.settings.allow_project_voting { %>checked<% } %>>
+                    Allow project voting (likes)
+                </label>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" name="allow_project_reviews" value="true" <% if self.exchange.settings.allow_project_reviews { %>checked<% } %>>
+                    Allow project reviews
+                </label>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" name="require_approval" value="true" <% if self.exchange.settings.require_approval { %>checked<% } %>>
+                    Require approval for new projects
+                </label>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" name="restricted_add" value="true" <% if self.exchange.settings.restricted_add { %>checked<% } %>>
+                    Only staff can add projects
+                </label>
+            </div>
+            <div class="form-group">
+                <label for="custom_css">Custom CSS</label>
+                <textarea name="custom_css" id="custom_css" placeholder="Enter custom CSS to style this exchange..."><% if let Some(ref css) = self.exchange.settings.custom_css { %><%= css %><% } %></textarea>
+            </div>
+            <button type="submit" class="btn">Save Settings</button>
+            <div id="settings-feedback" class="feedback" style="display: none;"></div>
+        </form>
+    </div>
+
+    <div class="section">
+        <h2>Predefined Searches</h2>
+        <% if self.predefined_searches.is_empty() { %>
+            <p>No predefined searches configured.</p>
+        <% } else { %>
+            <ul class="search-list">
+                <% for search in &self.predefined_searches { %>
+                    <li class="search-item">
+                        <div>
+                            <strong><%= &search.name %></strong><br>
+                            <small>
+                                <% if !search.search_params.phrase.is_empty() { %>
+                                    Phrases: <code><%= search.search_params.phrase.join(", ") %></code>
+                                <% } %>
+                                <% if let Some(ref activity) = search.search_params.activity { %>
+                                    Activity: <code><%= activity %></code>
+                                <% } %>
+                                <% if let Some(ref topic) = search.search_params.topic { %>
+                                    Topic: <code><%= topic %></code>
+                                <% } %>
+                            </small>
+                        </div>
+                        <button
+                            hx-delete="/exchange/<%= self.exchange.exchange_id %>/predef/<%= search.search_id|disp %>"
+                            hx-confirm="Delete this predefined search?"
+                            hx-target="closest li"
+                            hx-swap="outerHTML"
+                            class="btn btn-danger btn-sm">Delete</button>
+                    </li>
+                <% } %>
+            </ul>
+        <% } %>
+
+        <h3>Add New Predefined Search</h3>
+        <form hx-post="/exchange/<%= self.exchange.exchange_id %>/predef" hx-target="#predef-feedback">
+            <div class="form-group">
+                <label for="search_name">Search Name</label>
+                <input type="text" name="name" id="search_name" required placeholder="e.g., Birds">
+            </div>
+            <div class="form-group">
+                <label for="search_phrase">Phrases (comma-separated)</label>
+                <input type="text" name="phrase" id="search_phrase" placeholder="e.g., bird, avian">
+            </div>
+            <div class="form-group">
+                <label for="search_activity">Activity</label>
+                <input type="text" name="activity" id="search_activity" placeholder="e.g., observation">
+            </div>
+            <div class="form-group">
+                <label for="search_topic">Topic</label>
+                <input type="text" name="topic" id="search_topic" placeholder="e.g., ecology">
+            </div>
+            <div class="form-group">
+                <label for="search_audience">Audience (comma-separated)</label>
+                <input type="text" name="audience" id="search_audience" placeholder="e.g., families, youth">
+            </div>
+            <button type="submit" class="btn">Add Predefined Search</button>
+            <div id="predef-feedback" class="feedback" style="display: none;"></div>
+        </form>
+    </div>
+</body>
+</html>

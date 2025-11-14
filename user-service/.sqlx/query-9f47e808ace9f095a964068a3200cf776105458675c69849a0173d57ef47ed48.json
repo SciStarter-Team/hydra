@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM user_set_evaluations\n                               WHERE evaluation_id = ?\n                                 AND operation = 'intersect'\n                                 AND user_id NOT IN (\n                                   SELECT user_id FROM user_set_evaluations\n                                   WHERE evaluation_id = ?\n                                 )",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "9f47e808ace9f095a964068a3200cf776105458675c69849a0173d57ef47ed48"
+}

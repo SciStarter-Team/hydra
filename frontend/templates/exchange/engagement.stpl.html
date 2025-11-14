@@ -1,0 +1,174 @@
+<div class="border">
+  <div class="flex flex-select">
+    <h1>Exchange Engagement Stats</h1>
+    <select name="year" class="el-select" hx-get="/exchange/<%= exchange_id %>/engagement">
+      <option value="" <% if selected_year == 0 { %>selected<% } %>>All Time</option>
+      <% for year in available_years.iter() { %>
+      <option value="<%= year %>" <% if selected_year == *year { %>selected<% } %>><%= year %></option>
+      <% } %>
+    </select>
+  </div>
+  <div class="flex projects-top flex-jc">
+    <div class="left-icon">
+      <svg xmlns="http://www.w3.org/2000/svg" width="128.205" height="109.734" viewBox="0 0 128.205 109.734" class="big-icon">
+        <g id="page-views" transform="translate(0 -0.098)">
+          <path id="Path_629" data-name="Path 629" d="M287.989,257.65c-12.413,0-22.109-13.082-22.516-13.639a1.955,1.955,0,0,1,0-2.3c.407-.558,10.1-13.639,22.516-13.639s22.109,13.082,22.516,13.639a1.952,1.952,0,0,1,0,2.3C310.1,244.568,300.4,257.65,287.989,257.65Zm-18.436-14.792c2.535,3.012,9.969,10.883,18.436,10.883s15.9-7.87,18.436-10.883c-2.536-3.014-9.969-10.883-18.436-10.883S272.089,239.846,269.553,242.858Zm0,0" transform="translate(-191.051 -164.294)"/>
+          <path id="Path_630" data-name="Path 630" d="M321.845,265.585a9.771,9.771,0,1,1,9.772-9.772A9.782,9.782,0,0,1,321.845,265.585Zm0-15.634a5.862,5.862,0,1,0,5.863,5.862A5.868,5.868,0,0,0,321.845,249.951Zm0,0" transform="translate(-224.908 -177.249)"/>
+          <path id="Path_631" data-name="Path 631" d="M266.377,231.614a31.268,31.268,0,1,1,31.268-31.268A31.3,31.3,0,0,1,266.377,231.614Zm0-58.628a27.359,27.359,0,1,0,27.36,27.36A27.39,27.39,0,0,0,266.377,172.986Zm0,0" transform="translate(-169.44 -121.782)"/>
+          <path id="Path_632" data-name="Path 632" d="M68.43,87.37H13.121A13.136,13.136,0,0,1,0,74.249V13.219A13.136,13.136,0,0,1,13.121.1H85.707A13.136,13.136,0,0,1,98.828,13.219V49.25a1.954,1.954,0,1,1-3.908,0V13.219a9.223,9.223,0,0,0-9.213-9.213H13.121a9.223,9.223,0,0,0-9.213,9.213v61.03a9.223,9.223,0,0,0,9.213,9.213H68.43a1.954,1.954,0,1,1,0,3.908Zm0,0" transform="translate(0)"/>
+          <path id="Path_633" data-name="Path 633" d="M96.874,85.311H1.954a1.954,1.954,0,1,1,0-3.908h94.92a1.954,1.954,0,1,1,0,3.908Zm0,0" transform="translate(0 -58.595)"/>
+          <path id="Path_634" data-name="Path 634" d="M86.235,39.443A5.462,5.462,0,1,1,91.7,33.981,5.469,5.469,0,0,1,86.235,39.443Zm0-7.016a1.554,1.554,0,1,0,1.554,1.554A1.556,1.556,0,0,0,86.235,32.428Zm0,0" transform="translate(-58.212 -20.483)"/>
+          <path id="Path_635" data-name="Path 635" d="M29.821,39.268a5.462,5.462,0,1,1,5.462-5.462A5.469,5.469,0,0,1,29.821,39.268Zm0-7.016a1.554,1.554,0,1,0,1.554,1.554A1.556,1.556,0,0,0,29.821,32.252Zm0,0" transform="translate(-17.555 -20.357)"/>
+          <path id="Path_636" data-name="Path 636" d="M142.649,39.619a5.462,5.462,0,1,1,5.462-5.462A5.468,5.468,0,0,1,142.649,39.619Zm0-7.016a1.554,1.554,0,1,0,1.554,1.554A1.556,1.556,0,0,0,142.649,32.6Zm0,0" transform="translate(-98.869 -20.61)"/>
+        </g>
+      </svg>
+      <div class="data-numbers">
+        <h2><%= exchange_visits %></h2>
+        <h3>Exchange Visits <button type="button" class="el-button el-tooltip question-mark-tooltip el-button--default" aria-label="How many times your exchange was loaded by users" data-microtip-position="top" role="tooltip" tabindex="0"><span>?</span></button></h3>
+        <h4><%= &selected_year_display %></h4>
+      </div>
+    </div>
+  </div>
+  <hr />
+  <div class="flex engagement-bar">
+    <div class="flex2">
+      <img src="https://static.scistarter.org/img/data/views.svg" />
+      <div class="data-numbers dn-small">
+        <h2><%= visitors %></h2>
+        <h3>Unique Visitors <button type="button" class="el-button el-tooltip question-mark-tooltip el-button--default" aria-label="How many times unique visitors visitors viewed your projects" data-microtip-position="top" role="tooltip" tabindex="0"><span>?</span></button></h3>
+      </div>
+    </div>
+    <div class="flex2">
+      <img src="https://static.scistarter.org/img/data/views.svg" />
+      <div class="data-numbers dn-small">
+        <h2><%= views %></h2>
+        <h3>Page Views <button type="button" class="el-button el-tooltip question-mark-tooltip el-button--default" aria-label="How many times projects were viewed. One user may view multiple times." data-microtip-position="top" role="tooltip" tabindex="0"><span>?</span></button></h3>
+      </div>
+    </div>
+  </div>
+  <hr />
+  <div class="flex engagement-bar">
+    <div class="flex3">
+      <img src="https://static.scistarter.org/img/data/saves.svg" />
+      <div class="data-numbers dn-small">
+        <h2><%= saves %></h2>
+        <h3>Saves <button type="button" class="el-button el-tooltip question-mark-tooltip el-button--default" aria-label="How many times users saved the project to their SciStarter dashboard." data-microtip-position="top" role="tooltip" tabindex="0"><span>?</span></button></h3>
+      </div>
+    </div>
+    <div class="flex3">
+      <img src="https://static.scistarter.org/img/data/referrals.svg" />
+      <div class="data-numbers dn-small">
+        <h2><%= referrals %></h2>
+        <h3>Referrals <button type="button" class="el-button el-tooltip question-mark-tooltip el-button--default" aria-label="How many times users clicked to a projects website from SciStarter or a SciStarter exchange." data-microtip-position="top" role="tooltip" tabindex="0"><span>?</span></button></h3>
+      </div>
+    </div>
+    <div class="flex3">
+      <img src="https://static.scistarter.org/img/data/contributions.svg" />
+      <div class="data-numbers dn-small">
+        <h2><%= contributions %></h2>
+        <h3>Contributions to Affiliate Projects* <button type="button" class="el-button el-tooltip question-mark-tooltip el-button--default" aria-label="How many times users took part in SciStarter affiliated projects" data-microtip-position="top" role="tooltip" tabindex="0"><span>?</span></button></h3>
+        <br>
+        <small>*This number includes all contributions to SciStarter affiliate projects which appear on your Exchange.</small>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="border top-10">
+  <div class="flex flex-select">
+    <div>
+      <h1>Popular Projects For Your Visitors</h1>
+      <ul class="data-nav not-d2t">
+        <li><a class="selected"
+              _="on click
+                  hide #saves
+                  hide #referrals
+                  show #views
+                  remove .selected from .selected
+                  add .selected to me">Views</a></li>
+        <li><a _="on click
+                  hide #views
+                  hide #referrals
+                  show #saves
+                  remove .selected from .selected
+                  add .selected to me">Saves</a></li>
+        <li><a _="on click
+                  hide #saves
+                  hide #views
+                  show #referrals
+                  remove .selected from .selected
+                  add .selected to me">Referrals</a></li>
+      </ul>
+    </div>
+    <select name="year" class="el-select" hx-get="/exchange/<%= exchange_id %>/engagement">
+      <option value="" <% if selected_year == 0 { %>selected<% } %>>All Time</option>
+      <% for year in available_years.iter() { %>
+      <option value="<%= year %>" <% if selected_year == *year { %>selected<% } %>><%= year %></option>
+      <% } %>
+    </select>
+  </div>
+
+  <div id="views">
+    <h2>Top 10 Projects by Views</h2>
+
+    <table>
+      <% for (idx, item) in top_views.iter().enumerate() { %>
+      <tr>
+        <td class="order-num num"><%= idx + 1 %></td>
+        <td>
+          <div class="media-object">
+            <img src="https://media.scistarter.org/<%= item.2 %>" class="media-image" />
+            <div class="media-body">
+              <h3><%= item.0 %></h3>
+              <p><%= item.1 %></p>
+            </div>
+          </div>
+        </td>
+        <td class="count num"><%= item.3 %></td>
+      </tr>
+      <% } %>
+    </table>
+  </div>
+
+  <div id="saves" _="init hide me">
+    <h2>Top 10 Projects by Saves</h2>
+
+    <table>
+      <% for (idx, item) in top_saves.iter().enumerate() { %>
+      <tr>
+        <td class="order-num num"><%= idx + 1 %></td>
+        <td>
+          <div class="media-object">
+            <img src="https://media.scistarter.org/<%= item.2 %>" class="media-image" />
+            <div class="media-body">
+              <h3><%= item.0 %></h3>
+              <p><%= item.1 %></p>
+            </div>
+          </div>
+        </td>
+        <td class="count num"><%= item.3 %></td>
+      </tr>
+      <% } %>
+    </table>
+  </div>
+
+  <div id="referrals" _="init hide me">
+    <h2>Top 10 Projects by Referrals</h2>
+    <table>
+      <% for (idx, item) in top_referrals.iter().enumerate() { %>
+      <tr>
+        <td class="order-num num"><%= idx + 1 %></td>
+        <td>
+          <div class="media-object">
+            <img src="https://media.scistarter.org/<%= item.2 %>" class="media-image" />
+            <div class="media-body">
+              <h3><%= item.0 %></h3>
+              <p><%= item.1 %></p>
+            </div>
+          </div>
+        </td>
+        <td class="count num"><%= item.3 %></td>
+      </tr>
+      <% } %>
+    </table>
+  </div>
+</div>

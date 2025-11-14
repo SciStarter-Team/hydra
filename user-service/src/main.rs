@@ -16,13 +16,17 @@ pub mod address_sets;
 pub mod auth;
 pub mod bookmarks;
 pub mod health;
+pub mod permissions;
+pub mod project_joins;
 pub mod recipient_search;
 pub mod sessions;
 pub mod stats;
 pub mod sync;
+pub mod user_matching;
 pub mod user_sets;
 pub mod users;
 pub mod webauthn;
+pub mod workflow;
 
 async fn cleanup() {
     loop {
@@ -998,6 +1002,11 @@ async fn main() {
 
     let user_info = service.group("user.info");
     toplevel.spawn(handler!(user_info, "email_info", users::user_email_info));
+    toplevel.spawn(handler!(
+        user_info,
+        "display_info_batch",
+        users::user_display_info_batch
+    ));
 
     let stats = service.group("user.stats");
     toplevel.spawn(handler!(stats, "total_count", stats::total_count));
@@ -1080,6 +1089,36 @@ async fn main() {
     // Bookmark endpoints
     let bookmarks = service.group("user.bookmarks");
     toplevel.spawn(handler!(bookmarks, "create", bookmarks::create_bookmark));
+    toplevel.spawn(handler!(bookmarks, "check", bookmarks::check_bookmark));
+
+    // Project join endpoints
+    let joins = service.group("user.joins");
+    toplevel.spawn(handler!(joins, "create", project_joins::create_join));
+    toplevel.spawn(handler!(joins, "check", project_joins::check_join));
+
+    let permissions = service.group("user.permissions");
+    toplevel.spawn(handler!(permissions, "check", permissions::check_permission));
+    toplevel.spawn(handler!(permissions, "grant", permissions::grant_permission));
+    toplevel.spawn(handler!(permissions, "revoke", permissions::revoke_permission));
+    toplevel.spawn(handler!(permissions, "list", permissions::list_permissions));
+
+    // User matching for API participation recording
+    let user_match = service.group("user");
+    toplevel.spawn(handler!(user_match, "match", user_matching::match_user));
+
+    // API key management
+    let api_key = service.group("user.api_key");
+    toplevel.spawn(handler!(api_key, "get", user_matching::get_api_key));
+    toplevel.spawn(handler!(api_key, "validate", user_matching::validate_api_key));
+
+    // Opaque ID retrieval
+    let opaque_id = service.group("user.opaque_id");
+    toplevel.spawn(handler!(opaque_id, "get", user_matching::get_opaque_id));
+
+    // Workflow progress tracking
+    let workflow_group = service.group("user.workflow");
+    toplevel.spawn(handler!(workflow_group, "progress", workflow::record_progress));
+    toplevel.spawn(handler!(workflow_group, "status", workflow::get_status));
 
     let health = service.group("user.health");
     toplevel.spawn(handler!(health, "check", health::health_check));

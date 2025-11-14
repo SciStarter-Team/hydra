@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "insert into \"users\" (\n          \"user_id\",\n          \"handle\",\n          \"primary_email\",\n          \"verified\",\n          \"password\",\n          \"newsletter\",\n          \"zipcode\",\n          \"protected\",\n          \"point\"\n        )\n        values (\n          ?1,\n          ?3,\n          ?2,\n          ?9,\n          ?4,\n          ?5,\n          ?6,\n          ?7,\n          GeomFromGeoJSON(?8)\n        )",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 9
+    },
+    "nullable": []
+  },
+  "hash": "5f7dc1d86c3c88fd68c48f3d2d01d66328e8e14a0c4620e9c66750e89cc4f955"
+}

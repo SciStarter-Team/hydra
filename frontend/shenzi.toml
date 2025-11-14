@@ -30,6 +30,11 @@ handler = "Copy"
 include = "richtext.js"
 handler = "Copy"
 
+# Exchange JS files cause minify_js to panic
+[[rules]]
+include = "exchange/js/*.js"
+handler = "Copy"
+
 [[rules]]
 include = "**/*.min.js"
 handler = "Copy"

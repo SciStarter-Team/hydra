@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM user_set_results WHERE evaluation_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "0dfe7029c829c547463e6783c0c4a894917903894a7bef69916fb6bfdbe6f71d"
+}

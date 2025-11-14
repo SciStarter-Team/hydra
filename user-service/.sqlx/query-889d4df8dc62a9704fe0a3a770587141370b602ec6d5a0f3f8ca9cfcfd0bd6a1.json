@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM address_sets WHERE slug = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "889d4df8dc62a9704fe0a3a770587141370b602ec6d5a0f3f8ca9cfcfd0bd6a1"
+}

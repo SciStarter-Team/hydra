@@ -577,6 +577,27 @@ pub enum TriggerEvent {
 
     /// Sent when a project is approved
     ProjectApproved,
+
+    /// Sent when the Foundations of Citizen Science badge is earned
+    BadgeFoundations,
+
+    /// Sent when the Libraries as Hubs for Citizen Science badge is earned
+    BadgeLibrariesHubs,
+
+    /// Sent when the Building Data Literacy badge is earned
+    BadgeDataLiteracy,
+
+    /// Sent when the Teaching in Higher Education badge is earned
+    BadgeHigherEd,
+
+    /// Sent when the Data Ethics for Practitioners badge is earned
+    BadgeDataEthics,
+
+    /// Sent when the Ideal Participatory Science badge is earned
+    BadgeIdeal,
+
+    /// Sent when the SciStarter Ambassador badge is earned
+    BadgeAmbassador,
 }
 
 impl TriggerEvent {
@@ -586,6 +607,13 @@ impl TriggerEvent {
             Self::UserWelcome => "When a new user completes signup",
             Self::ProjectSubmitted => "When a project is submitted for review",
             Self::ProjectApproved => "When a project is approved",
+            Self::BadgeFoundations => "When the Foundations of Citizen Science badge is earned",
+            Self::BadgeLibrariesHubs => "When the Libraries as Hubs for Citizen Science badge is earned",
+            Self::BadgeDataLiteracy => "When the Building Data Literacy badge is earned",
+            Self::BadgeHigherEd => "When the Teaching in Higher Education badge is earned",
+            Self::BadgeDataEthics => "When the Data Ethics for Practitioners badge is earned",
+            Self::BadgeIdeal => "When the Ideal Participatory Science badge is earned",
+            Self::BadgeAmbassador => "When the SciStarter Ambassador badge is earned",
         }
     }
 
@@ -594,6 +622,13 @@ impl TriggerEvent {
         match self {
             Self::UserWelcome => "user",
             Self::ProjectSubmitted | Self::ProjectApproved => "project",
+            Self::BadgeFoundations
+            | Self::BadgeLibrariesHubs
+            | Self::BadgeDataLiteracy
+            | Self::BadgeHigherEd
+            | Self::BadgeDataEthics
+            | Self::BadgeIdeal
+            | Self::BadgeAmbassador => "badge",
         }
     }
 }

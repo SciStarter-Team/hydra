@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= self.exchange.info.name %> - Exchange</title>
+    <link rel="stylesheet" href="https://early.webawesome.com/webawesome@3.0.0-beta.3/dist/styles/themes/default.css" />
+    <link href="/-static/exchange/css/styles.css" rel="stylesheet">
+    <script type="module" src="https://early.webawesome.com/webawesome@3.0.0-beta.3/dist/webawesome.loader.js"></script>
+    <script src="/-static/htmx.js"></script>
+    <script src="/-static/_hyperscript.js"></script>
+    <script src="/-static/exchange/js/auth-fallback.js"></script>
+  </head>
+  <body hx-headers='{"X-CSRFToken": "<%= self.csrftoken %>"}' <% if !self.user.is_authenticated() { %>data-needs-auth<% } %>>
+    <%+ NavigationBar {exchange: self.exchange, user: self.user} %>
+
+    <!-- PAGE SPECIFIC CONTENT -->
+    <div class="o-wrapper" style="padding-top: 0.5rem">
+
+      <div class="el-row" style="margin-left: -15px; margin-right: -15px;">
+        <div class="el-col el-col-24 el-col-xs-24 el-col-sm-8" style="padding-left: 15px; padding-right: 15px;">
+          <form id="search-form" class="el-form compact-form">
+            <div class="el-form-item">
+              <label for="phrase" class="el-form-item__label">search by word or phrase</label>
+              <div class="el-form-item__content">
+                <div class="el-input">
+                  <input name="phrase" type="text" autocomplete="off" placeholder="plants, animals, weather, etc" class="el-input__inner"
+                         _="on keydown[key=='Enter'] halt the event then trigger click on #submit-search">
+                </div>
+              </div>
+            </div>
+            <% for (label, phrase) in self.predefined.iter() { %>
+            <label for="id-pre-<%= phrase %>" style="display: block">
+              <input type="checkbox" name="phrase" value="<%= phrase %>" id="id-pre-<%= phrase %>">
+              <%= label %>
+            </label>
+            <% } %>
+            <!-- <div class="el-form-item"> -->
+            <!--   <label for="location " class="el-form-item__label">search by location</label> -->
+            <!--   <div class="el-form-item__content"> -->
+            <!--     <div id="location-input" class="el-input"> -->
+            <!--       <input type="hidden" name="longitude"> -->
+            <!--       <input type="hidden" name="latitude"> -->
+            <!--       <input type="text" autocomplete="off" placeholder="Enter a location" class="el-input__inner"> -->
+            <!--     </div> -->
+            <!--   </div> -->
+            <!-- </div> -->
+            <div class="el-form-item">
+              <label for="activity" class="el-form-item__label">filter for projects based on activity</label>
+              <div class="el-form-item__content">
+                <wa-select name="activity" label="Projects to do while...">
+                  <wa-option value=""></wa-option>
+                  <% for (value, label) in self.activities.iter() { %>
+                    <wa-option value="<%= value %>"><%= label %></wa-option>
+                  <% } %>
+                </wa-select>
+              </div>
+            </div>
+            <div class="el-form-item">
+              <label for="topics" class="el-form-item__label">filter for projects based on topic</label>
+              <div class="el-form-item__content">
+                <wa-select name="topic" label="Select a topic">
+                  <wa-option value=""></wa-option>
+                  <% for (value, label) in self.topics.iter() { %>
+                    <wa-option value="<%= value %>"><%= label %></wa-option>
+                  <% } %>
+                </wa-select>
+              </div>
+            </div>
+            <div class="el-form-item">
+              <label for="audience" class="el-form-item__label">filter for projects based on ideal audience</label>
+              <div class="el-form-item__content">
+                <wa-select name="audience" label="Age group(s)" multiple with-clear>
+                  <% for (value, label) in self.audiences.iter() { %>
+                    <wa-option value="<%= value %>"><%= label %></wa-option>
+                  <% } %>
+                </wa-select>
+              </div>
+            </div>
+            <div class="el-form-item">
+              <!-- <div role="switch" aria-checked="false" class="switch-wrap"> -->
+              <!--   <label class="switch"> -->
+              <!--     <input type="checkbox" class="switch-input"> -->
+              <!--     <span class="switch-label" data-on="On" data-off="Off"></span> -->
+              <!--     <span class="switch-handle"></span> -->
+              <!--   </label> -->
+              <!--   <span aria-hidden="true">include events</span> -->
+              <!--   <button type="button" class="el-button el-tooltip question-mark-tooltip el-button--default" aria-label="'Projects' are typically ongoing while 'events' are short-term." data-microtip-position="top" role="tooltip" tabindex="0"><span>?</span></button> -->
+              <!-- </div> -->
+
+              <label for="include-inactive">
+                <input id="include-inactive" name="inactive" value="true" type="checkbox">
+                include inactive projects
+              </label>
+            </div>
+            <div class="u-txt-r u-mb-lg">
+              <button hx-on:click="document.querySelector('#search-form').reset()" type="button" class="el-button el-button--info is-plain"><span>clear form</span></button>
+              <button
+                id="submit-search"
+                hx-get="/exchange/<%= self.exchange.exchange_id() %>/results"
+                hx-include="#search-form"
+                hx-target="#search-results"
+                hx-indicator="#search-results"
+                hx-swap="outerHTML"
+                type="button"
+                class="el-button el-button--primary"><span>find projects</span></button>
+            </div>
+          </form>
+        </div>
+
+        <%+ SearchResults {exchange: self.exchange, projects: self.projects, pagination: self.pagination, params: self.params, total: self.total} %>
+      </div>
+    </div><!-- .o-wrapper -->
+
+    <!-- END PAGE SPECIFIC CONTENT-->
+
+    <!-- FOOTER - every page -->
+    <footer>
+      <% if !self.exchange.restricted_add() || self.exchange.user_is_authorized() { %>
+      <a class="btn btn-secondary"  data-custom-open="add-modal"><span>+</span> Add a Project or Event</a>
+      <% } %>
+      <div><a href="/login?next=%2Fexchange%2F<%= self.exchange.exchange_id() %>%2F">Log In</a> | <a href="/login?action=signup&next=%2Fexchange%2F<%= self.exchange.exchange_id() %>%2F">Sign Up</a></div>
+      <p class="powered-by">powered by <img src="/-static/img/scistarter-logo-web-r.svg" alt="SciStarter" /></p>
+      <div style="height: 8rem"></div>
+    </footer>
+    <!-- END FOOTER -->
+
+    <div class="modal micromodal-slide" id="add-modal" aria-hidden="true">
+      <div class="modal__overlay" tabindex="-1" data-micromodal-close>
+        <div class="modal__container" role="dialog" aria-modal="true" aria-labelledby="add-modal-title">
+          <header class="modal__header">
+            <div>
+              <h2 class="modal__title" id="add-modal-title">Add a Citizen Science Project or Event</h2>
+              <p class="powered-by">powered by <img src="/img/scistarter-logo-web-r.svg" alt="SciStarter" /></p>
+              <p>You will be taken from this website to the <a href="https://scistarter.org">SciStarter</a> website to enter your project, event, or tool. Once approved, it will be available on SciStarter and in any SciStarter partner websites where it meets the criteria to display.</p>
+            </div>
+            <button class="modal__close" aria-label="Close modal" data-micromodal-close></button>
+          </header>
+          <main class="modal__content">
+            <div>
+              <img src="/-static/exchange/img/microscope.svg" alt="microscope icon" />
+              <h3>Add a Citizen Science Project</h3>
+              <p>Projects are typically  long term initiatives that may crowdsource data collection or analysis.</p>
+              <p><a href="https://scistarter.org/add-project?exchange=<%= self.exchange.exchange_id() %>" class="modal__btn modal__btn-primary" target="_blank"><span class="plus">+</span> Add a Project</a></p>
+              <p><a href="https://scistarter.org/finder" target="_blank">Visit SciStarter Projects Page</a></p>
+            </div>
+            <div>
+              <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon entity__tab-icon" style="fill: currentcolor;"><use xlink:href="/-static/exchange/img/icons.svg#icon--db-events"></use></svg>
+              <h3>Add a Citizen Science Event</h3>
+              <p>Events are typically short term (possibly reoccurring) events with known start and end times and may focus on trainings, meet-ups, and other activities related to a citizen science project.</p>
+              <p><a href="https://scistarter.org/add-event?exchange=<%= self.exchange.exchange_id() %>" class="modal__btn modal__btn-primary" target="_blank"><span class="plus">+</span> Add an Event</a></p>
+              <p><a href="https://scistarter.org/events" target="_blank">Visit SciStarter Events Page</a></p>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+
+    <!-- https://micromodal.vercel.app/ -->
+    <script src="/-static/exchange/js/micromodal.js"></script>
+    <script>
+    MicroModal.init({
+        onShow: modal => console.info(`${modal.id} is shown`), // [1]
+        onClose: modal => console.info(`${modal.id} is hidden`), // [2]
+        openTrigger: 'data-custom-open', // [3]
+        openClass: 'is-open', // [5]
+        disableScroll: true, // [6]
+        disableFocus: false, // [7]
+        awaitOpenAnimation: false, // [8]
+        awaitCloseAnimation: false, // [9]
+        debugMode: true // [10]
+    });
+    </script>
+
+  </body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR IGNORE INTO \"user_tags\" (\"user_id\", \"tag\") VALUES (?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "18569835ee214466a53dce5ff48523e9024762ee2e5066e19ff4ed846327f81f"
+}

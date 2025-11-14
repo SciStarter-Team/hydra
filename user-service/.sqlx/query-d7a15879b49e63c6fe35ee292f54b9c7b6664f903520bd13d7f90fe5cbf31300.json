@@ -1,0 +1,105 @@
+{
+  "db_name": "SQLite",
+  "query": "select u.user_id, u.handle, u.password, u.is_staff, u.is_superuser, u.public, u.protected,\n           AsText(u.point) as \"point: String\"\n           from users u\n           join emails e on u.user_id = e.user_id\n           where e.email = ?\n           limit 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "user_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "name": "handle",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "handle"
+          }
+        }
+      },
+      {
+        "name": "password",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "password"
+          }
+        }
+      },
+      {
+        "name": "is_staff",
+        "ordinal": 3,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "is_staff"
+          }
+        }
+      },
+      {
+        "name": "is_superuser",
+        "ordinal": 4,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "is_superuser"
+          }
+        }
+      },
+      {
+        "name": "public",
+        "ordinal": 5,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "public"
+          }
+        }
+      },
+      {
+        "name": "protected",
+        "ordinal": 6,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "protected"
+          }
+        }
+      },
+      {
+        "name": "point: String",
+        "ordinal": 7,
+        "type_info": "Null",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "d7a15879b49e63c6fe35ee292f54b9c7b6664f903520bd13d7f90fe5cbf31300"
+}

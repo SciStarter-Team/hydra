@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exchange</title>
+    <script src="/-static/htmx.js"></script>
+    <link href="/-static/exchange/css/styles.css" rel="stylesheet">
+  </head>
+  <body hx-headers='{"X-CSRFToken": "<%= csrftoken %>"}'>
+    <div class="login-wrapper back-wrapper">
+      <a href="javascript:void(0)" onclick="history.back()">&laquo; back</a>
+    </div>
+    <div class="login-wrapper">
+      <h2 class="b-heading-6 b-color-secondary">Log in with SciStarter account</h2>
+      <p>No account? <a href="/signup.html">Create an account</a></p>
+      <form class="el-form ss-login" autocomplete="off">
+        <div class="el-form-item is-required">
+          <label for="email" class="el-form-item__label">Email address</label>
+          <div class="el-form-item__content">
+            <div class="el-input">
+              <input type="text" autocomplete="off" class="el-input__inner">
+            </div>
+          </div>
+        </div>
+        <div class="el-form-item is-required">
+          <label for="password" class="el-form-item__label">Password</label>
+          <div class="el-form-item__content">
+            <div class="el-input">
+              <input type="password" autocomplete="off" class="el-input__inner">
+            </div> 
+            <p><a>Forgot your password?</a></p>
+          </div>
+        </div>
+        <div class="el-form-item u-txt-r">
+          <div class="el-form-item__content">
+            <button type="button" class="el-button el-button--default"><span>Cancel</span></button>
+            <button type="button" class="el-button el-button--primary"><span>Log in</span></button>
+          </div>
+        </div>
+    </div>
+    </form>
+
+  </body>
+</html>

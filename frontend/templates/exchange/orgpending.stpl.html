@@ -1,0 +1,5 @@
+<div hx-target="this" class="org-item oi-line" hx-vals='{"id": <%= id %>}'>
+  <span class="label"><a href="https://scistarter.org/<%= &slug %>" target="_blank"><%= &name %></a></span>
+  <a class="oi-add-item oi-actions" hx-post="/exchange/<%= exchange_id %>/approval/accept">approve</a>
+  <a style="color: #B80000" class="oi-remove-item oi-actions" hx-post="/exchange/<%= exchange_id %>/approval/reject">reject</a>
+</div>

@@ -1,0 +1,90 @@
+<div class="bg-white rounded-lg shadow border border-gray-200">
+    <div class="px-6 py-4 border-b border-gray-200">
+        <h3 class="text-lg font-medium text-gray-900">Edit Exchange</h3>
+        <p class="mt-1 text-sm text-gray-500">Update exchange metadata</p>
+    </div>
+    <div class="p-6">
+        <form method="post" action="/-admin/exchanges/<%= self.exchange_id %>" class="space-y-6">
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Exchange ID</label>
+                <div class="mt-1 block w-full rounded-md border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-500">
+                    <%= self.exchange_id %> (read-only)
+                </div>
+            </div>
+
+            <div>
+                <label for="slug" class="block text-sm font-medium text-gray-700">Slug</label>
+                <input
+                    type="text"
+                    name="slug"
+                    id="slug"
+                    required
+                    pattern="[a-z0-9-]+"
+                    value="<%= self.slug %>"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                <p class="mt-1 text-sm text-gray-500">Lowercase letters, numbers, and hyphens only</p>
+            </div>
+
+            <div>
+                <label for="name" class="block text-sm font-medium text-gray-700">Name</label>
+                <input
+                    type="text"
+                    name="name"
+                    id="name"
+                    required
+                    value="<%= self.name %>"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+            </div>
+
+            <div>
+                <label for="description" class="block text-sm font-medium text-gray-700">Description</label>
+                <textarea
+                    name="description"
+                    id="description"
+                    required
+                    rows="3"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"><%= self.description %></textarea>
+            </div>
+
+            <div>
+                <label for="logo_url" class="block text-sm font-medium text-gray-700">Logo URL (Optional)</label>
+                <input
+                    type="url"
+                    name="logo_url"
+                    id="logo_url"
+                    value="<%= self.logo_url %>"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+            </div>
+
+            <div class="flex justify-between">
+                <button
+                    type="button"
+                    hx-delete="/-admin/exchanges/<%= self.exchange_id %>"
+                    hx-confirm="Are you sure you want to delete this exchange? This action cannot be undone."
+                    hx-target="closest .bg-white"
+                    hx-swap="outerHTML"
+                    class="inline-flex justify-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2">
+                    Delete Exchange
+                </button>
+                <div class="flex space-x-3">
+                    <a href="/-admin/exchanges" class="inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                        Cancel
+                    </a>
+                    <button
+                        type="submit"
+                        class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                        Save Changes
+                    </button>
+                </div>
+            </div>
+        </form>
+
+        <div class="mt-6 pt-6 border-t border-gray-200">
+            <p class="text-sm text-gray-500">For detailed exchange settings (voting, reviews, predefined searches, etc.), visit the exchange admin page:</p>
+            <a href="/exchange/<%= self.exchange_id %>/org.html" target="_blank" class="mt-2 inline-flex items-center text-indigo-600 hover:text-indigo-900 text-sm font-medium">
+                Open Exchange Admin Page
+                <svg class="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+            </a>
+        </div>
+    </div>
+</div>

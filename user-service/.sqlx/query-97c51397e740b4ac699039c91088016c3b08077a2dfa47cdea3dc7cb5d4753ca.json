@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(*) as count FROM users\n         WHERE DATE(date_joined) = DATE('now')\n         AND verified = 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "count",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "97c51397e740b4ac699039c91088016c3b08077a2dfa47cdea3dc7cb5d4753ca"
+}

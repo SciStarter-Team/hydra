@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exchange</title>
+    <script src="/-static/htmx.js"></script>
+    <link href="/-static/exchange/css/styles.css" rel="stylesheet">
+  </head>
+  <body hx-headers='{"X-CSRFToken": "<%= csrftoken %>"}'>
+    <div class="login-wrapper back-wrapper">
+      <a href="javascript:void(0)" onclick="history.back()">&laquo; back</a>
+    </div>
+    <div class="login-wrapper">
+      <h2 class="b-heading-6 b-color-secondary">Create a SciStarter account</h2>
+      <p>Have an account? <a href="/login.html">Log in</a></p>
+      
+      <form class="el-form ss-signup" method="post" action="/core/signup?next=<%= &next %>">
+        <input type="hidden" name="csrftoken" value="<%= csrftoken %>">
+        <input type="hidden" name="origin" value="evolveme">
+        <input type="hidden" name="referrer_tag" value="signup-evolveme:<%= task %>">
+        <div class="el-form-item is-required">
+          <div class="el-form-item__content">
+            <div class="el-input">
+              <input type="text" name="email" autocomplete="off" placeholder="Email address" class="el-input__inner">
+            </div>
+          </div>
+        </div>
+        <div class="el-form-item">
+          <div class="el-form-item__content">
+            <div class="el-input">
+              <input type="text" name="handle" autocomplete="off" placeholder="Handle (display name)" class="el-input__inner">
+            </div>
+          </div>
+        </div>
+        <div class="el-form-item is-required">
+          <div class="el-form-item__content">
+            <div class="el-input">
+              <input type="password" name="password" autocomplete="new-password" placeholder="Password" class="el-input__inner">
+            </div>
+          </div>
+        </div>
+        <div class="el-form-item is-required">
+          <div class="el-form-item__content">
+            <div class="el-input">
+              <input type="password" name="password2" autocomplete="new-password" placeholder="Repeat password" class="el-input__inner">
+            </div>
+          </div>
+        </div>
+        <div class="el-form-item">
+          <div class="el-form-item__content">
+            <div class="el-input">
+              <input type="text" name="zipcode" autocomplete="off" placeholder="Zip/Postal code" class="el-input__inner">
+            </div>
+          </div>
+        </div>
+        <div class="el-form-item">
+          <label class="el-form-item__label">Sign up for our newsletter</label>
+          <div class="el-form-item__content">
+            <div role="switch" aria-checked="true" class="switch-wrap">
+              <label class="switch">
+                <input type="checkbox" name="newsletter" class="switch-input" checked>
+                <span class="switch-label" data-on="On" data-off="Off"></span>
+                <span class="switch-handle"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="el-form-item is-required">
+          <div class="el-form-item__content">
+            <label for="id_terms" class="this-required_label el-form-item__label">Agree to SciStarter's <a href="/terms">Terms of Use</a></label>
+            <div role="switch" aria-checked="true" class="switch-wrap">
+              <label class="switch">
+                <input type="checkbox" name="terms" class="switch-input" checked>
+                <span class="switch-label" data-on="On" data-off="Off"></span>
+                <span class="switch-handle"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="el-form-item u-txt-r">
+          <div class="el-form-item__content">
+            <button type="submit" class="el-button el-button--primary"><span>Sign up</span></button>
+          </div>
+        </div>
+      </form>
+
+  </body>
+</html>

@@ -1,0 +1,11 @@
+<div hx-target="this" class="org-item oi-line">
+  <% if id > 0 { %>
+  <span class="label"><%= &name %></span>
+  <p><a href="mailto:<%= &email %>"><%= &email %></a></p>
+  <a class="oi-remove-item oi-actions" hx-post="/exchange/<%= exchange_id %>/staff/del" hx-vals='{"user_id":<%= id %>}' hx-swap="delete">remove</a>
+  <% } else { %>
+  <span class="label" style="font-weight: bold">Invalid</span>
+  <p><%= &email %></p>
+  <span>The specified email address is not the login email for any scistarter.org account, and so it can't be used to identify a staff member. (Case sensitive)</span>
+  <% } %>
+</div>

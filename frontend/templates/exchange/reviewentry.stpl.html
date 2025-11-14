@@ -1,0 +1,16 @@
+<li <% if self.oob { %>hx-swap-oob="beforeend:#reviews"<% } %>>
+  <div class="media-object">
+    <% if !self.review.user_image.is_empty() { %>
+    <div class="mo-img">
+      <img style="max-width: 100%; height: auto;" src="https://orrery-media.s3.amazonaws.com/<%= &self.review.user_image %>" alt="profile image">
+    </div>
+    <% } %>
+    <div class="mo-body">
+      <div class="ss-markdown reset-exempt short">
+        <%- &self.review.text %>
+      </div>
+      <a href="/profile?for=<%= &self.review.user_id %>" title="Unique ID: <%= &self.review.user_id %>" target="_blank" class="ss-userref"><%= if self.review.user_handle.is_empty() { format!("({})", &self.review.user_id) } else { self.review.user_handle.clone() } %></a>
+      <span><%= self.review.when|disp%></span>
+    </div>
+  </div>
+</li>

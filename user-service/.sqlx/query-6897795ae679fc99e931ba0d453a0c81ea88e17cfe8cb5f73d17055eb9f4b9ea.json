@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO user_set_results (evaluation_id, user_id, created_at)\n                   SELECT DISTINCT ?, user_id, ?\n                   FROM user_set_evaluations\n                   WHERE evaluation_id = ? AND operation = 'union'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "6897795ae679fc99e931ba0d453a0c81ea88e17cfe8cb5f73d17055eb9f4b9ea"
+}

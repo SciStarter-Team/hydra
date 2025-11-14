@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT email_address FROM address_set_members WHERE address_set_slug = ? ORDER BY email_address LIMIT ? OFFSET ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "email_address",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "address_set_members",
+            "name": "email_address"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6e7250a63e377f1dfe6dea056028ea5f01401dedbd4fa9d710e22441332dc34b"
+}

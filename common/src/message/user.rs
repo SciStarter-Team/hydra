@@ -766,6 +766,29 @@ pub struct UserSetDetailResponse {
     pub criteria: Vec<UserSetCriterionWithId>,
 }
 
+// User Display Info (for public display in reviews, forums, etc.)
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserDisplayInfoRequest {
+    pub user_id: Ulid,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserDisplayInfo {
+    pub user_id: Ulid,
+    pub handle: String,
+    pub image: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserDisplayInfoBatchRequest {
+    pub user_ids: Vec<Ulid>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserDisplayInfoBatchResponse {
+    pub users: Vec<UserDisplayInfo>,
+}
+
 // User Info for Email Sending (lightweight alternative to AdminUser)
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct UserEmailInfoRequest {
@@ -832,4 +855,194 @@ pub struct BookmarkCreateRequest {
 pub struct BookmarkCreateResponse {
     pub success: bool,
     pub message: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct BookmarkCheckRequest {
+    pub user_id: Ulid,
+    pub project_id: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct BookmarkCheckResponse {
+    pub has_bookmark: bool,
+}
+
+// Project joins
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ProjectJoinRequest {
+    pub user_id: Ulid,
+    pub project_id: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ProjectJoinResponse {
+    pub success: bool,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ProjectJoinCheckRequest {
+    pub user_id: Ulid,
+    pub project_id: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ProjectJoinCheckResponse {
+    pub has_joined: bool,
+}
+
+// Permissions
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PermissionCheckRequest {
+    pub user_id: String,  // ULID
+    pub resource_type: String,
+    pub resource_id: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PermissionCheckResponse {
+    pub has_permission: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PermissionGrantRequest {
+    pub user_id: String,
+    pub resource_type: String,
+    pub resource_id: String,
+    pub permission: String,
+    pub granted_by: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PermissionRevokeRequest {
+    pub user_id: String,
+    pub resource_type: String,
+    pub resource_id: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PermissionListRequest {
+    pub user_id: String,
+    pub resource_type: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Permission {
+    pub user_id: String,
+    pub resource_type: String,
+    pub resource_id: String,
+    pub permission: String,
+    pub granted_by: String,
+    pub granted_at: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PermissionListResponse {
+    pub permissions: Vec<Permission>,
+}
+
+// ============================================================================
+// User Matching (for API participation recording)
+// ============================================================================
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub enum IdentifierType {
+    Hashed,    // SHA256 hash of email
+    Opaque,    // User's opaque_id UUID
+    Email,     // Plaintext email
+    LinkToken, // Link token string
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserMatchRequest {
+    pub identifier: String,
+    pub identifier_type: IdentifierType,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserMatchResponse {
+    pub user_id: Option<String>, // ULID, None = no match (discard for privacy)
+}
+
+// ============================================================================
+// API Key Management
+// ============================================================================
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserApiKeyRequest {
+    pub user_id: String, // ULID
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserApiKeyResponse {
+    pub api_key: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserOpaqueIdRequest {
+    pub user_id: String, // ULID
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserOpaqueIdResponse {
+    pub opaque_id: Option<String>, // UUID string, None if not set
+}
+
+// ============================================================================
+// API Key Validation
+// ============================================================================
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ValidateApiKeyRequest {
+    pub api_key: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ValidateApiKeyResponse {
+    pub valid: bool,
+    pub user_id: Option<String>, // ULID if valid
+    pub is_staff: bool,
+    pub is_superuser: bool,
+}
+
+// ============================================================================
+// Articulate Workflow Progress
+// ============================================================================
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WorkflowProgressRequest {
+    pub user_id: String, // ULID
+    pub workflow: WorkflowType,
+    pub step: String, // e.g., "hour1", "tutorial", "squirrel"
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WorkflowProgressResponse {
+    pub success: bool,
+    pub badge_granted: bool, // True if this step completion triggered a badge
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum WorkflowType {
+    Foundations,
+    LibrariesHubs,
+    DataLiteracy,
+    HigherEd,
+    DataEthics,
+    Ideal,
+    Ambassador,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WorkflowStatusRequest {
+    pub user_id: String, // ULID
+    pub workflow: WorkflowType,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WorkflowStatusResponse {
+    pub current_step: Option<String>, // Current step identifier, None if not started
+    pub completed_steps: Vec<String>, // All completed steps
+    pub badge_granted: bool,
 }

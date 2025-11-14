@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "insert into \"emails\" (\n          \"user_id\",\n          \"email\",\n          \"verified\",\n          \"hash\",\n          \"hash_lower\",\n          \"hash_capfirst\"\n        )\n        values (\n          ?,\n          ?,\n          ?,\n          ?,\n          ?,\n          ?\n        )",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "f20bcc7f20f393bf85c95f77d9cfd98ca9f829571c3cb9dafedf0319ac08f9a9"
+}

@@ -1,0 +1,13 @@
+<div hx-target=this hx-swap=outerHTML class=predef-search-item>
+  <% if edit { %>
+  <button class=predef-delete type=button hx-delete="/exchange/<%= exchange %>/predef/<%= id %>" hx-include="#csrftoken">&#10006;</button>
+  <input type=text name=label value="<%= label %>">
+  <input type=text name=phrase value="<%= phrase %>">
+  <button class=predef-save type=button hx-post="/exchange/<%= exchange %>/predef/<%= id %>" hx-include="closest .predef-search-item,#csrftoken">&#128190;</button>
+  <% } else { %>
+  <span></span>
+  <a hx-get="/exchange/<%= exchange %>/predef/<%= id %>" ><%= label %></a>
+  <span><%= phrase %></span>
+  <span></span>
+  <% } %>
+</div>

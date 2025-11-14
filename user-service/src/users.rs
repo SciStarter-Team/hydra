@@ -10,7 +10,8 @@ use common::{
         AdminUserResponse, AdminUserSearchRequest, AdminUserUpdateRequest, BadgeHolderInfo,
         BadgeHoldersRequest, BadgeHoldersResponse, BasicInfo, PageManagerSyncRequest,
         PageManagerSyncResponse, PageManagerUpdateRequest, PageManagerUpdateResponse,
-        UserAndBadge, UserBadge, UserEmail, UserEmailAddRequest, UserEmailDeleteRequest,
+        UserAndBadge, UserBadge, UserDisplayInfo, UserDisplayInfoBatchRequest,
+        UserDisplayInfoBatchResponse, UserEmail, UserEmailAddRequest, UserEmailDeleteRequest,
         UserEmailResponse, UserEmailToggleVerifiedRequest, UserEmailUpdateRequest, UserEmailInfo,
         UserEmailInfoRequest, UserNameMapping,
     },
@@ -1091,6 +1092,48 @@ pub async fn admin_user_batch_get(req: &Request) -> Result<AdminUserBatchGetResp
         .collect();
 
     Ok(AdminUserBatchGetResponse { users: users? })
+}
+
+pub async fn user_display_info_batch(
+    req: &Request,
+) -> Result<UserDisplayInfoBatchResponse, Error> {
+    let request: UserDisplayInfoBatchRequest = decode_structured_message(req.message.clone())?;
+
+    if request.user_ids.is_empty() {
+        return Ok(UserDisplayInfoBatchResponse { users: Vec::new() });
+    }
+
+    // Build query to get user display info by IDs
+    let mut query_builder =
+        sqlx::QueryBuilder::new(r#"SELECT "user_id", "handle", "image" FROM "users" WHERE "user_id" IN ("#);
+    let mut separated = query_builder.separated(", ");
+    for user_id in &request.user_ids {
+        separated.push_bind(user_id.to_string());
+    }
+    separated.push_unseparated(")");
+
+    let rows = query_builder
+        .build_query_as::<(String, String, String)>()
+        .fetch_all(db())
+        .await?;
+
+    let users: Result<Vec<UserDisplayInfo>, Error> = rows
+        .into_iter()
+        .map(
+            |(user_id_str, handle, image)| -> Result<UserDisplayInfo, Error> {
+                let user_id = user_id_str
+                    .as_ulid()
+                    .map_err(|e| anyhow::anyhow!("Invalid user ID in database: {}", e))?;
+                Ok(UserDisplayInfo {
+                    user_id,
+                    handle,
+                    image,
+                })
+            },
+        )
+        .collect();
+
+    Ok(UserDisplayInfoBatchResponse { users: users? })
 }
 
 pub async fn admin_user_create(req: &Request) -> Result<AdminUserResponse, Error> {

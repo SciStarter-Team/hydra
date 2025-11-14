@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT \"user_id\", \"tag\" FROM \"user_tags\" ORDER BY \"user_id\", \"tag\" LIMIT ? OFFSET ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "user_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_tags",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "name": "tag",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_tags",
+            "name": "tag"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "743414e20d779d9e8e838218769a879b5a7998e2238cb398903ba74dc43e1295"
+}

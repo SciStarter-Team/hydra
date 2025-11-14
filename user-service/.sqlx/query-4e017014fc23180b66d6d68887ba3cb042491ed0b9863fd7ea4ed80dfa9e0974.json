@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE \"users\" SET \"verified\" = ? WHERE \"user_id\" = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "4e017014fc23180b66d6d68887ba3cb042491ed0b9863fd7ea4ed80dfa9e0974"
+}

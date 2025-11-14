@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM \"user_tags\" WHERE \"user_id\" = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "64f062d7dadec3ba5756e5a166af6a96c2fb64060b5ffdd1f74541b4905074f0"
+}

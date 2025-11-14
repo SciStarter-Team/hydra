@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exchange</title>
+    <script src="/-static/htmx.js"></script>
+    <script src="/-static/_hyperscript.js" defer></script>
+    <link href="/-static/exchange/css/styles.css" rel="stylesheet">
+  </head>
+  <body hx-headers='{"X-CSRFToken": "<%= csrftoken %>"}'>
+
+    <%+ NavigationBar {exchange: &exchange, user: &user} %>
+
+    <!-- PAGE SPECIFIC CONTENT -->
+    <div class="o-wrapper u-pt u-pb-lg ss-organization">
+
+      <div class="d2t">
+        <ul role="tablist" class="d2t-tabs">
+          <li role="tab" tabindex="0" aria-controls="#org-settings" class="d2t-tab is-active d2t--selected">
+            <a href="#org-settings" role="presentation">
+              <div class="media-object mo-center">
+                <div class="media-image">
+                  <svg id="settings" xmlns="http://www.w3.org/2000/svg" width="40.19" height="40.19" viewBox="0 0 40.19 40.19">
+                    <g id="Group_1361" data-name="Group 1361" transform="translate(0 0)">
+                      <path id="Path_584" data-name="Path 584" d="M21.971,40.19H18.219a2.508,2.508,0,0,1-2.488-2.21l-.4-3.142a15.825,15.825,0,0,1-2.3-.953l-2.5,1.944A2.5,2.5,0,0,1,7.2,35.618L4.567,32.981a2.491,2.491,0,0,1-.2-3.314l1.944-2.5a15.461,15.461,0,0,1-.953-2.3l-3.148-.4A2.514,2.514,0,0,1,0,21.971V18.219a2.508,2.508,0,0,1,2.21-2.488l3.142-.4a15.825,15.825,0,0,1,.953-2.3l-1.943-2.5A2.5,2.5,0,0,1,4.575,7.2L7.212,4.565a2.493,2.493,0,0,1,3.314-.2l2.5,1.946a15.768,15.768,0,0,1,2.3-.953l.4-3.148A2.508,2.508,0,0,1,18.219,0h3.751a2.508,2.508,0,0,1,2.488,2.21l.4,3.142a15.768,15.768,0,0,1,2.3.953l2.5-1.944a2.5,2.5,0,0,1,3.324.213l2.637,2.637a2.491,2.491,0,0,1,.2,3.314l-1.944,2.5a15.46,15.46,0,0,1,.953,2.3l3.148.4a2.511,2.511,0,0,1,2.2,2.49v3.751a2.508,2.508,0,0,1-2.21,2.488l-3.142.4a15.825,15.825,0,0,1-.953,2.3l1.944,2.5a2.494,2.494,0,0,1-.213,3.324l-2.637,2.637a2.489,2.489,0,0,1-3.314.2l-2.5-1.944a15.46,15.46,0,0,1-2.3.953l-.4,3.148a2.511,2.511,0,0,1-2.49,2.205Zm-9.026-8.138a.849.849,0,0,1,.409.105,14.055,14.055,0,0,0,2.971,1.232.836.836,0,0,1,.6.7l.469,3.684a.846.846,0,0,0,.827.744h3.751a.843.843,0,0,0,.826-.735l.471-3.691a.836.836,0,0,1,.6-.7,14.055,14.055,0,0,0,2.971-1.232.836.836,0,0,1,.921.07l2.931,2.277a.824.824,0,0,0,1.1-.057L34.439,31.8A.828.828,0,0,0,34.5,30.69L32.227,27.76a.836.836,0,0,1-.07-.921,14.055,14.055,0,0,0,1.232-2.971.836.836,0,0,1,.7-.6l3.684-.469a.849.849,0,0,0,.744-.829V18.219a.843.843,0,0,0-.735-.826l-3.691-.471a.836.836,0,0,1-.7-.6,14.055,14.055,0,0,0-1.232-2.971.833.833,0,0,1,.07-.921L34.506,9.5a.821.821,0,0,0-.055-1.1L31.8,5.752a.824.824,0,0,0-1.105-.065L27.761,7.964a.839.839,0,0,1-.923.07A14,14,0,0,0,23.868,6.8a.836.836,0,0,1-.6-.7L22.8,2.42a.849.849,0,0,0-.829-.745H18.219a.843.843,0,0,0-.826.735L16.923,6.1a.84.84,0,0,1-.6.7,13.993,13.993,0,0,0-2.971,1.231.839.839,0,0,1-.923-.069L9.5,5.685a.821.821,0,0,0-1.1.055L5.751,8.4A.828.828,0,0,0,5.685,9.5l2.277,2.931a.836.836,0,0,1,.07.921A13.968,13.968,0,0,0,6.8,16.324a.836.836,0,0,1-.7.6l-3.684.469a.846.846,0,0,0-.744.827v3.751a.843.843,0,0,0,.735.826l3.691.471a.836.836,0,0,1,.7.6,14.055,14.055,0,0,0,1.232,2.971.833.833,0,0,1-.07.921L5.684,30.688a.821.821,0,0,0,.055,1.1l2.654,2.654A.828.828,0,0,0,9.5,34.5l2.931-2.277a.862.862,0,0,1,.516-.174Z" transform="translate(0 0)" />
+                    </g>
+                    <g id="Group_1362" data-name="Group 1362" transform="translate(11.722 11.722)">
+                      <path id="Path_585" data-name="Path 585" d="M15.373,23.746a8.373,8.373,0,1,1,8.373-8.373A8.382,8.382,0,0,1,15.373,23.746Zm0-15.071a6.7,6.7,0,1,0,6.7,6.7A6.705,6.705,0,0,0,15.373,8.675Z" transform="translate(-7 -7)" />
+                    </g>
+                  </svg>
+
+                </div>
+                <div class="media-body">
+                  <h2>Organizational Settings</h2>
+                  <p>Customize which projects are displayed on your Exchange</p>
+                </div>
+              </div>
+            </a>
+          </li>
+          <li role="tab" tabindex="1" aria-controls="#managers" class="d2t-tab">
+            <a href="#managers" role="presentation">
+              <div class="media-object mo-center">
+                <div class="media-image">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="38.265" height="38.265" viewBox="0 0 38.265 38.265">
+                    <g id="key" transform="translate(0 0)">
+                      <g id="Group_1364" data-name="Group 1364" transform="translate(0 0)">
+                        <g id="Group_1363" data-name="Group 1363" transform="translate(0 0)">
+                          <path id="Path_586" data-name="Path 586" d="M34.659,3.607A12.327,12.327,0,0,0,14.213,16.124L.328,30.009A1.121,1.121,0,0,0,0,30.8v6.343a1.121,1.121,0,0,0,1.121,1.121H7.464a1.121,1.121,0,0,0,.793-.328l1.586-1.586a1.121,1.121,0,0,0,.321-.922l-.2-1.7,2.36-.222a1.121,1.121,0,0,0,1.011-1.011l.223-2.361,1.7.2a1.121,1.121,0,0,0,1.251-1.114V27.128h2.05a1.121,1.121,0,0,0,.788-.324l2.786-2.753A12.327,12.327,0,0,0,34.659,3.607ZM33.073,19.463a10.093,10.093,0,0,1-10.815,2.251,1.121,1.121,0,0,0-1.2.247L18.1,24.886H15.392a1.121,1.121,0,0,0-1.121,1.121v1.95l-1.59-.185a1.121,1.121,0,0,0-1.246,1.008l-.243,2.578L8.614,31.6a1.121,1.121,0,0,0-1.009,1.246l.268,2.3L7,36.023H2.242V31.266L16.3,17.208a1.121,1.121,0,0,0,.251-1.2,10.087,10.087,0,1,1,16.522,3.456Z" transform="translate(0 0)" />
+                        </g>
+                      </g>
+                      <g id="Group_1366" data-name="Group 1366" transform="translate(25.747 5.794)">
+                        <g id="Group_1365" data-name="Group 1365">
+                          <path id="Path_587" data-name="Path 587" d="M350.24,78.512a3.364,3.364,0,1,0,0,4.757A3.367,3.367,0,0,0,350.24,78.512Zm-1.586,3.171a1.121,1.121,0,1,1,0-1.586A1.122,1.122,0,0,1,348.654,81.684Z" transform="translate(-344.499 -77.529)" />
+                        </g>
+                      </g>
+                    </g>
+                  </svg>
+                </div>
+                <div class="media-body">
+                  <h2>Staff</h2>
+                  <p>Members with management access</p>
+                </div>
+              </div>
+            </a>
+          </li>
+          <li role="tab" tabindex="2" aria-controls="#projects" class="d2t-tab">
+            <a href="#projects" role="presentation">
+              <div class="media-object mo-center">
+                <div class="media-image">
+                </div>
+                <div class="media-body">
+                  <h2>Project Approval</h2>
+                  <p>Approve or reject submitted projects</p>
+                </div>
+              </div>
+            </a>
+          </li>
+        </ul>
+
+        <div class="d2t-content" id="drawers">
+          <div class="d2t--drawer" id="org-settings">
+            <div class="d2t--header">
+              <a href="javascript:void(0);" class="d2t--close">&times;</a>
+              <h3>Organizational Settings</h3>
+            </div>
+            <div id="settings-fields" class="d2t--content">
+              <input id=csrftoken type=hidden name=csrftoken value="<%= csrftoken %>">
+              <div class="org-item oi-line">
+                <span class="label">Organization</span>
+                <input hx-on:input="document.querySelector('#settings-feedback').textContent=''" type="text" name="name" value="<%= exchange.name() %>" />
+              </div>
+              <div class="org-item oi-line">
+                <span class="label">Only show organization projects</span>
+                <input hx-on:input="document.querySelector('#settings-feedback').textContent=''" type="checkbox" name="exclude_scistarter" value="true" <% if exchange.exclude_scistarter() { %>checked<% } %> />
+              </div>
+              <div class="org-item oi-line">
+                <span class="label">Only show matching projects</span>
+                <textarea hx-on:input="document.querySelector('#settings-feedback').textContent=''" name="search"><%= exchange.search() %></textarea>
+                <small>
+                  This field is for entering
+                  a <a href="https://www.postgresql.org/docs/current/functions-matching.html#POSIX-SYNTAX-DETAILS"
+                       target="_blank">regular expression</a>, which is
+                  used to select matching projects for display. For
+                  most purposes, you can just enter a key word here,
+                  or multiple key words separated
+                  by <strong>|</strong>, so for example you could
+                  enter bird|fish|reptile into the field.
+                </small>
+              </div>
+              <div class="org-item oi-line">
+                <span class="label">Only show projects available in region</span>
+                <% let current_region = exchange.region_id().unwrap_or(0); %>
+                <select hx-on:input="document.querySelector('#settings-feedback').textContent=''" name="region_id">
+                  <option value="">---</option>
+                  <% for (region, name) in regions.iter() { %>
+                  <option value="<%= region %>" <% if *region == current_region { %>selected<% } %>><%= name %></option>
+                  <% } %>
+                </select>
+              </div>
+              <div class="org-item oi-line">
+                <span class="label">Only staff can add projects</span>
+                <input hx-on:input="document.querySelector('#settings-feedback').textContent=''" type="checkbox" name="restricted_add" value="true" <% if exchange.restricted_add() { %>checked<% } %> />
+              </div>
+              <div class="org-item oi-line">
+                <span class="label">Prompted search terms</span>
+                <div id="predef-searches">
+                  <div>
+                    <span></span>
+                    <label>Label</label>
+                    <label>Search</label>
+                    <span></span>
+                  </div>
+                  <% for (id, label, phrase) in predefined.iter() { %>
+                  <%+ OrgPredefItem { edit: false, exchange: exchange.exchange_id, id: *id, label: label.to_string(), phrase: phrase.to_string()} %>
+                  <% } %>
+                  <div>
+                    <span></span>
+                    <button type=button hx-get="/exchange/<%= exchange.exchange_id %>/predef" hx-target="closest div" hx-swap=beforebegin>Add</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div id="settings-feedback"></div>
+            <button
+                hx-post="/exchange/<%= exchange.exchange_id %>/settings"
+                hx-include="#settings-fields"
+                hx-target="#settings-feedback"
+                hx-swap="innerHTML"
+                type="button"
+                style="margin: 1rem"
+                class="el-button el-button--primary"><span>Save</span></button>
+          </div>
+          <div class="d2t--drawer" id="managers" style="display: none;">
+            <div class="d2t--header">
+              <a href="javascript:void(0);" class="d2t--close">&times;</a>
+              <h3>Staff</h3>
+            </div>
+            <div class="d2t--content">
+              <p>
+                In order to add a person as staff, that person must
+                have a scistarter.org account. Use the person's
+                scistarter.org login email here to add them to the
+                staff. Emails are case sensitive.
+              </p>
+              <h4>Current Organization Staff</h4>
+              <% if let Some(owner) = owner { %>
+              <div class="org-item oi-line">
+                <span class="label"><%= &owner.name %></span>
+                <p><a href="mailto:<%= &owner.email %>"><%= &owner.email %></a></p>
+              </div>
+              <% } %>
+              <div id="current-staff">
+                <%+ RenderAll { items: staff } %>
+              </div>
+              <!-- <h4 style="margin-top:2rem;">Pending Organization Page Managers</h4> -->
+              <!-- <div class="org-item oi-line"> -->
+              <!--   <span class="label">Kevin Ripka</span> -->
+              <!--   <p><a href="mailto:kevinripka@projectwombat.com">kevinripka@projectwombat.com</a></p> -->
+              <!--   <a class="oi-remove-item oi-actions" href="javascript:void(0);">remove</a> -->
+              <!-- </div> -->
+              <button type="button" class="el-button  el-button--primary" data-custom-open="add-manager"><span class="plus">+</span>Add SciStarter Members</button>
+            </div>
+          </div>
+          <div class="d2t--drawer" id="projects" style="display: none;">
+            <div class="d2t--header">
+              <a href="javascript:void(0);" class="d2t--close">&times;</a>
+              <h3>Project Approval</h3>
+            </div>
+            <div class="d2t--content">
+              <h4>Projects Awaiting Approval</h4>
+              <div id="current-staff">
+                <%+ RenderAll { items: pending } %>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- end .o-wrapper -->
+
+
+    <!-- END PAGE SPECIFIC CONTENT-->
+
+
+    <!-- FOOTER - every page -->
+    <footer>
+      <a class="btn btn-secondary"  data-custom-open="add-modal"><span>+</span> Add a Project or Event</a>
+      <p class="powered-by">powered by <img src="/-static/img/scistarter-logo-web-r.svg" alt="SciStarter" /></p>
+      <div style="height: 8rem"></div>
+    </footer>
+    <!-- END FOOTER -->
+
+    <!-- DEFAULT MODALS -->
+    <div class="modal micromodal-slide" id="add-modal" aria-hidden="true">
+      <div class="modal__overlay" tabindex="-1" data-micromodal-close>
+        <div class="modal__container" role="dialog" aria-modal="true" aria-labelledby="add-modal-title">
+          <header class="modal__header">
+            <div>
+              <h2 class="modal__title" id="add-modal-title">Add a Citizen Science Project or Event</h2>
+              <p class="powered-by">powered by <img src="/img/scistarter-logo-web-r.svg" alt="SciStarter" /></p>
+              <p>You will be taken from this website to the <a href="https://scistarter.org">SciStarter</a> website to enter your project, event, or tool. Once approved, it will be available on SciStarter and in any SciStarter partner websites where it meets the criteria to display.</p>
+            </div>
+            <button class="modal__close" aria-label="Close modal" data-micromodal-close></button>
+          </header>
+          <main class="modal__content">
+            <div>
+              <img src="/img/microscope.svg" alt="microscope icon" />
+              <h3>Add a Citizen Science Project</h3>
+              <p>Projects are typically  long term initiatives that may crowdsource data collection or analysis.</p>
+              <a href="https://scistarter.org/add-project?exchange=<%= exchange.exchange_id %>" class="modal__btn modal__btn-primary"><span class="plus">+</span> Add a Project</a>
+              <p><a href="https://scistarter.org/finder">Visit SciStarter Projects Page</a></p>
+            </div>
+            <div>
+              <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon entity__tab-icon" style="fill: currentcolor;"><use xlink:href="/img/icons.svg#icon--db-events"></use></svg>
+              <h3>Add a Citizen Science Event</h3>
+              <p>Events are typically short term (possibly reoccurring) events with known start and end times and may focus on trainings, meet-ups, and other activities related to a citizen science project.</p>
+              <a  href="https://scistarter.org/add-event?exchange=<%= exchange.exchange_id %>" class="modal__btn modal__btn-primary"><span class="plus">+</span> Add an Event</a>
+              <p><a href="https://scistarter.org/events">Visit SciStarter Events Page</a></p>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+    <!-- END DEFAULT MODALS-->
+
+
+    <!-- MODALS -->
+    <div class="modal micromodal-slide" id="add-manager" aria-hidden="true">
+      <div class="modal__overlay" tabindex="-1" data-micromodal-close>
+        <div class="modal__container" role="dialog" aria-modal="true" aria-labelledby="add-manager-title">
+          <header class="modal__header">
+            <h2 class="modal__title" id="add-manager-title">Add New Staff</h2>
+            <button class="modal__close" aria-label="Close modal" data-micromodal-close></button>
+          </header>
+          <main class="modal__content" id="add-manager-content">
+            <label for="email-list">Add a comma separated list of emails</label>
+            <small>
+              You can only add people to this list if they have a
+              SciStarter account.
+            </small>
+            <textarea id="email-list" name="emails" style="min-width: 300px; min-height: 4rem"></textarea>
+            <button
+                hx-post="/exchange/<%= exchange.exchange_id %>/staff/add"
+                hx-include="#email-list"
+                hx-target="#current-staff"
+                hx-swap="beforeend"
+                hx-disabled-elt="this"
+                class="modal__btn modal__btn-primary">Add SciStarter Members</button>
+          </main>
+        </div>
+      </div>
+    </div>
+    <!-- END MODALS-->
+
+    <!-- https://micromodal.vercel.app/ -->
+    <script src="/-static/exchange/js/micromodal.js"></script>
+    <script>
+     MicroModal.init({
+         onShow: modal => console.info(`${modal.id} is shown`), // [1]
+         onClose: modal => console.info(`${modal.id} is hidden`), // [2]
+         openTrigger: 'data-custom-open', // [3]
+         openClass: 'is-open', // [5]
+         disableScroll: true, // [6]
+         disableFocus: false, // [7]
+         awaitOpenAnimation: false, // [8]
+         awaitCloseAnimation: false, // [9]
+         debugMode: true // [10]
+     });
+    </script>
+
+    <script src="/-static/exchange/js/d2t.js"></script>
+  </body>
+</html>

@@ -263,6 +263,12 @@ pub fn routes() -> impl Endpoint {
         .at("/api/recipient-search", get(api_recipient_search))
         .at("/api/recipient-select", post(api_recipient_select))
         .at("/api/recipient-remove", delete(api_recipient_remove))
+        .at("/exchanges", get(exchanges_list))
+        .at("/exchanges/new", get(exchange_create_page).post(exchange_create))
+        .at(
+            "/exchanges/:id",
+            get(exchange_edit_page).post(exchange_update).delete(exchange_delete),
+        )
         .at("/badges", get(badges_list))
         .at("/badges/:badgeclass/holders", get(badges_holders))
         .at(
@@ -12093,6 +12099,186 @@ struct RecipientBadge {
 }
 
 #[handler]
+async fn exchanges_list(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    // Fetch exchanges from database
+    let rows = sqlx::query!(
+        "SELECT exchange_id, slug, name, description, logo_url, created, updated FROM exchanges ORDER BY created DESC"
+    )
+    .fetch_all(db())
+    .await?;
+
+    let exchanges: Vec<ExchangeListItem> = rows
+        .into_iter()
+        .map(|row| ExchangeListItem {
+            exchange_id: row.exchange_id,
+            slug: row.slug,
+            name: row.name,
+            description: row.description,
+            logo_url: row.logo_url,
+            created: row.created,
+        })
+        .collect();
+
+    let content = ExchangesListPage { exchanges };
+
+    let prepared = crate::component::AdminLayout::new("Exchange Management", content)
+        .with_sidebar_active("exchanges")
+        .prepare(user_info)
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct ExchangeCreateForm {
+    exchange_id: i64,
+    slug: String,
+    name: String,
+    description: String,
+    #[serde(default)]
+    logo_url: String,
+}
+
+#[handler]
+async fn exchange_create_page(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let content = ExchangeCreatePage {};
+
+    let prepared = crate::component::AdminLayout::new("Create Exchange", content)
+        .with_sidebar_active("exchanges")
+        .prepare(user_info)
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+#[handler]
+async fn exchange_create(
+    Authenticated(_user_info): Authenticated,
+    form: poem::web::Form<ExchangeCreateForm>,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::exchange::Exchange;
+
+    // Create new exchange with default settings
+    let exchange = Exchange {
+        exchange_id: form.exchange_id,
+        slug: form.slug.clone(),
+        name: form.name.clone(),
+        description: form.description.clone(),
+        logo_url: if form.logo_url.is_empty() {
+            None
+        } else {
+            Some(form.logo_url.clone())
+        },
+        settings: crate::exchange::ExchangeSettings {
+            allow_project_voting: true,
+            allow_project_reviews: true,
+            require_approval: false,
+            restricted_add: false,
+            custom_css: None,
+        },
+        predefined_searches: Vec::new(),
+        hidden_projects: std::collections::HashSet::new(),
+        created: common::timestring::TimeString::now(),
+        updated: common::timestring::TimeString::now(),
+    };
+
+    // Use LoadStorePeered to save and broadcast
+    exchange.store().await?;
+
+    // Redirect to exchanges list
+    Ok(poem::web::Redirect::see_other("/-admin/exchanges").into_response())
+}
+
+#[handler]
+async fn exchange_edit_page(
+    Path(exchange_id): Path<i64>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::exchange::Exchange;
+
+    // Load exchange via LoadStorePeered
+    let exchange = Exchange::load(exchange_id).await?;
+
+    let content = ExchangeEditPage {
+        exchange_id: exchange.exchange_id,
+        slug: exchange.slug,
+        name: exchange.name,
+        description: exchange.description,
+        logo_url: exchange.logo_url.unwrap_or_default(),
+    };
+
+    let prepared = crate::component::AdminLayout::new("Edit Exchange", content)
+        .with_sidebar_active("exchanges")
+        .prepare(user_info)
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct ExchangeUpdateForm {
+    slug: String,
+    name: String,
+    description: String,
+    #[serde(default)]
+    logo_url: String,
+}
+
+#[handler]
+async fn exchange_update(
+    Path(exchange_id): Path<i64>,
+    Authenticated(_user_info): Authenticated,
+    form: poem::web::Form<ExchangeUpdateForm>,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::exchange::Exchange;
+
+    // Load existing exchange
+    let mut exchange = Exchange::load(exchange_id).await?;
+
+    // Update fields
+    exchange.slug = form.slug.clone();
+    exchange.name = form.name.clone();
+    exchange.description = form.description.clone();
+    exchange.logo_url = if form.logo_url.is_empty() {
+        None
+    } else {
+        Some(form.logo_url.clone())
+    };
+    exchange.updated = common::timestring::TimeString::now();
+
+    // Use LoadStorePeered to save and broadcast
+    exchange.store().await?;
+
+    // Redirect to exchanges list
+    Ok(poem::web::Redirect::see_other("/-admin/exchanges").into_response())
+}
+
+#[handler]
+async fn exchange_delete(
+    Path(exchange_id): Path<i64>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::exchange::Exchange;
+    use crate::peering::LoadStorePeered;
+
+    // Use LoadStorePeered to delete and broadcast to peers
+    Exchange::delete(exchange_id).await?;
+
+    // Return success message for HTMX
+    Ok(Html("<div class=\"text-green-600\">Exchange deleted successfully</div>").into_response())
+}
+
+#[handler]
 async fn badges_list(
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
@@ -12330,6 +12516,37 @@ async fn badges_revoke(
     Ok(poem::Response::builder()
         .status(poem::http::StatusCode::OK)
         .finish())
+}
+
+// Exchange Management Templates
+#[derive(Debug, Clone)]
+struct ExchangeListItem {
+    exchange_id: i64,
+    slug: String,
+    name: String,
+    description: String,
+    logo_url: Option<String>,
+    created: String,
+}
+
+#[derive(TemplateOnce)]
+#[template(path = "admin/exchanges.stpl.html")]
+struct ExchangesListPage {
+    exchanges: Vec<ExchangeListItem>,
+}
+
+#[derive(TemplateOnce)]
+#[template(path = "admin/exchanges_create.stpl.html")]
+struct ExchangeCreatePage {}
+
+#[derive(TemplateOnce)]
+#[template(path = "admin/exchanges_edit.stpl.html")]
+struct ExchangeEditPage {
+    exchange_id: i64,
+    slug: String,
+    name: String,
+    description: String,
+    logo_url: String,
 }
 
 // Badge Management Templates

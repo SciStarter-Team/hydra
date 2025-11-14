@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM address_set_members WHERE address_set_slug = ? AND email_address = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "7d121f611ee67d88bfeae3f73961de04e611d7f916ceed688c0511dd6024e499"
+}

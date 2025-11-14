@@ -1,4 +1,5 @@
 pub mod admin;
+pub mod api;
 pub mod auth;
 pub mod badge;
 pub mod channel;
@@ -8,6 +9,7 @@ pub mod dev;
 pub mod emailer;
 pub mod entity;
 pub mod event;
+pub mod exchange;
 pub mod evolveme;
 pub mod gourl;
 pub mod health;
@@ -19,6 +21,8 @@ pub mod pagecontent;
 pub mod pages;
 pub mod peering;
 pub mod project;
+pub mod rating;
+pub mod review;
 pub mod schedule;
 pub mod session;
 pub mod ui;
@@ -185,6 +189,7 @@ fn user_facing() -> impl Endpoint {
         .at("/go/*friendly_url", get(gourl::handle_go_url))
         .nest("/badges", badge::routes())
         .nest("/evolveme", evolveme::routes())
+        .nest("/exchange", exchange::routes())
         .at("/*slug", get(entity_page))
         .with(middleware::analytics::AnalyticsMiddleware)
 }
@@ -208,6 +213,7 @@ fn dynamic() -> impl Endpoint {
         .nest("/-upload", upload::authenticated_routes())
         .nest("/-forum", component::forum::forum_routes())
         .nest("/-webauthn", auth::webauthn_routes())
+        .nest("/api", api::authenticated_routes())
         .nest_no_strip("/", user_facing())
         .catch_all_error(error_dispatch)
         .with(middleware::authorization::AuthMiddleware)
@@ -254,6 +260,7 @@ async fn main() -> Result<(), Error> {
         .nest("/-static", StaticFiles::new())
         .nest("/-uploaded", upload::anonymous_routes())
         .nest("/messaging/emailer", emailer::routes())
+        .nest("/api", api::external_routes().with(api::middleware::api_cors()))
         .nest_no_strip("/", dynamic())
         .with_if(
             cfg!(not(debug_assertions)),
@@ -278,6 +285,7 @@ async fn main() -> Result<(), Error> {
     let _project_field_updates = tokio::spawn(ProjectField::peering_task());
     let _event_all_updates = tokio::spawn(EventAll::peering_task());
     let _event_field_updates = tokio::spawn(EventField::peering_task());
+    let _exchange_updates = tokio::spawn(exchange::Exchange::peering_task());
 
     let _synchronize_projects = tokio::spawn(sync::synchronize_projects());
     let _synchronize_events = tokio::spawn(sync::synchronize_events());

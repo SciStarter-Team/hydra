@@ -1,0 +1,19 @@
+<% if self.saved { %>
+<a id="<%= &self.id %>" hx-post="/exchange/<%= self.exchange_id %>/<%= &self.project_id %>/unsave" hx-swap="outerHTML" hx-vals='{"id": "<%= &self.id %>"}' class="el-button full-width btn-subdued btn-project el-button--default">
+  <span>
+    <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon icon--bookie u-mr-xs svg-fill-currentcolor" style="fill: currentColor;">
+      <use xlink:href="/img/icons.svg#icon--bookmark"></use>
+    </svg>
+    Saved to your Dashboard
+  </span>
+</a>
+<% } else { %>
+<a id="<%= &self.id %>" hx-post="/exchange/<%= self.exchange_id %>/<%= &self.project_id %>/save" hx-swap="outerHTML" hx-vals='{"id": "<%= &self.id %>"}' class="el-button full-width btn-subdued btn-project el-button--default">
+  <span>
+    <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon icon--bookie u-mr-xs svg-fill-white" style="fill: currentColor;">
+      <use xlink:href="/img/icons.svg#icon--bookmark"></use>
+    </svg>
+    Save to Review Later
+  </span>
+</a>
+<% } %>

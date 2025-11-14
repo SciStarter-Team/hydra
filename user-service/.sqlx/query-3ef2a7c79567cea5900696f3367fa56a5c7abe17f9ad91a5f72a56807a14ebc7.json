@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE user_sets SET name = ? WHERE slug = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "3ef2a7c79567cea5900696f3367fa56a5c7abe17f9ad91a5f72a56807a14ebc7"
+}

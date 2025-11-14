@@ -22,4 +22,5 @@ webauthn-rs = { version = "0.5.2", features = ["danger-allow-state-serialisation
 uuid = "1.18"
 url = "2.5.4"
 base64 = "0.22.1"
+rand = "0.8"
 

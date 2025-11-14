@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO user_set_evaluations (evaluation_id, criterion_index, operation, user_id, created_at)\n                   SELECT ?, ?, ?, user_id, ?\n                   FROM users\n                   WHERE is_page_manager = 1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "01385672f9849b5e1a03aa5a110ac01fc442f5a35f132aa8220370d0cfef0e21"
+}

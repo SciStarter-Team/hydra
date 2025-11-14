@@ -1,0 +1,86 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT user_id, resource_type, resource_id, permission, granted_by, granted_at\n            FROM permissions\n            WHERE user_id = ?\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "user_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "permissions",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "name": "resource_type",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "permissions",
+            "name": "resource_type"
+          }
+        }
+      },
+      {
+        "name": "resource_id",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "permissions",
+            "name": "resource_id"
+          }
+        }
+      },
+      {
+        "name": "permission",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "permissions",
+            "name": "permission"
+          }
+        }
+      },
+      {
+        "name": "granted_by",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "permissions",
+            "name": "granted_by"
+          }
+        }
+      },
+      {
+        "name": "granted_at",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "permissions",
+            "name": "granted_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "2d8e8f0c5f765a86e30bbd781b9f9256a4ee84cee659f6a36b6a4cfe7d583a97"
+}

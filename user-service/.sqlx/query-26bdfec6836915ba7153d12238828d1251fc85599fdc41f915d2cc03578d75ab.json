@@ -1,0 +1,28 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT\n            COUNT(*) as count,\n            SUM(CASE WHEN verified = 1 THEN 1 ELSE 0 END) as verified_count\n        FROM users\n        WHERE date(date_joined) <= ?\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "count",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      },
+      {
+        "name": "verified_count",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "26bdfec6836915ba7153d12238828d1251fc85599fdc41f915d2cc03578d75ab"
+}

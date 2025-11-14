@@ -1,0 +1,77 @@
+<div class="bg-white rounded-lg shadow border border-gray-200">
+    <div class="px-6 py-4 border-b border-gray-200">
+        <h3 class="text-lg font-medium text-gray-900">Create New Exchange</h3>
+        <p class="mt-1 text-sm text-gray-500">Create a new white-labeled project finder exchange</p>
+    </div>
+    <div class="p-6">
+        <form method="post" action="/-admin/exchanges/new" class="space-y-6">
+            <div>
+                <label for="exchange_id" class="block text-sm font-medium text-gray-700">Exchange ID</label>
+                <input
+                    type="number"
+                    name="exchange_id"
+                    id="exchange_id"
+                    required
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    placeholder="Enter a unique integer ID">
+                <p class="mt-1 text-sm text-gray-500">Use an integer ID (for backward compatibility with orrery)</p>
+            </div>
+
+            <div>
+                <label for="slug" class="block text-sm font-medium text-gray-700">Slug</label>
+                <input
+                    type="text"
+                    name="slug"
+                    id="slug"
+                    required
+                    pattern="[a-z0-9-]+"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    placeholder="exchange-slug">
+                <p class="mt-1 text-sm text-gray-500">Lowercase letters, numbers, and hyphens only</p>
+            </div>
+
+            <div>
+                <label for="name" class="block text-sm font-medium text-gray-700">Name</label>
+                <input
+                    type="text"
+                    name="name"
+                    id="name"
+                    required
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    placeholder="Exchange Name">
+            </div>
+
+            <div>
+                <label for="description" class="block text-sm font-medium text-gray-700">Description</label>
+                <textarea
+                    name="description"
+                    id="description"
+                    required
+                    rows="3"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    placeholder="Brief description of this exchange"></textarea>
+            </div>
+
+            <div>
+                <label for="logo_url" class="block text-sm font-medium text-gray-700">Logo URL (Optional)</label>
+                <input
+                    type="url"
+                    name="logo_url"
+                    id="logo_url"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    placeholder="https://example.com/logo.png">
+            </div>
+
+            <div class="flex justify-end space-x-3">
+                <a href="/-admin/exchanges" class="inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                    Cancel
+                </a>
+                <button
+                    type="submit"
+                    class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                    Create Exchange
+                </button>
+            </div>
+        </form>
+    </div>
+</div>

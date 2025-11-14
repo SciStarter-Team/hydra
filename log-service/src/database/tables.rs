@@ -256,3 +256,43 @@ inventory::submit! {
         schema: EmailEventRow::schema,
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExchangeEventRow {
+    pub when: String,
+    pub event_id: String,
+    pub exchange_id: String,
+    pub device_id: String,
+    pub interaction_id: String,
+    pub user_id: Option<String>,
+    pub page: String,
+    pub page_id: Option<String>,
+    pub action: String,
+    pub extra: Option<String>,
+}
+
+impl TableRow for ExchangeEventRow {
+    const TABLE_NAME: &'static str = "exchange_events";
+
+    fn schema() -> Schema {
+        Schema::new(vec![
+            Field::new("when", DataType::Utf8, false),
+            Field::new("event_id", DataType::Utf8, false),
+            Field::new("exchange_id", DataType::Utf8, false),
+            Field::new("device_id", DataType::Utf8, false),
+            Field::new("interaction_id", DataType::Utf8, false),
+            Field::new("user_id", DataType::Utf8, true),
+            Field::new("page", DataType::Utf8, false),
+            Field::new("page_id", DataType::Utf8, true),
+            Field::new("action", DataType::Utf8, false),
+            Field::new("extra", DataType::Utf8, true),
+        ])
+    }
+}
+
+inventory::submit! {
+    TableRegistration {
+        name: ExchangeEventRow::TABLE_NAME,
+        schema: ExchangeEventRow::schema,
+    }
+}

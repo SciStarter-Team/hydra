@@ -176,3 +176,18 @@ pub struct ProjectParticipationRecord {
     pub fidelity: Option<f64>,        // Fidelity score (defaults to 1.0)
     pub task_name: Option<String>,    // Task name
 }
+
+// Exchange Analytics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExchangeEvent {
+    pub event_id: String,          // ULID
+    pub exchange_id: String,       // ULID
+    pub user_id: Option<String>,   // ULID, None for anonymous
+    pub device_id: String,         // Device identifier (persistent)
+    pub interaction_id: String,    // Interaction identifier (1 hour expiry)
+    pub when_occurred: String,     // TimeString
+    pub page: String,              // "home", "project", "results"
+    pub page_id: Option<String>,   // e.g., project_id
+    pub action: String,            // "view", "search", "vote", "save"
+    pub extra: Option<String>,     // JSON for additional context
+}

@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exchange</title>
+    <script src="/-static/htmx.js"></script>
+    <script src="/-static/_hyperscript.js"></script>
+    <link href="/-static/exchange/css/styles.css" rel="stylesheet">
+  </head>
+  <body hx-headers='{"X-CSRFToken": "<%= csrftoken %>"}'>
+
+    <%+ NavigationBar {exchange: &exchange, user: &user} %>
+
+    <!-- PAGE SPECIFIC CONTENT -->
+    <div class="o-wrapper u-pt u-pb-lg ss-data">
+
+    <div class="d2t two-tabs">
+        <ul role="tablist" class="d2t-tabs">
+          <li role="tab" tabindex="0" aria-controls="#exchange-overview" class="d2t-tab is-active d2t--selected">
+                <a href="#exchange-overview" role="presentation">
+                    <div class="media-object mo-center">
+                        <div class="media-image">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="34.668" height="44.484" viewBox="0 0 34.668 44.484">
+                                <g id="projects" transform="translate(-3.41 -0.444)">
+                                  <g id="Group-3" transform="translate(3.41 0.444)">
+                                    <path d="M36.539,43.432H4.574V41.4a2.3,2.3,0,0,1,2.2-2.314H34.225a2.231,2.231,0,0,1,2.2,2.314v1.967ZM9.77,33.927A3.215,3.215,0,0,1,12.9,31.378H22.06a7.3,7.3,0,0,0-2.439,2.549Zm15.518-2.549a6.775,6.775,0,0,1,7.524,4.628l.582,1.732H19.4l.582-1.732c.111-.346.346-.817.457-1.164h0A7.565,7.565,0,0,1,25.3,31.364c-.111.111,0,.111,0,0Zm7.066-5.542A5.958,5.958,0,0,0,26.4,19.795h-.457l2.549-4.157h0a10.461,10.461,0,0,1,5.681,3.478,10.3,10.3,0,0,1,2.439,6.831A10.6,10.6,0,0,1,33.13,33.83h0c0-.111-.111-.111-.111-.236h0c0-.111-.111-.111-.111-.236h0A8.743,8.743,0,0,0,29.9,30.921a7.136,7.136,0,0,0,2.439-5.1ZM21.575,24.45l-.111-.111-4.517-2.9L26.119,6.59l1.039.693h0L29.708,8.9h0l1.039.693-2.965,4.877h0l-2.134,3.367Zm-.1,3.09L14.065,22.69l.693-1.164.817.457h0l5.792,3.824h0l.817.457Zm9.075-21.3L29.86,7.283l-1.386-.928.693-.984ZM28.821,2.087l4.752,3.007-.693,1.164-1.039-.693h0l-2.6-1.58h0L28.2,3.293Zm6.027,35.8-.693-2.2c-.111-.236-.111-.457-.236-.693a11.971,11.971,0,0,0,4.157-9.159,11.514,11.514,0,0,0-2.771-7.648,11.209,11.209,0,0,0-5.9-3.824l2.9-4.628a.693.693,0,0,0,.111-.457c0-.236-.111-.346-.346-.457l-1.081-.679L31.676,7.1l1.039.693a.43.43,0,0,0,.346.111.637.637,0,0,0,.582-.346l1.386-2.2a.693.693,0,0,0,.111-.457.624.624,0,0,0-.346-.457L29.015.563A.624.624,0,0,0,28.087.8L26.7,3a.693.693,0,0,0-.111.457c0,.236.111.346.346.457l1.039.693-.693,1.039-1.039-.693a.624.624,0,0,0-.928.236l-9.5,15.421-.817-.457a.693.693,0,0,0-.457-.111.624.624,0,0,0-.457.346l-1.386,2.2a.624.624,0,0,0,.236.928l8.577,5.542a.43.43,0,0,0,.346.111.637.637,0,0,0,.582-.346l1.386-2.2a.624.624,0,0,0-.236-.928l-.817-.457,2.245-3.824A5.819,5.819,0,0,1,26.4,21.18a4.669,4.669,0,0,1,4.628,4.752A4.946,4.946,0,0,1,28.2,30.311a8.937,8.937,0,0,0-1.8-.208H12.915a4.628,4.628,0,0,0-4.531,4.642.748.748,0,0,0,.693.693h9.851c0,.111-.111.236-.111.346l-.734,2.2H7A3.616,3.616,0,0,0,3.41,41.576v2.66a.748.748,0,0,0,.693.693H37.356a.748.748,0,0,0,.693-.693v-2.66a3.866,3.866,0,0,0-3.242-3.713Z" transform="translate(-3.41 -0.444)" />
+                                  </g>
+                                  <path d="M20.583,26.561a.817.817,0,1,1,.817-.817c-.111.346-.457.817-.817.817m0-3.007a2.106,2.106,0,0,0-2.092,2.2,2.175,2.175,0,0,0,2.092,2.189,2.2,2.2,0,1,0,0-4.406" transform="translate(5.814 8.905)" />
+                                </g>
+                              </svg>
+                              
+                        </div>
+                        <div class="media-body">
+                            <h2>Exchange Overview</h2>
+                            <p>Projects on the exchange</p>
+                        </div>
+                    </div>
+                </a>
+          </li>
+          <li role="tab" tabindex="1" aria-controls="#engagement" class="d2t-tab">
+                <a href="#engagement" role="presentation">
+                    <div class="media-object mo-center">
+                        <div class="media-image">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="33.036" height="44.001" viewBox="0 0 33.036 44.001">
+                                <g id="tap" transform="translate(-0.284)">
+                                  <path data-name="Path 336" d="M29.765,49.431H29.7a3.393,3.393,0,0,0-2.287.87A3.567,3.567,0,0,0,24.1,47.884,3.436,3.436,0,0,0,21.65,48.94a3.516,3.516,0,0,0-3.137-2.007h-.066a3.221,3.221,0,0,0-2.02.673V39.083a3.658,3.658,0,0,0-3.554-3.735A3.651,3.651,0,0,0,9.327,39.08L9.311,55.991l-.957-1.162a4.827,4.827,0,0,0-3.411-1.792A4.75,4.75,0,0,0,1.385,54.3l-.833.69a.74.74,0,0,0-.184.911l8.1,15.562a8.348,8.348,0,0,0,7.351,4.618h9.124V76.07c4.626,0,8.377-4.014,8.382-8.943,0-2.205-.007-3.849-.005-5.181,0-3.564,0-4.88-.008-8.806A3.634,3.634,0,0,0,29.765,49.431Zm2.059,12.509c0,1.333,0,2.983-.006,5.188A7.228,7.228,0,0,1,24.9,74.6h-9.08a6.873,6.873,0,0,1-6.037-3.821L1.957,55.748l.386-.322.029-.026a3.286,3.286,0,0,1,2.467-.886,3.359,3.359,0,0,1,2.369,1.255l2.266,2.757a.74.74,0,0,0,1.312-.469L10.8,39.081a2.179,2.179,0,0,1,2.074-2.253,2.179,2.179,0,0,1,2.073,2.255V50.524c0,.04,0,.08,0,.12,0,.017,0,.035,0,.052v4.892a.74.74,0,0,0,1.48,0V50.549a2.075,2.075,0,0,1,2.02-2.136h.066a2.161,2.161,0,0,1,2.078,2.232v4.476a.74.74,0,1,0,1.48,0V51.61a2.046,2.046,0,1,1,4.071,0v3.313a.74.74,0,1,0,1.48,0V53.129A2.15,2.15,0,0,1,29.7,50.912h.062a2.148,2.148,0,0,1,2.056,2.23C31.83,57.065,31.829,58.379,31.824,61.941Zm0,0" transform="translate(0 -32.077)" />
+                                  <path data-name="Path 337" d="M65.35,7.325a.74.74,0,0,0,.74-.74,5.129,5.129,0,0,1,10.258,0,.74.74,0,1,0,1.48,0,6.61,6.61,0,0,0-13.219,0A.74.74,0,0,0,65.35,7.325Zm0,0" transform="translate(-58.373)" />
+                                </g>
+                              </svg>
+                              
+                              
+                        </div>
+                        <div class="media-body">
+                            <h2>Engagement</h2>
+                            <p>How users interact with your projects</p>
+                        </div>
+                    </div>
+                </a>
+          </li>
+        </ul>
+
+        <div class="d2t-content" id="drawers">
+          <div class="d2t--drawer" id="exchange-overview">
+            <div class="d2t--header">
+              <a href="javascript:void(0);" class="d2t--close">&times;</a>
+              <h3>Exchange Overview</h3>
+            </div>
+            <div class="d2t--content">
+              <div class="border">
+                <div class="flex projects-top flex-jc">
+                  <div class="left-icon">
+                    <img src="https://static.scistarter.org/img/data/robot-cog.svg" alt="robot in cog icon" class="big-icon" />
+                    <div class="data-numbers">
+                      <h2><%= overview.entity_count %></h2>
+                      <h3>Projects added through your exchange</h3>
+                    </div>
+                  </div>
+                </div>
+                <hr />
+                <div class="flex projects-top">
+                  <div class="flex2">
+                    <div class="left-icon push">
+                      <img src="https://static.scistarter.org/img/data/inperson.svg" alt="hiking icon" />
+                      <div class="data-numbers">
+                        <h2><%= overview.in_person_count %></h2>
+                        <h3>In person, in a place</h3>
+                      </div>
+                    </div>
+                    <div class="bar">
+                      <div class="bar-wrapper">
+                        <div class="bar-outer">
+                          <div class="bar-inner" style="width: <%= percent(overview.in_person_count, overview.entity_count) %>%;"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="flex2">
+                    <div class="left-icon push">
+                      <img src="https://static.scistarter.org/img/data/online.svg" alt="computer icon" />
+                      <div class="data-numbers">
+                        <h2><%= overview.online_count %></h2>
+                        <h3>Online only</h3>
+                      </div>
+                    </div>
+                    <div class="bar">
+                      <div class="bar-wrapper">
+                        <div class="bar-outer">
+                          <div class="bar-inner" style="width: <%= percent(overview.online_count, overview.entity_count) %>%;"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <hr />
+                <div class="flex projects-top">
+                  <div class="flex-child3">
+                    <div class="left-icon push">
+                      <img src="https://static.scistarter.org/img/data/global.svg" alt="globe icon" />
+                      <div class="data-numbers">
+                        <h2><%= overview.global_count %></h2>
+                        <h3>Global</h3>
+                      </div>
+                    </div>
+                    <div class="bar">
+                      <div class="bar-wrapper">
+                        <div class="bar-outer">
+                          <div class="bar-inner" style="width: <%= percent(overview.global_count, overview.entity_count) %>%;"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="flex-child3">
+                    <div class="left-icon push">
+                      <img src="https://static.scistarter.org/img/data/region.svg" alt="region icon" />
+                      <div class="data-numbers">
+                        <h2><%= overview.near_count %></h2>
+                        <h3>In a region</h3>
+                      </div>
+                    </div>
+                    <div class="bar">
+                      <div class="bar-wrapper">
+                        <div class="bar-outer">
+                          <div class="bar-inner" style="width: <%= percent(overview.near_count, overview.entity_count) %>%;"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="flex-child3">
+                    <div class="left-icon push">
+                      <img src="https://static.scistarter.org/img/data/point.svg" alt="map marker icon" />
+                      <div class="data-numbers">
+                        <h2><%= overview.at_count %></h2>
+                        <h3>At a point location</h3>
+                      </div>
+                    </div>
+                    <div class="bar">
+                      <div class="bar-wrapper">
+                        <div class="bar-outer">
+                          <div class="bar-inner" style="width: <%= percent(overview.at_count, overview.entity_count) %>%;"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </div>
+          <div class="d2t--drawer" id="engagement" style="display: none;">
+            <div class="d2t--header">
+              <a href="javascript:void(0);" class="d2t--close">&times;</a>
+              <h3>Engagement</h3>
+            </div>
+            <div class="d2t--content" hx-target="this">
+              <%+ engagement %>
+            </div>
+          </div>
+        </div>
+    </div>
+
+    </div><!-- end .o-wrapper -->
+      
+
+     <!-- END PAGE SPECIFIC CONTENT-->
+
+
+    <!-- FOOTER - every page -->
+    <footer>
+      <% if !exchange.restricted_add() || exchange.user_is_authorized() { %>
+      <a class="btn btn-secondary"  data-custom-open="add-modal"><span>+</span> Add a Project or Event</a>
+      <% } %>
+      <div><a href="/login?next=<%= encode(&format!("/exchange/{}/data.html", exchange.exchange_id))|disp %>">Log In</a> | <a href="/login?action=signup&next=<%= encode(&format!("/exchange/{}/data.html", exchange.exchange_id))|disp %>">Sign Up</a></div>
+      <p class="powered-by">powered by <img src="/-static/img/scistarter-logo-web-r.svg" alt="SciStarter" /></p>
+      <div style="height: 8rem"></div>
+    </footer>
+    <!-- END FOOTER -->
+
+    <!-- DEFAULT MODALS -->
+    <div class="modal micromodal-slide" id="add-modal" aria-hidden="true">
+      <div class="modal__overlay" tabindex="-1" data-micromodal-close>
+          <div class="modal__container" role="dialog" aria-modal="true" aria-labelledby="add-modal-title">
+          <header class="modal__header">
+              <div>
+              <h2 class="modal__title" id="add-modal-title">Add a Citizen Science Project or Event</h2>
+              <p class="powered-by">powered by <img src="/img/scistarter-logo-web-r.svg" alt="SciStarter" /></p>
+              <p>You will be taken from this website to the <a href="https://scistarter.org">SciStarter</a> website to enter your project, event, or tool. Once approved, it will be available on SciStarter and in any SciStarter partner websites where it meets the criteria to display.</p>
+          </div>
+              <button class="modal__close" aria-label="Close modal" data-micromodal-close></button>
+          </header>
+          <main class="modal__content">
+              <div>
+                  <img src="/img/microscope.svg" alt="microscope icon" />
+                  <h3>Add a Citizen Science Project</h3>
+                  <p>Projects are typically  long term initiatives that may crowdsource data collection or analysis.</p>
+                  <a href="https://scistarter.org/add-project?exchange=<%= exchange.exchange_id %>" class="modal__btn modal__btn-primary"><span class="plus">+</span> Add a Project</a>
+                  <p><a href="https://scistarter.org/finder">Visit SciStarter Projects Page</a></p>
+              </div>
+              <div>
+                  <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon entity__tab-icon" style="fill: currentcolor;"><use xlink:href="/img/icons.svg#icon--db-events"></use></svg>
+                  <h3>Add a Citizen Science Event</h3>
+                  <p>Events are typically short term (possibly reoccurring) events with known start and end times and may focus on trainings, meet-ups, and other activities related to a citizen science project.</p>
+                  <a  href="https://scistarter.org/add-event?exchange=<%= exchange.exchange_id %>" class="modal__btn modal__btn-primary"><span class="plus">+</span> Add an Event</a>
+                  <p><a href="https://scistarter.org/events">Visit SciStarter Events Page</a></p> 
+              </div>
+          </main>
+          </div>
+      </div>
+      </div>
+      <!-- END DEFAULT MODALS-->   
+
+    <!-- https://micromodal.vercel.app/ -->
+    <script src="/-static/exchange/js/micromodal.js"></script>
+    <script>
+      MicroModal.init({
+         onShow: modal => console.info(`${modal.id} is shown`), // [1]
+         onClose: modal => console.info(`${modal.id} is hidden`), // [2]
+         openTrigger: 'data-custom-open', // [3]
+         openClass: 'is-open', // [5]
+         disableScroll: true, // [6]
+         disableFocus: false, // [7]
+         awaitOpenAnimation: false, // [8]
+         awaitCloseAnimation: false, // [9]
+         debugMode: true // [10]
+         });
+    </script>
+
+<script src="/-static/exchange/js/d2t.js"></script>
+
+<script>
+  const nav = document.querySelectorAll('.data-nav:not(.not-d2t) a');
+  const handleNav = function(e) {
+    e.preventDefault();
+    const ctx = this;
+    nav.forEach((i)=>i.classList.remove('selected'));
+    ctx.classList.add('selected');
+
+    const href = ctx.getAttribute('href');
+    const h2 = document.querySelector('.top-10 h2');
+
+    console.log(href);
+
+    switch(href){
+      case '#views':
+        h2.textContent = 'Top 10 Projects by Views';
+        break;
+      case '#saves':
+        h2.textContent = 'Top 10 Projects by Saves';
+        break;
+      case '#referrals':
+        h2.textContent = 'Top 10 Projects by Referrals';
+        break;
+    }
+
+    const tables = document.querySelectorAll('.top-10 table');
+    tables.forEach((i)=>i.style.display = "none");
+    document.querySelector(href).style.display = "table";
+
+
+  };
+  nav.forEach((item)=>{
+      item.addEventListener('click', handleNav);
+  });
+</script>
+
+</body>
+</html>

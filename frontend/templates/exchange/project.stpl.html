@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exchange</title>
+    <script src="/-static/htmx.js"></script>
+    <link href="/-static/exchange/css/styles.css" rel="stylesheet">
+  </head>
+  <body hx-headers='{"X-CSRFToken": "<%= self.csrftoken %>"}'>
+
+    <%+ NavigationBar {exchange: &self.exchange, user: &self.user} %>
+
+    <!-- PAGE SPECIFIC CONTENT -->
+    <div class="o-wrapper u-pt u-pb-lg ss-project">
+
+      <p class="u-mb-sm b-small u-mt-0 find-more"><a href="/exchange/<%= self.exchange.info.exchange_id %>/"><svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon icon--angle-left u-mr-xs v-align-middle" style="fill: currentcolor;"><use xlink:href="/img/icons.svg#icon--angle"></use></svg>
+          Find more projects
+      </a></p>
+
+
+      <!-- IF LOGGED IN AND AUTHORIZED -->
+      <% if self.project.user_is_authorized { %>
+      <div class="el-tabs el-tabs--card el-tabs--top">
+        <div class="el-tabs__header is-top">
+          <div class="el-tabs__nav-wrap is-top">
+            <div class="el-tabs__nav-scroll">
+              <div role="tablist" class="el-tabs__nav is-top" style="transform: translateX(0px);">
+                <div id="tab-view" aria-controls="pane-view" role="tab" tabindex="0" class="el-tabs__item is-top is-active" aria-selected="true">View</div>
+                <div id="tab-edit" aria-controls="offsite" role="tab" tabindex="-1" class="el-tabs__item is-top" data-custom-open="edit-modal">Edit</div>
+                <div id="tab-tools" aria-controls="offsite" role="tab" tabindex="-1" class="el-tabs__item is-top" data-custom-open="tools-modal">More Tools</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="el-tabs__content">
+          <div role="tabpanel" id="pane-view" aria-labelledby="tab-view" class="el-tab-pane" style=""></div>
+          <div role="tabpanel" id="pane-review" aria-labelledby="tab-review" class="el-tab-pane" aria-hidden="true" style="display: none;"></div>
+        </div>
+      </div>
+      <% } %>
+      <!-- END IF AUTHORIZED -->
+
+      <div><!-- START PROJECT INFO -->
+        <article class="u-clearfix u-mt-sm">
+          <div class="mobile-flex">
+            <div class="u-fl-r@bp2 u-width-2/3@bp2 u-pl-lg@bp2 u-mb@bp2 title-holder">
+              <!-- <p><span class="u-fl-r status">Status goes here</span></p> -->
+              <h1><%= self.project.name %></h1>
+              <p class="mobile-only" style="margin-bottom: 0px !important;"><%= self.project.presenter %>
+              </p>
+              <div class="ss-project-thumb-wrap">
+                <%+ LikeButton { liked: self.project.liked, likes: self.project.likes, exchange_id: self.exchange.info.exchange_id, project_id: self.project.id.clone(), user_id: self.user.id() } %>
+
+                <!--  add to lists - not sure how to handle, but there's a modal if not logged in -->
+                <!-- <div class="ss-list-button" style="margin-left: 1rem;"> -->
+                <!--   <span class="el-popover__reference-wrapper"> -->
+                <!--     <button type="button" class="el-button el-button--default el-popover__reference" aria-describedby="el-popover-6913" tabindex="0"  data-custom-open="modal-1"> -->
+                <!--       <span>Add to my lists</span> -->
+                <!--     </button> -->
+                <!--   </span> -->
+                <!-- </div> -->
+                <!-- end add to list -->
+              </div>
+            </div>
+            <div class="u-fl-l@bp2 u-width-1/3@bp2 u-mb image-holder">
+              <figure class="section frame entity-image u-mb-sm">
+                <div class="entity-image__container">
+                  <img loading="lazy" src="<%= self.project.image %>" alt="project image">
+                </div>
+                <figcaption class="u-mt-xs"><% if self.project.image_credit != "null"  { %><%= self.project.image_credit %><% } %></figcaption>
+              </figure>
+            </div>
+          </div>
+          <div class="u-fl-r@bp2 u-width-2/3@bp2 u-pl-lg@bp2 info-holder">
+            <table class="table-project">
+              <caption class="u-visuallyhidden">Main Project Information</caption>
+              <tbody>
+                <% if !self.project.presenter.is_empty() { %>
+                <tr class="no-mobile">
+                  <th scope="row">Presented By</th>
+                  <td><%= self.project.presenter %></td>
+                </tr>
+                <% } %>
+                <% if !self.project.goal.is_empty() { %>
+                <tr class="mobile-1">
+                  <th scope="row">Goal</th>
+                  <td class="b">
+                    <div>
+                      <div><%= self.project.goal %></div>
+                    </div>
+                  </td>
+                </tr>
+                <% } %>
+                <% if !self.project.task.is_empty() { %>
+                <tr>
+                  <th scope="row">Task</th>
+                  <td class="b">
+                    <div>
+                      <div><%= self.project.task %></div>
+                    </div>
+                  </td>
+                </tr>
+                <% } %>
+                <!-- <tr> -->
+                <!--   <th scope="row">Where</th> -->
+                <!--   <td class="b"> -->
+                <!--     <div class="ss-project-location"> -->
+                <!--       <span> -->
+                <!--         <div role="tooltip" id="el-popover-2330" aria-hidden="true" class="el-popover el-popper" tabindex="0" style="width: 300px; display: none;"> -->
+                <!--           <div class="ss-map reset-exempt"> -->
+                <!--             <div class="el-row"> -->
+                <!--               <div class="el-col el-col-24"></div> -->
+                <!--             </div> -->
+                <!--             <div class="display leaflet-container leaflet-touch leaflet-retina leaflet-fade-anim leaflet-grab leaflet-touch-drag leaflet-touch-zoom" tabindex="0" style="position: relative;"> -->
+                <!--               <a href="http://mapbox.com/about/maps" target="_blank" class="mapbox-logo">Mapbox</a> -->
+                <!--               <div class="leaflet-pane leaflet-map-pane" style="transform: translate3d(0px, 0px, 0px);"> -->
+                <!--                 <div class="leaflet-pane leaflet-tile-pane"> -->
+                <!--                   <div class="leaflet-gl-layer mapboxgl-map" style="width: 0px; height: 0px; transform: translate3d(0px, 0px, 0px);"> -->
+                <!--                     <div class="mapboxgl-canary" style="visibility: hidden;"></div> -->
+                <!--                     <div class="mapboxgl-canvas-container"> -->
+                <!--                       <canvas class="mapboxgl-canvas leaflet-image-layer leaflet-zoom-animated" tabindex="0" aria-label="Map" width="800" height="600" style="position: absolute; width: 400px; height: 300px; transform: translate3d(0px, 0px, 0px) scale(1);"></canvas> -->
+                <!--                     </div> -->
+                <!--                     <div class="mapboxgl-control-container"> -->
+                <!--                       <div class="mapboxgl-ctrl-top-left"></div> -->
+                <!--                       <div class="mapboxgl-ctrl-top-right"></div> -->
+                <!--                       <div class="mapboxgl-ctrl-bottom-left"> -->
+                <!--                         <div class="mapboxgl-ctrl" style="display: block;"><a class="mapboxgl-ctrl-logo mapboxgl-compact" target="_blank" rel="noopener nofollow" href="https://www.mapbox.com/" aria-label="Mapbox logo"></a></div> -->
+                <!--                       </div> -->
+                <!--                       <div class="mapboxgl-ctrl-bottom-right"></div> -->
+                <!--                     </div> -->
+                <!--                   </div> -->
+                <!--                 </div> -->
+                <!--                 <div class="leaflet-pane leaflet-shadow-pane"></div> -->
+                <!--                 <div class="leaflet-pane leaflet-overlay-pane"> -->
+                <!--                   <svg pointer-events="none" class="leaflet-zoom-animated" width="0" height="0" viewBox="0 0 0 0" style="transform: translate3d(0px, 0px, 0px) scale(1);"> -->
+                <!--                     <g> -->
+                <!--                       <path class="leaflet-interactive" stroke="#3388ff" stroke-opacity="1" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="#3388ff" fill-opacity="0.2" fill-rule="evenodd" d="M-3 -1L1 0L-3 0z"></path> -->
+                <!--                     </g> -->
+                <!--                   </svg> -->
+                <!--                 </div> -->
+                <!--                 <div class="leaflet-pane leaflet-marker-pane"></div> -->
+                <!--                 <div class="leaflet-pane leaflet-tooltip-pane"></div> -->
+                <!--                 <div class="leaflet-pane leaflet-popup-pane"></div> -->
+                <!--                 <div class="leaflet-proxy leaflet-zoom-animated" style="transform: translate3d(62.9056px, 95.3553px, 0px) scale(0.5);"></div> -->
+                <!--               </div> -->
+                <!--               <div class="leaflet-control-container"> -->
+                <!--                 <div class="leaflet-top leaflet-left"> -->
+                <!--                   <div class="leaflet-control-zoom leaflet-bar leaflet-control"><a class="leaflet-control-zoom-in" href="#" title="Zoom in" role="button" aria-label="Zoom in">+</a><a class="leaflet-control-zoom-out leaflet-disabled" href="#" title="Zoom out" role="button" aria-label="Zoom out">−</a></div> -->
+                <!--                 </div> -->
+                <!--                 <div class="leaflet-top leaflet-right"></div> -->
+                <!--                 <div class="leaflet-bottom leaflet-left"></div> -->
+                <!--                 <div class="leaflet-bottom leaflet-right"> -->
+                <!--                   <div class="leaflet-control-attribution leaflet-control"><a href="http://leafletjs.com" title="A JS library for interactive maps">Leaflet</a> | © <a href="https://www.mapbox.com/about/maps/">Mapbox</a> © <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> <strong><a href="https://www.mapbox.com/map-feedback/" target="_blank">Improve this map</a></strong></div> -->
+                <!--                 </div> -->
+                <!--               </div> -->
+                <!--             </div> -->
+                <!--           </div> -->
+                <!--         </div> -->
+                <!--         <span class="el-popover__reference-wrapper"><a class="el-popover__reference" aria-describedby="el-popover-2330" tabindex="0">View map...</a></span> -->
+                <!--       </span> -->
+                <!--     </div> -->
+                <!--   </td> -->
+                <!-- </tr> -->
+                <% if !self.project.description.is_empty() { %>
+                <tr>
+                  <th scope="row">Description</th>
+                  <td class="dont-break-out">
+                    <div class="ss-markdown reset-exempt collapse short">
+                      <div>
+                        <%- self.description[0] %>
+                        <% if self.description.len() > 1 { %>
+                        <details>
+                          <summary style="color: #47a8d4; cursor: pointer">Read more</summary>
+                          <% for para in self.description.iter().skip(1) { %>
+                          <%- para %>
+                          <% } %>
+                        </details>
+                        <% } %>
+                      </div>
+                      <!-- <div class="fade"></div> -->
+                      <!-- <div class="toggle">See <span>more</span></div> -->
+                    </div>
+                  </td>
+                </tr>
+                <% } %>
+                <% if !self.project.how_to_join.is_empty() { %>
+                <tr class="get-started-row">
+                  <th scope="row">How to get started</th>
+                  <td class="dont-break-out">
+                    <div class="ss-markdown reset-exempt short">
+                      <div>
+                        <%- self.project.how_to_join %>
+                      </div>
+                      <!-- <div class="fade"></div> -->
+                      <!-- <div class="toggle">See <span>more</span></div> -->
+                    </div>
+                  </td>
+                </tr>
+                <% } %>
+                <% if self.project.twitter_name.is_some() || self.project.facebook_page.is_some() { %>
+                <tr>
+                  <th scope="row">Social Media</th>
+                  <td>
+                    <ul class="b-list-inline">
+                      <% if let Some(ref twitter_name) = self.project.twitter_name { %>
+                      <li class="u-mr">
+                        <a itemprop="sameAs" href="https://twitter.com/<%= twitter_name %>" target="_blank">
+                          <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon icon--twitter icon--color-twitter" style="fill: currentcolor;">
+                            <use xlink:href="/img/icons.svg#icon--twitter"></use>
+                          </svg>
+                          <span class="u-visuallyhidden">Follow <%= self.project.name %> on Twitter</span>
+                        </a>
+                      </li>
+                      <% } %>
+                      <% if let Some(ref facebook_page) = self.project.facebook_page { %>
+                      <li class="u-mr">
+                        <a itemprop="sameAs" href="<%= facebook_page %>" target="_blank">
+                          <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon icon--facebook icon--color-facebook" style="fill: currentcolor;">
+                            <use xlink:href="/img/icons.svg#icon--facebook"></use>
+                          </svg>
+                          <span class="u-visuallyhidden">Find <%= self.project.name %> on Facebook</span>
+                        </a>
+                      </li>
+                      <% } %>
+                    </ul>
+                  </td>
+                </tr>
+                <% } %>
+                <% if let Some(total_expense) = self.project.total_expense { %>
+                <tr>
+                  <th scope="row">Total expense</th>
+                  <td>$<%= format!("{:.2}", total_expense) %></td>
+                </tr>
+                <% } %>
+                <% if !self.project.audience.is_empty() { %>
+                <tr>
+                  <th scope="row">Ideal Age Group</th>
+                  <td>
+                    <% { let mut first = true; for (id, name) in &self.project.audience { %><% if !first { %>, <% } else { first = false; } %><a href="https://scistarter.org/finder?audience=<%= id %>" target="_blank"><%= name %></a><% } } %>
+                  </td>
+                </tr>
+                <% } %>
+                <tr>
+                  <th scope="row">Spend the time</th>
+                  <td><% if self.project.indoors { if self.project.outdoors { %>Indoors or Outdoors<% } else { %>Indoors<% } } else if self.project.outdoors { %>Outdoors<% } %></td>
+                </tr>
+                <!-- <tr> -->
+                <!--   <th scope="row">Ideal Frequency</th> -->
+                <!--   <td>Unspecified</td> -->
+                <!-- </tr> -->
+                <!-- <tr> -->
+                <!--   <th scope="row">Average Time</th> -->
+                <!--   <td></td> -->
+                <!-- </tr> -->
+                <% if !self.project.activities.is_empty() { %>
+                <tr>
+                  <th scope="row">Type of Activity</th>
+                  <td>
+                    <% { let mut first = true; for (id, name) in &self.project.activities { %><% if !first { %>, <% } else { first = false; } %><a href="https://scistarter.org/finder?activity=<%= id %>" target="_blank"><%= name %></a><% } } %>
+                  </td>
+                </tr>
+                <% } %>
+                <% if !self.project.topics.is_empty() { %>
+                <tr>
+                  <th scope="row">Topics</th>
+                  <td>
+                    <% { let mut first = true; for (id, name) in &self.project.topics { %><% if !first { %>, <% } else { first = false; } %><a href="https://scistarter.org/finder?topic=<%= id %>" target="_blank"><%= name %></a><% } } %>
+                  </td>
+                </tr>
+                <% } %>
+                <!-- <tr> -->
+                <!--   <th scope="row">Media Mentions &amp; Publications</th> -->
+                <!--   <td> -->
+                <!--     <ul> -->
+                <!--       <li><a href="https://blog.scistarter.com/2011/12/12-days-of-christmasy-citizen-science-projects/">12 Days of Christmasy Citizen Science Projects</a></li> -->
+                <!--       <li><a href="https://blog.scistarter.com/2012/12/tis-the-season-for-citizen-science/">Tis the season for citizen science</a></li> -->
+                <!--     </ul> -->
+                <!--   </td> -->
+                <!-- </tr> -->
+                <% if !self.project.tags.is_empty() { %>
+                <tr>
+                  <th scope="row">Tags</th>
+                  <td>
+                    <% { let mut first = true; for tag in &self.project.tags { %><% if !first { %>, <% } else { first = false; } %><a href="https://scistarter.org/finder?phrase=<%= tag %>" target="_blank"><%= tag %></a><% } } %>
+                  </td>
+                </tr>
+                <% } %>
+                <% if let Some(ref url) = self.project.url { %>
+                <tr>
+                  <th scope="row">Website</th>
+                  <td class="dont-break-out"><a href="<%= url %>" target="_blank"><%= self.project.name %></a></td>
+                </tr>
+                <% } %>
+                <tr>
+                  <th scope="row">Project Entry Updated</th>
+                  <td><%= self.project.updated|disp %></td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="ss-project-reviews">
+              <div class="ss-review-header">
+                <h1>Reviews (<%= self.project.reviews.len() %>)</h1>
+                <div class="ss-review-thumbs">
+                  <span>
+                    <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon icon--thumbs-up" style="fill: currentcolor;">
+                      <use xlink:href="/img/icons.svg#icon--heart"></use>
+                    </svg>
+                    <%= self.project.likes %><span class="u-visuallyhidden"> Likes</span>
+                  </span>
+                </div>
+              </div>
+
+              <ul id="reviews" class="ss-review-list">
+                <% for review in self.project.reviews.iter() { %>
+                <%+ ReviewEntry { review: &review, oob: false } %>
+                <% } %>
+              </ul>
+
+              <%+ LikeButton { liked: self.project.liked, likes: self.project.likes, exchange_id: self.exchange.info.exchange_id, project_id: self.project.id.clone(), user_id: self.user.id() } %>
+
+              <% if self.user.is_authenticated() { %>
+              <h2>Write a review</h2>
+              <div class="el-textarea">
+                <textarea id="review-input" name="text" autocomplete="off" rows="2" class="el-textarea__inner" style="min-height: 33px;"></textarea>
+              </div>
+              <button hx-post="/exchange/<%= self.exchange.info.exchange_id %>/<%= self.project.id %>/review" hx-include="#review-input" hx-target="#review-input" hx-swap="outerHTML" type="button" class="el-button el-button--primary"><span>submit review</span></button>
+              <% } else { %>
+              <p><a href="/login?next=<%= self.encode(&format!("/exchange/{}/{}/project.html", self.exchange.info.exchange_id, self.project.id))|disp %>">Log In</a> or <a href="/login?action=signup&next=<%= self.encode(&format!("/exchange/{}/{}/project.html", self.exchange.info.exchange_id, self.project.id))|disp %>">sign up</a> to add your review.</p>
+              <% } %>
+            </div>
+          </div>
+
+          <!-- <div class="u-fl-l@bp2 u-width-1/3@bp2 project-flavor"> -->
+          <!--   <p> -->
+          <!--     <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon icon--visits u-mr-xs" style="fill: currentcolor;"> -->
+          <!--       <use xlink:href="/img/icons.svg#icon--org-visits"></use> -->
+          <!--     </svg> -->
+          <!--     Off-site Project -->
+          <!--     <button type="button" class="el-button el-tooltip question-mark-tooltip el-button--default" aria-label="This project takes place outside of SciStarter. You'll have to tell us if you've joined the project in your dashboard (after clicking the visit link below) or below." data-microtip-position="top" role="tooltip" tabindex="0"><span>?</span></button> -->
+          <!--   </p> -->
+          <!-- </div> -->
+
+          <div class="u-fl-l@bp2 u-width-1/3@bp2">
+
+            <div class="mobile-overlay">
+              <div id="project-utility" class="u-mb-lg">
+                <div id="mobile-more-actions"><button class="mma-x mobile-more-action-btn"><span class="mobile-more-action-btn">+</span></button></div>
+
+                <% if self.user.is_authenticated() { %> <!-- IF LOGGED IN -->
+                <div class="project-action-btns">
+                  <div class="p-offsite p-logged-in">
+                    <div class="p-not-joined">
+                      <div class="project-flex p-flex-mobile">
+                        <a href="/exchange/<%= self.exchange.info.exchange_id %>/<%= self.project.id %>/visit" target="_blank" class="el-button full-width btn-project major-call-to-action-mobile-only el-button--primary">
+                          <span>
+                            Visit
+                            <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon icon--external u-ml-xs svg-fill-white" style="fill: currentcolor;">
+                              <use xlink:href="/img/icons.svg#icon--external-link"></use>
+                            </svg>
+                          </span>
+                        </a>
+                        <%+ SaveButton { id: "sidebar-save-button".into(), saved: self.project.saved, exchange_id: self.exchange.info.exchange_id, project_id: self.project.id.clone() } %>
+                        <button type="button" class="el-button full-width btn-subdued btn-project el-button--default el-popover__reference" aria-describedby="el-popover-9958" tabindex="0" data-custom-open="share-modal">
+                          <i class="el-icon-share"></i><span>
+                            Share</span>
+                        </button>
+                      </div>
+                      <% if !self.project.joined { %>
+                      <button hx-post="/exchange/<%= self.exchange.info.exchange_id %>/<%= self.project.id %>/join" class="p-text-btn">I have already joined this project, add to my dashboard</button>
+                      <% } %>
+                    </div>
+                  </div>
+                </div>
+                <% } else { %> <!-- ELSE NOT LOGGED IN-->
+                <div class="project-action-btns">
+                  <div class="p-offsite p--not-logged-in">
+                    <div class="project-flex p-flex-mobile">
+                      <a href="/exchange/<%= self.exchange.info.exchange_id %>/<%= self.project.id %>/visit" target="_blank" class="el-button full-width btn-project el-button--primary">
+                        <span>Visit
+                          <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon icon--external u-ml-xs svg-fill-white" style="fill: currentcolor;"><use xlink:href="/img/icons.svg#icon--external-link"></use></svg>
+                        </span>
+                      </a>
+                      <a type="button" class="el-button full-width btn-subdued btn-project el-button--default" data-custom-open="modal-1">
+                        <span>
+                          <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon icon--bookie u-mr-xs svg-fill-white" style="fill: currentcolor;"><use xlink:href="/img/icons.svg#icon--bookmark"></use></svg>
+                          Save to Review Later</span>
+                      </a>
+                    </div>
+                    <span><span class="el-popover__reference-wrapper"><button type="button" class="el-button full-width btn-subdued btn-project el-button--default el-popover__reference" aria-describedby="el-popover-8993" tabindex="0" data-custom-open="share-modal"><i class="el-icon-share"></i><span>Share</span></button></span></span>
+                  </div>
+                </div>
+                <% } %> <!-- END -->
+              </div>
+            </div>
+
+
+            <!-- <div style="margin-top: 2rem;"> -->
+            <!--   <h2 class="b-heading-4 u-mb-sm">10 SciStarter members involved!</h2> -->
+            <!--   <a href="/profile?for=131905" title="Unique ID: 131905" target="_blank" class="ss-userref" style="display: inline; font-size: 10pt;">HollieKRosser</a>, -->
+            <!--   <a href="/profile?for=148535" title="Unique ID: 148535" target="_blank" class="ss-userref" style="display: inline; font-size: 10pt;">JACKSONsmith</a>, -->
+            <!--   <a href="/profile?for=89866" title="Unique ID: 89866" target="_blank" class="ss-userref" style="display: inline; font-size: 10pt;">dyenca</a>, -->
+            <!--   <a href="/profile?for=132374" title="Unique ID: 132374" target="_blank" class="ss-userref" style="display: inline; font-size: 10pt;">nicolewhitlock</a>, -->
+            <!--   <a href="/profile?for=118659" title="Unique ID: 118659" target="_blank" class="ss-userref" style="display: inline; font-size: 10pt;">Steven Weedon</a>, -->
+            <!--   <a href="/profile?for=111117" title="Unique ID: 111117" target="_blank" class="ss-userref" style="display: inline; font-size: 10pt;">troop1252iowaHAF</a>, -->
+            <!--   <a href="/profile?for=82407" title="Unique ID: 82407" target="_blank" class="ss-userref" style="display: inline; font-size: 10pt;">jbiscuit</a>, -->
+            <!--   <a href="/profile?for=13447" title="Unique ID: 13447" target="_blank" class="ss-userref" style="display: inline; font-size: 10pt;">12dakota12</a>, -->
+            <!--   <a href="/profile?for=8996" title="Unique ID: 8996" target="_blank" class="ss-userref" style="display: inline; font-size: 10pt;">wilsop</a>, -->
+            <!--   <a href="/profile?for=3289" title="Unique ID: 3289" target="_blank" class="ss-userref" style="display: inline; font-size: 10pt;">KurBur</a>, -->
+            <!--   <div><a>show more</a></div> -->
+            <!-- </div> -->
+
+            <!-- <div style="margin-top: 2rem;"> -->
+            <!--   <button type="button" class="el-button el-button--text"><span>suggest an edit</span> -->
+            <!--   </button> -->
+            <!-- </div> -->
+          </div>
+
+        </article>
+        <div class="el-dialog__wrapper" style="display: none;">
+          <div role="dialog" aria-modal="true" aria-label="SciStarter Affiliates" class="el-dialog" style="margin-top: 15vh;">
+            <div class="el-dialog__header"><span class="el-dialog__title">SciStarter Affiliates</span><button type="button" aria-label="Close" class="el-dialog__headerbtn"><i class="el-dialog__close el-icon el-icon-close"></i></button></div>
+            <div class="el-dialog__footer">
+              <span class="dialog-footer">
+                <button type="button" class="el-button btn-subdued el-button--default" small="">
+                  <span>OK</span>
+                </button>
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="el-dialog__wrapper dialog-share" style="display: none;">
+          <div role="dialog" aria-modal="true" aria-label="Share this project" class="el-dialog" style="margin-top: 15vh;">
+            <div class="el-dialog__header"><span class="el-dialog__title">Share this project</span><button type="button" aria-label="Close" class="el-dialog__headerbtn"><i class="el-dialog__close el-icon el-icon-close"></i></button></div>
+            <div class="el-dialog__footer">
+              <span class="dialog-footer">
+                <button type="button" class="el-button btn-subdued el-button--default" small="">
+                  <span>Done</span>
+                </button>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- END Project Info -->
+    </div>
+    <!-- END PAGE SPECIFIC CONTENT-->
+
+
+    <% if self.exchange.user_is_authorized() { %>
+    <div style="position: fixed; bottom: 20px; right: 20px; background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
+      <h4 style="margin-top: 0;">Admin Actions</h4>
+      <button
+        hx-post="/exchange/<%= self.exchange.info.exchange_id %>/<%= self.project.slug %>/hide"
+        hx-confirm="Hide this project from the exchange?"
+        hx-target="this"
+        hx-swap="outerHTML"
+        style="padding: 0.5rem 1rem; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer;">
+        Hide Project
+      </button>
+    </div>
+    <% } %>
+
+    <!-- FOOTER - every page -->
+    <footer>
+      <% if !self.exchange.restricted_add() || self.exchange.user_is_authorized() { %>
+      <a class="btn btn-secondary"  data-custom-open="add-modal"><span>+</span> Add a Project or Event</a>
+      <% } %>
+      <div><a href="/login?next=<%= self.encode(&format!("/exchange/{}/{}/project.html", self.exchange.info.exchange_id, self.project.id))|disp %>">Log In</a> | <a href="/login?action=signup&next=<%= self.encode(&format!("/exchange/{}/{}/project.html", self.exchange.info.exchange_id, self.project.id))|disp %>">Sign Up</a></div>
+      <p class="powered-by">powered by <img src="/-static/img/scistarter-logo-web-r.svg" alt="SciStarter" /></p>
+      <div style="height: 8rem"></div>
+    </footer>
+    <!-- END FOOTER -->
+
+
+    <!-- MODALS -->
+    <div class="modal micromodal-slide" id="modal-1" aria-hidden="true">
+      <div class="modal__overlay" tabindex="-1" data-micromodal-close>
+        <div class="modal__container" role="dialog" aria-modal="true" aria-labelledby="modal-1-title">
+          <header class="modal__header">
+            <h2 class="modal__title" id="modal-1-title">
+              You Must Be Signed In to SciStarter
+            </h2>
+            <button class="modal__close" aria-label="Close modal" data-micromodal-close></button>
+          </header>
+          <main class="modal__content" id="modal-1-content">
+            <p>Create a free SciStarter account</p>
+            <a href="/login?action=signup&next=<%= self.encode(&format!("/exchange/{}/{}/project.html", self.exchange.info.exchange_id, self.project.id))|disp %>" class="modal__btn modal__btn-primary">Create Account</a>
+            <p>Login with your SciStarter account</p>
+            <a href="/login?next=<%= self.encode(&format!("/exchange/{}/{}/project.html", self.exchange.info.exchange_id, self.project.id))|disp %>" class="modal__btn modal__btn-primary">Log In</a>
+          </main>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal micromodal-slide" id="edit-modal" aria-hidden="true">
+      <div class="modal__overlay" tabindex="-1" data-micromodal-close>
+        <div class="modal__container" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title">
+          <header class="modal__header">
+            <h2 class="modal__title" id="edit-modal-title">
+              Edit Project
+            </h2>
+            <button class="modal__close" aria-label="Close modal" data-micromodal-close></button>
+          </header>
+          <main class="modal__content" id="modal-1-content">
+            <p>You will be taken to SciStarter to edit this self.project.</p>
+            <a href="https://scistarter.org/<%= self.project.slug %>/project/edit" class="modal__btn modal__btn-primary">Continue to SciStarter</a>
+            <button class="modal__btn modal__btn-text" data-micromodal-close>Cancel</button>
+          </main>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal micromodal-slide" id="tools-modal" aria-hidden="true">
+      <div class="modal__overlay" tabindex="-1" data-micromodal-close>
+        <div class="modal__container" role="dialog" aria-modal="true" aria-labelledby="tools-modal-title">
+          <header class="modal__header">
+            <h2 class="modal__title" id="tools-modal-title">More Tools</h2>
+            <button class="modal__close" aria-label="Close modal" data-micromodal-close></button>
+          </header>
+          <main class="modal__content" id="modal-1-content">
+            <p>You'll be taken to SciStarter where you'll find more tools such as stats and tools to help acquire more citizen scientists to do your self.project.</p>
+            <a href="https://scistarter.org/<%= self.project.slug %>/tools" class="modal__btn modal__btn-primary">Continue to SciStarter</a>
+            <button class="modal__btn modal__btn-text" data-micromodal-close>Cancel</button>
+          </main>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal micromodal-slide" id="share-modal" aria-hidden="true">
+      <div class="modal__overlay" tabindex="-1" data-micromodal-close>
+        <div class="modal__container" role="dialog" aria-modal="true" aria-labelledby="share-modal-title">
+          <header class="modal__header">
+            <h2 class="modal__title" id="share-modal-title">
+              Share Project
+            </h2>
+            <button class="modal__close" aria-label="Close modal" data-micromodal-close></button>
+          </header>
+          <main class="modal__content" id="modal-1-content">
+            <div class="ss-share-this">
+              <div>
+                <% let ss_url = self.encode(&format!("https://scistarter.org/{}", &self.project.slug)).to_string(); %>
+                <% let ss_name = self.encode(&self.project.name).to_string(); %>
+                <a data-link="#share-facebook" href="https://www.facebook.com/sharer/sharer.php?u=<%= &ss_url %>" target="_blank">
+                  <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" style="fill: currentcolor;">
+                    <use xlink:href="/img/icons.svg#icon--facebook"></use>
+                  </svg>
+                  <span class="u-visuallyhidden">Share on Facebook</span>
+                </a>
+                <a data-link="#share-twitter" href="https://twitter.com/intent/tweet?text=<%= &ss_name %>&url=<%= &ss_url %>" target="_blank">
+                  <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" style="fill: currentcolor;">
+                    <use xlink:href="/img/icons.svg#icon--twitter"></use>
+                  </svg>
+                  <span class="u-visuallyhidden">Share on Twitter</span>
+                </a>
+                <a data-link="#share-pinterest" href="http://pinterest.com/pin/create/button/?url=<%= &ss_url %>&description=<%= &ss_name %>" target="_blank">
+                  <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" style="fill: currentcolor;">
+                    <use xlink:href="/img/icons.svg#icon--pinterest"></use>
+                  </svg>
+                  <span class="u-visuallyhidden">Share on Pinterest</span>
+                </a>
+                <a data-link="#share-linkedin" href="https://www.linkedin.com/shareArticle?mini=true&url=<%= &ss_url %>&title=<%= &ss_name %>&summary=<%= &ss_name %>&source=<%= &ss_url %>" target="_blank">
+                  <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" style="fill: currentcolor;">
+                    <use xlink:href="/img/icons.svg#icon--linkedin"></use>
+                  </svg>
+                  <span class="u-visuallyhidden">Share on LinkedIn</span>
+                </a>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- END MODALS-->
+
+    <!-- DEFAULT MODALS -->
+    <div class="modal micromodal-slide" id="add-modal" aria-hidden="true">
+      <div class="modal__overlay" tabindex="-1" data-micromodal-close>
+        <div class="modal__container" role="dialog" aria-modal="true" aria-labelledby="add-modal-title">
+          <header class="modal__header">
+            <div>
+              <h2 class="modal__title" id="add-modal-title">Add a Citizen Science Project or Event</h2>
+              <p class="powered-by">powered by <img src="/img/scistarter-logo-web-r.svg" alt="SciStarter" /></p>
+              <p>You will be taken from this website to the <a href="https://scistarter.org">SciStarter</a> website to enter your project, event, or tool. Once approved, it will be available on SciStarter and in any SciStarter partner websites where it meets the criteria to display.</p>
+            </div>
+            <button class="modal__close" aria-label="Close modal" data-micromodal-close></button>
+          </header>
+          <main class="modal__content">
+            <div>
+              <img src="/img/microscope.svg" alt="microscope icon" />
+              <h3>Add a Citizen Science Project</h3>
+              <p>Projects are typically  long term initiatives that may crowdsource data collection or analysis.</p>
+              <p><a href="https://scistarter.org/add-project?exchange=<%= self.exchange.info.exchange_id %>" class="modal__btn modal__btn-primary" target="_blank"><span class="plus">+</span> Add a Project</a></p>
+              <p><a href="https://scistarter.org/finder" target="_blank">Visit SciStarter Projects Page</a></p>
+            </div>
+            <div>
+              <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon entity__tab-icon" style="fill: currentcolor;"><use xlink:href="/img/icons.svg#icon--db-events"></use></svg>
+              <h3>Add a Citizen Science Event</h3>
+              <p>Events are typically short term (possibly reoccurring) events with known start and end times and may focus on trainings, meet-ups, and other activities related to a citizen science self.project.</p>
+              <p><a href="https://scistarter.org/add-event?exchange=<%= self.exchange.info.exchange_id %>" class="modal__btn modal__btn-primary" target="_blank"><span class="plus">+</span> Add an Event</a></p>
+              <p><a href="https://scistarter.org/events" target="_blank">Visit SciStarter Events Page</a></p>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+    <!-- END DEFAULT MODALS-->
+
+
+    <!-- https://micromodal.vercel.app/ -->
+    <script src="/-static/exchange/js/micromodal.js"></script>
+    <script>
+    MicroModal.init({
+        onShow: modal => console.info(`${modal.id} is shown`), // [1]
+        onClose: modal => console.info(`${modal.id} is hidden`), // [2]
+        openTrigger: 'data-custom-open', // [3]
+        openClass: 'is-open', // [5]
+        disableScroll: true, // [6]
+        disableFocus: false, // [7]
+        awaitOpenAnimation: false, // [8]
+        awaitCloseAnimation: false, // [9]
+        debugMode: true // [10]
+    });
+    </script>
+
+    <script>
+    /*show mobile buttons */
+    const mobile = document.querySelector('.mobile-overlay');
+    mobile.addEventListener('click',function(evt){
+        if (evt.target && evt.target.classList.contains('mobile-more-action-btn')) {
+            if (mobile.classList.contains('shown')) {
+                mobile.classList.remove('shown')
+            } else {
+                mobile.classList.add('shown')
+            }
+        }
+    })
+    </script>
+  </body>
+</html>

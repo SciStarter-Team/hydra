@@ -1,0 +1,39 @@
+<article class="u-mb-lg flex-grid__card">
+  <figure class="section project-image overflow-hidden u-txt-c u-mb-sm">
+    <a href="/exchange/<%= self.exchange.exchange_id() %>/<%= self.project.slug %>/project.html" class="project-frame project-frame-rect full-width">
+      <img loading="lazy" src="<%= self.project.image %>" alt="project image" class="u-p-sm">
+    </a>
+    <figcaption><% if !self.project.image_credit.is_empty() { %><span title="<%= self.project.image_credit %>"><%= self.project.image_credit.chars().take(32).collect::<String>() %></span><% } %></figcaption>
+  </figure>
+  <h3 class="b-heading-5--lc"><a href="/exchange/<%= self.exchange.exchange_id() %>/<%= self.project.slug %>/project.html"><%= self.project.name %></a></h3>
+  <table class="table-finder">
+    <tbody>
+      <tr>
+        <th scope="row">Goal</th>
+        <td>
+          <% if self.project.goal.len() > 35 { %>
+          <details>
+            <summary><%= self.project.goal.chars().take(30).collect::<String>() %>...</summary>
+            <%= self.project.goal %>
+          </details>
+          <% } else { %>
+          <%= self.project.goal %>
+          <% } %>
+        </td>
+      </tr>
+      <tr>
+        <th scope="row">Task</th>
+        <td>
+          <% if self.project.task.len() > 35 { %>
+          <details>
+            <summary><%= self.project.task.chars().take(30).collect::<String>() %>...</summary>
+            <%= self.project.task %>
+          </details>
+          <% } else { %>
+          <%= self.project.task %>
+          <% } %>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</article>
