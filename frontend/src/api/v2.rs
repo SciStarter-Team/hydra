@@ -435,7 +435,7 @@ pub async fn record_event_articulate(
                 WorkflowProgressRequest {
                     user_id: user_id_str.clone(),
                     workflow: WorkflowType::Foundations,
-                    step: "hour1".to_string(),
+                    step: "tutorial".to_string(),
                 }
             ).await?;
 
@@ -469,7 +469,7 @@ pub async fn record_event_articulate(
                 WorkflowProgressRequest {
                     user_id: user_id_str,
                     workflow: WorkflowType::LibrariesHubs,
-                    step: "hour2".to_string(),
+                    step: "tutorial".to_string(),
                 }
             ).await?;
         }

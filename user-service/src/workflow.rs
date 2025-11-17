@@ -53,44 +53,65 @@ async fn update_foundations_progress(user_id: &str, step: &str, now: &str) -> Re
     .await?;
 
     let mut badge_granted = false;
+    let user_ulid = Ulid::from_string(user_id)?;
 
     match step {
-        "hour1" => {
-            sqlx::query!(
+        "tutorial" => {
+            let result = sqlx::query!(
                 "UPDATE foundations_progress SET hour1_completed_at = ? WHERE user_id = ? AND hour1_completed_at IS NULL",
                 now, user_id
             )
             .execute(db())
             .await?;
+
+            // Trigger email if this is a new completion
+            if result.rows_affected() > 0 {
+                trigger_email(TriggerEvent::FoundationsTutorial, user_ulid, None).await?;
+            }
         }
         "squirrel" => {
-            sqlx::query!(
+            let result = sqlx::query!(
                 "UPDATE foundations_progress SET squirrel_completed_at = ? WHERE user_id = ? AND squirrel_completed_at IS NULL",
                 now, user_id
             )
             .execute(db())
             .await?;
 
-            // Check if badge should be granted (need hour1 + 2 projects)
+            // Trigger email if this is a new completion
+            if result.rows_affected() > 0 {
+                trigger_email(TriggerEvent::FoundationsSquirrel, user_ulid, None).await?;
+            }
+
+            // Check if badge should be granted (need tutorial + 2 projects)
             badge_granted = check_foundations_badge(user_id).await?;
         }
         "stall" => {
-            sqlx::query!(
+            let result = sqlx::query!(
                 "UPDATE foundations_progress SET stall_completed_at = ? WHERE user_id = ? AND stall_completed_at IS NULL",
                 now, user_id
             )
             .execute(db())
             .await?;
 
+            // Trigger email if this is a new completion
+            if result.rows_affected() > 0 {
+                trigger_email(TriggerEvent::FoundationsStall, user_ulid, None).await?;
+            }
+
             badge_granted = check_foundations_badge(user_id).await?;
         }
         "debris" => {
-            sqlx::query!(
+            let result = sqlx::query!(
                 "UPDATE foundations_progress SET debris_completed_at = ? WHERE user_id = ? AND debris_completed_at IS NULL",
                 now, user_id
             )
             .execute(db())
             .await?;
+
+            // Trigger email if this is a new completion
+            if result.rows_affected() > 0 {
+                trigger_email(TriggerEvent::FoundationsDebris, user_ulid, None).await?;
+            }
 
             badge_granted = check_foundations_badge(user_id).await?;
         }
@@ -164,22 +185,34 @@ async fn update_libraries_hubs_progress(user_id: &str, step: &str, now: &str) ->
     .execute(db())
     .await?;
 
+    let user_ulid = Ulid::from_string(user_id)?;
+
     match step {
-        "hour2" => {
-            sqlx::query!(
+        "tutorial" => {
+            let result = sqlx::query!(
                 "UPDATE libraries_hubs_progress SET hour2_completed_at = ? WHERE user_id = ? AND hour2_completed_at IS NULL",
                 now, user_id
             )
             .execute(db())
             .await?;
+
+            // Trigger email if this is a new completion
+            if result.rows_affected() > 0 {
+                trigger_email(TriggerEvent::LibrariesHubsTutorial, user_ulid, None).await?;
+            }
         }
         "supplemental" => {
-            sqlx::query!(
+            let result = sqlx::query!(
                 "UPDATE libraries_hubs_progress SET supplemental_signup_at = ? WHERE user_id = ? AND supplemental_signup_at IS NULL",
                 now, user_id
             )
             .execute(db())
             .await?;
+
+            // Trigger email if this is a new completion
+            if result.rows_affected() > 0 {
+                trigger_email(TriggerEvent::LibrariesHubsSupplemental, user_ulid, None).await?;
+            }
 
             // Grant badge if both steps complete
             return check_libraries_hubs_badge(user_id).await;
@@ -440,7 +473,7 @@ async fn get_foundations_status(user_id: &str) -> Result<WorkflowStatusResponse,
 
     let mut completed_steps = Vec::new();
     if row.hour1_completed_at.is_some() {
-        completed_steps.push("hour1".to_string());
+        completed_steps.push("tutorial".to_string());
     }
     if row.squirrel_completed_at.is_some() {
         completed_steps.push("squirrel".to_string());
@@ -480,7 +513,7 @@ async fn get_libraries_hubs_status(user_id: &str) -> Result<WorkflowStatusRespon
 
     let mut completed_steps = Vec::new();
     if row.hour2_completed_at.is_some() {
-        completed_steps.push("hour2".to_string());
+        completed_steps.push("tutorial".to_string());
     }
     if row.supplemental_signup_at.is_some() {
         completed_steps.push("supplemental".to_string());

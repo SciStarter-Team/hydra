@@ -318,14 +318,37 @@ struct ArticulateParams {
     lrs_url: String,
     user: Arc<BasicInfo>,
     activity: Option<String>,
+    jwt: String,
 }
 
 impl ArticulateParams {
     fn new(lrs_url: &str, user: Arc<BasicInfo>) -> Self {
+        use jsonwebtoken::{encode, EncodingKey, Header};
+        use serde::Serialize;
+
+        #[derive(Serialize)]
+        struct ArticulateJwtClaims {
+            email: String,
+        }
+
+        // Generate JWT with email field containing ULID@scistarter.org
+        let claims = ArticulateJwtClaims {
+            email: format!("{}@scistarter.org", user.user_id),
+        };
+
+        let jwt_secret = env!("SCISTARTER_JWT_SECRET");
+        let jwt = encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret(jwt_secret.as_bytes()),
+        )
+        .unwrap_or_else(|_| String::from(""));
+
         Self {
             lrs_url: lrs_url.to_string(),
             user,
             activity: None,
+            jwt,
         }
     }
 
@@ -344,17 +367,21 @@ impl std::fmt::Display for ArticulateParams {
                 "actor={}",
                 urlencoding::encode(
                     &serde_json::json!({
+                        "objectType": "Agent",
                         "name": self.user.handle,
                         "mbox": format!("mailto:{}@scistarter.org", self.user.user_id),
                     })
                     .to_string()
                 )
             ),
+            format!("auth={}", urlencoding::encode(&format!("Bearer {}", self.jwt))),
         ];
 
         if let Some(activity) = &self.activity {
             params.push(format!("activity={}", urlencoding::encode(activity)));
         }
+
+        params.push("tincan=true".to_string());
 
         write!(f, "{}", params.join("&"))
     }

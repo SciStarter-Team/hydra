@@ -910,7 +910,7 @@ async fn userbadges_synchronize() {
             };
 
             // Insert the badge into the database
-            sqlx::query!(
+            let result = sqlx::query!(
                 r#"insert into "user_badges" ("user_id", "badgeclass", "when", "image")
                    values (?, ?, ?, ?)
                    on conflict ("user_id", "badgeclass") do nothing"#,
@@ -925,7 +925,7 @@ async fn userbadges_synchronize() {
 
             // Log the badge earning activity
             log_activity(
-                Some(badge_when),
+                Some(badge_when.clone()),
                 "badge_earned",
                 badge.user_ulid.as_ulid().ok(),
                 None::<Ulid>,
@@ -933,6 +933,106 @@ async fn userbadges_synchronize() {
             )
             .await
             .expect("Error logging badge activity");
+
+            // If badge was actually inserted (not a duplicate), create workflow record
+            if result.rows_affected() > 0 {
+                let now_str = badge_when.to_string();
+                match badge.badgeclass.as_str() {
+                    // Foundations of Citizen Science
+                    "6Jg_IwmfQTaJ2kUNePsO5Q" => {
+                        sqlx::query!(
+                            "INSERT OR IGNORE INTO foundations_progress (user_id, hour1_completed_at, squirrel_completed_at, stall_completed_at, debris_completed_at, badge_granted_at) VALUES (?, ?, ?, ?, ?, ?)",
+                            badge.user_ulid, now_str, now_str, now_str, now_str, now_str
+                        )
+                        .execute(db)
+                        .await
+                        .expect("Creating foundations workflow record failed");
+                    }
+                    // Libraries as Community Hubs
+                    "CWZrsNMPSZSHqKJoz8pLMQ" => {
+                        sqlx::query!(
+                            "INSERT OR IGNORE INTO libraries_hubs_progress (user_id, hour2_completed_at, supplemental_signup_at, badge_granted_at) VALUES (?, ?, ?, ?)",
+                            badge.user_ulid, now_str, now_str, now_str
+                        )
+                        .execute(db)
+                        .await
+                        .expect("Creating libraries_hubs workflow record failed");
+                    }
+                    // Data Literacy
+                    "e_t41dudSc6dXymoEa8iNw" => {
+                        sqlx::query!(
+                            "INSERT OR IGNORE INTO data_literacy_progress (user_id, tutorial_completed_at, badge_granted_at) VALUES (?, ?, ?)",
+                            badge.user_ulid, now_str, now_str
+                        )
+                        .execute(db)
+                        .await
+                        .expect("Creating data_literacy workflow record failed");
+                    }
+                    // Higher Education
+                    "OP_wrFm7QauZgaXrZY-DhA" => {
+                        sqlx::query!(
+                            "INSERT OR IGNORE INTO higher_ed_progress (user_id, tutorial_completed_at, badge_granted_at) VALUES (?, ?, ?)",
+                            badge.user_ulid, now_str, now_str
+                        )
+                        .execute(db)
+                        .await
+                        .expect("Creating higher_ed workflow record failed");
+                    }
+                    // Data Ethics
+                    "1OeTfgY1Q-exWqz---kPAQ" => {
+                        sqlx::query!(
+                            "INSERT OR IGNORE INTO data_ethics_progress (user_id, tutorial_completed_at, badge_granted_at) VALUES (?, ?, ?)",
+                            badge.user_ulid, now_str, now_str
+                        )
+                        .execute(db)
+                        .await
+                        .expect("Creating data_ethics workflow record failed");
+                    }
+                    // IDEAL
+                    "a8cFJfeBTRec05glGM3_9w" => {
+                        sqlx::query!(
+                            "INSERT OR IGNORE INTO ideal_progress (user_id, tutorial_completed_at, badge_granted_at) VALUES (?, ?, ?)",
+                            badge.user_ulid, now_str, now_str
+                        )
+                        .execute(db)
+                        .await
+                        .expect("Creating ideal workflow record failed");
+                    }
+                    // Ambassador
+                    "9csPkdhzQLSZuk-OWREaKg" => {
+                        sqlx::query!(
+                            "INSERT OR IGNORE INTO ambassador_progress (user_id, tutorial_completed_at, badge_granted_at) VALUES (?, ?, ?)",
+                            badge.user_ulid, now_str, now_str
+                        )
+                        .execute(db)
+                        .await
+                        .expect("Creating ambassador workflow record failed");
+                    }
+                    // One Million Acts 2024
+                    "QLLs6Nm9TfqIj3_722yFQg" => {
+                        sqlx::query!(
+                            "INSERT OR IGNORE INTO one_million_2024_progress (user_id, completed_at, badge_granted_at) VALUES (?, ?, ?)",
+                            badge.user_ulid, now_str, now_str
+                        )
+                        .execute(db)
+                        .await
+                        .expect("Creating one_million_2024 workflow record failed");
+                    }
+                    // One Million Acts 2025
+                    "U431wPFaTaKwUQO0WhQJRg" => {
+                        sqlx::query!(
+                            "INSERT OR IGNORE INTO one_million_2025_progress (user_id, completed_at, badge_granted_at) VALUES (?, ?, ?)",
+                            badge.user_ulid, now_str, now_str
+                        )
+                        .execute(db)
+                        .await
+                        .expect("Creating one_million_2025 workflow record failed");
+                    }
+                    _ => {
+                        // Other badges don't have workflow tracking
+                    }
+                }
+            }
 
             println!(
                 "Saved badge {} for user {}",

@@ -598,6 +598,24 @@ pub enum TriggerEvent {
 
     /// Sent when the SciStarter Ambassador badge is earned
     BadgeAmbassador,
+
+    /// Sent when Foundations tutorial is completed
+    FoundationsTutorial,
+
+    /// Sent when Squirrel Mapper project is completed (Foundations)
+    FoundationsSquirrel,
+
+    /// Sent when Stall Catchers project is completed (Foundations)
+    FoundationsStall,
+
+    /// Sent when Debris Tracker project is completed (Foundations)
+    FoundationsDebris,
+
+    /// Sent when Libraries tutorial is completed
+    LibrariesHubsTutorial,
+
+    /// Sent when Libraries supplemental signup is completed
+    LibrariesHubsSupplemental,
 }
 
 impl TriggerEvent {
@@ -614,6 +632,12 @@ impl TriggerEvent {
             Self::BadgeDataEthics => "When the Data Ethics for Practitioners badge is earned",
             Self::BadgeIdeal => "When the Ideal Participatory Science badge is earned",
             Self::BadgeAmbassador => "When the SciStarter Ambassador badge is earned",
+            Self::FoundationsTutorial => "When Foundations tutorial is completed",
+            Self::FoundationsSquirrel => "When Squirrel Mapper project is completed (Foundations)",
+            Self::FoundationsStall => "When Stall Catchers project is completed (Foundations)",
+            Self::FoundationsDebris => "When Debris Tracker project is completed (Foundations)",
+            Self::LibrariesHubsTutorial => "When Libraries tutorial is completed",
+            Self::LibrariesHubsSupplemental => "When Libraries supplemental signup is completed",
         }
     }
 
@@ -629,6 +653,12 @@ impl TriggerEvent {
             | Self::BadgeDataEthics
             | Self::BadgeIdeal
             | Self::BadgeAmbassador => "badge",
+            Self::FoundationsTutorial
+            | Self::FoundationsSquirrel
+            | Self::FoundationsStall
+            | Self::FoundationsDebris
+            | Self::LibrariesHubsTutorial
+            | Self::LibrariesHubsSupplemental => "workflow",
         }
     }
 }

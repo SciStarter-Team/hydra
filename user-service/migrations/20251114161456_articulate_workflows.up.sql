@@ -53,3 +53,17 @@ CREATE TABLE ambassador_progress (
     tutorial_completed_at TEXT,  -- Completed tutorial
     badge_granted_at TEXT  -- When badge was earned
 ) STRICT;
+
+-- One Million Acts of Science 2024 workflow
+CREATE TABLE one_million_2024_progress (
+    user_id TEXT PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
+    completed_at TEXT,  -- Completed participation
+    badge_granted_at TEXT  -- When badge was earned
+) STRICT;
+
+-- One Million Acts of Science 2025 workflow
+CREATE TABLE one_million_2025_progress (
+    user_id TEXT PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
+    completed_at TEXT,  -- Completed participation
+    badge_granted_at TEXT  -- When badge was earned
+) STRICT;
