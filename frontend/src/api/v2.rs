@@ -19,7 +19,6 @@ struct ParticipationForm {
     #[serde(rename = "where")]
     where_point: Option<String>,  // GeoJSON point
     when: Option<String>,          // ISO datetime
-    count: Option<i32>,
     #[serde(rename = "type")]
     event_type: Option<String>,
     origin: Option<i16>,
@@ -406,7 +405,7 @@ pub async fn record_event_articulate(
     // Get JWT secret from compile-time environment
     let jwt_secret = env!("SCISTARTER_JWT_SECRET");
 
-    // Decode and validate JWT
+    // Decode and validate JWT (validates expiration automatically)
     let token_data = decode::<ArticulateClaims>(
         &form.token,
         &DecodingKey::from_secret(jwt_secret.as_bytes()),
@@ -555,7 +554,9 @@ struct ArticulateForm {
 #[derive(Debug, serde::Deserialize)]
 struct ArticulateClaims {
     email: String,
+    /// JWT expiration timestamp - validated automatically by jsonwebtoken library
     #[serde(default)]
+    #[allow(dead_code)]
     exp: Option<u64>,
 }
 

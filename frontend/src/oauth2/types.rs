@@ -319,13 +319,14 @@ pub struct RefreshToken {
     pub access_token: String,
     pub client_id: String,
     pub user_id: String,
+    pub scope: String,
     pub expires_at: TimeString,
     pub created: TimeString,
 }
 
 impl RefreshToken {
     /// Create a new refresh token
-    pub fn new(access_token: String, client_id: String, user_id: String) -> Self {
+    pub fn new(access_token: String, client_id: String, user_id: String, scope: String) -> Self {
         use rand::Rng;
 
         // Generate random token
@@ -350,6 +351,7 @@ impl RefreshToken {
             access_token,
             client_id,
             user_id,
+            scope,
             expires_at,
             created,
         }
@@ -374,12 +376,13 @@ impl LoadStorePeered for RefreshToken {
         let created_str = self.created.to_string();
 
         sqlx::query!(
-            "INSERT OR REPLACE INTO oauth2_refresh_tokens (token, access_token, client_id, user_id, expires_at, created)
-             VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT OR REPLACE INTO oauth2_refresh_tokens (token, access_token, client_id, user_id, scope, expires_at, created)
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
             self.token,
             self.access_token,
             self.client_id,
             self.user_id,
+            self.scope,
             expires_str,
             created_str
         )
@@ -391,7 +394,7 @@ impl LoadStorePeered for RefreshToken {
 
     async fn read_from_database(token: Self::DatabaseKey) -> Result<Self, Error> {
         let row = sqlx::query!(
-            "SELECT token, access_token, client_id, user_id, expires_at, created
+            "SELECT token, access_token, client_id, user_id, scope, expires_at, created
              FROM oauth2_refresh_tokens WHERE token = ?",
             token
         )
@@ -403,6 +406,7 @@ impl LoadStorePeered for RefreshToken {
             access_token: row.access_token,
             client_id: row.client_id,
             user_id: row.user_id,
+            scope: row.scope,
             expires_at: row.expires_at.try_into()?,
             created: row.created.try_into()?,
         })

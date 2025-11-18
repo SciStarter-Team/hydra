@@ -275,6 +275,10 @@ pub fn routes() -> impl Endpoint {
             "/oauth2-clients/:client_id",
             get(oauth2_client_edit_page).post(oauth2_client_update).delete(oauth2_client_delete),
         )
+        .at("/wiki", get(wiki_index))
+        .at("/wiki/:title", get(wiki_page).post(wiki_save).delete(wiki_delete))
+        .at("/wiki/:title/edit", get(wiki_edit))
+        .at("/component-pages", get(component_pages_stub))
         .at("/badges", get(badges_list))
         .at("/badges/:badgeclass/holders", get(badges_holders))
         .at(
@@ -11901,11 +11905,10 @@ async fn api_recipient_select(
 
     // Build current recipients list
     let mut recipients = Vec::new();
-    for (idx, (recipient_type, recipient_value)) in form
+    for (recipient_type, recipient_value) in form
         .recipient_types
         .iter()
         .zip(form.recipient_values.iter())
-        .enumerate()
     {
         // Look up display name for existing recipients
         let display = if recipient_type == "User" {
@@ -11935,7 +11938,6 @@ async fn api_recipient_select(
         };
 
         recipients.push(RecipientInfo {
-            id: idx.to_string(),
             display,
             recipient_type: recipient_type.clone(),
             recipient_value: recipient_value.clone(),
@@ -11976,7 +11978,6 @@ async fn api_recipient_select(
     };
 
     recipients.push(RecipientInfo {
-        id: recipients.len().to_string(),
         display,
         recipient_type: recipient_type.to_string(),
         recipient_value,
@@ -12051,7 +12052,6 @@ async fn api_recipient_remove(
         };
 
         recipients.push(RecipientInfo {
-            id: idx.to_string(),
             display,
             recipient_type: recipient_type.clone(),
             recipient_value: recipient_value.clone(),
@@ -12084,7 +12084,6 @@ struct BadgeHoldersContentPartial {
 
 #[derive(Clone)]
 struct RecipientInfo {
-    id: String,
     display: String,
     recipient_type: String,
     recipient_value: String,
@@ -12110,7 +12109,7 @@ async fn exchanges_list(
 ) -> Result<poem::Response, anyhow::Error> {
     // Fetch exchanges from database
     let rows = sqlx::query!(
-        "SELECT exchange_id, slug, name, description, logo_url, created, updated FROM exchanges ORDER BY created DESC"
+        "SELECT exchange_id, slug, name, description, created, updated FROM exchanges ORDER BY created DESC"
     )
     .fetch_all(db())
     .await?;
@@ -12122,7 +12121,6 @@ async fn exchanges_list(
             slug: row.slug,
             name: row.name,
             description: row.description,
-            logo_url: row.logo_url,
             created: row.created,
         })
         .collect();
@@ -12339,6 +12337,57 @@ async fn oauth2_client_create_page(
         .body(prepared.render_once()?))
 }
 
+// OAuth2 validation helpers
+fn validate_client_id(client_id: &str) -> Result<(), anyhow::Error> {
+    // Only allow alphanumeric, hyphens, underscores
+    if !client_id.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+        anyhow::bail!("Client ID must contain only alphanumeric characters, hyphens, and underscores");
+    }
+    if client_id.is_empty() || client_id.len() > 64 {
+        anyhow::bail!("Client ID must be 1-64 characters");
+    }
+    Ok(())
+}
+
+fn validate_redirect_uri(uri: &str) -> Result<(), anyhow::Error> {
+    let parsed = url::Url::parse(uri)
+        .map_err(|e| anyhow::anyhow!("Invalid URI '{}': {}", uri, e))?;
+
+    // Require HTTPS in production (allow http://localhost for dev)
+    if parsed.scheme() != "https" {
+        if cfg!(debug_assertions) {
+            // Allow http://localhost in development
+            if parsed.scheme() != "http" || !parsed.host_str().unwrap_or("").starts_with("localhost") {
+                anyhow::bail!("Only HTTPS URIs allowed (except http://localhost in dev): {}", uri);
+            }
+        } else {
+            anyhow::bail!("Only HTTPS redirect URIs allowed in production: {}", uri);
+        }
+    }
+
+    // No fragment allowed
+    if parsed.fragment().is_some() {
+        anyhow::bail!("Redirect URIs cannot contain fragments: {}", uri);
+    }
+
+    Ok(())
+}
+
+fn parse_redirect_uris(input: &str) -> Vec<String> {
+    input
+        .lines()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+fn parse_scopes(input: &str) -> Vec<String> {
+    input
+        .split_whitespace()
+        .map(|s| s.to_string())
+        .collect()
+}
+
 #[derive(Debug, serde::Deserialize)]
 struct OAuth2ClientCreateForm {
     client_id: String,
@@ -12356,18 +12405,17 @@ async fn oauth2_client_create(
 ) -> Result<poem::Response, anyhow::Error> {
     use crate::oauth2::types::Client;
 
-    // Parse redirect URIs (newline-separated)
-    let redirect_uris: Vec<String> = form.redirect_uris
-        .lines()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect();
+    // Validate client_id format
+    validate_client_id(&form.client_id)?;
 
-    // Parse scopes (space-separated)
-    let allowed_scopes: Vec<String> = form.allowed_scopes
-        .split_whitespace()
-        .map(|s| s.to_string())
-        .collect();
+    // Parse redirect URIs and validate each one
+    let redirect_uris = parse_redirect_uris(&form.redirect_uris);
+    for uri in &redirect_uris {
+        validate_redirect_uri(uri)?;
+    }
+
+    // Parse scopes
+    let allowed_scopes = parse_scopes(&form.allowed_scopes);
 
     // Create new OAuth2 client
     let client = Client {
@@ -12440,6 +12488,15 @@ async fn oauth2_client_update(
     // Load existing client
     let mut client = Client::load(client_id).await?;
 
+    // Parse redirect URIs and validate each one
+    let redirect_uris = parse_redirect_uris(&form.redirect_uris);
+    for uri in &redirect_uris {
+        validate_redirect_uri(uri)?;
+    }
+
+    // Parse scopes
+    let allowed_scopes = parse_scopes(&form.allowed_scopes);
+
     // Update fields
     client.client_name = form.client_name.clone();
     client.client_secret = form.client_secret.clone();
@@ -12448,15 +12505,8 @@ async fn oauth2_client_update(
     } else {
         Some(form.owner_user_id.clone())
     };
-    client.redirect_uris = form.redirect_uris
-        .lines()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect();
-    client.allowed_scopes = form.allowed_scopes
-        .split_whitespace()
-        .map(|s| s.to_string())
-        .collect();
+    client.redirect_uris = redirect_uris;
+    client.allowed_scopes = allowed_scopes;
 
     // Use LoadStorePeered to save and broadcast
     client.store().await?;
@@ -12479,6 +12529,182 @@ async fn oauth2_client_delete(
     // Return success message for HTMX
     Ok(Html("<div class=\"text-green-600\">OAuth2 client deleted successfully</div>").into_response())
 }
+
+// Wiki Handlers
+
+/// GET /wiki - Show the "Index" wiki page
+#[handler]
+async fn wiki_index(
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    // Redirect to the Index page
+    Ok(poem::web::Redirect::see_other("/-admin/wiki/Index").into_response())
+}
+
+/// GET /wiki/:title - Show wiki page or edit form if doesn't exist
+#[handler]
+async fn wiki_page(
+    Path(title): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::wiki::{WikiPage, render_wiki_content};
+    use crate::peering::LoadStorePeered;
+
+    // Try to load the page
+    match WikiPage::load(title.clone()).await {
+        Ok(page) => {
+            // Page exists - show it with rendered wiki links
+            let rendered_content = render_wiki_content(&page.content);
+
+            let content = WikiPageView {
+                title: page.title.clone(),
+                content: rendered_content,
+            };
+
+            let prepared = crate::component::AdminLayout::new(&format!("Wiki: {}", page.title), content)
+                .with_sidebar_active("wiki")
+                .prepare(user_info)
+                .await?;
+
+            Ok(poem::Response::builder()
+                .content_type("text/html")
+                .body(prepared.render_once()?))
+        }
+        Err(_) => {
+            // Page doesn't exist - show editor
+            let content = WikiPageEdit {
+                title: title.clone(),
+                content: String::new(),
+                is_new: true,
+            };
+
+            let prepared = crate::component::AdminLayout::new(&format!("Create Wiki Page: {}", title), content)
+                .with_sidebar_active("wiki")
+                .with_quill()
+                .prepare(user_info)
+                .await?;
+
+            Ok(poem::Response::builder()
+                .content_type("text/html")
+                .body(prepared.render_once()?))
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct WikiSaveForm {
+    content: String,
+}
+
+/// GET /wiki/:title/edit - Show edit form for existing page
+#[handler]
+async fn wiki_edit(
+    Path(title): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::wiki::WikiPage;
+    use crate::peering::LoadStorePeered;
+
+    // Load the page (or use empty content if doesn't exist)
+    let (content, is_new) = match WikiPage::load(title.clone()).await {
+        Ok(page) => (page.content, false),
+        Err(_) => (String::new(), true),
+    };
+
+    let edit_form = WikiPageEdit {
+        title: title.clone(),
+        content,
+        is_new,
+    };
+
+    let page_title = if is_new {
+        format!("Create Wiki Page: {}", title)
+    } else {
+        format!("Edit Wiki Page: {}", title)
+    };
+
+    let prepared = crate::component::AdminLayout::new(&page_title, edit_form)
+        .with_sidebar_active("wiki")
+        .with_quill()
+        .prepare(user_info)
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+/// POST /wiki/:title - Save wiki page
+#[handler]
+async fn wiki_save(
+    Path(title): Path<String>,
+    Authenticated(_user_info): Authenticated,
+    form: poem::web::Form<WikiSaveForm>,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::wiki::WikiPage;
+
+    let page = WikiPage {
+        title: title.clone(),
+        content: form.content.clone(),
+    };
+
+    page.store().await?;
+
+    // Redirect back to view the page
+    Ok(poem::web::Redirect::see_other(&format!("/-admin/wiki/{}", urlencoding::encode(&title))).into_response())
+}
+
+/// DELETE /wiki/:title - Delete wiki page
+#[handler]
+async fn wiki_delete(
+    Path(title): Path<String>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::wiki::WikiPage;
+    use crate::peering::LoadStorePeered;
+
+    WikiPage::delete(title).await?;
+
+    // Redirect to Index page
+    Ok(poem::web::Redirect::see_other("/-admin/wiki").into_response())
+}
+
+#[derive(TemplateOnce)]
+#[template(path = "admin/wiki_view.stpl.html")]
+struct WikiPageView {
+    title: String,
+    content: String,
+}
+
+#[derive(TemplateOnce)]
+#[template(path = "admin/wiki_edit.stpl.html")]
+struct WikiPageEdit {
+    title: String,
+    content: String,
+    is_new: bool,
+}
+
+// Component Pages Stub
+
+#[handler]
+async fn component_pages_stub(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let content = ComponentPagesStub {};
+
+    let prepared = crate::component::AdminLayout::new("Component Pages", content)
+        .with_sidebar_active("component-pages")
+        .prepare(user_info)
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+#[derive(TemplateOnce)]
+#[template(path = "admin/component_pages.stpl.html")]
+struct ComponentPagesStub {}
 
 #[handler]
 async fn badges_list(
@@ -12727,7 +12953,6 @@ struct ExchangeListItem {
     slug: String,
     name: String,
     description: String,
-    logo_url: Option<String>,
     created: String,
 }
 

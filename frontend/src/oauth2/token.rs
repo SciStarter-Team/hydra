@@ -126,6 +126,7 @@ async fn handle_authorization_code_grant(req: TokenRequest) -> Result<Response, 
         access_token.token.clone(),
         auth_code.client_id.clone(),
         auth_code.user_id.clone(),
+        auth_code.scope.clone(),
     );
 
     // Store tokens via LoadStorePeered
@@ -204,11 +205,14 @@ async fn handle_refresh_token_grant(req: TokenRequest) -> Result<Response, Error
     // Delete old access token
     AccessToken::delete(old_refresh.access_token.clone()).await?;
 
-    // Generate new access token (use empty scope for now, could store scope in refresh token table)
+    // Store scope before moving old_refresh
+    let scope = old_refresh.scope.clone();
+
+    // Generate new access token with original scope from refresh token
     let access_token = AccessToken::new(
         old_refresh.client_id.clone(),
         old_refresh.user_id.clone(),
-        "openid".to_string(), // TODO: Store original scope in refresh token
+        scope.clone(),
     );
 
     // Store new access token
@@ -231,13 +235,18 @@ async fn handle_refresh_token_grant(req: TokenRequest) -> Result<Response, Error
         expires_in,
         refresh_token: Some(refresh_token_str),
         id_token: None,
-        scope: "openid".to_string(),
+        scope,
     };
 
     Ok(poem::web::Json(response).into_response())
 }
 
 fn verify_pkce(challenge: &str, verifier: &str, method: &str) -> bool {
+    // RFC 7636 Section 4.1: code_verifier must be 43-128 characters
+    if verifier.len() < 43 || verifier.len() > 128 {
+        return false;
+    }
+
     match method {
         "plain" => challenge == verifier,
         "S256" => {
@@ -298,9 +307,30 @@ fn generate_id_token(user_id: &str, client_id: &str) -> Result<String, Error> {
 }
 
 fn error_response(error: &str, description: Option<&str>) -> Response {
+    use poem::http::StatusCode;
+
+    // OAuth2 spec: invalid_client should return 401 Unauthorized
+    let status = match error {
+        "invalid_client" => StatusCode::UNAUTHORIZED,
+        _ => StatusCode::BAD_REQUEST,
+    };
+
     let err = TokenErrorResponse {
         error: error.to_string(),
         error_description: description.map(|s| s.to_string()),
     };
-    poem::web::Json(err).with_status(poem::http::StatusCode::BAD_REQUEST).into_response()
+
+    let mut response = poem::web::Json(err)
+        .with_status(status)
+        .into_response();
+
+    // Add WWW-Authenticate header for 401 responses per OAuth2 spec
+    if status == StatusCode::UNAUTHORIZED {
+        response.headers_mut().insert(
+            "WWW-Authenticate",
+            "Basic realm=\"OAuth2 Client Authentication\"".parse().unwrap(),
+        );
+    }
+
+    response
 }

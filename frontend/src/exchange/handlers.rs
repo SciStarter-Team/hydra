@@ -429,12 +429,6 @@ struct LikeButton {
     user_id: Option<Ulid>,
 }
 
-impl LikeButton {
-    fn has_user(&self) -> bool {
-        self.user_id.is_some()
-    }
-}
-
 #[derive(TemplateOnce)]
 #[template(path = "exchange/savebutton.stpl.html")]
 struct SaveButton {
@@ -449,11 +443,6 @@ struct SaveButton {
 struct ReviewEntry<'a> {
     review: &'a ReviewForDisplay,
     oob: bool,
-}
-
-// Helper functions for template
-fn encode(s: &str) -> String {
-    urlencoding::encode(s).to_string()
 }
 
 /// Load full project detail for exchange project page

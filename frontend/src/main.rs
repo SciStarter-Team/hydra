@@ -28,6 +28,7 @@ pub mod schedule;
 pub mod session;
 pub mod ui;
 pub mod upload;
+pub mod wiki;
 pub mod wordpress;
 
 use anyhow::Error;
@@ -293,6 +294,7 @@ async fn main() -> Result<(), Error> {
     let _oauth2_authz_code_updates = tokio::spawn(oauth2::types::AuthorizationCode::peering_task());
     let _oauth2_access_token_updates = tokio::spawn(oauth2::types::AccessToken::peering_task());
     let _oauth2_refresh_token_updates = tokio::spawn(oauth2::types::RefreshToken::peering_task());
+    let _wiki_page_updates = tokio::spawn(wiki::WikiPage::peering_task());
 
     let _synchronize_projects = tokio::spawn(sync::synchronize_projects());
     let _synchronize_events = tokio::spawn(sync::synchronize_events());

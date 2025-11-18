@@ -8,8 +8,6 @@ use crate::middleware::authorization::Authenticated;
 use crate::oauth2::types::{Client, AuthorizationCode};
 use crate::peering::LoadStorePeered;
 use crate::component::{Component, Head, StandardLayout};
-use common::message::user::BasicInfo;
-use std::sync::Arc;
 
 #[derive(Debug, Deserialize)]
 pub struct AuthorizeQuery {
@@ -50,7 +48,6 @@ struct ConsentContent {
     state: String,
     code_challenge: String,
     code_challenge_method: String,
-    user_info: Option<Arc<BasicInfo>>,
 }
 
 /// GET /oauth2/authorize
@@ -113,7 +110,6 @@ pub async fn authorize_get(
         state: query.state.unwrap_or_default(),
         code_challenge: query.code_challenge.unwrap_or_default(),
         code_challenge_method: query.code_challenge_method.unwrap_or_default(),
-        user_info: Some(user.clone()),
     };
 
     let layout = StandardLayout::new(content).prepare(Some(user.clone())).await?;
