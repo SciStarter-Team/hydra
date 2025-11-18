@@ -42,4 +42,5 @@ hmac = "0.12.1"
 sha2 = "0.10.9"
 hex = "0.4.3"
 jsonwebtoken = "9.3"
+rsa = "0.9"
 

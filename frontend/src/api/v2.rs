@@ -1,7 +1,7 @@
 // V2 API endpoints for participation recording
 // Ported from orrery/orrery/api/views/v2.py
 
-use poem::{handler, web::{Path, Form, Query}, Response, IntoResponse};
+use poem::{handler, web::{Path, Form, Query}, Response, IntoResponse, http::HeaderMap};
 use serde::Deserialize;
 use anyhow::Error;
 use ulid::Ulid;
@@ -10,6 +10,8 @@ use common::message::log::ProjectParticipationRecord;
 use common::service::{request, send};
 use common::shared::db;
 use crate::middleware::authorization::Authenticated;
+use crate::oauth2::types::AccessToken;
+use crate::peering::LoadStorePeered;
 
 /// Form data for participation recording
 #[derive(Debug, Deserialize)]
@@ -555,4 +557,112 @@ struct ArticulateClaims {
     email: String,
     #[serde(default)]
     exp: Option<u64>,
+}
+
+/// Record participation event via OAuth2 access token
+/// POST /api/participation/openid/:slug
+/// POST /api/participation/openid
+#[handler]
+pub async fn record_event_openid(
+    slug: Option<Path<String>>,
+    headers: &HeaderMap,
+    Form(mut form): Form<ParticipationForm>,
+) -> Result<Response, Error> {
+    // Extract bearer token from Authorization header
+    let token = extract_bearer_token(headers)
+        .ok_or_else(|| anyhow::anyhow!("Missing or invalid Authorization header"))?;
+
+    // Load and validate access token
+    let access_token = AccessToken::load(token.to_string())
+        .await
+        .map_err(|_| anyhow::anyhow!("Invalid or expired access token"))?;
+
+    // Check if token has expired
+    if access_token.is_expired() {
+        AccessToken::delete(access_token.token.clone()).await?;
+        return Err(anyhow::anyhow!("Access token has expired"));
+    }
+
+    // Check if token has participation scope
+    let scopes: Vec<&str> = access_token.scope.split_whitespace().collect();
+    if !scopes.contains(&"participation") {
+        return Err(anyhow::anyhow!("Access token does not have participation scope"));
+    }
+
+    // Parse user_id from access token
+    let user_id = Ulid::from_string(&access_token.user_id)
+        .map_err(|_| anyhow::anyhow!("Invalid user_id in access token"))?;
+
+    // Determine project ID
+    let project_id = if let Some(Path(project_slug)) = slug {
+        // Slug provided: look up entity and get its target (project_id)
+        get_entity_id_for_slug(&project_slug).await
+            .map_err(|_| anyhow::anyhow!("Project slug does not identify a project"))?
+    } else {
+        // No slug: find the unique project owned by the client owner
+        use crate::oauth2::types::Client;
+        let client = Client::load(access_token.client_id.clone())
+            .await
+            .map_err(|_| anyhow::anyhow!("Could not find OAuth2 client"))?;
+
+        let owner_user_id = client.owner_user_id
+            .ok_or_else(|| anyhow::anyhow!("Token does not identify a project and no project slug provided"))?;
+
+        // Query for projects created by the client owner
+        let projects = sqlx::query_scalar!(
+            "SELECT project_id FROM projects WHERE page_creator_id = ?",
+            owner_user_id
+        )
+        .fetch_all(db())
+        .await?;
+
+        match projects.len() {
+            0 => return Err(anyhow::anyhow!("Client owner has no projects")),
+            1 => projects[0].clone(),
+            _ => return Err(anyhow::anyhow!("Client owner has multiple projects, slug required")),
+        }
+    };
+
+    // Override origin to 6 (OpenID) if not provided
+    if form.origin.is_none() {
+        form.origin = Some(6);
+    }
+
+    // Record the participation
+    send(
+        "log.project_participation_record",
+        ProjectParticipationRecord {
+            user_id,
+            project_id,
+            origin: form.origin,
+            when: form.when.clone(),
+            duration: form.duration,
+            where_point: form.where_point.clone(),
+            magnitude: form.magnitude,
+            authenticated: Some(true), // OAuth2-authenticated
+            extra: form.extra.clone(),
+            fidelity: form.fidelity,
+            task_name: form.event_type.clone(),
+        },
+    )
+    .await?;
+
+    Ok(poem::web::Json(serde_json::json!({
+        "result": "success",
+        "operation": "record"
+    })).into_response())
+}
+
+/// Helper to extract Bearer token from Authorization header
+fn extract_bearer_token(headers: &HeaderMap) -> Option<&str> {
+    headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|auth| {
+            if auth.starts_with("Bearer ") {
+                Some(&auth[7..])
+            } else {
+                None
+            }
+        })
 }

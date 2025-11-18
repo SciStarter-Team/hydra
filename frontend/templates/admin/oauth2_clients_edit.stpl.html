@@ -1,0 +1,122 @@
+<div class="bg-white rounded-lg shadow border border-gray-200">
+    <div class="px-6 py-4 border-b border-gray-200">
+        <h3 class="text-lg font-medium text-gray-900">Edit OAuth2 Client</h3>
+        <p class="mt-1 text-sm text-gray-500">Update OAuth2/OIDC client configuration</p>
+    </div>
+    <div class="p-6">
+        <form method="post" action="/-admin/oauth2-clients/<%= self.client_id %>" class="space-y-6">
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Client ID</label>
+                <div class="mt-1 block w-full rounded-md border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-500 font-mono">
+                    <%= self.client_id %> (read-only)
+                </div>
+            </div>
+
+            <div>
+                <label for="client_name" class="block text-sm font-medium text-gray-700">Client Name</label>
+                <input
+                    type="text"
+                    name="client_name"
+                    id="client_name"
+                    required
+                    value="<%= self.client_name %>"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                <p class="mt-1 text-sm text-gray-500">Human-readable name shown to users during authorization</p>
+            </div>
+
+            <div>
+                <label for="client_secret" class="block text-sm font-medium text-gray-700">Client Secret</label>
+                <input
+                    type="text"
+                    name="client_secret"
+                    id="client_secret"
+                    required
+                    value="<%= self.client_secret %>"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm font-mono">
+                <p class="mt-1 text-sm text-gray-500">Confidential secret used to authenticate this client</p>
+            </div>
+
+            <div>
+                <label for="owner_user_id" class="block text-sm font-medium text-gray-700">Owner User ID (Optional)</label>
+                <input
+                    type="text"
+                    name="owner_user_id"
+                    id="owner_user_id"
+                    value="<%= self.owner_user_id %>"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm font-mono">
+                <p class="mt-1 text-sm text-gray-500">ULID of the user who owns this client (for project lookup)</p>
+            </div>
+
+            <div>
+                <label for="redirect_uris" class="block text-sm font-medium text-gray-700">Redirect URIs</label>
+                <textarea
+                    name="redirect_uris"
+                    id="redirect_uris"
+                    required
+                    rows="4"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm font-mono"><%= self.redirect_uris %></textarea>
+                <p class="mt-1 text-sm text-gray-500">Allowed callback URLs (one per line)</p>
+            </div>
+
+            <div>
+                <label for="allowed_scopes" class="block text-sm font-medium text-gray-700">Allowed Scopes</label>
+                <input
+                    type="text"
+                    name="allowed_scopes"
+                    id="allowed_scopes"
+                    required
+                    value="<%= self.allowed_scopes %>"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm font-mono">
+                <p class="mt-1 text-sm text-gray-500">Space-separated list of allowed scopes (openid, profile, email, participation)</p>
+            </div>
+
+            <div class="flex justify-between">
+                <button
+                    type="button"
+                    hx-delete="/-admin/oauth2-clients/<%= self.client_id %>"
+                    hx-confirm="Are you sure you want to delete this OAuth2 client? This action cannot be undone and will revoke all associated tokens."
+                    hx-target="closest .bg-white"
+                    hx-swap="outerHTML"
+                    class="inline-flex justify-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2">
+                    Delete Client
+                </button>
+                <div class="flex space-x-3">
+                    <a href="/-admin/oauth2-clients" class="inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                        Cancel
+                    </a>
+                    <button
+                        type="submit"
+                        class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                        Save Changes
+                    </button>
+                </div>
+            </div>
+        </form>
+
+        <div class="mt-6 pt-6 border-t border-gray-200">
+            <h4 class="text-sm font-medium text-gray-900 mb-3">OAuth2/OIDC Endpoints</h4>
+            <div class="bg-gray-50 rounded-md p-4 space-y-2 text-xs font-mono">
+                <div class="flex justify-between items-center">
+                    <span class="text-gray-600">Authorization:</span>
+                    <code class="text-gray-900">https://<%= env!("DOMAIN") %>/oauth2/authorize</code>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-gray-600">Token:</span>
+                    <code class="text-gray-900">https://<%= env!("DOMAIN") %>/oauth2/token</code>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-gray-600">UserInfo:</span>
+                    <code class="text-gray-900">https://<%= env!("DOMAIN") %>/oauth2/userinfo</code>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-gray-600">Discovery:</span>
+                    <code class="text-gray-900">https://<%= env!("DOMAIN") %>/.well-known/openid-configuration</code>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-gray-600">JWKS:</span>
+                    <code class="text-gray-900">https://<%= env!("DOMAIN") %>/.well-known/jwks.json</code>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

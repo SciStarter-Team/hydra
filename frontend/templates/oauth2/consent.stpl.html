@@ -1,0 +1,30 @@
+<div class="ss-container !pt-8 !pb-8 mx-auto">
+  <h1 class="text-2xl font-bold mb-4">Authorize Application</h1>
+
+  <div class="bg-blue-50 border border-blue-200 rounded p-4 mb-6">
+    <p class="mb-2">
+      <strong><%= self.client_name %></strong> is requesting access to your SciStarter account.
+    </p>
+    <p class="text-sm text-gray-700">
+      Requested permissions: <code class="bg-gray-100 px-2 py-1 rounded"><%= self.scope %></code>
+    </p>
+  </div>
+
+  <form method="post" action="/oauth2/authorize" class="space-y-4">
+    <input type="hidden" name="client_id" value="<%= self.client_id %>">
+    <input type="hidden" name="redirect_uri" value="<%= self.redirect_uri %>">
+    <input type="hidden" name="scope" value="<%= self.scope %>">
+    <input type="hidden" name="state" value="<%= self.state %>">
+    <input type="hidden" name="code_challenge" value="<%= self.code_challenge %>">
+    <input type="hidden" name="code_challenge_method" value="<%= self.code_challenge_method %>">
+
+    <div class="flex gap-4">
+      <button type="submit" name="approve" value="yes" class="btn btn-primary">
+        Approve
+      </button>
+      <button type="submit" name="approve" value="no" class="btn btn-secondary">
+        Deny
+      </button>
+    </div>
+  </form>
+</div>

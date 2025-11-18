@@ -2972,6 +2972,7 @@ dependencies = [
  "rand 0.8.5",
  "regex",
  "reqwest",
+ "rsa",
  "rust-embed",
  "sailfish",
  "scraper 0.22.0",

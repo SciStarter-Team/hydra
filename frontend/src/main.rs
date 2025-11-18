@@ -16,6 +16,7 @@ pub mod health;
 pub mod lru_cache;
 pub mod middleware;
 pub mod misc;
+pub mod oauth2;
 pub mod page_manager;
 pub mod pagecontent;
 pub mod pages;
@@ -261,6 +262,8 @@ async fn main() -> Result<(), Error> {
         .nest("/-uploaded", upload::anonymous_routes())
         .nest("/messaging/emailer", emailer::routes())
         .nest("/api", api::external_routes().with(api::middleware::api_cors()))
+        .nest("/oauth2", oauth2::oauth2_routes())
+        .nest("/.well-known", oauth2::well_known_routes())
         .nest_no_strip("/", dynamic())
         .with_if(
             cfg!(not(debug_assertions)),
@@ -286,6 +289,10 @@ async fn main() -> Result<(), Error> {
     let _event_all_updates = tokio::spawn(EventAll::peering_task());
     let _event_field_updates = tokio::spawn(EventField::peering_task());
     let _exchange_updates = tokio::spawn(exchange::Exchange::peering_task());
+    let _oauth2_client_updates = tokio::spawn(oauth2::types::Client::peering_task());
+    let _oauth2_authz_code_updates = tokio::spawn(oauth2::types::AuthorizationCode::peering_task());
+    let _oauth2_access_token_updates = tokio::spawn(oauth2::types::AccessToken::peering_task());
+    let _oauth2_refresh_token_updates = tokio::spawn(oauth2::types::RefreshToken::peering_task());
 
     let _synchronize_projects = tokio::spawn(sync::synchronize_projects());
     let _synchronize_events = tokio::spawn(sync::synchronize_events());

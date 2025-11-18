@@ -269,6 +269,12 @@ pub fn routes() -> impl Endpoint {
             "/exchanges/:id",
             get(exchange_edit_page).post(exchange_update).delete(exchange_delete),
         )
+        .at("/oauth2-clients", get(oauth2_clients_list))
+        .at("/oauth2-clients/new", get(oauth2_client_create_page).post(oauth2_client_create))
+        .at(
+            "/oauth2-clients/:client_id",
+            get(oauth2_client_edit_page).post(oauth2_client_update).delete(oauth2_client_delete),
+        )
         .at("/badges", get(badges_list))
         .at("/badges/:badgeclass/holders", get(badges_holders))
         .at(
@@ -12278,6 +12284,202 @@ async fn exchange_delete(
     Ok(Html("<div class=\"text-green-600\">Exchange deleted successfully</div>").into_response())
 }
 
+// OAuth2 Client Management Handlers
+
+#[handler]
+async fn oauth2_clients_list(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    // Fetch OAuth2 clients from database
+    let rows = sqlx::query!(
+        "SELECT client_id, client_name, owner_user_id, redirect_uris, allowed_scopes, created
+         FROM oauth2_clients
+         ORDER BY created DESC"
+    )
+    .fetch_all(db())
+    .await?;
+
+    let clients: Vec<OAuth2ClientListItem> = rows
+        .into_iter()
+        .map(|row| OAuth2ClientListItem {
+            client_id: row.client_id,
+            client_name: row.client_name,
+            owner_user_id: row.owner_user_id,
+            redirect_uris: row.redirect_uris.lines().map(|s| s.to_string()).collect(),
+            allowed_scopes: row.allowed_scopes.split_whitespace().map(|s| s.to_string()).collect(),
+            created: row.created,
+        })
+        .collect();
+
+    let content = OAuth2ClientsListPage { clients };
+
+    let prepared = crate::component::AdminLayout::new("OAuth2 Client Management", content)
+        .with_sidebar_active("engine-room-oauth2-clients")
+        .prepare(user_info)
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+#[handler]
+async fn oauth2_client_create_page(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let content = OAuth2ClientCreatePage {};
+
+    let prepared = crate::component::AdminLayout::new("Create OAuth2 Client", content)
+        .with_sidebar_active("engine-room-oauth2-clients")
+        .prepare(user_info)
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct OAuth2ClientCreateForm {
+    client_id: String,
+    client_name: String,
+    client_secret: String,
+    owner_user_id: String,
+    redirect_uris: String,
+    allowed_scopes: String,
+}
+
+#[handler]
+async fn oauth2_client_create(
+    Authenticated(_user_info): Authenticated,
+    form: poem::web::Form<OAuth2ClientCreateForm>,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::oauth2::types::Client;
+
+    // Parse redirect URIs (newline-separated)
+    let redirect_uris: Vec<String> = form.redirect_uris
+        .lines()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    // Parse scopes (space-separated)
+    let allowed_scopes: Vec<String> = form.allowed_scopes
+        .split_whitespace()
+        .map(|s| s.to_string())
+        .collect();
+
+    // Create new OAuth2 client
+    let client = Client {
+        client_id: form.client_id.clone(),
+        client_secret: form.client_secret.clone(),
+        client_name: form.client_name.clone(),
+        redirect_uris,
+        allowed_scopes,
+        owner_user_id: if form.owner_user_id.is_empty() {
+            None
+        } else {
+            Some(form.owner_user_id.clone())
+        },
+        created: common::timestring::TimeString::now(),
+    };
+
+    // Use LoadStorePeered to save and broadcast
+    client.store().await?;
+
+    // Redirect to OAuth2 clients list
+    Ok(poem::web::Redirect::see_other("/-admin/oauth2-clients").into_response())
+}
+
+#[handler]
+async fn oauth2_client_edit_page(
+    Path(client_id): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::oauth2::types::Client;
+
+    // Load client via LoadStorePeered
+    let client = Client::load(client_id).await?;
+
+    let content = OAuth2ClientEditPage {
+        client_id: client.client_id,
+        client_name: client.client_name,
+        client_secret: client.client_secret,
+        owner_user_id: client.owner_user_id.unwrap_or_default(),
+        redirect_uris: client.redirect_uris.join("\n"),
+        allowed_scopes: client.allowed_scopes.join(" "),
+    };
+
+    let prepared = crate::component::AdminLayout::new("Edit OAuth2 Client", content)
+        .with_sidebar_active("engine-room-oauth2-clients")
+        .prepare(user_info)
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct OAuth2ClientUpdateForm {
+    client_name: String,
+    client_secret: String,
+    owner_user_id: String,
+    redirect_uris: String,
+    allowed_scopes: String,
+}
+
+#[handler]
+async fn oauth2_client_update(
+    Path(client_id): Path<String>,
+    Authenticated(_user_info): Authenticated,
+    form: poem::web::Form<OAuth2ClientUpdateForm>,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::oauth2::types::Client;
+
+    // Load existing client
+    let mut client = Client::load(client_id).await?;
+
+    // Update fields
+    client.client_name = form.client_name.clone();
+    client.client_secret = form.client_secret.clone();
+    client.owner_user_id = if form.owner_user_id.is_empty() {
+        None
+    } else {
+        Some(form.owner_user_id.clone())
+    };
+    client.redirect_uris = form.redirect_uris
+        .lines()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    client.allowed_scopes = form.allowed_scopes
+        .split_whitespace()
+        .map(|s| s.to_string())
+        .collect();
+
+    // Use LoadStorePeered to save and broadcast
+    client.store().await?;
+
+    // Redirect to OAuth2 clients list
+    Ok(poem::web::Redirect::see_other("/-admin/oauth2-clients").into_response())
+}
+
+#[handler]
+async fn oauth2_client_delete(
+    Path(client_id): Path<String>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::oauth2::types::Client;
+    use crate::peering::LoadStorePeered;
+
+    // Use LoadStorePeered to delete and broadcast to peers
+    Client::delete(client_id).await?;
+
+    // Return success message for HTMX
+    Ok(Html("<div class=\"text-green-600\">OAuth2 client deleted successfully</div>").into_response())
+}
+
 #[handler]
 async fn badges_list(
     Authenticated(user_info): Authenticated,
@@ -12547,6 +12749,38 @@ struct ExchangeEditPage {
     name: String,
     description: String,
     logo_url: String,
+}
+
+// OAuth2 Client Management Templates
+#[derive(Clone)]
+struct OAuth2ClientListItem {
+    client_id: String,
+    client_name: String,
+    owner_user_id: Option<String>,
+    redirect_uris: Vec<String>,
+    allowed_scopes: Vec<String>,
+    created: String,
+}
+
+#[derive(TemplateOnce)]
+#[template(path = "admin/oauth2_clients.stpl.html")]
+struct OAuth2ClientsListPage {
+    clients: Vec<OAuth2ClientListItem>,
+}
+
+#[derive(TemplateOnce)]
+#[template(path = "admin/oauth2_clients_create.stpl.html")]
+struct OAuth2ClientCreatePage {}
+
+#[derive(TemplateOnce)]
+#[template(path = "admin/oauth2_clients_edit.stpl.html")]
+struct OAuth2ClientEditPage {
+    client_id: String,
+    client_name: String,
+    client_secret: String,
+    owner_user_id: String,
+    redirect_uris: String,
+    allowed_scopes: String,
 }
 
 // Badge Management Templates

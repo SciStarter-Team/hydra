@@ -16,9 +16,8 @@ pub fn external_routes() -> impl Endpoint {
         .at("/participation/email/:slug", post(v2::record_event_email))
         .at("/participation/link-token/:slug", post(v2::record_event_link_token))
         .at("/participation/articulate", post(v2::record_event_articulate))
-        // OpenID endpoints require Phase 5
-        // .at("/participation/openid/:slug", post(v2::record_event_openid))
-        // .at("/participation/openid", post(v2::record_event_openid_no_slug))
+        .at("/participation/openid/:slug", post(v2::record_event_openid))
+        .at("/participation/openid", post(v2::record_event_openid))
 }
 
 /// Authenticated API routes - for logged-in users
