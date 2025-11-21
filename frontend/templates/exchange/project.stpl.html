@@ -14,7 +14,7 @@
     <!-- PAGE SPECIFIC CONTENT -->
     <div class="o-wrapper u-pt u-pb-lg ss-project">
 
-      <p class="u-mb-sm b-small u-mt-0 find-more"><a href="/exchange/<%= self.exchange.info.exchange_id %>/"><svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon icon--angle-left u-mr-xs v-align-middle" style="fill: currentcolor;"><use xlink:href="/img/icons.svg#icon--angle"></use></svg>
+      <p class="u-mb-sm b-small u-mt-0 find-more"><a href="/exchange/<%= self.exchange.exchange_id() %>/"><svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon icon--angle-left u-mr-xs v-align-middle" style="fill: currentcolor;"><use xlink:href="/img/icons.svg#icon--angle"></use></svg>
           Find more projects
       </a></p>
 
@@ -50,7 +50,7 @@
               <p class="mobile-only" style="margin-bottom: 0px !important;"><%= self.project.presenter %>
               </p>
               <div class="ss-project-thumb-wrap">
-                <%+ LikeButton { liked: self.project.liked, likes: self.project.likes, exchange_id: self.exchange.info.exchange_id, project_id: self.project.id.clone(), user_id: self.user.id() } %>
+                <%+ LikeButton { liked: self.project.liked, likes: self.project.likes, exchange_id: self.exchange.exchange_id(), project_id: self.project.id.clone(), user_id: self.user.id() } %>
 
                 <!--  add to lists - not sure how to handle, but there's a modal if not logged in -->
                 <!-- <div class="ss-list-button" style="margin-left: 1rem;"> -->
@@ -317,16 +317,16 @@
                 <% } %>
               </ul>
 
-              <%+ LikeButton { liked: self.project.liked, likes: self.project.likes, exchange_id: self.exchange.info.exchange_id, project_id: self.project.id.clone(), user_id: self.user.id() } %>
+              <%+ LikeButton { liked: self.project.liked, likes: self.project.likes, exchange_id: self.exchange.exchange_id(), project_id: self.project.id.clone(), user_id: self.user.id() } %>
 
               <% if self.user.is_authenticated() { %>
               <h2>Write a review</h2>
               <div class="el-textarea">
                 <textarea id="review-input" name="text" autocomplete="off" rows="2" class="el-textarea__inner" style="min-height: 33px;"></textarea>
               </div>
-              <button hx-post="/exchange/<%= self.exchange.info.exchange_id %>/<%= self.project.id %>/review" hx-include="#review-input" hx-target="#review-input" hx-swap="outerHTML" type="button" class="el-button el-button--primary"><span>submit review</span></button>
+              <button hx-post="/exchange/<%= self.exchange.exchange_id() %>/<%= self.project.id %>/review" hx-include="#review-input" hx-target="#review-input" hx-swap="outerHTML" type="button" class="el-button el-button--primary"><span>submit review</span></button>
               <% } else { %>
-              <p><a href="/login?next=<%= self.encode(&format!("/exchange/{}/{}/project.html", self.exchange.info.exchange_id, self.project.id))|disp %>">Log In</a> or <a href="/login?action=signup&next=<%= self.encode(&format!("/exchange/{}/{}/project.html", self.exchange.info.exchange_id, self.project.id))|disp %>">sign up</a> to add your review.</p>
+              <p><a href="/login?next=<%= self.encode(&format!("/exchange/{}/{}/project.html", self.exchange.exchange_id(), self.project.id))|disp %>">Log In</a> or <a href="/login?action=signup&next=<%= self.encode(&format!("/exchange/{}/{}/project.html", self.exchange.exchange_id(), self.project.id))|disp %>">sign up</a> to add your review.</p>
               <% } %>
             </div>
           </div>
@@ -352,7 +352,7 @@
                   <div class="p-offsite p-logged-in">
                     <div class="p-not-joined">
                       <div class="project-flex p-flex-mobile">
-                        <a href="/exchange/<%= self.exchange.info.exchange_id %>/<%= self.project.id %>/visit" target="_blank" class="el-button full-width btn-project major-call-to-action-mobile-only el-button--primary">
+                        <a href="/exchange/<%= self.exchange.exchange_id() %>/<%= self.project.id %>/visit" target="_blank" class="el-button full-width btn-project major-call-to-action-mobile-only el-button--primary">
                           <span>
                             Visit
                             <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon icon--external u-ml-xs svg-fill-white" style="fill: currentcolor;">
@@ -360,14 +360,14 @@
                             </svg>
                           </span>
                         </a>
-                        <%+ SaveButton { id: "sidebar-save-button".into(), saved: self.project.saved, exchange_id: self.exchange.info.exchange_id, project_id: self.project.id.clone() } %>
+                        <%+ SaveButton { id: "sidebar-save-button".into(), saved: self.project.saved, exchange_id: self.exchange.exchange_id(), project_id: self.project.id.clone() } %>
                         <button type="button" class="el-button full-width btn-subdued btn-project el-button--default el-popover__reference" aria-describedby="el-popover-9958" tabindex="0" data-custom-open="share-modal">
                           <i class="el-icon-share"></i><span>
                             Share</span>
                         </button>
                       </div>
                       <% if !self.project.joined { %>
-                      <button hx-post="/exchange/<%= self.exchange.info.exchange_id %>/<%= self.project.id %>/join" class="p-text-btn">I have already joined this project, add to my dashboard</button>
+                      <button hx-post="/exchange/<%= self.exchange.exchange_id() %>/<%= self.project.id %>/join" class="p-text-btn">I have already joined this project, add to my dashboard</button>
                       <% } %>
                     </div>
                   </div>
@@ -376,7 +376,7 @@
                 <div class="project-action-btns">
                   <div class="p-offsite p--not-logged-in">
                     <div class="project-flex p-flex-mobile">
-                      <a href="/exchange/<%= self.exchange.info.exchange_id %>/<%= self.project.id %>/visit" target="_blank" class="el-button full-width btn-project el-button--primary">
+                      <a href="/exchange/<%= self.exchange.exchange_id() %>/<%= self.project.id %>/visit" target="_blank" class="el-button full-width btn-project el-button--primary">
                         <span>Visit
                           <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon icon--external u-ml-xs svg-fill-white" style="fill: currentcolor;"><use xlink:href="/img/icons.svg#icon--external-link"></use></svg>
                         </span>
@@ -451,7 +451,7 @@
     <div style="position: fixed; bottom: 20px; right: 20px; background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
       <h4 style="margin-top: 0;">Admin Actions</h4>
       <button
-        hx-post="/exchange/<%= self.exchange.info.exchange_id %>/<%= self.project.slug %>/hide"
+        hx-post="/exchange/<%= self.exchange.exchange_id() %>/<%= self.project.slug %>/hide"
         hx-confirm="Hide this project from the exchange?"
         hx-target="this"
         hx-swap="outerHTML"
@@ -466,8 +466,8 @@
       <% if !self.exchange.restricted_add() || self.exchange.user_is_authorized() { %>
       <a class="btn btn-secondary"  data-custom-open="add-modal"><span>+</span> Add a Project or Event</a>
       <% } %>
-      <div><a href="/login?next=<%= self.encode(&format!("/exchange/{}/{}/project.html", self.exchange.info.exchange_id, self.project.id))|disp %>">Log In</a> | <a href="/login?action=signup&next=<%= self.encode(&format!("/exchange/{}/{}/project.html", self.exchange.info.exchange_id, self.project.id))|disp %>">Sign Up</a></div>
-      <p class="powered-by">powered by <img src="/-static/img/scistarter-logo-web-r.svg" alt="SciStarter" /></p>
+      <div><a href="/login?next=<%= self.encode(&format!("/exchange/{}/{}/project.html", self.exchange.exchange_id(), self.project.id))|disp %>">Log In</a> | <a href="/login?action=signup&next=<%= self.encode(&format!("/exchange/{}/{}/project.html", self.exchange.exchange_id(), self.project.id))|disp %>">Sign Up</a></div>
+      <p class="powered-by">powered by <img src="/-static/img/logo/svg/Standard__tagline-dark.svg" alt="SciStarter" /></p>
       <div style="height: 8rem"></div>
     </footer>
     <!-- END FOOTER -->
@@ -485,9 +485,9 @@
           </header>
           <main class="modal__content" id="modal-1-content">
             <p>Create a free SciStarter account</p>
-            <a href="/login?action=signup&next=<%= self.encode(&format!("/exchange/{}/{}/project.html", self.exchange.info.exchange_id, self.project.id))|disp %>" class="modal__btn modal__btn-primary">Create Account</a>
+            <a href="/login?action=signup&next=<%= self.encode(&format!("/exchange/{}/{}/project.html", self.exchange.exchange_id(), self.project.id))|disp %>" class="modal__btn modal__btn-primary">Create Account</a>
             <p>Login with your SciStarter account</p>
-            <a href="/login?next=<%= self.encode(&format!("/exchange/{}/{}/project.html", self.exchange.info.exchange_id, self.project.id))|disp %>" class="modal__btn modal__btn-primary">Log In</a>
+            <a href="/login?next=<%= self.encode(&format!("/exchange/{}/{}/project.html", self.exchange.exchange_id(), self.project.id))|disp %>" class="modal__btn modal__btn-primary">Log In</a>
           </main>
         </div>
       </div>
@@ -582,24 +582,24 @@
           <header class="modal__header">
             <div>
               <h2 class="modal__title" id="add-modal-title">Add a Citizen Science Project or Event</h2>
-              <p class="powered-by">powered by <img src="/img/scistarter-logo-web-r.svg" alt="SciStarter" /></p>
+              <p class="powered-by">powered by <img src="/-static/img/logo/svg/Standard__tagline-dark.svg" alt="SciStarter" /></p>
               <p>You will be taken from this website to the <a href="https://scistarter.org">SciStarter</a> website to enter your project, event, or tool. Once approved, it will be available on SciStarter and in any SciStarter partner websites where it meets the criteria to display.</p>
             </div>
             <button class="modal__close" aria-label="Close modal" data-micromodal-close></button>
           </header>
           <main class="modal__content">
             <div>
-              <img src="/img/microscope.svg" alt="microscope icon" />
+              <img src="/-static/img/microscope.svg" alt="microscope icon" />
               <h3>Add a Citizen Science Project</h3>
               <p>Projects are typically  long term initiatives that may crowdsource data collection or analysis.</p>
-              <p><a href="https://scistarter.org/add-project?exchange=<%= self.exchange.info.exchange_id %>" class="modal__btn modal__btn-primary" target="_blank"><span class="plus">+</span> Add a Project</a></p>
+              <p><a href="https://scistarter.org/add-project?exchange=<%= self.exchange.exchange_id() %>" class="modal__btn modal__btn-primary" target="_blank"><span class="plus">+</span> Add a Project</a></p>
               <p><a href="https://scistarter.org/finder" target="_blank">Visit SciStarter Projects Page</a></p>
             </div>
             <div>
-              <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon entity__tab-icon" style="fill: currentcolor;"><use xlink:href="/img/icons.svg#icon--db-events"></use></svg>
+              <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon entity__tab-icon" style="fill: currentcolor;"><use xlink:href="/-static/img/icons.svg#icon--db-events"></use></svg>
               <h3>Add a Citizen Science Event</h3>
               <p>Events are typically short term (possibly reoccurring) events with known start and end times and may focus on trainings, meet-ups, and other activities related to a citizen science self.project.</p>
-              <p><a href="https://scistarter.org/add-event?exchange=<%= self.exchange.info.exchange_id %>" class="modal__btn modal__btn-primary" target="_blank"><span class="plus">+</span> Add an Event</a></p>
+              <p><a href="https://scistarter.org/add-event?exchange=<%= self.exchange.exchange_id() %>" class="modal__btn modal__btn-primary" target="_blank"><span class="plus">+</span> Add an Event</a></p>
               <p><a href="https://scistarter.org/events" target="_blank">Visit SciStarter Events Page</a></p>
             </div>
           </main>

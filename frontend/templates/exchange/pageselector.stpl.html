@@ -1,7 +1,7 @@
 <div class="el-pagination">
   <% let last_page = self.last_page(); %>
   <button
-      hx-get="/exchange/<%= self.exchange.exchange_id() %>/results?page=<%= self.page - 1 %>&page_size=<%= self.page_size %>&<%= self.params.query_string() %>"
+      hx-get="/exchange/<%= self.exchange.exchange_id() %>/results?page=<%= self.page.saturating_sub(1) %>&page_size=<%= self.page_size %>&<%= self.params.query_string() %>"
       hx-target="#search-results"
       hx-indicator="#search-results"
       hx-swap="outerHTML"
@@ -22,7 +22,7 @@
     <% if self.page > 4 { %>
     <li class="el-icon more btn-quicknext el-icon-more"></li>
     <% } %>
-    <% for pg in ((self.page - 2).max(1))..self.page { %>
+    <% for pg in (self.page.saturating_sub(2).max(1))..self.page { %>
     <li
         hx-get="/exchange/<%= self.exchange.exchange_id() %>/results?page=<%= pg %>&page_size=<%= self.page_size %>&<%= self.params.query_string() %>"
         hx-target="#search-results"
@@ -43,10 +43,10 @@
         class="number"
         style="color: #47a8d4"><%= pg %></li>
     <% } %>
-    <% if self.page < last_page - 3 { %>
+    <% if self.page < last_page.saturating_sub(3) { %>
     <li class="el-icon more btn-quicknext el-icon-more"></li>
     <% } %>
-    <% if self.page < last_page - 2 { %>
+    <% if self.page < last_page.saturating_sub(2) { %>
     <li
         hx-get="/exchange/<%= self.exchange.exchange_id() %>/results?page=<%= last_page %>&page_size=<%= self.page_size %>&<%= self.params.query_string() %>"
         hx-target="#search-results"

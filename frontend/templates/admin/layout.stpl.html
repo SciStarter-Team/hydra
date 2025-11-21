@@ -54,24 +54,14 @@
                         <span>Analytics</span>
                     </a>
 
+                    <a href="/-admin/wiki" class="<%= if self.sidebar_active == "wiki" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
+                        <wa-icon name="book" class="w-5 h-5 flex-shrink-0"></wa-icon>
+                        <span>Wiki</span>
+                    </a>
+
                     <a href="/-admin/users" class="<%= if self.sidebar_active == "users" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
                         <wa-icon name="users" class="w-5 h-5 flex-shrink-0"></wa-icon>
                         <span>Users</span>
-                    </a>
-
-                    <a href="/-admin/exchanges" class="<%= if self.sidebar_active == "exchanges" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
-                        <wa-icon name="repeat" class="w-5 h-5 flex-shrink-0"></wa-icon>
-                        <span>Exchanges</span>
-                    </a>
-
-                    <a href="/-admin/badges" class="<%= if self.sidebar_active == "badges" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
-                        <wa-icon name="award" class="w-5 h-5 flex-shrink-0"></wa-icon>
-                        <span>Badges</span>
-                    </a>
-
-                    <a href="/-admin/schedules" class="<%= if self.sidebar_active == "schedules" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
-                        <wa-icon name="clock" class="w-5 h-5 flex-shrink-0"></wa-icon>
-                        <span>Scheduling</span>
                     </a>
 
                     <a href="/-admin/entities" class="<%= if self.sidebar_active == "entities" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
@@ -94,9 +84,19 @@
                         <span>Simple Pages</span>
                     </a>
 
+                    <a href="/-admin/component-pages" class="<%= if self.sidebar_active == "component-pages" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
+                        <wa-icon name="puzzle-piece" class="w-5 h-5 flex-shrink-0"></wa-icon>
+                        <span>Page Builder</span>
+                    </a>
+
                     <a href="/-admin/files-links" class="<%= if self.sidebar_active == "files-links" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
                         <wa-icon name="link" class="w-5 h-5 flex-shrink-0"></wa-icon>
                         <span>Files &amp; Links</span>
+                    </a>
+
+                    <a href="/-admin/schedules" class="<%= if self.sidebar_active == "schedules" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
+                        <wa-icon name="clock" class="w-5 h-5 flex-shrink-0"></wa-icon>
+                        <span>Scheduling</span>
                     </a>
 
                     <details class="group" <% if self.sidebar_active.starts_with("email-") { %>open<% } %>>
@@ -137,6 +137,12 @@
                             <a href="/-admin/engine-room" class="<%= if self.sidebar_active == "engine-room" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
                                 <span>Controls</span>
                             </a>
+                            <a href="/-admin/exchanges" class="<%= if self.sidebar_active == "engine-room-exchanges" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
+                                <span>Exchanges</span>
+                            </a>
+                            <a href="/-admin/badges" class="<%= if self.sidebar_active == "engine-room-badges" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
+                                <span>Badges</span>
+                            </a>
                             <a href="/-admin/oauth2-clients" class="<%= if self.sidebar_active == "engine-room-oauth2-clients" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
                                 <span>OAuth2 Clients</span>
                             </a>
@@ -145,12 +151,6 @@
                             </a>
                             <a href="/-admin/pagecontent/RawHtml" class="<%= if self.sidebar_active == "engine-room-raw-html" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
                                 <span>Raw HTML</span>
-                            </a>
-                            <a href="/-admin/wiki" class="<%= if self.sidebar_active == "wiki" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
-                                <span>Wiki</span>
-                            </a>
-                            <a href="/-admin/component-pages" class="<%= if self.sidebar_active == "component-pages" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
-                                <span>Component Pages</span>
                             </a>
                         </div>
                     </details>

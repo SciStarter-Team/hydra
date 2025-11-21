@@ -9,6 +9,6 @@
   <a href="/exchange/<%= self.exchange.exchange_id() %>/org.html">Manage Organization</a>
   <a href="/exchange/<%= self.exchange.exchange_id() %>/data.html">Data Dashboard</a>
   <% } %>
-  <a hx-post="/logout" hx-swap="none" hx-on::after-swap="window.location = '/exchange/<%= self.exchange.exchange_id() %>/'">log out</a>
+  <a href="/logout?next=%2Fexchange%2F<%= self.exchange.exchange_id() %>%2F">log out</a>
 </header>
 <% } %>

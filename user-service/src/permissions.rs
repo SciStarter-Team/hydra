@@ -3,7 +3,8 @@ use async_nats::service::Request;
 use common::{
     message::user::{
         Permission, PermissionCheckRequest, PermissionCheckResponse, PermissionGrantRequest,
-        PermissionListRequest, PermissionListResponse, PermissionRevokeRequest,
+        PermissionListRequest, PermissionListResponse, PermissionListByResourceRequest,
+        PermissionListByResourceResponse, PermissionRevokeRequest,
     },
     service::decode_structured_message,
     shared::db,
@@ -105,4 +106,25 @@ pub async fn list_permissions(req: &Request) -> Result<PermissionListResponse, E
     };
 
     Ok(PermissionListResponse { permissions })
+}
+
+pub async fn list_permissions_by_resource(
+    req: &Request,
+) -> Result<PermissionListByResourceResponse, Error> {
+    let req: PermissionListByResourceRequest = decode_structured_message(req.message.clone())?;
+
+    let permissions = sqlx::query_as!(
+        Permission,
+        r#"
+        SELECT user_id, resource_type, resource_id, permission, granted_by, granted_at
+        FROM permissions
+        WHERE resource_type = ? AND resource_id = ?
+        "#,
+        req.resource_type,
+        req.resource_id
+    )
+    .fetch_all(db())
+    .await?;
+
+    Ok(PermissionListByResourceResponse { permissions })
 }

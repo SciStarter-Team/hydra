@@ -8,7 +8,7 @@
     <link href="/-static/exchange/css/styles.css" rel="stylesheet">
     <script type="module" src="https://early.webawesome.com/webawesome@3.0.0-beta.3/dist/webawesome.loader.js"></script>
     <script src="/-static/htmx.js"></script>
-    <script src="/-static/_hyperscript.js"></script>
+    <script src="/-static/alpine.js" defer></script>
     <script src="/-static/exchange/js/auth-fallback.js"></script>
   </head>
   <body hx-headers='{"X-CSRFToken": "<%= self.csrftoken %>"}' <% if !self.user.is_authenticated() { %>data-needs-auth<% } %>>
@@ -24,14 +24,14 @@
               <label for="phrase" class="el-form-item__label">search by word or phrase</label>
               <div class="el-form-item__content">
                 <div class="el-input">
-                  <input name="phrase" type="text" autocomplete="off" placeholder="plants, animals, weather, etc" class="el-input__inner"
-                         _="on keydown[key=='Enter'] halt the event then trigger click on #submit-search">
+                  <input name="phrase[]" type="text" autocomplete="off" placeholder="plants, animals, weather, etc" class="el-input__inner"
+                         hx-on:keydown="if(event.key === 'Enter') { event.preventDefault(); document.getElementById('submit-search').click(); }">
                 </div>
               </div>
             </div>
             <% for (label, phrase) in self.predefined.iter() { %>
             <label for="id-pre-<%= phrase %>" style="display: block">
-              <input type="checkbox" name="phrase" value="<%= phrase %>" id="id-pre-<%= phrase %>">
+              <input type="checkbox" name="phrase[]" value="<%= phrase %>" id="id-pre-<%= phrase %>">
               <%= label %>
             </label>
             <% } %>
@@ -70,7 +70,7 @@
             <div class="el-form-item">
               <label for="audience" class="el-form-item__label">filter for projects based on ideal audience</label>
               <div class="el-form-item__content">
-                <wa-select name="audience" label="Age group(s)" multiple with-clear>
+                <wa-select name="audience[]" label="Age group(s)" multiple with-clear>
                   <% for (value, label) in self.audiences.iter() { %>
                     <wa-option value="<%= value %>"><%= label %></wa-option>
                   <% } %>
@@ -120,7 +120,7 @@
       <a class="btn btn-secondary"  data-custom-open="add-modal"><span>+</span> Add a Project or Event</a>
       <% } %>
       <div><a href="/login?next=%2Fexchange%2F<%= self.exchange.exchange_id() %>%2F">Log In</a> | <a href="/login?action=signup&next=%2Fexchange%2F<%= self.exchange.exchange_id() %>%2F">Sign Up</a></div>
-      <p class="powered-by">powered by <img src="/-static/img/scistarter-logo-web-r.svg" alt="SciStarter" /></p>
+      <p class="powered-by">powered by <img src="/-static/img/logo/svg/Standard__tagline-dark.svg" alt="SciStarter" /></p>
       <div style="height: 8rem"></div>
     </footer>
     <!-- END FOOTER -->
@@ -131,7 +131,7 @@
           <header class="modal__header">
             <div>
               <h2 class="modal__title" id="add-modal-title">Add a Citizen Science Project or Event</h2>
-              <p class="powered-by">powered by <img src="/img/scistarter-logo-web-r.svg" alt="SciStarter" /></p>
+              <p class="powered-by">powered by <img src="/-static/img/logo/svg/Standard__tagline-dark.svg" alt="SciStarter" /></p>
               <p>You will be taken from this website to the <a href="https://scistarter.org">SciStarter</a> website to enter your project, event, or tool. Once approved, it will be available on SciStarter and in any SciStarter partner websites where it meets the criteria to display.</p>
             </div>
             <button class="modal__close" aria-label="Close modal" data-micromodal-close></button>

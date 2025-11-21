@@ -41,8 +41,7 @@ use common::{
 };
 use jiff::Timestamp;
 use poem::{
-    Endpoint, EndpointExt, FromRequest, IntoResponse, Request, RequestBody, Result as PoemResult,
-    Route, delete, get, handler, patch, post, put,
+    Endpoint, EndpointExt, IntoResponse, Route, delete, get, handler, patch, post, put,
     web::{Form, Html, Path, Query},
 };
 use sailfish::TemplateOnce;
@@ -77,6 +76,8 @@ pub fn routes() -> impl Endpoint {
         .at("/projects/search", get(projects_search))
         .at("/projects/new", get(projects_new))
         .at("/projects/:id", get(projects_edit))
+        .at("/projects/:id/publish", post(projects_publish))
+        .at("/projects/:id/unpublish", post(projects_unpublish))
         .at(
             "/projects/:id/field/:field_type",
             put(projects_update_field),
@@ -678,6 +679,8 @@ pub struct AdminProject {
     pub url: String,
     pub admin_notes: String,
     pub draft: bool,
+    pub reviewed: bool,
+    pub published: bool,
     pub tags: Vec<String>,
 }
 
@@ -879,6 +882,7 @@ pub struct AdminProjectFull {
     pub stakeholders: Vec<String>,
     pub circuit_id: String,
     pub sustainable_development_goals: String,
+    pub published: bool,
 }
 
 // Helper function to look up user email by ULID
@@ -898,6 +902,19 @@ async fn lookup_user_email(user_id: Option<Ulid>) -> String {
 impl AdminProjectFull {
     /// Convert a ProjectAll to AdminProjectFull, performing user lookups for editor fields
     pub async fn from_project_all(project: ProjectAll) -> Result<Self, anyhow::Error> {
+        use common::shared::db;
+
+        // Check if project is published by looking for entity
+        let project_id_str = project.project_id.to_string();
+        let published = sqlx::query!(
+            r#"SELECT COALESCE(publish, 0) as "published!: bool" FROM entities WHERE kind = 'Project' AND target = ?"#,
+            project_id_str
+        )
+        .fetch_optional(db())
+        .await?
+        .map(|r| r.published)
+        .unwrap_or(false);
+
         Ok(AdminProjectFull {
             id: project.project_id.to_string(),
             title: project.name,
@@ -1039,6 +1056,7 @@ impl AdminProjectFull {
             sustainable_development_goals: project.sustainable_development_goals,
             point: project.point,
             regions: project.regions,
+            published,
         })
     }
 }
@@ -1047,6 +1065,7 @@ async fn fetch_projects_page(
     search: Option<&str>,
     status_filter: Option<&str>,
     flagged_filter: Option<&str>,
+    reviewed_filter: Option<&str>,
     spatial_overlap: Option<&str>, // GeoJSON geometry for overlap search
     spatial_point: Option<(f64, f64, f64)>, // (lat, lng, radius_meters) circle for intersection search
     proximity_sort: Option<(f64, f64)>,     // (lat, lng) for proximity sorting
@@ -1066,9 +1085,11 @@ async fn fetch_projects_page(
         query.push(
             "SELECT p.project_id, p.name, p.status, p.created, p.presenter,
                     p.origin, p.flagged, p.duplicate, p.is_test, p.goal, p.task, p.image,
-                    p.url, p.admin_notes, p.draft, p.description
+                    p.url, p.admin_notes, p.draft, p.reviewed, p.description,
+                    COALESCE(ent.publish, 0) as published
              FROM projects p
              JOIN projects_fts f ON p.project_id = f.project_id
+             LEFT JOIN entities ent ON ent.target = p.project_id AND ent.kind = 'Project'
              WHERE projects_fts MATCH ",
         );
         // With porter stemming enabled, use simple term matching for better flexibility
@@ -1077,8 +1098,10 @@ async fn fetch_projects_page(
         query.push(
             "SELECT p.project_id, p.name, p.status, p.created, p.presenter,
                     p.origin, p.flagged, p.duplicate, p.is_test, p.goal, p.task, p.image,
-                    p.url, p.admin_notes, p.draft, p.description
+                    p.url, p.admin_notes, p.draft, p.reviewed, p.description,
+                    COALESCE(ent.publish, 0) as published
              FROM projects p
+             LEFT JOIN entities ent ON ent.target = p.project_id AND ent.kind = 'Project'
              WHERE 1=1",
         );
     }
@@ -1092,6 +1115,12 @@ async fn fetch_projects_page(
         let flagged_bool = flagged == "true";
         query.push(" AND p.flagged = ");
         query.push_bind(flagged_bool);
+    }
+
+    if let Some(reviewed) = reviewed_filter.filter(|s| !s.is_empty()) {
+        let reviewed_bool = reviewed == "true";
+        query.push(" AND p.reviewed = ");
+        query.push_bind(reviewed_bool);
     }
 
     // Add spatial filtering
@@ -1171,6 +1200,8 @@ async fn fetch_projects_page(
         url: String,
         admin_notes: String,
         draft: bool,
+        reviewed: bool,
+        published: bool,
         description: String,
     }
 
@@ -1198,6 +1229,8 @@ async fn fetch_projects_page(
                 url: row.url,
                 admin_notes: row.admin_notes,
                 draft: row.draft,
+                reviewed: row.reviewed,
+                published: row.published,
                 tags: Vec::new(), // Tags not needed for project list
             }
         })
@@ -1210,6 +1243,7 @@ async fn count_projects(
     search: Option<&str>,
     status_filter: Option<&str>,
     flagged_filter: Option<&str>,
+    reviewed_filter: Option<&str>,
     spatial_overlap: Option<&str>,
     spatial_point: Option<(f64, f64, f64)>,
 ) -> Result<u64, anyhow::Error> {
@@ -1239,6 +1273,12 @@ async fn count_projects(
         let flagged_bool = flagged == "true";
         query.push(" AND p.flagged = ");
         query.push_bind(flagged_bool);
+    }
+
+    if let Some(reviewed) = reviewed_filter.filter(|s| !s.is_empty()) {
+        let reviewed_bool = reviewed == "true";
+        query.push(" AND p.reviewed = ");
+        query.push_bind(reviewed_bool);
     }
 
     // Add spatial filtering (same as in fetch_projects_page)
@@ -1434,6 +1474,7 @@ pub struct ProjectsPage {
     search: Option<String>,
     status: Option<String>,
     flagged: Option<String>,
+    reviewed: Option<String>,
 }
 
 #[derive(Debug, TemplateOnce)]
@@ -1452,6 +1493,7 @@ pub struct ProjectsPagePrepared {
     search_term: String,
     selected_status: String,
     flagged: String,
+    reviewed: String,
 }
 
 impl Component for ProjectsPage {
@@ -1465,10 +1507,12 @@ impl Component for ProjectsPage {
         let search_ref = self.search.as_deref();
         let status_ref = self.status.as_deref();
         let flagged_ref = self.flagged.as_deref();
+        let reviewed_ref = self.reviewed.as_deref();
         let projects_list = match fetch_projects_page(
             search_ref,
             status_ref,
             flagged_ref,
+            reviewed_ref,
             None, // spatial_overlap
             None, // spatial_point
             None, // proximity_sort
@@ -1488,6 +1532,7 @@ impl Component for ProjectsPage {
             search_ref,
             status_ref,
             flagged_ref,
+            reviewed_ref,
             None, // spatial_overlap
             None, // spatial_point
         )
@@ -1505,10 +1550,11 @@ impl Component for ProjectsPage {
             start_item: ((page - 1) * per_page) + 1,
             end_item: std::cmp::min(page * per_page, total_projects as u32),
             pagination_url: "/-admin/projects".to_string(),
-            pagination_include: "[name='search'], [name='status'], [name='flagged']".to_string(),
+            pagination_include: "[name='search'], [name='status'], [name='flagged'], [name='reviewed']".to_string(),
             search_term: self.search.unwrap_or_default(),
             selected_status: self.status.unwrap_or_default(),
             flagged: self.flagged.unwrap_or_default(),
+            reviewed: self.reviewed.unwrap_or_default(),
         };
 
         AdminLayout::new("Projects", projects_content)
@@ -2467,11 +2513,12 @@ async fn projects(
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     // If any search parameters are provided, perform a search instead of the default list
-    if query.search.is_some() || query.status.is_some() || query.flagged.is_some() {
+    if query.search.is_some() || query.status.is_some() || query.flagged.is_some() || query.reviewed.is_some() {
         let search_query = ProjectSearchQuery {
             search: query.search,
             status: query.status,
             flagged: query.flagged,
+            reviewed: query.reviewed,
             page: query.page,
         };
         let projects_page = projects_search_internal(search_query).await?;
@@ -2488,6 +2535,7 @@ async fn projects(
         search: query.search,
         status: query.status,
         flagged: query.flagged,
+        reviewed: query.reviewed,
     }
     .into_response(user_info)
     .await
@@ -3760,6 +3808,7 @@ struct ProjectPageQuery {
     search: Option<String>,
     status: Option<String>,
     flagged: Option<String>,
+    reviewed: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -3767,6 +3816,7 @@ struct ProjectSearchQuery {
     search: Option<String>,
     status: Option<String>,
     flagged: Option<String>,
+    reviewed: Option<String>,
     page: Option<u32>,
 }
 
@@ -3793,6 +3843,7 @@ pub struct ProjectsContent {
     pub search_term: String,
     pub selected_status: String,
     pub flagged: String,
+    pub reviewed: String,
 }
 
 #[derive(Debug, TemplateOnce)]
@@ -3801,6 +3852,13 @@ pub struct ProjectRow {
     pub project: AdminProject,
     pub oob: bool,
     pub oob_swap: String,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/partials/publish_status.stpl.html")]
+pub struct PublishStatus {
+    pub project_id: String,
+    pub published: bool,
 }
 
 #[derive(Debug, TemplateOnce)]
@@ -4178,6 +4236,7 @@ async fn projects_search_internal(
         query.search.as_deref(),
         query.status.as_deref(),
         query.flagged.as_deref(),
+        query.reviewed.as_deref(),
         None, // spatial_overlap
         None, // spatial_point
         None, // proximity_sort
@@ -4191,6 +4250,7 @@ async fn projects_search_internal(
         query.search.as_deref(),
         query.status.as_deref(),
         query.flagged.as_deref(),
+        query.reviewed.as_deref(),
         None, // spatial_overlap
         None, // spatial_point
     )
@@ -4217,10 +4277,11 @@ async fn projects_search_internal(
         start_item: start_item as u32,
         end_item,
         pagination_url: "/-admin/projects".to_string(),
-        pagination_include: "[name='search'], [name='status'], [name='flagged']".to_string(),
+        pagination_include: "[name='search'], [name='status'], [name='flagged'], [name='reviewed']".to_string(),
         search_term: query.search.unwrap_or_default(),
         selected_status: query.status.unwrap_or_default(),
         flagged: query.flagged.unwrap_or_default(),
+        reviewed: query.reviewed.unwrap_or_default(),
     })
 }
 
@@ -4246,6 +4307,7 @@ async fn projects_search(
         search_term: query.search.clone().unwrap_or_default(),
         selected_status: query.status.clone().unwrap_or_default(),
         flagged: query.flagged.clone().unwrap_or_default(),
+        reviewed: query.reviewed.clone().unwrap_or_default(),
     };
 
     let html = projects_content.render_once()?;
@@ -4265,6 +4327,11 @@ async fn projects_search(
     if let Some(flagged) = &query.flagged {
         if !flagged.trim().is_empty() {
             url_params.push(format!("flagged={}", urlencoding::encode(flagged)));
+        }
+    }
+    if let Some(reviewed) = &query.reviewed {
+        if !reviewed.trim().is_empty() {
+            url_params.push(format!("reviewed={}", urlencoding::encode(reviewed)));
         }
     }
     let page = query.page.unwrap_or(1);
@@ -4532,6 +4599,211 @@ async fn projects_edit(
 }
 
 #[handler]
+async fn projects_publish(
+    Path(project_id): Path<String>,
+    Query(query): Query<std::collections::HashMap<String, String>>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::entity::{Entity, EntityKind, EntityTarget};
+    use common::shared::db;
+
+    let project_ulid = project_id
+        .parse::<Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid project ID format"))?;
+
+    // Try to load existing entity
+    let project_id_str = project_ulid.to_string();
+    let existing = sqlx::query!(
+        r#"SELECT slug, created FROM entities WHERE kind = 'Project' AND target = ?"#,
+        project_id_str
+    )
+    .fetch_optional(db())
+    .await?;
+
+    if let Some(existing) = existing {
+        // Entity exists, update it with publish=true
+        let entity = Entity::with_created(
+            existing.slug,
+            EntityKind::Project,
+            EntityTarget::Ulid(project_ulid),
+            true, // publish = true
+            common::timestring::TimeString::try_from(existing.created)?,
+        );
+        entity.store().await?;
+    } else {
+        // No entity exists, create new one with publish=true
+        let project = sqlx::query!("SELECT name FROM projects WHERE project_id = ?", project_id_str)
+            .fetch_one(db())
+            .await?;
+
+        Entity::new_by_name(&project.name, EntityKind::Project, EntityTarget::Ulid(project_ulid))
+            .await?;
+    }
+
+    // Check if this is from the edit page
+    let is_edit_context = query.get("context").map(|s| s.as_str()) == Some("edit");
+
+    if is_edit_context {
+        // Return just the publish status section
+        let publish_status = PublishStatus {
+            project_id: project_id_str,
+            published: true,
+        };
+
+        Ok(poem::Response::builder()
+            .content_type("text/html")
+            .body(publish_status.render_once()?))
+    } else {
+        // Return the full project row for list view
+        let row = sqlx::query!(
+            r#"SELECT p.project_id, p.name, p.status, p.created, p.presenter,
+                      p.origin, p.flagged, p.duplicate, p.is_test, p.goal, p.task, p.image,
+                      p.url, p.admin_notes, p.draft, p.reviewed, p.description,
+                      COALESCE(ent.publish, 0) as "published!: bool"
+               FROM projects p
+               LEFT JOIN entities ent ON ent.target = p.project_id AND ent.kind = 'Project'
+               WHERE p.project_id = ?"#,
+            project_id_str
+        )
+        .fetch_one(db())
+        .await?;
+
+        let project = AdminProject {
+            id: row.project_id,
+            title: row.name,
+            status: row.status,
+            created_date: row.created,
+            page_creator_id: String::new(),
+            page_creator_email: None,
+            description: row.description,
+            presenter: row.presenter,
+            origin: row.origin,
+            flagged: row.flagged,
+            duplicate: row.duplicate,
+            is_test: row.is_test,
+            goal: row.goal,
+            task: row.task,
+            image: row.image,
+            url: row.url,
+            admin_notes: row.admin_notes,
+            draft: row.draft,
+            reviewed: row.reviewed,
+            published: row.published,
+            tags: Vec::new(),
+        };
+
+        let project_row = ProjectRow {
+            project,
+            oob: false,
+            oob_swap: String::new(),
+        };
+
+        Ok(poem::Response::builder()
+            .content_type("text/html")
+            .body(project_row.render_once()?))
+    }
+}
+
+#[handler]
+async fn projects_unpublish(
+    Path(project_id): Path<String>,
+    Query(query): Query<std::collections::HashMap<String, String>>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::entity::{Entity, EntityKind, EntityTarget};
+    use common::shared::db;
+
+    let project_ulid = project_id
+        .parse::<Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid project ID format"))?;
+
+    // Load existing entity
+    let project_id_str = project_ulid.to_string();
+    let existing = sqlx::query!(
+        r#"SELECT slug, created FROM entities WHERE kind = 'Project' AND target = ?"#,
+        project_id_str
+    )
+    .fetch_optional(db())
+    .await?;
+
+    if let Some(existing) = existing {
+        // Entity exists, update it with publish=false
+        let entity = Entity::with_created(
+            existing.slug,
+            EntityKind::Project,
+            EntityTarget::Ulid(project_ulid),
+            false, // publish = false
+            common::timestring::TimeString::try_from(existing.created)?,
+        );
+        entity.store().await?;
+    }
+    // If no entity exists, it's already unpublished (no action needed)
+
+    // Check if this is from the edit page
+    let is_edit_context = query.get("context").map(|s| s.as_str()) == Some("edit");
+
+    if is_edit_context {
+        // Return just the publish status section
+        let publish_status = PublishStatus {
+            project_id: project_id_str,
+            published: false,
+        };
+
+        Ok(poem::Response::builder()
+            .content_type("text/html")
+            .body(publish_status.render_once()?))
+    } else {
+        // Return the full project row for list view
+        let row = sqlx::query!(
+            r#"SELECT p.project_id, p.name, p.status, p.created, p.presenter,
+                      p.origin, p.flagged, p.duplicate, p.is_test, p.goal, p.task, p.image,
+                      p.url, p.admin_notes, p.draft, p.reviewed, p.description,
+                      COALESCE(ent.publish, 0) as "published!: bool"
+               FROM projects p
+               LEFT JOIN entities ent ON ent.target = p.project_id AND ent.kind = 'Project'
+               WHERE p.project_id = ?"#,
+            project_id_str
+        )
+        .fetch_one(db())
+        .await?;
+
+        let project = AdminProject {
+            id: row.project_id,
+            title: row.name,
+            status: row.status,
+            created_date: row.created,
+            page_creator_id: String::new(),
+            page_creator_email: None,
+            description: row.description,
+            presenter: row.presenter,
+            origin: row.origin,
+            flagged: row.flagged,
+            duplicate: row.duplicate,
+            is_test: row.is_test,
+            goal: row.goal,
+            task: row.task,
+            image: row.image,
+            url: row.url,
+            admin_notes: row.admin_notes,
+            draft: row.draft,
+            reviewed: row.reviewed,
+            published: row.published,
+            tags: Vec::new(),
+        };
+
+        let project_row = ProjectRow {
+            project,
+            oob: false,
+            oob_swap: String::new(),
+        };
+
+        Ok(poem::Response::builder()
+            .content_type("text/html")
+            .body(project_row.render_once()?))
+    }
+}
+
+#[handler]
 async fn projects_update_field(
     Path((project_id, field_type)): Path<(String, String)>,
     Form(form): Form<UpdateProjectFieldForm>,
@@ -4552,6 +4824,7 @@ async fn projects_update_field(
         "duplicate" => crate::project::field::ProjectFieldType::Duplicate,
         "authoritative" => crate::project::field::ProjectFieldType::Authoritative,
         "flagged" => crate::project::field::ProjectFieldType::Flagged,
+        "reviewed" => crate::project::field::ProjectFieldType::Reviewed,
         "is_test" => crate::project::field::ProjectFieldType::IsTest,
         "status" => crate::project::field::ProjectFieldType::Status,
         "promotion_time" => crate::project::field::ProjectFieldType::PromotionTime,
@@ -4916,6 +5189,14 @@ async fn projects_update_field(
             }
             crate::project::field::ProjectFieldType::Extra => {
                 crate::project::field::ProjectFieldValue::Extra(form.value)
+            }
+            crate::project::field::ProjectFieldType::Reviewed => {
+                let bool_value = form.value.parse::<bool>().unwrap_or_else(|_| {
+                    form.value.to_lowercase() == "true"
+                        || form.value == "1"
+                        || form.value.to_lowercase() == "on"
+                });
+                crate::project::field::ProjectFieldValue::Reviewed(bool_value)
             }
             crate::project::field::ProjectFieldType::ProjectLastEditor => {
                 let option_value = if form.value.is_empty() {
@@ -10841,42 +11122,8 @@ async fn email_queue_content(
         .body(content))
 }
 
-// Helper to deserialize either a single string or array of strings
-fn deserialize_string_or_vec<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    use serde::de::Deserialize;
-
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum StringOrVec {
-        String(String),
-        Vec(Vec<String>),
-    }
-
-    match StringOrVec::deserialize(deserializer)? {
-        StringOrVec::String(s) => Ok(vec![s]),
-        StringOrVec::Vec(v) => Ok(v),
-    }
-}
-
-// Custom form extractor using serde_qs to support array notation (field[])
-pub struct QsForm<T>(pub T);
-
-impl<'a, T: serde::de::DeserializeOwned> FromRequest<'a> for QsForm<T> {
-    async fn from_request(_req: &'a Request, body: &mut RequestBody) -> PoemResult<Self> {
-        let data = body.take()?.into_vec().await?;
-        let config = serde_qs::Config::new(10, false); // max_depth=10, strict=false
-        let form = config.deserialize_bytes(&data).map_err(|e| {
-            poem::Error::from_string(
-                format!("Failed to parse form data: {}", e),
-                poem::http::StatusCode::BAD_REQUEST,
-            )
-        })?;
-        Ok(QsForm(form))
-    }
-}
+// Import form utilities from form module
+use crate::form::{QsForm, deserialize_string_or_vec};
 
 // HTMX endpoint to fetch merge fields HTML fragment for selected datasets
 #[derive(Debug, Deserialize)]
@@ -12109,26 +12356,28 @@ async fn exchanges_list(
 ) -> Result<poem::Response, anyhow::Error> {
     // Fetch exchanges from database
     let rows = sqlx::query!(
-        "SELECT exchange_id, slug, name, description, created, updated FROM exchanges ORDER BY created DESC"
+        "SELECT exchange_id, path_id, slug, name, description FROM exchanges ORDER BY name"
     )
     .fetch_all(db())
     .await?;
 
     let exchanges: Vec<ExchangeListItem> = rows
         .into_iter()
-        .map(|row| ExchangeListItem {
-            exchange_id: row.exchange_id,
-            slug: row.slug,
-            name: row.name,
-            description: row.description,
-            created: row.created,
+        .filter_map(|row| {
+            Ulid::from_string(&row.exchange_id).ok().map(|exchange_id| ExchangeListItem {
+                exchange_id,
+                path_id: row.path_id,
+                slug: row.slug,
+                name: row.name,
+                description: row.description,
+            })
         })
         .collect();
 
     let content = ExchangesListPage { exchanges };
 
     let prepared = crate::component::AdminLayout::new("Exchange Management", content)
-        .with_sidebar_active("exchanges")
+        .with_sidebar_active("engine-room-exchanges")
         .prepare(user_info)
         .await?;
 
@@ -12139,7 +12388,7 @@ async fn exchanges_list(
 
 #[derive(Debug, serde::Deserialize)]
 struct ExchangeCreateForm {
-    exchange_id: i64,
+    path_id: i64,
     slug: String,
     name: String,
     description: String,
@@ -12154,7 +12403,7 @@ async fn exchange_create_page(
     let content = ExchangeCreatePage {};
 
     let prepared = crate::component::AdminLayout::new("Create Exchange", content)
-        .with_sidebar_active("exchanges")
+        .with_sidebar_active("engine-room-exchanges")
         .prepare(user_info)
         .await?;
 
@@ -12172,7 +12421,8 @@ async fn exchange_create(
 
     // Create new exchange with default settings
     let exchange = Exchange {
-        exchange_id: form.exchange_id,
+        exchange_id: Ulid::new(),
+        path_id: form.path_id,
         slug: form.slug.clone(),
         name: form.name.clone(),
         description: form.description.clone(),
@@ -12190,8 +12440,6 @@ async fn exchange_create(
         },
         predefined_searches: Vec::new(),
         hidden_projects: std::collections::HashSet::new(),
-        created: common::timestring::TimeString::now(),
-        updated: common::timestring::TimeString::now(),
     };
 
     // Use LoadStorePeered to save and broadcast
@@ -12203,16 +12451,19 @@ async fn exchange_create(
 
 #[handler]
 async fn exchange_edit_page(
-    Path(exchange_id): Path<i64>,
+    Path(exchange_id_str): Path<String>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     use crate::exchange::Exchange;
+
+    let exchange_id = Ulid::from_string(&exchange_id_str)?;
 
     // Load exchange via LoadStorePeered
     let exchange = Exchange::load(exchange_id).await?;
 
     let content = ExchangeEditPage {
         exchange_id: exchange.exchange_id,
+        path_id: exchange.path_id,
         slug: exchange.slug,
         name: exchange.name,
         description: exchange.description,
@@ -12220,7 +12471,7 @@ async fn exchange_edit_page(
     };
 
     let prepared = crate::component::AdminLayout::new("Edit Exchange", content)
-        .with_sidebar_active("exchanges")
+        .with_sidebar_active("engine-room-exchanges")
         .prepare(user_info)
         .await?;
 
@@ -12240,11 +12491,13 @@ struct ExchangeUpdateForm {
 
 #[handler]
 async fn exchange_update(
-    Path(exchange_id): Path<i64>,
+    Path(exchange_id_str): Path<String>,
     Authenticated(_user_info): Authenticated,
     form: poem::web::Form<ExchangeUpdateForm>,
 ) -> Result<poem::Response, anyhow::Error> {
     use crate::exchange::Exchange;
+
+    let exchange_id = Ulid::from_string(&exchange_id_str)?;
 
     // Load existing exchange
     let mut exchange = Exchange::load(exchange_id).await?;
@@ -12258,7 +12511,6 @@ async fn exchange_update(
     } else {
         Some(form.logo_url.clone())
     };
-    exchange.updated = common::timestring::TimeString::now();
 
     // Use LoadStorePeered to save and broadcast
     exchange.store().await?;
@@ -12269,11 +12521,13 @@ async fn exchange_update(
 
 #[handler]
 async fn exchange_delete(
-    Path(exchange_id): Path<i64>,
+    Path(exchange_id_str): Path<String>,
     Authenticated(_user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     use crate::exchange::Exchange;
     use crate::peering::LoadStorePeered;
+
+    let exchange_id = Ulid::from_string(&exchange_id_str)?;
 
     // Use LoadStorePeered to delete and broadcast to peers
     Exchange::delete(exchange_id).await?;
@@ -12665,8 +12919,11 @@ async fn wiki_delete(
 
     WikiPage::delete(title).await?;
 
-    // Redirect to Index page
-    Ok(poem::web::Redirect::see_other("/-admin/wiki").into_response())
+    // Use HX-Redirect header for HTMX client-side redirect
+    Ok(poem::Response::builder()
+        .header("HX-Redirect", "/-admin/wiki")
+        .status(poem::http::StatusCode::OK)
+        .finish())
 }
 
 #[derive(TemplateOnce)]
@@ -12713,7 +12970,7 @@ async fn badges_list(
     let content = BadgesListPage {};
 
     let prepared = crate::component::AdminLayout::new("Badge Management", content)
-        .with_sidebar_active("badges")
+        .with_sidebar_active("engine-room-badges")
         .prepare(user_info)
         .await?;
 
@@ -12778,7 +13035,7 @@ async fn badges_holders(
 
     let prepared =
         crate::component::AdminLayout::new(&format!("{} - Badge Holders", badge.name()), content)
-            .with_sidebar_active("badges")
+            .with_sidebar_active("engine-room-badges")
             .with_breadcrumb("Badges", Some("/-admin/badges"))
             .with_breadcrumb(badge.name(), None)
             .prepare(user_info)
@@ -12949,11 +13206,11 @@ async fn badges_revoke(
 // Exchange Management Templates
 #[derive(Debug, Clone)]
 struct ExchangeListItem {
-    exchange_id: i64,
+    exchange_id: Ulid,
+    path_id: i64,
     slug: String,
     name: String,
     description: String,
-    created: String,
 }
 
 #[derive(TemplateOnce)]
@@ -12969,7 +13226,8 @@ struct ExchangeCreatePage {}
 #[derive(TemplateOnce)]
 #[template(path = "admin/exchanges_edit.stpl.html")]
 struct ExchangeEditPage {
-    exchange_id: i64,
+    exchange_id: Ulid,
+    path_id: i64,
     slug: String,
     name: String,
     description: String,

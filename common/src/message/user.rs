@@ -805,6 +805,22 @@ pub struct UserEmailInfo {
     pub verified: bool,
 }
 
+// User lookup by email address
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserByEmailRequest {
+    pub email: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserByEmailResponse {
+    pub found: bool,
+    pub user_id: Option<String>,
+    pub handle: Option<String>,
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+    pub email: Option<String>,
+}
+
 // Recipient Search (for email sending UI)
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum RecipientFilter {
@@ -1045,4 +1061,15 @@ pub struct WorkflowStatusResponse {
     pub current_step: Option<String>, // Current step identifier, None if not started
     pub completed_steps: Vec<String>, // All completed steps
     pub badge_granted: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PermissionListByResourceRequest {
+    pub resource_type: String,
+    pub resource_id: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PermissionListByResourceResponse {
+    pub permissions: Vec<Permission>,
 }

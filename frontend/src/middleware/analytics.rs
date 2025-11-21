@@ -2,7 +2,7 @@ use std::{net::IpAddr, sync::Arc};
 
 use common::{message::user::UserInfo, service::log_pageview};
 use jiff::{ToSpan, Zoned};
-use poem::{Endpoint, FromRequest, Middleware, session::Session, web::RealIp};
+use poem::{Endpoint, FromRequest, IntoResponse, Middleware, Response, session::Session, web::RealIp};
 use ulid::Ulid;
 
 use super::authorization::Authenticated;
@@ -79,19 +79,20 @@ impl<E: Endpoint> Middleware<E> for AnalyticsMiddleware {
 }
 
 impl<E: Endpoint> Endpoint for AnalyticsMiddlewareEndpoint<E> {
-    type Output = E::Output;
+    type Output = Response;
 
     async fn call(&self, mut req: poem::Request) -> poem::Result<Self::Output> {
         let Some(session) = req.extensions().get::<Session>() else {
             tracing::error!("AnalyticsMiddleware: Session not found in request");
-            return self.wrapped.call(req).await;
+            let output = self.wrapped.call(req).await?;
+            return Ok(output.into_response());
         };
 
         let device = session_device(session);
         let interaction = session_interaction(session);
 
         let uri = req.uri();
-        let path = uri.path();
+        let path = uri.path().to_string();
         let query = uri.query().map(|q| q.to_string());
         let user_info = req
             .extensions()
@@ -113,28 +114,35 @@ impl<E: Endpoint> Endpoint for AnalyticsMiddlewareEndpoint<E> {
             .and_then(|h| h.to_str().ok())
             .map(|s| s.to_string());
 
-        // Log the page view
-        if let Err(e) = log_pageview(
-            None, // when - let it use current time
-            ip_address,
-            &device,
-            &interaction,
-            user_info.user_id(),
-            path,
-            referrer,
-            query,
-            None, // geolocation - let it resolve from IP
-        )
-        .await
-        {
-            tracing::warn!("Failed to log page view: {}", e);
+        let extensions = req.extensions_mut();
+        extensions.insert(Device(Arc::new(device.clone())));
+        extensions.insert(Interaction(Arc::new(interaction.clone())));
+
+        // Call the endpoint first to get the response
+        let output = self.wrapped.call(req).await?;
+        let response = output.into_response();
+        let status = response.status();
+
+        // Skip logging for 404 Not Found responses
+        if status != poem::http::StatusCode::NOT_FOUND {
+            if let Err(e) = log_pageview(
+                None, // when - let it use current time
+                ip_address,
+                &device,
+                &interaction,
+                user_info.user_id(),
+                &path,
+                referrer,
+                query,
+                None, // geolocation - let it resolve from IP
+            )
+            .await
+            {
+                tracing::warn!("Failed to log page view: {}", e);
+            }
         }
 
-        let extensions = req.extensions_mut();
-        extensions.insert(Device(Arc::new(device)));
-        extensions.insert(Interaction(Arc::new(interaction)));
-
-        self.wrapped.call(req).await
+        Ok(response)
     }
 }
 

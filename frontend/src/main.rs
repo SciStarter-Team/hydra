@@ -11,6 +11,7 @@ pub mod entity;
 pub mod event;
 pub mod exchange;
 pub mod evolveme;
+pub mod form;
 pub mod gourl;
 pub mod health;
 pub mod lru_cache;
@@ -181,12 +182,12 @@ fn user_facing() -> impl Endpoint {
     Route::new()
         .at("/", get(pages::index::index_page))
         .at("/index.html", get(pages::index::index_page))
-        .at("/signup", post(auth::signup_action))
+        .at("/signup", post(auth::signup_action).with(middleware::partitioned_session::EnablePartitionedCookies))
         .at(
             "/login",
-            get(auth::login_signup_page).post(auth::login_action),
+            get(auth::login_signup_page).post(auth::login_action.with(middleware::partitioned_session::EnablePartitionedCookies)),
         )
-        .at("/logout", get(auth::logout_action))
+        .at("/logout", get(auth::logout_action).with(middleware::partitioned_session::EnablePartitionedCookies))
         .at("/demo-forum", get(demo_forum))
         .at("/go/*friendly_url", get(gourl::handle_go_url))
         .nest("/badges", badge::routes())
@@ -229,6 +230,7 @@ fn dynamic() -> impl Endpoint {
                 .max_age(std::time::Duration::from_secs(60 * 60 * 24 * 365)),
             session_storage,
         ))
+        .with(middleware::partitioned_session::PartitionedSessionMiddleware)
         .with(SetHeader::new().overriding("Cache-Control", "no-store"))
         .with(NormalizePath::new(TrailingSlash::Trim))
 }
@@ -1024,6 +1026,9 @@ mod sync {
                     .into_boxed_slice();
                 proj.circuit_id = data.circuit_id;
                 proj.sustainable_development_goals = data.sustainable_development_goals;
+
+                // Mark synced projects as reviewed (they come from the main database)
+                proj.reviewed = true;
 
                 if let Err(err) = proj.store().await {
                     tracing::error!("Error saving {}: {}", &proj.name, err);

@@ -2,6 +2,9 @@
 <div class="bg-white rounded-lg shadow border border-gray-200">
   <div class="px-6 py-6 space-y-6">
 
+    <!-- Publish Status -->
+    <%+ PublishStatus { project_id: self.project.id.clone(), published: self.project.published } %>
+
     <!-- Admin Notes -->
     <details class="mb-6">
       <summary class="cursor-pointer text-sm font-medium text-red-700 hover:text-red-900">Admin Notes</summary>

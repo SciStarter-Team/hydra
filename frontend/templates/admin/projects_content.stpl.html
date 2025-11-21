@@ -19,7 +19,7 @@
                         <button type="button"
                                 hx-get="/-admin/projects/search"
                                 hx-target="#projects-content"
-                                hx-vals='{"search": "", "status": "<%= self.selected_status %>", "flagged": "<%= self.flagged %>", "page": "1"}'
+                                hx-vals='{"search": "", "status": "<%= self.selected_status %>", "flagged": "<%= self.flagged %>", "reviewed": "<%= self.reviewed %>", "page": "1"}'
                                 class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
                             <wa-icon name="xmark" class="w-4 h-4"></wa-icon>
                         </button>
@@ -52,6 +52,18 @@
                         <option value=""<% if self.flagged.is_empty() { %> selected<% } %>>All Flagged Status</option>
                         <option value="true"<% if self.flagged == "true" { %> selected<% } %>>Flagged</option>
                         <option value="false"<% if self.flagged == "false" { %> selected<% } %>>Not Flagged</option>
+                    </select>
+                    <select
+                        name="reviewed"
+                        class="block px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        hx-get="/-admin/projects/search"
+                        hx-target="#projects-content"
+                        hx-trigger="change"
+                        hx-include="#project-search-form"
+                    >
+                        <option value=""<% if self.reviewed.is_empty() { %> selected<% } %>>All Reviewed Status</option>
+                        <option value="true"<% if self.reviewed == "true" { %> selected<% } %>>Reviewed</option>
+                        <option value="false"<% if self.reviewed == "false" { %> selected<% } %>>Awaiting Review</option>
                     </select>
                 </div>
             </div>

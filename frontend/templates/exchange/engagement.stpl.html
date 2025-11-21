@@ -1,10 +1,10 @@
 <div class="border">
   <div class="flex flex-select">
     <h1>Exchange Engagement Stats</h1>
-    <select name="year" class="el-select" hx-get="/exchange/<%= exchange_id %>/engagement">
-      <option value="" <% if selected_year == 0 { %>selected<% } %>>All Time</option>
-      <% for year in available_years.iter() { %>
-      <option value="<%= year %>" <% if selected_year == *year { %>selected<% } %>><%= year %></option>
+    <select name="year" class="el-select" hx-get="/exchange/<%= self.exchange_id %>/engagement">
+      <option value="" <% if self.selected_year == 0 { %>selected<% } %>>All Time</option>
+      <% for year in self.available_years.iter() { %>
+      <option value="<%= year %>" <% if self.selected_year == *year { %>selected<% } %>><%= year %></option>
       <% } %>
     </select>
   </div>
@@ -23,9 +23,9 @@
         </g>
       </svg>
       <div class="data-numbers">
-        <h2><%= exchange_visits %></h2>
+        <h2><%= self.exchange_visits %></h2>
         <h3>Exchange Visits <button type="button" class="el-button el-tooltip question-mark-tooltip el-button--default" aria-label="How many times your exchange was loaded by users" data-microtip-position="top" role="tooltip" tabindex="0"><span>?</span></button></h3>
-        <h4><%= &selected_year_display %></h4>
+        <h4><%= &self.selected_year_display %></h4>
       </div>
     </div>
   </div>
@@ -34,14 +34,14 @@
     <div class="flex2">
       <img src="https://static.scistarter.org/img/data/views.svg" />
       <div class="data-numbers dn-small">
-        <h2><%= visitors %></h2>
+        <h2><%= self.visitors %></h2>
         <h3>Unique Visitors <button type="button" class="el-button el-tooltip question-mark-tooltip el-button--default" aria-label="How many times unique visitors visitors viewed your projects" data-microtip-position="top" role="tooltip" tabindex="0"><span>?</span></button></h3>
       </div>
     </div>
     <div class="flex2">
       <img src="https://static.scistarter.org/img/data/views.svg" />
       <div class="data-numbers dn-small">
-        <h2><%= views %></h2>
+        <h2><%= self.views %></h2>
         <h3>Page Views <button type="button" class="el-button el-tooltip question-mark-tooltip el-button--default" aria-label="How many times projects were viewed. One user may view multiple times." data-microtip-position="top" role="tooltip" tabindex="0"><span>?</span></button></h3>
       </div>
     </div>
@@ -51,67 +51,50 @@
     <div class="flex3">
       <img src="https://static.scistarter.org/img/data/saves.svg" />
       <div class="data-numbers dn-small">
-        <h2><%= saves %></h2>
+        <h2><%= self.saves %></h2>
         <h3>Saves <button type="button" class="el-button el-tooltip question-mark-tooltip el-button--default" aria-label="How many times users saved the project to their SciStarter dashboard." data-microtip-position="top" role="tooltip" tabindex="0"><span>?</span></button></h3>
       </div>
     </div>
     <div class="flex3">
       <img src="https://static.scistarter.org/img/data/referrals.svg" />
       <div class="data-numbers dn-small">
-        <h2><%= referrals %></h2>
-        <h3>Referrals <button type="button" class="el-button el-tooltip question-mark-tooltip el-button--default" aria-label="How many times users clicked to a projects website from SciStarter or a SciStarter exchange." data-microtip-position="top" role="tooltip" tabindex="0"><span>?</span></button></h3>
+        <h2><%= self.clickthroughs %></h2>
+        <h3>Clickthroughs (System-wide) <button type="button" class="el-button el-tooltip question-mark-tooltip el-button--default" aria-label="Total system-wide clickthroughs to project websites (not exchange-specific)" data-microtip-position="top" role="tooltip" tabindex="0"><span>?</span></button></h3>
       </div>
     </div>
     <div class="flex3">
       <img src="https://static.scistarter.org/img/data/contributions.svg" />
       <div class="data-numbers dn-small">
-        <h2><%= contributions %></h2>
-        <h3>Contributions to Affiliate Projects* <button type="button" class="el-button el-tooltip question-mark-tooltip el-button--default" aria-label="How many times users took part in SciStarter affiliated projects" data-microtip-position="top" role="tooltip" tabindex="0"><span>?</span></button></h3>
-        <br>
-        <small>*This number includes all contributions to SciStarter affiliate projects which appear on your Exchange.</small>
+        <h2><%= self.contributions %></h2>
+        <h3>Contributions (System-wide) <button type="button" class="el-button el-tooltip question-mark-tooltip el-button--default" aria-label="Total system-wide contributions to affiliated projects (not exchange-specific)" data-microtip-position="top" role="tooltip" tabindex="0"><span>?</span></button></h3>
       </div>
     </div>
   </div>
 </div>
-<div class="border top-10">
+<div class="border top-10" x-data="{ activeTab: 'views' }">
   <div class="flex flex-select">
     <div>
       <h1>Popular Projects For Your Visitors</h1>
       <ul class="data-nav not-d2t">
-        <li><a class="selected"
-              _="on click
-                  hide #saves
-                  hide #referrals
-                  show #views
-                  remove .selected from .selected
-                  add .selected to me">Views</a></li>
-        <li><a _="on click
-                  hide #views
-                  hide #referrals
-                  show #saves
-                  remove .selected from .selected
-                  add .selected to me">Saves</a></li>
-        <li><a _="on click
-                  hide #saves
-                  hide #views
-                  show #referrals
-                  remove .selected from .selected
-                  add .selected to me">Referrals</a></li>
+        <li><a :class="activeTab === 'views' ? 'selected' : ''"
+              @click="activeTab = 'views'">Views</a></li>
+        <li><a :class="activeTab === 'saves' ? 'selected' : ''"
+              @click="activeTab = 'saves'">Saves</a></li>
       </ul>
     </div>
-    <select name="year" class="el-select" hx-get="/exchange/<%= exchange_id %>/engagement">
-      <option value="" <% if selected_year == 0 { %>selected<% } %>>All Time</option>
-      <% for year in available_years.iter() { %>
-      <option value="<%= year %>" <% if selected_year == *year { %>selected<% } %>><%= year %></option>
+    <select name="year" class="el-select" hx-get="/exchange/<%= self.exchange_id %>/engagement">
+      <option value="" <% if self.selected_year == 0 { %>selected<% } %>>All Time</option>
+      <% for year in self.available_years.iter() { %>
+      <option value="<%= year %>" <% if self.selected_year == *year { %>selected<% } %>><%= year %></option>
       <% } %>
     </select>
   </div>
 
-  <div id="views">
+  <div x-show="activeTab === 'views'">
     <h2>Top 10 Projects by Views</h2>
 
     <table>
-      <% for (idx, item) in top_views.iter().enumerate() { %>
+      <% for (idx, item) in self.top_views.iter().enumerate() { %>
       <tr>
         <td class="order-num num"><%= idx + 1 %></td>
         <td>
@@ -129,32 +112,11 @@
     </table>
   </div>
 
-  <div id="saves" _="init hide me">
+  <div x-show="activeTab === 'saves'">
     <h2>Top 10 Projects by Saves</h2>
 
     <table>
-      <% for (idx, item) in top_saves.iter().enumerate() { %>
-      <tr>
-        <td class="order-num num"><%= idx + 1 %></td>
-        <td>
-          <div class="media-object">
-            <img src="https://media.scistarter.org/<%= item.2 %>" class="media-image" />
-            <div class="media-body">
-              <h3><%= item.0 %></h3>
-              <p><%= item.1 %></p>
-            </div>
-          </div>
-        </td>
-        <td class="count num"><%= item.3 %></td>
-      </tr>
-      <% } %>
-    </table>
-  </div>
-
-  <div id="referrals" _="init hide me">
-    <h2>Top 10 Projects by Referrals</h2>
-    <table>
-      <% for (idx, item) in top_referrals.iter().enumerate() { %>
+      <% for (idx, item) in self.top_saves.iter().enumerate() { %>
       <tr>
         <td class="order-num num"><%= idx + 1 %></td>
         <td>

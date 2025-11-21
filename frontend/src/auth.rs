@@ -481,9 +481,17 @@ pub async fn login_action(session: &Session, Form(form): Form<LoginForm>) -> Res
     }
 }
 
+#[derive(Debug, serde::Deserialize)]
+struct LogoutQuery {
+    next: Option<String>,
+}
+
 #[handler]
 #[tracing::instrument]
-pub async fn logout_action(session: &Session) -> impl IntoResponse {
+pub async fn logout_action(
+    session: &Session,
+    Query(query): Query<LogoutQuery>,
+) -> impl IntoResponse {
     let Some(info): Option<BasicInfo> = session.get("basic_info") else {
         return Redirect::see_other("/");
     };
@@ -494,7 +502,14 @@ pub async fn logout_action(session: &Session) -> impl IntoResponse {
         .await
         .ok();
 
-    Redirect::see_other("/")
+    // Validate next parameter - must start with / to prevent open redirect
+    let redirect_to = query
+        .next
+        .as_deref()
+        .filter(|next| next.starts_with('/'))
+        .unwrap_or("/");
+
+    Redirect::see_other(redirect_to)
 }
 
 // WebAuthn Authentication Start - for login flow

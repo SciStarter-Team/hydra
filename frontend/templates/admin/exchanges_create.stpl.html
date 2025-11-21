@@ -6,15 +6,15 @@
     <div class="p-6">
         <form method="post" action="/-admin/exchanges/new" class="space-y-6">
             <div>
-                <label for="exchange_id" class="block text-sm font-medium text-gray-700">Exchange ID</label>
+                <label for="path_id" class="block text-sm font-medium text-gray-700">Path ID</label>
                 <input
                     type="number"
-                    name="exchange_id"
-                    id="exchange_id"
+                    name="path_id"
+                    id="path_id"
                     required
                     class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                     placeholder="Enter a unique integer ID">
-                <p class="mt-1 text-sm text-gray-500">Use an integer ID (for backward compatibility with orrery)</p>
+                <p class="mt-1 text-sm text-gray-500">Integer ID used in URLs (must match orrery exchange ID for backward compatibility)</p>
             </div>
 
             <div>

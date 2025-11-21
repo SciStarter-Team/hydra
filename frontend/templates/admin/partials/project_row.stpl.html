@@ -70,7 +70,7 @@
         <wa-icon name="pencil" class="w-4 h-4"></wa-icon>
       </a>
       <% if self.project.flagged { %>
-        <button 
+        <button
             hx-put="/-admin/projects/<%= self.project.id %>/field/flagged"
             hx-vals='{"value": "false"}'
             hx-target="#project-row-<%= self.project.id %>"
@@ -81,7 +81,7 @@
           <wa-icon name="flag" class="w-4 h-4"></wa-icon>
         </button>
       <% } else { %>
-        <button 
+        <button
             hx-put="/-admin/projects/<%= self.project.id %>/field/flagged"
             hx-vals='{"value": "true"}'
             hx-target="#project-row-<%= self.project.id %>"
@@ -92,6 +92,28 @@
           <wa-icon name="flag" class="w-4 h-4"></wa-icon>
         </button>
       <% } %>
+      <% if !self.project.reviewed { %>
+        <button
+            hx-put="/-admin/projects/<%= self.project.id %>/field/reviewed"
+            hx-vals='{"value": "true"}'
+            hx-target="#project-row-<%= self.project.id %>"
+            hx-swap="outerHTML"
+            class="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50"
+            title="Mark as reviewed"
+        >
+          <wa-icon name="eye" class="w-4 h-4"></wa-icon>
+        </button>
+      <% } %>
+      <wa-switch
+          name="publish"
+          <% if self.project.published { %>checked<% } %>
+          hx-post="/-admin/projects/<%= self.project.id %>/<% if self.project.published { %>unpublish<% } else { %>publish<% } %>"
+          hx-trigger="change"
+          hx-target="#project-row-<%= self.project.id %>"
+          hx-swap="outerHTML"
+          title="<% if self.project.published { %>Unpublish project<% } else { %>Publish project<% } %>"
+      >
+      </wa-switch>
     </div>
   </div>
 </div>

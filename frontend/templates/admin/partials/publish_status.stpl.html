@@ -1,0 +1,27 @@
+<div id="publish-status" class="mb-6 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+  <div class="flex items-center justify-between">
+    <div class="flex items-center space-x-3">
+      <wa-icon name="globe" class="w-5 h-5 text-purple-600"></wa-icon>
+      <div>
+        <h4 class="text-sm font-medium text-purple-900">Publication Status</h4>
+        <p class="text-xs text-purple-700 mt-1">
+          <% if self.published { %>
+            This project is published and visible to the public
+          <% } else { %>
+            This project is not published (draft mode)
+          <% } %>
+        </p>
+      </div>
+    </div>
+    <wa-switch
+        name="publish"
+        <% if self.published { %>checked<% } %>
+        hx-post="/-admin/projects/<%= self.project_id %>/<% if self.published { %>unpublish<% } else { %>publish<% } %>?context=edit"
+        hx-trigger="change"
+        hx-target="#publish-status"
+        hx-swap="outerHTML"
+    >
+      <% if self.published { %>Published<% } else { %>Unpublished<% } %>
+    </wa-switch>
+  </div>
+</div>

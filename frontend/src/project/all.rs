@@ -73,6 +73,7 @@ pub struct ProjectAll {
     pub project_last_edited: Option<TimeString>,
     pub scistarter_last_editor: Option<Ulid>,
     pub scistarter_last_edited: Option<TimeString>,
+    pub reviewed: bool,
 
     // section Project
     pub draft: bool,
@@ -250,6 +251,7 @@ impl LoadStorePeered for ProjectAll {
           "welcomed",
           "page_creator_id",
           "extra",
+          "reviewed",
           "draft",
           "name",
           "participation_degree",
@@ -449,14 +451,7 @@ impl LoadStorePeered for ProjectAll {
           ?108,
           ?109,
           ?110,
-          case
-            when ?111 is null then
-              null
-            when substr(?111, 1, 1) == '{' and substr(?111, -1, 1) == '}' then
-              GeomFromGeoJSON(?111)
-            else
-              GeomFromEWKT(?111)
-          end,
+          ?111,
           case
             when ?112 is null then
               null
@@ -464,6 +459,14 @@ impl LoadStorePeered for ProjectAll {
               GeomFromGeoJSON(?112)
             else
               GeomFromEWKT(?112)
+          end,
+          case
+            when ?113 is null then
+              null
+            when substr(?113, 1, 1) == '{' and substr(?113, -1, 1) == '}' then
+              GeomFromGeoJSON(?113)
+            else
+              GeomFromEWKT(?113)
           end
         )"#,
             project_id,
@@ -491,6 +494,7 @@ impl LoadStorePeered for ProjectAll {
             self.welcomed,
             page_creator_id,
             self.extra,
+            self.reviewed,
             self.draft,
             self.name,
             self.participation_degree,
@@ -1106,7 +1110,7 @@ impl LoadStorePeered for ProjectAll {
                 promotion_time, promotion_target, admin_notes, created, wild_hope,
                 exchange, origin, suborigin, guid, opengraph_description,
                 is_affiliate, is_inaturalist, inat_project_id, welcomed,
-                page_creator_id, extra, draft, name, participation_degree,
+                page_creator_id, extra, reviewed, draft, name, participation_degree,
                 participant_instructions, participant_instructions_email,
                 us_federally_funded, presenter, goal, task, description,
                 image, image_credit, connect_opaque_url, connect_opaque_url1,
@@ -1325,6 +1329,7 @@ impl LoadStorePeered for ProjectAll {
             project_last_edited: None,
             scistarter_last_editor: None,
             scistarter_last_edited: None,
+            reviewed: project_row.reviewed,
 
             // Project section
             draft: project_row.draft,

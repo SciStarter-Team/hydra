@@ -31,11 +31,10 @@
                 <table class="min-w-full divide-y divide-gray-300">
                     <thead class="bg-gray-50">
                         <tr>
-                            <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">ID</th>
+                            <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">Path ID</th>
                             <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Name</th>
                             <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Slug</th>
                             <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Description</th>
-                            <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Created</th>
                             <th scope="col" class="relative py-3.5 pl-3 pr-4 sm:pr-6">
                                 <span class="sr-only">Actions</span>
                             </th>
@@ -45,7 +44,7 @@
                         <% for exchange in &self.exchanges { %>
                             <tr>
                                 <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
-                                    <%= exchange.exchange_id %>
+                                    <%= exchange.path_id %>
                                 </td>
                                 <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-900">
                                     <%= exchange.name %>
@@ -56,17 +55,14 @@
                                 <td class="px-3 py-4 text-sm text-gray-500 max-w-md truncate">
                                     <%= exchange.description %>
                                 </td>
-                                <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                                    <%= exchange.created %>
-                                </td>
                                 <td class="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6 space-x-3">
-                                    <a href="/exchange/<%= exchange.exchange_id %>" class="text-indigo-600 hover:text-indigo-900" target="_blank">
+                                    <a href="/exchange/<%= exchange.path_id %>" class="text-indigo-600 hover:text-indigo-900" target="_blank">
                                         View<span class="sr-only">, <%= exchange.name %></span>
                                     </a>
-                                    <a href="/-admin/exchanges/<%= exchange.exchange_id %>" class="text-blue-600 hover:text-blue-900">
+                                    <a href="/-admin/exchanges/<%= exchange.exchange_id |disp %>" class="text-blue-600 hover:text-blue-900">
                                         Edit<span class="sr-only">, <%= exchange.name %></span>
                                     </a>
-                                    <a href="/exchange/<%= exchange.exchange_id %>/org.html" class="text-green-600 hover:text-green-900" target="_blank">
+                                    <a href="/exchange/<%= exchange.path_id %>/org.html" class="text-green-600 hover:text-green-900" target="_blank">
                                         Settings<span class="sr-only">, <%= exchange.name %></span>
                                     </a>
                                 </td>

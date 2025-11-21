@@ -16,7 +16,8 @@ pub use routes::routes;
 /// Lightweight exchange info for page rendering (no nested collections)
 #[derive(Debug, Clone)]
 pub struct ExchangeInfo {
-    pub exchange_id: i64,
+    pub exchange_id: Ulid,
+    pub path_id: i64,
     pub slug: String,
     pub name: String,
     pub description: String,
@@ -25,17 +26,18 @@ pub struct ExchangeInfo {
 }
 
 impl ExchangeInfo {
-    /// Load exchange metadata by ID (efficient for page views)
-    pub async fn load_by_id(exchange_id: i64) -> Result<Self, Error> {
+    /// Load exchange metadata by path_id (efficient for page views)
+    pub async fn load_by_id(path_id: i64) -> Result<Self, Error> {
         let row = sqlx::query!(
-            "SELECT exchange_id, slug, name, description, logo_url, settings FROM exchanges WHERE exchange_id = ?",
-            exchange_id
+            "SELECT exchange_id, path_id, slug, name, description, logo_url, settings FROM exchanges WHERE path_id = ?",
+            path_id
         )
         .fetch_one(db())
         .await?;
 
         Ok(ExchangeInfo {
-            exchange_id: row.exchange_id,
+            exchange_id: Ulid::from_string(&row.exchange_id)?,
+            path_id: row.path_id,
             slug: row.slug,
             name: row.name,
             description: row.description,
@@ -47,14 +49,15 @@ impl ExchangeInfo {
     /// Load exchange metadata by slug (efficient for page views)
     pub async fn load_by_slug(slug: &str) -> Result<Self, Error> {
         let row = sqlx::query!(
-            "SELECT exchange_id, slug, name, description, logo_url, settings FROM exchanges WHERE slug = ?",
+            "SELECT exchange_id, path_id, slug, name, description, logo_url, settings FROM exchanges WHERE slug = ?",
             slug
         )
         .fetch_one(db())
         .await?;
 
         Ok(ExchangeInfo {
-            exchange_id: row.exchange_id.ok_or_else(|| anyhow::anyhow!("Missing exchange_id"))?,
+            exchange_id: Ulid::from_string(&row.exchange_id)?,
+            path_id: row.path_id,
             slug: row.slug,
             name: row.name,
             description: row.description,
@@ -65,6 +68,7 @@ impl ExchangeInfo {
 
     /// Get predefined searches for this exchange
     pub async fn get_predefined_searches(&self) -> Result<Vec<PredefinedSearch>, Error> {
+        let exchange_id_str = self.exchange_id.to_string();
         let rows = sqlx::query!(
             r#"
             SELECT search_id as "search_id!: String", name, search_params, display_order
@@ -72,7 +76,7 @@ impl ExchangeInfo {
             WHERE exchange_id = ?
             ORDER BY display_order
             "#,
-            self.exchange_id
+            exchange_id_str
         )
         .fetch_all(db())
         .await?;
@@ -148,7 +152,8 @@ fn default_page_size() -> usize {
 /// Main Exchange type - implements LoadStorePeered for peer sync
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Exchange {
-    pub exchange_id: i64,
+    pub exchange_id: Ulid,
+    pub path_id: i64,
     pub slug: String,
     pub name: String,
     pub description: String,
@@ -156,12 +161,10 @@ pub struct Exchange {
     pub settings: ExchangeSettings,
     pub predefined_searches: Vec<PredefinedSearch>,
     pub hidden_projects: HashSet<Ulid>,
-    pub created: TimeString,
-    pub updated: TimeString,
 }
 
 impl LoadStorePeered for Exchange {
-    type DatabaseKey = i64; // exchange_id
+    type DatabaseKey = Ulid; // exchange_id
     const GROUP: &str = "exchange";
     const SPECIFIC: &str = "all";
 
@@ -170,23 +173,21 @@ impl LoadStorePeered for Exchange {
 
         // Save main exchange
         let settings_json = serde_json::to_string(&self.settings)?;
-        let created_str = self.created.to_string();
-        let updated_str = self.updated.to_string();
+        let exchange_id_str = self.exchange_id.to_string();
 
         sqlx::query!(
             r#"
             INSERT OR REPLACE INTO exchanges
-            (exchange_id, slug, name, description, logo_url, settings, created, updated)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (exchange_id, path_id, slug, name, description, logo_url, settings)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             "#,
-            self.exchange_id,
+            exchange_id_str,
+            self.path_id,
             self.slug,
             self.name,
             self.description,
             self.logo_url,
-            settings_json,
-            created_str,
-            updated_str
+            settings_json
         )
         .execute(&mut tx)
         .await?;
@@ -194,14 +195,14 @@ impl LoadStorePeered for Exchange {
         // Delete old nested data
         sqlx::query!(
             "DELETE FROM exchange_predefined_searches WHERE exchange_id = ?",
-            self.exchange_id
+            exchange_id_str
         )
         .execute(&mut tx)
         .await?;
 
         sqlx::query!(
             "DELETE FROM exchange_hidden_projects WHERE exchange_id = ?",
-            self.exchange_id
+            exchange_id_str
         )
         .execute(&mut tx)
         .await?;
@@ -218,7 +219,7 @@ impl LoadStorePeered for Exchange {
                 VALUES (?, ?, ?, ?, ?)
                 "#,
                 search_id_str,
-                self.exchange_id,
+                exchange_id_str,
                 search.name,
                 search_params_json,
                 search.display_order
@@ -238,7 +239,7 @@ impl LoadStorePeered for Exchange {
                 (exchange_id, project_id, hidden_by, hidden_at)
                 VALUES (?, ?, ?, ?)
                 "#,
-                self.exchange_id,
+                exchange_id_str,
                 project_id_str,
                 "system",
                 now
@@ -251,11 +252,13 @@ impl LoadStorePeered for Exchange {
         Ok(())
     }
 
-    async fn read_from_database(exchange_id: i64) -> Result<Self, Error> {
+    async fn read_from_database(exchange_id: Ulid) -> Result<Self, Error> {
+        let exchange_id_str = exchange_id.to_string();
+
         // Read main exchange
         let row = sqlx::query!(
-            "SELECT exchange_id, slug, name, description, logo_url, settings, created, updated FROM exchanges WHERE exchange_id = ?",
-            exchange_id
+            "SELECT exchange_id, path_id, slug, name, description, logo_url, settings FROM exchanges WHERE exchange_id = ?",
+            exchange_id_str
         )
         .fetch_one(db())
         .await?;
@@ -268,7 +271,7 @@ impl LoadStorePeered for Exchange {
             WHERE exchange_id = ?
             ORDER BY display_order
             "#,
-            exchange_id
+            exchange_id_str
         )
         .fetch_all(db())
         .await?;
@@ -288,7 +291,7 @@ impl LoadStorePeered for Exchange {
         // Read hidden projects
         let hidden = sqlx::query!(
             "SELECT project_id FROM exchange_hidden_projects WHERE exchange_id = ?",
-            exchange_id
+            exchange_id_str
         )
         .fetch_all(db())
         .await?;
@@ -299,7 +302,8 @@ impl LoadStorePeered for Exchange {
             .collect::<Result<HashSet<_>, _>>()?;
 
         Ok(Exchange {
-            exchange_id: row.exchange_id,
+            exchange_id: Ulid::from_string(&row.exchange_id)?,
+            path_id: row.path_id,
             slug: row.slug,
             name: row.name,
             description: row.description,
@@ -307,14 +311,13 @@ impl LoadStorePeered for Exchange {
             settings: serde_json::from_str(&row.settings)?,
             predefined_searches,
             hidden_projects,
-            created: TimeString::try_from(row.created)?,
-            updated: TimeString::try_from(row.updated)?,
         })
     }
 
-    async fn delete_from_database(exchange_id: i64) -> Result<(), Error> {
+    async fn delete_from_database(exchange_id: Ulid) -> Result<(), Error> {
+        let exchange_id_str = exchange_id.to_string();
         // Delete exchange and all related data (CASCADE handles predefined_searches and hidden_projects)
-        sqlx::query!("DELETE FROM exchanges WHERE exchange_id = ?", exchange_id)
+        sqlx::query!("DELETE FROM exchanges WHERE exchange_id = ?", exchange_id_str)
             .execute(db())
             .await?;
 
@@ -356,8 +359,9 @@ pub struct TemplateExchange {
 }
 
 impl TemplateExchange {
+    /// Returns path_id for use in URLs (backward compatible)
     pub fn exchange_id(&self) -> i64 {
-        self.info.exchange_id
+        self.info.path_id
     }
 
     pub fn restricted_add(&self) -> bool {

@@ -5,12 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Exchange</title>
     <script src="/-static/htmx.js"></script>
-    <script src="/-static/_hyperscript.js"></script>
+    <script src="/-static/alpine.js" defer></script>
     <link href="/-static/exchange/css/styles.css" rel="stylesheet">
   </head>
-  <body hx-headers='{"X-CSRFToken": "<%= csrftoken %>"}'>
+  <body hx-headers='{"X-CSRFToken": "<%= self.csrftoken %>"}'>
 
-    <%+ NavigationBar {exchange: &exchange, user: &user} %>
+    <%+ NavigationBar {exchange: self.exchange, user: self.user} %>
 
     <!-- PAGE SPECIFIC CONTENT -->
     <div class="o-wrapper u-pt u-pb-lg ss-data">
@@ -72,7 +72,7 @@
                   <div class="left-icon">
                     <img src="https://static.scistarter.org/img/data/robot-cog.svg" alt="robot in cog icon" class="big-icon" />
                     <div class="data-numbers">
-                      <h2><%= overview.entity_count %></h2>
+                      <h2><%= self.overview.entity_count %></h2>
                       <h3>Projects added through your exchange</h3>
                     </div>
                   </div>
@@ -83,14 +83,14 @@
                     <div class="left-icon push">
                       <img src="https://static.scistarter.org/img/data/inperson.svg" alt="hiking icon" />
                       <div class="data-numbers">
-                        <h2><%= overview.in_person_count %></h2>
+                        <h2><%= self.overview.in_person_count %></h2>
                         <h3>In person, in a place</h3>
                       </div>
                     </div>
                     <div class="bar">
                       <div class="bar-wrapper">
                         <div class="bar-outer">
-                          <div class="bar-inner" style="width: <%= percent(overview.in_person_count, overview.entity_count) %>%;"></div>
+                          <div class="bar-inner" style="width: <%= percent(self.overview.in_person_count, self.overview.entity_count) %>%;"></div>
                         </div>
                       </div>
                     </div>
@@ -99,14 +99,14 @@
                     <div class="left-icon push">
                       <img src="https://static.scistarter.org/img/data/online.svg" alt="computer icon" />
                       <div class="data-numbers">
-                        <h2><%= overview.online_count %></h2>
+                        <h2><%= self.overview.online_count %></h2>
                         <h3>Online only</h3>
                       </div>
                     </div>
                     <div class="bar">
                       <div class="bar-wrapper">
                         <div class="bar-outer">
-                          <div class="bar-inner" style="width: <%= percent(overview.online_count, overview.entity_count) %>%;"></div>
+                          <div class="bar-inner" style="width: <%= percent(self.overview.online_count, self.overview.entity_count) %>%;"></div>
                         </div>
                       </div>
                     </div>
@@ -118,14 +118,14 @@
                     <div class="left-icon push">
                       <img src="https://static.scistarter.org/img/data/global.svg" alt="globe icon" />
                       <div class="data-numbers">
-                        <h2><%= overview.global_count %></h2>
+                        <h2><%= self.overview.global_count %></h2>
                         <h3>Global</h3>
                       </div>
                     </div>
                     <div class="bar">
                       <div class="bar-wrapper">
                         <div class="bar-outer">
-                          <div class="bar-inner" style="width: <%= percent(overview.global_count, overview.entity_count) %>%;"></div>
+                          <div class="bar-inner" style="width: <%= percent(self.overview.global_count, self.overview.entity_count) %>%;"></div>
                         </div>
                       </div>
                     </div>
@@ -134,14 +134,14 @@
                     <div class="left-icon push">
                       <img src="https://static.scistarter.org/img/data/region.svg" alt="region icon" />
                       <div class="data-numbers">
-                        <h2><%= overview.near_count %></h2>
+                        <h2><%= self.overview.near_count %></h2>
                         <h3>In a region</h3>
                       </div>
                     </div>
                     <div class="bar">
                       <div class="bar-wrapper">
                         <div class="bar-outer">
-                          <div class="bar-inner" style="width: <%= percent(overview.near_count, overview.entity_count) %>%;"></div>
+                          <div class="bar-inner" style="width: <%= percent(self.overview.near_count, self.overview.entity_count) %>%;"></div>
                         </div>
                       </div>
                     </div>
@@ -150,14 +150,14 @@
                     <div class="left-icon push">
                       <img src="https://static.scistarter.org/img/data/point.svg" alt="map marker icon" />
                       <div class="data-numbers">
-                        <h2><%= overview.at_count %></h2>
+                        <h2><%= self.overview.at_count %></h2>
                         <h3>At a point location</h3>
                       </div>
                     </div>
                     <div class="bar">
                       <div class="bar-wrapper">
                         <div class="bar-outer">
-                          <div class="bar-inner" style="width: <%= percent(overview.at_count, overview.entity_count) %>%;"></div>
+                          <div class="bar-inner" style="width: <%= percent(self.overview.at_count, self.overview.entity_count) %>%;"></div>
                         </div>
                       </div>
                     </div>
@@ -172,8 +172,8 @@
               <a href="javascript:void(0);" class="d2t--close">&times;</a>
               <h3>Engagement</h3>
             </div>
-            <div class="d2t--content" hx-target="this">
-              <%+ engagement %>
+            <div class="d2t--content" hx-get="/exchange/<%= self.exchange.exchange_id() %>/engagement" hx-trigger="intersect once" hx-target="this">
+              <p>Loading engagement data...</p>
             </div>
           </div>
         </div>
@@ -187,11 +187,11 @@
 
     <!-- FOOTER - every page -->
     <footer>
-      <% if !exchange.restricted_add() || exchange.user_is_authorized() { %>
+      <% if !self.exchange.restricted_add() || self.exchange.user_is_authorized() { %>
       <a class="btn btn-secondary"  data-custom-open="add-modal"><span>+</span> Add a Project or Event</a>
       <% } %>
-      <div><a href="/login?next=<%= encode(&format!("/exchange/{}/data.html", exchange.exchange_id))|disp %>">Log In</a> | <a href="/login?action=signup&next=<%= encode(&format!("/exchange/{}/data.html", exchange.exchange_id))|disp %>">Sign Up</a></div>
-      <p class="powered-by">powered by <img src="/-static/img/scistarter-logo-web-r.svg" alt="SciStarter" /></p>
+      <div><a href="/login?next=<%= self.encode(&format!("/exchange/{}/data.html", self.exchange.exchange_id()))|disp %>">Log In</a> | <a href="/login?action=signup&next=<%= self.encode(&format!("/exchange/{}/data.html", self.exchange.exchange_id()))|disp %>">Sign Up</a></div>
+      <p class="powered-by">powered by <img src="/-static/img/logo/svg/Standard__tagline-dark.svg" alt="SciStarter" /></p>
       <div style="height: 8rem"></div>
     </footer>
     <!-- END FOOTER -->
@@ -203,7 +203,7 @@
           <header class="modal__header">
               <div>
               <h2 class="modal__title" id="add-modal-title">Add a Citizen Science Project or Event</h2>
-              <p class="powered-by">powered by <img src="/img/scistarter-logo-web-r.svg" alt="SciStarter" /></p>
+              <p class="powered-by">powered by <img src="/-static/img/logo/svg/Standard__tagline-dark.svg" alt="SciStarter" /></p>
               <p>You will be taken from this website to the <a href="https://scistarter.org">SciStarter</a> website to enter your project, event, or tool. Once approved, it will be available on SciStarter and in any SciStarter partner websites where it meets the criteria to display.</p>
           </div>
               <button class="modal__close" aria-label="Close modal" data-micromodal-close></button>
@@ -213,15 +213,15 @@
                   <img src="/img/microscope.svg" alt="microscope icon" />
                   <h3>Add a Citizen Science Project</h3>
                   <p>Projects are typically  long term initiatives that may crowdsource data collection or analysis.</p>
-                  <a href="https://scistarter.org/add-project?exchange=<%= exchange.exchange_id %>" class="modal__btn modal__btn-primary"><span class="plus">+</span> Add a Project</a>
+                  <a href="https://scistarter.org/add-project?exchange=<%= self.exchange.exchange_id() %>" class="modal__btn modal__btn-primary"><span class="plus">+</span> Add a Project</a>
                   <p><a href="https://scistarter.org/finder">Visit SciStarter Projects Page</a></p>
               </div>
               <div>
                   <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon entity__tab-icon" style="fill: currentcolor;"><use xlink:href="/img/icons.svg#icon--db-events"></use></svg>
                   <h3>Add a Citizen Science Event</h3>
                   <p>Events are typically short term (possibly reoccurring) events with known start and end times and may focus on trainings, meet-ups, and other activities related to a citizen science project.</p>
-                  <a  href="https://scistarter.org/add-event?exchange=<%= exchange.exchange_id %>" class="modal__btn modal__btn-primary"><span class="plus">+</span> Add an Event</a>
-                  <p><a href="https://scistarter.org/events">Visit SciStarter Events Page</a></p> 
+                  <a  href="https://scistarter.org/add-event?exchange=<%= self.exchange.exchange_id() %>" class="modal__btn modal__btn-primary"><span class="plus">+</span> Add an Event</a>
+                  <p><a href="https://scistarter.org/events">Visit SciStarter Events Page</a></p>
               </div>
           </main>
           </div>

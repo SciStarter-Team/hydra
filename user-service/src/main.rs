@@ -1117,6 +1117,7 @@ async fn main() {
 
     let search = service.group("user.search");
     toplevel.spawn(handler!(search, "by_handle", users::search_by_handle));
+    toplevel.spawn(handler!(search, "by_email", users::user_by_email));
     toplevel.spawn(handler!(search, "recipients", recipient_search::search));
 
     let session = service.group("user.session");
@@ -1201,6 +1202,11 @@ async fn main() {
     toplevel.spawn(handler!(permissions, "grant", permissions::grant_permission));
     toplevel.spawn(handler!(permissions, "revoke", permissions::revoke_permission));
     toplevel.spawn(handler!(permissions, "list", permissions::list_permissions));
+    toplevel.spawn(handler!(
+        permissions,
+        "list_by_resource",
+        permissions::list_permissions_by_resource
+    ));
 
     // User matching for API participation recording
     let user_match = service.group("user");

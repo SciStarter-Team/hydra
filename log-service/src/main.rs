@@ -119,6 +119,7 @@ async fn main() -> Result<()> {
     toplevel.spawn(recv_handler!(log_group, "join", handle_join));
     toplevel.spawn(recv_handler!(log_group, "email_event", handle_email_event));
     toplevel.spawn(recv_handler!(log_group, "exchange_event", exchange::record_exchange_event));
+    toplevel.spawn(handler!(log_group, "exchange_engagement", exchange::get_engagement_stats));
     toplevel.spawn(handler!(
         log_group,
         "clickthrough_analytics",
@@ -193,6 +194,7 @@ async fn main() -> Result<()> {
     println!("  - log.join");
     println!("  - log.email_event");
     println!("  - log.exchange_event");
+    println!("  - log.exchange_engagement");
     println!("  - log.clickthrough_analytics");
     println!("  - log.participation_analytics");
     println!("  - log.recent_activity");

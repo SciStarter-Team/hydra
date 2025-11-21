@@ -5,6 +5,7 @@ use common::{
         user::{PermissionCheckRequest, PermissionCheckResponse},
     },
     service::{request, send},
+    shared::db,
     timestring::TimeString,
 };
 use poem::{
@@ -238,7 +239,7 @@ async fn create_template_exchange(
     exchange_info: ExchangeInfo,
     auth: &Authenticated,
 ) -> Result<TemplateExchange, Error> {
-    let user_is_authorized = check_user_authorization(exchange_info.exchange_id, auth).await?;
+    let user_is_authorized = check_user_authorization(exchange_info.path_id, auth).await?;
 
     Ok(TemplateExchange {
         info: exchange_info,
@@ -317,7 +318,7 @@ impl SearchParams {
 
         for phrase in &self.phrase {
             if !phrase.is_empty() {
-                parts.push(format!("phrase={}", urlencoding::encode(phrase)));
+                parts.push(format!("phrase[]={}", urlencoding::encode(phrase)));
             }
         }
 
@@ -334,7 +335,7 @@ impl SearchParams {
         }
 
         for audience in &self.audience {
-            parts.push(format!("audience={}", urlencoding::encode(audience)));
+            parts.push(format!("audience[]={}", urlencoding::encode(audience)));
         }
 
         if self.inactive {
@@ -694,8 +695,8 @@ pub async fn exchange_home(
 
     // Build query for initial projects
     let mut query_builder = sqlx::QueryBuilder::new("");
-    build_base_where_clause(&mut query_builder, exchange.info.exchange_id, &params, false);
-    apply_search_filters(&mut query_builder, exchange.info.exchange_id, &params);
+    build_base_where_clause(&mut query_builder, exchange.info.path_id, &params, false);
+    apply_search_filters(&mut query_builder, exchange.info.path_id, &params);
 
     // Add ordering and pagination
     query_builder.push(" ORDER BY p.created DESC LIMIT ");
@@ -722,8 +723,8 @@ pub async fn exchange_home(
 
     // Get total count
     let mut count_builder = sqlx::QueryBuilder::new("");
-    build_base_where_clause(&mut count_builder, exchange.info.exchange_id, &params, true);
-    apply_search_filters(&mut count_builder, exchange.info.exchange_id, &params);
+    build_base_where_clause(&mut count_builder, exchange.info.path_id, &params, true);
+    apply_search_filters(&mut count_builder, exchange.info.path_id, &params);
 
     let (total_count,) = count_builder
         .build_query_as::<(i64,)>()
@@ -754,7 +755,7 @@ pub async fn exchange_home(
 #[handler]
 pub async fn exchange_results(
     Path(exchange_id): Path<i64>,
-    Query(params): Query<SearchParams>,
+    crate::form::QsQuery(params): crate::form::QsQuery<SearchParams>,
     auth: Authenticated,
     device: Device,
     interaction: Interaction,
@@ -786,10 +787,10 @@ pub async fn exchange_results(
     let mut query_builder = sqlx::QueryBuilder::new("");
 
     // Build base WHERE clause
-    build_base_where_clause(&mut query_builder, exchange.info.exchange_id, &params, false);
+    build_base_where_clause(&mut query_builder, exchange.info.path_id, &params, false);
 
     // Apply common search filters
-    apply_search_filters(&mut query_builder, exchange.info.exchange_id, &params);
+    apply_search_filters(&mut query_builder, exchange.info.path_id, &params);
 
     // Add ordering - use bm25() relevance for text search, otherwise creation date
     if has_text_search {
@@ -826,10 +827,10 @@ pub async fn exchange_results(
     let mut count_builder = sqlx::QueryBuilder::new("");
 
     // Build base WHERE clause for count
-    build_base_where_clause(&mut count_builder, exchange.info.exchange_id, &params, true);
+    build_base_where_clause(&mut count_builder, exchange.info.path_id, &params, true);
 
     // Add same filters as main query
-    apply_search_filters(&mut count_builder, exchange.info.exchange_id, &params);
+    apply_search_filters(&mut count_builder, exchange.info.path_id, &params);
 
     let (total_count,) = count_builder
         .build_query_as::<(i64,)>()
@@ -855,7 +856,7 @@ pub async fn exchange_results(
 #[handler]
 pub async fn exchange_csv(
     Path(exchange_id): Path<i64>,
-    Query(params): Query<SearchParams>,
+    crate::form::QsQuery(params): crate::form::QsQuery<SearchParams>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, Error> {
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
@@ -888,8 +889,8 @@ pub async fn exchange_csv(
     let mut query_builder = sqlx::QueryBuilder::new("");
 
     // Build base WHERE clause (no pagination - get all results)
-    build_base_where_clause(&mut query_builder, exchange.exchange_id, &params, false);
-    apply_search_filters(&mut query_builder, exchange.exchange_id, &params);
+    build_base_where_clause(&mut query_builder, exchange.path_id, &params, false);
+    apply_search_filters(&mut query_builder, exchange.path_id, &params);
 
     // Add ordering (same as search results)
     if has_text_search {
@@ -937,32 +938,364 @@ pub async fn exchange_csv(
 }
 
 #[derive(TemplateOnce)]
-#[template(path = "exchange/admin.stpl.html")]
-struct ExchangeAdminPage {
-    exchange: ExchangeInfo,
-    predefined_searches: Vec<super::PredefinedSearch>,
+#[template(path = "exchange/org.stpl.html")]
+struct ExchangeOrgPage {
+    exchange: Exchange,
+    template_exchange: TemplateExchange,
+    user: TemplateUser,
+    csrftoken: String,
+    regions: Vec<(i64, String)>,
+    owner: Option<StaffMember>,
+    staff: Vec<StaffMember>,
+    pending: Vec<PendingProject>,
+}
+
+#[derive(Clone)]
+struct StaffMember {
+    user_id: Ulid,
+    name: String,
+    email: String,
+}
+
+impl StaffMember {
+    fn to_html(&self, exchange_id: i64) -> String {
+        // Use simple HTML entity encoding for quotes and angle brackets
+        let name = self.name.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;");
+        let email = self.email.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;");
+
+        format!(
+            r#"<div class="org-item oi-line">
+                <span class="label">{}</span>
+                <p><a href="mailto:{}">{}</a></p>
+                <button type="button" hx-delete="/exchange/{}/staff/{}" hx-target="closest .org-item" hx-swap="outerHTML" class="oi-remove-item oi-actions">remove</button>
+            </div>"#,
+            name,
+            email,
+            email,
+            exchange_id,
+            self.user_id
+        )
+    }
+}
+
+#[derive(Clone)]
+struct PendingProject {
+    project_id: Ulid,
+    name: String,
+    slug: Option<String>,
+}
+
+impl PendingProject {
+    fn to_html(&self, exchange_id: i64) -> String {
+        let name = self.name.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;");
+
+        // Build project URL - use slug if available, otherwise use project_id
+        let project_url = if let Some(slug) = &self.slug {
+            format!("/exchange/{}/{}/project.html", exchange_id, slug)
+        } else {
+            format!("/exchange/{}/{}/project.html", exchange_id, self.project_id)
+        };
+
+        format!(
+            r#"<div class="org-item oi-line" style="gap: 8px;">
+                <span class="label"><a href="{}" target="_blank" style="color: inherit; text-decoration: underline;">{}</a></span>
+                <div style="display: flex; gap: 8px;">
+                    <button type="button" style="width: auto; min-width: 80px; height: 32px; padding: 0 12px; line-height: 1;" hx-post="/exchange/{}/projects/{}/approve" hx-target="closest .org-item" hx-swap="outerHTML" class="el-button el-button--primary">Approve</button>
+                    <button type="button" style="width: auto; min-width: 80px; height: 32px; padding: 0 12px; line-height: 1;" hx-delete="/exchange/{}/projects/{}/reject" hx-target="closest .org-item" hx-swap="outerHTML" class="el-button el-button--danger">Reject</button>
+                </div>
+            </div>"#,
+            project_url,
+            name,
+            exchange_id,
+            self.project_id,
+            exchange_id,
+            self.project_id
+        )
+    }
+}
+
+fn percent(num: i32, den: i32) -> i32 {
+    if num == 0 {
+        0
+    } else if den == 0 {
+        100
+    } else {
+        (((num as f32) / (den as f32)) * 100.0) as i32
+    }
+}
+
+#[derive(Default)]
+struct DataOverview {
+    pub entity_count: i32,
+    pub in_person_count: i32,
+    pub online_count: i32,
+    pub global_count: i32,
+    pub near_count: i32,
+    pub at_count: i32,
+}
+
+impl DataOverview {
+    async fn load_for_exchange(exchange_id: Ulid) -> Result<Self, Error> {
+        let exchange_id_str = exchange_id.to_string();
+
+        // Count total published projects associated with this exchange
+        let entity_count = sqlx::query_scalar!(
+            r#"
+            SELECT COUNT(*) as "count!: i32"
+            FROM projects p
+            INNER JOIN entities e ON e.target = p.project_id AND e.kind = 'Project' AND e.publish = 1
+            WHERE p.exchange = ?
+            "#,
+            exchange_id_str
+        )
+        .fetch_one(db())
+        .await?;
+
+        // Count in-person projects (where in_person = true)
+        let in_person_count = sqlx::query_scalar!(
+            r#"
+            SELECT COUNT(*) as "count!: i32"
+            FROM projects p
+            INNER JOIN entities e ON e.target = p.project_id AND e.kind = 'Project' AND e.publish = 1
+            WHERE p.exchange = ? AND p.in_person = 1
+            "#,
+            exchange_id_str
+        )
+        .fetch_one(db())
+        .await?;
+
+        // Count online-only projects (where entirely_online = true AND in_person = false)
+        let online_count = sqlx::query_scalar!(
+            r#"
+            SELECT COUNT(*) as "count!: i32"
+            FROM projects p
+            INNER JOIN entities e ON e.target = p.project_id AND e.kind = 'Project' AND e.publish = 1
+            WHERE p.exchange = ? AND p.entirely_online = 1 AND (p.in_person = 0 OR p.in_person IS NULL)
+            "#,
+            exchange_id_str
+        )
+        .fetch_one(db())
+        .await?;
+
+        // Count by geographic scope based on location_type
+        let global_count = sqlx::query_scalar!(
+            r#"
+            SELECT COUNT(*) as "count!: i32"
+            FROM projects p
+            INNER JOIN entities e ON e.target = p.project_id AND e.kind = 'Project' AND e.publish = 1
+            WHERE p.exchange = ? AND p.location_type = 'Global, anywhere on the planet'
+            "#,
+            exchange_id_str
+        )
+        .fetch_one(db())
+        .await?;
+
+        let near_count = sqlx::query_scalar!(
+            r#"
+            SELECT COUNT(*) as "count!: i32"
+            FROM projects p
+            INNER JOIN entities e ON e.target = p.project_id AND e.kind = 'Project' AND e.publish = 1
+            WHERE p.exchange = ? AND p.location_type = 'In a geographic location or range'
+            "#,
+            exchange_id_str
+        )
+        .fetch_one(db())
+        .await?;
+
+        let at_count = sqlx::query_scalar!(
+            r#"
+            SELECT COUNT(*) as "count!: i32"
+            FROM projects p
+            INNER JOIN entities e ON e.target = p.project_id AND e.kind = 'Project' AND e.publish = 1
+            WHERE p.exchange = ? AND p.location_type = 'At a specific address'
+            "#,
+            exchange_id_str
+        )
+        .fetch_one(db())
+        .await?;
+
+        Ok(DataOverview {
+            entity_count,
+            in_person_count,
+            online_count,
+            global_count,
+            near_count,
+            at_count,
+        })
+    }
+}
+
+/// Exchange data dashboard page
+#[handler]
+pub async fn exchange_data(
+    Path(exchange_id): Path<i64>,
+    session: &poem::session::Session,
+    auth: Authenticated,
+) -> Result<poem::Response, Error> {
+    let exchange_info = ExchangeInfo::load_by_id(exchange_id).await?;
+    let exchange = create_template_exchange(exchange_info, &auth).await?;
+
+    // Get CSRF token
+    let csrftoken = session
+        .get::<String>("csrftoken")
+        .unwrap_or_else(|| "".to_string());
+
+    // Load actual data from database
+    let overview = DataOverview::load_for_exchange(exchange.info.exchange_id).await?;
+
+    #[derive(TemplateOnce)]
+    #[template(path = "exchange/data.stpl.html")]
+    struct ExchangeDataPage<'a> {
+        exchange: &'a TemplateExchange,
+        user: &'a TemplateUser,
+        csrftoken: String,
+        overview: DataOverview,
+    }
+
+    impl ExchangeDataPage<'_> {
+        fn encode(&self, s: &str) -> String {
+            urlencoding::encode(s).to_string()
+        }
+    }
+
+    let page = ExchangeDataPage {
+        exchange: &exchange,
+        user: &TemplateUser(auth.0),
+        csrftoken,
+        overview,
+    };
+
+    Ok(Html(page.render_once()?).into_response())
+}
+
+/// Exchange engagement tab (HTMX endpoint)
+#[handler]
+pub async fn exchange_engagement(
+    Path(exchange_id): Path<i64>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Result<poem::Response, Error> {
+    use common::message::log::{ExchangeEngagementRequest, ExchangeEngagementResponse};
+    use common::service::request;
+
+    let exchange_info = ExchangeInfo::load_by_id(exchange_id).await?;
+
+    // Parse year from query params
+    let year = params.get("year")
+        .and_then(|y| y.parse::<i32>().ok())
+        .filter(|y| *y > 0);
+
+    // Request engagement data from log service
+    let response: ExchangeEngagementResponse = request(
+        "log.exchange_engagement",
+        ExchangeEngagementRequest {
+            exchange_id: exchange_info.exchange_id.to_string(),
+            year,
+        },
+    )
+    .await?;
+
+    // Get project details for top projects
+    let top_views = fetch_project_details(&response.top_views).await?;
+    let top_saves = fetch_project_details(&response.top_saves).await?;
+
+    #[derive(TemplateOnce)]
+    #[template(path = "exchange/engagement.stpl.html")]
+    struct EngagementContent {
+        exchange_id: i64,
+        selected_year: i32,
+        selected_year_display: String,
+        available_years: Vec<i32>,
+        exchange_visits: i32,
+        visitors: i32,
+        views: i32,
+        saves: i32,
+        clickthroughs: i32,
+        contributions: i32,
+        top_views: Vec<(String, String, String, i32)>,
+        top_saves: Vec<(String, String, String, i32)>,
+    }
+
+    let selected_year_display = if let Some(y) = year {
+        y.to_string()
+    } else {
+        "All Time".to_string()
+    };
+
+    let content = EngagementContent {
+        exchange_id,
+        selected_year: year.unwrap_or(0),
+        selected_year_display,
+        available_years: response.available_years,
+        exchange_visits: response.exchange_visits,
+        visitors: response.visitors,
+        views: response.views,
+        saves: response.saves,
+        clickthroughs: response.clickthroughs,
+        contributions: response.contributions,
+        top_views,
+        top_saves,
+    };
+
+    Ok(Html(content.render_once()?).into_response())
+}
+
+async fn fetch_project_details(
+    project_counts: &[common::message::log::ProjectCount],
+) -> Result<Vec<(String, String, String, i32)>, Error> {
+    use sqlx::Row;
+
+    let mut results = Vec::new();
+
+    for pc in project_counts {
+        // Query project details from database
+        let row = sqlx::query(
+            r#"
+            SELECT name, description, image
+            FROM projects
+            WHERE project_id = ?
+            "#,
+        )
+        .bind(&pc.project_id)
+        .fetch_optional(db())
+        .await?;
+
+        if let Some(row) = row {
+            let name: String = row.try_get("name").unwrap_or_else(|_| "Unknown Project".to_string());
+            let description: String = row.try_get("description").unwrap_or_default();
+            let image: String = row.try_get("image").unwrap_or_default();
+
+            results.push((name, description, image, pc.count));
+        }
+    }
+
+    Ok(results)
 }
 
 /// Exchange admin page
 #[handler]
 pub async fn exchange_admin(
     Path(exchange_id): Path<i64>,
+    session: &poem::session::Session,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, Error> {
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
     let exchange = ExchangeInfo::load_by_id(exchange_id).await?;
 
-    // Check permission via user-service
-    let has_permission = request::<PermissionCheckResponse>(
-        "user.permissions.check",
-        PermissionCheckRequest {
-            user_id: user_info.user_id.to_string(),
-            resource_type: "exchange".to_string(),
-            resource_id: exchange.exchange_id.to_string(),
-        },
-    )
-    .await?
-    .has_permission;
+    // Check permission - staff/superuser OR exchange-specific permission
+    let has_permission = if user_info.is_staff || user_info.is_superuser {
+        true
+    } else {
+        request::<PermissionCheckResponse>(
+            "user.permissions.check",
+            PermissionCheckRequest {
+                user_id: user_info.user_id.to_string(),
+                resource_type: "exchange".to_string(),
+                resource_id: exchange.exchange_id.to_string(),
+            },
+        )
+        .await?
+        .has_permission
+    };
 
     if !has_permission {
         return Ok(poem::Response::builder()
@@ -970,12 +1303,100 @@ pub async fn exchange_admin(
             .body("Forbidden"));
     }
 
-    // Load predefined searches for admin UI
-    let predefined_searches = exchange.get_predefined_searches().await?;
+    // Get CSRF token
+    let csrftoken = session
+        .get::<String>("csrftoken")
+        .unwrap_or_else(|| "".to_string());
 
-    let page = ExchangeAdminPage {
-        exchange,
-        predefined_searches,
+    // Load regions (simplified - would load from database in full implementation)
+    let regions = vec![]; // TODO: load actual regions
+
+    // Load full exchange for editing
+    let exchange_full = Exchange::load(exchange.exchange_id).await?;
+
+    // Create template exchange for navigation
+    let template_exchange = TemplateExchange {
+        info: exchange.clone(),
+        user_is_authorized: true, // Already checked above
+    };
+
+    // Load existing staff from permissions
+    let permissions_response = request::<common::message::user::PermissionListByResourceResponse>(
+        "user.permissions.list_by_resource",
+        common::message::user::PermissionListByResourceRequest {
+            resource_type: "exchange".to_string(),
+            resource_id: exchange_id.to_string(),
+        },
+    )
+    .await?;
+
+    // Extract user IDs and batch fetch user info
+    let user_ids: Vec<Ulid> = permissions_response
+        .permissions
+        .iter()
+        .filter_map(|perm| Ulid::from_string(&perm.user_id).ok())
+        .collect();
+
+    let mut staff = Vec::new();
+    if !user_ids.is_empty() {
+        match request::<common::message::user::AdminUserBatchGetResponse>(
+            "user.admin.user_batch_get",
+            common::message::user::AdminUserBatchGetRequest { user_ids: user_ids.clone() },
+        )
+        .await
+        {
+            Ok(user_batch_response) => {
+                for user_mapping in user_batch_response.users {
+                    staff.push(StaffMember {
+                        user_id: user_mapping.user_id,
+                        name: user_mapping.primary_email.clone(), // Use email as name for now
+                        email: user_mapping.primary_email,
+                    });
+                }
+            }
+            Err(_e) => {
+                // Failed to fetch user details, but continue
+            }
+        }
+    }
+
+    // Load pending projects for approval
+    // Projects that need approval are those with exchange set and reviewed = 0
+    let exchange_id_str = exchange.exchange_id.to_string();
+    let pending_rows = sqlx::query!(
+        r#"
+        SELECT p.project_id, p.name, e.slug
+        FROM projects p
+        LEFT JOIN entities e ON e.kind = 'Project' AND e.target = p.project_id
+        WHERE p.exchange = ?
+          AND p.reviewed = 0
+        ORDER BY p.name
+        "#,
+        exchange_id_str
+    )
+    .fetch_all(db())
+    .await?;
+
+    let pending: Vec<PendingProject> = pending_rows
+        .into_iter()
+        .filter_map(|row| {
+            Ulid::from_string(&row.project_id).ok().map(|project_id| PendingProject {
+                project_id,
+                name: row.name,
+                slug: row.slug,
+            })
+        })
+        .collect();
+
+    let page = ExchangeOrgPage {
+        exchange: exchange_full,
+        template_exchange,
+        user: TemplateUser(Some(user_info)),
+        csrftoken,
+        regions,
+        owner: None, // TODO: determine from exchange ownership
+        staff,
+        pending,
     };
 
     Ok(Html(page.render_once()?).into_response())
@@ -998,26 +1419,40 @@ struct ExchangeSettingsForm {
 /// Update exchange settings (uses LoadStorePeered for write)
 #[handler]
 pub async fn exchange_update_settings(
-    Path(exchange_id): Path<i64>,
+    Path(path_id): Path<i64>,
     form: poem::web::Form<ExchangeSettingsForm>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, Error> {
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
 
+    // Look up exchange_id from path_id
+    let exchange_id_str = sqlx::query_scalar!(
+        "SELECT exchange_id FROM exchanges WHERE path_id = ?",
+        path_id
+    )
+    .fetch_one(db())
+    .await?;
+
+    let exchange_id = Ulid::from_string(&exchange_id_str)?;
+
     // Load full Exchange via LoadStorePeered for modification
     let mut exchange = Exchange::load(exchange_id).await?;
 
-    // Check permission
-    let has_permission = request::<PermissionCheckResponse>(
-        "user.permissions.check",
-        PermissionCheckRequest {
-            user_id: user_info.user_id.to_string(),
-            resource_type: "exchange".to_string(),
-            resource_id: exchange.exchange_id.to_string(),
-        },
-    )
-    .await?
-    .has_permission;
+    // Check permission - staff/superuser OR exchange-specific permission
+    let has_permission = if user_info.is_staff || user_info.is_superuser {
+        true
+    } else {
+        request::<PermissionCheckResponse>(
+            "user.permissions.check",
+            PermissionCheckRequest {
+                user_id: user_info.user_id.to_string(),
+                resource_type: "exchange".to_string(),
+                resource_id: exchange.exchange_id.to_string(),
+            },
+        )
+        .await?
+        .has_permission
+    };
 
     if !has_permission {
         return Ok(poem::Response::builder()
@@ -1035,8 +1470,6 @@ pub async fn exchange_update_settings(
     } else {
         Some(form.custom_css.clone())
     };
-
-    exchange.updated = TimeString::now();
 
     // Use LoadStorePeered to save and broadcast to peers
     exchange.store().await?;
@@ -1057,27 +1490,86 @@ struct PredefinedSearchForm {
     audience: String, // Comma-separated audience types
 }
 
+/// Get empty predefined search form row
+#[handler]
+pub async fn get_predefined_search_form(
+    Path(exchange_id): Path<i64>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, Error> {
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+
+    // Check permission - staff/superuser OR exchange-specific permission
+    let has_permission = if user_info.is_staff || user_info.is_superuser {
+        true
+    } else {
+        request::<PermissionCheckResponse>(
+            "user.permissions.check",
+            PermissionCheckRequest {
+                user_id: user_info.user_id.to_string(),
+                resource_type: "exchange".to_string(),
+                resource_id: exchange_id.to_string(),
+            },
+        )
+        .await?
+        .has_permission
+    };
+
+    if !has_permission {
+        return Ok(poem::Response::builder()
+            .status(poem::http::StatusCode::FORBIDDEN)
+            .body("Forbidden"));
+    }
+
+    // Return an editable form row
+    let html = format!(
+        r#"<div style="gap: 8px;">
+            <span></span>
+            <input type="text" name="name" placeholder="Label" />
+            <input type="text" name="phrase" placeholder="Search terms" />
+            <button type="button" style="width: auto; min-width: 80px; height: 32px; padding: 0 12px; line-height: 1;" hx-post="/exchange/{}/predefined-search" hx-include="closest div" hx-target="closest div" hx-swap="outerHTML">Save</button>
+            <button type="button" style="width: auto; min-width: 80px; height: 32px; padding: 0 12px; line-height: 1;" onclick="this.closest('div').remove()">Cancel</button>
+        </div>"#,
+        exchange_id
+    );
+
+    Ok(Html(html).into_response())
+}
+
 /// Create predefined search (uses LoadStorePeered for write)
 #[handler]
 pub async fn create_predefined_search(
-    Path(exchange_id): Path<i64>,
+    Path(path_id): Path<i64>,
     form: poem::web::Form<PredefinedSearchForm>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, Error> {
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+
+    // Look up exchange_id from path_id
+    let exchange_id_str = sqlx::query_scalar!(
+        "SELECT exchange_id FROM exchanges WHERE path_id = ?",
+        path_id
+    )
+    .fetch_one(db())
+    .await?;
+
+    let exchange_id = Ulid::from_string(&exchange_id_str)?;
     let mut exchange = Exchange::load(exchange_id).await?;
 
-    // Check permission
-    let has_permission = request::<PermissionCheckResponse>(
-        "user.permissions.check",
-        PermissionCheckRequest {
-            user_id: user_info.user_id.to_string(),
-            resource_type: "exchange".to_string(),
-            resource_id: exchange.exchange_id.to_string(),
-        },
-    )
-    .await?
-    .has_permission;
+    // Check permission - staff/superuser OR exchange-specific permission
+    let has_permission = if user_info.is_staff || user_info.is_superuser {
+        true
+    } else {
+        request::<PermissionCheckResponse>(
+            "user.permissions.check",
+            PermissionCheckRequest {
+                user_id: user_info.user_id.to_string(),
+                resource_type: "exchange".to_string(),
+                resource_id: exchange.exchange_id.to_string(),
+            },
+        )
+        .await?
+        .has_permission
+    };
 
     if !has_permission {
         return Ok(poem::Response::builder()
@@ -1128,34 +1620,65 @@ pub async fn create_predefined_search(
         display_order: next_order,
     };
 
+    let search_id = new_search.search_id;
+    let search_name = new_search.name.clone();
+    let phrase = new_search.search_params.phrase.first().cloned().unwrap_or_default();
+
     exchange.predefined_searches.push(new_search);
-    exchange.updated = TimeString::now();
     exchange.store().await?;
 
-    Ok(Redirect::see_other(format!("/exchange/{}/org.html", exchange.exchange_id)).into_response())
+    // Return HTML for the new search item
+    let html = format!(
+        r#"<div style="gap: 8px;">
+            <span></span>
+            <input type="text" value="{}" readonly />
+            <input type="text" value="{}" readonly />
+            <button type="button" style="width: auto; min-width: 80px; height: 32px; padding: 0 12px; line-height: 1;" hx-delete="/exchange/{}/predefined-search/{}" hx-target="closest div" hx-swap="outerHTML">Delete</button>
+        </div>"#,
+        search_name.replace('"', "&quot;"),
+        phrase.replace('"', "&quot;"),
+        exchange_id,
+        search_id
+    );
+
+    Ok(Html(html).into_response())
 }
 
 /// Delete predefined search (uses LoadStorePeered for write)
 #[handler]
 pub async fn delete_predefined_search(
-    Path((exchange_id, search_id_str)): Path<(i64, String)>,
+    Path((path_id, search_id_str)): Path<(i64, String)>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, Error> {
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
     let search_id = Ulid::from_string(&search_id_str)?;
+
+    // Look up exchange_id from path_id
+    let exchange_id_str = sqlx::query_scalar!(
+        "SELECT exchange_id FROM exchanges WHERE path_id = ?",
+        path_id
+    )
+    .fetch_one(db())
+    .await?;
+
+    let exchange_id = Ulid::from_string(&exchange_id_str)?;
     let mut exchange = Exchange::load(exchange_id).await?;
 
-    // Check permission
-    let has_permission = request::<PermissionCheckResponse>(
-        "user.permissions.check",
-        PermissionCheckRequest {
-            user_id: user_info.user_id.to_string(),
-            resource_type: "exchange".to_string(),
-            resource_id: exchange.exchange_id.to_string(),
-        },
-    )
-    .await?
-    .has_permission;
+    // Check permission - staff/superuser OR exchange-specific permission
+    let has_permission = if user_info.is_staff || user_info.is_superuser {
+        true
+    } else {
+        request::<PermissionCheckResponse>(
+            "user.permissions.check",
+            PermissionCheckRequest {
+                user_id: user_info.user_id.to_string(),
+                resource_type: "exchange".to_string(),
+                resource_id: exchange.exchange_id.to_string(),
+            },
+        )
+        .await?
+        .has_permission
+    };
 
     if !has_permission {
         return Ok(poem::Response::builder()
@@ -1168,10 +1691,346 @@ pub async fn delete_predefined_search(
         .predefined_searches
         .retain(|s| s.search_id != search_id);
 
-    exchange.updated = TimeString::now();
     exchange.store().await?;
 
-    Ok(Html("Deleted").into_response())
+    // Return empty content - HTMX will swap and remove the element
+    Ok(Html("").into_response())
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct AddStaffForm {
+    emails: String,
+}
+
+/// Add staff members to exchange
+#[handler]
+pub async fn add_exchange_staff(
+    Path(exchange_id): Path<i64>,
+    form: poem::web::Form<AddStaffForm>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, Error> {
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+
+    // Check permission - staff/superuser OR exchange-specific permission
+    let has_permission = if user_info.is_staff || user_info.is_superuser {
+        true
+    } else {
+        request::<PermissionCheckResponse>(
+            "user.permissions.check",
+            PermissionCheckRequest {
+                user_id: user_info.user_id.to_string(),
+                resource_type: "exchange".to_string(),
+                resource_id: exchange_id.to_string(),
+            },
+        )
+        .await?
+        .has_permission
+    };
+
+    if !has_permission {
+        return Ok(poem::Response::builder()
+            .status(poem::http::StatusCode::FORBIDDEN)
+            .body("Forbidden"));
+    }
+
+    // Parse emails from comma-separated list
+    let emails: Vec<String> = form
+        .emails
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    let mut added_staff = Vec::new();
+
+    for email in emails {
+        // Look up user by email
+        if let Ok(user_response) = request::<common::message::user::UserByEmailResponse>(
+            "user.search.by_email",
+            common::message::user::UserByEmailRequest {
+                email: email.clone(),
+            },
+        )
+        .await
+        {
+            if user_response.found {
+                if let (Some(user_id_str), Some(first_name), Some(last_name), Some(found_email)) =
+                    (user_response.user_id, user_response.first_name, user_response.last_name, user_response.email)
+                {
+                    // Grant permission
+                    match request::<()>(
+                        "user.permissions.grant",
+                        common::message::user::PermissionGrantRequest {
+                            user_id: user_id_str.clone(),
+                            resource_type: "exchange".to_string(),
+                            resource_id: exchange_id.to_string(),
+                            permission: "manage".to_string(),
+                            granted_by: user_info.user_id.to_string(),
+                        },
+                    )
+                    .await
+                    {
+                        Ok(_) => {}
+                        Err(_e) => {
+                            continue; // Skip adding to the list if grant failed
+                        }
+                    }
+
+                    // Parse user_id as ULID for display
+                    if let Ok(user_ulid) = Ulid::from_string(&user_id_str) {
+                        let display_name = format!("{} {}", first_name, last_name).trim().to_string();
+                        let display_name = if display_name.is_empty() {
+                            user_response.handle.unwrap_or_default()
+                        } else {
+                            display_name
+                        };
+
+                        added_staff.push(StaffMember {
+                            user_id: user_ulid,
+                            name: display_name,
+                            email: found_email,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // Render all staff members as HTML
+    let html_output: String = added_staff
+        .iter()
+        .map(|member| member.to_html(exchange_id))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    Ok(Html(html_output).into_response())
+}
+
+/// Remove staff member from exchange
+#[handler]
+pub async fn remove_exchange_staff(
+    Path((exchange_id, user_id_str)): Path<(i64, String)>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, Error> {
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+
+    // Check permission - staff/superuser OR exchange-specific permission
+    let has_permission = if user_info.is_staff || user_info.is_superuser {
+        true
+    } else {
+        request::<PermissionCheckResponse>(
+            "user.permissions.check",
+            PermissionCheckRequest {
+                user_id: user_info.user_id.to_string(),
+                resource_type: "exchange".to_string(),
+                resource_id: exchange_id.to_string(),
+            },
+        )
+        .await?
+        .has_permission
+    };
+
+    if !has_permission {
+        return Ok(poem::Response::builder()
+            .status(poem::http::StatusCode::FORBIDDEN)
+            .body("Forbidden"));
+    }
+
+    // Revoke permission
+    let _ = request::<()>(
+        "user.permissions.revoke",
+        common::message::user::PermissionRevokeRequest {
+            user_id: user_id_str,
+            resource_type: "exchange".to_string(),
+            resource_id: exchange_id.to_string(),
+        },
+    )
+    .await;
+
+    // Return empty response (HTMX will remove the element)
+    Ok(Html("").into_response())
+}
+
+/// Approve a project for an exchange
+#[handler]
+pub async fn approve_exchange_project(
+    Path((exchange_id, project_id_str)): Path<(i64, String)>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, Error> {
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+
+    // Check permission - staff/superuser OR exchange-specific permission
+    let has_permission = if user_info.is_staff || user_info.is_superuser {
+        true
+    } else {
+        request::<PermissionCheckResponse>(
+            "user.permissions.check",
+            PermissionCheckRequest {
+                user_id: user_info.user_id.to_string(),
+                resource_type: "exchange".to_string(),
+                resource_id: exchange_id.to_string(),
+            },
+        )
+        .await?
+        .has_permission
+    };
+
+    if !has_permission {
+        return Ok(poem::Response::builder()
+            .status(poem::http::StatusCode::FORBIDDEN)
+            .body("Forbidden"));
+    }
+
+    let project_id = Ulid::from_string(&project_id_str)?;
+
+    // Verify the project belongs to this exchange
+    let project_exchange = sqlx::query_scalar!(
+        r#"SELECT exchange FROM projects WHERE project_id = ?"#,
+        project_id_str
+    )
+    .fetch_optional(db())
+    .await?;
+
+    match project_exchange {
+        Some(Some(exchange_str)) if exchange_str == exchange_id.to_string() => {
+            // Project belongs to this exchange, proceed with approval
+        }
+        _ => {
+            return Ok(poem::Response::builder()
+                .status(poem::http::StatusCode::BAD_REQUEST)
+                .body("Project does not belong to this exchange"));
+        }
+    }
+
+    // Load project name for slug generation
+    let project_name = sqlx::query_scalar!(
+        r#"SELECT name FROM projects WHERE project_id = ?"#,
+        project_id_str
+    )
+    .fetch_one(db())
+    .await?;
+
+    // Check if entity already exists
+    let existing_entity = sqlx::query!(
+        r#"SELECT slug, created FROM entities WHERE kind = 'Project' AND target = ?"#,
+        project_id_str
+    )
+    .fetch_optional(db())
+    .await?;
+
+    let entity = if let Some(existing) = existing_entity {
+        // Update existing entity to publish
+        use crate::entity::{Entity, EntityKind, EntityTarget};
+        Entity::with_created(
+            existing.slug,
+            EntityKind::Project,
+            EntityTarget::Ulid(project_id),
+            true, // publish = true
+            TimeString::try_from(existing.created)?,
+        )
+    } else {
+        // Create new entity
+        use crate::entity::{Entity, EntityKind, EntityTarget};
+        Entity::new_by_name(&project_name, EntityKind::Project, EntityTarget::Ulid(project_id))
+            .await?
+    };
+
+    // Store the entity (this will create or update it with publish = true)
+    use crate::peering::LoadStorePeered;
+    entity.store().await?;
+
+    // Mark project as reviewed
+    use crate::project::field::{ProjectField, ProjectFieldValue};
+    let reviewed_field = ProjectField::new(project_id, ProjectFieldValue::Reviewed(true));
+    reviewed_field.store().await?;
+
+    tracing::info!(%project_id, exchange_id, "Approved project for exchange");
+
+    // Log the approval action
+    let _ = common::service::log_activity(
+        None,
+        "exchange-project-approve",
+        user_info.user_id,
+        Some(project_id),
+        format!("exchange={}", exchange_id),
+    )
+    .await;
+
+    // Return empty response (HTMX will remove the element)
+    Ok(Html("").into_response())
+}
+
+/// Reject a project for an exchange
+#[handler]
+pub async fn reject_exchange_project(
+    Path((exchange_id, project_id_str)): Path<(i64, String)>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, Error> {
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+
+    // Check permission - staff/superuser OR exchange-specific permission
+    let has_permission = if user_info.is_staff || user_info.is_superuser {
+        true
+    } else {
+        request::<PermissionCheckResponse>(
+            "user.permissions.check",
+            PermissionCheckRequest {
+                user_id: user_info.user_id.to_string(),
+                resource_type: "exchange".to_string(),
+                resource_id: exchange_id.to_string(),
+            },
+        )
+        .await?
+        .has_permission
+    };
+
+    if !has_permission {
+        return Ok(poem::Response::builder()
+            .status(poem::http::StatusCode::FORBIDDEN)
+            .body("Forbidden"));
+    }
+
+    let project_id = Ulid::from_string(&project_id_str)?;
+
+    // Verify the project belongs to this exchange
+    let project_exchange = sqlx::query_scalar!(
+        r#"SELECT exchange FROM projects WHERE project_id = ?"#,
+        project_id_str
+    )
+    .fetch_optional(db())
+    .await?;
+
+    match project_exchange {
+        Some(Some(exchange_str)) if exchange_str == exchange_id.to_string() => {
+            // Project belongs to this exchange, proceed with rejection
+        }
+        _ => {
+            return Ok(poem::Response::builder()
+                .status(poem::http::StatusCode::BAD_REQUEST)
+                .body("Project does not belong to this exchange"));
+        }
+    }
+
+    // Mark project as reviewed without publishing
+    // Project stays associated with exchange but won't appear in pending list
+    use crate::project::field::{ProjectField, ProjectFieldValue};
+    let reviewed_field = ProjectField::new(project_id, ProjectFieldValue::Reviewed(true));
+    reviewed_field.store().await?;
+
+    tracing::info!(%project_id, exchange_id, "Rejected project for exchange (kept association)");
+
+    // Log the rejection action
+    let _ = common::service::log_activity(
+        None,
+        "exchange-project-reject",
+        user_info.user_id,
+        Some(project_id),
+        format!("exchange={}", exchange_id),
+    )
+    .await;
+
+    // Return empty response (HTMX will remove the element)
+    Ok(Html("").into_response())
 }
 
 /// Exchange project detail page
@@ -1186,22 +2045,26 @@ pub async fn exchange_project(
     let exchange_info = ExchangeInfo::load_by_id(exchange_id).await?;
     let exchange = create_template_exchange(exchange_info.clone(), &auth).await?;
 
-    // Load project by slug
-    let project_id_row = sqlx::query!(
+    // Load project by slug - include unpublished if user is authorized
+    let project_row = sqlx::query!(
         r#"
-        SELECT p.project_id
+        SELECT p.project_id, COALESCE(ent.publish, 0) as "publish!: bool"
         FROM projects p
         LEFT JOIN entities ent ON ent.target = p.project_id AND ent.kind = 'Project'
-        WHERE ent.slug = ? AND ent.publish = 1
+        WHERE ent.slug = ?
         "#,
         project_slug
     )
     .fetch_optional(common::shared::db())
-    .await?;
+    .await?
+    .ok_or_else(|| anyhow::anyhow!("Project not found"))?;
 
-    let project_id = project_id_row
-        .ok_or_else(|| anyhow::anyhow!("Project not found"))?
-        .project_id;
+    // If project is not published, check if user is authorized for the exchange
+    if !project_row.publish && !exchange.user_is_authorized {
+        return Err(anyhow::anyhow!("Project not found"));
+    }
+
+    let project_id = project_row.project_id;
 
     // Track view
     if let Some(ref user_info) = auth.0 {
@@ -1365,10 +2228,20 @@ pub async fn vote_project(
 /// Hide project from exchange (uses LoadStorePeered for write)
 #[handler]
 pub async fn hide_project(
-    Path((exchange_id, project_slug)): Path<(i64, String)>,
+    Path((path_id, project_slug)): Path<(i64, String)>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, Error> {
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+
+    // Look up exchange_id from path_id
+    let exchange_id_str = sqlx::query_scalar!(
+        "SELECT exchange_id FROM exchanges WHERE path_id = ?",
+        path_id
+    )
+    .fetch_one(db())
+    .await?;
+
+    let exchange_id = Ulid::from_string(&exchange_id_str)?;
     let mut exchange = Exchange::load(exchange_id).await?;
 
     // Check permission
@@ -1405,7 +2278,6 @@ pub async fn hide_project(
     if let Some(row) = project_id_row {
         let project_id = Ulid::from_string(&row.project_id)?;
         exchange.hidden_projects.insert(project_id);
-        exchange.updated = TimeString::now();
         exchange.store().await?;
 
         Ok(Html("Project hidden").into_response())
@@ -1418,7 +2290,7 @@ pub async fn hide_project(
 
 /// Track analytics event
 async fn record_event(
-    exchange_id: i64,
+    exchange_id: Ulid,
     user_id: Option<Ulid>,
     device: impl AsRef<str>,
     interaction: impl AsRef<str>,

@@ -191,3 +191,28 @@ pub struct ExchangeEvent {
     pub action: String,            // "view", "search", "vote", "save"
     pub extra: Option<String>,     // JSON for additional context
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExchangeEngagementRequest {
+    pub exchange_id: String,       // ULID
+    pub year: Option<i32>,         // None = all time
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExchangeEngagementResponse {
+    pub exchange_visits: i32,
+    pub visitors: i32,
+    pub views: i32,
+    pub saves: i32,
+    pub clickthroughs: i32,       // System-wide total
+    pub contributions: i32,        // System-wide total
+    pub available_years: Vec<i32>,
+    pub top_views: Vec<ProjectCount>,
+    pub top_saves: Vec<ProjectCount>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectCount {
+    pub project_id: String,  // ULID
+    pub count: i32,
+}

@@ -5,12 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Exchange</title>
     <script src="/-static/htmx.js"></script>
-    <script src="/-static/_hyperscript.js" defer></script>
+    <script src="/-static/alpine.js" defer></script>
     <link href="/-static/exchange/css/styles.css" rel="stylesheet">
   </head>
-  <body hx-headers='{"X-CSRFToken": "<%= csrftoken %>"}'>
+  <body hx-headers='{"X-CSRFToken": "<%= self.csrftoken %>"}'>
 
-    <%+ NavigationBar {exchange: &exchange, user: &user} %>
+    <%+ NavigationBar {exchange: &self.template_exchange, user: &self.user} %>
 
     <!-- PAGE SPECIFIC CONTENT -->
     <div class="o-wrapper u-pt u-pb-lg ss-organization">
@@ -85,18 +85,20 @@
               <h3>Organizational Settings</h3>
             </div>
             <div id="settings-fields" class="d2t--content">
-              <input id=csrftoken type=hidden name=csrftoken value="<%= csrftoken %>">
+              <input id=csrftoken type=hidden name=csrftoken value="<%= self.csrftoken %>">
               <div class="org-item oi-line">
                 <span class="label">Organization</span>
-                <input hx-on:input="document.querySelector('#settings-feedback').textContent=''" type="text" name="name" value="<%= exchange.name() %>" />
+                <input hx-on:input="document.querySelector('#settings-feedback').textContent=''" type="text" name="name" value="<%= self.exchange.name %>" />
               </div>
-              <div class="org-item oi-line">
+              <!-- TODO: Implement exclude_scistarter field -->
+              <!-- <div class="org-item oi-line">
                 <span class="label">Only show organization projects</span>
-                <input hx-on:input="document.querySelector('#settings-feedback').textContent=''" type="checkbox" name="exclude_scistarter" value="true" <% if exchange.exclude_scistarter() { %>checked<% } %> />
-              </div>
-              <div class="org-item oi-line">
+                <input hx-on:input="document.querySelector('#settings-feedback').textContent=''" type="checkbox" name="exclude_scistarter" value="true" />
+              </div> -->
+              <!-- TODO: Implement search field -->
+              <!-- <div class="org-item oi-line">
                 <span class="label">Only show matching projects</span>
-                <textarea hx-on:input="document.querySelector('#settings-feedback').textContent=''" name="search"><%= exchange.search() %></textarea>
+                <textarea hx-on:input="document.querySelector('#settings-feedback').textContent=''" name="search"></textarea>
                 <small>
                   This field is for entering
                   a <a href="https://www.postgresql.org/docs/current/functions-matching.html#POSIX-SYNTAX-DETAILS"
@@ -107,20 +109,20 @@
                   by <strong>|</strong>, so for example you could
                   enter bird|fish|reptile into the field.
                 </small>
-              </div>
-              <div class="org-item oi-line">
+              </div> -->
+              <!-- TODO: Implement region_id field -->
+              <!-- <div class="org-item oi-line">
                 <span class="label">Only show projects available in region</span>
-                <% let current_region = exchange.region_id().unwrap_or(0); %>
                 <select hx-on:input="document.querySelector('#settings-feedback').textContent=''" name="region_id">
                   <option value="">---</option>
-                  <% for (region, name) in regions.iter() { %>
-                  <option value="<%= region %>" <% if *region == current_region { %>selected<% } %>><%= name %></option>
+                  <% for (region, name) in self.regions.iter() { %>
+                  <option value="<%= region %>"><%= name %></option>
                   <% } %>
                 </select>
-              </div>
+              </div> -->
               <div class="org-item oi-line">
                 <span class="label">Only staff can add projects</span>
-                <input hx-on:input="document.querySelector('#settings-feedback').textContent=''" type="checkbox" name="restricted_add" value="true" <% if exchange.restricted_add() { %>checked<% } %> />
+                <input hx-on:input="document.querySelector('#settings-feedback').textContent=''" type="checkbox" name="restricted_add" value="true" <% if self.exchange.settings.restricted_add { %>checked<% } %> />
               </div>
               <div class="org-item oi-line">
                 <span class="label">Prompted search terms</span>
@@ -131,19 +133,25 @@
                     <label>Search</label>
                     <span></span>
                   </div>
-                  <% for (id, label, phrase) in predefined.iter() { %>
-                  <%+ OrgPredefItem { edit: false, exchange: exchange.exchange_id, id: *id, label: label.to_string(), phrase: phrase.to_string()} %>
+                  <% for search in self.exchange.predefined_searches.iter() { %>
+                  <% let phrase = search.search_params.phrase.first().map(|s| s.as_str()).unwrap_or(""); %>
+                  <div style="gap: 8px;">
+                    <span></span>
+                    <input type="text" value="<%= &search.name %>" readonly />
+                    <input type="text" value="<%= phrase %>" readonly />
+                    <button type="button" style="width: auto; min-width: 80px; height: 32px; padding: 0 12px; line-height: 1;" hx-delete="/exchange/<%= self.exchange.path_id %>/predefined-search/<%= search.search_id |disp %>" hx-target="closest div" hx-swap="outerHTML">Delete</button>
+                  </div>
                   <% } %>
                   <div>
                     <span></span>
-                    <button type=button hx-get="/exchange/<%= exchange.exchange_id %>/predef" hx-target="closest div" hx-swap=beforebegin>Add</button>
+                    <button type=button hx-get="/exchange/<%= self.exchange.path_id %>/predef" hx-target="closest div" hx-swap=beforebegin>Add</button>
                   </div>
                 </div>
               </div>
             </div>
             <div id="settings-feedback"></div>
             <button
-                hx-post="/exchange/<%= exchange.exchange_id %>/settings"
+                hx-post="/exchange/<%= self.exchange.path_id %>/settings"
                 hx-include="#settings-fields"
                 hx-target="#settings-feedback"
                 hx-swap="innerHTML"
@@ -164,14 +172,16 @@
                 staff. Emails are case sensitive.
               </p>
               <h4>Current Organization Staff</h4>
-              <% if let Some(owner) = owner { %>
+              <% if let Some(ref owner) = self.owner { %>
               <div class="org-item oi-line">
                 <span class="label"><%= &owner.name %></span>
                 <p><a href="mailto:<%= &owner.email %>"><%= &owner.email %></a></p>
               </div>
               <% } %>
               <div id="current-staff">
-                <%+ RenderAll { items: staff } %>
+                <% for member in self.staff.iter() { %>
+                <%- member.to_html(self.exchange.path_id) %>
+                <% } %>
               </div>
               <!-- <h4 style="margin-top:2rem;">Pending Organization Page Managers</h4> -->
               <!-- <div class="org-item oi-line"> -->
@@ -189,8 +199,13 @@
             </div>
             <div class="d2t--content">
               <h4>Projects Awaiting Approval</h4>
-              <div id="current-staff">
-                <%+ RenderAll { items: pending } %>
+              <% if self.pending.is_empty() { %>
+              <p style="color: #666;">No projects awaiting approval.</p>
+              <% } %>
+              <div id="pending-projects">
+                <% for project in self.pending.iter() { %>
+                <%- project.to_html(self.exchange.path_id) %>
+                <% } %>
               </div>
             </div>
           </div>
@@ -206,7 +221,7 @@
     <!-- FOOTER - every page -->
     <footer>
       <a class="btn btn-secondary"  data-custom-open="add-modal"><span>+</span> Add a Project or Event</a>
-      <p class="powered-by">powered by <img src="/-static/img/scistarter-logo-web-r.svg" alt="SciStarter" /></p>
+      <p class="powered-by">powered by <img src="/-static/img/logo/svg/Standard__tagline-dark.svg" alt="SciStarter" /></p>
       <div style="height: 8rem"></div>
     </footer>
     <!-- END FOOTER -->
@@ -218,7 +233,7 @@
           <header class="modal__header">
             <div>
               <h2 class="modal__title" id="add-modal-title">Add a Citizen Science Project or Event</h2>
-              <p class="powered-by">powered by <img src="/img/scistarter-logo-web-r.svg" alt="SciStarter" /></p>
+              <p class="powered-by">powered by <img src="/-static/img/logo/svg/Standard__tagline-dark.svg" alt="SciStarter" /></p>
               <p>You will be taken from this website to the <a href="https://scistarter.org">SciStarter</a> website to enter your project, event, or tool. Once approved, it will be available on SciStarter and in any SciStarter partner websites where it meets the criteria to display.</p>
             </div>
             <button class="modal__close" aria-label="Close modal" data-micromodal-close></button>
@@ -228,14 +243,14 @@
               <img src="/img/microscope.svg" alt="microscope icon" />
               <h3>Add a Citizen Science Project</h3>
               <p>Projects are typically  long term initiatives that may crowdsource data collection or analysis.</p>
-              <a href="https://scistarter.org/add-project?exchange=<%= exchange.exchange_id %>" class="modal__btn modal__btn-primary"><span class="plus">+</span> Add a Project</a>
+              <a href="https://scistarter.org/add-project?exchange=<%= self.exchange.path_id %>" class="modal__btn modal__btn-primary"><span class="plus">+</span> Add a Project</a>
               <p><a href="https://scistarter.org/finder">Visit SciStarter Projects Page</a></p>
             </div>
             <div>
               <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon entity__tab-icon" style="fill: currentcolor;"><use xlink:href="/img/icons.svg#icon--db-events"></use></svg>
               <h3>Add a Citizen Science Event</h3>
               <p>Events are typically short term (possibly reoccurring) events with known start and end times and may focus on trainings, meet-ups, and other activities related to a citizen science project.</p>
-              <a  href="https://scistarter.org/add-event?exchange=<%= exchange.exchange_id %>" class="modal__btn modal__btn-primary"><span class="plus">+</span> Add an Event</a>
+              <a  href="https://scistarter.org/add-event?exchange=<%= self.exchange.path_id %>" class="modal__btn modal__btn-primary"><span class="plus">+</span> Add an Event</a>
               <p><a href="https://scistarter.org/events">Visit SciStarter Events Page</a></p>
             </div>
           </main>
@@ -261,11 +276,13 @@
             </small>
             <textarea id="email-list" name="emails" style="min-width: 300px; min-height: 4rem"></textarea>
             <button
-                hx-post="/exchange/<%= exchange.exchange_id %>/staff/add"
+                type="button"
+                hx-post="/exchange/<%= self.exchange.path_id %>/staff"
                 hx-include="#email-list"
                 hx-target="#current-staff"
                 hx-swap="beforeend"
                 hx-disabled-elt="this"
+                hx-on::after-request="if(event.detail.successful) { document.getElementById('email-list').value = ''; MicroModal.close('add-manager'); }"
                 class="modal__btn modal__btn-primary">Add SciStarter Members</button>
           </main>
         </div>

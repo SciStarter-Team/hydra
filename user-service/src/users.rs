@@ -163,6 +163,42 @@ pub async fn search_by_handle(req: &Request) -> Result<Vec<BasicInfo>, Error> {
     Ok(users)
 }
 
+pub async fn user_by_email(req: &Request) -> Result<common::message::user::UserByEmailResponse, Error> {
+    use common::message::user::{UserByEmailRequest, UserByEmailResponse};
+
+    let request: UserByEmailRequest = decode_structured_message(req.message.clone())?;
+
+    // Look up user by primary email
+    let result = sqlx::query!(
+        r#"SELECT user_id, handle, first_name, last_name, primary_email
+        FROM users
+        WHERE primary_email = ?"#,
+        request.email
+    )
+    .fetch_optional(db())
+    .await?;
+
+    if let Some(row) = result {
+        Ok(UserByEmailResponse {
+            found: true,
+            user_id: Some(row.user_id),
+            handle: Some(row.handle),
+            first_name: Some(row.first_name),
+            last_name: Some(row.last_name),
+            email: Some(row.primary_email),
+        })
+    } else {
+        Ok(UserByEmailResponse {
+            found: false,
+            user_id: None,
+            handle: None,
+            first_name: None,
+            last_name: None,
+            email: None,
+        })
+    }
+}
+
 /// Get all tags for a user
 pub async fn get_user_tags(req: &Request) -> Result<Vec<String>, Error> {
     let user_id: String = flexbuffers::from_slice(&req.message.payload)?;

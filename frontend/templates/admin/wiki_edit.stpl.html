@@ -1,4 +1,4 @@
-<div class="bg-white rounded-lg shadow border border-gray-200">
+<div class="wiki-edit-card bg-white rounded-lg shadow border border-gray-200">
     <!-- Page Header -->
     <div class="px-6 py-4 border-b border-gray-200">
         <h3 class="text-lg font-medium text-gray-900"><% if self.is_new { %>Create<% } else { %>Edit<% } %> Wiki Page: <%= self.title %></h3>
@@ -27,7 +27,7 @@
                     type="button"
                     hx-delete="/-admin/wiki/<%= urlencoding::encode(&self.title) %>"
                     hx-confirm="Are you sure you want to delete this wiki page? This action cannot be undone."
-                    hx-target="closest .bg-white"
+                    hx-target="closest .wiki-edit-card"
                     hx-swap="outerHTML"
                     class="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500">
                     Delete Page

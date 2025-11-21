@@ -245,6 +245,7 @@ pub enum ProjectFieldValue {
     ProjectLastEdited(Option<TimeString>),
     ScistarterLastEditor(Option<Ulid>),
     ScistarterLastEdited(Option<TimeString>),
+    Reviewed(bool),
     Draft(bool),
     Name(String),
     Tags(HashSet<InsensitiveString>),
@@ -537,6 +538,7 @@ impl ProjectField {
             ProjectFieldValue::ProjectLastEdited(_) => ProjectFieldType::ProjectLastEdited,
             ProjectFieldValue::ScistarterLastEditor(_) => ProjectFieldType::ScistarterLastEditor,
             ProjectFieldValue::ScistarterLastEdited(_) => ProjectFieldType::ScistarterLastEdited,
+            ProjectFieldValue::Reviewed(_) => ProjectFieldType::Reviewed,
             ProjectFieldValue::Draft(_) => ProjectFieldType::Draft,
             ProjectFieldValue::Name(_) => ProjectFieldType::Name,
             ProjectFieldValue::Tags(_) => ProjectFieldType::Tags,
@@ -1804,6 +1806,20 @@ impl ProjectField {
         Ok(ProjectField::new(
             project_id,
             ProjectFieldValue::Extra(extra),
+        ))
+    }
+
+    async fn read_reviewed(project_id: Ulid) -> Result<Self, Error> {
+        let project_id_str = project_id.to_string();
+        let reviewed = sqlx::query_scalar!(
+            "SELECT reviewed FROM projects WHERE project_id = ?",
+            project_id_str
+        )
+        .fetch_one(db())
+        .await?;
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::Reviewed(reviewed),
         ))
     }
 
@@ -3114,6 +3130,18 @@ impl ProjectField {
         Ok(())
     }
 
+    async fn save_reviewed(&self, reviewed: bool) -> Result<(), Error> {
+        let project_id_str = self.project_id.to_string();
+        sqlx::query!(
+            "UPDATE projects SET reviewed = ? WHERE project_id = ?",
+            reviewed,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
+        Ok(())
+    }
+
     async fn save_participant_instructions_email(
         &self,
         participant_instructions_email: &str,
@@ -3835,6 +3863,7 @@ impl LoadStorePeered for ProjectField {
                 self.save_page_creator_id(*page_creator_id).await
             }
             ProjectFieldValue::Extra(extra) => self.save_extra(extra).await,
+            ProjectFieldValue::Reviewed(reviewed) => self.save_reviewed(*reviewed).await,
             ProjectFieldValue::ParticipantInstructionsEmail(participant_instructions_email) => {
                 self.save_participant_instructions_email(participant_instructions_email)
                     .await
@@ -4094,6 +4123,7 @@ impl LoadStorePeered for ProjectField {
             ProjectFieldType::InatProjectId => Self::read_inat_project_id(project_id).await,
             ProjectFieldType::PageCreatorId => Self::read_page_creator_id(project_id).await,
             ProjectFieldType::Extra => Self::read_extra(project_id).await,
+            ProjectFieldType::Reviewed => Self::read_reviewed(project_id).await,
             ProjectFieldType::ParticipantInstructionsEmail => {
                 Self::read_participant_instructions_email(project_id).await
             }
