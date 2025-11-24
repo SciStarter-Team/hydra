@@ -1,0 +1,142 @@
+<div id="archive-content">
+    <!-- Search -->
+    <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 relative">
+        <form id="archive-search-form" class="relative" onsubmit="return false;">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0 sm:space-x-4">
+                <div class="flex-1 min-w-0">
+                    <div class="relative">
+                        <input
+                            type="search"
+                            placeholder="Search archive entries..."
+                            class="block w-full px-3 py-2 pr-8 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            hx-get="/-admin/archive/search"
+                            hx-target="#archive-content"
+                            hx-trigger="keyup[keyCode==13]"
+                            hx-include="#archive-search-form"
+                            name="search"
+                            value="<%= self.search_term %>"
+                        >
+                        <button type="button"
+                                hx-get="/-admin/archive/search"
+                                hx-target="#archive-content"
+                                hx-vals='{"search": "", "page": "1"}'
+                                class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                            <wa-icon name="xmark" class="w-4 h-4"></wa-icon>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Archive Entries List -->
+    <div class="bg-white">
+        <!-- Header Row - Hidden on mobile, visible on larger screens -->
+        <div class="hidden lg:grid lg:grid-cols-5 bg-gray-50 px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
+            <div>Name</div>
+            <div>Timestamp</div>
+            <div>Has File</div>
+            <div>Has Snapshot</div>
+            <div>Actions</div>
+        </div>
+
+        <div id="archive-table-body" class="divide-y divide-gray-200">
+            <% for entry in &self.entries { %>
+                <div class="flex flex-col lg:grid lg:grid-cols-5 gap-3 lg:gap-4 lg:items-center px-6 py-4 hover:bg-gray-50 transition-colors">
+                    <!-- Name -->
+                    <div class="lg:col-span-1">
+                        <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Name</div>
+                        <a href="/-admin/archive/<%= entry.archive_id|disp %>" class="text-sm font-medium text-indigo-600 hover:text-indigo-900"><%= entry.name %></a>
+                    </div>
+
+                    <!-- Timestamp -->
+                    <div class="lg:col-span-1">
+                        <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Timestamp</div>
+                        <div class="text-sm text-gray-600"><%= entry.timestamp %></div>
+                    </div>
+
+                    <!-- Has File -->
+                    <div class="lg:col-span-1">
+                        <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Has File</div>
+                        <div class="text-sm text-gray-600">
+                            <% if entry.file_id.is_some() { %>
+                                <wa-icon name="check" class="w-4 h-4 text-green-600"></wa-icon>
+                            <% } else { %>
+                                <wa-icon name="xmark" class="w-4 h-4 text-gray-400"></wa-icon>
+                            <% } %>
+                        </div>
+                    </div>
+
+                    <!-- Has Snapshot -->
+                    <div class="lg:col-span-1">
+                        <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Has Snapshot</div>
+                        <div class="text-sm text-gray-600">
+                            <% if entry.snapshot_html.is_some() { %>
+                                <wa-icon name="check" class="w-4 h-4 text-green-600"></wa-icon>
+                            <% } else { %>
+                                <wa-icon name="xmark" class="w-4 h-4 text-gray-400"></wa-icon>
+                            <% } %>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="lg:col-span-1">
+                        <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Actions</div>
+                        <div class="flex items-center space-x-3">
+                            <a href="/-admin/archive/<%= entry.archive_id|disp %>/edit" class="text-indigo-600 hover:text-indigo-900">
+                                <wa-icon name="pencil" class="w-4 h-4"></wa-icon>
+                            </a>
+                            <button
+                                hx-post="/-admin/archive/<%= entry.archive_id|disp %>/delete"
+                                hx-confirm="Are you sure you want to delete this archive entry?"
+                                class="text-red-600 hover:text-red-900"
+                            >
+                                <wa-icon name="trash" class="w-4 h-4"></wa-icon>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            <% } %>
+        </div>
+    </div>
+
+    <!-- Results info and pagination -->
+    <div class="px-6 py-3 bg-gray-50 border-t border-gray-200">
+        <div class="flex items-center justify-between">
+            <div class="text-sm text-gray-700">
+                <% if self.total_entries == 0 { %>
+                    No entries found
+                <% } else { %>
+                    Showing <span class="font-medium"><%= self.start_item %></span> to <span class="font-medium"><%= self.end_item %></span> of <span class="font-medium"><%= self.total_entries %></span> results
+                <% } %>
+            </div>
+            <% if self.total_entries > self.per_page { %>
+                <div class="flex space-x-2">
+                    <% if self.has_previous { %>
+                        <button
+                            hx-get="<%= self.pagination_url %>?page=<%= self.current_page - 1 %>"
+                            hx-target="#archive-content"
+                            hx-include="<%= self.pagination_include %>"
+                            class="px-3 py-1 bg-white border border-gray-300 text-sm rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                            Previous
+                        </button>
+                    <% } %>
+                    <span class="px-3 py-1 bg-white border border-gray-300 text-sm rounded-md">
+                        Page <%= self.current_page %>
+                    </span>
+                    <% if self.has_next { %>
+                        <button
+                            hx-get="<%= self.pagination_url %>?page=<%= self.current_page + 1 %>"
+                            hx-target="#archive-content"
+                            hx-include="<%= self.pagination_include %>"
+                            class="px-3 py-1 bg-white border border-gray-300 text-sm rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                            Next
+                        </button>
+                    <% } %>
+                </div>
+            <% } %>
+        </div>
+    </div>
+</div>

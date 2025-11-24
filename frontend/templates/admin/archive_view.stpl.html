@@ -1,0 +1,99 @@
+<!-- Archive View -->
+<div class="bg-white rounded-lg shadow border border-gray-200">
+    <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+        <h3 class="text-lg font-medium text-gray-900"><%= self.entry.name %></h3>
+        <div class="flex items-center space-x-2">
+            <a
+                href="/-admin/archive/<%= self.entry.archive_id|disp %>/edit"
+                class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 no-underline"
+            >
+                <wa-icon name="pencil" class="w-4 h-4 mr-2"></wa-icon>
+                Edit
+            </a>
+            <a
+                href="/-admin/archive"
+                class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 no-underline"
+            >
+                Back to List
+            </a>
+        </div>
+    </div>
+
+    <div class="px-6 py-6 space-y-6">
+        <!-- Entry Details -->
+        <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+            <!-- Timestamp -->
+            <div>
+                <dt class="text-sm font-medium text-gray-500 mb-2">Timestamp</dt>
+                <input
+                    type="datetime-local"
+                    value="<%= self.entry.timestamp %>"
+                    disabled
+                    class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 bg-gray-50 text-gray-700 sm:text-sm"
+                >
+            </div>
+
+            <!-- Archive ID -->
+            <div>
+                <dt class="text-sm font-medium text-gray-500">Archive ID</dt>
+                <dd class="mt-1 text-sm text-gray-900 font-mono"><%= self.entry.archive_id|disp %></dd>
+            </div>
+
+            <!-- Attached File -->
+            <div>
+                <dt class="text-sm font-medium text-gray-500">Attached File</dt>
+                <dd class="mt-1 text-sm text-gray-900">
+                    <% if let Some(file_id) = self.entry.file_id { %>
+                        <a href="/-upload/files/<%= file_id|disp %>" target="_blank" rel="noopener noreferrer" class="inline-flex items-center text-indigo-600 hover:text-indigo-900">
+                            <wa-icon name="download" class="w-4 h-4 mr-1"></wa-icon>
+                            Download File
+                        </a>
+                        <span class="ml-2 font-mono text-xs text-gray-500">(<%= file_id|disp %>)</span>
+                    <% } else { %>
+                        <span class="text-gray-400">None</span>
+                    <% } %>
+                </dd>
+            </div>
+        </div>
+
+        <!-- Notes -->
+        <% if let Some(ref notes) = self.entry.notes { %>
+            <div>
+                <dt class="text-sm font-medium text-gray-500 mb-2">Notes</dt>
+                <dd class="mt-1 text-sm text-gray-900 whitespace-pre-wrap bg-gray-50 p-4 rounded-md border border-gray-200">
+                    <%= notes %>
+                </dd>
+            </div>
+        <% } %>
+
+        <!-- Snapshot URL -->
+        <% if let Some(ref url) = self.entry.snapshot_url { %>
+            <div>
+                <dt class="text-sm font-medium text-gray-500 mb-2">Snapshot URL</dt>
+                <dd class="mt-1 text-sm">
+                    <a href="<%= url %>" target="_blank" rel="noopener noreferrer" class="text-indigo-600 hover:text-indigo-900 break-all">
+                        <%= url %>
+                    </a>
+                </dd>
+            </div>
+        <% } %>
+
+        <!-- Snapshot Preview -->
+        <% if let Some(ref html) = self.entry.snapshot_html { %>
+            <div>
+                <dt class="text-sm font-medium text-gray-500 mb-2">Snapshot</dt>
+                <dd class="mt-1">
+                    <div class="flex items-center space-x-4">
+                        <a href="/-admin/archive/<%= self.entry.archive_id|disp %>/snapshot" target="_blank" rel="noopener noreferrer" class="inline-flex items-center px-4 py-2 border border-indigo-600 text-sm font-medium rounded-md text-indigo-600 bg-white hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            <wa-icon name="arrow-up-right-from-square" class="w-4 h-4 mr-2"></wa-icon>
+                            Open Snapshot in New Tab
+                        </a>
+                        <span class="text-xs text-gray-500">
+                            Captured HTML size: <%= html.len() %> bytes
+                        </span>
+                    </div>
+                </dd>
+            </div>
+        <% } %>
+    </div>
+</div>

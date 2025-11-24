@@ -288,6 +288,13 @@ pub fn routes() -> impl Endpoint {
         )
         .at("/badges/:badgeclass/grant", post(badges_grant))
         .at("/badges/:badgeclass/:user_id/revoke", post(badges_revoke))
+        .at("/archive", get(archive_list))
+        .at("/archive/search", get(archive_search))
+        .at("/archive/new", get(archive_create_form).post(archive_create))
+        .at("/archive/:id", get(archive_view))
+        .at("/archive/:id/snapshot", get(archive_snapshot))
+        .at("/archive/:id/edit", get(archive_edit_form).post(archive_edit))
+        .at("/archive/:id/delete", post(archive_delete))
         .nest("/autocomplete", autocomplete::routes())
         .with(StaffOnly)
 }
@@ -10762,8 +10769,10 @@ pub struct CreateTriggerForm {
 #[handler]
 async fn email_trigger_create(
     Form(form): Form<CreateTriggerForm>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info
+        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
     use common::message::email::{
         CreateTriggerRequest, CreateTriggerResponse, GetStoredEmailRequest, GetStoredEmailResponse,
         ListTriggersRequest, ListTriggersResponse, TriggerActionType,
@@ -10834,6 +10843,15 @@ async fn email_trigger_create(
         triggers: triggers_response.triggers,
         stored_emails,
     };
+
+    common::service::log_activity(
+        None,
+        "email-trigger-create",
+        user_info.user_id,
+        None,
+        None,
+    )
+    .await?;
 
     Ok(poem::Response::builder()
         .content_type("text/html")
@@ -11026,8 +11044,11 @@ async fn email_trigger_update(
 #[handler]
 async fn email_trigger_delete(
     Path(id): Path<String>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info
+        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+
     use common::message::email::{DeleteTriggerRequest, DeleteTriggerResponse};
     use common::service::request;
 
@@ -11038,6 +11059,15 @@ async fn email_trigger_delete(
     let _response: DeleteTriggerResponse = request(
         "emailer.triggers.delete",
         DeleteTriggerRequest { trigger_id },
+    )
+    .await?;
+
+    common::service::log_activity(
+        None,
+        "email-trigger-delete",
+        user_info.user_id,
+        Some(trigger_id),
+        None,
     )
     .await?;
 
@@ -11255,8 +11285,12 @@ pub struct CreateAddressSetForm {
 #[handler]
 async fn address_sets_create(
     Form(form): Form<CreateAddressSetForm>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info
+        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+
+    let slug = form.slug.clone();
     let request = common::message::user::AddressSetCreateRequest {
         slug: form.slug,
         name: form.name,
@@ -11268,6 +11302,15 @@ async fn address_sets_create(
     )
     .await
     .map_err(|e| anyhow::anyhow!("Failed to create address set: {}", e))?;
+
+    common::service::log_activity(
+        None,
+        "address-set-create",
+        user_info.user_id,
+        None,
+        Some(slug),
+    )
+    .await?;
 
     Ok(poem::Response::builder()
         .status(poem::http::StatusCode::SEE_OTHER)
@@ -11351,8 +11394,12 @@ async fn address_sets_update(
 #[handler]
 async fn address_sets_delete(
     Path(slug): Path<String>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info
+        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+
+    let slug_clone = slug.clone();
     let request = common::message::user::AddressSetDeleteRequest { slug };
 
     common::service::request::<common::message::user::AddressSetResponse>(
@@ -11361,6 +11408,15 @@ async fn address_sets_delete(
     )
     .await
     .map_err(|e| anyhow::anyhow!("Failed to delete address set: {}", e))?;
+
+    common::service::log_activity(
+        None,
+        "address-set-delete",
+        user_info.user_id,
+        None,
+        Some(slug_clone),
+    )
+    .await?;
 
     Ok(poem::Response::builder()
         .status(poem::http::StatusCode::OK)
@@ -11500,8 +11556,12 @@ pub struct CreateUserSetForm {
 #[handler]
 async fn user_sets_create(
     Form(form): Form<CreateUserSetForm>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info
+        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+
+    let slug = form.slug.clone();
     let request = common::message::user::UserSetCreateRequest {
         slug: form.slug,
         name: form.name,
@@ -11513,6 +11573,15 @@ async fn user_sets_create(
     )
     .await
     .map_err(|e| anyhow::anyhow!("Failed to create user set: {}", e))?;
+
+    common::service::log_activity(
+        None,
+        "user-set-create",
+        user_info.user_id,
+        None,
+        Some(slug),
+    )
+    .await?;
 
     Ok(poem::Response::builder()
         .status(poem::http::StatusCode::SEE_OTHER)
@@ -11692,8 +11761,12 @@ async fn user_sets_update(
 #[handler]
 async fn user_sets_delete(
     Path(slug): Path<String>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info
+        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+
+    let slug_clone = slug.clone();
     let request = common::message::user::UserSetDeleteRequest { slug };
 
     common::service::request::<common::message::user::UserSetResponse>(
@@ -11702,6 +11775,15 @@ async fn user_sets_delete(
     )
     .await
     .map_err(|e| anyhow::anyhow!("Failed to delete user set: {}", e))?;
+
+    common::service::log_activity(
+        None,
+        "user-set-delete",
+        user_info.user_id,
+        None,
+        Some(slug_clone),
+    )
+    .await?;
 
     Ok(poem::Response::builder()
         .status(poem::http::StatusCode::OK)
@@ -12414,9 +12496,12 @@ async fn exchange_create_page(
 
 #[handler]
 async fn exchange_create(
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
     form: poem::web::Form<ExchangeCreateForm>,
 ) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info
+        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+
     use crate::exchange::Exchange;
 
     // Create new exchange with default settings
@@ -12444,6 +12529,15 @@ async fn exchange_create(
 
     // Use LoadStorePeered to save and broadcast
     exchange.store().await?;
+
+    common::service::log_activity(
+        None,
+        "exchange-create",
+        user_info.user_id,
+        Some(exchange.exchange_id),
+        None,
+    )
+    .await?;
 
     // Redirect to exchanges list
     Ok(poem::web::Redirect::see_other("/-admin/exchanges").into_response())
@@ -12492,9 +12586,12 @@ struct ExchangeUpdateForm {
 #[handler]
 async fn exchange_update(
     Path(exchange_id_str): Path<String>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
     form: poem::web::Form<ExchangeUpdateForm>,
 ) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info
+        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+
     use crate::exchange::Exchange;
 
     let exchange_id = Ulid::from_string(&exchange_id_str)?;
@@ -12515,6 +12612,15 @@ async fn exchange_update(
     // Use LoadStorePeered to save and broadcast
     exchange.store().await?;
 
+    common::service::log_activity(
+        None,
+        "exchange-update",
+        user_info.user_id,
+        Some(exchange_id),
+        None,
+    )
+    .await?;
+
     // Redirect to exchanges list
     Ok(poem::web::Redirect::see_other("/-admin/exchanges").into_response())
 }
@@ -12522,8 +12628,11 @@ async fn exchange_update(
 #[handler]
 async fn exchange_delete(
     Path(exchange_id_str): Path<String>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info
+        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+
     use crate::exchange::Exchange;
     use crate::peering::LoadStorePeered;
 
@@ -12531,6 +12640,15 @@ async fn exchange_delete(
 
     // Use LoadStorePeered to delete and broadcast to peers
     Exchange::delete(exchange_id).await?;
+
+    common::service::log_activity(
+        None,
+        "exchange-delete",
+        user_info.user_id,
+        Some(exchange_id),
+        None,
+    )
+    .await?;
 
     // Return success message for HTMX
     Ok(Html("<div class=\"text-green-600\">Exchange deleted successfully</div>").into_response())
@@ -12654,9 +12772,12 @@ struct OAuth2ClientCreateForm {
 
 #[handler]
 async fn oauth2_client_create(
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
     form: poem::web::Form<OAuth2ClientCreateForm>,
 ) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info
+        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+
     use crate::oauth2::types::Client;
 
     // Validate client_id format
@@ -12688,6 +12809,15 @@ async fn oauth2_client_create(
 
     // Use LoadStorePeered to save and broadcast
     client.store().await?;
+
+    common::service::log_activity(
+        None,
+        "oauth2-client-create",
+        user_info.user_id,
+        None,
+        Some(client.client_id.clone()),
+    )
+    .await?;
 
     // Redirect to OAuth2 clients list
     Ok(poem::web::Redirect::see_other("/-admin/oauth2-clients").into_response())
@@ -12734,13 +12864,16 @@ struct OAuth2ClientUpdateForm {
 #[handler]
 async fn oauth2_client_update(
     Path(client_id): Path<String>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
     form: poem::web::Form<OAuth2ClientUpdateForm>,
 ) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info
+        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+
     use crate::oauth2::types::Client;
 
     // Load existing client
-    let mut client = Client::load(client_id).await?;
+    let mut client = Client::load(client_id.clone()).await?;
 
     // Parse redirect URIs and validate each one
     let redirect_uris = parse_redirect_uris(&form.redirect_uris);
@@ -12765,6 +12898,15 @@ async fn oauth2_client_update(
     // Use LoadStorePeered to save and broadcast
     client.store().await?;
 
+    common::service::log_activity(
+        None,
+        "oauth2-client-update",
+        user_info.user_id,
+        None,
+        Some(client_id),
+    )
+    .await?;
+
     // Redirect to OAuth2 clients list
     Ok(poem::web::Redirect::see_other("/-admin/oauth2-clients").into_response())
 }
@@ -12772,13 +12914,26 @@ async fn oauth2_client_update(
 #[handler]
 async fn oauth2_client_delete(
     Path(client_id): Path<String>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info
+        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+
     use crate::oauth2::types::Client;
     use crate::peering::LoadStorePeered;
 
+    let client_id_clone = client_id.clone();
     // Use LoadStorePeered to delete and broadcast to peers
     Client::delete(client_id).await?;
+
+    common::service::log_activity(
+        None,
+        "oauth2-client-delete",
+        user_info.user_id,
+        None,
+        Some(client_id_clone),
+    )
+    .await?;
 
     // Return success message for HTMX
     Ok(Html("<div class=\"text-green-600\">OAuth2 client deleted successfully</div>").into_response())
@@ -12892,9 +13047,12 @@ async fn wiki_edit(
 #[handler]
 async fn wiki_save(
     Path(title): Path<String>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
     form: poem::web::Form<WikiSaveForm>,
 ) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info
+        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+
     use crate::wiki::WikiPage;
 
     let page = WikiPage {
@@ -12904,6 +13062,15 @@ async fn wiki_save(
 
     page.store().await?;
 
+    common::service::log_activity(
+        None,
+        "wiki-save",
+        user_info.user_id,
+        None,
+        Some(title.clone()),
+    )
+    .await?;
+
     // Redirect back to view the page
     Ok(poem::web::Redirect::see_other(&format!("/-admin/wiki/{}", urlencoding::encode(&title))).into_response())
 }
@@ -12912,12 +13079,25 @@ async fn wiki_save(
 #[handler]
 async fn wiki_delete(
     Path(title): Path<String>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info
+        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+
     use crate::wiki::WikiPage;
     use crate::peering::LoadStorePeered;
 
+    let title_clone = title.clone();
     WikiPage::delete(title).await?;
+
+    common::service::log_activity(
+        None,
+        "wiki-delete",
+        user_info.user_id,
+        None,
+        Some(title_clone),
+    )
+    .await?;
 
     // Use HX-Redirect header for HTMX client-side redirect
     Ok(poem::Response::builder()
@@ -13284,4 +13464,522 @@ struct BadgeHoldersPage {
     per_page: u32,
     start_item: u32,
     end_item: u32,
+}
+
+// Archive Management
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArchiveEntry {
+    pub archive_id: Ulid,
+    pub name: String,
+    pub timestamp: String,
+    pub notes: Option<String>,
+    pub file_id: Option<Ulid>,
+    pub snapshot_html: Option<String>,
+    pub snapshot_url: Option<String>,
+}
+
+impl LoadStorePeered for ArchiveEntry {
+    type DatabaseKey = Ulid;
+    const GROUP: &str = "archive";
+    const SPECIFIC: &str = "entry";
+
+    async fn save_to_database(&self) -> Result<(), anyhow::Error> {
+        use common::shared::db;
+
+        let archive_id_str = self.archive_id.to_string();
+        let file_id_str = self.file_id.map(|id| id.to_string());
+
+        sqlx::query!(
+            r#"INSERT OR REPLACE INTO archive_entries
+               (archive_id, name, timestamp, notes, file_id, snapshot_html, snapshot_url)
+               VALUES (?, ?, ?, ?, ?, ?, ?)"#,
+            archive_id_str,
+            self.name,
+            self.timestamp,
+            self.notes,
+            file_id_str,
+            self.snapshot_html,
+            self.snapshot_url
+        )
+        .execute(db())
+        .await?;
+
+        Ok(())
+    }
+
+    async fn read_from_database(key: Self::DatabaseKey) -> Result<Self, anyhow::Error> {
+        use common::shared::db;
+
+        let archive_id_str = key.to_string();
+        let row = sqlx::query!(
+            r#"SELECT archive_id, name, timestamp, notes, file_id, snapshot_html, snapshot_url
+               FROM archive_entries
+               WHERE archive_id = ?"#,
+            archive_id_str
+        )
+        .fetch_optional(db())
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Archive entry not found"))?;
+
+        Ok(ArchiveEntry {
+            archive_id: row.archive_id.parse()?,
+            name: row.name,
+            timestamp: row.timestamp,
+            notes: row.notes,
+            file_id: row.file_id.and_then(|id| id.parse().ok()),
+            snapshot_html: row.snapshot_html,
+            snapshot_url: row.snapshot_url,
+        })
+    }
+
+    async fn delete_from_database(key: Self::DatabaseKey) -> Result<(), anyhow::Error> {
+        use common::shared::db;
+
+        let archive_id_str = key.to_string();
+        sqlx::query!(
+            r#"DELETE FROM archive_entries WHERE archive_id = ?"#,
+            archive_id_str
+        )
+        .execute(db())
+        .await?;
+
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct ArchivePage;
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/archive.stpl.html")]
+pub struct ArchivePagePrepared {
+    entries: Vec<ArchiveEntry>,
+    current_page: u32,
+    total_entries: u32,
+    has_previous: bool,
+    has_next: bool,
+    per_page: u32,
+    start_item: u32,
+    end_item: u32,
+    pagination_url: String,
+    pagination_include: String,
+    search_term: String,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/archive_content.stpl.html")]
+pub struct ArchiveContent {
+    pub entries: Vec<ArchiveEntry>,
+    pub current_page: u32,
+    pub total_entries: u32,
+    pub has_previous: bool,
+    pub has_next: bool,
+    pub per_page: u32,
+    pub start_item: u32,
+    pub end_item: u32,
+    pub pagination_url: String,
+    pub pagination_include: String,
+    pub search_term: String,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/archive_create.stpl.html")]
+pub struct ArchiveCreatePage {}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/archive_edit.stpl.html")]
+pub struct ArchiveEditPage {
+    pub entry: ArchiveEntry,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/archive_view.stpl.html")]
+pub struct ArchiveViewPage {
+    pub entry: ArchiveEntry,
+}
+
+impl Component for ArchivePage {
+    type Param = Option<Arc<BasicInfo>>;
+    type Prepared = AdminLayoutPrepared<ArchivePagePrepared>;
+
+    async fn prepare(self, param: Self::Param) -> Result<Self::Prepared, anyhow::Error> {
+        let page = 1u32;
+        let per_page = 25u32;
+
+        let entries_list = match fetch_archive_entries(None, Some(page), Some(per_page)).await {
+            Ok(entries) => entries,
+            Err(e) => {
+                tracing::warn!("Failed to fetch archive entries from database: {}", e);
+                vec![]
+            }
+        };
+
+        let total_entries = count_archive_entries(None).await.unwrap_or(0);
+
+        let archive_content = ArchivePagePrepared {
+            entries: entries_list,
+            current_page: page,
+            total_entries: total_entries as u32,
+            has_previous: false,
+            has_next: total_entries > per_page as u64,
+            per_page,
+            start_item: 1,
+            end_item: std::cmp::min(per_page, total_entries as u32),
+            pagination_url: "/-admin/archive/search".to_string(),
+            pagination_include: "[name='search']".to_string(),
+            search_term: "".to_string(),
+        };
+
+        AdminLayout::new("Archive", archive_content)
+            .with_breadcrumb("Archive", None)
+            .with_sidebar_active("archive")
+            .prepare(param)
+            .await
+    }
+}
+
+async fn fetch_archive_entries(
+    search: Option<&str>,
+    page: Option<u32>,
+    per_page: Option<u32>,
+) -> Result<Vec<ArchiveEntry>, anyhow::Error> {
+    use common::shared::db;
+    use sqlx::{QueryBuilder, Row};
+
+    let page = page.unwrap_or(1);
+    let per_page = per_page.unwrap_or(25);
+    let offset = (page - 1) * per_page;
+
+    let mut query = QueryBuilder::new("");
+
+    if let Some(search_term) = search.filter(|s| !s.trim().is_empty()) {
+        query.push(
+            "SELECT a.archive_id, a.name, a.timestamp, a.notes, a.file_id,
+                    a.snapshot_html, a.snapshot_url
+             FROM archive_entries a
+             JOIN archive_entries_fts f ON a.archive_id = f.archive_id
+             WHERE archive_entries_fts MATCH ",
+        );
+        query.push_bind(search_term);
+    } else {
+        query.push(
+            "SELECT archive_id, name, timestamp, notes, file_id,
+                    snapshot_html, snapshot_url
+             FROM archive_entries
+             WHERE 1=1",
+        );
+    }
+
+    query.push(" ORDER BY timestamp DESC LIMIT ");
+    query.push_bind(per_page);
+    query.push(" OFFSET ");
+    query.push_bind(offset);
+
+    let results = query.build().fetch_all(db()).await?;
+
+    let mut entries = Vec::new();
+    for row in results {
+        let archive_id: String = row.get("archive_id");
+        let name: String = row.get("name");
+        let timestamp: String = row.get("timestamp");
+        let notes: Option<String> = row.get("notes");
+        let file_id: Option<String> = row.get("file_id");
+        let snapshot_html: Option<String> = row.get("snapshot_html");
+        let snapshot_url: Option<String> = row.get("snapshot_url");
+
+        entries.push(ArchiveEntry {
+            archive_id: archive_id.parse()?,
+            name,
+            timestamp,
+            notes,
+            file_id: file_id.and_then(|id| id.parse().ok()),
+            snapshot_html,
+            snapshot_url,
+        });
+    }
+
+    Ok(entries)
+}
+
+async fn count_archive_entries(search: Option<&str>) -> Result<u64, anyhow::Error> {
+    use common::shared::db;
+    use sqlx::{QueryBuilder, Row};
+
+    let mut query = QueryBuilder::new("");
+
+    if let Some(search_term) = search.filter(|s| !s.trim().is_empty()) {
+        query.push(
+            "SELECT COUNT(*) as count
+             FROM archive_entries a
+             JOIN archive_entries_fts f ON a.archive_id = f.archive_id
+             WHERE archive_entries_fts MATCH ",
+        );
+        query.push_bind(search_term);
+    } else {
+        query.push("SELECT COUNT(*) as count FROM archive_entries WHERE 1=1");
+    }
+
+    let row = query.build().fetch_one(db()).await?;
+    let count: i64 = row.get("count");
+
+    Ok(count as u64)
+}
+
+// Archive handlers
+#[handler]
+async fn archive_list(Authenticated(user_info): Authenticated) -> Result<poem::Response, anyhow::Error> {
+    Ok(ArchivePage.into_response(user_info).await?)
+}
+
+#[derive(Debug, Deserialize)]
+struct ArchiveSearchQuery {
+    search: Option<String>,
+    page: Option<u32>,
+}
+
+#[handler]
+async fn archive_search(
+    Query(query): Query<ArchiveSearchQuery>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let page = query.page.unwrap_or(1);
+    let per_page = 25u32;
+    let search_term = query.search.as_deref().unwrap_or("");
+
+    let entries_list = fetch_archive_entries(Some(search_term), Some(page), Some(per_page)).await?;
+    let total_entries = count_archive_entries(Some(search_term)).await? as u32;
+
+    let archive_content = ArchiveContent {
+        entries: entries_list,
+        current_page: page,
+        total_entries,
+        has_previous: page > 1,
+        has_next: (page * per_page) < total_entries,
+        per_page,
+        start_item: ((page - 1) * per_page) + 1,
+        end_item: std::cmp::min(page * per_page, total_entries),
+        pagination_url: "/-admin/archive/search".to_string(),
+        pagination_include: "[name='search']".to_string(),
+        search_term: search_term.to_string(),
+    };
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(archive_content.render_once()?))
+}
+
+#[handler]
+async fn archive_create_form(Authenticated(user_info): Authenticated) -> Result<poem::Response, anyhow::Error> {
+    let content = ArchiveCreatePage {};
+
+    let prepared = crate::component::AdminLayout::new("Create Archive Entry", content)
+        .with_breadcrumb("Archive", Some("/-admin/archive"))
+        .with_breadcrumb("Create", None)
+        .with_sidebar_active("archive")
+        .prepare(user_info)
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+#[derive(Debug, Deserialize)]
+struct ArchiveCreateForm {
+    name: String,
+    timestamp: String,
+    notes: Option<String>,
+    file_id: Option<String>,
+    snapshot_url: Option<String>,
+}
+
+#[handler]
+async fn archive_create(
+    Form(form): Form<ArchiveCreateForm>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info
+        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+
+    // Capture snapshot if URL provided
+    let snapshot_html = if let Some(ref url) = form.snapshot_url {
+        capture_page_snapshot(url).await.ok()
+    } else {
+        None
+    };
+
+    let entry = ArchiveEntry {
+        archive_id: Ulid::new(),
+        name: form.name,
+        timestamp: form.timestamp,
+        notes: form.notes.filter(|s| !s.trim().is_empty()),
+        file_id: form.file_id.and_then(|id| id.parse().ok()),
+        snapshot_html,
+        snapshot_url: form.snapshot_url.filter(|s| !s.trim().is_empty()),
+    };
+
+    entry.store().await?;
+
+    common::service::log_activity(
+        None,
+        "archive-create",
+        user_info.user_id,
+        Some(entry.archive_id),
+        None,
+    )
+    .await?;
+
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::SEE_OTHER)
+        .header("Location", "/-admin/archive")
+        .finish())
+}
+
+#[handler]
+async fn archive_view(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let archive_id: Ulid = id.parse()?;
+    let entry = ArchiveEntry::load(archive_id).await?;
+
+    let content = ArchiveViewPage { entry };
+
+    let prepared = crate::component::AdminLayout::new("View Archive Entry", content)
+        .with_breadcrumb("Archive", Some("/-admin/archive"))
+        .with_breadcrumb("View", None)
+        .with_sidebar_active("archive")
+        .prepare(user_info)
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+#[handler]
+async fn archive_snapshot(
+    Path(id): Path<String>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let archive_id: Ulid = id.parse()?;
+    let entry = ArchiveEntry::load(archive_id).await?;
+
+    if let Some(html) = entry.snapshot_html {
+        Ok(poem::Response::builder()
+            .content_type("text/html; charset=utf-8")
+            .body(html))
+    } else {
+        Ok(poem::Response::builder()
+            .status(poem::http::StatusCode::NOT_FOUND)
+            .body("No snapshot available for this entry"))
+    }
+}
+
+#[handler]
+async fn archive_edit_form(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let archive_id: Ulid = id.parse()?;
+    let entry = ArchiveEntry::load(archive_id).await?;
+
+    let content = ArchiveEditPage { entry };
+
+    let prepared = crate::component::AdminLayout::new("Edit Archive Entry", content)
+        .with_breadcrumb("Archive", Some("/-admin/archive"))
+        .with_breadcrumb("Edit", None)
+        .with_sidebar_active("archive")
+        .prepare(user_info)
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+#[derive(Debug, Deserialize)]
+struct ArchiveEditForm {
+    name: String,
+    timestamp: String,
+    notes: Option<String>,
+    file_id: Option<String>,
+    snapshot_url: Option<String>,
+    capture_snapshot: Option<String>, // "true" if we should capture a new snapshot
+}
+
+#[handler]
+async fn archive_edit(
+    Path(id): Path<String>,
+    Form(form): Form<ArchiveEditForm>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info
+        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+
+    let archive_id: Ulid = id.parse()?;
+    let mut entry = ArchiveEntry::load(archive_id).await?;
+
+    // Update fields
+    entry.name = form.name;
+    entry.timestamp = form.timestamp;
+    entry.notes = form.notes.filter(|s| !s.trim().is_empty());
+    entry.file_id = form.file_id.and_then(|id| id.parse().ok());
+    entry.snapshot_url = form.snapshot_url.filter(|s| !s.trim().is_empty());
+
+    // Capture new snapshot if requested
+    if form.capture_snapshot.as_deref() == Some("true") {
+        if let Some(ref url) = entry.snapshot_url {
+            entry.snapshot_html = capture_page_snapshot(url).await.ok();
+        }
+    }
+
+    entry.store().await?;
+
+    common::service::log_activity(
+        None,
+        "archive-edit",
+        user_info.user_id,
+        Some(entry.archive_id),
+        None,
+    )
+    .await?;
+
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::SEE_OTHER)
+        .header("Location", format!("/-admin/archive/{}", id))
+        .finish())
+}
+
+#[handler]
+async fn archive_delete(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info
+        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+
+    let archive_id: Ulid = id.parse()?;
+    ArchiveEntry::delete(archive_id).await?;
+
+    common::service::log_activity(
+        None,
+        "archive-delete",
+        user_info.user_id,
+        Some(archive_id),
+        None,
+    )
+    .await?;
+
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::SEE_OTHER)
+        .header("Location", "/-admin/archive")
+        .finish())
+}
+
+async fn capture_page_snapshot(url: &str) -> Result<String, anyhow::Error> {
+    // Use reqwest to fetch the page content
+    let response = reqwest::get(url).await?;
+    let html = response.text().await?;
+    Ok(html)
 }

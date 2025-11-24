@@ -1,0 +1,28 @@
+<!-- Archive Management -->
+<div class="bg-white rounded-lg shadow border border-gray-200">
+    <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+        <h3 class="text-lg font-medium text-gray-900">Archive</h3>
+        <a
+            href="/-admin/archive/new"
+            class="relative inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200 no-underline"
+        >
+            <span class="inline-flex items-center">
+                <wa-icon name="plus" class="w-4 h-4 mr-2"></wa-icon>
+                Add Entry
+            </span>
+        </a>
+    </div>
+    <%+ ArchiveContent {
+        entries: self.entries.clone(),
+        current_page: self.current_page,
+        total_entries: self.total_entries,
+        has_previous: self.has_previous,
+        has_next: self.has_next,
+        per_page: self.per_page,
+        start_item: self.start_item,
+        end_item: self.end_item,
+        pagination_url: self.pagination_url.clone(),
+        pagination_include: self.pagination_include.clone(),
+        search_term: self.search_term.clone()
+    } %>
+</div>
