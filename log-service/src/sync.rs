@@ -623,7 +623,7 @@ async fn insert_join_as_clickthrough(database: &Database, join: &JoinData) -> Re
             .unwrap_or_else(|| format!("entity/{}", join.entity_ulid)),
         link_type: "join".to_string(),
         program_id: Some(join.entity_ulid.clone()),
-        geolocation: "POINT(0 0)".to_string(),
+        geolocation: r#"{"type":"Point","coordinates":[0,0]}"#.to_string(),
     };
 
     database.clickthroughs.insert(row).await?;
@@ -643,7 +643,7 @@ async fn insert_golink_as_clickthrough(database: &Database, golink: &GolinkData)
         to_url: golink.target.clone(),
         link_type: "golink".to_string(),
         program_id: None,
-        geolocation: "POINT(0 0)".to_string(),
+        geolocation: r#"{"type":"Point","coordinates":[0,0]}"#.to_string(),
     };
 
     database.clickthroughs.insert(row).await?;

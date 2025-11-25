@@ -774,6 +774,230 @@ async fn users_synchronize() {
                 }
             }
 
+            // Check for any badges this user has and create missing workflow records
+            let user_badges = sqlx::query!(
+                r#"SELECT badgeclass, "when" FROM user_badges WHERE user_id = ?"#,
+                user.ulid
+            )
+            .fetch_all(db)
+            .await
+            .unwrap_or_default();
+
+            for badge in user_badges {
+                match badge.badgeclass.as_str() {
+                    "6Jg_IwmfQTaJ2kUNePsO5Q" => {
+                        // Foundations of Citizen Science
+                        let exists = sqlx::query_scalar::<_, i64>(
+                            "SELECT COUNT(*) FROM foundations_progress WHERE user_id = ?"
+                        )
+                        .bind(&user.ulid)
+                        .fetch_one(db)
+                        .await
+                        .unwrap_or(0) > 0;
+
+                        if !exists {
+                            if let Err(e) = sqlx::query!(
+                                "INSERT INTO foundations_progress (user_id, hour1_completed_at, squirrel_completed_at, stall_completed_at, debris_completed_at, badge_granted_at) VALUES (?, ?, ?, ?, ?, ?)",
+                                user.ulid, badge.when, badge.when, badge.when, badge.when, badge.when
+                            )
+                            .execute(db)
+                            .await {
+                                eprintln!("Failed to create foundations workflow record during user sync for {}: {}", user.ulid, e);
+                            } else {
+                                println!("Created missing foundations workflow record for user {}", user.ulid);
+                            }
+                        }
+                    }
+                    "CWZrsNMPSZSHqKJoz8pLMQ" => {
+                        // Libraries as Community Hubs
+                        let exists = sqlx::query_scalar::<_, i64>(
+                            "SELECT COUNT(*) FROM libraries_hubs_progress WHERE user_id = ?"
+                        )
+                        .bind(&user.ulid)
+                        .fetch_one(db)
+                        .await
+                        .unwrap_or(0) > 0;
+
+                        if !exists {
+                            if let Err(e) = sqlx::query!(
+                                "INSERT INTO libraries_hubs_progress (user_id, hour2_completed_at, supplemental_signup_at, badge_granted_at) VALUES (?, ?, ?, ?)",
+                                user.ulid, badge.when, badge.when, badge.when
+                            )
+                            .execute(db)
+                            .await {
+                                eprintln!("Failed to create libraries_hubs workflow record during user sync for {}: {}", user.ulid, e);
+                            } else {
+                                println!("Created missing libraries_hubs workflow record for user {}", user.ulid);
+                            }
+                        }
+                    }
+                    "e_t41dudSc6dXymoEa8iNw" => {
+                        // Data Literacy
+                        let exists = sqlx::query_scalar::<_, i64>(
+                            "SELECT COUNT(*) FROM data_literacy_progress WHERE user_id = ?"
+                        )
+                        .bind(&user.ulid)
+                        .fetch_one(db)
+                        .await
+                        .unwrap_or(0) > 0;
+
+                        if !exists {
+                            if let Err(e) = sqlx::query!(
+                                "INSERT INTO data_literacy_progress (user_id, tutorial_completed_at, badge_granted_at) VALUES (?, ?, ?)",
+                                user.ulid, badge.when, badge.when
+                            )
+                            .execute(db)
+                            .await {
+                                eprintln!("Failed to create data_literacy workflow record during user sync for {}: {}", user.ulid, e);
+                            } else {
+                                println!("Created missing data_literacy workflow record for user {}", user.ulid);
+                            }
+                        }
+                    }
+                    "OP_wrFm7QauZgaXrZY-DhA" => {
+                        // Higher Education
+                        let exists = sqlx::query_scalar::<_, i64>(
+                            "SELECT COUNT(*) FROM higher_ed_progress WHERE user_id = ?"
+                        )
+                        .bind(&user.ulid)
+                        .fetch_one(db)
+                        .await
+                        .unwrap_or(0) > 0;
+
+                        if !exists {
+                            if let Err(e) = sqlx::query!(
+                                "INSERT INTO higher_ed_progress (user_id, tutorial_completed_at, badge_granted_at) VALUES (?, ?, ?)",
+                                user.ulid, badge.when, badge.when
+                            )
+                            .execute(db)
+                            .await {
+                                eprintln!("Failed to create higher_ed workflow record during user sync for {}: {}", user.ulid, e);
+                            } else {
+                                println!("Created missing higher_ed workflow record for user {}", user.ulid);
+                            }
+                        }
+                    }
+                    "1OeTfgY1Q-exWqz---kPAQ" => {
+                        // Data Ethics
+                        let exists = sqlx::query_scalar::<_, i64>(
+                            "SELECT COUNT(*) FROM data_ethics_progress WHERE user_id = ?"
+                        )
+                        .bind(&user.ulid)
+                        .fetch_one(db)
+                        .await
+                        .unwrap_or(0) > 0;
+
+                        if !exists {
+                            if let Err(e) = sqlx::query!(
+                                "INSERT INTO data_ethics_progress (user_id, tutorial_completed_at, badge_granted_at) VALUES (?, ?, ?)",
+                                user.ulid, badge.when, badge.when
+                            )
+                            .execute(db)
+                            .await {
+                                eprintln!("Failed to create data_ethics workflow record during user sync for {}: {}", user.ulid, e);
+                            } else {
+                                println!("Created missing data_ethics workflow record for user {}", user.ulid);
+                            }
+                        }
+                    }
+                    "a8cFJfeBTRec05glGM3_9w" => {
+                        // IDEAL
+                        let exists = sqlx::query_scalar::<_, i64>(
+                            "SELECT COUNT(*) FROM ideal_progress WHERE user_id = ?"
+                        )
+                        .bind(&user.ulid)
+                        .fetch_one(db)
+                        .await
+                        .unwrap_or(0) > 0;
+
+                        if !exists {
+                            if let Err(e) = sqlx::query!(
+                                "INSERT INTO ideal_progress (user_id, tutorial_completed_at, badge_granted_at) VALUES (?, ?, ?)",
+                                user.ulid, badge.when, badge.when
+                            )
+                            .execute(db)
+                            .await {
+                                eprintln!("Failed to create ideal workflow record during user sync for {}: {}", user.ulid, e);
+                            } else {
+                                println!("Created missing ideal workflow record for user {}", user.ulid);
+                            }
+                        }
+                    }
+                    "9csPkdhzQLSZuk-OWREaKg" => {
+                        // Ambassador
+                        let exists = sqlx::query_scalar::<_, i64>(
+                            "SELECT COUNT(*) FROM ambassador_progress WHERE user_id = ?"
+                        )
+                        .bind(&user.ulid)
+                        .fetch_one(db)
+                        .await
+                        .unwrap_or(0) > 0;
+
+                        if !exists {
+                            if let Err(e) = sqlx::query!(
+                                "INSERT INTO ambassador_progress (user_id, tutorial_completed_at, badge_granted_at) VALUES (?, ?, ?)",
+                                user.ulid, badge.when, badge.when
+                            )
+                            .execute(db)
+                            .await {
+                                eprintln!("Failed to create ambassador workflow record during user sync for {}: {}", user.ulid, e);
+                            } else {
+                                println!("Created missing ambassador workflow record for user {}", user.ulid);
+                            }
+                        }
+                    }
+                    "QLLs6Nm9TfqIj3_722yFQg" => {
+                        // One Million Acts 2024
+                        let exists = sqlx::query_scalar::<_, i64>(
+                            "SELECT COUNT(*) FROM one_million_2024_progress WHERE user_id = ?"
+                        )
+                        .bind(&user.ulid)
+                        .fetch_one(db)
+                        .await
+                        .unwrap_or(0) > 0;
+
+                        if !exists {
+                            if let Err(e) = sqlx::query!(
+                                "INSERT INTO one_million_2024_progress (user_id, completed_at, badge_granted_at) VALUES (?, ?, ?)",
+                                user.ulid, badge.when, badge.when
+                            )
+                            .execute(db)
+                            .await {
+                                eprintln!("Failed to create one_million_2024 workflow record during user sync for {}: {}", user.ulid, e);
+                            } else {
+                                println!("Created missing one_million_2024 workflow record for user {}", user.ulid);
+                            }
+                        }
+                    }
+                    "U431wPFaTaKwUQO0WhQJRg" => {
+                        // One Million Acts 2025
+                        let exists = sqlx::query_scalar::<_, i64>(
+                            "SELECT COUNT(*) FROM one_million_2025_progress WHERE user_id = ?"
+                        )
+                        .bind(&user.ulid)
+                        .fetch_one(db)
+                        .await
+                        .unwrap_or(0) > 0;
+
+                        if !exists {
+                            if let Err(e) = sqlx::query!(
+                                "INSERT INTO one_million_2025_progress (user_id, completed_at, badge_granted_at) VALUES (?, ?, ?)",
+                                user.ulid, badge.when, badge.when
+                            )
+                            .execute(db)
+                            .await {
+                                eprintln!("Failed to create one_million_2025 workflow record during user sync for {}: {}", user.ulid, e);
+                            } else {
+                                println!("Created missing one_million_2025 workflow record for user {}", user.ulid);
+                            }
+                        }
+                    }
+                    _ => {
+                        // Other badges don't have workflow tracking
+                    }
+                }
+            }
+
             log_activity(None, "imported", user.ulid.as_ulid().ok(), None, None)
                 .await
                 .ok();
@@ -935,102 +1159,125 @@ async fn userbadges_synchronize() {
             .expect("Error logging badge activity");
 
             // If badge was actually inserted (not a duplicate), create workflow record
+            // Only create workflow record if user exists in users table
             if result.rows_affected() > 0 {
-                let now_str = badge_when.to_string();
-                match badge.badgeclass.as_str() {
-                    // Foundations of Citizen Science
-                    "6Jg_IwmfQTaJ2kUNePsO5Q" => {
-                        sqlx::query!(
-                            "INSERT OR IGNORE INTO foundations_progress (user_id, hour1_completed_at, squirrel_completed_at, stall_completed_at, debris_completed_at, badge_granted_at) VALUES (?, ?, ?, ?, ?, ?)",
-                            badge.user_ulid, now_str, now_str, now_str, now_str, now_str
-                        )
-                        .execute(db)
-                        .await
-                        .expect("Creating foundations workflow record failed");
+                // Check if user exists in users table first
+                let user_exists = sqlx::query_scalar::<_, i64>(
+                    "SELECT COUNT(*) FROM users WHERE user_id = ?"
+                )
+                .bind(&badge.user_ulid)
+                .fetch_one(db)
+                .await
+                .unwrap_or(0) > 0;
+
+                if user_exists {
+                    let now_str = badge_when.to_string();
+                    match badge.badgeclass.as_str() {
+                        // Foundations of Citizen Science
+                        "6Jg_IwmfQTaJ2kUNePsO5Q" => {
+                            if let Err(e) = sqlx::query!(
+                                "INSERT OR IGNORE INTO foundations_progress (user_id, hour1_completed_at, squirrel_completed_at, stall_completed_at, debris_completed_at, badge_granted_at) VALUES (?, ?, ?, ?, ?, ?)",
+                                badge.user_ulid, now_str, now_str, now_str, now_str, now_str
+                            )
+                            .execute(db)
+                            .await {
+                                eprintln!("Failed to create foundations workflow record for user {}: {}", badge.user_ulid, e);
+                            }
+                        }
+                        // Libraries as Community Hubs
+                        "CWZrsNMPSZSHqKJoz8pLMQ" => {
+                            if let Err(e) = sqlx::query!(
+                                "INSERT OR IGNORE INTO libraries_hubs_progress (user_id, hour2_completed_at, supplemental_signup_at, badge_granted_at) VALUES (?, ?, ?, ?)",
+                                badge.user_ulid, now_str, now_str, now_str
+                            )
+                            .execute(db)
+                            .await {
+                                eprintln!("Failed to create libraries_hubs workflow record for user {}: {}", badge.user_ulid, e);
+                            }
+                        }
+                        // Data Literacy
+                        "e_t41dudSc6dXymoEa8iNw" => {
+                            if let Err(e) = sqlx::query!(
+                                "INSERT OR IGNORE INTO data_literacy_progress (user_id, tutorial_completed_at, badge_granted_at) VALUES (?, ?, ?)",
+                                badge.user_ulid, now_str, now_str
+                            )
+                            .execute(db)
+                            .await {
+                                eprintln!("Failed to create data_literacy workflow record for user {}: {}", badge.user_ulid, e);
+                            }
+                        }
+                        // Higher Education
+                        "OP_wrFm7QauZgaXrZY-DhA" => {
+                            if let Err(e) = sqlx::query!(
+                                "INSERT OR IGNORE INTO higher_ed_progress (user_id, tutorial_completed_at, badge_granted_at) VALUES (?, ?, ?)",
+                                badge.user_ulid, now_str, now_str
+                            )
+                            .execute(db)
+                            .await {
+                                eprintln!("Failed to create higher_ed workflow record for user {}: {}", badge.user_ulid, e);
+                            }
+                        }
+                        // Data Ethics
+                        "1OeTfgY1Q-exWqz---kPAQ" => {
+                            if let Err(e) = sqlx::query!(
+                                "INSERT OR IGNORE INTO data_ethics_progress (user_id, tutorial_completed_at, badge_granted_at) VALUES (?, ?, ?)",
+                                badge.user_ulid, now_str, now_str
+                            )
+                            .execute(db)
+                            .await {
+                                eprintln!("Failed to create data_ethics workflow record for user {}: {}", badge.user_ulid, e);
+                            }
+                        }
+                        // IDEAL
+                        "a8cFJfeBTRec05glGM3_9w" => {
+                            if let Err(e) = sqlx::query!(
+                                "INSERT OR IGNORE INTO ideal_progress (user_id, tutorial_completed_at, badge_granted_at) VALUES (?, ?, ?)",
+                                badge.user_ulid, now_str, now_str
+                            )
+                            .execute(db)
+                            .await {
+                                eprintln!("Failed to create ideal workflow record for user {}: {}", badge.user_ulid, e);
+                            }
+                        }
+                        // Ambassador
+                        "9csPkdhzQLSZuk-OWREaKg" => {
+                            if let Err(e) = sqlx::query!(
+                                "INSERT OR IGNORE INTO ambassador_progress (user_id, tutorial_completed_at, badge_granted_at) VALUES (?, ?, ?)",
+                                badge.user_ulid, now_str, now_str
+                            )
+                            .execute(db)
+                            .await {
+                                eprintln!("Failed to create ambassador workflow record for user {}: {}", badge.user_ulid, e);
+                            }
+                        }
+                        // One Million Acts 2024
+                        "QLLs6Nm9TfqIj3_722yFQg" => {
+                            if let Err(e) = sqlx::query!(
+                                "INSERT OR IGNORE INTO one_million_2024_progress (user_id, completed_at, badge_granted_at) VALUES (?, ?, ?)",
+                                badge.user_ulid, now_str, now_str
+                            )
+                            .execute(db)
+                            .await {
+                                eprintln!("Failed to create one_million_2024 workflow record for user {}: {}", badge.user_ulid, e);
+                            }
+                        }
+                        // One Million Acts 2025
+                        "U431wPFaTaKwUQO0WhQJRg" => {
+                            if let Err(e) = sqlx::query!(
+                                "INSERT OR IGNORE INTO one_million_2025_progress (user_id, completed_at, badge_granted_at) VALUES (?, ?, ?)",
+                                badge.user_ulid, now_str, now_str
+                            )
+                            .execute(db)
+                            .await {
+                                eprintln!("Failed to create one_million_2025 workflow record for user {}: {}", badge.user_ulid, e);
+                            }
+                        }
+                        _ => {
+                            // Other badges don't have workflow tracking
+                        }
                     }
-                    // Libraries as Community Hubs
-                    "CWZrsNMPSZSHqKJoz8pLMQ" => {
-                        sqlx::query!(
-                            "INSERT OR IGNORE INTO libraries_hubs_progress (user_id, hour2_completed_at, supplemental_signup_at, badge_granted_at) VALUES (?, ?, ?, ?)",
-                            badge.user_ulid, now_str, now_str, now_str
-                        )
-                        .execute(db)
-                        .await
-                        .expect("Creating libraries_hubs workflow record failed");
-                    }
-                    // Data Literacy
-                    "e_t41dudSc6dXymoEa8iNw" => {
-                        sqlx::query!(
-                            "INSERT OR IGNORE INTO data_literacy_progress (user_id, tutorial_completed_at, badge_granted_at) VALUES (?, ?, ?)",
-                            badge.user_ulid, now_str, now_str
-                        )
-                        .execute(db)
-                        .await
-                        .expect("Creating data_literacy workflow record failed");
-                    }
-                    // Higher Education
-                    "OP_wrFm7QauZgaXrZY-DhA" => {
-                        sqlx::query!(
-                            "INSERT OR IGNORE INTO higher_ed_progress (user_id, tutorial_completed_at, badge_granted_at) VALUES (?, ?, ?)",
-                            badge.user_ulid, now_str, now_str
-                        )
-                        .execute(db)
-                        .await
-                        .expect("Creating higher_ed workflow record failed");
-                    }
-                    // Data Ethics
-                    "1OeTfgY1Q-exWqz---kPAQ" => {
-                        sqlx::query!(
-                            "INSERT OR IGNORE INTO data_ethics_progress (user_id, tutorial_completed_at, badge_granted_at) VALUES (?, ?, ?)",
-                            badge.user_ulid, now_str, now_str
-                        )
-                        .execute(db)
-                        .await
-                        .expect("Creating data_ethics workflow record failed");
-                    }
-                    // IDEAL
-                    "a8cFJfeBTRec05glGM3_9w" => {
-                        sqlx::query!(
-                            "INSERT OR IGNORE INTO ideal_progress (user_id, tutorial_completed_at, badge_granted_at) VALUES (?, ?, ?)",
-                            badge.user_ulid, now_str, now_str
-                        )
-                        .execute(db)
-                        .await
-                        .expect("Creating ideal workflow record failed");
-                    }
-                    // Ambassador
-                    "9csPkdhzQLSZuk-OWREaKg" => {
-                        sqlx::query!(
-                            "INSERT OR IGNORE INTO ambassador_progress (user_id, tutorial_completed_at, badge_granted_at) VALUES (?, ?, ?)",
-                            badge.user_ulid, now_str, now_str
-                        )
-                        .execute(db)
-                        .await
-                        .expect("Creating ambassador workflow record failed");
-                    }
-                    // One Million Acts 2024
-                    "QLLs6Nm9TfqIj3_722yFQg" => {
-                        sqlx::query!(
-                            "INSERT OR IGNORE INTO one_million_2024_progress (user_id, completed_at, badge_granted_at) VALUES (?, ?, ?)",
-                            badge.user_ulid, now_str, now_str
-                        )
-                        .execute(db)
-                        .await
-                        .expect("Creating one_million_2024 workflow record failed");
-                    }
-                    // One Million Acts 2025
-                    "U431wPFaTaKwUQO0WhQJRg" => {
-                        sqlx::query!(
-                            "INSERT OR IGNORE INTO one_million_2025_progress (user_id, completed_at, badge_granted_at) VALUES (?, ?, ?)",
-                            badge.user_ulid, now_str, now_str
-                        )
-                        .execute(db)
-                        .await
-                        .expect("Creating one_million_2025 workflow record failed");
-                    }
-                    _ => {
-                        // Other badges don't have workflow tracking
-                    }
+                } else {
+                    println!("Badge {} for user {} - user not found in users table, skipping workflow record creation", badge.badgeclass, badge.user_ulid);
                 }
             }
 

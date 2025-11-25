@@ -3,9 +3,10 @@ use common::{
     message::log::{
         AffiliateParticipantsRequest, AffiliateParticipantsResponse, AnalyticsQuery,
         AnalyticsResponse, ArticulateCompletionRecord, ArticulateCompletionRequest,
-        ArticulateCompletionResponse, GoUrlStatsRequest, GoUrlStatsResponse,
-        ProjectParticipationRecord, ProjectParticipationRequest, ProjectParticipationResponse,
-        RecentActivityRequest, RecentActivityResponse,
+        ArticulateCompletionResponse, ExternalLinkClickthroughResponse, ExternalLinksResponse,
+        GoUrlStatsRequest, GoUrlStatsResponse, ProjectParticipationRecord,
+        ProjectParticipationRequest, ProjectParticipationResponse, RecentActivityRequest,
+        RecentActivityResponse,
     },
     service::decode_structured_message,
 };
@@ -562,4 +563,135 @@ pub async fn handle_project_participation_record(req: &async_nats::service::Requ
     .await?;
 
     Ok(())
+}
+
+pub async fn handle_external_links(
+    req: &async_nats::service::Request,
+) -> Result<ExternalLinksResponse, anyhow::Error> {
+    use common::message::log::ExternalLinksRequest;
+    use common::timestring::TimeString;
+
+    let request: ExternalLinksRequest = decode_structured_message(req.message.clone())?;
+
+    let db = common::shared::db();
+    let mut links = std::collections::HashMap::new();
+
+    // Use a transaction for atomicity
+    let mut tx = db.begin().await?;
+
+    for url in request.urls {
+        // Try to get existing link for this slug+url combination
+        let existing = sqlx::query!(
+            "SELECT link_id FROM external_links WHERE slug = ? AND url = ?",
+            request.slug,
+            url
+        )
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        let link_id = if let Some(row) = existing {
+            row.link_id.parse::<ulid::Ulid>()?
+        } else {
+            // Create new link
+            let new_id = ulid::Ulid::new();
+            let new_id_str = new_id.to_string();
+            let now = TimeString::now().to_string();
+
+            sqlx::query!(
+                "INSERT INTO external_links (link_id, slug, url, created_at) VALUES (?, ?, ?, ?)",
+                new_id_str,
+                request.slug,
+                url,
+                now
+            )
+            .execute(&mut *tx)
+            .await?;
+
+            new_id
+        };
+
+        links.insert(url, link_id);
+    }
+
+    tx.commit().await?;
+
+    Ok(ExternalLinksResponse { links })
+}
+
+pub async fn handle_external_link_clickthrough(
+    req: &async_nats::service::Request,
+) -> Result<ExternalLinkClickthroughResponse, anyhow::Error> {
+    use common::message::log::ExternalLinkClickthroughRequest;
+    use common::timestring::TimeString;
+    use log_service::database::tables::ClickthroughRow;
+
+    let request: ExternalLinkClickthroughRequest = decode_structured_message(req.message.clone())?;
+
+    let db = common::shared::db();
+
+    // Use a transaction for atomicity
+    let mut tx = db.begin().await?;
+
+    // Get URL and slug for this link_id
+    let link_id_str = request.link_id.to_string();
+    let link = sqlx::query!(
+        "SELECT slug, url FROM external_links WHERE link_id = ?",
+        link_id_str
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    let (slug, url) = match link {
+        Some(row) => (row.slug, Some(row.url)),
+        None => (String::new(), None),
+    };
+
+    // If URL found, record the clickthrough
+    if let Some(ref url_string) = url {
+        let when = request.when.unwrap_or_else(|| TimeString::now().to_string());
+        let user_id = request.user_id.map(|id| id.to_string());
+
+        // Resolve geolocation from IP if not provided
+        let geolocation = match request.geolocation {
+            Some(geo) => geo,
+            None => {
+                match common::service::request::<common::message::location::LocationInfo>(
+                    "location.ip",
+                    &request.ip_address,
+                )
+                .await
+                {
+                    Ok(loc) => loc
+                        .as_point()
+                        .map(|p| p.to_string())
+                        .unwrap_or_else(|| r#"{"type":"Point","coordinates":[0,0]}"#.to_string()),
+                    Err(_) => r#"{"type":"Point","coordinates":[0,0]}"#.to_string(),
+                }
+            }
+        };
+
+        let row = ClickthroughRow {
+            when,
+            ip_address: request.ip_address,
+            device_id: request.device_id,
+            interaction_id: request.interaction_id,
+            user_id,
+            from_path: format!("/{}", slug),
+            to_url: url_string.to_string(),
+            link_type: request.link_type,
+            program_id: request.program_id,
+            geolocation,
+        };
+
+        let database = DATABASE
+            .read()
+            .as_ref()
+            .expect("Database not initialized")
+            .clone();
+        database.clickthroughs.insert(row).await?;
+    }
+
+    tx.commit().await?;
+
+    Ok(ExternalLinkClickthroughResponse { url })
 }

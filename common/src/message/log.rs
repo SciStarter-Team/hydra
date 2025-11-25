@@ -216,3 +216,34 @@ pub struct ProjectCount {
     pub project_id: String,  // ULID
     pub count: i32,
 }
+
+// External Links - Get or create ULIDs for URLs
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExternalLinksRequest {
+    pub slug: String,                // Entity slug where links are found
+    pub urls: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExternalLinksResponse {
+    pub links: std::collections::HashMap<String, ulid::Ulid>,  // URL -> ULID
+}
+
+// External Link Clickthrough - Get URL for ULID and record click
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExternalLinkClickthroughRequest {
+    pub link_id: ulid::Ulid,
+    pub when: Option<String>,         // Optional timestamp, defaults to now
+    pub ip_address: String,
+    pub device_id: String,
+    pub interaction_id: String,
+    pub user_id: Option<ulid::Ulid>,
+    pub link_type: String,            // Type of link (e.g., "external_link")
+    pub program_id: Option<String>,
+    pub geolocation: Option<String>,  // Optional GeoJSON point, will be resolved from IP if not provided
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExternalLinkClickthroughResponse {
+    pub url: Option<String>,  // None if link_id not found
+}

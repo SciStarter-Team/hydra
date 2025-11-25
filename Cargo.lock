@@ -2953,6 +2953,7 @@ dependencies = [
 name = "frontend"
 version = "0.1.0"
 dependencies = [
+ "aho-corasick",
  "anyhow",
  "async-nats",
  "badgebuilder",

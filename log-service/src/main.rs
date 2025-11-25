@@ -13,7 +13,8 @@ mod exchange;
 use handlers::{
     handle_activity_log, handle_affiliate_participation, handle_articulate_completion,
     handle_articulate_completion_record, handle_clickthrough, handle_clickthrough_analytics,
-    handle_email_event, handle_go_url_stats, handle_health_check, handle_join, handle_page_view,
+    handle_email_event, handle_external_link_clickthrough, handle_external_links,
+    handle_go_url_stats, handle_health_check, handle_join, handle_page_view,
     handle_participation_analytics, handle_project_participation,
     handle_project_participation_record, handle_recent_activity, handle_top_performers_analytics,
     handle_user_emails_update, handle_user_tags_update,
@@ -183,6 +184,11 @@ async fn main() -> Result<()> {
         handle_user_emails_update
     ));
 
+    // External links endpoints
+    let links_group = svc.group("log.links");
+    toplevel.spawn(handler!(links_group, "get_or_create", handle_external_links));
+    toplevel.spawn(handler!(links_group, "clickthrough", handle_external_link_clickthrough));
+
     // Health endpoint
     let health_group = svc.group("log.health");
     toplevel.spawn(handler!(health_group, "check", handle_health_check));
@@ -195,6 +201,8 @@ async fn main() -> Result<()> {
     println!("  - log.email_event");
     println!("  - log.exchange_event");
     println!("  - log.exchange_engagement");
+    println!("  - log.links.get_or_create");
+    println!("  - log.links.clickthrough");
     println!("  - log.clickthrough_analytics");
     println!("  - log.participation_analytics");
     println!("  - log.recent_activity");

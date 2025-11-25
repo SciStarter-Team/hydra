@@ -1,8 +1,13 @@
-use std::{net::IpAddr, sync::Arc};
+use std::{collections::HashSet, net::IpAddr, sync::Arc};
 
-use common::{message::user::UserInfo, service::log_pageview};
+use aho_corasick::AhoCorasick;
+use common::{
+    message::{log::{ExternalLinksRequest, ExternalLinksResponse}, user::UserInfo},
+    service::{log_pageview, request},
+};
 use jiff::{ToSpan, Zoned};
 use poem::{Endpoint, FromRequest, IntoResponse, Middleware, Response, session::Session, web::RealIp};
+use regex::Regex;
 use ulid::Ulid;
 
 use super::authorization::Authenticated;
@@ -120,7 +125,7 @@ impl<E: Endpoint> Endpoint for AnalyticsMiddlewareEndpoint<E> {
 
         // Call the endpoint first to get the response
         let output = self.wrapped.call(req).await?;
-        let response = output.into_response();
+        let mut response = output.into_response();
         let status = response.status();
 
         // Skip logging for 404 Not Found responses
@@ -139,6 +144,43 @@ impl<E: Endpoint> Endpoint for AnalyticsMiddlewareEndpoint<E> {
             .await
             {
                 tracing::warn!("Failed to log page view: {}", e);
+            }
+        }
+
+        // Rewrite external links in HTML responses
+        let is_html = response
+            .headers()
+            .get("content-type")
+            .and_then(|ct| ct.to_str().ok())
+            .map(|ct_str| ct_str.contains("text/html"))
+            .unwrap_or(false);
+
+        if is_html {
+            if let Ok(body) = response.take_body().into_string().await {
+                // Extract slug from path (remove leading slash)
+                let mut slug = path.strip_prefix('/').unwrap_or(&path).to_string();
+
+                // Handle index page specially
+                if slug.is_empty() || slug == "index.html" {
+                    slug = "index".to_string();
+                }
+
+                match rewrite_external_links(&body, &slug).await {
+                    Ok(rewritten) => {
+                        response = Response::builder()
+                            .status(status)
+                            .content_type("text/html; charset=utf-8")
+                            .body(rewritten);
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to rewrite external links: {}", e);
+                        // Return original body on error
+                        response = Response::builder()
+                            .status(status)
+                            .content_type("text/html; charset=utf-8")
+                            .body(body);
+                    }
+                }
             }
         }
 
@@ -186,4 +228,54 @@ fn session_device(session: &Session) -> String {
         session.set("device", &device);
         device
     }
+}
+
+/// Rewrites external links in HTML to use tracked /-link/<ULID> URLs
+async fn rewrite_external_links(html: &str, slug: &str) -> Result<String, anyhow::Error> {
+    const DOMAIN: &str = env!("DOMAIN");
+
+    // Find all URLs in href attributes using regex
+    let url_regex = Regex::new(r#"href=["']([^"']+)["']"#)?;
+
+    // Collect unique external URLs
+    let mut external_urls = HashSet::new();
+    for cap in url_regex.captures_iter(html) {
+        if let Some(url_match) = cap.get(1) {
+            let url = url_match.as_str();
+
+            // Check if it's an external link:
+            // - Not starting with / (internal relative)
+            // - Not linking to our own domain
+            if !url.starts_with('/') && !url.contains(DOMAIN) {
+                external_urls.insert(url.to_string());
+            }
+        }
+    }
+
+    // If no external links found, return original HTML
+    if external_urls.is_empty() {
+        return Ok(html.to_string());
+    }
+
+    // Batch request ULIDs for all external URLs
+    let urls: Vec<String> = external_urls.into_iter().collect();
+    let req_data = ExternalLinksRequest {
+        slug: slug.to_string(),
+        urls,
+    };
+
+    let response: ExternalLinksResponse = request("log.links.get_or_create", &req_data).await?;
+
+    // Build patterns and replacements for aho-corasick from HashMap entries
+    let (patterns, replacements): (Vec<&String>, Vec<String>) = response
+        .links
+        .iter()
+        .map(|(url, ulid)| (url, format!("/-link/{}", ulid)))
+        .unzip();
+
+    // Use aho-corasick for efficient parallel replacement
+    let ac = AhoCorasick::new(&patterns)?;
+    let result = ac.replace_all(html, &replacements);
+
+    Ok(result)
 }

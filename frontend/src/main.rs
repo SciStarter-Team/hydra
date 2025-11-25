@@ -11,6 +11,7 @@ pub mod entity;
 pub mod event;
 pub mod exchange;
 pub mod evolveme;
+pub mod external_link;
 pub mod form;
 pub mod gourl;
 pub mod health;
@@ -190,6 +191,7 @@ fn user_facing() -> impl Endpoint {
         .at("/logout", get(auth::logout_action).with(middleware::partitioned_session::EnablePartitionedCookies))
         .at("/demo-forum", get(demo_forum))
         .at("/go/*friendly_url", get(gourl::handle_go_url))
+        .at("/-link/:link_id", get(external_link::handle_external_link))
         .nest("/badges", badge::routes())
         .nest("/evolveme", evolveme::routes())
         .nest("/exchange", exchange::routes())
