@@ -234,19 +234,24 @@ fn session_device(session: &Session) -> String {
 async fn rewrite_external_links(html: &str, slug: &str) -> Result<String, anyhow::Error> {
     const DOMAIN: &str = env!("DOMAIN");
 
-    // Find all URLs in href attributes using regex
-    let url_regex = Regex::new(r#"href=["']([^"']+)["']"#)?;
+    // Find all URLs in <a> tag href attributes, excluding <link> tags
+    // This regex matches: <a ...href="..."...> but not <link ...href="..."...>
+    let url_regex = Regex::new(r#"<a\s[^>]*href=["']([^"']+)["'][^>]*>"#)?;
 
     // Collect unique external URLs
     let mut external_urls = HashSet::new();
+    let domain_url = format!("https://{}", DOMAIN);
+
     for cap in url_regex.captures_iter(html) {
         if let Some(url_match) = cap.get(1) {
             let url = url_match.as_str();
 
             // Check if it's an external link:
-            // - Not starting with / (internal relative)
-            // - Not linking to our own domain
-            if !url.starts_with('/') && !url.contains(DOMAIN) {
+            // - Must start with http:// or https://
+            // - Must not start with https://<DOMAIN>
+            if (url.starts_with("http://") || url.starts_with("https://"))
+                && !url.starts_with(&domain_url)
+            {
                 external_urls.insert(url.to_string());
             }
         }
