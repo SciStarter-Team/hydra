@@ -2,6 +2,7 @@ pub mod admin;
 pub mod api;
 pub mod auth;
 pub mod badge;
+pub mod builder;
 pub mod channel;
 pub mod component;
 pub mod contact;
@@ -9,13 +10,14 @@ pub mod dev;
 pub mod emailer;
 pub mod entity;
 pub mod event;
-pub mod exchange;
 pub mod evolveme;
+pub mod exchange;
 pub mod external_link;
 pub mod form;
 pub mod gourl;
 pub mod health;
 pub mod lru_cache;
+pub mod mcp;
 pub mod middleware;
 pub mod misc;
 pub mod oauth2;
@@ -183,12 +185,22 @@ fn user_facing() -> impl Endpoint {
     Route::new()
         .at("/", get(pages::index::index_page))
         .at("/index.html", get(pages::index::index_page))
-        .at("/signup", post(auth::signup_action).with(middleware::partitioned_session::EnablePartitionedCookies))
+        .at(
+            "/signup",
+            post(auth::signup_action)
+                .with(middleware::partitioned_session::EnablePartitionedCookies),
+        )
         .at(
             "/login",
-            get(auth::login_signup_page).post(auth::login_action.with(middleware::partitioned_session::EnablePartitionedCookies)),
+            get(auth::login_signup_page).post(
+                auth::login_action.with(middleware::partitioned_session::EnablePartitionedCookies),
+            ),
         )
-        .at("/logout", get(auth::logout_action).with(middleware::partitioned_session::EnablePartitionedCookies))
+        .at(
+            "/logout",
+            get(auth::logout_action)
+                .with(middleware::partitioned_session::EnablePartitionedCookies),
+        )
         .at("/demo-forum", get(demo_forum))
         .at("/go/*friendly_url", get(gourl::handle_go_url))
         .at("/-link/:link_id", get(external_link::handle_external_link))
@@ -263,10 +275,15 @@ async fn main() -> Result<(), Error> {
 
     let routes = Route::new()
         .at("/favicon.ico", StaticFile::new("favicon.ico"))
+        .at("/apple-touch-icon.png", StaticFile::new("apple-touch-icon.png"))
         .nest("/-static", StaticFiles::new())
         .nest("/-uploaded", upload::anonymous_routes())
         .nest("/messaging/emailer", emailer::routes())
-        .nest("/api", api::external_routes().with(api::middleware::api_cors()))
+        .nest(
+            "/api",
+            api::external_routes().with(api::middleware::api_cors()),
+        )
+        .at("/-mcp", post(mcp::mcp_handler))
         .nest("/oauth2", oauth2::oauth2_routes())
         .nest("/.well-known", oauth2::well_known_routes())
         .nest_no_strip("/", dynamic())
@@ -374,7 +391,7 @@ async fn main() -> Result<(), Error> {
 
 /// Background task for periodic maintenance operations
 async fn periodic_maintenance() {
-    use tokio::time::{interval, Duration};
+    use tokio::time::{Duration, interval};
 
     let mut interval = interval(Duration::from_secs(300)); // Run every 5 minutes
 
@@ -1032,6 +1049,9 @@ mod sync {
                 // Mark synced projects as reviewed (they come from the main database)
                 proj.reviewed = true;
 
+                // Use Legacy source so higher-priority sources aren't overwritten
+                proj.update_source = Some(crate::project::field_source::FieldSource::Legacy);
+
                 if let Err(err) = proj.store().await {
                     tracing::error!("Error saving {}: {}", &proj.name, err);
                     continue;
@@ -1514,6 +1534,7 @@ mod sync {
                         field: crate::project::field::ProjectFieldValue::Status(
                             ProjectStatus::Expired,
                         ),
+                        source: None,
                     };
 
                     // Use the peering system to update the status

@@ -44,4 +44,11 @@ hex = "0.4.3"
 jsonwebtoken = "9.3"
 rsa = "0.9"
 aho-corasick = "1.1"
+handlebars = "6.3.2"
+fxhash = "0.2.1"
+parking_lot = "0.12.5"
+
+[dev-dependencies]
+assert2 = "0.3.16"
+tokio = { version = "1.47.1", features = ["rt", "macros"] }
 

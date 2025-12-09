@@ -6,7 +6,7 @@ use ulid::Ulid;
 
 use crate::{contact::Contact, peering::LoadStorePeered};
 
-use super::{ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus};
+use super::{field_source::FieldSource, ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus};
 
 // Vocabulary constants for controlled fields
 pub const PARTICIPATION_TASKS_VOCABULARY: &[&str] = &[
@@ -209,10 +209,14 @@ pub const SUSTAINABLE_DEVELOPMENT_GOALS_VOCABULARY: &[&str] = &[
 pub struct ProjectField {
     pub project_id: Ulid,
     pub field: ProjectFieldValue,
+    /// Source of this field update for permission checking.
+    /// If None, permission checking is bypassed (backward compatibility).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<FieldSource>,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, strum::EnumDiscriminants)]
-#[strum_discriminants(name(ProjectFieldType), derive(serde::Serialize, serde::Deserialize))]
+#[strum_discriminants(name(ProjectFieldType), derive(Hash, serde::Serialize, serde::Deserialize, strum::EnumIter))]
 pub enum ProjectFieldValue {
     ProjectId(Ulid),
     LegacyId(Option<i64>),
@@ -443,9 +447,23 @@ impl TryFrom<&ProjectField> for Vec<String> {
 }
 
 impl ProjectField {
-    /// Create a new ProjectField with the given project_id and field value
+    /// Create a new ProjectField with the given project_id and field value.
+    /// Source defaults to None for backward compatibility.
     pub fn new(project_id: Ulid, field: ProjectFieldValue) -> Self {
-        Self { project_id, field }
+        Self {
+            project_id,
+            field,
+            source: None,
+        }
+    }
+
+    /// Create a new ProjectField with explicit source for permission checking.
+    pub fn with_source(project_id: Ulid, field: ProjectFieldValue, source: FieldSource) -> Self {
+        Self {
+            project_id,
+            field,
+            source: Some(source),
+        }
     }
 
     /// Create a new ProjectField with an array field type and items
@@ -3731,6 +3749,53 @@ impl ProjectField {
         .await?;
         Ok(())
     }
+
+    /// Checks if this update is allowed based on source priority, and updates
+    /// the source tracking table if the source is changing to a higher priority.
+    /// Returns Ok(true) if update should proceed, Ok(false) for silent reject.
+    async fn check_and_update_source(&self) -> Result<bool, Error> {
+        let Some(new_source) = self.source else {
+            // No source specified, allow update (backward compatibility)
+            return Ok(true);
+        };
+
+        let project_id_str = self.project_id.to_string();
+        let field_type_str = self.field_type().to_string();
+
+        // Check existing source
+        let existing = sqlx::query_scalar!(
+            "SELECT source FROM project_field_sources WHERE project_id = ? AND field_type = ?",
+            project_id_str,
+            field_type_str
+        )
+        .fetch_optional(db())
+        .await?;
+
+        if let Some(existing_source_str) = existing {
+            let existing_source = FieldSource::try_from(existing_source_str.as_str())?;
+            if !new_source.can_overwrite(existing_source) {
+                // Silent reject - lower priority source cannot overwrite
+                return Ok(false);
+            }
+            if new_source == existing_source {
+                // Same source, no need to update tracking table
+                return Ok(true);
+            }
+        }
+
+        // Insert or update source tracking (only when source is new or higher priority)
+        let source_str = new_source.as_str();
+        sqlx::query!(
+            "INSERT OR REPLACE INTO project_field_sources (project_id, field_type, source) VALUES (?, ?, ?)",
+            project_id_str,
+            field_type_str,
+            source_str,
+        )
+        .execute(db())
+        .await?;
+
+        Ok(true)
+    }
 }
 
 impl LoadStorePeered for ProjectField {
@@ -3742,6 +3807,12 @@ impl LoadStorePeered for ProjectField {
 
     #[tracing::instrument]
     async fn save_to_database(&self) -> Result<(), Error> {
+        // Check source permission first
+        if !self.check_and_update_source().await? {
+            // Silent reject - source priority too low
+            return Ok(());
+        }
+
         match &self.field {
             ProjectFieldValue::Status(status) => self.save_status(*status).await,
             ProjectFieldValue::Name(name) => self.save_name(name).await,
@@ -4258,6 +4329,7 @@ impl ProjectField {
         Ok(ProjectField {
             project_id,
             field: ProjectFieldValue::ParticipantFiles(urls.into_boxed_slice()),
+            source: None,
         })
     }
 
@@ -4274,6 +4346,7 @@ impl ProjectField {
         Ok(ProjectField {
             project_id,
             field: ProjectFieldValue::Topics(topics.into_boxed_slice()),
+            source: None,
         })
     }
 
@@ -4290,6 +4363,7 @@ impl ProjectField {
         Ok(ProjectField {
             project_id,
             field: ProjectFieldValue::FieldsOfScience(fields.into_boxed_slice()),
+            source: None,
         })
     }
 
@@ -4306,6 +4380,7 @@ impl ProjectField {
         Ok(ProjectField {
             project_id,
             field: ProjectFieldValue::Practices(practices.into_boxed_slice()),
+            source: None,
         })
     }
 
@@ -4322,6 +4397,7 @@ impl ProjectField {
         Ok(ProjectField {
             project_id,
             field: ProjectFieldValue::Audience(audiences.into_boxed_slice()),
+            source: None,
         })
     }
 
@@ -4338,6 +4414,7 @@ impl ProjectField {
         Ok(ProjectField {
             project_id,
             field: ProjectFieldValue::GeographicScope(scopes.into_boxed_slice()),
+            source: None,
         })
     }
 
@@ -4354,6 +4431,7 @@ impl ProjectField {
         Ok(ProjectField {
             project_id,
             field: ProjectFieldValue::ParticipationTasks(tasks.into_boxed_slice()),
+            source: None,
         })
     }
 
@@ -4370,6 +4448,7 @@ impl ProjectField {
         Ok(ProjectField {
             project_id,
             field: ProjectFieldValue::Activities(activities.into_boxed_slice()),
+            source: None,
         })
     }
 
@@ -4386,6 +4465,7 @@ impl ProjectField {
         Ok(ProjectField {
             project_id,
             field: ProjectFieldValue::DataAggregation(aggregations.into_boxed_slice()),
+            source: None,
         })
     }
 
@@ -4402,6 +4482,7 @@ impl ProjectField {
         Ok(ProjectField {
             project_id,
             field: ProjectFieldValue::DataConsent(consents.into_boxed_slice()),
+            source: None,
         })
     }
 
@@ -4418,6 +4499,7 @@ impl ProjectField {
         Ok(ProjectField {
             project_id,
             field: ProjectFieldValue::DataAccess(accesses.into_boxed_slice()),
+            source: None,
         })
     }
 
@@ -4434,6 +4516,7 @@ impl ProjectField {
         Ok(ProjectField {
             project_id,
             field: ProjectFieldValue::IntendedOutcomes(outcomes.into_boxed_slice()),
+            source: None,
         })
     }
 
@@ -4450,6 +4533,7 @@ impl ProjectField {
         Ok(ProjectField {
             project_id,
             field: ProjectFieldValue::Sponsors(sponsors.into_boxed_slice()),
+            source: None,
         })
     }
 
@@ -4466,6 +4550,7 @@ impl ProjectField {
         Ok(ProjectField {
             project_id,
             field: ProjectFieldValue::Stakeholders(stakeholders.into_boxed_slice()),
+            source: None,
         })
     }
 
@@ -4486,6 +4571,7 @@ impl ProjectField {
         Ok(ProjectField {
             project_id,
             field: ProjectFieldValue::AssociatedProjects(project_ids?.into_boxed_slice()),
+            source: None,
         })
     }
 
@@ -4506,6 +4592,7 @@ impl ProjectField {
         Ok(ProjectField {
             project_id,
             field: ProjectFieldValue::PageEditorIds(user_ids?.into_boxed_slice()),
+            source: None,
         })
     }
 
@@ -4971,6 +5058,7 @@ impl ProjectField {
         Ok(ProjectField {
             project_id,
             field: ProjectFieldValue::Tags(tags),
+            source: None,
         })
     }
 
@@ -5050,6 +5138,7 @@ impl ProjectField {
         Ok(Self {
             project_id,
             field: ProjectFieldValue::Contacts(contacts.into_boxed_slice()),
+            source: None,
         })
     }
 }
