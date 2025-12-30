@@ -1,0 +1,8 @@
+wa-input::part(input) {
+  @apply bg-primary-light border border-linework text-primary-dark px-4 py-3;
+  border-radius: 4px;
+}
+wa-input::part(label) {
+  color: #333;
+  font-weight: bold;
+}

@@ -1,7 +1,7 @@
 //! Implementation of types and operations for the "Page Builder" feature.
 //!
 //! This feature has several unusual requirements that impact its design and implementation:
-//! - Rendering both page templates and component templates must happen within an async context
+//! - Rendering of both page templates and component templates must happen within an async context
 //! - Rendering may need to produce different results depending on whether the template is being viewed in the builder interface or on the site
 //!   - For example, an if statement should pick at most one branch when rendered on the site, but display all of them in the builder interface
 //! - Components may need to add content to the page <head> tag, but if multiple components add the same item to the <head> it should only appear once

@@ -50,15 +50,21 @@
 @import "./components/event-card.css";
 @import "./components/media-object.css";
 @import "./components/feature-card.css";
+@import "./components/cta.css";
+
+@import "./components/flip.css";
+@import "./components/web-awesome-overrides.css";
 
 
 /** Load Templates (page patterns) **/
 @import "./pages/communities.css";
+@import "./pages/organization.css";
+@import "./pages/csm.css";
 
 
 /** Load Page Specific **/
  /* @import "./components/home.css"; */
- @import "./components/home-2.css";
+ @import "./components/home-3.css";
 
 
 @import "./main.css";

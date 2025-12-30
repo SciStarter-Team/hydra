@@ -177,10 +177,14 @@
 .tabs-bar {
     @apply flex border border-linework;
 }
-.tabs-bar > button {
+.tabs-bar > button, .tabs-bar > a {
     flex: 1 1 0;
     @apply p-4 bg-primary-light border-l border-linework text-primary-action;
     white-space: nowrap;
+}
+
+.tabs-bar > a:hover {
+    text-decoration: none;
 }
 
 .tabs-bar .tab-icon, .tabs-list .tab-icon {
@@ -192,15 +196,15 @@
     @apply fill-primary-action;
 }
 
-.tabs-bar [aria-selected=true].tab-icon > svg, .tabs-bar .tab-icon:hover > svg {
+.tabs-bar [aria-selected=true].tab-icon > svg, .tabs-bar .tab-icon:hover > svg, .tabs-bar a.active > svg {
     @apply fill-white;
 }
 
-.tabs-bar > button:first-child {
+.tabs-bar > button:first-child, .tabs-bar > a:first-child {
     @apply border-0;
 }
 
-.tabs-bar > [aria-selected=true] {
+.tabs-bar > [aria-selected=true], a.active {
     @apply bg-accent1 text-white;
 }
 
@@ -237,7 +241,7 @@
   .tabs-bar { scrollbar-width: none; -ms-overflow-style: none; } .tabs-bar::-webkit-scrollbar { display: none; }
 
 
-  .tabs-bar .tab:hover{ @apply bg-accent1 text-white }
+  .tabs-bar .tab:hover, .tabs-bar a:hover { @apply bg-accent1 text-white }
 
   .tabs-bar-wrapper .tabs-panels, .tabs-list-wrapper .tab-panels {
     @apply border-linework;

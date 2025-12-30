@@ -1,0 +1,16 @@
+.ss-account-cta-small-wrapper {
+    @apply text-center;
+}
+.ss-account-cta-small {
+    @apply inline-flex flex-col md:flex-row gap-4 justify-center p-4 border border-linework md:items-center mx-auto text-left;
+}
+.ss-account-cta-small img {
+    width: 60px;
+}
+.ss-account-cta-small h3 {
+    @apply m-0 text-lg text-primary-dark;
+    line-height: 1.2;
+}
+.ss-account-cta-small a {
+    @apply self-start;
+}

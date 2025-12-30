@@ -4,9 +4,9 @@ header nav a {
 }
 
 #nav--users a {
-  font-size: 18.66px;
-  font-weight: bold;
-  @apply font-header-lg;
+  @apply text-base;
+  /* font-weight: bold;
+  @apply font-header-lg; */
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
@@ -25,6 +25,10 @@ header #nav--users a:hover{
 
 #nav-main, #menu {
   z-index: 9999;
+}
+
+#nav--main {
+  @apply border-t-4 border-t-primary;
 }
 
 
@@ -116,6 +120,7 @@ header #nav--users a:hover{
       display: flex;
       align-items: center;
       height: 100%;
+      white-space: nowrap;
     }
      .main-nav-btn:hover, .main-nav-btn[aria-expanded=true], .main-nav-btn.active {
       @apply border-b-2 border-accent1;
@@ -253,21 +258,39 @@ header #nav--users a:hover{
 /* logged in nav is 200px 768px – 1024px */
 @media (min-width:768px){
   
-  .logged-in header nav, .logged-in #main-content, .logged-in footer {
+  .logged-in header nav, .logged-in #main-content, .logged-in footer, .logged-in #ss-omni-search-wrapper  {
     margin-left:200px;
   }
 
-  .logged-in-collapsed.logged-in header nav, .logged-in-collapsed.logged-in #main-content, .logged-in-collapsed.logged-in footer {
+  .logged-in-collapsed.logged-in header nav, .logged-in-collapsed.logged-in #main-content, .logged-in-collapsed.logged-in footer, .logged-in-collapsed.logged-in #ss-omni-search-wrapper {
     margin-left: 80px;
+  }
+
+  .logged-in-collapsed.logged-in #ss-omni-search-wrapper .ss-container {
+   padding: 0 1rem!important;
+  }
+
+  .logged-in.logged-in-open #ss-omni-search-wrapper fieldset {
+    @apply flex-col;
   }
 
 }
 
+@media (min-width:930px) {
+  .logged-in.logged-in-open #ss-omni-search-wrapper fieldset {
+    @apply flex-row;
+  }
+}
+
+
 /* logged in nav is 280px at 1024px */
 @media (min-width:1024px){
   
-  .logged-in header nav, .logged-in #main-content, .logged-in footer {
+  .logged-in header nav, .logged-in #main-content, .logged-in footer, .logged-in #ss-omni-search-wrapper {
     margin-left:280px;
+  }
+  .logged-in #ss-omni-search-wrapper .ss-container {
+   padding: 0 1rem!important;
   }
 
 }

@@ -1,0 +1,98 @@
+  <!-- HEADER - PRE-APRIL -->
+         <div class="mx-auto">
+        <div class="acts-hero">
+            <div id="stars"></div>
+            <div class="acts-hero-content ss-container mx-auto">
+                <div class="acts-hero-left">
+                    <div>
+                        <h2 class="relative left-[6px]">Help Us Achieve</h2>
+                        <h1 class="sr-only">2.50 Million Acts of Science</h1>
+                        <img src="/-static/img/csm/Acts_only_number_standard.svg" alt="2.50 Million Acts of Science Logo" />
+                        <div class="flex-row gap-1 md:gap-4 items-center my-8 justify-center relative sm:left-[-20px] hidden sm:flex">
+                            <p class="mb-0 uppercase text-primary-dark text-sm">Official partner of</p>
+                            <img src="/-static/img/csm/America250_logo.svg" alt="America 250 logo" class="w-[60px] md:w-[60px] block" />
+                        </div>
+                        <a href="/csm-report" class="btn btn-primary report-btn">Report Your Acts Now</a>
+                    </div>
+                </div> <!-- acts hero left-->
+                <div class="acts-hero-right">
+
+                    <div>
+
+                    <!-- TEST TUBE -->
+                    <div id="test-tube">
+                        <img id="test-tube-base" src="/-static/img/csm/test-tube.svg" alt="test tube data visualization">
+                        <!-- max height is 370px - so 2.5 million == 370px, 37px per 250,000 -->
+                        <!-- BUT you have to add 2px to that because of the top -->
+                        <div id="test-tube-fill" style="height: calc(37px + 2px)"></div>
+                        <!-- set bottom position equal to fill height plus 40px -->
+                        <div id="test-tube-fill-top" style="bottom:calc(37px + 40px);"></div>
+                        <div id="test-tube-scale">
+                            <div class="tube-tick tick0"></div>
+                            <div class="tube-tick tick1"></div>
+                            <div class="tube-tick tick2"></div>
+                            <div class="tube-tick tick3"></div>
+                            <div class="tube-tick tick4"></div>
+                            <div class="tube-tick tick5"></div>
+                            <div class="tube-tick tick6"></div>
+                            <div class="tube-tick tick7"></div>
+                            <div class="tube-tick tick8"></div>
+                            <div class="tube-tick tick9"></div>
+                            <div class="tube-tick tick10"></div>
+                            <div class="num tick1">0.25 M</div>
+                            <div class="num tick2">0.50 M</div>
+                            <div class="num tick3">0.75 M</div>
+                            <div class="num tick4">1.00 M</div>
+                            <div class="num tick5">1.25 M</div>
+                            <div class="num tick6">1.50 M</div>
+                            <div class="num tick7">1.75 M</div>
+                            <div class="num tick8">2.00 M</div>
+                            <div class="num tick9">2.25 M</div>
+                            <div class="num tick10">2.50 M</div>
+                        </div>
+                        <div id="test-tube-reflect"></div>
+
+                        <!-- same deal, 37px per 250,000 and add 6px -->
+                        <!-- <div id="test-tube-counter" style="bottom:calc(37px + 6px);">
+                            <div class="tt-date">April 4</div>
+                            <div class="tt-count">250,000</div>
+                        </div> -->
+
+
+                         <!-- once it reaches 2.50 million-->
+                         <!-- just add a clss of reached to above and get rid of calc-->
+                        <div id="test-tube-counter" class="reached">
+                            <div class="tt-date">April 28</div>
+                            <div class="tt-count">2,542,543</div>
+                        </div>
+
+                        <!-- Once we hit 2.50 million, turn this on and keep counting with just this number -->
+                        <div id="test-tube-over">
+                            <div class="tt-date">Goal Reached</div>
+                            <div class="tt-date">April 28!</div>
+                            <div class="tt-count">2.50 Million</div> 
+                        </div>
+
+
+                    </div>
+                    <!-- end test tube-->
+
+                    </div>
+                                        
+                </div> <!-- acts hero right -->
+                
+            
+
+            </div>
+                 <!-- after one million reached-->
+            <div id="fireworks"><lottie-player src="/-static/img/csm/fireworks.json" background="transparent"  speed="1"  loop autoplay></lottie-player></div>
+            <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
+        </div>
+        </div>
+        <!-- end header -->
+
+        <!-- MOBILE ONLY 250 PARTNER-->
+        <div class="flex-row gap-1 md:gap-4 items-center my-8 justify-center relative sm:left-[-20px] flex sm:hidden bg-primary-light py-4">
+            <p class="mb-0 uppercase text-primary-dark text-sm">Official partner of</p>
+            <img src="/-static/img/csm/America250_logo.svg" alt="America 250 logo" class="w-[60px] md:w-[60px] block" />
+        </div>

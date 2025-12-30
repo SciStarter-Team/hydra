@@ -1,36 +1,60 @@
 .ss-feature-project-card {
-    @apply border border-linework mb-4 bg-primary-light justify-start;
+    @apply border border-linework mb-4 justify-start;
     border-radius: 4px;
 }
-.ss-feature-project-card > div {
-    @apply p-4;
+
+
+.ss-fpc-header {
+    @apply flex gap-4 items-center bg-white h-[100px] overflow-clip px-4 pt-4 mb-4;
 }
-.ss-feature-project-card > div:first-child {
-    @apply bg-white;
+
+.ss-fpc-img-a {
+    @apply w-1/3 shrink-0 h-full;
 }
+
+.ss-fpc-img-a img {
+    @apply max-h-[100px] object-contain;
+}
+.ss-fpc-header h3 {
+    @apply line-clamp-3;
+    word-wrap:break-word;
+    margin-bottom:0!important;
+}
+.ss-fpc-header h3 a {
+    display: block;
+}
+
 .ss-feature-project-card > div:first-child, .ss-feature-project-card > div:first-child span,.ss-feature-project-card > div:first-child h3 {
     line-height: 1.2;
 }
-.ss-feature-project-card > div:first-child span {
-    display: block;
-    @apply mb-1;
+
+.ss-fpc-body {
+    @apply flex-grow py-0 px-4 mb-4;
 }
-.ss-feature-project-card > div:first-child h3 {
-    @apply mb-2;
+.ss-fpc-body span {
+    @apply text-xs font-bold block leading-tight mb-2;
 }
-.ss-feature-project-card > div:last-child {
-    @apply bg-primary-light;
+.ss-fpc-body p {
+    @apply line-clamp-3;
+}
+
+.ss-fpc-footer {
+    @apply bg-primary-light p-4;
 }
 .ss-feature-project-card ul, .ss-feature-project-card ul > li:last-child {
     margin-bottom: 0;
 }
 
-.ss-feature-project-card ul > li {
+.ss-fpc-footer ul > li {
     @apply text-sm;
 }
 
+.ss-fpc-footer ul > li > div {
+    @apply line-clamp-1;
+}
+
 .ss-feature-project-card.ss-fpc-comm {
-    @apply flex flex-col justify-between;
+    @apply flex flex-col justify-between w-full md:w-1/2;
 }
 
 /* .ss-feature-project-card.ss-fpc-event {

@@ -41,6 +41,10 @@
 }
 
 @media (min-width:1024px){
+    .program-page-header {
+        max-width: 1420px;
+        @apply mx-auto;
+    }
     .program-page-header-intro {
         width:40%;
     }
@@ -55,4 +59,12 @@
     .program-page-header-img, .program-page-header-img img {
         max-height: 100%;
     }
+}
+
+
+.ss-comm-blank {
+    @apply border border-linework p-4 rounded mx-auto inline-block my-8;
+}
+.ss-comm-blank h2 {
+    @apply text-primary-dark text-xl;
 }

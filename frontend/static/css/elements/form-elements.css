@@ -54,3 +54,4 @@ input:where([type="checkbox"][role="switch"]):checked::before {
   left: 1em;
   /* @apply bg-accent2-dark; */
 }
+

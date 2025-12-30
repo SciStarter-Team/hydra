@@ -1,0 +1,100 @@
+.ss-org-header {
+    @apply flex flex-col-reverse mb-8 border-t-3 border-primary;
+}
+.ss-org-header__img-1 {
+    display: none;
+}
+
+.ss-org-header__content {
+    @apply flex flex-col p-4 justify-center items-center text-center;
+}
+.ss-org-header__content .partner-tag {
+    @apply inline-flex flex-none;
+    left: -20px;
+}
+.ss-org-header__content img {
+    @apply max-w-[300px] object-contain mb-4;
+}
+
+@media (min-width:960px){
+    .ss-org-header {
+        @apply flex-row mx-auto;
+        min-height: 400px;
+        max-width: 1600px;
+    }
+    .ss-org-header__img-1, .ss-org-header__img-2 {
+        /* max-width: 25%; */
+        object-fit: cover;
+        display: block;
+        @apply flex-1 overflow-hidden;
+    }
+     .ss-org-header__img-2 {
+        object-position: left;
+     }
+     .ss-org-header__content {
+        max-width: 500px;
+        @apply px-8;
+     }
+}
+
+.ss-org-account {
+    @apply bg-primary-light my-16 mx-4 md:flex lg:mx-auto;
+    border-radius: 6px;
+    overflow: hidden;
+    max-width: 1024px;
+}
+.ss-org-account img {
+    @apply md:w-1/2 object-cover object-right max-h-[300px] md:max-h-full lg:max-h-[300px] w-full lg:w-full;
+}
+
+.ss-org-account__content {
+    @apply p-8 md:inline-flex md:flex-col md:justify-center;
+}
+.ss-org-account__content h2 {
+    @apply text-primary-dark mb-1 uppercase;
+}
+
+.ss-org-account__btns {
+    @apply inline-flex flex-col gap-2 md:block;
+}
+.ss-org-account__btns .btn {
+    @apply md:mb-2;
+}
+
+.ss-org-programs {
+   @apply  flex flex-col md:flex-row flex-wrap gap-4 max-w-[1024px] mx-4 lg:mx-auto my-8 justify-center;
+}
+
+.ss-org-card {
+    border-radius: 6px;
+    @apply border border-primary border-t-4 px-8 py-6 text-center w-full sm:basis-[calc(50%-0.5rem)] lg:basis-[calc(33.333%-0.6rem)] flex flex-col;
+}
+
+.ss-org-card h3 {
+    line-height: 1.2!important;
+    @apply text-lg mt-4 mb-1;
+}
+.ss-org-card p {
+    @apply text-sm;
+}
+.ss-org-card img {
+    @apply object-contain mx-auto;
+    height: 200px;
+}
+.ss-org-card a.btn {
+    @apply mt-auto self-center;
+}
+
+.ss-org-programs-wrap {
+    max-width: 1024px;
+    @apply mx-auto mt-16;
+}
+
+.ss-org-programs-wrap h2 {
+    @apply text-primary-dark font-header-lg uppercase text-xl mx-auto w-full text-center;
+}
+
+.ss-org-programs-wrap h2::before {
+    content: url(/-static/img/projects-molecule.svg);
+    vertical-align: middle;
+}
