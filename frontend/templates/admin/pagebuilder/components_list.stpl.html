@@ -1,0 +1,92 @@
+<div class="space-y-6">
+    <!-- Header with create button -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="text-lg font-semibold text-gray-900">Page Components</h2>
+            <p class="mt-1 text-sm text-gray-500">
+                Reusable template components with slots for page building
+            </p>
+        </div>
+        <a href="/-admin/engine-room/components/new"
+           class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            <wa-icon name="plus" class="w-4 h-4 mr-2"></wa-icon>
+            New Component
+        </a>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-white rounded-lg shadow border border-gray-200 p-4">
+        <div class="flex flex-wrap gap-4 items-end">
+            <div class="flex-1 min-w-[200px]">
+                <label for="search" class="block text-sm font-medium text-gray-700">Search</label>
+                <input type="text"
+                       id="search"
+                       name="search"
+                       placeholder="Search by name or description..."
+                       class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                       hx-get="/-admin/engine-room/components/search"
+                       hx-trigger="input changed delay:300ms, search"
+                       hx-target="#components-content"
+                       hx-include="[name='category']">
+            </div>
+            <div class="w-48">
+                <label for="category" class="block text-sm font-medium text-gray-700">Category</label>
+                <select id="category"
+                        name="category"
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                        hx-get="/-admin/engine-room/components/search"
+                        hx-trigger="change"
+                        hx-target="#components-content"
+                        hx-include="[name='search']">
+                    <option value="">All Categories</option>
+                    <% for cat in &self.categories { %>
+                    <option value="<%= cat %>"<% if self.selected_category.as_ref() == Some(cat) { %> selected<% } %>><%= cat %></option>
+                    <% } %>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Components list -->
+    <div id="components-content" class="bg-white rounded-lg shadow border border-gray-200">
+        <% if self.components.is_empty() { %>
+        <div class="p-8 text-center">
+            <wa-icon name="puzzle-piece" class="mx-auto h-12 w-12 text-gray-400"></wa-icon>
+            <h3 class="mt-2 text-sm font-medium text-gray-900">No components</h3>
+            <p class="mt-1 text-sm text-gray-500">Get started by creating a new component.</p>
+            <div class="mt-6">
+                <a href="/-admin/engine-room/components/new"
+                   class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                    <wa-icon name="plus" class="w-4 h-4 mr-2"></wa-icon>
+                    New Component
+                </a>
+            </div>
+        </div>
+        <% } else { %>
+        <ul class="divide-y divide-gray-200">
+            <% for component in &self.components { %>
+            <li class="hover:bg-gray-50">
+                <a href="/-admin/engine-room/components/<%= component.component_id|disp %>" class="block px-6 py-4">
+                    <div class="flex items-center justify-between">
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-3">
+                                <h3 class="text-sm font-medium text-indigo-600 truncate"><%= &component.name %></h3>
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                    <%= &component.category %>
+                                </span>
+                            </div>
+                            <% if !component.description.is_empty() { %>
+                            <p class="mt-1 text-sm text-gray-500 truncate"><%= &component.description %></p>
+                            <% } %>
+                        </div>
+                        <div class="ml-4 flex-shrink-0 text-sm text-gray-500">
+                            Updated <%= component.updated.format_display() %>
+                        </div>
+                    </div>
+                </a>
+            </li>
+            <% } %>
+        </ul>
+        <% } %>
+    </div>
+</div>

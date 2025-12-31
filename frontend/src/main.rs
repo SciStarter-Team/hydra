@@ -22,6 +22,7 @@ pub mod middleware;
 pub mod misc;
 pub mod oauth2;
 pub mod page_manager;
+pub mod pagebuilder;
 pub mod pagecontent;
 pub mod pages;
 pub mod peering;
@@ -316,6 +317,9 @@ async fn main() -> Result<(), Error> {
     let _oauth2_access_token_updates = tokio::spawn(oauth2::types::AccessToken::peering_task());
     let _oauth2_refresh_token_updates = tokio::spawn(oauth2::types::RefreshToken::peering_task());
     let _wiki_page_updates = tokio::spawn(wiki::WikiPage::peering_task());
+    let _pagebuilder_component_updates =
+        tokio::spawn(pagebuilder::PageBuilderComponent::peering_task());
+    let _pagebuilder_page_updates = tokio::spawn(pagebuilder::PageBuilderPage::peering_task());
 
     let _synchronize_projects = tokio::spawn(sync::synchronize_projects());
     let _synchronize_events = tokio::spawn(sync::synchronize_events());

@@ -10,5 +10,6 @@
 //! - Components need to be placed on a page in the page builder interface by drag-and-drop from a palette, and customized by editing options via a GUI
 
 pub mod context;
+pub mod parse;
 pub mod render;
 pub mod value;

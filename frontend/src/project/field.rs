@@ -216,7 +216,11 @@ pub struct ProjectField {
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, strum::EnumDiscriminants)]
-#[strum_discriminants(name(ProjectFieldType), derive(Hash, serde::Serialize, serde::Deserialize, strum::EnumIter))]
+#[strum_discriminants(
+    name(ProjectFieldType),
+    derive(Hash, serde::Serialize, serde::Deserialize, strum::EnumIter, strum::Display),
+    strum(serialize_all = "snake_case")
+)]
 pub enum ProjectFieldValue {
     ProjectId(Ulid),
     LegacyId(Option<i64>),
@@ -383,30 +387,6 @@ impl TryFrom<&str> for ProjectFieldType {
     }
 }
 
-impl std::fmt::Display for ProjectFieldType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = match self {
-            ProjectFieldType::ParticipantFiles => "participant_files",
-            ProjectFieldType::Topics => "topics",
-            ProjectFieldType::FieldsOfScience => "fields_of_science",
-            ProjectFieldType::Practices => "practices",
-            ProjectFieldType::Audience => "audience",
-            ProjectFieldType::GeographicScope => "geographic_scope",
-            ProjectFieldType::ParticipationTasks => "participation_tasks",
-            ProjectFieldType::Activities => "activities",
-            ProjectFieldType::DataAggregation => "data_aggregation",
-            ProjectFieldType::DataConsent => "data_consent",
-            ProjectFieldType::DataAccess => "data_access",
-            ProjectFieldType::IntendedOutcomes => "intended_outcomes",
-            ProjectFieldType::Sponsors => "sponsors",
-            ProjectFieldType::Stakeholders => "stakeholders",
-            ProjectFieldType::AssociatedProjects => "associated_projects",
-            ProjectFieldType::PageEditorIds => "page_editor_ids",
-            _ => return Err(std::fmt::Error),
-        };
-        write!(f, "{}", s)
-    }
-}
 
 impl From<ProjectFieldType> for String {
     fn from(field_type: ProjectFieldType) -> String {

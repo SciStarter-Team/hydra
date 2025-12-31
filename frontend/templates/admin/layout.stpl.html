@@ -43,7 +43,7 @@
                 </div>
                 
                 <!-- Navigation -->
-                <nav class="flex-1 px-4 py-4 space-y-2">
+                <nav class="flex-1 px-4 py-4 space-y-2 overflow-y-auto">
                     <a href="/-admin" class="<%= if self.sidebar_active == "dashboard" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
                         <wa-icon name="chart-line" class="w-5 h-5 flex-shrink-0"></wa-icon>
                         <span>Dashboard</span>
@@ -86,7 +86,7 @@
 
                     <a href="/-admin/component-pages" class="<%= if self.sidebar_active == "component-pages" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
                         <wa-icon name="puzzle-piece" class="w-5 h-5 flex-shrink-0"></wa-icon>
-                        <span>Page Builder</span>
+                        <span>Component Pages</span>
                     </a>
 
                     <a href="/-admin/files-links" class="<%= if self.sidebar_active == "files-links" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
@@ -156,6 +156,9 @@
                             </a>
                             <a href="/-admin/pagecontent/RawHtml" class="<%= if self.sidebar_active == "engine-room-raw-html" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
                                 <span>Raw HTML</span>
+                            </a>
+                            <a href="/-admin/engine-room/components" class="<%= if self.sidebar_active == "engine-room-components" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
+                                <span>Components</span>
                             </a>
                         </div>
                     </details>

@@ -393,7 +393,43 @@ impl Entity {
                     return Err(poem::Error::from_status(StatusCode::NOT_FOUND));
                 }
             }
-            EntityKind::PageBuilder => todo!(),
+            EntityKind::PageBuilder => {
+                if let Some(ulid) = self.target.as_ulid() {
+                    use crate::builder::context::{Context, ContextMode};
+                    use crate::pagebuilder::{PageBuilderPage, cache};
+
+                    let page = PageBuilderPage::load(ulid).await.map_err(|_| {
+                        poem::Error::from_status(StatusCode::NOT_FOUND)
+                    })?;
+
+                    // Compile with caching (uses timestamp to detect stale cache)
+                    let compiled = cache::compile_cached(ulid, &page.source, &page.updated)
+                        .map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR))?;
+
+                    // Render the page in presenting mode
+                    let ctx = Context::new(db(), &user_info, ContextMode::Presenting)
+                        .map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR))?;
+                    let html = compiled.render(&ctx).await
+                        .map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR))?;
+
+                    let content_wrapper = ContentPageContent {
+                        content: Literal::new(&html),
+                    };
+
+                    let layout = StandardLayout::new(content_wrapper)
+                        .prepare(user_info.clone())
+                        .await?;
+
+                    ContentPage {
+                        head: Head::default().prepare(None).await?,
+                        layout,
+                    }
+                    .into_response(None)
+                    .await?
+                } else {
+                    return Err(poem::Error::from_status(StatusCode::NOT_FOUND));
+                }
+            }
             EntityKind::Form => todo!(),
             EntityKind::Project => todo!(),
             EntityKind::Event => todo!(),

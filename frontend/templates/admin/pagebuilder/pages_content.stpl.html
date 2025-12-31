@@ -1,0 +1,27 @@
+<% if self.pages.is_empty() { %>
+<div class="p-8 text-center">
+    <wa-icon name="document" class="mx-auto h-12 w-12 text-gray-400"></wa-icon>
+    <h3 class="mt-2 text-sm font-medium text-gray-900">No pages found</h3>
+    <p class="mt-1 text-sm text-gray-500">Try adjusting your search.</p>
+</div>
+<% } else { %>
+<ul class="divide-y divide-gray-200">
+    <% for page in &self.pages { %>
+    <li class="hover:bg-gray-50">
+        <a href="/-admin/component-pages/<%= page.page_id|disp %>" class="block px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex-1 min-w-0">
+                    <h3 class="text-sm font-medium text-indigo-600 truncate"><%= &page.name %></h3>
+                    <% if !page.description.is_empty() { %>
+                    <p class="mt-1 text-sm text-gray-500 truncate"><%= &page.description %></p>
+                    <% } %>
+                </div>
+                <div class="ml-4 flex-shrink-0 text-sm text-gray-500">
+                    Updated <%= page.updated.format_display() %>
+                </div>
+            </div>
+        </a>
+    </li>
+    <% } %>
+</ul>
+<% } %>

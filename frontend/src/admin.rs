@@ -123,6 +123,43 @@ pub fn routes() -> impl Endpoint {
             "/engine-room/sync-page-managers",
             post(engine_room_sync_page_managers),
         )
+        .at("/engine-room/components", get(pb_components_list))
+        .at("/engine-room/components/search", get(pb_components_search))
+        .at(
+            "/engine-room/components/new",
+            get(pb_components_new).post(pb_components_create),
+        )
+        .at(
+            "/engine-room/components/:id",
+            get(pb_components_edit)
+                .post(pb_components_update)
+                .delete(pb_components_delete),
+        )
+        .at("/component-pages", get(pb_pages_list))
+        .at("/component-pages/search", get(pb_pages_search))
+        .at(
+            "/component-pages/new",
+            get(pb_pages_new).post(pb_pages_create),
+        )
+        .at(
+            "/component-pages/:id",
+            get(pb_page_editor).delete(pb_page_delete),
+        )
+        .at("/component-pages/:id/edit", get(pb_page_edit_details))
+        .at("/component-pages/:id/update", post(pb_page_update))
+        .at(
+            "/component-pages/:id/source",
+            get(pb_page_source_editor).post(pb_page_update_source),
+        )
+        .at("/component-pages/:id/preview", get(pb_page_preview))
+        .at(
+            "/component-pages/:id/slot/:slot_name",
+            post(pb_slot_insert).delete(pb_slot_clear),
+        )
+        .at(
+            "/component-pages/:id/slot/:slot_name/params",
+            get(pb_slot_params_form).put(pb_slot_update_params),
+        )
         .at("/files-links", get(files_links))
         .at("/files-links/search", get(files_links_search))
         .at("/files-links/redirect", post(files_links_create_redirect))
@@ -265,21 +302,33 @@ pub fn routes() -> impl Endpoint {
         .at("/api/recipient-select", post(api_recipient_select))
         .at("/api/recipient-remove", delete(api_recipient_remove))
         .at("/exchanges", get(exchanges_list))
-        .at("/exchanges/new", get(exchange_create_page).post(exchange_create))
+        .at(
+            "/exchanges/new",
+            get(exchange_create_page).post(exchange_create),
+        )
         .at(
             "/exchanges/:id",
-            get(exchange_edit_page).post(exchange_update).delete(exchange_delete),
+            get(exchange_edit_page)
+                .post(exchange_update)
+                .delete(exchange_delete),
         )
         .at("/oauth2-clients", get(oauth2_clients_list))
-        .at("/oauth2-clients/new", get(oauth2_client_create_page).post(oauth2_client_create))
+        .at(
+            "/oauth2-clients/new",
+            get(oauth2_client_create_page).post(oauth2_client_create),
+        )
         .at(
             "/oauth2-clients/:client_id",
-            get(oauth2_client_edit_page).post(oauth2_client_update).delete(oauth2_client_delete),
+            get(oauth2_client_edit_page)
+                .post(oauth2_client_update)
+                .delete(oauth2_client_delete),
         )
         .at("/wiki", get(wiki_index))
-        .at("/wiki/:title", get(wiki_page).post(wiki_save).delete(wiki_delete))
+        .at(
+            "/wiki/:title",
+            get(wiki_page).post(wiki_save).delete(wiki_delete),
+        )
         .at("/wiki/:title/edit", get(wiki_edit))
-        .at("/component-pages", get(component_pages_stub))
         .at("/badges", get(badges_list))
         .at("/badges/:badgeclass/holders", get(badges_holders))
         .at(
@@ -290,10 +339,16 @@ pub fn routes() -> impl Endpoint {
         .at("/badges/:badgeclass/:user_id/revoke", post(badges_revoke))
         .at("/archive", get(archive_list))
         .at("/archive/search", get(archive_search))
-        .at("/archive/new", get(archive_create_form).post(archive_create))
+        .at(
+            "/archive/new",
+            get(archive_create_form).post(archive_create),
+        )
         .at("/archive/:id", get(archive_view))
         .at("/archive/:id/snapshot", get(archive_snapshot))
-        .at("/archive/:id/edit", get(archive_edit_form).post(archive_edit))
+        .at(
+            "/archive/:id/edit",
+            get(archive_edit_form).post(archive_edit),
+        )
         .at("/archive/:id/delete", post(archive_delete))
         .nest("/autocomplete", autocomplete::routes())
         .with(StaffOnly)
@@ -1557,7 +1612,8 @@ impl Component for ProjectsPage {
             start_item: ((page - 1) * per_page) + 1,
             end_item: std::cmp::min(page * per_page, total_projects as u32),
             pagination_url: "/-admin/projects".to_string(),
-            pagination_include: "[name='search'], [name='status'], [name='flagged'], [name='reviewed']".to_string(),
+            pagination_include:
+                "[name='search'], [name='status'], [name='flagged'], [name='reviewed']".to_string(),
             search_term: self.search.unwrap_or_default(),
             selected_status: self.status.unwrap_or_default(),
             flagged: self.flagged.unwrap_or_default(),
@@ -2520,7 +2576,11 @@ async fn projects(
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     // If any search parameters are provided, perform a search instead of the default list
-    if query.search.is_some() || query.status.is_some() || query.flagged.is_some() || query.reviewed.is_some() {
+    if query.search.is_some()
+        || query.status.is_some()
+        || query.flagged.is_some()
+        || query.reviewed.is_some()
+    {
         let search_query = ProjectSearchQuery {
             search: query.search,
             status: query.status,
@@ -4284,7 +4344,8 @@ async fn projects_search_internal(
         start_item: start_item as u32,
         end_item,
         pagination_url: "/-admin/projects".to_string(),
-        pagination_include: "[name='search'], [name='status'], [name='flagged'], [name='reviewed']".to_string(),
+        pagination_include: "[name='search'], [name='status'], [name='flagged'], [name='reviewed']"
+            .to_string(),
         search_term: query.search.unwrap_or_default(),
         selected_status: query.status.unwrap_or_default(),
         flagged: query.flagged.unwrap_or_default(),
@@ -4639,12 +4700,19 @@ async fn projects_publish(
         entity.store().await?;
     } else {
         // No entity exists, create new one with publish=true
-        let project = sqlx::query!("SELECT name FROM projects WHERE project_id = ?", project_id_str)
-            .fetch_one(db())
-            .await?;
+        let project = sqlx::query!(
+            "SELECT name FROM projects WHERE project_id = ?",
+            project_id_str
+        )
+        .fetch_one(db())
+        .await?;
 
-        Entity::new_by_name(&project.name, EntityKind::Project, EntityTarget::Ulid(project_ulid))
-            .await?;
+        Entity::new_by_name(
+            &project.name,
+            EntityKind::Project,
+            EntityTarget::Ulid(project_ulid),
+        )
+        .await?;
     }
 
     // Check if this is from the edit page
@@ -7306,6 +7374,7 @@ pub struct EntityTargetInputTemplate {
     pub project_widget: Option<crate::admin::autocomplete::EntityAutocomplete>,
     pub event_widget: Option<crate::admin::autocomplete::EntityAutocomplete>,
     pub pagecontent_widget: Option<crate::admin::autocomplete::EntityAutocomplete>,
+    pub pagebuilder_widget: Option<crate::admin::autocomplete::EntityAutocomplete>,
 }
 
 #[derive(Debug, Clone)]
@@ -7344,7 +7413,7 @@ impl EntityKind {
             EntityKind::RawHtml => "Raw HTML",
             EntityKind::DressedHtml => "Dressed HTML",
             EntityKind::Wysiwyg => "Simple Editor",
-            EntityKind::PageBuilder => "Page Builder",
+            EntityKind::PageBuilder => "Component Page",
             EntityKind::Form => "Form",
             EntityKind::Project => "Project",
             EntityKind::Event => "Event",
@@ -7415,128 +7484,7 @@ async fn entities_target_input(
     let kind = query.kind.parse::<EntityKind>()?;
     let current_value = query.current_value.unwrap_or_default();
 
-    let (project_widget, event_widget, pagecontent_widget) = match kind {
-        EntityKind::Project => {
-            let widget = if !current_value.is_empty() {
-                if let Ok(ulid) = current_value.parse::<Ulid>() {
-                    if let Ok(Some(name)) =
-                        crate::admin::autocomplete::resolve_project_name(ulid).await
-                    {
-                        crate::admin::autocomplete::EntityAutocomplete::new_project_selector(
-                            "target",
-                            "Target",
-                            "Search for a project...",
-                        )
-                        .with_selected(ulid, name)
-                    } else {
-                        crate::admin::autocomplete::EntityAutocomplete::new_project_selector(
-                            "target",
-                            "Target",
-                            "Search for a project...",
-                        )
-                    }
-                } else {
-                    crate::admin::autocomplete::EntityAutocomplete::new_project_selector(
-                        "target",
-                        "Target",
-                        "Search for a project...",
-                    )
-                }
-            } else {
-                crate::admin::autocomplete::EntityAutocomplete::new_project_selector(
-                    "target",
-                    "Target",
-                    "Search for a project...",
-                )
-            };
-            (Some(widget), None, None)
-        }
-        EntityKind::Event => {
-            let widget = if !current_value.is_empty() {
-                if let Ok(ulid) = current_value.parse::<Ulid>() {
-                    if let Ok(Some(name)) =
-                        crate::admin::autocomplete::resolve_event_name(ulid).await
-                    {
-                        crate::admin::autocomplete::EntityAutocomplete::new_event_selector(
-                            "target",
-                            "Target",
-                            "Search for an event...",
-                        )
-                        .with_selected(ulid, name)
-                    } else {
-                        crate::admin::autocomplete::EntityAutocomplete::new_event_selector(
-                            "target",
-                            "Target",
-                            "Search for an event...",
-                        )
-                    }
-                } else {
-                    crate::admin::autocomplete::EntityAutocomplete::new_event_selector(
-                        "target",
-                        "Target",
-                        "Search for an event...",
-                    )
-                }
-            } else {
-                crate::admin::autocomplete::EntityAutocomplete::new_event_selector(
-                    "target",
-                    "Target",
-                    "Search for an event...",
-                )
-            };
-            (None, Some(widget), None)
-        }
-        EntityKind::RawHtml => {
-            let widget = create_pagecontent_widget(
-                &current_value,
-                crate::pagecontent::PageContentKind::RawHtml,
-            )
-            .await;
-            (None, None, Some(widget))
-        }
-        EntityKind::DressedHtml => {
-            let widget = create_pagecontent_widget(
-                &current_value,
-                crate::pagecontent::PageContentKind::DressedHtml,
-            )
-            .await;
-            (None, None, Some(widget))
-        }
-        EntityKind::Wysiwyg => {
-            let widget = create_pagecontent_widget(
-                &current_value,
-                crate::pagecontent::PageContentKind::Wysiwyg,
-            )
-            .await;
-            (None, None, Some(widget))
-        }
-        EntityKind::PageBuilder => {
-            let widget = create_pagecontent_widget(
-                &current_value,
-                crate::pagecontent::PageContentKind::PageBuilder,
-            )
-            .await;
-            (None, None, Some(widget))
-        }
-        EntityKind::Form => {
-            let widget = create_pagecontent_widget(
-                &current_value,
-                crate::pagecontent::PageContentKind::Form,
-            )
-            .await;
-            (None, None, Some(widget))
-        }
-        _ => (None, None, None),
-    };
-
-    let template = EntityTargetInputTemplate {
-        kind,
-        current_value,
-        project_widget,
-        event_widget,
-        pagecontent_widget,
-    };
-
+    let template = create_target_input_template(&kind, &current_value).await;
     let html = template.render_once()?;
 
     Ok(poem::Response::builder()
@@ -7941,7 +7889,7 @@ async fn create_target_input_template(
     kind: &EntityKind,
     current_value: &str,
 ) -> EntityTargetInputTemplate {
-    let (project_widget, event_widget, pagecontent_widget) = match kind {
+    let (project_widget, event_widget, pagecontent_widget, pagebuilder_widget) = match kind {
         EntityKind::Project => {
             let widget = if !current_value.is_empty() {
                 if let Ok(ulid) = current_value.parse::<Ulid>() {
@@ -7975,7 +7923,7 @@ async fn create_target_input_template(
                     "Search for a project...",
                 )
             };
-            (Some(widget), None, None)
+            (Some(widget), None, None, None)
         }
         EntityKind::Event => {
             let widget = if !current_value.is_empty() {
@@ -8010,7 +7958,7 @@ async fn create_target_input_template(
                     "Search for an event...",
                 )
             };
-            (None, Some(widget), None)
+            (None, Some(widget), None, None)
         }
         EntityKind::RawHtml => {
             let widget = create_pagecontent_widget(
@@ -8018,7 +7966,7 @@ async fn create_target_input_template(
                 crate::pagecontent::PageContentKind::RawHtml,
             )
             .await;
-            (None, None, Some(widget))
+            (None, None, Some(widget), None)
         }
         EntityKind::DressedHtml => {
             let widget = create_pagecontent_widget(
@@ -8026,7 +7974,7 @@ async fn create_target_input_template(
                 crate::pagecontent::PageContentKind::DressedHtml,
             )
             .await;
-            (None, None, Some(widget))
+            (None, None, Some(widget), None)
         }
         EntityKind::Wysiwyg => {
             let widget = create_pagecontent_widget(
@@ -8034,23 +7982,50 @@ async fn create_target_input_template(
                 crate::pagecontent::PageContentKind::Wysiwyg,
             )
             .await;
-            (None, None, Some(widget))
+            (None, None, Some(widget), None)
         }
         EntityKind::PageBuilder => {
-            let widget = create_pagecontent_widget(
-                current_value,
-                crate::pagecontent::PageContentKind::PageBuilder,
-            )
-            .await;
-            (None, None, Some(widget))
+            let widget = if !current_value.is_empty() {
+                if let Ok(ulid) = current_value.parse::<Ulid>() {
+                    if let Ok(Some(name)) =
+                        crate::admin::autocomplete::resolve_pagebuilder_page_name(ulid).await
+                    {
+                        crate::admin::autocomplete::EntityAutocomplete::new_pagebuilder_selector(
+                            "target",
+                            "Target",
+                            "Search for a component page...",
+                        )
+                        .with_selected(ulid, name)
+                    } else {
+                        crate::admin::autocomplete::EntityAutocomplete::new_pagebuilder_selector(
+                            "target",
+                            "Target",
+                            "Search for a component page...",
+                        )
+                    }
+                } else {
+                    crate::admin::autocomplete::EntityAutocomplete::new_pagebuilder_selector(
+                        "target",
+                        "Target",
+                        "Search for a component page...",
+                    )
+                }
+            } else {
+                crate::admin::autocomplete::EntityAutocomplete::new_pagebuilder_selector(
+                    "target",
+                    "Target",
+                    "Search for a component page...",
+                )
+            };
+            (None, None, None, Some(widget))
         }
         EntityKind::Form => {
             let widget =
                 create_pagecontent_widget(current_value, crate::pagecontent::PageContentKind::Form)
                     .await;
-            (None, None, Some(widget))
+            (None, None, Some(widget), None)
         }
-        _ => (None, None, None),
+        _ => (None, None, None, None),
     };
 
     EntityTargetInputTemplate {
@@ -8059,6 +8034,7 @@ async fn create_target_input_template(
         project_widget,
         event_widget,
         pagecontent_widget,
+        pagebuilder_widget,
     }
 }
 
@@ -10771,8 +10747,7 @@ async fn email_trigger_create(
     Form(form): Form<CreateTriggerForm>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    let user_info = user_info
-        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
     use common::message::email::{
         CreateTriggerRequest, CreateTriggerResponse, GetStoredEmailRequest, GetStoredEmailResponse,
         ListTriggersRequest, ListTriggersResponse, TriggerActionType,
@@ -10844,14 +10819,8 @@ async fn email_trigger_create(
         stored_emails,
     };
 
-    common::service::log_activity(
-        None,
-        "email-trigger-create",
-        user_info.user_id,
-        None,
-        None,
-    )
-    .await?;
+    common::service::log_activity(None, "email-trigger-create", user_info.user_id, None, None)
+        .await?;
 
     Ok(poem::Response::builder()
         .content_type("text/html")
@@ -11046,8 +11015,7 @@ async fn email_trigger_delete(
     Path(id): Path<String>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    let user_info = user_info
-        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
 
     use common::message::email::{DeleteTriggerRequest, DeleteTriggerResponse};
     use common::service::request;
@@ -11287,8 +11255,7 @@ async fn address_sets_create(
     Form(form): Form<CreateAddressSetForm>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    let user_info = user_info
-        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
 
     let slug = form.slug.clone();
     let request = common::message::user::AddressSetCreateRequest {
@@ -11396,8 +11363,7 @@ async fn address_sets_delete(
     Path(slug): Path<String>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    let user_info = user_info
-        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
 
     let slug_clone = slug.clone();
     let request = common::message::user::AddressSetDeleteRequest { slug };
@@ -11558,8 +11524,7 @@ async fn user_sets_create(
     Form(form): Form<CreateUserSetForm>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    let user_info = user_info
-        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
 
     let slug = form.slug.clone();
     let request = common::message::user::UserSetCreateRequest {
@@ -11574,14 +11539,8 @@ async fn user_sets_create(
     .await
     .map_err(|e| anyhow::anyhow!("Failed to create user set: {}", e))?;
 
-    common::service::log_activity(
-        None,
-        "user-set-create",
-        user_info.user_id,
-        None,
-        Some(slug),
-    )
-    .await?;
+    common::service::log_activity(None, "user-set-create", user_info.user_id, None, Some(slug))
+        .await?;
 
     Ok(poem::Response::builder()
         .status(poem::http::StatusCode::SEE_OTHER)
@@ -11763,8 +11722,7 @@ async fn user_sets_delete(
     Path(slug): Path<String>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    let user_info = user_info
-        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
 
     let slug_clone = slug.clone();
     let request = common::message::user::UserSetDeleteRequest { slug };
@@ -12446,13 +12404,15 @@ async fn exchanges_list(
     let exchanges: Vec<ExchangeListItem> = rows
         .into_iter()
         .filter_map(|row| {
-            Ulid::from_string(&row.exchange_id).ok().map(|exchange_id| ExchangeListItem {
-                exchange_id,
-                path_id: row.path_id,
-                slug: row.slug,
-                name: row.name,
-                description: row.description,
-            })
+            Ulid::from_string(&row.exchange_id)
+                .ok()
+                .map(|exchange_id| ExchangeListItem {
+                    exchange_id,
+                    path_id: row.path_id,
+                    slug: row.slug,
+                    name: row.name,
+                    description: row.description,
+                })
         })
         .collect();
 
@@ -12499,8 +12459,7 @@ async fn exchange_create(
     Authenticated(user_info): Authenticated,
     form: poem::web::Form<ExchangeCreateForm>,
 ) -> Result<poem::Response, anyhow::Error> {
-    let user_info = user_info
-        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
 
     use crate::exchange::Exchange;
 
@@ -12589,8 +12548,7 @@ async fn exchange_update(
     Authenticated(user_info): Authenticated,
     form: poem::web::Form<ExchangeUpdateForm>,
 ) -> Result<poem::Response, anyhow::Error> {
-    let user_info = user_info
-        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
 
     use crate::exchange::Exchange;
 
@@ -12630,8 +12588,7 @@ async fn exchange_delete(
     Path(exchange_id_str): Path<String>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    let user_info = user_info
-        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
 
     use crate::exchange::Exchange;
     use crate::peering::LoadStorePeered;
@@ -12676,7 +12633,11 @@ async fn oauth2_clients_list(
             client_name: row.client_name,
             owner_user_id: row.owner_user_id,
             redirect_uris: row.redirect_uris.lines().map(|s| s.to_string()).collect(),
-            allowed_scopes: row.allowed_scopes.split_whitespace().map(|s| s.to_string()).collect(),
+            allowed_scopes: row
+                .allowed_scopes
+                .split_whitespace()
+                .map(|s| s.to_string())
+                .collect(),
             created: row.created,
         })
         .collect();
@@ -12712,8 +12673,13 @@ async fn oauth2_client_create_page(
 // OAuth2 validation helpers
 fn validate_client_id(client_id: &str) -> Result<(), anyhow::Error> {
     // Only allow alphanumeric, hyphens, underscores
-    if !client_id.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
-        anyhow::bail!("Client ID must contain only alphanumeric characters, hyphens, and underscores");
+    if !client_id
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+    {
+        anyhow::bail!(
+            "Client ID must contain only alphanumeric characters, hyphens, and underscores"
+        );
     }
     if client_id.is_empty() || client_id.len() > 64 {
         anyhow::bail!("Client ID must be 1-64 characters");
@@ -12722,15 +12688,20 @@ fn validate_client_id(client_id: &str) -> Result<(), anyhow::Error> {
 }
 
 fn validate_redirect_uri(uri: &str) -> Result<(), anyhow::Error> {
-    let parsed = url::Url::parse(uri)
-        .map_err(|e| anyhow::anyhow!("Invalid URI '{}': {}", uri, e))?;
+    let parsed =
+        url::Url::parse(uri).map_err(|e| anyhow::anyhow!("Invalid URI '{}': {}", uri, e))?;
 
     // Require HTTPS in production (allow http://localhost for dev)
     if parsed.scheme() != "https" {
         if cfg!(debug_assertions) {
             // Allow http://localhost in development
-            if parsed.scheme() != "http" || !parsed.host_str().unwrap_or("").starts_with("localhost") {
-                anyhow::bail!("Only HTTPS URIs allowed (except http://localhost in dev): {}", uri);
+            if parsed.scheme() != "http"
+                || !parsed.host_str().unwrap_or("").starts_with("localhost")
+            {
+                anyhow::bail!(
+                    "Only HTTPS URIs allowed (except http://localhost in dev): {}",
+                    uri
+                );
             }
         } else {
             anyhow::bail!("Only HTTPS redirect URIs allowed in production: {}", uri);
@@ -12754,10 +12725,7 @@ fn parse_redirect_uris(input: &str) -> Vec<String> {
 }
 
 fn parse_scopes(input: &str) -> Vec<String> {
-    input
-        .split_whitespace()
-        .map(|s| s.to_string())
-        .collect()
+    input.split_whitespace().map(|s| s.to_string()).collect()
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -12775,8 +12743,7 @@ async fn oauth2_client_create(
     Authenticated(user_info): Authenticated,
     form: poem::web::Form<OAuth2ClientCreateForm>,
 ) -> Result<poem::Response, anyhow::Error> {
-    let user_info = user_info
-        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
 
     use crate::oauth2::types::Client;
 
@@ -12867,8 +12834,7 @@ async fn oauth2_client_update(
     Authenticated(user_info): Authenticated,
     form: poem::web::Form<OAuth2ClientUpdateForm>,
 ) -> Result<poem::Response, anyhow::Error> {
-    let user_info = user_info
-        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
 
     use crate::oauth2::types::Client;
 
@@ -12916,8 +12882,7 @@ async fn oauth2_client_delete(
     Path(client_id): Path<String>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    let user_info = user_info
-        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
 
     use crate::oauth2::types::Client;
     use crate::peering::LoadStorePeered;
@@ -12936,7 +12901,10 @@ async fn oauth2_client_delete(
     .await?;
 
     // Return success message for HTMX
-    Ok(Html("<div class=\"text-green-600\">OAuth2 client deleted successfully</div>").into_response())
+    Ok(
+        Html("<div class=\"text-green-600\">OAuth2 client deleted successfully</div>")
+            .into_response(),
+    )
 }
 
 // Wiki Handlers
@@ -12956,8 +12924,8 @@ async fn wiki_page(
     Path(title): Path<String>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    use crate::wiki::{WikiPage, render_wiki_content};
     use crate::peering::LoadStorePeered;
+    use crate::wiki::{WikiPage, render_wiki_content};
 
     // Try to load the page
     match WikiPage::load(title.clone()).await {
@@ -12970,10 +12938,11 @@ async fn wiki_page(
                 content: rendered_content,
             };
 
-            let prepared = crate::component::AdminLayout::new(&format!("Wiki: {}", page.title), content)
-                .with_sidebar_active("wiki")
-                .prepare(user_info)
-                .await?;
+            let prepared =
+                crate::component::AdminLayout::new(&format!("Wiki: {}", page.title), content)
+                    .with_sidebar_active("wiki")
+                    .prepare(user_info)
+                    .await?;
 
             Ok(poem::Response::builder()
                 .content_type("text/html")
@@ -12987,11 +12956,14 @@ async fn wiki_page(
                 is_new: true,
             };
 
-            let prepared = crate::component::AdminLayout::new(&format!("Create Wiki Page: {}", title), content)
-                .with_sidebar_active("wiki")
-                .with_quill()
-                .prepare(user_info)
-                .await?;
+            let prepared = crate::component::AdminLayout::new(
+                &format!("Create Wiki Page: {}", title),
+                content,
+            )
+            .with_sidebar_active("wiki")
+            .with_quill()
+            .prepare(user_info)
+            .await?;
 
             Ok(poem::Response::builder()
                 .content_type("text/html")
@@ -13011,8 +12983,8 @@ async fn wiki_edit(
     Path(title): Path<String>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    use crate::wiki::WikiPage;
     use crate::peering::LoadStorePeered;
+    use crate::wiki::WikiPage;
 
     // Load the page (or use empty content if doesn't exist)
     let (content, is_new) = match WikiPage::load(title.clone()).await {
@@ -13050,8 +13022,7 @@ async fn wiki_save(
     Authenticated(user_info): Authenticated,
     form: poem::web::Form<WikiSaveForm>,
 ) -> Result<poem::Response, anyhow::Error> {
-    let user_info = user_info
-        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
 
     use crate::wiki::WikiPage;
 
@@ -13072,7 +13043,10 @@ async fn wiki_save(
     .await?;
 
     // Redirect back to view the page
-    Ok(poem::web::Redirect::see_other(&format!("/-admin/wiki/{}", urlencoding::encode(&title))).into_response())
+    Ok(
+        poem::web::Redirect::see_other(&format!("/-admin/wiki/{}", urlencoding::encode(&title)))
+            .into_response(),
+    )
 }
 
 /// DELETE /wiki/:title - Delete wiki page
@@ -13081,11 +13055,10 @@ async fn wiki_delete(
     Path(title): Path<String>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    let user_info = user_info
-        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
 
-    use crate::wiki::WikiPage;
     use crate::peering::LoadStorePeered;
+    use crate::wiki::WikiPage;
 
     let title_clone = title.clone();
     WikiPage::delete(title).await?;
@@ -13120,28 +13093,6 @@ struct WikiPageEdit {
     content: String,
     is_new: bool,
 }
-
-// Component Pages Stub
-
-#[handler]
-async fn component_pages_stub(
-    Authenticated(user_info): Authenticated,
-) -> Result<poem::Response, anyhow::Error> {
-    let content = ComponentPagesStub {};
-
-    let prepared = crate::component::AdminLayout::new("Component Pages", content)
-        .with_sidebar_active("component-pages")
-        .prepare(user_info)
-        .await?;
-
-    Ok(poem::Response::builder()
-        .content_type("text/html")
-        .body(prepared.render_once()?))
-}
-
-#[derive(TemplateOnce)]
-#[template(path = "admin/component_pages.stpl.html")]
-struct ComponentPagesStub {}
 
 #[handler]
 async fn badges_list(
@@ -13727,7 +13678,9 @@ async fn count_archive_entries(search: Option<&str>) -> Result<u64, anyhow::Erro
 
 // Archive handlers
 #[handler]
-async fn archive_list(Authenticated(user_info): Authenticated) -> Result<poem::Response, anyhow::Error> {
+async fn archive_list(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
     Ok(ArchivePage.into_response(user_info).await?)
 }
 
@@ -13769,7 +13722,9 @@ async fn archive_search(
 }
 
 #[handler]
-async fn archive_create_form(Authenticated(user_info): Authenticated) -> Result<poem::Response, anyhow::Error> {
+async fn archive_create_form(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
     let content = ArchiveCreatePage {};
 
     let prepared = crate::component::AdminLayout::new("Create Archive Entry", content)
@@ -13798,8 +13753,7 @@ async fn archive_create(
     Form(form): Form<ArchiveCreateForm>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    let user_info = user_info
-        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
 
     // Capture snapshot if URL provided
     let snapshot_html = if let Some(ref url) = form.snapshot_url {
@@ -13914,8 +13868,7 @@ async fn archive_edit(
     Form(form): Form<ArchiveEditForm>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    let user_info = user_info
-        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
 
     let archive_id: Ulid = id.parse()?;
     let mut entry = ArchiveEntry::load(archive_id).await?;
@@ -13956,8 +13909,7 @@ async fn archive_delete(
     Path(id): Path<String>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    let user_info = user_info
-        .ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
 
     let archive_id: Ulid = id.parse()?;
     ArchiveEntry::delete(archive_id).await?;
@@ -13982,4 +13934,949 @@ async fn capture_page_snapshot(url: &str) -> Result<String, anyhow::Error> {
     let response = reqwest::get(url).await?;
     let html = response.text().await?;
     Ok(html)
+}
+
+// ============================================================================
+// Page Builder Components CRUD
+// ============================================================================
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/pagebuilder/components_list.stpl.html")]
+struct PbComponentsListPage {
+    components: Vec<crate::pagebuilder::PageBuilderComponent>,
+    categories: Vec<String>,
+    selected_category: Option<String>,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/pagebuilder/components_content.stpl.html")]
+struct PbComponentsContent {
+    components: Vec<crate::pagebuilder::PageBuilderComponent>,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/pagebuilder/component_form.stpl.html")]
+struct PbComponentForm {
+    component: Option<crate::pagebuilder::PageBuilderComponent>,
+    categories: Vec<String>,
+    is_new: bool,
+}
+
+#[derive(serde::Deserialize)]
+struct PbComponentsSearchQuery {
+    category: Option<String>,
+    search: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct PbComponentFormData {
+    name: String,
+    description: Option<String>,
+    category: Option<String>,
+    source: String,
+}
+
+#[handler]
+async fn pb_components_list(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    let components = crate::pagebuilder::PageBuilderComponent::list(None).await?;
+    let categories = crate::pagebuilder::PageBuilderComponent::categories().await?;
+
+    let page = PbComponentsListPage {
+        components,
+        categories,
+        selected_category: None,
+    };
+
+    let prepared = crate::component::AdminLayout::new("Page Components", page)
+        .with_sidebar_active("engine-room-components")
+        .with_breadcrumb("Engine Room", Some("/-admin/engine-room"))
+        .with_breadcrumb("Components", None)
+        .prepare(Some(user_info))
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+#[handler]
+async fn pb_components_search(
+    Query(query): Query<PbComponentsSearchQuery>,
+) -> Result<poem::Response, anyhow::Error> {
+    let components =
+        crate::pagebuilder::PageBuilderComponent::list(query.category.as_deref()).await?;
+
+    // Filter by search if provided
+    let components = if let Some(ref search) = query.search {
+        let search_lower = search.to_lowercase();
+        components
+            .into_iter()
+            .filter(|c| {
+                c.name.to_lowercase().contains(&search_lower)
+                    || c.description.to_lowercase().contains(&search_lower)
+            })
+            .collect()
+    } else {
+        components
+    };
+
+    let content = PbComponentsContent { components };
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(content.render_once()?))
+}
+
+#[handler]
+async fn pb_components_new(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    let categories = crate::pagebuilder::PageBuilderComponent::categories().await?;
+
+    let form = PbComponentForm {
+        component: None,
+        categories,
+        is_new: true,
+    };
+
+    let prepared = crate::component::AdminLayout::new("New Component", form)
+        .with_sidebar_active("engine-room-components")
+        .with_breadcrumb("Engine Room", Some("/-admin/engine-room"))
+        .with_breadcrumb("Components", Some("/-admin/engine-room/components"))
+        .with_breadcrumb("New", None)
+        .prepare(Some(user_info))
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+#[handler]
+async fn pb_components_create(
+    Authenticated(user_info): Authenticated,
+    poem::web::Form(form_data): poem::web::Form<PbComponentFormData>,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::builder::render::CompiledTemplate;
+    use crate::peering::LoadStorePeered;
+
+    let _user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    // Validate template syntax before saving
+    if let Err(e) = CompiledTemplate::compile(&form_data.source) {
+        let error = PbFormError {
+            message: e.to_string(),
+        };
+        return Ok(poem::Response::builder()
+            .content_type("text/html")
+            .header("HX-Retarget", "body")
+            .header("HX-Reswap", "beforeend")
+            .body(error.render_once()?));
+    }
+
+    let mut component =
+        crate::pagebuilder::PageBuilderComponent::new(&form_data.name, &form_data.source);
+
+    if let Some(ref desc) = form_data.description {
+        component.description = desc.clone();
+    }
+
+    if let Some(ref cat) = form_data.category {
+        if !cat.is_empty() {
+            component.category = cat.clone();
+        }
+    }
+
+    component.store().await?;
+
+    // Return redirect with HX-Redirect header for HTMX
+    Ok(poem::Response::builder()
+        .header("HX-Redirect", "/-admin/engine-room/components")
+        .body(""))
+}
+
+#[handler]
+async fn pb_components_edit(
+    Authenticated(user_info): Authenticated,
+    Path(id): Path<String>,
+) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    use crate::peering::LoadStorePeered;
+
+    let component_id: ulid::Ulid = id.parse()?;
+    let component = crate::pagebuilder::PageBuilderComponent::load(component_id).await?;
+    let categories = crate::pagebuilder::PageBuilderComponent::categories().await?;
+
+    let component_name = component.name.clone();
+
+    let form = PbComponentForm {
+        component: Some(component),
+        categories,
+        is_new: false,
+    };
+
+    let prepared = crate::component::AdminLayout::new(&format!("Edit: {}", component_name), form)
+        .with_sidebar_active("engine-room-components")
+        .with_breadcrumb("Engine Room", Some("/-admin/engine-room"))
+        .with_breadcrumb("Components", Some("/-admin/engine-room/components"))
+        .with_breadcrumb(&component_name, None)
+        .prepare(Some(user_info))
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+#[handler]
+async fn pb_components_update(
+    Authenticated(user_info): Authenticated,
+    Path(id): Path<String>,
+    poem::web::Form(form_data): poem::web::Form<PbComponentFormData>,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::builder::render::CompiledTemplate;
+    use crate::peering::LoadStorePeered;
+
+    let _user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    // Validate template syntax before saving
+    if let Err(e) = CompiledTemplate::compile(&form_data.source) {
+        let error = PbFormError {
+            message: e.to_string(),
+        };
+        return Ok(poem::Response::builder()
+            .content_type("text/html")
+            .header("HX-Retarget", "body")
+            .header("HX-Reswap", "beforeend")
+            .body(error.render_once()?));
+    }
+
+    let component_id: ulid::Ulid = id.parse()?;
+    let mut component = crate::pagebuilder::PageBuilderComponent::load(component_id).await?;
+
+    component.name = form_data.name;
+    component.description = form_data.description.unwrap_or_default();
+    component.set_source(&form_data.source);
+
+    if let Some(ref cat) = form_data.category {
+        if !cat.is_empty() {
+            component.category = cat.clone();
+        }
+    }
+
+    component.store().await?;
+
+    // Return redirect with HX-Redirect header for HTMX
+    Ok(poem::Response::builder()
+        .header("HX-Redirect", "/-admin/engine-room/components")
+        .body(""))
+}
+
+#[handler]
+async fn pb_components_delete(
+    Authenticated(user_info): Authenticated,
+    Path(id): Path<String>,
+) -> Result<poem::Response, anyhow::Error> {
+    let _user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    use crate::peering::LoadStorePeered;
+
+    let component_id: ulid::Ulid = id.parse()?;
+    crate::pagebuilder::PageBuilderComponent::delete(component_id).await?;
+
+    // Return redirect with HX-Redirect header for HTMX
+    Ok(poem::Response::builder()
+        .header("HX-Redirect", "/-admin/engine-room/components")
+        .body(""))
+}
+
+// ============================================================================
+// Page Builder Pages CRUD and Editor
+// ============================================================================
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/pagebuilder/pages_list.stpl.html")]
+struct PbPagesListPage {
+    pages: Vec<crate::pagebuilder::PageBuilderPage>,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/pagebuilder/pages_content.stpl.html")]
+struct PbPagesContent {
+    pages: Vec<crate::pagebuilder::PageBuilderPage>,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/pagebuilder/page_form.stpl.html")]
+struct PbPageForm {
+    page: Option<crate::pagebuilder::PageBuilderPage>,
+    is_new: bool,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/pagebuilder/editor.stpl.html")]
+struct PbPageEditor {
+    page: crate::pagebuilder::PageBuilderPage,
+    components: Vec<crate::pagebuilder::PageBuilderComponent>,
+    categories: Vec<String>,
+    canvas_html: String,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/pagebuilder/editor_error.stpl.html")]
+struct PbPageEditorError {
+    page: crate::pagebuilder::PageBuilderPage,
+    error_message: String,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/pagebuilder/source_editor.stpl.html")]
+struct PbPageSourceEditor {
+    page: crate::pagebuilder::PageBuilderPage,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/pagebuilder/canvas_error.stpl.html")]
+struct PbCanvasError {
+    message: String,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/pagebuilder/form_error.stpl.html")]
+struct PbFormError {
+    message: String,
+}
+
+#[derive(serde::Deserialize)]
+struct PbPagesSearchQuery {
+    search: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct PbPageFormData {
+    name: String,
+    description: Option<String>,
+    source: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct PbSlotInsertData {
+    component_id: String,
+}
+
+#[handler]
+async fn pb_pages_list(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    let pages = crate::pagebuilder::PageBuilderPage::list().await?;
+
+    let page = PbPagesListPage { pages };
+
+    let prepared = crate::component::AdminLayout::new("Component Pages", page)
+        .with_sidebar_active("component-pages")
+        .with_breadcrumb("Component Pages", None)
+        .prepare(Some(user_info))
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+#[handler]
+async fn pb_pages_search(
+    Query(query): Query<PbPagesSearchQuery>,
+) -> Result<poem::Response, anyhow::Error> {
+    let pages = crate::pagebuilder::PageBuilderPage::list().await?;
+
+    // Filter by search if provided
+    let pages = if let Some(ref search) = query.search {
+        let search_lower = search.to_lowercase();
+        pages
+            .into_iter()
+            .filter(|p| {
+                p.name.to_lowercase().contains(&search_lower)
+                    || p.description.to_lowercase().contains(&search_lower)
+            })
+            .collect()
+    } else {
+        pages
+    };
+
+    let content = PbPagesContent { pages };
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(content.render_once()?))
+}
+
+#[handler]
+async fn pb_pages_new(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    let form = PbPageForm {
+        page: None,
+        is_new: true,
+    };
+
+    let prepared = crate::component::AdminLayout::new("New Component Page", form)
+        .with_sidebar_active("component-pages")
+        .with_breadcrumb("Component Pages", Some("/-admin/component-pages"))
+        .with_breadcrumb("New", None)
+        .prepare(Some(user_info))
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+#[handler]
+async fn pb_pages_create(
+    Authenticated(user_info): Authenticated,
+    poem::web::Form(form_data): poem::web::Form<PbPageFormData>,
+) -> Result<poem::Response, anyhow::Error> {
+    let _user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    use crate::peering::LoadStorePeered;
+
+    // Default source with a main slot
+    let source = form_data
+        .source
+        .unwrap_or_else(|| "{$ slot main $}{$ /slot $}".to_string());
+
+    let mut page = crate::pagebuilder::PageBuilderPage::new(&form_data.name, &source);
+
+    if let Some(ref desc) = form_data.description {
+        page.description = desc.clone();
+    }
+
+    page.store().await?;
+
+    // Redirect to the editor
+    Ok(poem::Response::builder()
+        .header(
+            "HX-Redirect",
+            format!("/-admin/component-pages/{}", page.page_id),
+        )
+        .body(""))
+}
+
+#[handler]
+async fn pb_page_editor(
+    Authenticated(user_info): Authenticated,
+    Path(id): Path<String>,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::builder::context::{Context, ContextMode};
+    use crate::builder::render::render;
+    use crate::peering::LoadStorePeered;
+
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    let page_id: ulid::Ulid = id.parse()?;
+    let page = crate::pagebuilder::PageBuilderPage::load(page_id).await?;
+
+    // Try to render the page in editing mode
+    let ctx = Context::new(common::shared::db(), &None, ContextMode::Editing)?;
+    let render_result = render(&ctx, &page.source).await;
+
+    match render_result {
+        Ok(canvas_html) => {
+            // Render succeeded - show normal editor
+            let components = crate::pagebuilder::PageBuilderComponent::list(None).await?;
+            let categories = crate::pagebuilder::PageBuilderComponent::categories().await?;
+
+            let editor = PbPageEditor {
+                page,
+                components,
+                categories,
+                canvas_html,
+            };
+
+            let prepared = crate::component::AdminLayout::new("Page Editor", editor)
+                .with_sidebar_active("component-pages")
+                .with_breadcrumb("Component Pages", Some("/-admin/component-pages"))
+                .with_breadcrumb("Editor", None)
+                .prepare(Some(user_info))
+                .await?;
+
+            Ok(poem::Response::builder()
+                .content_type("text/html")
+                .body(prepared.render_once()?))
+        }
+        Err(e) => {
+            // Render failed - show error editor to fix the source
+            let error_editor = PbPageEditorError {
+                page,
+                error_message: e.to_string(),
+            };
+
+            let prepared = crate::component::AdminLayout::new("Page Editor - Error", error_editor)
+                .with_sidebar_active("component-pages")
+                .with_breadcrumb("Component Pages", Some("/-admin/component-pages"))
+                .with_breadcrumb("Editor (Error)", None)
+                .prepare(Some(user_info))
+                .await?;
+
+            Ok(poem::Response::builder()
+                .content_type("text/html")
+                .body(prepared.render_once()?))
+        }
+    }
+}
+
+#[handler]
+async fn pb_page_edit_details(
+    Authenticated(user_info): Authenticated,
+    Path(id): Path<String>,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::peering::LoadStorePeered;
+
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    let page_id: ulid::Ulid = id.parse()?;
+    let page = crate::pagebuilder::PageBuilderPage::load(page_id).await?;
+
+    let form = PbPageForm {
+        page: Some(page),
+        is_new: false,
+    };
+
+    let prepared = crate::component::AdminLayout::new("Edit Page", form)
+        .with_sidebar_active("component-pages")
+        .with_breadcrumb("Component Pages", Some("/-admin/component-pages"))
+        .with_breadcrumb("Edit", None)
+        .prepare(Some(user_info))
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+#[handler]
+async fn pb_page_update(
+    Authenticated(user_info): Authenticated,
+    Path(id): Path<String>,
+    poem::web::Form(form_data): poem::web::Form<PbPageFormData>,
+) -> Result<poem::Response, anyhow::Error> {
+    let _user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    use crate::peering::LoadStorePeered;
+
+    let page_id: ulid::Ulid = id.parse()?;
+    let mut page = crate::pagebuilder::PageBuilderPage::load(page_id).await?;
+
+    page.name = form_data.name;
+    page.description = form_data.description.unwrap_or_default();
+
+    if let Some(source) = form_data.source {
+        page.set_source(&source);
+    }
+
+    page.store().await?;
+
+    Ok(poem::Response::builder()
+        .header(
+            "HX-Redirect",
+            format!("/-admin/component-pages/{}", page_id),
+        )
+        .body(""))
+}
+
+#[handler]
+async fn pb_page_source_editor(
+    Authenticated(user_info): Authenticated,
+    Path(id): Path<String>,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::peering::LoadStorePeered;
+
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    let page_id: ulid::Ulid = id.parse()?;
+    let page = crate::pagebuilder::PageBuilderPage::load(page_id).await?;
+
+    let editor = PbPageSourceEditor { page };
+
+    let prepared = crate::component::AdminLayout::new("Edit Page Source", editor)
+        .with_sidebar_active("component-pages")
+        .with_breadcrumb("Component Pages", Some("/-admin/component-pages"))
+        .with_breadcrumb("Source", None)
+        .prepare(Some(user_info))
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+#[derive(serde::Deserialize)]
+struct PbPageSourceData {
+    source: String,
+}
+
+#[handler]
+async fn pb_page_update_source(
+    Authenticated(user_info): Authenticated,
+    Path(id): Path<String>,
+    poem::web::Form(form_data): poem::web::Form<PbPageSourceData>,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::builder::render::CompiledTemplate;
+    use crate::peering::LoadStorePeered;
+
+    let _user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    let page_id: ulid::Ulid = id.parse()?;
+    let mut page = crate::pagebuilder::PageBuilderPage::load(page_id).await?;
+
+    // Validate syntax before saving
+    if let Err(e) = CompiledTemplate::compile(&form_data.source) {
+        let error_editor = PbPageEditorError {
+            page,
+            error_message: e.to_string(),
+        };
+        return Ok(poem::Response::builder()
+            .content_type("text/html")
+            .body(error_editor.render_once()?));
+    }
+
+    page.set_source(&form_data.source);
+    page.store().await?;
+
+    Ok(poem::Response::builder()
+        .header(
+            "HX-Redirect",
+            format!("/-admin/component-pages/{}", page_id),
+        )
+        .body(""))
+}
+
+#[handler]
+async fn pb_page_delete(
+    Authenticated(user_info): Authenticated,
+    Path(id): Path<String>,
+) -> Result<poem::Response, anyhow::Error> {
+    let _user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    use crate::peering::LoadStorePeered;
+
+    let page_id: ulid::Ulid = id.parse()?;
+    crate::pagebuilder::PageBuilderPage::delete(page_id).await?;
+
+    Ok(poem::Response::builder()
+        .header("HX-Redirect", "/-admin/component-pages")
+        .body(""))
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "pages/content.stpl.html")]
+struct PbPreviewPage {
+    head: <crate::component::Head as crate::component::Component>::Prepared,
+    layout: <crate::component::StandardLayout<PbPreviewContent> as crate::component::Component>::Prepared,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "pages/content_page_content.stpl.html")]
+struct PbPreviewContent {
+    content: crate::misc::Literal<'static>,
+}
+
+#[derive(serde::Deserialize)]
+struct PbPreviewQuery {
+    /// "user" for logged-in preview, "guest" for logged-out preview
+    #[serde(rename = "as", default)]
+    preview_as: String,
+}
+
+#[handler]
+async fn pb_page_preview(
+    Authenticated(user_info): Authenticated,
+    Path(id): Path<String>,
+    Query(query): Query<PbPreviewQuery>,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::builder::context::{Context, ContextMode};
+    use crate::builder::render::render;
+    use crate::component::{Component, Head, StandardLayout};
+    use crate::misc::Literal;
+    use crate::peering::LoadStorePeered;
+
+    // Must be authenticated to access preview
+    let admin_user = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    let page_id: ulid::Ulid = id.parse()?;
+    let page = crate::pagebuilder::PageBuilderPage::load(page_id).await?;
+
+    // Determine which user context to use for preview
+    let preview_user = if query.preview_as == "guest" {
+        None
+    } else {
+        Some(admin_user.clone())
+    };
+
+    // Render in presenting mode for preview
+    let ctx = Context::new(common::shared::db(), &preview_user, ContextMode::Presenting)?;
+    let html = render(&ctx, &page.source).await?;
+
+    // Wrap in standard layout like entity pages do
+    let content_wrapper = PbPreviewContent {
+        content: Literal::new(Box::leak(html.into_boxed_str())),
+    };
+
+    let layout = StandardLayout::new(content_wrapper)
+        .prepare(preview_user)
+        .await?;
+
+    let page = PbPreviewPage {
+        head: Head::default().prepare(None).await?,
+        layout,
+    };
+
+    Ok(page.into_response(None).await?)
+}
+
+#[handler]
+async fn pb_slot_insert(
+    Authenticated(user_info): Authenticated,
+    Path((id, slot_name)): Path<(String, String)>,
+    poem::web::Form(data): poem::web::Form<PbSlotInsertData>,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::builder::context::{Context, ContextMode};
+    use crate::builder::render::{CompiledTemplate, render};
+    use crate::peering::LoadStorePeered;
+
+    let _user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    let page_id: ulid::Ulid = id.parse()?;
+    let component_id: ulid::Ulid = data.component_id.parse()?;
+
+    let mut page = crate::pagebuilder::PageBuilderPage::load(page_id).await?;
+    let component = crate::pagebuilder::PageBuilderComponent::load(component_id).await?;
+
+    // Extract default param values from the component template
+    let default_params: Vec<(String, String)> =
+        if let Ok(compiled) = CompiledTemplate::compile(&component.source) {
+            compiled
+                .extract_params()
+                .into_iter()
+                .filter_map(|p| p.default.map(|v| (p.name, v.to_string())))
+                .collect()
+        } else {
+            vec![]
+        };
+
+    // Insert the component into the slot with default params
+    let new_source = crate::pagebuilder::source::insert_component_into_slot(
+        &page.source,
+        &slot_name,
+        &component,
+        &default_params,
+        common::shared::db(),
+    )
+    .await?;
+
+    // Try to render the new source before saving
+    let ctx = Context::new(common::shared::db(), &None, ContextMode::Editing)?;
+    let canvas_html = match render(&ctx, &new_source).await {
+        Ok(html) => html,
+        Err(e) => {
+            // Render failed - return error without saving
+            let error = PbCanvasError {
+                message: format!(
+                    "Component '{}' has invalid template syntax: {}",
+                    component.name, e
+                ),
+            };
+            return Ok(poem::Response::builder()
+                .content_type("text/html")
+                .body(error.render_once()?));
+        }
+    };
+
+    // Rendering succeeded, now save the page
+    page.set_source(&new_source);
+    page.store().await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(canvas_html))
+}
+
+#[handler]
+async fn pb_slot_clear(
+    Authenticated(user_info): Authenticated,
+    Path((id, slot_name)): Path<(String, String)>,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::builder::context::{Context, ContextMode};
+    use crate::builder::render::render;
+    use crate::peering::LoadStorePeered;
+
+    let _user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    let page_id: ulid::Ulid = id.parse()?;
+
+    let mut page = crate::pagebuilder::PageBuilderPage::load(page_id).await?;
+
+    // Clear the slot
+    let new_source = crate::pagebuilder::source::clear_slot(&page.source, &slot_name)?;
+
+    page.set_source(&new_source);
+    page.store().await?;
+
+    // Re-render the canvas in editing mode
+    let ctx = Context::new(common::shared::db(), &None, ContextMode::Editing)?;
+    let canvas_html = render(&ctx, &page.source).await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(canvas_html))
+}
+
+/// A param definition with its current value for the slot params form
+struct SlotParamField {
+    /// The param definition (name, label, description, default)
+    def: crate::builder::render::ParamDef,
+    /// The current value (from slot params or default)
+    current_value: String,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/pagebuilder/slot_params_form.stpl.html")]
+struct PbSlotParamsForm {
+    page_id: ulid::Ulid,
+    slot_path: String,
+    component: crate::pagebuilder::PageBuilderComponent,
+    params: Vec<SlotParamField>,
+}
+
+#[handler]
+async fn pb_slot_params_form(
+    Authenticated(user_info): Authenticated,
+    Path((id, slot_path)): Path<(String, String)>,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::builder::render::CompiledTemplate;
+    use crate::peering::LoadStorePeered;
+
+    let _user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    let page_id: ulid::Ulid = id.parse()?;
+    let page = crate::pagebuilder::PageBuilderPage::load(page_id).await?;
+
+    // Find the slot by path
+    let slots = crate::pagebuilder::source::extract_slots(&page.source)?;
+    let slot = slots
+        .iter()
+        .find(|s| s.path == slot_path)
+        .ok_or_else(|| anyhow::anyhow!("Slot not found"))?;
+
+    let component_id = slot
+        .component_id
+        .ok_or_else(|| anyhow::anyhow!("Slot has no component"))?;
+    let component = crate::pagebuilder::PageBuilderComponent::load(component_id).await?;
+
+    // Extract param definitions from component template
+    let compiled = CompiledTemplate::compile(&component.source)?;
+    let param_defs = compiled.extract_params();
+
+    // Build current params lookup
+    let current_params: std::collections::HashMap<_, _> = slot.params.iter().cloned().collect();
+
+    // Build param fields with current values or defaults
+    let params: Vec<SlotParamField> = param_defs
+        .into_iter()
+        .map(|def| {
+            let current_value = current_params.get(&def.name).cloned().unwrap_or_else(|| {
+                def.default
+                    .as_ref()
+                    .map(|v| v.to_string())
+                    .unwrap_or_default()
+            });
+            SlotParamField { def, current_value }
+        })
+        .collect();
+
+    let form = PbSlotParamsForm {
+        page_id,
+        slot_path,
+        component,
+        params,
+    };
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(form.render_once()?))
+}
+
+#[derive(serde::Deserialize)]
+struct PbSlotParamsData {
+    #[serde(flatten)]
+    params: std::collections::HashMap<String, String>,
+}
+
+#[handler]
+async fn pb_slot_update_params(
+    Authenticated(user_info): Authenticated,
+    Path((id, slot_path)): Path<(String, String)>,
+    poem::web::Form(data): poem::web::Form<PbSlotParamsData>,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::builder::context::{Context, ContextMode};
+    use crate::builder::render::render;
+    use crate::peering::LoadStorePeered;
+
+    let _user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    let page_id: ulid::Ulid = id.parse()?;
+    let page = crate::pagebuilder::PageBuilderPage::load(page_id).await?;
+
+    // Find the slot by path
+    let slots = crate::pagebuilder::source::extract_slots(&page.source)?;
+    let slot = slots
+        .iter()
+        .find(|s| s.path == slot_path)
+        .ok_or_else(|| anyhow::anyhow!("Slot not found"))?;
+
+    let component_id = slot
+        .component_id
+        .ok_or_else(|| anyhow::anyhow!("Slot has no component"))?;
+    let component = crate::pagebuilder::PageBuilderComponent::load(component_id).await?;
+
+    // Convert params HashMap to Vec
+    let params: Vec<(String, String)> = data
+        .params
+        .into_iter()
+        .filter(|(k, _)| k.starts_with("param_"))
+        .map(|(k, v)| (k.strip_prefix("param_").unwrap().to_string(), v))
+        .collect();
+
+    // Update the slot with new params
+    let new_source = crate::pagebuilder::source::update_slot_params(
+        &page.source,
+        &slot_path,
+        &component,
+        &params,
+        common::shared::db(),
+    )
+    .await?;
+
+    let mut page = page;
+    page.set_source(&new_source);
+    page.store().await?;
+
+    // Re-render the canvas in editing mode
+    let ctx = Context::new(common::shared::db(), &None, ContextMode::Editing)?;
+    let canvas_html = render(&ctx, &page.source).await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(canvas_html))
 }
