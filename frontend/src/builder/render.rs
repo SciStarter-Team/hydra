@@ -1074,7 +1074,7 @@ fn render_nodes<'a>(
                         if let Some(cid) = component_id {
                             buffer.extend_from_slice(b" data-component-id=\"");
                             buffer.extend_from_slice(cid.to_string().as_bytes());
-                            buffer.extend_from_slice(b"\"");
+                            buffer.extend_from_slice(b"\" draggable=\"true\"");
                         }
 
                         buffer.extend_from_slice(b" data-pb-droppable=\"true\">");

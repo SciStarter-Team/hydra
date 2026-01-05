@@ -2,7 +2,7 @@
     <div class="flex items-center justify-between">
         <h3 class="text-sm font-semibold text-gray-900">Slot Properties</h3>
         <button type="button"
-                hx-delete="/-admin/component-pages/<%= self.page_id|disp %>/slot/<%= &self.slot_path %>"
+                hx-delete="/-admin/component-pages/<%= self.page_id|disp %>/slot/<%= urlencoding::encode(&self.slot_path) %>"
                 hx-target="#canvas-content"
                 hx-swap="innerHTML"
                 hx-confirm="Remove this component from the slot?"
@@ -43,7 +43,7 @@
     </div>
 
     <% if !self.params.is_empty() { %>
-    <form hx-put="/-admin/component-pages/<%= self.page_id|disp %>/slot/<%= &self.slot_path %>/params"
+    <form hx-put="/-admin/component-pages/<%= self.page_id|disp %>/slot/<%= urlencoding::encode(&self.slot_path) %>/params"
           hx-target="#canvas-content"
           hx-swap="innerHTML"
           class="space-y-4">

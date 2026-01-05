@@ -160,6 +160,14 @@ pub fn routes() -> impl Endpoint {
             "/component-pages/:id/slot/:slot_name/params",
             get(pb_slot_params_form).put(pb_slot_update_params),
         )
+        .at(
+            "/component-pages/:id/slot/:target_slot/move-from/:source_slot",
+            post(pb_slot_move),
+        )
+        .at(
+            "/component-pages/:id/slot/:target_slot/copy-from/:source_slot",
+            post(pb_slot_copy),
+        )
         .at("/files-links", get(files_links))
         .at("/files-links/search", get(files_links_search))
         .at("/files-links/redirect", post(files_links_create_redirect))
@@ -14729,6 +14737,115 @@ async fn pb_slot_clear(
 
     // Clear the slot
     let new_source = crate::pagebuilder::source::clear_slot(&page.source, &slot_name)?;
+
+    page.set_source(&new_source);
+    page.store().await?;
+
+    // Re-render the canvas in editing mode
+    let ctx = Context::new(common::shared::db(), &None, ContextMode::Editing)?;
+    let canvas_html = render(&ctx, &page.source).await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(canvas_html))
+}
+
+#[handler]
+async fn pb_slot_move(
+    Authenticated(user_info): Authenticated,
+    Path((id, target_slot, source_slot)): Path<(String, String, String)>,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::builder::context::{Context, ContextMode};
+    use crate::builder::render::render;
+    use crate::pagebuilder::source::{extract_slots, clear_slot, insert_component_into_slot};
+    use crate::peering::LoadStorePeered;
+
+    let _user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    let page_id: ulid::Ulid = id.parse()?;
+    let mut page = crate::pagebuilder::PageBuilderPage::load(page_id).await?;
+
+    // Get source slot info before modifying
+    let slots = extract_slots(&page.source)?;
+    let source_info = slots
+        .iter()
+        .find(|s| s.path == source_slot)
+        .ok_or_else(|| anyhow::anyhow!("Source slot '{}' not found", source_slot))?;
+
+    let component_id = source_info
+        .component_id
+        .ok_or_else(|| anyhow::anyhow!("Source slot has no component"))?;
+
+    let params: Vec<(String, String)> = source_info.params.clone();
+
+    // Load the component
+    let component = crate::pagebuilder::PageBuilderComponent::load(component_id).await?;
+
+    // Clear the source slot first
+    let intermediate_source = clear_slot(&page.source, &source_slot)?;
+
+    // Insert into target slot
+    let new_source = insert_component_into_slot(
+        &intermediate_source,
+        &target_slot,
+        &component,
+        &params,
+        common::shared::db(),
+    )
+    .await?;
+
+    page.set_source(&new_source);
+    page.store().await?;
+
+    // Re-render the canvas in editing mode
+    let ctx = Context::new(common::shared::db(), &None, ContextMode::Editing)?;
+    let canvas_html = render(&ctx, &page.source).await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(canvas_html))
+}
+
+#[handler]
+async fn pb_slot_copy(
+    Authenticated(user_info): Authenticated,
+    Path((id, target_slot, source_slot)): Path<(String, String, String)>,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::builder::context::{Context, ContextMode};
+    use crate::builder::render::render;
+    use crate::pagebuilder::source::{extract_slots, insert_component_into_slot};
+    use crate::peering::LoadStorePeered;
+
+    let _user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    let page_id: ulid::Ulid = id.parse()?;
+    let mut page = crate::pagebuilder::PageBuilderPage::load(page_id).await?;
+
+    // Get source slot info
+    let slots = extract_slots(&page.source)?;
+    let source_info = slots
+        .iter()
+        .find(|s| s.path == source_slot)
+        .ok_or_else(|| anyhow::anyhow!("Source slot '{}' not found", source_slot))?;
+
+    let component_id = source_info
+        .component_id
+        .ok_or_else(|| anyhow::anyhow!("Source slot has no component"))?;
+
+    let params: Vec<(String, String)> = source_info.params.clone();
+
+    // Load the component
+    let component = crate::pagebuilder::PageBuilderComponent::load(component_id).await?;
+
+    // Insert into target slot (without clearing source - this is a copy)
+    let new_source = insert_component_into_slot(
+        &page.source,
+        &target_slot,
+        &component,
+        &params,
+        common::shared::db(),
+    )
+    .await?;
 
     page.set_source(&new_source);
     page.store().await?;
