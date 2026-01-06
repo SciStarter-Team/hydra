@@ -342,6 +342,58 @@ pub fn move_slot_content(
     Ok(result)
 }
 
+/// Extract the source of a slot (component info + body) for staging
+///
+/// Returns a tuple of (component_id, params, body) where body is the raw content.
+/// This can be used to temporarily store slot content in the staging panel.
+pub fn extract_slot_source(
+    page_source: &str,
+    slot_path: &str,
+) -> Result<(Option<Ulid>, Vec<(String, String)>, String), Error> {
+    let slots = extract_slots(page_source)?;
+
+    let slot = slots
+        .iter()
+        .find(|s| s.path == slot_path)
+        .ok_or_else(|| anyhow!("Slot '{}' not found", slot_path))?;
+
+    let body = page_source[slot.body_start..slot.body_end].to_string();
+
+    Ok((slot.component_id, slot.params.clone(), body))
+}
+
+/// Insert raw source into a slot
+///
+/// This replaces the slot's content with the provided raw source, optionally
+/// setting component ID and params. Used to restore content from staging.
+pub fn insert_raw_source(
+    page_source: &str,
+    slot_path: &str,
+    component_id: Option<&Ulid>,
+    params: &[(String, String)],
+    body: &str,
+) -> Result<String, Error> {
+    let slots = extract_slots(page_source)?;
+
+    let slot = slots
+        .iter()
+        .find(|s| s.path == slot_path)
+        .ok_or_else(|| anyhow!("Slot '{}' not found", slot_path))?;
+
+    // Build new slot tag
+    let new_tag = build_slot_tag(&slot.name, component_id, params);
+
+    // Reconstruct the source
+    let mut result = String::with_capacity(page_source.len() + body.len());
+    result.push_str(&page_source[..slot.start]);
+    result.push_str(&new_tag);
+    result.push_str(body);
+    result.push_str("{$ /slot $}");
+    result.push_str(&page_source[slot.end..]);
+
+    Ok(result)
+}
+
 /// Copy slot content from source to target, preserving all nested content
 ///
 /// This copies the entire slot body (including nested slots) from source to target.

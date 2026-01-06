@@ -121,6 +121,21 @@
                 </div>
             </div>
         </div>
+
+        <!-- Floating Staging Panel (for temporary component storage) -->
+        <div id="staging-panel" class="pb-floating-panel pb-panel-bottom">
+            <div class="pb-panel-header" hx-on:click="togglePanel('staging-panel')">
+                <wa-icon name="inbox" class="w-4 h-4"></wa-icon>
+                <span class="pb-panel-title">Staging</span>
+                <wa-icon name="chevron-down" class="w-4 h-4 pb-panel-chevron"></wa-icon>
+            </div>
+            <div class="pb-panel-body">
+                <p class="text-xs text-gray-500 mb-2">Drag components here temporarily while rearranging</p>
+                <div id="staging-slots" class="flex flex-wrap gap-2">
+                    <!-- Staging slots are rendered by JavaScript -->
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -130,6 +145,159 @@
     const pageId = '<%= self.page.page_id|disp %>';
     let draggedComponent = null;  // From palette
     let draggedSlot = null;       // From existing slot
+    let draggedStaging = null;    // From staging area
+
+    // Staging area management
+    const stagingSlots = [];  // Array of { source: string, label: string } or null for empty
+
+    function renderStagingSlots() {
+        const container = document.getElementById('staging-slots');
+        if (!container) return;
+
+        // Always show N+1 slots where N is the number of filled slots
+        const filledCount = stagingSlots.filter(s => s !== null).length;
+        const totalSlots = filledCount + 1;
+
+        // Ensure array has right size
+        while (stagingSlots.length < totalSlots) stagingSlots.push(null);
+        while (stagingSlots.length > totalSlots && stagingSlots[stagingSlots.length - 1] === null) {
+            stagingSlots.pop();
+        }
+
+        container.innerHTML = stagingSlots.map((slot, i) => {
+            if (slot) {
+                return `<div class="pb-staging-slot pb-staging-slot-filled"
+                             draggable="true"
+                             data-staging-index="${i}"
+                             data-pb-staging-droppable="true">
+                    <div class="pb-staging-label">${slot.label}</div>
+                    <button type="button" class="pb-staging-delete" data-staging-index="${i}" title="Discard">×</button>
+                </div>`;
+            } else {
+                return `<div class="pb-staging-slot pb-staging-slot-empty"
+                             data-staging-index="${i}"
+                             data-pb-staging-droppable="true">
+                    <span>Drop here</span>
+                </div>`;
+            }
+        }).join('');
+    }
+
+    // Handle staging slot delete button clicks
+    document.addEventListener('click', (e) => {
+        const deleteBtn = e.target.closest('.pb-staging-delete');
+        if (deleteBtn) {
+            e.stopPropagation();
+            const index = parseInt(deleteBtn.dataset.stagingIndex, 10);
+            stagingSlots[index] = null;
+            renderStagingSlots();
+        }
+    });
+
+    // Initialize staging slots
+    renderStagingSlots();
+
+    // Staging drag/drop handlers
+    document.addEventListener('dragstart', (e) => {
+        const stagingSlot = e.target.closest('.pb-staging-slot-filled');
+        if (stagingSlot) {
+            const index = parseInt(stagingSlot.dataset.stagingIndex, 10);
+            draggedStaging = { index, data: stagingSlots[index] };
+            draggedComponent = null;
+            draggedSlot = null;
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', `staging:${index}`);
+            stagingSlot.classList.add('opacity-50');
+        }
+    }, true);
+
+    document.addEventListener('dragend', (e) => {
+        const stagingSlot = e.target.closest('.pb-staging-slot');
+        if (stagingSlot) {
+            stagingSlot.classList.remove('opacity-50');
+        }
+        draggedStaging = null;
+    }, true);
+
+    // Handle dragover for staging slots
+    document.addEventListener('dragover', (e) => {
+        const stagingSlot = e.target.closest('[data-pb-staging-droppable="true"]');
+        if (stagingSlot && (draggedSlot || draggedStaging)) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            stagingSlot.classList.add('ring-2', 'ring-indigo-500');
+        }
+    });
+
+    document.addEventListener('dragleave', (e) => {
+        const stagingSlot = e.target.closest('[data-pb-staging-droppable="true"]');
+        if (stagingSlot && !stagingSlot.contains(e.relatedTarget)) {
+            stagingSlot.classList.remove('ring-2', 'ring-indigo-500');
+        }
+    });
+
+    // Handle drop on staging slots
+    document.addEventListener('drop', async (e) => {
+        const stagingSlot = e.target.closest('[data-pb-staging-droppable="true"]');
+        if (!stagingSlot) return;
+        if (!draggedSlot && !draggedStaging) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Capture drag state before async operations (dragend may clear these)
+        const slotToMove = draggedSlot;
+        const stagingToMove = draggedStaging;
+
+        // Clear all staging drop highlights
+        document.querySelectorAll('[data-pb-staging-droppable="true"]').forEach(el => {
+            el.classList.remove('ring-2', 'ring-indigo-500');
+        });
+
+        const targetIndex = parseInt(stagingSlot.dataset.stagingIndex, 10);
+
+        if (slotToMove) {
+            // Dragging from canvas to staging: extract and store, then clear source slot
+            try {
+                const response = await fetch(
+                    `/-admin/component-pages/${pageId}/slot/${encodeURIComponent(slotToMove.path)}/extract`
+                );
+                if (!response.ok) throw new Error('Failed to extract slot');
+
+                const slotData = await response.json();
+
+                // Store in staging
+                stagingSlots[targetIndex] = {
+                    component_id: slotData.component_id,
+                    params: slotData.params,
+                    body: slotData.body,
+                    label: slotData.label
+                };
+                renderStagingSlots();
+
+                // Clear the source slot on the page
+                htmx.ajax('DELETE', `/-admin/component-pages/${pageId}/slot/${encodeURIComponent(slotToMove.path)}`, {
+                    target: '#canvas-content',
+                    swap: 'innerHTML'
+                });
+            } catch (err) {
+                console.error('Failed to move to staging:', err);
+                alert('Failed to move component to staging');
+            }
+        } else if (stagingToMove) {
+            // Dragging between staging slots: swap positions
+            const sourceIndex = stagingToMove.index;
+            if (sourceIndex !== targetIndex) {
+                const temp = stagingSlots[sourceIndex];
+                stagingSlots[sourceIndex] = stagingSlots[targetIndex];
+                stagingSlots[targetIndex] = temp;
+                renderStagingSlots();
+            }
+        }
+
+        draggedSlot = null;
+        draggedStaging = null;
+    }, true);
 
     // Panel dragging and toggling
     (function() {
@@ -161,6 +329,8 @@
                 dragOffsetY = e.clientY - rect.top;
                 hasDragged = false;
 
+                // Lock width during drag to prevent resizing
+                draggedPanel.style.width = rect.width + 'px';
                 draggedPanel.style.transition = 'none';
                 document.body.style.userSelect = 'none';
                 e.preventDefault();
@@ -175,12 +345,26 @@
             const y = e.clientY - dragOffsetY;
 
             // Constrain to viewport
-            const maxX = window.innerWidth - draggedPanel.offsetWidth;
             const maxY = window.innerHeight - draggedPanel.offsetHeight;
 
-            draggedPanel.style.left = Math.max(0, Math.min(x, maxX)) + 'px';
+            // Bottom panel has transform: translateX(-50%), so adjust constraints
+            const isBottomPanel = draggedPanel.classList.contains('pb-panel-bottom');
+            let minX, maxX;
+            if (isBottomPanel) {
+                // With translateX(-50%), left=0 puts center at 0, so left edge is at -width/2
+                // We want left edge at 0, so left = width/2
+                minX = draggedPanel.offsetWidth / 2;
+                // We want right edge at viewport, so left + width/2 = viewport width
+                maxX = window.innerWidth - draggedPanel.offsetWidth / 2;
+            } else {
+                minX = 0;
+                maxX = window.innerWidth - draggedPanel.offsetWidth;
+            }
+
+            draggedPanel.style.left = Math.max(minX, Math.min(x, maxX)) + 'px';
             draggedPanel.style.top = Math.max(0, Math.min(y, maxY)) + 'px';
             draggedPanel.style.right = 'auto';
+            draggedPanel.style.bottom = 'auto';
         });
 
         document.addEventListener('mouseup', () => {
@@ -192,7 +376,8 @@
                 const id = draggedPanel.id;
                 const pos = {
                     left: draggedPanel.style.left,
-                    top: draggedPanel.style.top
+                    top: draggedPanel.style.top,
+                    width: draggedPanel.style.width
                 };
                 localStorage.setItem('pb-panel-pos-' + id, JSON.stringify(pos));
 
@@ -208,6 +393,10 @@
                 panel.style.left = pos.left;
                 panel.style.top = pos.top;
                 panel.style.right = 'auto';
+                panel.style.bottom = 'auto';  // Clear bottom to prevent stretch
+                if (pos.width) {
+                    panel.style.width = pos.width;
+                }
             }
         });
     })();
@@ -309,9 +498,12 @@
         const slot = e.target.closest('[data-pb-droppable="true"]');
         if (!slot) return;
 
+        // Accept drops from palette, canvas slots, or staging
+        if (!draggedComponent && !draggedSlot && !draggedStaging) return;
+
         e.preventDefault();
         // Ctrl+drag copies, normal drag moves (for slots) or copies (from palette)
-        e.dataTransfer.dropEffect = draggedSlot ? (e.ctrlKey ? 'copy' : 'move') : 'copy';
+        e.dataTransfer.dropEffect = (draggedSlot || draggedStaging) ? (e.ctrlKey ? 'copy' : 'move') : 'copy';
         slot.classList.add('ring-2', 'ring-indigo-500', 'ring-offset-2');
     });
 
@@ -326,7 +518,7 @@
 
     // Handle drop on slots - find innermost slot at cursor position
     document.addEventListener('drop', (e) => {
-        if (!draggedComponent && !draggedSlot) return;
+        if (!draggedComponent && !draggedSlot && !draggedStaging) return;
 
         // Use elementsFromPoint to find the innermost droppable slot
         const elements = document.elementsFromPoint(e.clientX, e.clientY);
@@ -368,6 +560,38 @@
                     swap: 'innerHTML'
                 });
             }
+        } else if (draggedStaging) {
+            // Dragging from staging to canvas: insert raw source and clear staging slot
+            const stagingData = draggedStaging.data;
+            const stagingIndex = draggedStaging.index;
+
+            fetch(`/-admin/component-pages/${pageId}/slot/${encodeURIComponent(targetPath)}/insert-raw`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    component_id: stagingData.component_id,
+                    params: stagingData.params,
+                    body: stagingData.body
+                })
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('Failed to insert from staging');
+                return response.text();
+            })
+            .then(html => {
+                document.getElementById('canvas-content').innerHTML = html;
+                // Clear the staging slot
+                stagingSlots[stagingIndex] = null;
+                renderStagingSlots();
+                // Trigger htmx processing for new content
+                htmx.process(document.getElementById('canvas-content'));
+            })
+            .catch(err => {
+                console.error('Failed to insert from staging:', err);
+                alert('Failed to insert component from staging');
+            });
+
+            draggedStaging = null;
         }
     });
 
@@ -630,6 +854,80 @@
 
 .pb-panel-right {
     right: 0.5rem;
+}
+
+.pb-panel-bottom {
+    top: auto;
+    bottom: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    width: auto;
+    min-width: 300px;
+    max-width: 600px;
+}
+
+.pb-staging-slot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 80px;
+    min-height: 50px;
+    padding: 0.5rem;
+    border: 2px dashed #d1d5db;
+    border-radius: 0.375rem;
+    background: #f9fafb;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.pb-staging-slot:hover {
+    border-color: #6366f1;
+    background: #eef2ff;
+}
+
+.pb-staging-slot-empty {
+    color: #9ca3af;
+    font-size: 0.75rem;
+}
+
+.pb-staging-slot-filled {
+    position: relative;
+    border-style: solid;
+    border-color: #6366f1;
+    background: #eef2ff;
+}
+
+.pb-staging-slot-filled .pb-staging-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #4f46e5;
+    text-align: center;
+    word-break: break-word;
+}
+
+.pb-staging-delete {
+    position: absolute;
+    top: -0.25rem;
+    right: -0.25rem;
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 50%;
+    border: none;
+    background: #ef4444;
+    color: white;
+    font-size: 0.875rem;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.pb-staging-slot-filled:hover .pb-staging-delete {
+    opacity: 1;
+}
+
+.pb-staging-delete:hover {
+    background: #dc2626;
 }
 
 #properties-panel-container:not(.pb-panel-collapsed) {

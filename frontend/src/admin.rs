@@ -168,6 +168,14 @@ pub fn routes() -> impl Endpoint {
             "/component-pages/:id/slot/:target_slot/copy-from/:source_slot",
             post(pb_slot_copy),
         )
+        .at(
+            "/component-pages/:id/slot/:slot_name/extract",
+            get(pb_slot_extract),
+        )
+        .at(
+            "/component-pages/:id/slot/:slot_name/insert-raw",
+            post(pb_slot_insert_raw),
+        )
         .at("/files-links", get(files_links))
         .at("/files-links/search", get(files_links_search))
         .at("/files-links/redirect", post(files_links_create_redirect))
@@ -14799,6 +14807,102 @@ async fn pb_slot_copy(
 
     // Copy slot content preserving all nested content
     let new_source = copy_slot_content(&page.source, &source_slot, &target_slot)?;
+
+    page.set_source(&new_source);
+    page.store().await?;
+
+    // Re-render the canvas in editing mode
+    let ctx = Context::new(common::shared::db(), &None, ContextMode::Editing)?;
+    let canvas_html = render(&ctx, &page.source).await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(canvas_html))
+}
+
+/// JSON response for slot extraction (used by staging panel)
+#[derive(serde::Serialize)]
+struct PbSlotExtractResponse {
+    component_id: Option<String>,
+    params: Vec<(String, String)>,
+    body: String,
+    label: String,
+}
+
+#[handler]
+async fn pb_slot_extract(
+    Authenticated(user_info): Authenticated,
+    Path((id, slot_name)): Path<(String, String)>,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::pagebuilder::source::extract_slot_source;
+    use crate::peering::LoadStorePeered;
+
+    let _user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    let page_id: ulid::Ulid = id.parse()?;
+    let page = crate::pagebuilder::PageBuilderPage::load(page_id).await?;
+
+    let (component_id, params, body) = extract_slot_source(&page.source, &slot_name)?;
+
+    // Use the component name as the label, falling back to slot name
+    let label = if let Some(cid) = component_id {
+        match crate::pagebuilder::PageBuilderComponent::load(cid).await {
+            Ok(component) => component.name,
+            Err(_) => slot_name.split('.').last().unwrap_or(&slot_name).to_string(),
+        }
+    } else {
+        slot_name.split('.').last().unwrap_or(&slot_name).to_string()
+    };
+
+    let response = PbSlotExtractResponse {
+        component_id: component_id.map(|id| id.to_string()),
+        params,
+        body,
+        label,
+    };
+
+    Ok(poem::Response::builder()
+        .content_type("application/json")
+        .body(serde_json::to_string(&response)?))
+}
+
+#[derive(serde::Deserialize)]
+struct PbSlotInsertRawData {
+    component_id: Option<String>,
+    #[serde(default)]
+    params: Vec<(String, String)>,
+    body: String,
+}
+
+#[handler]
+async fn pb_slot_insert_raw(
+    Authenticated(user_info): Authenticated,
+    Path((id, slot_name)): Path<(String, String)>,
+    poem::web::Json(data): poem::web::Json<PbSlotInsertRawData>,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::builder::context::{Context, ContextMode};
+    use crate::builder::render::render;
+    use crate::pagebuilder::source::insert_raw_source;
+    use crate::peering::LoadStorePeered;
+
+    let _user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    let page_id: ulid::Ulid = id.parse()?;
+    let mut page = crate::pagebuilder::PageBuilderPage::load(page_id).await?;
+
+    let component_id: Option<ulid::Ulid> = data
+        .component_id
+        .as_ref()
+        .map(|s| s.parse())
+        .transpose()?;
+
+    let new_source = insert_raw_source(
+        &page.source,
+        &slot_name,
+        component_id.as_ref(),
+        &data.params,
+        &data.body,
+    )?;
 
     page.set_source(&new_source);
     page.store().await?;
