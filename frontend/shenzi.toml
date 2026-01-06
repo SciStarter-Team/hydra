@@ -14,6 +14,10 @@ include = "vendor.sh"
 handler = "Ignore"
 
 [[rules]]
+include = "css/safelist.txt"
+handler = "Ignore"
+
+[[rules]]
 include = "css/style.css"
 handler = {Command = ["tailwindcss", "--minify", "--input", "$infile", "--output", "$outfile"]}
 skip_unchanged = false

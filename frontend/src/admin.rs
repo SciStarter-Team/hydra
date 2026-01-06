@@ -14416,6 +14416,7 @@ async fn pb_page_editor(
                 .with_sidebar_active("component-pages")
                 .with_breadcrumb("Component Pages", Some("/-admin/component-pages"))
                 .with_breadcrumb("Editor", None)
+                .with_quill()
                 .prepare(Some(user_info))
                 .await?;
 
@@ -14434,6 +14435,7 @@ async fn pb_page_editor(
                 .with_sidebar_active("component-pages")
                 .with_breadcrumb("Component Pages", Some("/-admin/component-pages"))
                 .with_breadcrumb("Editor (Error)", None)
+                .with_quill()
                 .prepare(Some(user_info))
                 .await?;
 
@@ -14757,7 +14759,7 @@ async fn pb_slot_move(
 ) -> Result<poem::Response, anyhow::Error> {
     use crate::builder::context::{Context, ContextMode};
     use crate::builder::render::render;
-    use crate::pagebuilder::source::{extract_slots, clear_slot, insert_component_into_slot};
+    use crate::pagebuilder::source::move_slot_content;
     use crate::peering::LoadStorePeered;
 
     let _user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
@@ -14765,34 +14767,8 @@ async fn pb_slot_move(
     let page_id: ulid::Ulid = id.parse()?;
     let mut page = crate::pagebuilder::PageBuilderPage::load(page_id).await?;
 
-    // Get source slot info before modifying
-    let slots = extract_slots(&page.source)?;
-    let source_info = slots
-        .iter()
-        .find(|s| s.path == source_slot)
-        .ok_or_else(|| anyhow::anyhow!("Source slot '{}' not found", source_slot))?;
-
-    let component_id = source_info
-        .component_id
-        .ok_or_else(|| anyhow::anyhow!("Source slot has no component"))?;
-
-    let params: Vec<(String, String)> = source_info.params.clone();
-
-    // Load the component
-    let component = crate::pagebuilder::PageBuilderComponent::load(component_id).await?;
-
-    // Clear the source slot first
-    let intermediate_source = clear_slot(&page.source, &source_slot)?;
-
-    // Insert into target slot
-    let new_source = insert_component_into_slot(
-        &intermediate_source,
-        &target_slot,
-        &component,
-        &params,
-        common::shared::db(),
-    )
-    .await?;
+    // Move slot content preserving all nested content
+    let new_source = move_slot_content(&page.source, &source_slot, &target_slot)?;
 
     page.set_source(&new_source);
     page.store().await?;
@@ -14813,7 +14789,7 @@ async fn pb_slot_copy(
 ) -> Result<poem::Response, anyhow::Error> {
     use crate::builder::context::{Context, ContextMode};
     use crate::builder::render::render;
-    use crate::pagebuilder::source::{extract_slots, insert_component_into_slot};
+    use crate::pagebuilder::source::copy_slot_content;
     use crate::peering::LoadStorePeered;
 
     let _user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
@@ -14821,31 +14797,8 @@ async fn pb_slot_copy(
     let page_id: ulid::Ulid = id.parse()?;
     let mut page = crate::pagebuilder::PageBuilderPage::load(page_id).await?;
 
-    // Get source slot info
-    let slots = extract_slots(&page.source)?;
-    let source_info = slots
-        .iter()
-        .find(|s| s.path == source_slot)
-        .ok_or_else(|| anyhow::anyhow!("Source slot '{}' not found", source_slot))?;
-
-    let component_id = source_info
-        .component_id
-        .ok_or_else(|| anyhow::anyhow!("Source slot has no component"))?;
-
-    let params: Vec<(String, String)> = source_info.params.clone();
-
-    // Load the component
-    let component = crate::pagebuilder::PageBuilderComponent::load(component_id).await?;
-
-    // Insert into target slot (without clearing source - this is a copy)
-    let new_source = insert_component_into_slot(
-        &page.source,
-        &target_slot,
-        &component,
-        &params,
-        common::shared::db(),
-    )
-    .await?;
+    // Copy slot content preserving all nested content
+    let new_source = copy_slot_content(&page.source, &source_slot, &target_slot)?;
 
     page.set_source(&new_source);
     page.store().await?;

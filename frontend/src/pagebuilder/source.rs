@@ -254,6 +254,136 @@ pub async fn update_slot_params(
     Ok(result)
 }
 
+/// Move slot content from source to target, preserving all nested content
+///
+/// This transplants the entire slot body (including nested slots) from source to target.
+/// The source slot is cleared after the move.
+pub fn move_slot_content(
+    page_source: &str,
+    source_path: &str,
+    target_path: &str,
+) -> Result<String, Error> {
+    let slots = extract_slots(page_source)?;
+
+    let source = slots
+        .iter()
+        .find(|s| s.path == source_path)
+        .ok_or_else(|| anyhow!("Source slot '{}' not found", source_path))?;
+
+    let target = slots
+        .iter()
+        .find(|s| s.path == target_path)
+        .ok_or_else(|| anyhow!("Target slot '{}' not found", target_path))?;
+
+    // Extract the source slot's opening tag and body (but not its name - we'll use target's name)
+    let source_body = &page_source[source.body_start..source.body_end];
+
+    // Build new target slot tag with source's component and params
+    let new_tag = build_slot_tag(
+        &target.name,
+        source.component_id.as_ref(),
+        &source.params,
+    );
+
+    // Build empty source slot tag
+    let empty_source_tag = build_slot_tag(&source.name, None, &[]);
+
+    // We need to handle the order of modifications carefully
+    // If source comes before target, we modify target first (higher positions)
+    // If target comes before source, we modify source first
+    let mut result = page_source.to_string();
+
+    if source.start < target.start {
+        // Source is before target - modify target first (since its positions are still valid)
+        // Then modify source
+        let mut intermediate = String::with_capacity(result.len() + source_body.len());
+        intermediate.push_str(&result[..target.start]);
+        intermediate.push_str(&new_tag);
+        intermediate.push_str(source_body);
+        intermediate.push_str("{$ /slot $}");
+        intermediate.push_str(&result[target.end..]);
+        // Re-extract slots since positions changed
+        let slots = extract_slots(&intermediate)?;
+        let source = slots
+            .iter()
+            .find(|s| s.path == source_path)
+            .ok_or_else(|| anyhow!("Source slot '{}' not found after first modification", source_path))?;
+        // Clear source slot
+        let mut final_result = String::with_capacity(intermediate.len());
+        final_result.push_str(&intermediate[..source.start]);
+        final_result.push_str(&empty_source_tag);
+        final_result.push_str("{$ /slot $}");
+        final_result.push_str(&intermediate[source.end..]);
+        result = final_result;
+    } else {
+        // Target is before source - modify source first
+        // Clear source slot
+        let mut intermediate = String::with_capacity(result.len());
+        intermediate.push_str(&result[..source.start]);
+        intermediate.push_str(&empty_source_tag);
+        intermediate.push_str("{$ /slot $}");
+        intermediate.push_str(&result[source.end..]);
+        // Re-extract slots since positions changed
+        let slots = extract_slots(&intermediate)?;
+        let target = slots
+            .iter()
+            .find(|s| s.path == target_path)
+            .ok_or_else(|| anyhow!("Target slot '{}' not found after first modification", target_path))?;
+        // Replace target with source content
+        let mut final_result = String::with_capacity(intermediate.len() + source_body.len());
+        final_result.push_str(&intermediate[..target.start]);
+        final_result.push_str(&new_tag);
+        final_result.push_str(source_body);
+        final_result.push_str("{$ /slot $}");
+        final_result.push_str(&intermediate[target.end..]);
+        result = final_result;
+    }
+
+    Ok(result)
+}
+
+/// Copy slot content from source to target, preserving all nested content
+///
+/// This copies the entire slot body (including nested slots) from source to target.
+/// The source slot is left unchanged.
+pub fn copy_slot_content(
+    page_source: &str,
+    source_path: &str,
+    target_path: &str,
+) -> Result<String, Error> {
+    let slots = extract_slots(page_source)?;
+
+    let source = slots
+        .iter()
+        .find(|s| s.path == source_path)
+        .ok_or_else(|| anyhow!("Source slot '{}' not found", source_path))?;
+
+    let target = slots
+        .iter()
+        .find(|s| s.path == target_path)
+        .ok_or_else(|| anyhow!("Target slot '{}' not found", target_path))?;
+
+    // Extract the source slot's body
+    let source_body = &page_source[source.body_start..source.body_end];
+
+    // Build new target slot tag with source's component and params
+    let new_tag = build_slot_tag(
+        &target.name,
+        source.component_id.as_ref(),
+        &source.params,
+    );
+
+    // Replace target slot with source content
+    let mut result = String::with_capacity(page_source.len() + source_body.len());
+    result.push_str(&page_source[..target.start]);
+    result.push_str(&new_tag);
+    result.push_str(source_body);
+    result.push_str("{$ /slot $}");
+    result.push_str(&page_source[target.end..]);
+
+    Ok(result)
+}
+
 /// Build a slot tag string with optional component and params
 fn build_slot_tag(
     name: &str,

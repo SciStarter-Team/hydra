@@ -251,6 +251,24 @@
             return;
         }
 
+        // Handle badge link drag start (moving component via badge path)
+        const badgeLink = e.target.closest('.pb-badge-link[data-slot-path]');
+        if (badgeLink) {
+            const slotPath = badgeLink.dataset.slotPath;
+            const slot = document.querySelector(`[data-slot-path="${slotPath}"]`);
+            if (slot && slot.dataset.componentId) {
+                draggedSlot = {
+                    path: slotPath,
+                    componentId: slot.dataset.componentId
+                };
+                draggedComponent = null;
+                e.dataTransfer.effectAllowed = 'copyMove';
+                e.dataTransfer.setData('text/plain', slotPath);
+                badgeLink.classList.add('opacity-50');
+            }
+            return;
+        }
+
         // Handle slot drag start (moving existing component)
         const slot = e.target.closest('.pb-slot[data-component-id]');
         if (slot) {
@@ -271,6 +289,10 @@
         const component = e.target.closest('.pb-component');
         if (component) {
             component.classList.remove('opacity-50');
+        }
+        const badgeLink = e.target.closest('.pb-badge-link');
+        if (badgeLink) {
+            badgeLink.classList.remove('opacity-50');
         }
         const slot = e.target.closest('.pb-slot');
         if (slot) {
@@ -402,7 +424,15 @@
                     break;
                 }
             }
-            if (!content) return;
+
+            // If slot has no content at all (only badge), add placeholder
+            if (!content) {
+                const placeholder = document.createElement('span');
+                placeholder.className = 'pb-empty-placeholder';
+                placeholder.textContent = '[empty: ' + slot.dataset.slotPath.split('.').pop() + ']';
+                slot.appendChild(placeholder);
+                return;
+            }
 
             // Skip if content is itself a slot (it will handle its own placeholder)
             if (content.classList.contains('pb-slot')) return;
@@ -426,6 +456,19 @@
         if (e.target.id === 'canvas-content') {
             scanForEmptyComponents();
             setTimeout(scanForEmptyComponents, 100);
+            // Re-scan when images inside canvas finish loading
+            e.target.querySelectorAll('img').forEach(img => {
+                if (!img.complete) {
+                    img.addEventListener('load', scanForEmptyComponents, { once: true });
+                }
+            });
+        }
+    });
+
+    // Re-scan when images finish loading (for initial page load)
+    document.getElementById('canvas-content').querySelectorAll('img').forEach(img => {
+        if (!img.complete) {
+            img.addEventListener('load', scanForEmptyComponents, { once: true });
         }
     });
 
@@ -491,18 +534,12 @@
         slot.classList.add('pb-slot-selected');
         selectedSlotPath = slotPath;
 
-        // Apply outline to content element (not slot, since it's display:contents)
-        let content = slot.querySelector('.pb-empty-placeholder');
-        if (!content) {
-            for (const child of slot.children) {
-                if (!child.classList.contains('pb-slot-badge')) {
-                    content = child;
-                    break;
-                }
-            }
-        }
-        if (content) {
-            content.classList.add('pb-selected-outline');
+        // Apply outline to all content elements (not slot, since it's display:contents)
+        let hasPlaceholder = slot.querySelector('.pb-empty-placeholder');
+        for (const child of slot.children) {
+            if (child.classList.contains('pb-slot-badge')) continue;
+            if (hasPlaceholder && !child.classList.contains('pb-empty-placeholder')) continue;
+            child.classList.add('pb-selected-outline');
         }
 
         // Expand properties panel if collapsed
@@ -516,6 +553,38 @@
             target: '#properties-panel',
             swap: 'innerHTML'
         });
+    }
+
+    // Upload file and set URL in target input
+    window.pbUploadFile = async function(fileInput, targetInputId) {
+        const file = fileInput.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const response = await fetch('/-upload/file', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error('Upload failed');
+            }
+
+            const result = await response.json();
+            const targetInput = document.getElementById(targetInputId);
+            if (targetInput) {
+                targetInput.value = result.file_path;
+            }
+        } catch (err) {
+            console.error('File upload failed:', err);
+            alert('Failed to upload file');
+        }
+
+        // Clear the file input
+        fileInput.value = '';
     }
 
     document.addEventListener('click', (e) => {
@@ -786,5 +855,36 @@
     border-color: #6366f1;
     animation: expandTextarea 0.2s ease-out;
     transform-origin: top right;
+}
+
+/* Expanding rich text editor */
+#properties-panel ss-rich-text-html:focus-within {
+    position: fixed;
+    z-index: 1000;
+    left: 2rem;
+    right: 2rem;
+    top: 6rem;
+    width: calc(100vw - 4rem);
+    height: calc(100vh - 14rem);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    animation: expandTextarea 0.2s ease-out;
+    transform-origin: top right;
+    background: white;
+}
+
+#properties-panel ss-rich-text-html:focus-within .editor-container {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    border-color: #6366f1;
+}
+
+#properties-panel ss-rich-text-html:focus-within .ql-container {
+    flex: 1;
+    overflow-y: auto;
+}
+
+#properties-panel ss-rich-text-html:focus-within .ql-editor {
+    min-height: 100%;
 }
 </style>

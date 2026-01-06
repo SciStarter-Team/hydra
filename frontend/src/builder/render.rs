@@ -32,6 +32,10 @@ pub enum ParamInputType {
     Text,
     /// Multi-line textarea
     Textarea,
+    /// Rich text editor using Quill JS (stores HTML)
+    RichText,
+    /// URL input with file upload option
+    FileUrl,
 }
 
 /// A parameter definition extracted from a template
@@ -261,7 +265,7 @@ enum Item<'a> {
     Slot {
         name: &'a str,
         component: Option<&'a str>,
-        params: Vec<(&'a str, &'a str)>,
+        params: Vec<(&'a str, String)>,
     },
     /// {$ /slot $} - end of slot block
     EndSlot,
@@ -383,7 +387,7 @@ fn parse_item(raw: &[u8]) -> Result<Item<'_>, Error> {
 
 /// Parse slot item: `name [component=ID] [key=value...]`
 fn parse_slot_item(rest: &str) -> Result<Item<'_>, Error> {
-    use super::parse::parse_attributes;
+    use super::parse::{parse_attributes, unescape_value};
 
     let mut parser = parse_attributes(rest);
     let name = parser.name().ok_or_else(|| anyhow!("slot requires a name"))?;
@@ -395,7 +399,8 @@ fn parse_slot_item(rest: &str) -> Result<Item<'_>, Error> {
         if attr.key == "component" {
             component = Some(attr.value);
         } else {
-            params.push((attr.key, attr.value));
+            // Unescape the value to handle escaped quotes in param values
+            params.push((attr.key, unescape_value(attr.value)));
         }
     }
 
@@ -508,7 +513,9 @@ fn parse_param_item(rest: &str) -> Result<Item<'_>, Error> {
                     input_type = match s {
                         "text" => ParamInputType::Text,
                         "textarea" => ParamInputType::Textarea,
-                        _ => return Err(anyhow!("Unknown param type: '{}'. Valid types: text, textarea", s)),
+                        "richtext" => ParamInputType::RichText,
+                        "fileurl" => ParamInputType::FileUrl,
+                        _ => return Err(anyhow!("Unknown param type: '{}'. Valid types: text, textarea, richtext, fileurl", s)),
                     };
                 } else {
                     return Err(anyhow!("type must be a quoted string"));
@@ -649,7 +656,7 @@ fn parse_nodes(
                             component_id,
                             params: params
                                 .into_iter()
-                                .map(|(k, v)| (k.to_string(), v.to_string()))
+                                .map(|(k, v)| (k.to_string(), v))
                                 .collect(),
                             body,
                         });
@@ -1098,7 +1105,9 @@ fn render_nodes<'a>(
                                 }
                                 // Build the path up to this segment
                                 let partial_path: String = parts[..=i].join(".");
-                                buffer.extend_from_slice(b"<button type=\"button\" class=\"pb-badge-link\" onclick=\"selectSlot('");
+                                buffer.extend_from_slice(b"<button type=\"button\" class=\"pb-badge-link\" draggable=\"true\" data-slot-path=\"");
+                                buffer.extend_from_slice(partial_path.as_bytes());
+                                buffer.extend_from_slice(b"\" hx-on:click=\"selectSlot('");
                                 buffer.extend_from_slice(partial_path.as_bytes());
                                 buffer.extend_from_slice(b"')\">");
                                 buffer.extend_from_slice(part.as_bytes());

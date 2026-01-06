@@ -1,6 +1,9 @@
 @import "tailwindcss";
 @import "./theme.css";
 
+/* Classes generated dynamically (e.g., by rich text editor) */
+@source "./safelist.txt";
+
 
 /*
   The default border color has changed to `currentcolor` in Tailwind CSS v4,
