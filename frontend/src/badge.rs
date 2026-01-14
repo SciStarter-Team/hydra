@@ -110,7 +110,9 @@ async fn badge_class(
                     tracing::error!("Failed to render badge HTML: {}", e);
                     poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
                 })?;
-            return Ok(Html(html_content).into_response());
+            return Ok(Html(html_content)
+                .into_response()
+                .with_header("Vary", "Accept"));
         }
     }
 
@@ -129,7 +131,8 @@ async fn badge_class(
         issuer: format!("https://{}/badges/issuer.json", DOMAIN),
         tags: Some(badge.tags().iter().map(|s| s.to_string()).collect()),
     })
-    .into_response())
+    .into_response()
+    .with_header("Vary", "Accept"))
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -210,7 +213,9 @@ async fn badge_instance(
                 tracing::error!("Failed to build badge assertion: {}", e);
                 poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
             })?;
-            return Ok(Json(assertion).into_response());
+            return Ok(Json(assertion)
+                .into_response()
+                .with_header("Vary", "Accept"));
         } else if accept_str.contains("image/png") {
             // Return baked PNG
             let png_data = bake_badge(
@@ -226,6 +231,7 @@ async fn badge_instance(
             })?;
             return Ok(Response::builder()
                 .header(header::CONTENT_TYPE, "image/png")
+                .header(header::VARY, "Accept")
                 .body(png_data));
         }
     }
@@ -245,7 +251,9 @@ async fn badge_instance(
         tracing::error!("Failed to render badge HTML: {}", e);
         poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
     })?;
-    Ok(Html(html_content).into_response())
+    Ok(Html(html_content)
+        .into_response()
+        .with_header("Vary", "Accept"))
 }
 
 #[derive(Serialize)]

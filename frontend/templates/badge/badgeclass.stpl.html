@@ -19,9 +19,9 @@
   <body>
     <div class="ss-container mx-auto !py-4 ss-text">
       <div class="flex flex-col sm:flex-row max-w-[1120px] mx-auto mb-8 mt-4">
-        <a class="flex justify-center" href="<%= &self.image_url %>" download>
-          <img src="<%= &self.image_url %>" title="verifiable <%= &self.name %> badge image" class="self-center md:self-start w-[200px] h-[200px] mr-4 mb-4 sm:mb-0" />
-        </a>
+        <span class="flex justify-center">
+          <img src="<%= &self.image_url %>" title="image of the badge" class="self-center md:self-start w-[200px] h-[200px] mr-4 mb-4 sm:mb-0" />
+        </span>
         <div>
           <h1 class="ss-xl mb-2"><%= self.name %></h1>
           <p class="ss-small"><%- &self.badgeclass_description %></p>
