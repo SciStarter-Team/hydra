@@ -1,0 +1,3 @@
+.ss-alert {
+    @apply bg-accent1-dark p-4 text-white rounded mb-4 text-center font-bold;
+}

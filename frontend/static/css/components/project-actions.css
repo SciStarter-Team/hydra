@@ -4,17 +4,17 @@
     left:0;
     right:0;
     /* background-color: #fff; */
-    padding:0.5rem 1rem 0;
     flex-wrap: wrap;
     box-shadow: 0 -2px 5px rgba(0,0,0,.2);
-    @apply bg-purple;
+    @apply bg-primary-dark p-4;
 }
 
 #project-actions > :nth-child(2) {
-    margin-right: 42px;
+    margin-right: 0;
 }
 #project-actions .more-actions {
     width: 100%;
+    display: flex
 }
 
 #project-actions .more-actions label {
@@ -170,4 +170,135 @@
       #project-actions .toggle-input:checked ~ .mega-menu li:last-child button {
         @apply border-b-0;
       }
+}
+
+
+/* Container establishes positioning context */
+.more-actions {
+  position: relative;
+  display: inline-block;
+}
+
+/* Ensure button behaves predictably */
+.more-actions > button {
+  cursor: pointer;
+}
+
+/* Menu positioning */
+.more-actions [role="menu"] {
+  position: absolute;
+  top: calc(100% - 3px);
+  right: 0;
+
+  /* Layout */
+  display: flex;
+  flex-direction: column;
+  min-width: max-content;
+
+  /* Reset default list styles */
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  /* Accessibility */
+  z-index: 1000;
+
+  @apply rounded;
+}
+
+/* Hide menu when closed */
+.more-actions [role="menu"][hidden] {
+  display: none;
+}
+
+/* Menu items should stretch full width */
+.more-actions [role="menuitem"] {
+  display: block;
+  width: 100%;
+  text-align: left;
+
+  /* Remove browser defaults that interfere */
+  background: none;
+  border: none;
+  padding: 0;
+
+  font: inherit;
+}
+
+/* Ensure links behave like menu items */
+.more-actions [role="menuitem"]:where(a) {
+  text-decoration: none;
+}
+
+/* Focus visibility — leave styling to browser defaults */
+.more-actions [role="menuitem"]:focus {
+  outline-offset: 2px;
+}
+
+#actionsMenu {
+  @apply border border-primary-action bg-white;
+}
+
+#actionsMenu li {
+  @apply border-b border-linework;
+}
+
+#actionsMenu li:last-child {
+  border-bottom: 0;
+}
+
+#actionsMenu li button {
+  @apply inline-flex justify-start px-4 items-center py-2 m-0;
+}
+
+#actionsButton svg *, #actionsButton:hover svg * {
+  @apply !fill-primary-action;
+}
+
+#actionsButton[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+#actionsButton svg.mobile-only {
+  display: none;
+}
+
+@media (max-width:767px){
+    #actionsButton {
+        border-radius: 100%;
+        width:36px;
+        padding:0;
+        transition: all ease-out 200ms;
+    }
+
+    #actionsButton[aria-expanded="true"] svg {
+        transform: rotate(45deg);
+    } 
+  #actionsButton span, #actionsButton svg:last-child {
+    display: none!important;
+  }
+  #actionsButton svg.mobile-only {
+    display: block;
+  }
+  .more-actions [role="menu"] {
+    position: absolute;
+    top: auto;
+    left: auto;
+    right: 0;
+    bottom: calc(100% + 10px);
+    width: 100%;
+    @apply rounded;
+  }
+  #project-actions .more-actions {
+    width: auto;
+  }
+
+}
+
+#saveButton.active .icon-inactive {
+  display: none;
+}
+
+.bg-opacity-75 {
+  opacity: .75;
 }

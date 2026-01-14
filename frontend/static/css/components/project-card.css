@@ -102,3 +102,67 @@
 .ss-comm-joined.ss-comm-card .ss-fpc-footer {
     @apply flex justify-between;
 }
+
+.project-finder {
+    @apply border border-linework rounded-sm overflow-hidden relative;
+}
+
+.pf-complete {
+    @apply absolute top-0 left-0 bg-accent1-dark text-white;
+}
+
+.project-finder h1 {
+    @apply text-lg font-semibold !leading-tight hover:underline mb-4;
+}
+
+.project-finder img {
+    object-fit: contain;
+    width: 100%;
+    max-height: 240px;
+}
+
+.project-finder table td {
+    vertical-align: top;
+    @apply mb-2;
+}
+
+.project-finder table td:first-child {
+    @apply font-bold uppercase text-sm tracking-wide text-right;
+}
+
+/* .project-finder > div {
+    @apply flex flex-col justify-between;
+} */
+
+.event-finder {
+    @apply grid grid-cols-[70px_1fr] border border-linework rounded;
+}
+
+.event-finder .ef-date {
+    @apply flex flex-col items-center border-r border-linework justify-start pt-4; 
+}
+
+.event-finder .ef-date span:first-child, .event-finder .ef-date span:last-child {
+    @apply text-sm font-bold font-header-lg uppercase text-accent1;
+}
+.event-finder .ef-date span:nth-child(2) {
+     @apply text-xl font-bold font-header-lg uppercase text-primary-dark leading-[24px];
+}
+.event-finder .ef-date span:last-child {
+    @apply mb-4;
+}
+
+.event-finder .ef-info {
+    @apply pl-4 pb-4 pr-4;
+}
+
+.event-finder .ef-info > * {
+    @apply mb-2;
+}
+
+.event-finder .ef-info h2 {
+    @apply text-lg leading-tight pt-4;
+}
+.event-finder .ef-info p {
+    @apply text-sm;
+}

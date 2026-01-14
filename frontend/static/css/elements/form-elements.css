@@ -55,3 +55,13 @@ input:where([type="checkbox"][role="switch"]):checked::before {
   /* @apply bg-accent2-dark; */
 }
 
+/* Chrome, Edge, Safari */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  display: none;
+}
+
+/* Firefox */
+input[type="date"] {
+  appearance: none;
+  -moz-appearance: textfield;
+}

@@ -147,11 +147,16 @@
     position: absolute;
     top: 0;
     right: -12px;
-    border-top: 12px solid #252750;
+    border-top: 13.6px solid #252750;
     border-bottom: 12px solid #252750;
     border-right: 12px solid transparent;
     border-left: 12px solid transparent;
     z-index: 0;
+  }
+
+  .pf-complete.ribbon-project::after {
+    border-top: 13.6px solid #B92D0E;
+    border-bottom: 12.5px solid #B92D0E;
   }
 
   .ribbon-project.ribbon-subproject {

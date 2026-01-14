@@ -1,9 +1,9 @@
 .btn-like {
-    @apply border-line-blue border-[1px] rounded text-action-blue py-0 px-2 flex items-center gap-2;
+    @apply border-line-blue border-[1px] rounded text-primary-action py-0 px-2 flex items-center gap-2;
 }
 
 .btn-like svg {
-    @apply w-4 fill-action-blue;
+    @apply w-4 fill-primary-action;
 }
 
 .btn-like .heart-fill {
@@ -11,7 +11,7 @@
 }
 
 .btn-like:hover, .btn-like.active {
-    @apply bg-action-blue text-white;
+    @apply bg-primary-action text-white;
 }
 
 .btn-like:hover > .heart-fill, .btn-like.active > .heart-fill {

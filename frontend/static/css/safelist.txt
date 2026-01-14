@@ -1,16 +1,11 @@
-<!-- Tailwind classes that are generated dynamically and need to be preserved -->
-<!-- Rich text editor list classes -->
+<!-- Tailwind classes that are generated dynamically and need to be available -->
 list-disc
 list-decimal
 list-inside
 ml-4
-
-<!-- Rich text editor alignment classes -->
 text-center
 text-right
 text-justify
-
-<!-- Rich text editor indentation classes -->
 pl-4
 pl-8
 pl-12
@@ -19,6 +14,4 @@ pl-20
 pl-24
 pl-28
 pl-32
-
-<!-- Rich text editor direction -->
 rtl

@@ -1,13 +1,14 @@
-use anyhow::{anyhow, Error};
+use anyhow::{Error, anyhow};
 use common::badge::{Alignment, Badge};
-use common::message::user::{BasicInfo, UserAndBadge, UserBadge, UserEmailInfo, UserEmailInfoRequest};
+use common::message::user::{
+    BasicInfo, UserAndBadge, UserBadge, UserEmailInfo, UserEmailInfoRequest,
+};
 use jiff::Timestamp;
 use poem::{
-    handler,
-    http::{header, StatusCode},
+    IntoResponse, Response, Route, handler,
+    http::{StatusCode, header},
     session::Session,
     web::{Html, Json, Path, Query},
-    IntoResponse, Response, Route,
 };
 use sailfish::TemplateOnce;
 use serde::{Deserialize, Serialize};
@@ -19,6 +20,7 @@ pub fn routes() -> Route {
     Route::new()
         .at("/issuer.json", poem::get(issuer_json))
         .at("/:badgeclass", poem::get(badge_class))
+        .at("/:badgeclass/badge.png", poem::get(badgeclass_png))
         .at("/:badgeclass/:user_id", poem::get(badge_instance))
         .at(
             "/:badgeclass/:user_id/assertion.json",
@@ -86,11 +88,31 @@ struct BadgeCriteria {
 }
 
 #[handler]
-async fn badge_class(Path(badgeclass): Path<String>) -> poem::Result<Json<BadgeClassJson>> {
+async fn badge_class(
+    req: &poem::Request,
+    Path(badgeclass): Path<String>,
+) -> poem::Result<Response> {
     let badge = Badge::from_badgeclass(&badgeclass)
         .ok_or_else(|| poem::Error::from_status(StatusCode::NOT_FOUND))?;
 
     let criteria_narrative = markdown_to_html(badge.criteria_text());
+
+    let accept_header = req
+        .headers()
+        .get(header::ACCEPT)
+        .and_then(|h| h.to_str().ok());
+
+    if let Some(accept_str) = accept_header {
+        if accept_str.contains("text/html") {
+            let html_content = render_badgeclass_html(&badge, &badgeclass)
+                .await
+                .map_err(|e| {
+                    tracing::error!("Failed to render badge HTML: {}", e);
+                    poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
+                })?;
+            return Ok(Html(html_content).into_response());
+        }
+    }
 
     Ok(Json(BadgeClassJson {
         context: "https://w3id.org/openbadges/v2".to_string(),
@@ -106,7 +128,8 @@ async fn badge_class(Path(badgeclass): Path<String>) -> poem::Result<Json<BadgeC
         },
         issuer: format!("https://{}/badges/issuer.json", DOMAIN),
         tags: Some(badge.tags().iter().map(|s| s.to_string()).collect()),
-    }))
+    })
+    .into_response())
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -153,17 +176,14 @@ async fn badge_instance(
     let user_badge = user_badge.ok_or_else(|| poem::Error::from_status(StatusCode::NOT_FOUND))?;
 
     // Get user email
-    let email_request = UserEmailInfoRequest {
-        user_id: user_ulid,
-    };
+    let email_request = UserEmailInfoRequest { user_id: user_ulid };
 
-    let user_info: UserEmailInfo =
-        common::service::request("user.info.email_info", &email_request)
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to get user email: {}", e);
-                poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
-            })?;
+    let user_info: UserEmailInfo = common::service::request("user.info.email_info", &email_request)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to get user email: {}", e);
+            poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
+        })?;
 
     // Check if user is verified - unverified users' badges are not publicly viewable
     if !user_info.verified {
@@ -193,11 +213,17 @@ async fn badge_instance(
             return Ok(Json(assertion).into_response());
         } else if accept_str.contains("image/png") {
             // Return baked PNG
-            let png_data = bake_badge(&badgeclass, &user_id, &badge, &user_badge, &user_info.primary_email)
-                .map_err(|e| {
-                    tracing::error!("Failed to bake badge: {}", e);
-                    poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
-                })?;
+            let png_data = bake_badge(
+                &badgeclass,
+                &user_id,
+                &badge,
+                &user_badge,
+                &user_info.primary_email,
+            )
+            .map_err(|e| {
+                tracing::error!("Failed to bake badge: {}", e);
+                poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
+            })?;
             return Ok(Response::builder()
                 .header(header::CONTENT_TYPE, "image/png")
                 .body(png_data));
@@ -205,12 +231,20 @@ async fn badge_instance(
     }
 
     // Default: return HTML page
-    let html_content = render_badge_html(&badge, &user_badge, &user_info.primary_email, &badgeclass, &user_id, &params, own_badge)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to render badge HTML: {}", e);
-            poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
-        })?;
+    let html_content = render_badge_html(
+        &badge,
+        &user_badge,
+        &user_info.primary_email,
+        &badgeclass,
+        &user_id,
+        &params,
+        own_badge,
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to render badge HTML: {}", e);
+        poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
     Ok(Html(html_content).into_response())
 }
 
@@ -304,17 +338,14 @@ async fn assertion_json(
     let user_badge = user_badge.ok_or_else(|| poem::Error::from_status(StatusCode::NOT_FOUND))?;
 
     // Get user email
-    let email_request = UserEmailInfoRequest {
-        user_id: user_ulid,
-    };
+    let email_request = UserEmailInfoRequest { user_id: user_ulid };
 
-    let user_info: UserEmailInfo =
-        common::service::request("user.info.email_info", &email_request)
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to get user email: {}", e);
-                poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
-            })?;
+    let user_info: UserEmailInfo = common::service::request("user.info.email_info", &email_request)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to get user email: {}", e);
+            poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
+        })?;
 
     // Check if user is verified - unverified users' badges are not publicly viewable
     if !user_info.verified {
@@ -337,9 +368,7 @@ async fn assertion_json(
 }
 
 #[handler]
-async fn badge_png(
-    Path((badgeclass, user_id)): Path<(String, String)>,
-) -> poem::Result<Response> {
+async fn badge_png(Path((badgeclass, user_id)): Path<(String, String)>) -> poem::Result<Response> {
     let badge = Badge::from_badgeclass(&badgeclass)
         .ok_or_else(|| poem::Error::from_status(StatusCode::NOT_FOUND))?;
 
@@ -362,28 +391,47 @@ async fn badge_png(
     let user_badge = user_badge.ok_or_else(|| poem::Error::from_status(StatusCode::NOT_FOUND))?;
 
     // Get user email
-    let email_request = UserEmailInfoRequest {
-        user_id: user_ulid,
-    };
+    let email_request = UserEmailInfoRequest { user_id: user_ulid };
 
-    let user_info: UserEmailInfo =
-        common::service::request("user.info.email_info", &email_request)
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to get user email: {}", e);
-                poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
-            })?;
+    let user_info: UserEmailInfo = common::service::request("user.info.email_info", &email_request)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to get user email: {}", e);
+            poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
+        })?;
 
     // Check if user is verified - unverified users' badges are not publicly viewable
     if !user_info.verified {
         return Err(poem::Error::from_status(StatusCode::NOT_FOUND));
     }
 
-    let png_data = bake_badge(&badgeclass, &user_id, &badge, &user_badge, &user_info.primary_email)
-        .map_err(|e| {
-            tracing::error!("Failed to bake badge: {}", e);
-            poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
-        })?;
+    let png_data = bake_badge(
+        &badgeclass,
+        &user_id,
+        &badge,
+        &user_badge,
+        &user_info.primary_email,
+    )
+    .map_err(|e| {
+        tracing::error!("Failed to bake badge: {}", e);
+        poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+
+    Ok(Response::builder()
+        .header(header::CONTENT_TYPE, "image/png")
+        .body(png_data))
+}
+
+#[handler]
+async fn badgeclass_png(Path(badgeclass): Path<String>) -> poem::Result<Response> {
+    let badge = Badge::from_badgeclass(&badgeclass)
+        .ok_or_else(|| poem::Error::from_status(StatusCode::NOT_FOUND))?;
+
+    let badge_path = badge.template_path();
+    let badge_file = crate::Static::get(badge_path)
+        .ok_or_else(|| anyhow!("Badge template not found: {}", badge_path))?;
+
+    let png_data = badge_file.data.clone().into_owned();
 
     Ok(Response::builder()
         .header(header::CONTENT_TYPE, "image/png")
@@ -438,7 +486,10 @@ fn build_badge_assertion(
             alignment: alignments,
         },
         issued_on: when.to_string(),
-        image: format!("https://{}/badges/{}/{}/badge.png", DOMAIN, badgeclass, user_id),
+        image: format!(
+            "https://{}/badges/{}/{}/badge.png",
+            DOMAIN, badgeclass, user_id
+        ),
         verification: BadgeVerification {
             type_: "hosted".to_string(),
         },
@@ -481,14 +532,17 @@ fn bake_badge(
         .with_recipient_email(email)
         .with_issued_timestamp(when_timestamp)
         .with_issuer(issuer)
-        .with_image(format!("https://{}/badges/{}/{}/badge.png", DOMAIN, badgeclass, user_id))
+        .with_image(format!(
+            "https://{}/badges/{}/{}/badge.png",
+            DOMAIN, badgeclass, user_id
+        ))
         .with_badge_class_id(format!("https://{}/badges/{}", DOMAIN, badgeclass))
         .with_badge_class_name(badge.name())
         .with_badge_class_description(badge.description())
         .with_badge_class_image_url(format!("https://{}/badges/{}", DOMAIN, badgeclass))
         .with_badge_class_criteria(
             format!("https://{}/badges/{}", DOMAIN, badgeclass),
-            badge.criteria_text()
+            badge.criteria_text(),
         );
 
     // Use Cursor for Read + Seek on the badge PNG data
@@ -544,7 +598,10 @@ async fn render_badge_html(
     let canonical_url = badge_url.clone();
 
     // Parse the timestamp
-    let issued = user_badge.when.to_string().parse::<Timestamp>()
+    let issued = user_badge
+        .when
+        .to_string()
+        .parse::<Timestamp>()
         .map_err(|e| anyhow!("Failed to parse timestamp: {}", e))?;
 
     // Convert to Zoned to extract year and month
@@ -553,7 +610,13 @@ async fn render_badge_html(
     let issued_month = issued_zoned.month();
 
     // Build badge JSON for the <script> tag
-    let assertion = build_badge_assertion(badgeclass, user_id, badge, email, &user_badge.when.to_string())?;
+    let assertion = build_badge_assertion(
+        badgeclass,
+        user_id,
+        badge,
+        email,
+        &user_badge.when.to_string(),
+    )?;
     let badge_json = serde_json::to_string_pretty(&assertion)?;
 
     let confirm = params.confirm.is_some();
@@ -561,9 +624,12 @@ async fn render_badge_html(
 
     // Check if confirm email matches any of the user's emails
     let confirmed = if confirm {
-        common::service::request("user.emails.has", (user_id.to_string(), confirm_email.clone()))
-            .await
-            .unwrap_or(false)
+        common::service::request(
+            "user.emails.has",
+            (user_id.to_string(), confirm_email.clone()),
+        )
+        .await
+        .unwrap_or(false)
     } else {
         false
     };
@@ -600,6 +666,41 @@ async fn render_badge_html(
         confirm,
         confirm_email,
         confirmed,
+    };
+
+    Ok(template.render_once()?)
+}
+
+#[derive(TemplateOnce)]
+#[template(path = "badge/badgeclass.stpl.html")]
+struct BadgeClassTemplate {
+    name: String,
+    badgeclass_description_raw: String,
+    badgeclass_description: String,
+    badgeclass_criteria_text: String,
+    alignments: Vec<Alignment>,
+    tags: Vec<String>,
+    image_url: String,
+    earn_url: Option<String>,
+    canonical_url: String,
+}
+
+async fn render_badgeclass_html(badge: &Badge, badgeclass: &str) -> Result<String, Error> {
+    let badgeclass_criteria_text = markdown_to_html(badge.criteria_text());
+    let badgeclass_description = markdown_to_html(badge.description());
+    let canonical_url = format!("https://{}/badge/{}", DOMAIN, badgeclass);
+    let image_url = format!("{}/badge.png", &canonical_url);
+
+    let template = BadgeClassTemplate {
+        name: badge.name().to_string(),
+        badgeclass_description_raw: badge.description().to_string(),
+        badgeclass_description,
+        badgeclass_criteria_text,
+        alignments: badge.alignments().to_vec(),
+        tags: badge.tags().iter().map(|s| s.to_string()).collect(),
+        image_url,
+        earn_url: badge.earn_url().map(|s| s.to_string()),
+        canonical_url,
     };
 
     Ok(template.render_once()?)
@@ -642,9 +743,7 @@ async fn oembed_json(
 }
 
 #[handler]
-async fn oembed_xml(
-    Path((badgeclass, user_id)): Path<(String, String)>,
-) -> poem::Result<Response> {
+async fn oembed_xml(Path((badgeclass, user_id)): Path<(String, String)>) -> poem::Result<Response> {
     let badge = Badge::from_badgeclass(&badgeclass)
         .ok_or_else(|| poem::Error::from_status(StatusCode::NOT_FOUND))?;
 

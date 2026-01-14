@@ -3,7 +3,7 @@
 }
 
 .tabs-tabs {
-    @apply inline-flex pt-2 px-1 w-full border-b border-line-blue mb-4;
+    @apply inline-flex pt-2 px-1 w-full border-b border-linework mb-4;
 }
 
 .tabs-tabs > li {
@@ -13,10 +13,10 @@
 }
 
 .tabs-tabs > li > a {
-    @apply flex gap-2 items-center border border-line-blue border-b-0;
-    @apply  bg-action-blue px-4 text-white font-semibold py-2 border-r-0 underline;
+    @apply flex gap-2 items-center border border-linework border-b-0;
+    @apply  bg-primary-light px-4 text-primary-action font-semibold py-2 border-r-0 underline;
     border-radius: 0;
-    @apply hover:bg-action-blue-hover;
+    @apply hover:bg-primary-action-dark hover:text-white;
 }
 
 .tabs-tabs > li:first-child > a {
@@ -29,11 +29,11 @@
 
 
 .tabs-tabs  > li > a > svg {
-    @apply h-4 fill-action-blue;
+    @apply h-4 fill-primary-action;
 }
 
 .tabs-tabs > li.tab-active > a  {
-    @apply  bg-white px-4 text-purple font-semibold py-2;
+    @apply  bg-accent1 px-4 text-white font-semibold py-2;
     text-decoration: none;
     pointer-events: none
 }
@@ -68,12 +68,12 @@
 }
 
 .tabs-line > li > a {
-    @apply  bg-white px-4 text-action-blue font-semibold py-2 border-orange hover:underline;
+    @apply  bg-white px-4 text-primary-action font-semibold py-2 border-orange hover:underline;
 }
 
 
 .tabs-line  > li > a > svg {
-    @apply h-4 fill-action-blue;
+    @apply h-4 fill-primary-action;
 }
 
 .tabs-line > li.tab-active > a  {

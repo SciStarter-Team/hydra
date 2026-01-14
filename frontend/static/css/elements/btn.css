@@ -43,6 +43,14 @@
 
 }
 
+.btn-icon.btn-secondary svg, .btn-icon.btn-secondary svg * {
+    @apply fill-primary-action;
+}
+
+.btn-icon.btn-secondary:hover svg, .btn-icon.btn-secondary:hover svg * {
+    @apply fill-white;
+}
+
 
 /*** OLD STUFF ******/
 
@@ -96,15 +104,15 @@
 
 
 .btn-blue-outline {
-    @apply border-[1px] rounded border-action-blue text-action-blue bg-white;
+    @apply border-[1px] rounded border-primary-action text-primary-action bg-white;
 }
 
 .btn-blue-outline svg {
-    @apply fill-action-blue;
+    @apply fill-primary-action;
 }
 
 .btn-blue-outline:hover, .btn-blue-outline.active {
-    @apply text-white bg-action-blue;
+    @apply text-white bg-primary-action;
 }
 
 .btn-blue-outline:hover svg, .btn-blue-outline.active svg {
@@ -116,5 +124,5 @@
 }
 
 .btn-text {
-    @apply underline text-action-blue hover:text-action-blue-hover !p-0;
+    @apply underline text-primary-action hover:text-primary-action-dark !p-0;
 }

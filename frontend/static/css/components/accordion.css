@@ -58,3 +58,37 @@
 .accordion-content p:last-child {
   margin-bottom: 0;
 }
+
+.ss-accordion-accessible {
+  display: block;
+}
+
+/* Make summary behave like a button-like header */
+.ss-accordion-accessible .accordion__summary {
+  cursor: pointer;
+  list-style: none; /* removes marker in some browsers */
+}
+
+/* Remove the default marker reliably */
+.ss-accordion-accessible .accordion__summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Keep native focus outline, just offset it slightly */
+.ss-accordion-accessible .accordion__summary:focus {
+  outline-offset: 2px;
+}
+
+/* Optional: spacing scaffolding only (not decorative) */
+.ss-accordion-accessible .accordion__panel {
+  display: block;
+}
+
+.ss-accordion-accessible > summary svg {
+    transition: all ease-out 200ms;
+}
+
+.ss-accordion-accessible[open] > summary svg {
+  transform: rotate(45deg);
+  
+}

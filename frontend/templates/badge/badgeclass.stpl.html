@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= self.name %> Badge</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap" rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="/-static/css/style.css" />
+    <script src="/-static/js/scripts.js"></script>
+    <script type="text/javascript" src="https://platform-api.sharethis.com/js/sharethis.js#property=684be7fdeb2dda0012da59f3&product=inline-share-buttons&source=platform" async="async"></script>
+    <meta property="og:title" content="<%= &self.name %> Badge">
+    <meta property="og:description" content="<%= &self.badgeclass_description_raw %>">
+    <meta property="og:image" content="<%= &self.image_url %>">
+    <meta property="og:url" content="<%= &self.canonical_url %>">
+    <meta property="og:type" content="website">
+  </head>
+  <body>
+    <div class="ss-container mx-auto !py-4 ss-text">
+      <div class="flex flex-col sm:flex-row max-w-[1120px] mx-auto mb-8 mt-4">
+        <a class="flex justify-center" href="<%= &self.image_url %>" download>
+          <img src="<%= &self.image_url %>" title="verifiable <%= &self.name %> badge image" class="self-center md:self-start w-[200px] h-[200px] mr-4 mb-4 sm:mb-0" />
+        </a>
+        <div>
+          <h1 class="ss-xl mb-2"><%= self.name %></h1>
+          <p class="ss-small"><%- &self.badgeclass_description %></p>
+          <div class="flex items-start gap-4"></div>
+          <div class="min-h-[70px]">
+            <% if let Some(url) = self.earn_url { %>
+            <div class="mb-2">
+              <a href="<%= url %>" class="btn btn-blue">learn how to earn this badge</a>
+            </div>
+            <% } %>
+            <div class="sharethis-inline-share-buttons"></div>
+          </div>
+        </div>
+
+        <div class="min-w-[200px] md:ml-4">
+          <div class="ss-xxs">Offered by:</div>
+          <a href="/"><img src="/-static/img/logo/logo-rgb.svg" alt="SciStarter logo" class="max-w-[100px] mb-2" /></a>
+
+          <div class="inline-flex items-center gap-2 border border-girlscout rounded-lg px-4 py-2">
+            <svg class="w-6 h-6 text-girlscout" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex flex-col sm:flex-row">
+        <div class="w-full p-4 gap-8 md:flex">
+          <div class="md:text-right min-w-[250px] md:max-w-[250px]">
+            <h2 class="ss-normal">Earning Criteria</h2>
+            <p class="ss-xsmall">Recipients must complete the earning criteria to earn this badge</p>
+          </div>
+          <div class="markdown-container">
+            <%- &self.badgeclass_criteria_text %>
+          </div>
+        </div>
+        <div class="w-full sm:w-[300px] p-4">
+          <% if !self.tags.is_empty() { %>
+            <h3 class="ss-normal mb-4">Tags</h3>
+            <% for tag in self.tags.iter() { %>
+              <span class="ss-tag"><%= tag %></span>
+            <% } %>
+          <% } %>
+        </div>
+      </div>
+
+      <div class="flex flex-col sm:flex-row">
+        <div class="w-full p-4 gap-8 md:flex">
+          <div class="md:text-right min-w-[250px] md:max-w-[250px]">
+            <h2 class="ss-normal">Skills</h2>
+            <p class="ss-xsmall">Recipients demonstrated these job skills</p>
+          </div>
+          <div>
+            <% for skill in self.alignments.iter() { %>
+              <a target=_blank href="<%= &skill.url %>" class="ss-tag"><%= &skill.name %></a>
+            <% } %>
+          </div>
+        </div>
+      </div>
+
+      <div class="max-w-2xl mx-auto my-8">
+        <span class="ss-large mb-4">Questions? Check out our <a class=hyperlink href="https://scistarter.org/training-faq">FAQ</a>.</span>
+      </div>
+
+      <script>
+       document.querySelectorAll('.faq-toggle').forEach(btn => {
+           btn.addEventListener('click', function() {
+               const answer = this.nextElementSibling;
+               const arrow = this.querySelector('.faq-arrow');
+               answer.classList.toggle('hidden');
+               arrow.classList.toggle('rotate-180');
+           });
+       });
+      </script>
+    </div><!-- end .ss-container -->
+  </body>
+</html>
