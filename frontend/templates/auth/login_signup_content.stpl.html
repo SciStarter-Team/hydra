@@ -32,7 +32,7 @@
         </p>
         <p hx-on::load="hide_if_no_webauthn(this)">
           <label>
-            <input type=checkbox name=use_passkey value=true hx-on:change="let el = htmx.find('#login-password'); el.required = !this.checked; el.disabled=this.checked;">
+            <input type=checkbox id="use-passkey-login" name=use_passkey value=true hx-on:change="let el = htmx.find('#login-password'); el.required = !this.checked; el.disabled=this.checked;">
             Use passkey instead of password
           </label>
         </p>

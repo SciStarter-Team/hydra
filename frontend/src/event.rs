@@ -46,6 +46,7 @@ pub enum EventType {
     Training,
     Webinar,
     Ambassador,
+    ActsOfScienceConnected,
     #[default]
     Other,
 }
@@ -74,6 +75,7 @@ impl std::fmt::Display for EventType {
             EventType::Training => "Training",
             EventType::Webinar => "Webinar",
             EventType::Ambassador => "Ambassador",
+            EventType::ActsOfScienceConnected => "Acts of Science Connected",
             EventType::Other => "Other",
         };
 
@@ -108,6 +110,7 @@ impl FromStr for EventType {
             "Training" => Ok(EventType::Training),
             "Webinar" => Ok(EventType::Webinar),
             "Ambassador" => Ok(EventType::Ambassador),
+            "Acts of Science Connected" => Ok(EventType::ActsOfScienceConnected),
             "Other" => Ok(EventType::Other),
             _ => Err(EventError::EventTypeParse),
         }

@@ -213,7 +213,7 @@ impl Badge {
             Badge::OneMillionActsOfScience2025 => {
                 "This badge celebrates participation in the One Million Acts of Science initiative for 2025, contributing to collective scientific discovery and citizen engagement."
             }
-            Badge::OneMillionActsOfScience2025 => {
+            Badge::OneMillionActsOfScience2026 => {
                 "This badge celebrates participation in the 2.50 Million Acts of Science initiative for 2026, contributing to collective scientific discovery and citizen engagement."
             }
         }

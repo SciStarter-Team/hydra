@@ -112,7 +112,8 @@ async fn badge_class(
                 })?;
             return Ok(Html(html_content)
                 .into_response()
-                .with_header("Vary", "Accept"));
+                .with_header("Vary", "Accept")
+                .into_response());
         }
     }
 
@@ -132,7 +133,8 @@ async fn badge_class(
         tags: Some(badge.tags().iter().map(|s| s.to_string()).collect()),
     })
     .into_response()
-    .with_header("Vary", "Accept"))
+    .with_header("Vary", "Accept")
+    .into_response())
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -215,7 +217,8 @@ async fn badge_instance(
             })?;
             return Ok(Json(assertion)
                 .into_response()
-                .with_header("Vary", "Accept"));
+                .with_header("Vary", "Accept")
+                .into_response());
         } else if accept_str.contains("image/png") {
             // Return baked PNG
             let png_data = bake_badge(
@@ -253,7 +256,8 @@ async fn badge_instance(
     })?;
     Ok(Html(html_content)
         .into_response()
-        .with_header("Vary", "Accept"))
+        .with_header("Vary", "Accept")
+        .into_response())
 }
 
 #[derive(Serialize)]
