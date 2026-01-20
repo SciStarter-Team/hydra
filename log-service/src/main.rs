@@ -31,6 +31,9 @@ async fn main() -> Result<()> {
     // Initialize shared database connection (from common)
     shared::init("log_cache").await;
 
+    // Run migrations
+    sqlx::migrate!("./migrations").run(shared::db()).await?;
+
     #[cfg(not(debug_assertions))]
     let database_path = env!("DATABASE_PATH");
     #[cfg(debug_assertions)]
