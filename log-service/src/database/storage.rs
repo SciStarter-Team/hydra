@@ -11,6 +11,9 @@ use datafusion::datasource::listing::{
 use datafusion::datasource::{MemTable, TableProvider, TableType};
 use datafusion::error::{DataFusionError, Result as DataFusionResult};
 use datafusion::execution::context::SessionContext;
+use datafusion::execution::memory_pool::FairSpillPool;
+use datafusion::execution::runtime_env::RuntimeEnvBuilder;
+use datafusion::prelude::SessionConfig;
 use datafusion::logical_expr::{Expr, TableProviderFilterPushDown};
 use datafusion::physical_plan::ExecutionPlan;
 use object_store::local::LocalFileSystem;
@@ -28,6 +31,12 @@ use crate::database::tables::{
 };
 use std::path::PathBuf;
 use url::Url;
+
+/// Default memory limit for DataFusion queries (2GB)
+const DEFAULT_MEMORY_LIMIT_BYTES: usize = 2 * 1024 * 1024 * 1024;
+
+/// Default batch size for DataFusion operations
+const DEFAULT_BATCH_SIZE: usize = 8192;
 
 /// SQLite table provider for DataFusion
 #[derive(Debug)]
@@ -93,8 +102,8 @@ impl TableProvider for SqliteTableProvider {
         Self: 'async_trait,
     {
         Box::pin(async move {
-            // Query SQLite with pushed-down filters
-            let data = self.query_sqlite_table_with_filters(filters).await?;
+            // Query SQLite with pushed-down filters and limit
+            let data = self.query_sqlite_table_with_filters(filters, limit).await?;
 
             // Create a MemTable with the data and get its execution plan
             let mem_table = MemTable::try_new(self.schema.clone(), vec![vec![data]])?;
@@ -251,6 +260,7 @@ impl SqliteTableProvider {
     async fn query_sqlite_table_with_filters(
         &self,
         filters: &[Expr],
+        limit: Option<usize>,
     ) -> DataFusionResult<RecordBatch> {
         let where_clause = self.build_where_clause(filters)?;
 
@@ -262,9 +272,16 @@ impl SqliteTableProvider {
             .map(|f| f.name().clone())
             .collect();
         let columns_str = column_names.join(", ");
+
+        // Add LIMIT clause if provided to reduce memory usage
+        let limit_clause = match limit {
+            Some(n) => format!(" LIMIT {}", n),
+            None => String::new(),
+        };
+
         let sql = format!(
-            "SELECT {} FROM {}{}",
-            columns_str, self.table_name, where_clause
+            "SELECT {} FROM {}{}{}",
+            columns_str, self.table_name, where_clause, limit_clause
         );
 
         self.execute_sqlite_query(&sql).await
@@ -320,8 +337,34 @@ impl Database {
         // Create base directory structure
         tokio::fs::create_dir_all(&path).await?;
 
-        // Create session context and register tables
-        let session_context = SessionContext::new();
+        // Configure memory limits from environment or use defaults
+        let memory_limit = std::env::var("DATAFUSION_MEMORY_LIMIT_MB")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .map(|mb| mb * 1024 * 1024)
+            .unwrap_or(DEFAULT_MEMORY_LIMIT_BYTES);
+
+        let batch_size = std::env::var("DATAFUSION_BATCH_SIZE")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(DEFAULT_BATCH_SIZE);
+
+        // Create memory pool with spill-to-disk capability
+        let memory_pool = Arc::new(FairSpillPool::new(memory_limit));
+
+        // Create runtime environment with memory pool
+        let runtime_env = RuntimeEnvBuilder::new()
+            .with_memory_pool(memory_pool)
+            .build_arc()?;
+
+        // Configure session with batch size limits
+        let session_config = SessionConfig::new()
+            .with_batch_size(batch_size)
+            .with_coalesce_batches(true)
+            .with_target_partitions(2); // Limit parallelism to reduce memory
+
+        // Create session context with configured runtime and config
+        let session_context = SessionContext::new_with_config_rt(session_config, runtime_env);
 
         let database = Self {
             path: path.clone(),

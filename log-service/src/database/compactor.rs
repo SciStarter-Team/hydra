@@ -10,18 +10,23 @@ use datafusion::parquet::basic::{Compression, ZstdLevel};
 use datafusion::parquet::file::properties::WriterProperties;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::fs;
+use std::fs::{self, File};
+use std::io::{BufRead, BufReader};
 use std::sync::Arc;
 use tokio::time::{Duration, interval};
 use tokio_util::sync::CancellationToken;
 
 use crate::database::storage::Database;
 
+/// Default batch size for WAL compaction (number of records per Parquet row group)
+const DEFAULT_COMPACTOR_BATCH_SIZE: usize = 10_000;
+
 /// Background service that compacts WAL files to Parquet
 pub struct Compactor {
     base_path: std::path::PathBuf,
     cycle_interval: Duration,
     retention_days: u64,
+    batch_size: usize,
     database: Arc<Database>,
 }
 
@@ -38,10 +43,16 @@ impl Compactor {
             .and_then(|s| s.parse().ok())
             .unwrap_or(30); // 30 days default
 
+        let batch_size = std::env::var("COMPACTOR_BATCH_SIZE")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(DEFAULT_COMPACTOR_BATCH_SIZE);
+
         Self::with_config(
             database.clone(),
             Duration::from_secs(cycle_seconds),
             retention_days,
+            batch_size,
         )
     }
 
@@ -49,11 +60,13 @@ impl Compactor {
         database: Arc<Database>,
         cycle_interval: Duration,
         retention_days: u64,
+        batch_size: usize,
     ) -> Self {
         Self {
             base_path: database.path().clone(),
             cycle_interval,
             retention_days,
+            batch_size,
             database,
         }
     }
@@ -184,7 +197,7 @@ impl Compactor {
     }
 
     /// Atomically process a WAL file: read, convert to Parquet, and move to processed
-    /// Holds exclusive lock throughout the entire operation to prevent race conditions
+    /// Uses streaming to process large files without loading entirely into memory
     async fn process_wal_file_atomically(
         &self,
         wal_file: &std::path::Path,
@@ -203,21 +216,22 @@ impl Compactor {
                 Ok(_) => {
                     // Successfully acquired exclusive lock - now perform entire operation atomically
 
-                    // Step 1: Read WAL file content (potentially large files)
+                    // Step 1: Stream WAL file and convert to Parquet in batches
                     let wal_file_path = wal_file.to_path_buf();
-                    let content =
-                        tokio::task::spawn_blocking(move || fs::read_to_string(wal_file_path))
-                            .await??;
+                    let parquet_dir = parquet_dir.to_path_buf();
+                    let schema = schema.clone();
+                    let batch_size = self.batch_size;
 
-                    // Step 2: Convert to Parquet (but don't release lock yet)
-                    if let Err(e) = self
-                        .convert_content_to_parquet(&content, wal_file, parquet_dir, schema)
-                        .await
-                    {
+                    let result = tokio::task::spawn_blocking(move || {
+                        Self::stream_wal_to_parquet(&wal_file_path, &parquet_dir, &schema, batch_size)
+                    })
+                    .await?;
+
+                    if let Err(e) = result {
                         return Err(e);
                     }
 
-                    // Step 3: Move to processed directory while still holding lock
+                    // Step 2: Move to processed directory while still holding lock
                     let processed_dir = self.base_path.join("processed");
                     tokio::fs::create_dir_all(&processed_dir).await?;
 
@@ -249,13 +263,13 @@ impl Compactor {
         }
     }
 
-    /// Convert WAL content to Parquet (extracted from convert_wal_to_parquet)
-    async fn convert_content_to_parquet(
-        &self,
-        content: &str,
+    /// Stream WAL file line by line and write to Parquet in batches
+    /// This is the memory-efficient version that processes large files without loading them entirely
+    fn stream_wal_to_parquet(
         wal_file: &std::path::Path,
         parquet_dir: &std::path::Path,
         schema: &Schema,
+        batch_size: usize,
     ) -> Result<()> {
         let file_name = wal_file
             .file_name()
@@ -265,16 +279,48 @@ impl Compactor {
         let parquet_name = file_name.replace(".jsonl", ".parquet");
         let parquet_path = parquet_dir.join(&parquet_name);
 
-        // Parse JSONL content
-        let mut records = Vec::new();
+        // Open WAL file for streaming read
+        let file = File::open(wal_file)?;
+        let reader = BufReader::with_capacity(64 * 1024, file); // 64KB buffer
 
-        for line in content.lines() {
+        // Create Parquet writer
+        let parquet_file = File::create(&parquet_path)?;
+        let props = WriterProperties::builder()
+            .set_compression(Compression::ZSTD(ZstdLevel::try_new(3)?))
+            .set_max_row_group_size(batch_size)
+            .build();
+
+        let mut writer = ArrowWriter::try_new(parquet_file, Arc::new(schema.clone()), Some(props))?;
+
+        // Process file in batches
+        let mut records: Vec<Value> = Vec::with_capacity(batch_size);
+        let mut total_records = 0;
+
+        for line_result in reader.lines() {
+            let line = match line_result {
+                Ok(l) => l,
+                Err(e) => {
+                    eprintln!("Error reading line from {}: {}", wal_file.display(), e);
+                    continue;
+                }
+            };
+
             if line.trim().is_empty() {
                 continue;
             }
 
-            match serde_json::from_str::<Value>(line) {
-                Ok(value) => records.push(value),
+            match serde_json::from_str::<Value>(&line) {
+                Ok(value) => {
+                    records.push(value);
+                    total_records += 1;
+
+                    // When batch is full, write it to Parquet
+                    if records.len() >= batch_size {
+                        let batch = Self::json_records_to_batch(&records, schema)?;
+                        writer.write(&batch)?;
+                        records.clear();
+                    }
+                }
                 Err(e) => {
                     eprintln!("Failed to parse JSON line in {}: {}", wal_file.display(), e);
                     continue;
@@ -282,34 +328,25 @@ impl Compactor {
             }
         }
 
-        if records.is_empty() {
-            // No records found in WAL file
-            return Ok(());
+        // Write remaining records
+        if !records.is_empty() {
+            let batch = Self::json_records_to_batch(&records, schema)?;
+            writer.write(&batch)?;
         }
 
-        // Convert to Arrow RecordBatch
-        let batch = self.json_to_record_batch(&records, schema)?;
+        // Close the writer
+        writer.close()?;
 
-        // Write to Parquet (potentially expensive with compression and I/O)
-        tokio::task::spawn_blocking(move || -> Result<()> {
-            let file = fs::File::create(&parquet_path)?;
-            let props = WriterProperties::builder()
-                .set_compression(Compression::ZSTD(ZstdLevel::try_new(3)?))
-                .build();
+        // If no records were written, remove the empty parquet file
+        if total_records == 0 {
+            let _ = fs::remove_file(&parquet_path);
+        }
 
-            let mut writer = ArrowWriter::try_new(file, batch.schema(), Some(props))?;
-            writer.write(&batch)?;
-            writer.close()?;
-            Ok(())
-        })
-        .await??;
-
-        // Conversion completed successfully
         Ok(())
     }
 
-    /// Convert JSON records to Arrow RecordBatch
-    fn json_to_record_batch(&self, records: &[Value], schema: &Schema) -> Result<RecordBatch> {
+    /// Convert JSON records to Arrow RecordBatch (static method for use in blocking context)
+    fn json_records_to_batch(records: &[Value], schema: &Schema) -> Result<RecordBatch> {
         let mut builders: HashMap<String, Box<dyn ArrayBuilder>> = HashMap::new();
 
         // Initialize builders for each field

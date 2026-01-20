@@ -75,6 +75,7 @@ async fn test_individual_write_atomicity() -> Result<()> {
     let wal_file = database
         .path()
         .join("wal")
+        .join("activity_log")
         .join(format!("activity_log_{}.jsonl", today));
 
     if wal_file.exists() {
@@ -196,6 +197,7 @@ async fn test_concurrent_write_safety() -> Result<()> {
     let wal_file = database
         .path()
         .join("wal")
+        .join("activity_log")
         .join(format!("activity_log_{}.jsonl", today));
 
     let content = fs::read_to_string(&wal_file).await?;
@@ -312,6 +314,7 @@ async fn test_log_durability_across_crashes() -> Result<()> {
     let wal_file = database
         .path()
         .join("wal")
+        .join("activity_log")
         .join(format!("activity_log_{}.jsonl", today));
 
     assert!(wal_file.exists(), "Log file must survive crash");
@@ -430,6 +433,7 @@ async fn test_log_schema_consistency() -> Result<()> {
     let wal_file = database
         .path()
         .join("wal")
+        .join("activity_log")
         .join(format!("activity_log_{}.jsonl", today));
 
     let content = fs::read_to_string(&wal_file).await?;
@@ -571,6 +575,7 @@ async fn test_log_system_performance_under_load() -> Result<()> {
     let wal_file = database
         .path()
         .join("wal")
+        .join("activity_log")
         .join(format!("activity_log_{}.jsonl", today));
 
     let content = fs::read_to_string(&wal_file).await?;

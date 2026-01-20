@@ -18,7 +18,8 @@ async fn test_compaction_respects_date_boundaries() -> Result<()> {
     let yesterday = "2024-01-14".to_string(); // Static date for testing
 
     // === SETUP: Create artificial yesterday's WAL file ===
-    let wal_dir = database.path().join("wal");
+    // WAL files are stored in subdirectories: wal/{table_name}/{table_name}_{date}.jsonl
+    let wal_dir = database.path().join("wal").join("activity_log");
     tokio::fs::create_dir_all(&wal_dir).await?;
 
     let yesterday_wal = wal_dir.join(format!("activity_log_{}.jsonl", yesterday));
@@ -39,11 +40,11 @@ async fn test_compaction_respects_date_boundaries() -> Result<()> {
     sleep(Duration::from_millis(100)).await;
 
     let today_wal = wal_dir.join(format!("activity_log_{}.jsonl", today));
-    assert!(today_wal.exists(), "Today's WAL file should exist");
-    assert!(yesterday_wal.exists(), "Yesterday's WAL file should exist");
+    assert!(today_wal.exists(), "Today's WAL file should exist at {:?}", today_wal);
+    assert!(yesterday_wal.exists(), "Yesterday's WAL file should exist at {:?}", yesterday_wal);
 
     // === Run compactor ===
-    let compactor = Compactor::with_config(database.clone(), Duration::from_millis(50), 30);
+    let compactor = Compactor::with_config(database.clone(), Duration::from_millis(50), 30, 10_000);
     let cancel_token = CancellationToken::new();
 
     let compactor_task = {

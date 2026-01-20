@@ -124,7 +124,7 @@ async fn populate_test_data(database: &Arc<Database>) -> Result<()> {
             extra: format!("Participation extra data {}", i),
             fidelity: 0.8 + (i as f64 * 0.05),
             entity_id: format!("entity-{}", i),
-            user_id: format!("user-{}", i),
+            user_id: Some(format!("user-{}", i)),
             task_name: if i < 2 {
                 Some(format!("Task {}", i))
             } else {
@@ -169,23 +169,25 @@ async fn test_complete_database_lifecycle() -> Result<()> {
     // Test 2: Insert comprehensive test data
     populate_test_data(&database).await?;
 
-    // Test 3: Verify WAL files are created
+    // Test 3: Verify WAL files are created (in subdirectories per table)
     sleep(Duration::from_millis(200)).await;
 
     let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
     let wal_dir = database.path().join("wal");
 
-    let expected_wal_files = [
-        format!("activity_log_{}.jsonl", today),
-        format!("page_views_{}.jsonl", today),
-        format!("clickthroughs_{}.jsonl", today),
-        format!("join_table_{}.jsonl", today),
-        format!("participation_{}.jsonl", today),
-        format!("bookmark_{}.jsonl", today),
+    // WAL files are stored in subdirectories: wal/{table_name}/{table_name}_{date}.jsonl
+    let expected_tables = [
+        "activity_log",
+        "page_views",
+        "clickthroughs",
+        "join_table",
+        "participation",
+        "bookmark",
     ];
 
-    for wal_file in expected_wal_files {
-        let wal_path = wal_dir.join(&wal_file);
+    for table_name in expected_tables {
+        let wal_file = format!("{}_{}.jsonl", table_name, today);
+        let wal_path = wal_dir.join(table_name).join(&wal_file);
         assert!(wal_path.exists(), "WAL file should exist: {}", wal_file);
 
         // Verify WAL file has content
@@ -215,10 +217,9 @@ async fn test_complete_database_lifecycle() -> Result<()> {
 async fn test_full_pipeline_with_compaction() -> Result<()> {
     let (_temp_dir, database) = setup_complete_database_system().await?;
 
-    // Step 1: Create artificial "yesterday" WAL files with test data
+    // Step 1: Create artificial "yesterday" WAL files with test data in subdirectories
     let yesterday = "2024-01-14"; // Use a fixed date for deterministic testing
     let wal_dir = database.path().join("wal");
-    tokio::fs::create_dir_all(&wal_dir).await?;
 
     // Create sample WAL data for each table type with yesterday's date
     let sample_activity = serde_json::to_string(&ActivityLogRow {
@@ -242,14 +243,16 @@ async fn test_full_pipeline_with_compaction() -> Result<()> {
         geolocation: "POINT(0 0)".to_string(),
     })?;
 
-    // Write test WAL files with yesterday's date
+    // Write test WAL files with yesterday's date in subdirectories per table
     let tables_data = [
         ("activity_log", &sample_activity),
         ("clickthroughs", &sample_clickthrough),
     ];
 
     for (table_name, sample_data) in tables_data {
-        let wal_file = wal_dir.join(format!("{}_{}.jsonl", table_name, yesterday));
+        let table_wal_dir = wal_dir.join(table_name);
+        tokio::fs::create_dir_all(&table_wal_dir).await?;
+        let wal_file = table_wal_dir.join(format!("{}_{}.jsonl", table_name, yesterday));
         fs::write(
             &wal_file,
             format!(
@@ -264,7 +267,7 @@ async fn test_full_pipeline_with_compaction() -> Result<()> {
     // Step 2: Run compactor to convert WAL to Parquet
     let cancellation_token = CancellationToken::new();
     use log_service::database::compactor::Compactor;
-    let compactor = Compactor::with_config(database.clone(), Duration::from_millis(10), 30);
+    let compactor = Compactor::with_config(database.clone(), Duration::from_millis(10), 30, 10_000);
 
     let compactor_task = {
         let token = cancellation_token.clone();
@@ -307,7 +310,9 @@ async fn test_full_pipeline_with_compaction() -> Result<()> {
         );
 
         // Step 4: Verify original WAL file has been moved to processed directory
-        let original_wal = wal_dir.join(format!("{}_{}.jsonl", table_name, yesterday));
+        let original_wal = wal_dir
+            .join(table_name)
+            .join(format!("{}_{}.jsonl", table_name, yesterday));
         assert!(
             !original_wal.exists(),
             "Original WAL file should be moved after processing: {}",
@@ -413,12 +418,14 @@ async fn test_concurrent_operations_full_system() -> Result<()> {
     // Allow time for all writes to complete
     sleep(Duration::from_millis(300)).await;
 
-    // Verify data was written correctly
+    // Verify data was written correctly (WAL files are in subdirectories)
     let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
     let wal_dir = database.path().join("wal");
 
     // Check activity log has 20 entries
-    let activity_wal = wal_dir.join(format!("activity_log_{}.jsonl", today));
+    let activity_wal = wal_dir
+        .join("activity_log")
+        .join(format!("activity_log_{}.jsonl", today));
     let activity_content = fs::read_to_string(&activity_wal).await?;
     let activity_lines: Vec<&str> = activity_content
         .lines()
@@ -430,7 +437,9 @@ async fn test_concurrent_operations_full_system() -> Result<()> {
     );
 
     // Check page views has 15 entries
-    let page_view_wal = wal_dir.join(format!("page_views_{}.jsonl", today));
+    let page_view_wal = wal_dir
+        .join("page_views")
+        .join(format!("page_views_{}.jsonl", today));
     let page_view_content = fs::read_to_string(&page_view_wal).await?;
     let page_view_lines: Vec<&str> = page_view_content
         .lines()
@@ -491,11 +500,12 @@ async fn test_system_recovery_after_restart() -> Result<()> {
     {
         let database = Arc::new(Database::new(&db_path).await?);
 
-        // Verify files persist across "restart"
+        // Verify files persist across "restart" (WAL files are in subdirectories)
         let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
         let activity_wal = database
             .path()
             .join("wal")
+            .join("activity_log")
             .join(format!("activity_log_{}.jsonl", today));
         assert!(activity_wal.exists(), "WAL file should persist");
 

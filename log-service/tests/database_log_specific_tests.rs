@@ -73,11 +73,12 @@ async fn test_wal_to_parquet_compaction_integrity() -> Result<()> {
     // Force flush to WAL
     sleep(Duration::from_millis(6000)).await;
 
-    // Verify WAL data exists before compaction
+    // Verify WAL data exists before compaction (WAL files are in subdirectories)
     let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
     let activity_wal = database
         .path()
         .join("wal")
+        .join("activity_log")
         .join(format!("activity_log_{}.jsonl", today));
 
     assert!(
@@ -94,7 +95,7 @@ async fn test_wal_to_parquet_compaction_integrity() -> Result<()> {
     println!("WAL contains {} lines before compaction", wal_lines.len());
 
     // Start compactor with fast cycle time
-    let compactor = Compactor::with_config(database.clone(), Duration::from_millis(100), 1);
+    let compactor = Compactor::with_config(database.clone(), Duration::from_millis(100), 1, 10_000);
 
     // Create cancellation token and run compactor in background
     let cancellation_token = CancellationToken::new();
@@ -215,11 +216,12 @@ async fn test_wal_file_rotation_integrity() -> Result<()> {
     // Force flush
     sleep(Duration::from_millis(6000)).await;
 
-    // ROTATION INTEGRITY VERIFICATION
+    // ROTATION INTEGRITY VERIFICATION (WAL files are in subdirectories)
     let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
     let wal_file = database
         .path()
         .join("wal")
+        .join("activity_log")
         .join(format!("activity_log_{}.jsonl", today));
 
     assert!(wal_file.exists(), "WAL file should be created");
@@ -376,7 +378,7 @@ async fn test_multi_table_independent_logging() -> Result<()> {
     // Force flush all streams
     sleep(Duration::from_millis(6000)).await;
 
-    // INDEPENDENCE VERIFICATION
+    // INDEPENDENCE VERIFICATION (WAL files are in subdirectories)
     let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
 
     // Each table should have its own WAL file with correct data
@@ -384,6 +386,7 @@ async fn test_multi_table_independent_logging() -> Result<()> {
         database
             .path()
             .join("wal")
+            .join("activity_log")
             .join(format!("activity_log_{}.jsonl", today)),
     )
     .await?;
@@ -391,6 +394,7 @@ async fn test_multi_table_independent_logging() -> Result<()> {
         database
             .path()
             .join("wal")
+            .join("page_views")
             .join(format!("page_views_{}.jsonl", today)),
     )
     .await?;
@@ -398,6 +402,7 @@ async fn test_multi_table_independent_logging() -> Result<()> {
         database
             .path()
             .join("wal")
+            .join("join_table")
             .join(format!("join_table_{}.jsonl", today)),
     )
     .await?;
@@ -483,7 +488,7 @@ async fn test_compaction_data_preservation() -> Result<()> {
     sleep(Duration::from_millis(6000)).await;
 
     // Start compactor with aggressive settings to force compaction
-    let compactor = Compactor::with_config(database.clone(), Duration::from_millis(50), 1); // Very aggressive
+    let compactor = Compactor::with_config(database.clone(), Duration::from_millis(50), 1, 10_000); // Very aggressive
 
     // Create cancellation token and run compactor in background
     let cancellation_token = CancellationToken::new();
@@ -526,11 +531,12 @@ async fn test_compaction_data_preservation() -> Result<()> {
         }
     }
 
-    // Check WAL for any remaining data
+    // Check WAL for any remaining data (WAL files are in subdirectories)
     let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
     let wal_file = database
         .path()
         .join("wal")
+        .join("activity_log")
         .join(format!("activity_log_{}.jsonl", today));
 
     let mut wal_data_found = HashSet::new();
@@ -623,13 +629,14 @@ async fn test_log_system_recovery_after_failure() -> Result<()> {
             }
         }
 
-        // Verify data consistency after recovery
+        // Verify data consistency after recovery (WAL files are in subdirectories)
         sleep(Duration::from_millis(6000)).await;
 
         let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
         let wal_file = database
             .path()
             .join("wal")
+            .join("activity_log")
             .join(format!("activity_log_{}.jsonl", today));
 
         if wal_file.exists() {
@@ -774,13 +781,14 @@ async fn test_high_throughput_logging_reliability() -> Result<()> {
 
     println!("  Expected total (at target rate): {}", expected_total);
 
-    // Force flush and verify data integrity
+    // Force flush and verify data integrity (WAL files are in subdirectories)
     sleep(Duration::from_millis(6000)).await;
 
     let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
     let wal_file = database
         .path()
         .join("wal")
+        .join("activity_log")
         .join(format!("activity_log_{}.jsonl", today));
 
     let content = fs::read_to_string(&wal_file).await?;

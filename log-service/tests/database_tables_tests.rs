@@ -288,7 +288,7 @@ async fn test_participation_table() -> Result<()> {
         extra: "Additional participation data".to_string(),
         fidelity: 0.95,
         entity_id: "entity-789".to_string(),
-        user_id: "user-012".to_string(),
+        user_id: Some("user-012".to_string()),
         task_name: Some("Data collection".to_string()),
     };
 
@@ -614,7 +614,7 @@ async fn test_table_system_edge_case_values() -> Result<()> {
         extra: "".to_string(), // Empty string
         fidelity: 0.0,
         entity_id: "edge-entity".to_string(),
-        user_id: "edge-user".to_string(),
+        user_id: Some("edge-user".to_string()),
         task_name: Some("".to_string()), // Empty optional string
     };
 

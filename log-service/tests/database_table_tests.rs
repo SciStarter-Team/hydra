@@ -104,6 +104,7 @@ async fn test_table_insert_single_row() -> Result<()> {
     let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
     let wal_file = db_path
         .join("wal")
+        .join("test_table")
         .join(format!("test_table_{}.jsonl", today));
 
     assert!(wal_file.exists(), "WAL file should be created");
@@ -156,6 +157,7 @@ async fn test_table_insert_multiple_rows() -> Result<()> {
     let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
     let wal_file = db_path
         .join("wal")
+        .join("test_table")
         .join(format!("test_table_{}.jsonl", today));
 
     let content = fs::read_to_string(&wal_file).await?;
@@ -193,6 +195,7 @@ async fn test_table_json_serialization() -> Result<()> {
     let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
     let wal_file = db_path
         .join("wal")
+        .join("test_table")
         .join(format!("test_table_{}.jsonl", today));
 
     let content = fs::read_to_string(&wal_file).await?;
@@ -255,6 +258,7 @@ async fn test_table_daily_rotation() -> Result<()> {
     let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
     let expected_file = db_path
         .join("wal")
+        .join("test_table")
         .join(format!("test_table_{}.jsonl", today));
 
     assert!(expected_file.exists());
@@ -290,6 +294,7 @@ async fn test_table_buffered_writes() -> Result<()> {
     let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
     let wal_file = db_path
         .join("wal")
+        .join("test_table")
         .join(format!("test_table_{}.jsonl", today));
 
     let content = fs::read_to_string(&wal_file).await?;
@@ -323,6 +328,7 @@ async fn test_table_periodic_flush() -> Result<()> {
     let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
     let wal_file = db_path
         .join("wal")
+        .join("test_table")
         .join(format!("test_table_{}.jsonl", today));
 
     assert!(wal_file.exists());
@@ -364,9 +370,11 @@ async fn test_multiple_table_types() -> Result<()> {
     let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
     let test_wal = db_path
         .join("wal")
+        .join("test_table")
         .join(format!("test_table_{}.jsonl", today));
     let simple_wal = db_path
         .join("wal")
+        .join("simple_table")
         .join(format!("simple_table_{}.jsonl", today));
 
     assert!(test_wal.exists());
@@ -411,6 +419,7 @@ async fn test_table_shutdown_graceful() -> Result<()> {
     let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
     let wal_file = db_path
         .join("wal")
+        .join("test_table")
         .join(format!("test_table_{}.jsonl", today));
 
     let content = fs::read_to_string(&wal_file).await?;
@@ -486,6 +495,7 @@ async fn test_table_concurrent_inserts() -> Result<()> {
     let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
     let wal_file = db_path
         .join("wal")
+        .join("test_table")
         .join(format!("test_table_{}.jsonl", today));
 
     let content = fs::read_to_string(&wal_file).await?;
@@ -519,6 +529,7 @@ async fn test_table_special_characters() -> Result<()> {
     let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
     let wal_file = db_path
         .join("wal")
+        .join("test_table")
         .join(format!("test_table_{}.jsonl", today));
 
     let content = fs::read_to_string(&wal_file).await?;

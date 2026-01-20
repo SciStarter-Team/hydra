@@ -85,7 +85,7 @@ async fn test_wal_table_schema_alignment() -> Result<()> {
         extra: "test participation".to_string(),
         fidelity: 0.95,
         entity_id: "entity-123".to_string(),
-        user_id: "user-123".to_string(),
+        user_id: Some("user-123".to_string()),
         task_name: Some("test task".to_string()),
     })?;
 
@@ -207,8 +207,10 @@ async fn test_wal_nullable_fields() -> Result<()> {
         geolocation: "POINT(0 0)".to_string(),
     })?;
 
-    // Write to WAL file
-    let wal_file = wal_dir.join(format!("clickthroughs_{}.jsonl", today));
+    // Write to WAL file in subdirectory
+    let table_wal_dir = wal_dir.join("clickthroughs");
+    fs::create_dir_all(&table_wal_dir).await?;
+    let wal_file = table_wal_dir.join(format!("clickthroughs_{}.jsonl", today));
     fs::write(&wal_file, format!("{}\n", clickthrough_with_nulls)).await?;
 
     sleep(Duration::from_millis(100)).await;

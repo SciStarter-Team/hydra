@@ -42,7 +42,7 @@
 .ss-accordion.blocked {
     opacity: 0.5;
 }
-.ss-accordion.blocked > .accordion-content * {
+.ss-accordion.blocked > .accordion-content :not(details,summary) {
     pointer-events: none;
 }
 
