@@ -1339,9 +1339,9 @@ pub async fn exchange_admin(
 
     let mut staff = Vec::new();
     if !user_ids.is_empty() {
-        match request::<common::message::user::AdminUserBatchGetResponse>(
+        match request::<common::message::user::UserDetailsBatchGetResponse>(
             "user.admin.user_batch_get",
-            common::message::user::AdminUserBatchGetRequest { user_ids: user_ids.clone() },
+            common::message::user::UserDetailsBatchGetRequest { user_ids: user_ids.clone() },
         )
         .await
         {

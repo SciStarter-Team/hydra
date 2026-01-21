@@ -28,10 +28,10 @@ use common::{
     },
     message::user::{
         AdminAnalyticsRequest, AdminAnalyticsResponse, AdminPasswordResetRequest,
-        AdminPasswordResetResponse, AdminUser, AdminUserCreateRequest, AdminUserDeleteRequest,
-        AdminUserDeleteResponse, AdminUserExportRequest, AdminUserExportResponse,
-        AdminUserGetRequest, AdminUserListRequest, AdminUserListResponse, AdminUserResponse,
-        AdminUserSearchRequest, AdminUserUpdateRequest, BasicInfo, UserEmail, UserEmailAddRequest,
+        AdminPasswordResetResponse, UserDetails, UserDetailsCreateRequest, UserDetailsDeleteRequest,
+        UserDetailsDeleteResponse, UserDetailsExportRequest, UserDetailsExportResponse,
+        UserDetailsGetRequest, UserDetailsListRequest, UserDetailsListResponse, UserDetailsResponse,
+        UserDetailsSearchRequest, UserDetailsUpdateRequest, BasicInfo, UserEmail, UserEmailAddRequest,
         UserEmailDeleteRequest, UserEmailResponse, UserEmailToggleVerifiedRequest,
         UserEmailUpdateRequest,
     },
@@ -728,7 +728,7 @@ pub struct DashboardContent {
 #[derive(Debug, TemplateOnce)]
 #[template(path = "admin/partials/user_row.stpl.html")]
 pub struct UserRow {
-    pub user: AdminUser,
+    pub user: UserDetails,
     pub oob: bool,
     pub oob_swap: String,
 }
@@ -967,8 +967,8 @@ pub struct AdminProjectFull {
 async fn lookup_user_email(user_id: Option<Ulid>) -> String {
     match user_id {
         Some(id) => {
-            let get_request = AdminUserGetRequest { user_id: id };
-            match request::<AdminUserResponse>("user.admin.user_get", get_request).await {
+            let get_request = UserDetailsGetRequest { user_id: id };
+            match request::<UserDetailsResponse>("user.admin.user_get", get_request).await {
                 Ok(response) => response.user.primary_email,
                 Err(_) => id.to_string(), // Fallback to ULID if lookup fails
             }
@@ -2179,7 +2179,7 @@ impl Component for AnalyticsPage {
 #[derive(Debug, TemplateOnce)]
 #[template(path = "admin/users.stpl.html")]
 pub struct UsersPagePrepared {
-    pub users: Vec<AdminUser>,
+    pub users: Vec<UserDetails>,
     pub current_page: u32,
     pub total_users: u64,
     pub has_previous: bool,
@@ -2209,12 +2209,12 @@ impl Component for UsersPage {
     async fn prepare(self, param: Self::Param) -> Result<Self::Prepared, anyhow::Error> {
         // Fetch real user data from user service
         let page = self.page.unwrap_or(1);
-        let user_request = AdminUserListRequest {
+        let user_request = UserDetailsListRequest {
             page: Some(page),
             limit: Some(25),
         };
 
-        let response: AdminUserListResponse =
+        let response: UserDetailsListResponse =
             request("user.admin.user_list", user_request)
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to fetch users: {}", e))?;
@@ -2407,13 +2407,13 @@ struct UserSearchQuery {
 #[derive(Debug, TemplateOnce)]
 #[template(path = "admin/users_table_body.stpl.html")]
 pub struct UsersTableBody {
-    users: Vec<AdminUser>,
+    users: Vec<UserDetails>,
 }
 
 #[derive(Debug, TemplateOnce)]
 #[template(path = "admin/users_content.stpl.html")]
 pub struct UsersContent {
-    pub users: Vec<AdminUser>,
+    pub users: Vec<UserDetails>,
     pub current_page: u32,
     pub total_users: u64,
     pub has_previous: bool,
@@ -2430,7 +2430,7 @@ pub struct UsersContent {
 
 async fn users_search_internal(query: UserSearchQuery) -> Result<UsersPagePrepared, anyhow::Error> {
     let page = query.page.unwrap_or(1);
-    let search_request = AdminUserSearchRequest {
+    let search_request = UserDetailsSearchRequest {
         search: query.search.clone(),
         role: query.role.clone(),
         email_status: query.email_status.clone(),
@@ -2438,7 +2438,7 @@ async fn users_search_internal(query: UserSearchQuery) -> Result<UsersPagePrepar
         limit: Some(25),
     };
 
-    let response: AdminUserListResponse =
+    let response: UserDetailsListResponse =
         request("user.admin.user_search", search_request)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to search users: {}", e))?;
@@ -2882,9 +2882,9 @@ async fn analytics_export_users(
     let mut page = 1;
 
     loop {
-        let export_response: AdminUserExportResponse = request_timeout(
+        let export_response: UserDetailsExportResponse = request_timeout(
             "user.admin.user_export",
-            AdminUserExportRequest {
+            UserDetailsExportRequest {
                 start_date: start_date.clone(),
                 end_date: end_date.clone(),
                 page: Some(page),
@@ -3162,11 +3162,11 @@ async fn users_edit(
         .map_err(|_| anyhow::anyhow!("Invalid user ID format"))?;
 
     // Fetch user data from user service
-    let get_request = AdminUserGetRequest {
+    let get_request = UserDetailsGetRequest {
         user_id: parsed_user_id,
     };
 
-    let content = match request::<AdminUserResponse>("user.admin.user_get", get_request).await {
+    let content = match request::<UserDetailsResponse>("user.admin.user_get", get_request).await {
         Ok(response) => {
             let admin_user = response.user;
             EditUserPage {
@@ -3227,11 +3227,11 @@ async fn users_delete(
         .parse::<ulid::Ulid>()
         .map_err(|_| anyhow::anyhow!("Invalid user ID format"))?;
 
-    let delete_request = AdminUserDeleteRequest {
+    let delete_request = UserDetailsDeleteRequest {
         user_id: parsed_user_id,
     };
 
-    match request_with_retry::<AdminUserDeleteResponse>("user.admin.user_delete", delete_request)
+    match request_with_retry::<UserDetailsDeleteResponse>("user.admin.user_delete", delete_request)
         .await
     {
         Ok(response) => {
@@ -3352,7 +3352,7 @@ async fn users_create(
         "user" | _ => (false, false),
     };
 
-    let create_request = AdminUserCreateRequest {
+    let create_request = UserDetailsCreateRequest {
         handle: form.handle.clone(),
         first_name: form.first_name,
         last_name: form.last_name,
@@ -3362,7 +3362,7 @@ async fn users_create(
         verified: form.verified,
     };
 
-    match request_with_retry::<AdminUserResponse>("user.admin.user_create", create_request).await {
+    match request_with_retry::<UserDetailsResponse>("user.admin.user_create", create_request).await {
         Ok(response) => {
             // Log the activity
             if let Some(user_info) = &user_info {
@@ -3376,9 +3376,9 @@ async fn users_create(
                 .await?;
             }
             // Success - close modal and refresh users table with updated data
-            match request::<AdminUserListResponse>(
+            match request::<UserDetailsListResponse>(
                 "user.admin.user_list",
-                AdminUserListRequest {
+                UserDetailsListRequest {
                     page: Some(1),
                     limit: Some(25),
                 },
@@ -3491,7 +3491,7 @@ async fn users_update(
     let orcid = form.orcid.clone().filter(|o| !o.trim().is_empty());
 
     // Update
-    let update_request = AdminUserUpdateRequest {
+    let update_request = UserDetailsUpdateRequest {
         user_id: parsed_user_id,
         handle: form.handle.clone(),
         first_name: form.first_name.clone(),
@@ -3504,7 +3504,7 @@ async fn users_update(
         orcid,
     };
 
-    match request_with_retry::<AdminUserResponse>("user.admin.user_update", update_request).await {
+    match request_with_retry::<UserDetailsResponse>("user.admin.user_update", update_request).await {
         Ok(_response) => {
             // Log the activity
             if let Some(user_info) = &user_info {
@@ -3844,7 +3844,7 @@ async fn users_emails_toggle_verified(
         email: email.clone(),
     };
 
-    match request_with_retry::<AdminUserResponse>("user.admin.email_toggle_verified", email_request)
+    match request_with_retry::<UserDetailsResponse>("user.admin.email_toggle_verified", email_request)
         .await
     {
         Ok(response) => {

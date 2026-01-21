@@ -129,12 +129,12 @@ async fn handle_bounce(Json(notification): Json<SnsNotification>) -> Response {
         Ok(bounce) => {
             for recipient in &bounce.bounce.bounced_recipients {
                 // Look up user_id from email address
-                use common::message::user::{AdminUserListResponse, AdminUserSearchRequest};
+                use common::message::user::{UserDetailsListResponse, UserDetailsSearchRequest};
                 use common::service::request;
 
-                let user_id = match request::<AdminUserListResponse>(
+                let user_id = match request::<UserDetailsListResponse>(
                     "user.admin.search",
-                    AdminUserSearchRequest {
+                    UserDetailsSearchRequest {
                         search: Some(recipient.email_address.clone()),
                         role: None,
                         email_status: None,
@@ -190,12 +190,12 @@ async fn handle_complaint(Json(notification): Json<SnsNotification>) -> Response
         Ok(complaint) => {
             for recipient in &complaint.complaint.complained_recipients {
                 // Look up user_id from email address
-                use common::message::user::{AdminUserListResponse, AdminUserSearchRequest};
+                use common::message::user::{UserDetailsListResponse, UserDetailsSearchRequest};
                 use common::service::request;
 
-                let user_id = match request::<AdminUserListResponse>(
+                let user_id = match request::<UserDetailsListResponse>(
                     "user.admin.search",
-                    AdminUserSearchRequest {
+                    UserDetailsSearchRequest {
                         search: Some(recipient.email_address.clone()),
                         role: None,
                         email_status: None,

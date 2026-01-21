@@ -1403,18 +1403,18 @@ async fn main() {
 
     // Admin endpoints
     let admin = service.group("user.admin");
-    toplevel.spawn(handler!(admin, "user_list", users::admin_user_list));
-    toplevel.spawn(handler!(admin, "user_search", users::admin_user_search));
-    toplevel.spawn(handler!(admin, "user_export", users::admin_user_export));
-    toplevel.spawn(handler!(admin, "user_get", users::admin_user_get));
+    toplevel.spawn(handler!(admin, "user_list", users::user_details_list));
+    toplevel.spawn(handler!(admin, "user_search", users::user_details_search));
+    toplevel.spawn(handler!(admin, "user_export", users::user_details_export));
+    toplevel.spawn(handler!(admin, "user_get", users::user_details_get));
     toplevel.spawn(handler!(
         admin,
         "user_batch_get",
-        users::admin_user_batch_get
+        users::user_details_batch_get
     ));
-    toplevel.spawn(handler!(admin, "user_create", users::admin_user_create));
-    toplevel.spawn(handler!(admin, "user_update", users::admin_user_update));
-    toplevel.spawn(handler!(admin, "user_delete", users::admin_user_delete));
+    toplevel.spawn(handler!(admin, "user_create", users::user_details_create));
+    toplevel.spawn(handler!(admin, "user_update", users::user_details_update));
+    toplevel.spawn(handler!(admin, "user_delete", users::user_details_delete));
     toplevel.spawn(handler!(
         admin,
         "password_reset",

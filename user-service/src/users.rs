@@ -3,11 +3,11 @@ use async_nats::service::Request;
 use common::{
     badge::Badge,
     message::user::{
-        AdminPasswordResetRequest, AdminPasswordResetResponse, AdminUser, AdminUserBatchGetRequest,
-        AdminUserBatchGetResponse, AdminUserCreateRequest, AdminUserDeleteRequest,
-        AdminUserDeleteResponse, AdminUserExportRequest, AdminUserExportResponse,
-        AdminUserGetRequest, AdminUserListRequest, AdminUserListResponse,
-        AdminUserResponse, AdminUserSearchRequest, AdminUserUpdateRequest, BadgeHolderInfo,
+        AdminPasswordResetRequest, AdminPasswordResetResponse, UserDetails, UserDetailsBatchGetRequest,
+        UserDetailsBatchGetResponse, UserDetailsCreateRequest, UserDetailsDeleteRequest,
+        UserDetailsDeleteResponse, UserDetailsExportRequest, UserDetailsExportResponse,
+        UserDetailsGetRequest, UserDetailsListRequest, UserDetailsListResponse,
+        UserDetailsResponse, UserDetailsSearchRequest, UserDetailsUpdateRequest, BadgeHolderInfo,
         BadgeHoldersRequest, BadgeHoldersResponse, BasicInfo, PageManagerSyncRequest,
         PageManagerSyncResponse, PageManagerUpdateRequest, PageManagerUpdateResponse,
         UserAndBadge, UserBadge, UserDisplayInfo, UserDisplayInfoBatchRequest,
@@ -743,8 +743,8 @@ pub async fn get_badge_holders(req: &Request) -> Result<BadgeHoldersResponse, Er
     })
 }
 
-pub async fn admin_user_list(req: &Request) -> Result<AdminUserListResponse, Error> {
-    let request: AdminUserListRequest = decode_structured_message(req.message.clone())?;
+pub async fn user_details_list(req: &Request) -> Result<UserDetailsListResponse, Error> {
+    let request: UserDetailsListRequest = decode_structured_message(req.message.clone())?;
 
     let page = request.page.unwrap_or(1);
     let limit = request.limit.unwrap_or(25);
@@ -787,7 +787,7 @@ pub async fn admin_user_list(req: &Request) -> Result<AdminUserListResponse, Err
             .as_ulid()
             .map_err(|e| anyhow::anyhow!("Invalid user ID in database: {}", e))?;
 
-        users.push(AdminUser {
+        users.push(UserDetails {
             user_id,
             handle: row.handle,
             first_name: row.first_name,
@@ -799,12 +799,12 @@ pub async fn admin_user_list(req: &Request) -> Result<AdminUserListResponse, Err
             is_page_manager: row.is_page_manager,
             verified: row.verified,
             date_joined: row.date_joined,
-            emails: vec![], // Empty for list operations - use admin_user_get for full details
+            emails: vec![], // Empty for list operations - use user_details_get for full details
             orcid: row.orcid,
         });
     }
 
-    Ok(AdminUserListResponse {
+    Ok(UserDetailsListResponse {
         users,
         total_count,
         page,
@@ -812,8 +812,8 @@ pub async fn admin_user_list(req: &Request) -> Result<AdminUserListResponse, Err
     })
 }
 
-pub async fn admin_user_search(req: &Request) -> Result<AdminUserListResponse, Error> {
-    let request: AdminUserSearchRequest = decode_structured_message(req.message.clone())?;
+pub async fn user_details_search(req: &Request) -> Result<UserDetailsListResponse, Error> {
+    let request: UserDetailsSearchRequest = decode_structured_message(req.message.clone())?;
 
     let page = request.page.unwrap_or(1);
     let limit = request.limit.unwrap_or(25);
@@ -908,7 +908,7 @@ pub async fn admin_user_search(req: &Request) -> Result<AdminUserListResponse, E
             .as_ulid()
             .map_err(|e| anyhow::anyhow!("Invalid user ID in database: {}", e))?;
 
-        users.push(AdminUser {
+        users.push(UserDetails {
             user_id,
             handle: row.handle,
             first_name: row.first_name,
@@ -920,12 +920,12 @@ pub async fn admin_user_search(req: &Request) -> Result<AdminUserListResponse, E
             is_page_manager: row.is_page_manager,
             verified: row.verified,
             date_joined: row.date_joined,
-            emails: vec![], // Empty for list operations - use admin_user_get for full details
+            emails: vec![], // Empty for list operations - use user_details_get for full details
             orcid: row.orcid,
         });
     }
 
-    Ok(AdminUserListResponse {
+    Ok(UserDetailsListResponse {
         users,
         total_count,
         page,
@@ -933,8 +933,8 @@ pub async fn admin_user_search(req: &Request) -> Result<AdminUserListResponse, E
     })
 }
 
-pub async fn admin_user_export(req: &Request) -> Result<AdminUserExportResponse, Error> {
-    let request: AdminUserExportRequest = decode_structured_message(req.message.clone())?;
+pub async fn user_details_export(req: &Request) -> Result<UserDetailsExportResponse, Error> {
+    let request: UserDetailsExportRequest = decode_structured_message(req.message.clone())?;
 
     let page = request.page.unwrap_or(1);
     let limit = request.limit.unwrap_or(500);
@@ -976,7 +976,7 @@ pub async fn admin_user_export(req: &Request) -> Result<AdminUserExportResponse,
             .as_ulid()
             .map_err(|e| anyhow::anyhow!("Invalid user ID in database: {}", e))?;
 
-        users.push(AdminUser {
+        users.push(UserDetails {
             user_id,
             handle: row.handle,
             first_name: row.first_name,
@@ -993,13 +993,13 @@ pub async fn admin_user_export(req: &Request) -> Result<AdminUserExportResponse,
         });
     }
 
-    Ok(AdminUserExportResponse {
+    Ok(UserDetailsExportResponse {
         users,
     })
 }
 
-pub async fn admin_user_get(req: &Request) -> Result<AdminUserResponse, Error> {
-    let request: AdminUserGetRequest = decode_structured_message(req.message.clone())?;
+pub async fn user_details_get(req: &Request) -> Result<UserDetailsResponse, Error> {
+    let request: UserDetailsGetRequest = decode_structured_message(req.message.clone())?;
 
     let user_id_str = request.user_id.to_string();
     let user_result = sqlx::query!(
@@ -1035,7 +1035,7 @@ pub async fn admin_user_get(req: &Request) -> Result<AdminUserResponse, Error> {
             // Fetch user emails
             let emails = fetch_user_emails(&user_id_str).await?;
 
-            let user = AdminUser {
+            let user = UserDetails {
                 user_id,
                 handle: row.handle,
                 first_name: row.first_name,
@@ -1051,7 +1051,7 @@ pub async fn admin_user_get(req: &Request) -> Result<AdminUserResponse, Error> {
                 orcid: row.orcid,
             };
 
-            Ok(AdminUserResponse { user })
+            Ok(UserDetailsResponse { user })
         }
         None => Err(anyhow::anyhow!("User not found").into()),
     }
@@ -1098,11 +1098,11 @@ pub async fn user_email_info(req: &Request) -> Result<UserEmailInfo, Error> {
     }
 }
 
-pub async fn admin_user_batch_get(req: &Request) -> Result<AdminUserBatchGetResponse, Error> {
-    let request: AdminUserBatchGetRequest = decode_structured_message(req.message.clone())?;
+pub async fn user_details_batch_get(req: &Request) -> Result<UserDetailsBatchGetResponse, Error> {
+    let request: UserDetailsBatchGetRequest = decode_structured_message(req.message.clone())?;
 
     if request.user_ids.is_empty() {
-        return Ok(AdminUserBatchGetResponse { users: Vec::new() });
+        return Ok(UserDetailsBatchGetResponse { users: Vec::new() });
     }
 
     // Build query to get users by IDs
@@ -1135,7 +1135,7 @@ pub async fn admin_user_batch_get(req: &Request) -> Result<AdminUserBatchGetResp
         )
         .collect();
 
-    Ok(AdminUserBatchGetResponse { users: users? })
+    Ok(UserDetailsBatchGetResponse { users: users? })
 }
 
 pub async fn user_display_info_batch(
@@ -1180,8 +1180,8 @@ pub async fn user_display_info_batch(
     Ok(UserDisplayInfoBatchResponse { users: users? })
 }
 
-pub async fn admin_user_create(req: &Request) -> Result<AdminUserResponse, Error> {
-    let request: AdminUserCreateRequest = decode_structured_message(req.message.clone())?;
+pub async fn user_details_create(req: &Request) -> Result<UserDetailsResponse, Error> {
+    let request: UserDetailsCreateRequest = decode_structured_message(req.message.clone())?;
 
     let user_id = ulid::Ulid::new();
 
@@ -1257,7 +1257,7 @@ pub async fn admin_user_create(req: &Request) -> Result<AdminUserResponse, Error
         verified: request.verified,
     }];
 
-    let user = AdminUser {
+    let user = UserDetails {
         user_id,
         handle: request.handle.clone(),
         first_name: request.first_name.clone(),
@@ -1273,11 +1273,11 @@ pub async fn admin_user_create(req: &Request) -> Result<AdminUserResponse, Error
         orcid: None,
     };
 
-    Ok(AdminUserResponse { user })
+    Ok(UserDetailsResponse { user })
 }
 
-pub async fn admin_user_update(req: &Request) -> Result<AdminUserResponse, Error> {
-    let request: AdminUserUpdateRequest = decode_structured_message(req.message.clone())?;
+pub async fn user_details_update(req: &Request) -> Result<UserDetailsResponse, Error> {
+    let request: UserDetailsUpdateRequest = decode_structured_message(req.message.clone())?;
 
     let (is_staff, is_page_manager) = match request.role.as_str() {
         "staff" => (true, false),
@@ -1352,7 +1352,7 @@ pub async fn admin_user_update(req: &Request) -> Result<AdminUserResponse, Error
             // Fetch user emails for the response
             let emails = fetch_user_emails(&user_id_str).await?;
 
-            let user = AdminUser {
+            let user = UserDetails {
                 user_id: request.user_id,
                 handle: request.handle,
                 first_name: request.first_name,
@@ -1368,14 +1368,14 @@ pub async fn admin_user_update(req: &Request) -> Result<AdminUserResponse, Error
                 orcid: request.orcid,
             };
 
-            Ok(AdminUserResponse { user })
+            Ok(UserDetailsResponse { user })
         }
         Err(e) => Err(anyhow::anyhow!("Failed to update user: {}", e).into()),
     }
 }
 
-pub async fn admin_user_delete(req: &Request) -> Result<AdminUserDeleteResponse, Error> {
-    let request: AdminUserDeleteRequest = decode_structured_message(req.message.clone())?;
+pub async fn user_details_delete(req: &Request) -> Result<UserDetailsDeleteResponse, Error> {
+    let request: UserDetailsDeleteRequest = decode_structured_message(req.message.clone())?;
 
     let user_id_str = request.user_id.to_string();
     let result = sqlx::query!(r#"DELETE FROM "users" WHERE "user_id" = ?"#, user_id_str)
@@ -1385,7 +1385,7 @@ pub async fn admin_user_delete(req: &Request) -> Result<AdminUserDeleteResponse,
     match result {
         Ok(result) => {
             let success = result.rows_affected() > 0;
-            Ok(AdminUserDeleteResponse { success })
+            Ok(UserDetailsDeleteResponse { success })
         }
         Err(e) => Err(anyhow::anyhow!("Failed to delete user: {}", e).into()),
     }
@@ -1699,7 +1699,7 @@ pub async fn admin_email_delete(req: &Request) -> Result<UserEmailResponse, Erro
     }
 }
 
-pub async fn admin_email_toggle_verified(req: &Request) -> Result<AdminUserResponse, Error> {
+pub async fn admin_email_toggle_verified(req: &Request) -> Result<UserDetailsResponse, Error> {
     let request: UserEmailToggleVerifiedRequest = decode_structured_message(req.message.clone())?;
 
     let user_id_str = request.user_id.to_string();
@@ -1742,7 +1742,7 @@ pub async fn admin_email_toggle_verified(req: &Request) -> Result<AdminUserRespo
                     .await
                     .ok();
 
-                    // Fetch complete user data (similar to admin_user_get but without separate email fetch)
+                    // Fetch complete user data (similar to user_details_get but without separate email fetch)
                     let user_result = sqlx::query!(
                         r#"
                         SELECT
@@ -1774,7 +1774,7 @@ pub async fn admin_email_toggle_verified(req: &Request) -> Result<AdminUserRespo
                     // Fetch updated emails list
                     let emails = fetch_user_emails(&user_id_str).await?;
 
-                    let user = AdminUser {
+                    let user = UserDetails {
                         user_id,
                         handle: user_result.handle,
                         first_name: user_result.first_name,
@@ -1790,7 +1790,7 @@ pub async fn admin_email_toggle_verified(req: &Request) -> Result<AdminUserRespo
                         orcid: user_result.orcid,
                     };
 
-                    Ok(AdminUserResponse { user })
+                    Ok(UserDetailsResponse { user })
                 }
                 Err(e) => Err(anyhow::anyhow!("Failed to toggle verification: {}", e).into()),
             }

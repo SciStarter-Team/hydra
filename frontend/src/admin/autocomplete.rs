@@ -378,7 +378,7 @@ pub async fn resolve_event_name(id: Ulid) -> Result<Option<String>, Error> {
 
 pub async fn search_users(query: &AutocompleteQuery) -> Result<Vec<AutocompleteResult>, Error> {
     use common::{
-        message::user::{AdminUserListResponse, AdminUserSearchRequest},
+        message::user::{UserDetailsListResponse, UserDetailsSearchRequest},
         shared::nats,
     };
 
@@ -387,7 +387,7 @@ pub async fn search_users(query: &AutocompleteQuery) -> Result<Vec<AutocompleteR
         return Ok(Vec::new());
     }
 
-    let search_request = AdminUserSearchRequest {
+    let search_request = UserDetailsSearchRequest {
         search: Some(search_term.to_string()),
         role: None,
         email_status: None,
@@ -403,7 +403,7 @@ pub async fn search_users(query: &AutocompleteQuery) -> Result<Vec<AutocompleteR
         .await
         .map_err(|e| anyhow::anyhow!("NATS request failed: {}", e))?;
 
-    let search_response: AdminUserListResponse = flexbuffers::from_slice(&response.payload)
+    let search_response: UserDetailsListResponse = flexbuffers::from_slice(&response.payload)
         .map_err(|e| anyhow::anyhow!("Failed to deserialize search response: {}", e))?;
 
     let results = search_response
@@ -420,11 +420,11 @@ pub async fn search_users(query: &AutocompleteQuery) -> Result<Vec<AutocompleteR
 
 pub async fn resolve_user_name(id: Ulid) -> Result<Option<String>, Error> {
     use common::{
-        message::user::{AdminUserGetRequest, AdminUserResponse},
+        message::user::{UserDetailsGetRequest, UserDetailsResponse},
         shared::nats,
     };
 
-    let get_request = AdminUserGetRequest { user_id: id };
+    let get_request = UserDetailsGetRequest { user_id: id };
 
     let request_payload = flexbuffers::to_vec(&get_request)
         .map_err(|e| anyhow::anyhow!("Failed to serialize get request: {}", e))?;
@@ -435,7 +435,7 @@ pub async fn resolve_user_name(id: Ulid) -> Result<Option<String>, Error> {
         .map_err(|e| anyhow::anyhow!("NATS request failed: {}", e))?;
 
     // If the user doesn't exist, the user service returns an error
-    match flexbuffers::from_slice::<AdminUserResponse>(&response.payload) {
+    match flexbuffers::from_slice::<UserDetailsResponse>(&response.payload) {
         Ok(user_response) => Ok(Some(user_response.user.primary_email)),
         Err(_) => Ok(None), // User not found
     }
@@ -443,7 +443,7 @@ pub async fn resolve_user_name(id: Ulid) -> Result<Option<String>, Error> {
 
 pub async fn resolve_user_names(ids: Vec<Ulid>) -> Result<Vec<(Ulid, String)>, Error> {
     use common::{
-        message::user::{AdminUserBatchGetRequest, AdminUserBatchGetResponse},
+        message::user::{UserDetailsBatchGetRequest, UserDetailsBatchGetResponse},
         shared::nats,
     };
 
@@ -451,7 +451,7 @@ pub async fn resolve_user_names(ids: Vec<Ulid>) -> Result<Vec<(Ulid, String)>, E
         return Ok(Vec::new());
     }
 
-    let batch_request = AdminUserBatchGetRequest { user_ids: ids };
+    let batch_request = UserDetailsBatchGetRequest { user_ids: ids };
 
     let request_payload = flexbuffers::to_vec(&batch_request)
         .map_err(|e| anyhow::anyhow!("Failed to serialize batch request: {}", e))?;
@@ -461,7 +461,7 @@ pub async fn resolve_user_names(ids: Vec<Ulid>) -> Result<Vec<(Ulid, String)>, E
         .await
         .map_err(|e| anyhow::anyhow!("NATS request failed: {}", e))?;
 
-    let batch_response: AdminUserBatchGetResponse = flexbuffers::from_slice(&response.payload)
+    let batch_response: UserDetailsBatchGetResponse = flexbuffers::from_slice(&response.payload)
         .map_err(|e| anyhow::anyhow!("Failed to deserialize batch response: {}", e))?;
 
     let results = batch_response

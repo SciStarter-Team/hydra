@@ -251,13 +251,13 @@ pub struct UserCountResponse {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct AdminUserListRequest {
+pub struct UserDetailsListRequest {
     pub page: Option<u32>,
     pub limit: Option<u32>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct AdminUser {
+pub struct UserDetails {
     pub user_id: Ulid,
     pub handle: String,
     pub first_name: String,
@@ -273,7 +273,7 @@ pub struct AdminUser {
     pub orcid: Option<String>,
 }
 
-impl AdminUser {
+impl UserDetails {
     /// Returns the display name, preferring first/last name over handle
     pub fn display_name(&self) -> String {
         if self.first_name.is_empty() && self.last_name.is_empty() {
@@ -312,15 +312,15 @@ impl AdminUser {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct AdminUserListResponse {
-    pub users: Vec<AdminUser>,
+pub struct UserDetailsListResponse {
+    pub users: Vec<UserDetails>,
     pub total_count: u64,
     pub page: u32,
     pub limit: u32,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct AdminUserSearchRequest {
+pub struct UserDetailsSearchRequest {
     pub search: Option<String>,
     pub role: Option<String>,         // user, page_manager, staff
     pub email_status: Option<String>, // verified, unverified
@@ -329,7 +329,7 @@ pub struct AdminUserSearchRequest {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct AdminUserCreateRequest {
+pub struct UserDetailsCreateRequest {
     pub handle: String,
     pub first_name: String,
     pub last_name: String,
@@ -340,7 +340,7 @@ pub struct AdminUserCreateRequest {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct AdminUserUpdateRequest {
+pub struct UserDetailsUpdateRequest {
     pub user_id: Ulid,
     pub handle: String,
     pub first_name: String,
@@ -354,27 +354,27 @@ pub struct AdminUserUpdateRequest {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct AdminUserDeleteRequest {
+pub struct UserDetailsDeleteRequest {
     pub user_id: Ulid,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct AdminUserResponse {
-    pub user: AdminUser,
+pub struct UserDetailsResponse {
+    pub user: UserDetails,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct AdminUserDeleteResponse {
+pub struct UserDetailsDeleteResponse {
     pub success: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct AdminUserGetRequest {
+pub struct UserDetailsGetRequest {
     pub user_id: Ulid,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct AdminUserBatchGetRequest {
+pub struct UserDetailsBatchGetRequest {
     pub user_ids: Vec<Ulid>,
 }
 
@@ -385,7 +385,7 @@ pub struct UserNameMapping {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct AdminUserBatchGetResponse {
+pub struct UserDetailsBatchGetResponse {
     pub users: Vec<UserNameMapping>,
 }
 
@@ -498,7 +498,7 @@ pub struct GeographicStat {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
-pub struct AdminUserExportRequest {
+pub struct UserDetailsExportRequest {
     pub start_date: String, // Start date in YYYY-MM-DD format
     pub end_date: String,   // End date in YYYY-MM-DD format
     pub page: Option<u32>,  // Page number (1-indexed), for pagination
@@ -506,8 +506,8 @@ pub struct AdminUserExportRequest {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
-pub struct AdminUserExportResponse {
-    pub users: Vec<AdminUser>,
+pub struct UserDetailsExportResponse {
+    pub users: Vec<UserDetails>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
@@ -791,7 +791,7 @@ pub struct UserDisplayInfoBatchResponse {
     pub users: Vec<UserDisplayInfo>,
 }
 
-// User Info for Email Sending (lightweight alternative to AdminUser)
+// User Info for Email Sending (lightweight alternative to UserDetails)
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct UserEmailInfoRequest {
     pub user_id: Ulid,
