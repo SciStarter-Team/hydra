@@ -763,7 +763,8 @@ pub async fn admin_user_list(req: &Request) -> Result<AdminUserListResponse, Err
             "is_superuser" as "is_superuser: bool",
             "is_page_manager" as "is_page_manager: bool",
             "verified" as "verified: bool",
-            "date_joined"
+            "date_joined",
+            "orcid"
         FROM "users"
         ORDER BY "date_joined" DESC
         LIMIT ? OFFSET ?
@@ -799,6 +800,7 @@ pub async fn admin_user_list(req: &Request) -> Result<AdminUserListResponse, Err
             verified: row.verified,
             date_joined: row.date_joined,
             emails: vec![], // Empty for list operations - use admin_user_get for full details
+            orcid: row.orcid,
         });
     }
 
@@ -846,7 +848,8 @@ pub async fn admin_user_search(req: &Request) -> Result<AdminUserListResponse, E
             "is_superuser" as "is_superuser: bool",
             "is_page_manager" as "is_page_manager: bool",
             "verified" as "verified: bool",
-            "date_joined"
+            "date_joined",
+            "orcid"
         FROM "users"
         WHERE
             (? = '' OR "first_name" LIKE ? OR "last_name" LIKE ? OR "handle" LIKE ? OR "primary_email" LIKE ?)
@@ -918,6 +921,7 @@ pub async fn admin_user_search(req: &Request) -> Result<AdminUserListResponse, E
             verified: row.verified,
             date_joined: row.date_joined,
             emails: vec![], // Empty for list operations - use admin_user_get for full details
+            orcid: row.orcid,
         });
     }
 
@@ -949,7 +953,8 @@ pub async fn admin_user_export(req: &Request) -> Result<AdminUserExportResponse,
             "is_superuser" as "is_superuser: bool",
             "is_page_manager" as "is_page_manager: bool",
             "verified" as "verified: bool",
-            "date_joined"
+            "date_joined",
+            "orcid"
         FROM "users"
         WHERE "date_joined" >= ? AND "date_joined" <= ?
         ORDER BY "date_joined" DESC
@@ -984,6 +989,7 @@ pub async fn admin_user_export(req: &Request) -> Result<AdminUserExportResponse,
             verified: row.verified,
             date_joined: row.date_joined,
             emails: vec![], // Empty for export operations
+            orcid: row.orcid,
         });
     }
 
@@ -1009,7 +1015,8 @@ pub async fn admin_user_get(req: &Request) -> Result<AdminUserResponse, Error> {
             "is_superuser" as "is_superuser: bool",
             "is_page_manager" as "is_page_manager: bool",
             "verified" as "verified: bool",
-            "date_joined"
+            "date_joined",
+            "orcid"
         FROM "users"
         WHERE "user_id" = ?
         "#,
@@ -1041,6 +1048,7 @@ pub async fn admin_user_get(req: &Request) -> Result<AdminUserResponse, Error> {
                 verified: row.verified,
                 date_joined: row.date_joined,
                 emails,
+                orcid: row.orcid,
             };
 
             Ok(AdminUserResponse { user })
@@ -1262,6 +1270,7 @@ pub async fn admin_user_create(req: &Request) -> Result<AdminUserResponse, Error
         verified: request.verified,
         date_joined: "now".to_string(),
         emails,
+        orcid: None,
     };
 
     Ok(AdminUserResponse { user })
@@ -1287,7 +1296,8 @@ pub async fn admin_user_update(req: &Request) -> Result<AdminUserResponse, Error
         sqlx::query!(
             r#"UPDATE "users" SET
                 "handle" = ?, "first_name" = ?, "last_name" = ?, "primary_email" = ?,
-                "password" = ?, "is_active" = ?, "is_staff" = ?, "is_page_manager" = ?, "verified" = ?
+                "password" = ?, "is_active" = ?, "is_staff" = ?, "is_page_manager" = ?, "verified" = ?,
+                "orcid" = ?
             WHERE "user_id" = ?"#,
             request.handle,
             request.first_name,
@@ -1298,6 +1308,7 @@ pub async fn admin_user_update(req: &Request) -> Result<AdminUserResponse, Error
             is_staff,
             is_page_manager,
             calculated_verified,
+            request.orcid,
             user_id_str
         )
         .execute(db())
@@ -1306,7 +1317,8 @@ pub async fn admin_user_update(req: &Request) -> Result<AdminUserResponse, Error
         sqlx::query!(
             r#"UPDATE "users" SET
                 "handle" = ?, "first_name" = ?, "last_name" = ?, "primary_email" = ?,
-                "is_active" = ?, "is_staff" = ?, "is_page_manager" = ?, "verified" = ?
+                "is_active" = ?, "is_staff" = ?, "is_page_manager" = ?, "verified" = ?,
+                "orcid" = ?
             WHERE "user_id" = ?"#,
             request.handle,
             request.first_name,
@@ -1316,6 +1328,7 @@ pub async fn admin_user_update(req: &Request) -> Result<AdminUserResponse, Error
             is_staff,
             is_page_manager,
             calculated_verified,
+            request.orcid,
             user_id_str
         )
         .execute(db())
@@ -1352,6 +1365,7 @@ pub async fn admin_user_update(req: &Request) -> Result<AdminUserResponse, Error
                 verified: calculated_verified,
                 date_joined: updated_user.date_joined,
                 emails,
+                orcid: request.orcid,
             };
 
             Ok(AdminUserResponse { user })
@@ -1742,7 +1756,8 @@ pub async fn admin_email_toggle_verified(req: &Request) -> Result<AdminUserRespo
                             "is_superuser" as "is_superuser: bool",
                             "is_page_manager" as "is_page_manager: bool",
                             "verified" as "verified: bool",
-                            "date_joined"
+                            "date_joined",
+                            "orcid"
                         FROM "users"
                         WHERE "user_id" = ?
                         "#,
@@ -1772,6 +1787,7 @@ pub async fn admin_email_toggle_verified(req: &Request) -> Result<AdminUserRespo
                         verified: user_result.verified,
                         date_joined: user_result.date_joined,
                         emails,
+                        orcid: user_result.orcid,
                     };
 
                     Ok(AdminUserResponse { user })

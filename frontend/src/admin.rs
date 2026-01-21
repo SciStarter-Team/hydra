@@ -3108,6 +3108,7 @@ struct EditUserPage {
     active: bool,
     emails: Vec<UserEmail>,
     error_message: Option<String>,
+    orcid: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -3132,6 +3133,7 @@ struct UpdateUserForm {
     role: String,
     #[serde(default)]
     active: bool,
+    orcid: Option<String>,
 }
 
 #[handler]
@@ -3183,6 +3185,7 @@ async fn users_edit(
                 active: admin_user.is_active,
                 emails: admin_user.emails,
                 error_message: None,
+                orcid: admin_user.orcid,
             }
         }
         Err(_e) => {
@@ -3197,6 +3200,7 @@ async fn users_edit(
                 active: true,
                 emails: vec![],
                 error_message: Some("User not found".to_string()),
+                orcid: None,
             }
         }
     };
@@ -3468,6 +3472,7 @@ async fn users_update(
             active: form.active,
             emails: vec![],
             error_message: Some("Email is required".to_string()),
+            orcid: form.orcid,
         };
 
         let prepared = crate::component::AdminLayout::new("Edit User", content)
@@ -3482,6 +3487,9 @@ async fn users_update(
             .body(prepared.render_once()?));
     }
 
+    // Normalize empty ORCID to None
+    let orcid = form.orcid.clone().filter(|o| !o.trim().is_empty());
+
     // Update
     let update_request = AdminUserUpdateRequest {
         user_id: parsed_user_id,
@@ -3493,6 +3501,7 @@ async fn users_update(
         role: form.role.clone(),
         verified: false, // Will be auto-calculated by backend based on email verification
         is_active: form.active,
+        orcid,
     };
 
     match request_with_retry::<AdminUserResponse>("user.admin.user_update", update_request).await {
@@ -3527,6 +3536,7 @@ async fn users_update(
                 active: form.active,
                 emails: vec![],
                 error_message: Some(format!("Failed to update user: {}", e)),
+                orcid: form.orcid,
             };
 
             let prepared = crate::component::AdminLayout::new("Edit User", content)

@@ -270,6 +270,7 @@ pub struct AdminUser {
     pub verified: bool,
     pub date_joined: String,
     pub emails: Vec<UserEmail>,
+    pub orcid: Option<String>,
 }
 
 impl AdminUser {
@@ -349,6 +350,7 @@ pub struct AdminUserUpdateRequest {
     pub role: String,                 // user, page_manager, staff
     pub verified: bool,
     pub is_active: bool,
+    pub orcid: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
