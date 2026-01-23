@@ -276,7 +276,6 @@
             >
             <label for="project-test" class="ml-2 block text-sm text-gray-900">Test Project</label>
             <form class="ml-2 inline-flex" hx-put="/-admin/projects/<%= self.project.id %>/field/is_test" hx-target="this" hx-swap="none">
-              <input type="hidden" name="value" value="false">
               <input type="checkbox" name="value" value="true" <% if self.project.is_test { %>checked<% } %> style="display:none;">
               <button
                   type="submit"
@@ -297,7 +296,6 @@
             >
             <label for="project-duplicate" class="ml-2 block text-sm text-gray-900">Duplicate</label>
             <form class="ml-2 inline-flex" hx-put="/-admin/projects/<%= self.project.id %>/field/duplicate" hx-target="this" hx-swap="none">
-              <input type="hidden" name="value" value="false">
               <input type="checkbox" name="value" value="true" <% if self.project.duplicate { %>checked<% } %> style="display:none;">
               <button
                   type="submit"
