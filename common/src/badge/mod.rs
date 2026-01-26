@@ -61,7 +61,7 @@ impl Badge {
             Badge::OneMillionActsOfScience2024 => "One Million Acts of Science 2024",
             Badge::SciStarterAmbassador => "SciStarter Ambassador",
             Badge::OneMillionActsOfScience2025 => "One Million Acts of Science 2025",
-            Badge::OneMillionActsOfScience2026 => "One Million Acts of Science 2026",
+            Badge::OneMillionActsOfScience2026 => "2.50 Million Acts of Science 2026",
         }
     }
 
@@ -135,7 +135,7 @@ impl Badge {
                 concat!(
                     "https://",
                     env!("DOMAIN"),
-                    "/-static/img/badges/badge-1ma-2025.png"
+                    "/-static/img/badges/badge-acts-2026.png"
                 )
             }
         }
@@ -155,7 +155,7 @@ impl Badge {
             Badge::OneMillionActsOfScience2024 => "img/badges/badge-1ma.png",
             Badge::SciStarterAmbassador => "img/badges/badge-ambassador.png",
             Badge::OneMillionActsOfScience2025 => "img/badges/badge-1ma-2025.png",
-            Badge::OneMillionActsOfScience2026 => "img/badges/badge-1ma-2025.png",
+            Badge::OneMillionActsOfScience2026 => "img/badges/badge-acts-2026.png",
         }
     }
 
@@ -253,7 +253,7 @@ impl Badge {
             Badge::OneMillionActsOfScience2024 => include_str!("one_million_2024.md"),
             Badge::SciStarterAmbassador => include_str!("ambassador.md"),
             Badge::OneMillionActsOfScience2025 => include_str!("one_million_2025.md"),
-            Badge::OneMillionActsOfScience2026 => include_str!("one_million_2025.md"),
+            Badge::OneMillionActsOfScience2026 => include_str!("acts_2026.md"),
         }
     }
 
@@ -295,7 +295,7 @@ impl Badge {
             Badge::OneMillionActsOfScience2024 => &["one million acts", "2024", "participation"],
             Badge::SciStarterAmbassador => &["ambassador", "community", "leadership"],
             Badge::OneMillionActsOfScience2025 => &["one million acts", "2025", "participation"],
-            Badge::OneMillionActsOfScience2026 => &["one million acts", "2025", "participation"],
+            Badge::OneMillionActsOfScience2026 => &["one million acts", "2026", "participation"],
         }
     }
 
@@ -919,6 +919,7 @@ static ALL_BADGES: [Badge; 9] = [
     Badge::OneMillionActsOfScience2024,
     Badge::SciStarterAmbassador,
     Badge::OneMillionActsOfScience2025,
+    Badge::OneMillionActsOfScience2026,
 ];
 
 #[cfg(test)]
