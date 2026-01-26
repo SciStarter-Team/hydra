@@ -1,6 +1,6 @@
 <!-- Project Edit Form Content -->
 <div class="bg-white rounded-lg shadow border border-gray-200">
-  <div class="px-6 py-6 space-y-6">
+  <div class="px-3 sm:px-6 py-4 sm:py-6 space-y-6">
 
     <!-- Publish Status -->
     <%+ PublishStatus { project_id: self.project.id.clone(), published: self.project.published } %>
@@ -42,7 +42,7 @@
                 id="project-name-required"
                 value="<%= self.project.title %>"
                 required
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button
                 type="submit"
@@ -62,7 +62,7 @@
                 id="project-description-required"
                 rows="3"
                 required
-                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             ><%= self.project.description %></textarea>
             <button
                 type="submit"
@@ -83,7 +83,7 @@
                 id="project-goal-required"
                 required
                 value="<%= self.project.goal %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             />
             <button
                 type="submit"
@@ -104,7 +104,7 @@
                 id="project-task-required"
                 required
                 value="<%= self.project.task %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             />
             <button
                 type="submit"
@@ -125,7 +125,7 @@
                 id="project-image-required"
                 value="<%= self.project.image %>"
                 required
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button
                 type="submit"
@@ -145,7 +145,7 @@
                 name="value"
                 id="image-credit"
                 value="<%= self.project.image_credit %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button
                 type="submit"
@@ -165,7 +165,7 @@
                 name="value"
                 id="project-presenter"
                 value="<%= self.project.presenter %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button
                 type="submit"
@@ -189,7 +189,7 @@
             <select
                 name="value"
                 id="project-status"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
               <option value="active"<% if self.project.status == "active" { %> selected<% } %>>Active</option>
               <option value="pending"<% if self.project.status == "pending" { %> selected<% } %>>Pending</option>
@@ -212,7 +212,7 @@
             <select
                 name="value"
                 id="promotion-time"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
               <option value="Promote at any time"<% if self.project.promotion_time == "Promote at any time" { %> selected<% } %>>Promote at any time</option>
               <option value="Do not promote"<% if self.project.promotion_time == "Do not promote" { %> selected<% } %>>Do not promote</option>
@@ -356,7 +356,7 @@
               name="value"
               id="exchange"
               value="<% if let Some(exchange) = &self.project.exchange { %><%= exchange %><% } %>"
-              class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+              class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
           >
           <button 
               type="submit"
@@ -376,7 +376,7 @@
               name="value"
               id="guid"
               value="<%= self.project.guid %>"
-              class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+              class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
           >
           <button
               type="submit"
@@ -409,7 +409,7 @@
                 name="value"
                 id="project-url"
                 value="<%= self.project.url %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -429,7 +429,7 @@
                 name="value"
                 id="video-url"
                 value="<%= self.project.video_url %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -448,7 +448,7 @@
                 name="value"
                 id="blog-url"
                 value="<%= self.project.blog_url %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -468,7 +468,7 @@
                 id="twitter-name"
                 value="<%= self.project.twitter_name %>"
                 placeholder="@username"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -487,7 +487,7 @@
                 name="value"
                 id="facebook-page"
                 value="<%= self.project.facebook_page %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -506,7 +506,7 @@
                 name="value"
                 id="instagram-page"
                 value="<%= self.project.instagram_page %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -543,7 +543,7 @@
                 name="value"
                 id="origin"
                 value="<%= self.project.origin %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button
                 type="submit"
@@ -561,7 +561,7 @@
                 name="value"
                 id="suborigin"
                 value="<%= self.project.suborigin %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button
                 type="submit"
@@ -644,7 +644,7 @@
                 name="value"
                 id="how-to-join"
                 value="<%= self.project.how_to_join %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button
                 type="submit"
@@ -662,7 +662,7 @@
                 name="value"
                 id="signup-url"
                 value="<%= self.project.signup_url %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button
                 type="submit"
@@ -681,7 +681,7 @@
                 name="value"
                 id="total-expense"
                 value="<% if let Some(expense) = &self.project.total_expense { %><%= expense %><% } %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button
                 type="submit"
@@ -700,7 +700,7 @@
                 name="value"
                 id="materials"
                 rows="3"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             ><%= self.project.materials %></textarea>
             <button
                 type="submit"
@@ -719,7 +719,7 @@
                 name="value"
                 id="gear"
                 rows="3"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             ><%= self.project.gear %></textarea>
             <button
                 type="submit"
@@ -743,7 +743,7 @@
                 name="value"
                 id="special-skills"
                 rows="3"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             ><%= self.project.special_skills %></textarea>
             <button
                 type="submit"
@@ -768,7 +768,7 @@
                 name="value"
                 id="participation-degree"
                 value="<%= self.project.participation_degree %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -787,7 +787,7 @@
                 name="value"
                 id="participant-instructions" 
                 rows="4"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             ><%= self.project.participant_instructions %></textarea>
             <button 
                 type="submit"
@@ -805,7 +805,7 @@
                 name="value"
                 id="participant-instructions-email" 
                 rows="3"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             ><%= self.project.participant_instructions_email %></textarea>
             <button 
                 type="submit"
@@ -823,7 +823,7 @@
                 name="value"
                 id="prefix-how-to-logged-in" 
                 rows="3"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             ><%= self.project.prefix_how_to_logged_in %></textarea>
             <button 
                 type="submit"
@@ -841,7 +841,7 @@
                 name="value"
                 id="prefix-how-to-logged-out" 
                 rows="3"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             ><%= self.project.prefix_how_to_logged_out %></textarea>
             <button 
                 type="submit"
@@ -860,7 +860,7 @@
                 name="value"
                 id="howto-video"
                 value="<%= self.project.howto_video %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -879,7 +879,7 @@
                 name="value"
                 id="training-materials"
                 value="<%= self.project.training_materials %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -898,7 +898,7 @@
                 name="value"
                 id="classroom-materials"
                 value="<%= self.project.classroom_materials %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -917,7 +917,7 @@
                 name="value"
                 id="consent-statement"
                 value="<%= self.project.consent_statement %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -936,7 +936,7 @@
                 name="value"
                 id="consent-statement-date"
                 value="<% if let Some(date) = &self.project.consent_statement_date { %><%= date %><% } %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -995,7 +995,7 @@
                 name="value"
                 id="participation-prompt"
                 value="<%= self.project.participation_prompt %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1014,7 +1014,7 @@
                 name="value"
                 id="participation-confirmation-message"
                 value="<%= self.project.participation_confirmation_message %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1033,7 +1033,7 @@
                 name="value"
                 id="participation-notification-email"
                 value="<%= self.project.participation_notification_email %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1052,7 +1052,7 @@
                 name="value"
                 id="participation-usage"
                 value="<%= self.project.participation_usage %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1077,7 +1077,7 @@
                 name="value"
                 id="project-category"
                 value=""
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1106,7 +1106,7 @@
                 name="value"
                 id="opengraph-description" 
                 rows="3"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             ><%= self.project.opengraph_description %></textarea>
             <button 
                 type="submit"
@@ -1157,7 +1157,7 @@
                 name="value"
                 id="practices-how" 
                 rows="3"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             ><%= self.project.practices_how %></textarea>
             <button 
                 type="submit"
@@ -1177,7 +1177,7 @@
                 id="search-terms"
                 value="<%= self.project.search_terms %>"
                 placeholder="comma, separated, terms"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1292,7 +1292,7 @@
                 name="value"
                 id="location-type"
                 value="<%= self.project.location_type %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1311,7 +1311,7 @@
                 name="value"
                 id="united-nations-region"
                 value="<%= self.project.united_nations_region %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1353,7 +1353,7 @@
                 name="value"
                 id="regions"
                 value="<% if let Some(regions) = &self.project.regions { %><%= regions %><% } %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1373,7 +1373,7 @@
                 id="point"
                 value="<% if let Some(point) = &self.project.point { %><%= point %><% } %>"
                 placeholder="lat,lng or GeoJSON"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1391,7 +1391,7 @@
                 name="value"
                 id="regions-description" 
                 rows="2"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             ><%= self.project.regions_description %></textarea>
             <button 
                 type="submit"
@@ -1410,7 +1410,7 @@
                 name="value"
                 id="address"
                 value="<%= self.project.address %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1429,7 +1429,7 @@
                 name="value"
                 id="city"
                 value="<%= self.project.city %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1448,7 +1448,7 @@
                 name="value"
                 id="state"
                 value="<%= self.project.state %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1467,7 +1467,7 @@
                 name="value"
                 id="zip"
                 value="<%= self.project.zip %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1486,7 +1486,7 @@
                 name="value"
                 id="country"
                 value="<%= self.project.country %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1505,7 +1505,7 @@
                 name="value"
                 id="other"
                 value="<%= self.project.other %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1524,7 +1524,7 @@
                 name="value"
                 id="location-name"
                 value="<%= self.project.location_name %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1543,7 +1543,7 @@
                 name="value"
                 id="location-landuse"
                 value="<%= self.project.location_landuse %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1561,7 +1561,7 @@
                 name="value"
                 id="location-description" 
                 rows="2"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             ><%= self.project.location_description %></textarea>
             <button 
                 type="submit"
@@ -1633,7 +1633,7 @@
                 name="value"
                 id="project-timing"
                 value="<%= self.project.project_timing %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1652,7 +1652,7 @@
                 name="value"
                 id="participation-schedule"
                 value="<%= self.project.participation_schedule %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1671,7 +1671,7 @@
                 name="value"
                 id="time-per-participation"
                 value="<%= self.project.time_per_participation %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1690,7 +1690,7 @@
                 name="value"
                 id="time-required"
                 value="<%= self.project.time_required %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1710,7 +1710,7 @@
                 id="year-started"
                 value="<% if let Some(year) = &self.project.year_started { %><%= year %><% } %>"
                 min="1900" max="2100"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1730,7 +1730,7 @@
                 id="year-completed"
                 value="<% if let Some(year) = &self.project.year_completed { %><%= year %><% } %>"
                 min="1900" max="2100"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1750,7 +1750,7 @@
                 id="month-completed"
                 value="<% if let Some(month) = &self.project.month_completed { %><%= month %><% } %>"
                 min="1" max="12"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1833,7 +1833,7 @@
                 name="value"
                 id="data-license"
                 value="<%= self.project.data_license %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1852,7 +1852,7 @@
                 name="value"
                 id="metadata-publication-url"
                 value="<%= self.project.metadata_publication_url %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1871,7 +1871,7 @@
                 name="value"
                 id="data-publication-url"
                 value="<%= self.project.data_publication_url %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1889,7 +1889,7 @@
                 name="value"
                 id="data-results" 
                 rows="3"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             ><%= self.project.data_results %></textarea>
             <button 
                 type="submit"
@@ -1941,7 +1941,7 @@
                 name="value"
                 id="outcomes-label"
                 value="<%= self.project.outcomes_label %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1960,7 +1960,7 @@
                 name="value"
                 id="outcomes-link"
                 value="<%= self.project.outcomes_link %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1979,7 +1979,7 @@
                 name="value"
                 id="university-affiliation"
                 value="<%= self.project.university_affiliation %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -1998,7 +1998,7 @@
                 name="value"
                 id="circuit-id"
                 value="<%= self.project.circuit_id %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -2017,7 +2017,7 @@
                 name="value"
                 id="outcome-other"
                 value="<%= self.project.outcome_other %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -2080,7 +2080,7 @@
                 name="value"
                 id="mobile-app-url-android"
                 value="<%= self.project.mobile_app_url_android %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -2099,7 +2099,7 @@
                 name="value"
                 id="mobile-app-url-ios"
                 value="<%= self.project.mobile_app_url_ios %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -2118,7 +2118,7 @@
                 name="value"
                 id="mobile-app-url"
                 value="<%= self.project.mobile_app_url %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -2203,7 +2203,7 @@
                 name="value"
                 id="inat-project-id"
                 value="<% if let Some(id) = &self.project.inat_project_id { %><%= id %><% } %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -2222,7 +2222,7 @@
                 name="value"
                 id="connect-opaque-url"
                 value="<%= self.project.connect_opaque_url %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -2241,7 +2241,7 @@
                 name="value"
                 id="connect-opaque-url1"
                 value="<%= self.project.connect_opaque_url1 %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -2260,7 +2260,7 @@
                 name="value"
                 id="connect-opaque-url2"
                 value="<%= self.project.connect_opaque_url2 %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
                 type="submit"
@@ -2342,7 +2342,7 @@
                 name="value"
                 id="legacy-v1-id"
                 value="<% if let Some(id) = &self.project.legacy_v1_project_id { %><%= id %><% } %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button
                 type="submit"
@@ -2361,7 +2361,7 @@
                 name="value"
                 id="legacy-v2-id"
                 value="<% if let Some(id) = &self.project.legacy_v2_project_id { %><%= id %><% } %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button
                 type="submit"
@@ -2380,7 +2380,7 @@
                 name="value"
                 id="foreign-id"
                 value="<% if let Some(id) = &self.project.foreign_id { %><%= id %><% } %>"
-                class="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button
                 type="submit"

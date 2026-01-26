@@ -862,7 +862,7 @@ impl Component for EditProjectPage {
 
         AdminLayout::new(&format!("Edit Project: {}", title), content)
             .with_breadcrumb("Projects", Some("/-admin/projects"))
-            .with_breadcrumb(&title, None)
+            .with_breadcrumb_short(&title, "Project", None)
             .with_sidebar_active("projects")
             .prepare(user_info)
             .await

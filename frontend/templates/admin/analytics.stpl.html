@@ -236,13 +236,13 @@
             <h3 class="text-lg font-medium text-gray-900">Recent Verified Signups</h3>
             <p class="text-sm text-gray-500 mt-1">Daily new verified users for the selected date range (up to 14 days shown)</p>
         </div>
-        <div class="p-6">
+        <div class="p-3 sm:p-6">
             <% if !self.recent_signups_chart.is_empty() { %>
                 <% let max_new_users = self.recent_signups_chart.iter().map(|s| s.new_users).max().unwrap_or(1); %>
                 <% let chart_stats: Vec<_> = self.recent_signups_chart.iter().rev().collect(); %>
-                <div class="h-64 flex items-end justify-between gap-1">
+                <div class="h-64 flex items-end justify-between gap-px sm:gap-1">
                     <% for stat in &chart_stats { %>
-                        <div class="flex-1 flex flex-col items-center group">
+                        <div class="w-[6px] sm:flex-1 flex flex-col items-center group">
                             <div class="w-full bg-indigo-600 rounded-t transition-all group-hover:bg-indigo-700"
                                  style="height: <%= if max_new_users > 0 { (stat.new_users as f64 / max_new_users as f64 * 200.0) as i32 } else { 0 } %>px"
                                  title="<%= stat.date %>: <%= stat.new_users %> new verified users">

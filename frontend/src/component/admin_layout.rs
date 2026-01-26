@@ -7,6 +7,7 @@ use std::sync::Arc;
 pub struct Breadcrumb {
     pub label: String,
     pub url: Option<String>,
+    pub short_label: Option<String>,
 }
 
 #[derive(Debug)]
@@ -37,6 +38,7 @@ impl<C: TemplateOnce> AdminLayout<C> {
             breadcrumbs: vec![Breadcrumb {
                 label: "Admin".to_string(),
                 url: Some("/-admin".to_string()),
+                short_label: None,
             }],
             sidebar_active: String::new(),
             content,
@@ -48,6 +50,16 @@ impl<C: TemplateOnce> AdminLayout<C> {
         self.breadcrumbs.push(Breadcrumb {
             label: label.to_string(),
             url: url.map(|s| s.to_string()),
+            short_label: None,
+        });
+        self
+    }
+
+    pub fn with_breadcrumb_short(mut self, label: &str, short_label: &str, url: Option<&str>) -> Self {
+        self.breadcrumbs.push(Breadcrumb {
+            label: label.to_string(),
+            url: url.map(|s| s.to_string()),
+            short_label: Some(short_label.to_string()),
         });
         self
     }

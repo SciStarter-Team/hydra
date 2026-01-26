@@ -1,4 +1,4 @@
-<div id="projects-content">
+<div id="projects-content" class="overflow-x-hidden">
     <!-- Search and Filters -->
     <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 relative">
         <form id="project-search-form" class="relative" onsubmit="return false;">
@@ -25,10 +25,10 @@
                         </button>
                     </div>
                 </div>
-                <div class="flex space-x-3">
+                <div class="flex flex-wrap sm:flex-nowrap gap-2 sm:gap-3">
                     <select
                         name="status"
-                        class="block px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        class="block px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
                         hx-get="/-admin/projects/search"
                         hx-target="#projects-content"
                         hx-trigger="change"
@@ -43,25 +43,25 @@
                     </select>
                     <select
                         name="flagged"
-                        class="block px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        class="block px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
                         hx-get="/-admin/projects/search"
                         hx-target="#projects-content"
                         hx-trigger="change"
                         hx-include="#project-search-form"
                     >
-                        <option value=""<% if self.flagged.is_empty() { %> selected<% } %>>All Flagged Status</option>
+                        <option value=""<% if self.flagged.is_empty() { %> selected<% } %>>Flagged</option>
                         <option value="true"<% if self.flagged == "true" { %> selected<% } %>>Flagged</option>
                         <option value="false"<% if self.flagged == "false" { %> selected<% } %>>Not Flagged</option>
                     </select>
                     <select
                         name="reviewed"
-                        class="block px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        class="block px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
                         hx-get="/-admin/projects/search"
                         hx-target="#projects-content"
                         hx-trigger="change"
                         hx-include="#project-search-form"
                     >
-                        <option value=""<% if self.reviewed.is_empty() { %> selected<% } %>>All Reviewed Status</option>
+                        <option value=""<% if self.reviewed.is_empty() { %> selected<% } %>>Reviewed</option>
                         <option value="true"<% if self.reviewed == "true" { %> selected<% } %>>Reviewed</option>
                         <option value="false"<% if self.reviewed == "false" { %> selected<% } %>>Awaiting Review</option>
                     </select>
@@ -82,7 +82,7 @@
         <div>Actions</div>
     </div>
     
-    <div id="projects-table-body" class="divide-y divide-gray-200">
+    <div id="projects-table-body" class="divide-y divide-gray-200 overflow-x-hidden">
         <% for project in &self.projects { %>
             <%+ ProjectRow { project: project.clone(), oob: false, oob_swap: "".to_string() } %>
         <% } %>
@@ -91,7 +91,7 @@
 
 <!-- Results info and pagination -->
 <div class="px-6 py-3 bg-gray-50 border-t border-gray-200">
-    <div class="flex items-center justify-between">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div class="text-sm text-gray-700">
             <% if self.total_projects == 0 { %>
                 No projects found
@@ -99,10 +99,10 @@
                 Showing <span class="font-medium"><%= self.start_item %></span> to <span class="font-medium"><%= self.end_item %></span> of <span class="font-medium"><%= self.total_projects %></span> results
             <% } %>
         </div>
-        <div class="flex space-x-2">
+        <div class="flex items-center space-x-2">
             <% if self.has_previous { %>
-                <button 
-                    hx-get="<%= self.pagination_url %>?page=<%= self.current_page - 1 %>" 
+                <button
+                    hx-get="<%= self.pagination_url %>?page=<%= self.current_page - 1 %>"
                     hx-target="#projects-content"
                     hx-include="<%= self.pagination_include %>"
                     class="px-3 py-1 bg-white border border-gray-300 text-sm rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -114,8 +114,8 @@
                 Page <%= self.current_page %>
             </span>
             <% if self.has_next { %>
-                <button 
-                    hx-get="<%= self.pagination_url %>?page=<%= self.current_page + 1 %>" 
+                <button
+                    hx-get="<%= self.pagination_url %>?page=<%= self.current_page + 1 %>"
                     hx-target="#projects-content"
                     hx-include="<%= self.pagination_include %>"
                     class="px-3 py-1 bg-white border border-gray-300 text-sm rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"

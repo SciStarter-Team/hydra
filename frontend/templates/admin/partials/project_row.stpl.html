@@ -1,22 +1,22 @@
-<div id="project-row-<%= self.project.id %>" class="flex flex-col lg:grid lg:grid-cols-6 gap-3 lg:gap-4 lg:items-center px-6 py-4 hover:bg-gray-50 transition-colors" <% if self.oob { %>hx-swap-oob="<%= self.oob_swap %>:#project-row-<%= self.project.id %>"<% } %>>
-  
+<div id="project-row-<%= self.project.id %>" class="flex flex-col lg:grid lg:grid-cols-6 gap-3 lg:gap-4 lg:items-center px-6 py-4 hover:bg-gray-50 transition-colors min-w-0" <% if self.oob { %>hx-swap-oob="<%= self.oob_swap %>:#project-row-<%= self.project.id %>"<% } %>>
+
   <!-- Project Name - Always visible, spans full width on mobile -->
-  <div class="lg:col-span-1">
+  <div class="lg:col-span-1 min-w-0">
     <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Project</div>
-    <div class="text-sm font-medium text-gray-900">
+    <div class="text-sm font-medium text-gray-900 break-words">
       <span id="project-name-<%= self.project.id %>"><%= self.project.title %></span>
     </div>
     <% if !self.project.description.is_empty() { %>
-      <div class="text-xs text-gray-500 mt-1 truncate">
+      <div class="hidden lg:block text-xs text-gray-500 mt-1 truncate">
         <%= self.project.description %>
       </div>
     <% } %>
   </div>
-  
+
   <!-- Presenter - Hidden label on desktop, visible on mobile -->
-  <div class="lg:col-span-1">
+  <div class="lg:col-span-1 min-w-0">
     <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Presenter</div>
-    <div class="text-sm text-gray-600">
+    <div class="text-sm text-gray-600 break-words">
       <%= self.project.presenter %>
     </div>
   </div>

@@ -454,7 +454,7 @@ impl Component for EditEventPage {
 
         AdminLayout::new(&format!("Edit Event: {}", title), content)
             .with_breadcrumb("Events", Some("/-admin/events"))
-            .with_breadcrumb(&title, None)
+            .with_breadcrumb_short(&title, "Event", None)
             .with_sidebar_active("events")
             .prepare(user_info)
             .await

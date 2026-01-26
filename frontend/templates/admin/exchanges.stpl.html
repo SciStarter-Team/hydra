@@ -28,48 +28,50 @@
             </div>
         <% } else { %>
             <div class="overflow-hidden shadow ring-1 ring-black ring-opacity-5 rounded-lg">
-                <table class="min-w-full divide-y divide-gray-300">
-                    <thead class="bg-gray-50">
-                        <tr>
-                            <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">Path ID</th>
-                            <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Name</th>
-                            <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Slug</th>
-                            <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Description</th>
-                            <th scope="col" class="relative py-3.5 pl-3 pr-4 sm:pr-6">
-                                <span class="sr-only">Actions</span>
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-200 bg-white">
-                        <% for exchange in &self.exchanges { %>
-                            <tr>
-                                <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
-                                    <%= exchange.path_id %>
-                                </td>
-                                <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-900">
-                                    <%= exchange.name %>
-                                </td>
-                                <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                <!-- Header row (hidden on mobile) -->
+                <div class="hidden lg:grid lg:grid-cols-5 bg-gray-50 px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <div>Path ID</div>
+                    <div>Name</div>
+                    <div>Slug</div>
+                    <div>Description</div>
+                    <div class="text-right">Actions</div>
+                </div>
+                <!-- Data rows -->
+                <div class="divide-y divide-gray-200 bg-white">
+                    <% for exchange in &self.exchanges { %>
+                        <div class="flex flex-col lg:grid lg:grid-cols-5 gap-3 lg:gap-4 px-6 py-4 lg:items-center">
+                            <div>
+                                <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Path ID</div>
+                                <div class="text-sm font-medium text-gray-900"><%= exchange.path_id %></div>
+                            </div>
+                            <div>
+                                <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Name</div>
+                                <div class="text-sm text-gray-900"><%= exchange.name %></div>
+                            </div>
+                            <div>
+                                <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Slug</div>
+                                <div class="text-sm text-gray-500">
                                     <code class="bg-gray-100 px-2 py-1 rounded"><%= exchange.slug %></code>
-                                </td>
-                                <td class="px-3 py-4 text-sm text-gray-500 max-w-md truncate">
-                                    <%= exchange.description %>
-                                </td>
-                                <td class="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6 space-x-3">
-                                    <a href="/exchange/<%= exchange.path_id %>" class="text-indigo-600 hover:text-indigo-900" target="_blank">
-                                        View<span class="sr-only">, <%= exchange.name %></span>
-                                    </a>
-                                    <a href="/-admin/exchanges/<%= exchange.exchange_id |disp %>" class="text-blue-600 hover:text-blue-900">
-                                        Edit<span class="sr-only">, <%= exchange.name %></span>
-                                    </a>
-                                    <a href="/exchange/<%= exchange.path_id %>/org.html" class="text-green-600 hover:text-green-900" target="_blank">
-                                        Settings<span class="sr-only">, <%= exchange.name %></span>
-                                    </a>
-                                </td>
-                            </tr>
-                        <% } %>
-                    </tbody>
-                </table>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Description</div>
+                                <div class="text-sm text-gray-500 lg:truncate"><%= exchange.description %></div>
+                            </div>
+                            <div class="flex flex-wrap gap-3 lg:justify-end">
+                                <a href="/exchange/<%= exchange.path_id %>" class="text-sm font-medium text-indigo-600 hover:text-indigo-900" target="_blank">
+                                    View<span class="sr-only">, <%= exchange.name %></span>
+                                </a>
+                                <a href="/-admin/exchanges/<%= exchange.exchange_id |disp %>" class="text-sm font-medium text-blue-600 hover:text-blue-900">
+                                    Edit<span class="sr-only">, <%= exchange.name %></span>
+                                </a>
+                                <a href="/exchange/<%= exchange.path_id %>/org.html" class="text-sm font-medium text-green-600 hover:text-green-900" target="_blank">
+                                    Settings<span class="sr-only">, <%= exchange.name %></span>
+                                </a>
+                            </div>
+                        </div>
+                    <% } %>
+                </div>
             </div>
         <% } %>
     </div>

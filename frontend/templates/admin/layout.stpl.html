@@ -177,15 +177,15 @@
         <!-- Main Content -->
         <div class="flex-1 flex flex-col lg:ml-64">
             <!-- Top Bar -->
-            <div class="sticky top-0 z-10 bg-white shadow-sm border-b border-gray-200 px-6 py-4 h-16">
+            <div class="sticky top-0 z-10 bg-white shadow-sm border-b border-gray-200 px-3 sm:px-6 py-4 h-16">
                 <div class="flex items-center justify-between h-full">
                     <!-- Breadcrumbs with mobile button -->
-                    <div class="flex items-center flex-1">
+                    <div class="flex items-center flex-1 min-w-0">
                         <!-- Mobile menu button -->
-                        <button @click="sidebarCollapsed = !sidebarCollapsed" class="lg:hidden mr-4 p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100">
+                        <button @click="sidebarCollapsed = !sidebarCollapsed" class="lg:hidden mr-4 p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 flex-shrink-0">
                             <wa-icon name="bars" class="w-6 h-6"></wa-icon>
                         </button>
-                        
+
                         <!-- Breadcrumbs -->
                         <nav class="flex" aria-label="Breadcrumb">
                             <ol class="flex items-center space-x-1">
@@ -202,7 +202,12 @@
                                             </a>
                                         <% } else { %>
                                             <span class="text-sm font-semibold text-gray-900 bg-gray-50 px-2 py-1 rounded-md">
-                                                <%= breadcrumb.label %>
+                                                <% if let Some(short) = &breadcrumb.short_label { %>
+                                                    <span class="sm:hidden"><%= short %></span>
+                                                    <span class="hidden sm:inline"><%= breadcrumb.label %></span>
+                                                <% } else { %>
+                                                    <%= breadcrumb.label %>
+                                                <% } %>
                                             </span>
                                         <% } %>
                                     </li>
@@ -211,36 +216,12 @@
                         </nav>
                     </div>
                     
-                    <!-- Quick Actions -->
-                    <div class="flex items-center space-x-3">
-                        <button 
-                            hx-get="/-admin/notifications"
-                            hx-target="#notification-panel"
-                            hx-swap="innerHTML"
-                            class="p-2 rounded-lg text-gray-400 hover:text-gray-500 hover:bg-gray-100 transition-colors duration-200"
-                            @click="showNotifications = !showNotifications"
-                        >
-                            <wa-icon name="bell" class="w-5 h-5"></wa-icon>
-                            <span class="sr-only">Notifications</span>
-                        </button>
-                        
-                        <button 
-                            hx-get="/-admin/help?section=<%= self.sidebar_active %>"
-                            hx-target="#help-panel-content"
-                            hx-swap="innerHTML"
-                            class="p-2 rounded-lg text-gray-400 hover:text-gray-500 hover:bg-gray-100 transition-colors duration-200"
-                            @click="showHelp = !showHelp"
-                        >
-                            <wa-icon name="question-circle" class="w-5 h-5"></wa-icon>
-                            <span class="sr-only">Help</span>
-                        </button>
-                    </div>
                 </div>
             </div>
             
             <!-- Page Content -->
             <main class="flex-1 bg-gray-50">
-                <div class="max-w-7xl mx-auto px-6 py-8">
+                <div class="max-w-7xl mx-auto px-0 sm:px-6 py-4 sm:py-8">
                     <!-- Dynamic Content -->
                     <div id="main-content">
                         <%+ self.content %>
@@ -250,39 +231,6 @@
         </div>
     </div>
     
-    <!-- Notification Panel -->
-    <div 
-        id="notification-panel" 
-        class="fixed top-16 right-4 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50"
-        x-show="showNotifications"
-        x-transition
-        x-cloak
-    >
-        <!-- HTMX will populate this -->
-    </div>
-    
-    <!-- Help Panel -->
-    <div 
-        class="fixed inset-y-0 right-0 w-96 bg-white shadow-xl border-l border-gray-200 z-50 transform transition-transform duration-300 flex flex-col"
-        x-show="showHelp"
-        x-transition:enter="translate-x-0"
-        x-transition:leave="translate-x-full"
-        x-cloak
-    >
-        <!-- Help Panel Header (stays fixed) -->
-        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
-            <h3 class="text-lg font-semibold text-gray-900">Help</h3>
-            <button @click="showHelp = false" class="p-2 rounded-lg text-gray-400 hover:text-gray-500 hover:bg-gray-100">
-                <wa-icon name="xmark" class="w-5 h-5"></wa-icon>
-                <span class="sr-only">Close help</span>
-            </button>
-        </div>
-        
-        <!-- Help Content (HTMX target) -->
-        <div id="help-panel-content" class="flex-1 overflow-y-auto">
-            <!-- HTMX will populate this -->
-        </div>
-    </div>
     
     <%+ self.footer %>
 
@@ -366,13 +314,11 @@
         function adminApp() {
             return {
                 sidebarCollapsed: window.innerWidth < 1024,
-                showNotifications: false,
-                showHelp: false,
-                
+
                 init() {
                     // Ensure sidebar starts collapsed on mobile
                     this.sidebarCollapsed = window.innerWidth < 1024;
-                    
+
                     // Handle window resize
                     window.addEventListener('resize', () => {
                         if (window.innerWidth >= 1024) {
@@ -381,46 +327,6 @@
                             this.sidebarCollapsed = true;
                         }
                     });
-                    
-                    // Auto-close notifications when clicking outside
-                    this.$watch('showNotifications', (value) => {
-                        if (value) {
-                            this.$nextTick(() => {
-                                document.addEventListener('click', this.closeNotifications);
-                            });
-                        } else {
-                            document.removeEventListener('click', this.closeNotifications);
-                        }
-                    });
-                    
-                    // Auto-close help panel when clicking outside
-                    this.$watch('showHelp', (value) => {
-                        if (value) {
-                            this.$nextTick(() => {
-                                document.addEventListener('click', this.closeHelp);
-                            });
-                        } else {
-                            document.removeEventListener('click', this.closeHelp);
-                        }
-                    });
-                },
-                
-                closeNotifications(event) {
-                    const panel = document.getElementById('notification-panel');
-                    const button = event.target.closest('button[hx-target="#notification-panel"]');
-                    
-                    if (!panel?.contains(event.target) && !button) {
-                        this.showNotifications = false;
-                    }
-                },
-                
-                closeHelp(event) {
-                    const panel = event.target.closest('.fixed.inset-y-0.right-0'); // Help panel container
-                    const button = event.target.closest('button[hx-target="#help-panel-content"]');
-                    
-                    if (!panel && !button) {
-                        this.showHelp = false;
-                    }
                 }
             }
         }
