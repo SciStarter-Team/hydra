@@ -214,7 +214,7 @@ impl Badge {
                 "This badge celebrates participation in the One Million Acts of Science initiative for 2025, contributing to collective scientific discovery and citizen engagement."
             }
             Badge::OneMillionActsOfScience2026 => {
-                "This badge celebrates participation in the 2.50 Million Acts of Science initiative for 2026, contributing to collective scientific discovery and citizen engagement."
+                "The “2.50 Million Acts of Science” badge celebrates the people who made it happen: volunteers whose curiosity and commitment helped advance scientific knowledge worldwide during Citizen Science Month (April 2026). By contributing to SciStarter Affiliate projects or self-reporting Acts on CitizenScienceMonth.org, participants joined a global effort to reach 2.50 Million Acts of Science. This badge is awarded to participants with SciStarter accounts, recognizing their impact as part of a powerful, people-driven science movement."
             }
         }
     }
