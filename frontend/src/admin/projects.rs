@@ -1,24 +1,23 @@
-use crate::component::{admin_layout::AdminLayoutPrepared, AdminLayout, Component};
+use crate::component::{AdminLayout, Component, admin_layout::AdminLayoutPrepared};
 use crate::contact::Contact;
 use crate::entity::{Entity, EntityKind, EntityTarget};
 use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
 use crate::project::all::ProjectAll;
 use crate::project::field::{
-    ProjectField, ProjectFieldType, ProjectFieldValue, ACTIVITIES_VOCABULARY, AUDIENCE_VOCABULARY,
-    DATA_ACCESS_VOCABULARY, DATA_AGGREGATION_VOCABULARY, DATA_CONSENT_VOCABULARY,
-    DIFFICULTY_VOCABULARY, FIELDS_OF_SCIENCE_VOCABULARY, GEOGRAPHIC_SCOPE_VOCABULARY,
-    INTENDED_OUTCOMES_VOCABULARY, PARTICIPATION_TASKS_VOCABULARY, PRACTICES_VOCABULARY,
-    SPONSORS_VOCABULARY, STAKEHOLDERS_VOCABULARY, SUSTAINABLE_DEVELOPMENT_GOALS_VOCABULARY,
-    TOPICS_VOCABULARY,
+    ACTIVITIES_VOCABULARY, AUDIENCE_VOCABULARY, DATA_ACCESS_VOCABULARY,
+    DATA_AGGREGATION_VOCABULARY, DATA_CONSENT_VOCABULARY, DIFFICULTY_VOCABULARY,
+    FIELDS_OF_SCIENCE_VOCABULARY, GEOGRAPHIC_SCOPE_VOCABULARY, INTENDED_OUTCOMES_VOCABULARY,
+    PARTICIPATION_TASKS_VOCABULARY, PRACTICES_VOCABULARY, ProjectField, ProjectFieldType,
+    ProjectFieldValue, SPONSORS_VOCABULARY, STAKEHOLDERS_VOCABULARY,
+    SUSTAINABLE_DEVELOPMENT_GOALS_VOCABULARY, TOPICS_VOCABULARY,
 };
 use common::insensitivestring::InsensitiveString;
 use common::shared::db;
 use common::timestring::TimeString;
 use poem::{
-    delete, get, handler, post, put,
+    Route, delete, get, handler, post, put,
     web::{Form, Path, Query},
-    Route,
 };
 use sailfish::TemplateOnce;
 use serde::Deserialize;
@@ -108,7 +107,7 @@ impl AdminProject {
     /// Format created date and time in human-readable Eastern timezone format
     /// Returns (date_part, time_part) tuple
     pub fn formatted_created_date_time(&self) -> (String, String) {
-        use jiff::{tz::TimeZone, Timestamp};
+        use jiff::{Timestamp, tz::TimeZone};
 
         // Try to parse the created_date string as a Timestamp
         if let Ok(timestamp) = self.created_date.parse::<Timestamp>() {
@@ -1415,7 +1414,7 @@ async fn projects_publish(
 
     if let Some(existing) = existing {
         // Entity exists, update it with publish=true
-        let entity = Entity::with_created(
+        let entity = Entity::new_with_created(
             existing.slug,
             EntityKind::Project,
             EntityTarget::Ulid(project_ulid),
@@ -1525,7 +1524,7 @@ async fn projects_unpublish(
 
     if let Some(existing) = existing {
         // Entity exists, update it with publish=false
-        let entity = Entity::with_created(
+        let entity = Entity::new_with_created(
             existing.slug,
             EntityKind::Project,
             EntityTarget::Ulid(project_ulid),
@@ -3204,7 +3203,7 @@ async fn projects_create(
             .await?;
 
             // Set publish status on entity
-            let entity_with_publish = crate::entity::Entity::with_publish(
+            let entity_with_publish = crate::entity::Entity::new_with_publish(
                 entity.slug(),
                 *entity.kind(),
                 entity.target().clone(),

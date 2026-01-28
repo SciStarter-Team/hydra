@@ -310,7 +310,10 @@ async fn main() -> Result<(), Error> {
 
     let routes = Route::new()
         .at("/favicon.ico", StaticFile::new("favicon.ico"))
-        .at("/apple-touch-icon.png", StaticFile::new("apple-touch-icon.png"))
+        .at(
+            "/apple-touch-icon.png",
+            StaticFile::new("apple-touch-icon.png"),
+        )
         .nest("/-static", StaticFiles::new())
         .nest("/-uploaded", upload::anonymous_routes())
         .nest("/messaging/emailer", emailer::routes())
@@ -1111,7 +1114,7 @@ mod sync {
                     // Continue processing - don't fail the sync for this
                 }
 
-                let entity = Entity::with_publish(
+                let entity = Entity::new_with_publish(
                     data.slug,
                     crate::entity::EntityKind::Project,
                     crate::entity::EntityTarget::Ulid(proj.project_id),
@@ -1457,7 +1460,7 @@ mod sync {
                     // Continue processing - don't fail the sync for this
                 }
 
-                let entity = Entity::with_publish(
+                let entity = Entity::new_with_publish(
                     data.slug,
                     crate::entity::EntityKind::Event,
                     crate::entity::EntityTarget::Ulid(evt.event_id),

@@ -35,9 +35,10 @@ struct FilterOptions {
 }
 
 async fn load_filter_options() -> Result<FilterOptions, Error> {
-    let activity_rows = sqlx::query!("SELECT DISTINCT activity FROM project_activities ORDER BY activity")
-        .fetch_all(common::shared::db())
-        .await?;
+    let activity_rows =
+        sqlx::query!("SELECT DISTINCT activity FROM project_activities ORDER BY activity")
+            .fetch_all(common::shared::db())
+            .await?;
     let activities: Vec<(String, String)> = activity_rows
         .into_iter()
         .map(|r| (r.activity.clone(), r.activity))
@@ -51,9 +52,10 @@ async fn load_filter_options() -> Result<FilterOptions, Error> {
         .map(|r| (r.topic.clone(), r.topic))
         .collect();
 
-    let audience_rows = sqlx::query!("SELECT DISTINCT audience FROM project_audiences ORDER BY audience")
-        .fetch_all(common::shared::db())
-        .await?;
+    let audience_rows =
+        sqlx::query!("SELECT DISTINCT audience FROM project_audiences ORDER BY audience")
+            .fetch_all(common::shared::db())
+            .await?;
     let audiences: Vec<(String, String)> = audience_rows
         .into_iter()
         .map(|r| (r.audience.clone(), r.audience))
@@ -106,7 +108,7 @@ fn build_base_where_clause<'a>(
                     p.image_credit,
                     p.goal,
                     p.task
-                FROM projects p"#
+                FROM projects p"#,
             );
         }
 
@@ -114,11 +116,13 @@ fn build_base_where_clause<'a>(
             r#"
             JOIN projects_fts f ON p.project_id = f.project_id
             LEFT JOIN entities ent ON ent.target = p.project_id AND ent.kind = 'Project'
-            WHERE projects_fts MATCH "#
+            WHERE projects_fts MATCH "#,
         );
 
         // Combine phrases with OR for FTS5
-        let search_query = params.phrase.iter()
+        let search_query = params
+            .phrase
+            .iter()
             .filter(|p| !p.is_empty())
             .map(|p| p.as_str())
             .collect::<Vec<_>>()
@@ -133,7 +137,7 @@ fn build_base_where_clause<'a>(
             AND p.is_test = false
             AND p.project_id NOT IN (
                 SELECT project_id FROM exchange_hidden_projects
-                WHERE exchange_id = "#
+                WHERE exchange_id = "#,
         );
         query_builder.push_bind(exchange_id);
         query_builder.push(")");
@@ -151,7 +155,7 @@ fn build_base_where_clause<'a>(
                     p.image_credit,
                     p.goal,
                     p.task
-                FROM projects p"#
+                FROM projects p"#,
             );
         }
 
@@ -164,7 +168,7 @@ fn build_base_where_clause<'a>(
             AND p.is_test = false
             AND p.project_id NOT IN (
                 SELECT project_id FROM exchange_hidden_projects
-                WHERE exchange_id = "#
+                WHERE exchange_id = "#,
         );
         query_builder.push_bind(exchange_id);
         query_builder.push(")");
@@ -180,7 +184,9 @@ fn apply_search_filters<'a>(
     // Add activity filter
     if let Some(ref activity) = params.activity {
         if !activity.is_empty() {
-            query_builder.push(" AND p.project_id IN (SELECT project_id FROM project_activities WHERE activity = ");
+            query_builder.push(
+                " AND p.project_id IN (SELECT project_id FROM project_activities WHERE activity = ",
+            );
             query_builder.push_bind(activity);
             query_builder.push(")");
         }
@@ -189,7 +195,8 @@ fn apply_search_filters<'a>(
     // Add topic filter
     if let Some(ref topic) = params.topic {
         if !topic.is_empty() {
-            query_builder.push(" AND p.project_id IN (SELECT project_id FROM project_topics WHERE topic = ");
+            query_builder
+                .push(" AND p.project_id IN (SELECT project_id FROM project_topics WHERE topic = ");
             query_builder.push_bind(topic);
             query_builder.push(")");
         }
@@ -197,7 +204,9 @@ fn apply_search_filters<'a>(
 
     // Add audience filters
     if !params.audience.is_empty() {
-        query_builder.push(" AND p.project_id IN (SELECT project_id FROM project_audiences WHERE audience IN (");
+        query_builder.push(
+            " AND p.project_id IN (SELECT project_id FROM project_audiences WHERE audience IN (",
+        );
         let mut separated = query_builder.separated(", ");
         for audience in &params.audience {
             separated.push_bind(audience);
@@ -207,10 +216,7 @@ fn apply_search_filters<'a>(
 }
 
 /// Check if the current user is authorized to manage this exchange
-async fn check_user_authorization(
-    exchange_id: i64,
-    auth: &Authenticated,
-) -> Result<bool, Error> {
+async fn check_user_authorization(exchange_id: i64, auth: &Authenticated) -> Result<bool, Error> {
     if let Some(ref user_info) = auth.0 {
         // Staff and superusers have full access to all exchanges
         if user_info.is_staff || user_info.is_superuser {
@@ -262,7 +268,7 @@ pub struct ProjectSummary {
 /// Full project detail for exchange project pages
 #[derive(Debug, Clone)]
 pub struct ExchangeProjectDetail {
-    pub id: String,  // slug for URL purposes
+    pub id: String, // slug for URL purposes
     pub slug: String,
     pub name: String,
     pub image: String,
@@ -608,9 +614,21 @@ async fn load_exchange_project_detail(
         .collect();
 
     // Convert empty strings to None for optional fields
-    let url = if row.url.is_empty() { None } else { Some(row.url) };
-    let twitter_name = if row.twitter_name.is_empty() { None } else { Some(row.twitter_name) };
-    let facebook_page = if row.facebook_page.is_empty() { None } else { Some(row.facebook_page) };
+    let url = if row.url.is_empty() {
+        None
+    } else {
+        Some(row.url)
+    };
+    let twitter_name = if row.twitter_name.is_empty() {
+        None
+    } else {
+        Some(row.twitter_name)
+    };
+    let facebook_page = if row.facebook_page.is_empty() {
+        None
+    } else {
+        Some(row.facebook_page)
+    };
 
     Ok(ExchangeProjectDetail {
         id: project_slug.to_string(),
@@ -711,14 +729,16 @@ pub async fn exchange_home(
 
     let projects: Vec<ProjectSummary> = rows
         .into_iter()
-        .map(|(_, slug, name, image, image_credit, goal, task)| ProjectSummary {
-            slug,
-            name,
-            image,
-            image_credit,
-            goal,
-            task,
-        })
+        .map(
+            |(_, slug, name, image, image_credit, goal, task)| ProjectSummary {
+                slug,
+                name,
+                image,
+                image_credit,
+                goal,
+                task,
+            },
+        )
         .collect();
 
     // Get total count
@@ -813,14 +833,16 @@ pub async fn exchange_results(
 
     let projects: Vec<ProjectSummary> = rows
         .into_iter()
-        .map(|(_, slug, name, image, image_credit, goal, task)| ProjectSummary {
-            slug,
-            name,
-            image,
-            image_credit,
-            goal,
-            task,
-        })
+        .map(
+            |(_, slug, name, image, image_credit, goal, task)| ProjectSummary {
+                slug,
+                name,
+                image,
+                image_credit,
+                goal,
+                task,
+            },
+        )
         .collect();
 
     // Build count query with same filters
@@ -933,7 +955,10 @@ pub async fn exchange_csv(
 
     Ok(poem::Response::builder()
         .header("Content-Type", "text/csv")
-        .header("Content-Disposition", "attachment; filename=\"projects.csv\"")
+        .header(
+            "Content-Disposition",
+            "attachment; filename=\"projects.csv\"",
+        )
         .body(csv_content))
 }
 
@@ -960,8 +985,18 @@ struct StaffMember {
 impl StaffMember {
     fn to_html(&self, exchange_id: i64) -> String {
         // Use simple HTML entity encoding for quotes and angle brackets
-        let name = self.name.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;");
-        let email = self.email.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;");
+        let name = self
+            .name
+            .replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+            .replace('"', "&quot;");
+        let email = self
+            .email
+            .replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+            .replace('"', "&quot;");
 
         format!(
             r#"<div class="org-item oi-line">
@@ -969,11 +1004,7 @@ impl StaffMember {
                 <p><a href="mailto:{}">{}</a></p>
                 <button type="button" hx-delete="/exchange/{}/staff/{}" hx-target="closest .org-item" hx-swap="outerHTML" class="oi-remove-item oi-actions">remove</button>
             </div>"#,
-            name,
-            email,
-            email,
-            exchange_id,
-            self.user_id
+            name, email, email, exchange_id, self.user_id
         )
     }
 }
@@ -987,7 +1018,12 @@ struct PendingProject {
 
 impl PendingProject {
     fn to_html(&self, exchange_id: i64) -> String {
-        let name = self.name.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;");
+        let name = self
+            .name
+            .replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+            .replace('"', "&quot;");
 
         // Build project URL - use slug if available, otherwise use project_id
         let project_url = if let Some(slug) = &self.slug {
@@ -1004,12 +1040,7 @@ impl PendingProject {
                     <button type="button" style="width: auto; min-width: 80px; height: 32px; padding: 0 12px; line-height: 1;" hx-delete="/exchange/{}/projects/{}/reject" hx-target="closest .org-item" hx-swap="outerHTML" class="el-button el-button--danger">Reject</button>
                 </div>
             </div>"#,
-            project_url,
-            name,
-            exchange_id,
-            self.project_id,
-            exchange_id,
-            self.project_id
+            project_url, name, exchange_id, self.project_id, exchange_id, self.project_id
         )
     }
 }
@@ -1180,7 +1211,8 @@ pub async fn exchange_engagement(
     let exchange_info = ExchangeInfo::load_by_id(exchange_id).await?;
 
     // Parse year from query params
-    let year = params.get("year")
+    let year = params
+        .get("year")
         .and_then(|y| y.parse::<i32>().ok())
         .filter(|y| *y > 0);
 
@@ -1260,7 +1292,9 @@ async fn fetch_project_details(
         .await?;
 
         if let Some(row) = row {
-            let name: String = row.try_get("name").unwrap_or_else(|_| "Unknown Project".to_string());
+            let name: String = row
+                .try_get("name")
+                .unwrap_or_else(|_| "Unknown Project".to_string());
             let description: String = row.try_get("description").unwrap_or_default();
             let image: String = row.try_get("image").unwrap_or_default();
 
@@ -1341,7 +1375,9 @@ pub async fn exchange_admin(
     if !user_ids.is_empty() {
         match request::<common::message::user::UserDetailsBatchGetResponse>(
             "user.admin.user_batch_get",
-            common::message::user::UserDetailsBatchGetRequest { user_ids: user_ids.clone() },
+            common::message::user::UserDetailsBatchGetRequest {
+                user_ids: user_ids.clone(),
+            },
         )
         .await
         {
@@ -1380,11 +1416,13 @@ pub async fn exchange_admin(
     let pending: Vec<PendingProject> = pending_rows
         .into_iter()
         .filter_map(|row| {
-            Ulid::from_string(&row.project_id).ok().map(|project_id| PendingProject {
-                project_id,
-                name: row.name,
-                slug: row.slug,
-            })
+            Ulid::from_string(&row.project_id)
+                .ok()
+                .map(|project_id| PendingProject {
+                    project_id,
+                    name: row.name,
+                    slug: row.slug,
+                })
         })
         .collect();
 
@@ -1622,7 +1660,12 @@ pub async fn create_predefined_search(
 
     let search_id = new_search.search_id;
     let search_name = new_search.name.clone();
-    let phrase = new_search.search_params.phrase.first().cloned().unwrap_or_default();
+    let phrase = new_search
+        .search_params
+        .phrase
+        .first()
+        .cloned()
+        .unwrap_or_default();
 
     exchange.predefined_searches.push(new_search);
     exchange.store().await?;
@@ -1754,9 +1797,12 @@ pub async fn add_exchange_staff(
         .await
         {
             if user_response.found {
-                if let (Some(user_id_str), Some(first_name), Some(last_name), Some(found_email)) =
-                    (user_response.user_id, user_response.first_name, user_response.last_name, user_response.email)
-                {
+                if let (Some(user_id_str), Some(first_name), Some(last_name), Some(found_email)) = (
+                    user_response.user_id,
+                    user_response.first_name,
+                    user_response.last_name,
+                    user_response.email,
+                ) {
                     // Grant permission
                     match request::<()>(
                         "user.permissions.grant",
@@ -1778,7 +1824,8 @@ pub async fn add_exchange_staff(
 
                     // Parse user_id as ULID for display
                     if let Ok(user_ulid) = Ulid::from_string(&user_id_str) {
-                        let display_name = format!("{} {}", first_name, last_name).trim().to_string();
+                        let display_name =
+                            format!("{} {}", first_name, last_name).trim().to_string();
                         let display_name = if display_name.is_empty() {
                             user_response.handle.unwrap_or_default()
                         } else {
@@ -1921,7 +1968,7 @@ pub async fn approve_exchange_project(
     let entity = if let Some(existing) = existing_entity {
         // Update existing entity to publish
         use crate::entity::{Entity, EntityKind, EntityTarget};
-        Entity::with_created(
+        Entity::new_with_created(
             existing.slug,
             EntityKind::Project,
             EntityTarget::Ulid(project_id),
@@ -1931,8 +1978,12 @@ pub async fn approve_exchange_project(
     } else {
         // Create new entity
         use crate::entity::{Entity, EntityKind, EntityTarget};
-        Entity::new_by_name(&project_name, EntityKind::Project, EntityTarget::Ulid(project_id))
-            .await?
+        Entity::new_by_name(
+            &project_name,
+            EntityKind::Project,
+            EntityTarget::Ulid(project_id),
+        )
+        .await?
     };
 
     // Store the entity (this will create or update it with publish = true)
@@ -2081,13 +2132,9 @@ pub async fn exchange_project(
     }
 
     // Load full project data
-    let project = load_exchange_project_detail(
-        &project_id,
-        &project_slug,
-        auth.0.as_ref(),
-        &exchange_info,
-    )
-    .await?;
+    let project =
+        load_exchange_project_detail(&project_id, &project_slug, auth.0.as_ref(), &exchange_info)
+            .await?;
 
     // Split description into paragraphs
     let description: Vec<String> = project
@@ -2181,8 +2228,8 @@ pub async fn vote_project(
     device: Device,
     interaction: Interaction,
 ) -> Result<poem::Response, Error> {
-    use crate::rating::ProjectRating;
     use crate::peering::LoadStorePeered;
+    use crate::rating::ProjectRating;
 
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
     let exchange = ExchangeInfo::load_by_id(exchange_id).await?;

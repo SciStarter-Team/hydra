@@ -415,7 +415,8 @@ async fn entities_update(
 
     // Load existing entity and update fields (convert empty password string to None)
     let password = form.password.filter(|p| !p.trim().is_empty());
-    let updated_entity = Entity::load(slug.clone()).await?
+    let updated_entity = Entity::load(slug.clone())
+        .await?
         .with_kind(kind)
         .with_target(target)
         .with_password(password);
@@ -529,13 +530,7 @@ async fn entities_publish_toggle(
         .await
         .map_err(|_| poem::Error::from_status(poem::http::StatusCode::NOT_FOUND))?;
 
-    // Update the publish field using Entity::with_publish to create a new instance
-    let updated_entity = Entity::with_publish(
-        entity.slug(),
-        *entity.kind(),
-        entity.target().clone(),
-        publish,
-    );
+    let updated_entity = entity.with_publish(publish);
 
     updated_entity
         .store()
@@ -676,27 +671,16 @@ async fn create_target_input_template(
             (None, Some(widget), None, None)
         }
         EntityKind::RawHtml => {
-            let widget = create_pagecontent_widget(
-                current_value,
-                PageContentKind::RawHtml,
-            )
-            .await;
+            let widget = create_pagecontent_widget(current_value, PageContentKind::RawHtml).await;
             (None, None, Some(widget), None)
         }
         EntityKind::DressedHtml => {
-            let widget = create_pagecontent_widget(
-                current_value,
-                PageContentKind::DressedHtml,
-            )
-            .await;
+            let widget =
+                create_pagecontent_widget(current_value, PageContentKind::DressedHtml).await;
             (None, None, Some(widget), None)
         }
         EntityKind::Wysiwyg => {
-            let widget = create_pagecontent_widget(
-                current_value,
-                PageContentKind::Wysiwyg,
-            )
-            .await;
+            let widget = create_pagecontent_widget(current_value, PageContentKind::Wysiwyg).await;
             (None, None, Some(widget), None)
         }
         EntityKind::PageBuilder => {
@@ -735,9 +719,7 @@ async fn create_target_input_template(
             (None, None, None, Some(widget))
         }
         EntityKind::Form => {
-            let widget =
-                create_pagecontent_widget(current_value, PageContentKind::Form)
-                    .await;
+            let widget = create_pagecontent_widget(current_value, PageContentKind::Form).await;
             (None, None, Some(widget), None)
         }
         _ => (None, None, None, None),
@@ -824,8 +806,9 @@ async fn fetch_entities_content(
     let mut entity_list = Vec::new();
     for row in entity_rows {
         let target = parse_database_target(row.kind, &row.target)?;
-        let entity = Entity::with_created(&row.slug, row.kind, target, row.publish, row.created)
-            .with_password(row.password);
+        let entity =
+            Entity::new_with_created(&row.slug, row.kind, target, row.publish, row.created)
+                .with_password(row.password);
         let entity_with_info = create_entity_with_info(&entity).await?;
         entity_list.push(entity_with_info);
     }
@@ -939,6 +922,11 @@ pub fn routes() -> impl Endpoint {
         .at("/search", get(entities_search))
         .at("/new", get(entities_new).post(entities_create))
         .at("/target-input", get(entities_target_input))
-        .at("/edit/*slug", get(entities_edit).post(entities_update).delete(entities_delete))
+        .at(
+            "/edit/*slug",
+            get(entities_edit)
+                .post(entities_update)
+                .delete(entities_delete),
+        )
         .at("/publish/*slug", post(entities_publish_toggle))
 }

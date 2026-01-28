@@ -35,7 +35,9 @@ fn entity_password_session_key(slug: &str) -> String {
 
 /// Check if a session has password authorization for an entity
 pub fn is_password_authorized(session: &poem::session::Session, slug: &str) -> bool {
-    session.get::<bool>(&entity_password_session_key(slug)).unwrap_or(false)
+    session
+        .get::<bool>(&entity_password_session_key(slug))
+        .unwrap_or(false)
 }
 
 /// Grant password authorization for an entity in session
@@ -298,7 +300,12 @@ impl Entity {
     }
 
     #[tracing::instrument(skip(slug))]
-    pub fn with_publish(slug: impl Into<String>, kind: EntityKind, target: EntityTarget, publish: bool) -> Entity {
+    pub fn new_with_publish(
+        slug: impl Into<String>,
+        kind: EntityKind,
+        target: EntityTarget,
+        publish: bool,
+    ) -> Entity {
         Entity {
             slug: slug.into(),
             kind,
@@ -310,7 +317,13 @@ impl Entity {
     }
 
     #[tracing::instrument(skip(slug))]
-    pub fn with_created(slug: impl Into<String>, kind: EntityKind, target: EntityTarget, publish: bool, created: TimeString) -> Entity {
+    pub fn new_with_created(
+        slug: impl Into<String>,
+        kind: EntityKind,
+        target: EntityTarget,
+        publish: bool,
+        created: TimeString,
+    ) -> Entity {
         Entity {
             slug: slug.into(),
             kind,
@@ -466,19 +479,30 @@ impl Entity {
                     use crate::builder::context::{Context, ContextMode};
                     use crate::pagebuilder::{PageBuilderPage, cache};
 
-                    let page = PageBuilderPage::load(ulid).await.map_err(|_| {
-                        poem::Error::from_status(StatusCode::NOT_FOUND)
-                    })?;
+                    let page = PageBuilderPage::load(ulid)
+                        .await
+                        .map_err(|_| poem::Error::from_status(StatusCode::NOT_FOUND))?;
 
                     // Compile with caching (uses timestamp to detect stale cache)
                     let compiled = cache::compile_cached(ulid, &page.source, &page.updated)
-                        .map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR))?;
+                        .map_err(|e| {
+                            poem::Error::from_string(
+                                e.to_string(),
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                            )
+                        })?;
 
                     // Render the page in presenting mode
-                    let ctx = Context::new(db(), &user_info, ContextMode::Presenting)
-                        .map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR))?;
-                    let html = compiled.render(&ctx).await
-                        .map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR))?;
+                    let ctx =
+                        Context::new(db(), &user_info, ContextMode::Presenting).map_err(|e| {
+                            poem::Error::from_string(
+                                e.to_string(),
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                            )
+                        })?;
+                    let html = compiled.render(&ctx).await.map_err(|e| {
+                        poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR)
+                    })?;
 
                     let content_wrapper = ContentPageContent {
                         content: Literal::new(&html),
@@ -548,9 +572,7 @@ impl Entity {
             error,
         };
 
-        let layout = StandardLayout::new(prompt)
-            .prepare(user_info)
-            .await?;
+        let layout = StandardLayout::new(prompt).prepare(user_info).await?;
 
         Ok(EntityPasswordPage {
             head: Head::default().prepare(None).await?,
@@ -609,6 +631,11 @@ impl Entity {
     /// Create a copy of this entity with a different password
     pub fn with_password(self, password: Option<String>) -> Entity {
         Entity { password, ..self }
+    }
+
+    /// Create a copy of this entity with a different publication status
+    pub fn with_publish(self, publish: bool) -> Entity {
+        Entity { publish, ..self }
     }
 
     /// Create a copy of this entity with a different kind
