@@ -62,6 +62,7 @@ pub struct EditEntityPage {
     pub target: String,
     pub target_ulid: Option<Ulid>,
     pub target_input_template: EntityTargetInputTemplate,
+    pub password: Option<String>,
     pub error_message: Option<String>,
 }
 
@@ -85,6 +86,7 @@ pub struct EntityWithInfo {
     pub target: String,
     pub target_info: Option<String>,
     pub published: bool,
+    pub password: Option<String>,
 }
 
 #[derive(Debug)]
@@ -94,6 +96,7 @@ struct EntityDbRow {
     target: String,
     publish: bool,
     created: common::timestring::TimeString,
+    password: Option<String>,
 }
 
 // Query and form types
@@ -110,6 +113,7 @@ pub struct UpdateEntityForm {
     pub slug: String,
     pub kind: String,
     pub target: Option<String>,
+    pub password: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -319,6 +323,7 @@ async fn entities_edit(
         target: entity.target().to_string(),
         target_ulid,
         target_input_template,
+        password: entity.password().map(|s| s.to_string()),
         error_message: None,
     };
 
@@ -357,6 +362,7 @@ async fn entities_update(
                 target: form.target.unwrap_or_default(),
                 target_ulid,
                 target_input_template,
+                password: form.password,
                 error_message: Some(format!("Invalid entity kind: {}", e)),
             };
 
@@ -386,10 +392,11 @@ async fn entities_update(
 
             let content = EditEntityPage {
                 slug: slug.clone(),
-                kind: form.kind,
+                kind: form.kind.clone(),
                 target: form.target.unwrap_or_default(),
                 target_ulid,
                 target_input_template,
+                password: form.password,
                 error_message: Some(format!("Invalid target: {}", e)),
             };
 
@@ -406,7 +413,12 @@ async fn entities_update(
         }
     };
 
-    let updated_entity = Entity::new(&slug, kind, target);
+    // Load existing entity and update fields (convert empty password string to None)
+    let password = form.password.filter(|p| !p.trim().is_empty());
+    let updated_entity = Entity::load(slug.clone()).await?
+        .with_kind(kind)
+        .with_target(target)
+        .with_password(password);
     match updated_entity.store().await {
         Ok(_) => {
             if let Some(user_info) = &user_info {
@@ -440,6 +452,7 @@ async fn entities_update(
                 target: entity.target().to_string(),
                 target_ulid,
                 target_input_template,
+                password: entity.password().map(|s| s.to_string()),
                 error_message: Some(format!("Error saving entity: {}", e)),
             };
 
@@ -779,7 +792,7 @@ async fn fetch_entities_content(
 
     let all_rows = sqlx::query_as!(
         EntityDbRow,
-        r#"SELECT "slug", "kind" as "kind: EntityKind", "target", "publish", "created" as "created: common::timestring::TimeString" FROM "entities" ORDER BY "created" DESC"#
+        r#"SELECT "slug", "kind" as "kind: EntityKind", "target", "publish", "created" as "created: common::timestring::TimeString", "password" FROM "entities" ORDER BY "created" DESC"#
     ).fetch_all(db()).await?;
 
     let filtered_rows: Vec<_> = all_rows
@@ -811,7 +824,8 @@ async fn fetch_entities_content(
     let mut entity_list = Vec::new();
     for row in entity_rows {
         let target = parse_database_target(row.kind, &row.target)?;
-        let entity = Entity::with_created(&row.slug, row.kind, target, row.publish, row.created);
+        let entity = Entity::with_created(&row.slug, row.kind, target, row.publish, row.created)
+            .with_password(row.password);
         let entity_with_info = create_entity_with_info(&entity).await?;
         entity_list.push(entity_with_info);
     }
@@ -913,6 +927,7 @@ async fn create_entity_with_info(entity: &Entity) -> Result<EntityWithInfo, anyh
         target: entity.target().to_string(),
         target_info,
         published: entity.publish(),
+        password: entity.password().map(|s| s.to_string()),
     })
 }
 

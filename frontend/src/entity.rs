@@ -17,11 +17,51 @@ use crate::{
     peering::LoadStorePeered,
 };
 
+/// Result of checking entity access permissions
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EntityAccessResult {
+    /// Full access granted
+    Granted,
+    /// Entity has a password set and user needs to enter it
+    PasswordRequired,
+    /// No access (return 404)
+    Denied,
+}
+
+/// Generate session key for password authorization of an entity
+fn entity_password_session_key(slug: &str) -> String {
+    format!("entity_pw_{}", slug.to_lowercase())
+}
+
+/// Check if a session has password authorization for an entity
+pub fn is_password_authorized(session: &poem::session::Session, slug: &str) -> bool {
+    session.get::<bool>(&entity_password_session_key(slug)).unwrap_or(false)
+}
+
+/// Grant password authorization for an entity in session
+pub fn grant_password_authorization(session: &poem::session::Session, slug: &str) {
+    session.set(&entity_password_session_key(slug), true);
+}
+
 #[derive(sailfish::TemplateOnce)]
 #[template(path = "pages/content.stpl.html")]
 struct ContentPage<'a> {
     head: <Head as Component>::Prepared,
     layout: <StandardLayout<ContentPageContent<'a>> as Component>::Prepared,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "pages/entity_password.stpl.html")]
+pub struct EntityPasswordPage {
+    pub head: <Head as Component>::Prepared,
+    pub layout: <StandardLayout<EntityPasswordPrompt> as Component>::Prepared,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "pages/entity_password_prompt.stpl.html")]
+pub struct EntityPasswordPrompt {
+    pub slug: String,
+    pub error: bool,
 }
 
 #[derive(sailfish::TemplateOnce)]
@@ -111,6 +151,7 @@ pub struct Entity {
     target: EntityTarget,
     publish: bool,
     created: TimeString,
+    password: Option<String>,
 }
 
 #[derive(sailfish::TemplateOnce)]
@@ -127,6 +168,7 @@ struct EntityDB {
     target: String,
     publish: bool,
     created: TimeString,
+    password: Option<String>,
 }
 
 impl TryFrom<EntityDB> for Entity {
@@ -162,70 +204,84 @@ impl TryFrom<EntityDB> for Entity {
             target,
             publish: value.publish,
             created: value.created,
+            password: value.password,
         })
     }
 }
 
 /// Check if a user can access an unpublished entity
-/// Returns true if:
-/// - Entity is published (everyone can access)
-/// - User is staff/superuser (can access all unpublished entities)
-/// - User is a page manager for the entity's target (project/event)
-async fn can_user_access_entity(entity: &Entity, user_info: Option<&BasicInfo>) -> Result<bool, Error> {
+/// Returns:
+/// - Granted if user has full access
+/// - PasswordRequired if entity has a password and user hasn't entered it yet
+/// - Denied if no access (return 404)
+async fn check_entity_access(
+    entity: &Entity,
+    user_info: Option<&BasicInfo>,
+    password_authorized: bool,
+) -> Result<EntityAccessResult, Error> {
     // Published entities are accessible to everyone
     if entity.publish {
-        return Ok(true);
+        return Ok(EntityAccessResult::Granted);
     }
 
-    // Unpublished entities require authentication
-    let Some(user_info) = user_info else {
-        return Ok(false);
-    };
-
-    // Staff and superusers can access all unpublished entities
-    if user_info.is_staff || user_info.is_superuser {
-        return Ok(true);
-    }
-
-    // Check if user is a page manager for this entity's target
-    match (&entity.kind, &entity.target) {
-        (EntityKind::Project, EntityTarget::Ulid(project_id)) => {
-            let user_id_str = user_info.user_id.to_string();
-            let project_id_str = project_id.to_string();
-
-            let is_manager = sqlx::query_scalar!(
-                r#"SELECT EXISTS(
-                    SELECT 1 FROM project_page_editors
-                    WHERE project_id = ? AND user_id = ?
-                ) as "exists: bool""#,
-                project_id_str,
-                user_id_str
-            )
-            .fetch_one(db())
-            .await?;
-
-            Ok(is_manager)
+    // Check if user is staff/superuser
+    if let Some(user_info) = user_info {
+        if user_info.is_staff || user_info.is_superuser {
+            return Ok(EntityAccessResult::Granted);
         }
-        (EntityKind::Event, EntityTarget::Ulid(event_id)) => {
-            let user_id_str = user_info.user_id.to_string();
-            let event_id_str = event_id.to_string();
 
-            let is_manager = sqlx::query_scalar!(
-                r#"SELECT EXISTS(
-                    SELECT 1 FROM event_page_editors
-                    WHERE event_id = ? AND user_id = ?
-                ) as "exists: bool""#,
-                event_id_str,
-                user_id_str
-            )
-            .fetch_one(db())
-            .await?;
+        // Check if user is a page manager for this entity's target
+        let is_manager = match (&entity.kind, &entity.target) {
+            (EntityKind::Project, EntityTarget::Ulid(project_id)) => {
+                let user_id_str = user_info.user_id.to_string();
+                let project_id_str = project_id.to_string();
 
-            Ok(is_manager)
+                sqlx::query_scalar!(
+                    r#"SELECT EXISTS(
+                        SELECT 1 FROM project_page_editors
+                        WHERE project_id = ? AND user_id = ?
+                    ) as "exists: bool""#,
+                    project_id_str,
+                    user_id_str
+                )
+                .fetch_one(db())
+                .await?
+            }
+            (EntityKind::Event, EntityTarget::Ulid(event_id)) => {
+                let user_id_str = user_info.user_id.to_string();
+                let event_id_str = event_id.to_string();
+
+                sqlx::query_scalar!(
+                    r#"SELECT EXISTS(
+                        SELECT 1 FROM event_page_editors
+                        WHERE event_id = ? AND user_id = ?
+                    ) as "exists: bool""#,
+                    event_id_str,
+                    user_id_str
+                )
+                .fetch_one(db())
+                .await?
+            }
+            _ => false,
+        };
+
+        if is_manager {
+            return Ok(EntityAccessResult::Granted);
         }
-        // Other entity kinds don't have page managers, only staff can access
-        _ => Ok(false),
     }
+
+    // User doesn't have role-based access. Check if entity has a password.
+    if entity.password.is_some() {
+        // If password has been authorized via session, grant access
+        if password_authorized {
+            return Ok(EntityAccessResult::Granted);
+        }
+        // Otherwise, prompt for password
+        return Ok(EntityAccessResult::PasswordRequired);
+    }
+
+    // No password, no access
+    Ok(EntityAccessResult::Denied)
 }
 
 impl Entity {
@@ -237,6 +293,7 @@ impl Entity {
             target,
             publish: true,
             created: TimeString::now(),
+            password: None,
         }
     }
 
@@ -248,6 +305,7 @@ impl Entity {
             target,
             publish,
             created: TimeString::now(),
+            password: None,
         }
     }
 
@@ -259,6 +317,7 @@ impl Entity {
             target,
             publish,
             created,
+            password: None,
         }
     }
 
@@ -321,14 +380,23 @@ impl Entity {
         Ok(Entity::new(slug, kind, target))
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(session))]
     pub async fn response(
         &self,
         user_info: Option<Arc<BasicInfo>>,
+        session: &poem::session::Session,
     ) -> poem::Result<poem::Response> {
         // Check access permissions for unpublished entities
-        if !can_user_access_entity(self, user_info.as_deref()).await? {
-            return Err(poem::Error::from_status(StatusCode::NOT_FOUND));
+        let password_authorized = is_password_authorized(session, &self.slug);
+        match check_entity_access(self, user_info.as_deref(), password_authorized).await? {
+            EntityAccessResult::Granted => {}
+            EntityAccessResult::PasswordRequired => {
+                // Show password prompt page
+                return self.password_prompt_response(user_info, false).await;
+            }
+            EntityAccessResult::Denied => {
+                return Err(poem::Error::from_status(StatusCode::NOT_FOUND));
+            }
         }
 
         Ok(match self.kind {
@@ -468,16 +536,41 @@ impl Entity {
         })
     }
 
-    #[tracing::instrument(skip(slug))]
+    /// Render the password prompt page for this entity
+    #[tracing::instrument]
+    pub async fn password_prompt_response(
+        &self,
+        user_info: Option<Arc<BasicInfo>>,
+        error: bool,
+    ) -> poem::Result<poem::Response> {
+        let prompt = EntityPasswordPrompt {
+            slug: self.slug.clone(),
+            error,
+        };
+
+        let layout = StandardLayout::new(prompt)
+            .prepare(user_info)
+            .await?;
+
+        Ok(EntityPasswordPage {
+            head: Head::default().prepare(None).await?,
+            layout,
+        }
+        .into_response(None)
+        .await?)
+    }
+
+    #[tracing::instrument(skip(slug, session))]
     pub async fn response_for_slug(
         slug: impl AsRef<str>,
         user_info: Option<Arc<BasicInfo>>,
+        session: &poem::session::Session,
     ) -> poem::Result<poem::Response> {
         // This as_ref().to_string() silliness is due to the issue
         // mentioned in peering.rs forcing us to use String instead of
         // &str as the key type.
         match Entity::load(slug.as_ref().to_string()).await {
-            Ok(ent) => ent.response(user_info).await,
+            Ok(ent) => ent.response(user_info, session).await,
             Err(err) => match err.downcast_ref::<sqlx::Error>() {
                 Some(sqlx_err) => match sqlx_err {
                     sqlx::Error::RowNotFound => Ok(StatusCode::NOT_FOUND.into()),
@@ -503,6 +596,29 @@ impl Entity {
 
     pub fn publish(&self) -> bool {
         self.publish
+    }
+
+    pub fn password(&self) -> Option<&str> {
+        self.password.as_deref()
+    }
+
+    pub fn created(&self) -> &TimeString {
+        &self.created
+    }
+
+    /// Create a copy of this entity with a different password
+    pub fn with_password(self, password: Option<String>) -> Entity {
+        Entity { password, ..self }
+    }
+
+    /// Create a copy of this entity with a different kind
+    pub fn with_kind(self, kind: EntityKind) -> Entity {
+        Entity { kind, ..self }
+    }
+
+    /// Create a copy of this entity with a different target
+    pub fn with_target(self, target: EntityTarget) -> Entity {
+        Entity { target, ..self }
     }
 
     /// Check if an entity slug exists in the database (case-insensitive)
@@ -536,7 +652,8 @@ impl LoadStorePeered for Entity {
                  "kind" as "kind: EntityKind",
                  "target",
                  "publish",
-                 "created" as "created: TimeString"
+                 "created" as "created: TimeString",
+                 "password"
                from "entities"
                where LOWER("slug") = LOWER(?)"#,
             slug,
@@ -580,14 +697,16 @@ impl LoadStorePeered for Entity {
                  "kind",
                  "target",
                  "publish",
-                 "created"
+                 "created",
+                 "password"
                )
                values (
                  ?1,
                  ?2,
                  ?3,
                  ?4,
-                 ?5
+                 ?5,
+                 ?6
                )
             "#,
             self.slug,
@@ -595,6 +714,7 @@ impl LoadStorePeered for Entity {
             target,
             self.publish,
             self.created,
+            self.password,
         )
         .execute(db())
         .await?;

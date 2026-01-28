@@ -909,7 +909,7 @@ static ONE_MILLION_2025_ALIGNMENTS: [Alignment; 9] = [
     },
 ];
 
-static ALL_BADGES: [Badge; 9] = [
+static ALL_BADGES: [Badge; 10] = [
     Badge::FoundationsOfCitizenScience,
     Badge::LibrariesAsHubsForCitizenScience,
     Badge::BuildingDataLiteracyThroughCommunityAndCitizenScience,

@@ -54,7 +54,7 @@ use poem::{
     middleware::{ForceHttps, NormalizePath, SetHeader, TrailingSlash},
     post,
     session::{CookieConfig, ServerSession},
-    web::{Path, Redirect, cookie::SameSite},
+    web::{Form, Path, Redirect, cookie::SameSite},
 };
 use project::{all::ProjectAll, field::ProjectField};
 use rust_embed::Embed;
@@ -95,13 +95,46 @@ type StaticFile = EmbeddedFileEndpoint<Static>;
 async fn entity_page(
     poem::web::RealIp(client_ip): poem::web::RealIp,
     Authenticated(user_info): Authenticated,
+    session: &poem::session::Session,
     Path(slug): Path<String>,
 ) -> poem::Result<poem::Response> {
     if &slug == "" {
         Ok(index_page_pseudo_handler(client_ip, user_info).await?)
     } else {
-        Entity::response_for_slug(slug, user_info).await
+        Entity::response_for_slug(slug, user_info, session).await
     }
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct EntityPasswordForm {
+    password: String,
+}
+
+#[handler]
+#[tracing::instrument]
+async fn entity_password_verify(
+    Authenticated(user_info): Authenticated,
+    session: &poem::session::Session,
+    Path(slug): Path<String>,
+    Form(form): Form<EntityPasswordForm>,
+) -> poem::Result<poem::Response> {
+    // Load the entity
+    let entity = match Entity::load(slug.clone()).await {
+        Ok(e) => e,
+        Err(_) => return Err(poem::Error::from_status(poem::http::StatusCode::NOT_FOUND)),
+    };
+
+    // Check if the password matches
+    if let Some(correct_password) = entity.password() {
+        if form.password == correct_password {
+            // Password correct - grant access in session and redirect to entity
+            entity::grant_password_authorization(session, &slug);
+            return Ok(Redirect::see_other(format!("/{}", slug)).into_response());
+        }
+    }
+
+    // Password incorrect - show error
+    entity.password_prompt_response(user_info, true).await
 }
 
 #[tracing::instrument]
@@ -208,6 +241,7 @@ fn user_facing() -> impl Endpoint {
         .nest("/badges", badge::routes())
         .nest("/evolveme", evolveme::routes())
         .nest("/exchange", exchange::routes())
+        .at("/-entity-password/*slug", post(entity_password_verify))
         .at("/*slug", get(entity_page))
         .with(middleware::analytics::AnalyticsMiddleware)
 }
