@@ -42,15 +42,18 @@ pub async fn index_page(
         .await
         .unwrap_or_default();
 
-    let layout = StandardLayout::new(IndexPageContent {
-        user_info: user_info.clone(),
-        featured_items,
-    })
+    let layout = StandardLayout::new(
+        "/",
+        IndexPageContent {
+            user_info: user_info.clone(),
+            featured_items,
+        },
+    )
     .prepare(user_info.clone())
     .await?;
 
     IndexPage {
-        head: Head::default().prepare(None).await?,
+        head: Head::default().with_slick().prepare(None).await?,
         layout,
     }
     .into_response(None)
@@ -75,15 +78,18 @@ pub async fn index_page_pseudo_handler(
         .await
         .unwrap_or_default();
 
-    let layout = StandardLayout::new(IndexPageContent {
-        user_info: user_info.clone(),
-        featured_items,
-    })
+    let layout = StandardLayout::new(
+        "/",
+        IndexPageContent {
+            user_info: user_info.clone(),
+            featured_items,
+        },
+    )
     .prepare(user_info.clone())
     .await?;
 
     IndexPage {
-        head: Head::default().prepare(None).await?,
+        head: Head::default().with_slick().prepare(None).await?,
         layout,
     }
     .into_response(None)

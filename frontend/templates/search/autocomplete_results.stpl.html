@@ -1,0 +1,11 @@
+<% if !self.results.is_empty() { %>
+<div class="bg-white shadow-lg max-h-80 rounded-md py-1 text-base ring-1 ring-black/10 overflow-y-auto overflow-x-hidden">
+    <% for result in &self.results { %>
+    <a href="/<%= result.slug %>"
+       class="block px-4 py-3 hover:bg-primary-light border-b border-gray-100 last:border-b-0 text-primary-dark no-underline overflow-hidden">
+        <div class="font-medium break-words whitespace-normal"><%= result.title %></div>
+        <div class="text-xs text-gray-500"><%= result.entity_type %></div>
+    </a>
+    <% } %>
+</div>
+<% } %>

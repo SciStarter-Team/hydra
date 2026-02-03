@@ -1,8 +1,19 @@
-wa-input::part(input) {
-  @apply bg-primary-light border border-linework text-primary-dark px-4 py-3;
-  border-radius: 4px;
+:root {
+  --wa-form-control-required-content-color: var(--color-red-500);
 }
+
+wa-input::part(base) {
+    @apply border border-gray-300 text-primary-dark;
+    border-radius: 4px;
+}
+
+wa-input::part(input) {
+    @apply px-4 py-3;
+    background: transparent;
+    border: none;
+}
+
 wa-input::part(label) {
-  color: #333;
-  font-weight: bold;
+    color: #333;
+    font-weight: bold;
 }

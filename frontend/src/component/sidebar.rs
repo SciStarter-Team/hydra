@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use common::message::user::BasicInfo;
+use common::message::user::{BasicInfo, UserInfo};
 
 use super::Component;
 
@@ -12,11 +12,13 @@ impl Component for Sidebar {
 
     type Prepared = SidebarPrepared;
 
-    async fn prepare(self, _param: Self::Param) -> Result<Self::Prepared, anyhow::Error> {
-        Ok(SidebarPrepared {})
+    async fn prepare(self, param: Self::Param) -> Result<Self::Prepared, anyhow::Error> {
+        Ok(SidebarPrepared { basic_info: param })
     }
 }
 
 #[derive(sailfish::TemplateOnce)]
 #[template(path = "site/sidebar.stpl.html")]
-pub struct SidebarPrepared {}
+pub struct SidebarPrepared {
+    basic_info: Option<Arc<BasicInfo>>,
+}

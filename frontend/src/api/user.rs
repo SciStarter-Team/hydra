@@ -1,19 +1,18 @@
 use crate::component::{Component, Head, StandardLayout};
 use crate::middleware::authorization::Authenticated;
 use anyhow::Error;
-use poem::{handler, IntoResponse, Response};
-use sailfish::TemplateOnce;
 use common::message::user::{UserApiKeyRequest, UserApiKeyResponse};
 use common::service::request;
+use poem::{IntoResponse, Response, handler};
+use sailfish::TemplateOnce;
 
 /// Display user's API key page (user-facing, not admin)
 /// GET /api/key
 /// Requires authentication (handled by AuthMiddleware)
 #[handler]
-pub async fn api_key_page(
-    Authenticated(user_info): Authenticated,
-) -> Result<Response, Error> {
-    let user = user_info.as_ref()
+pub async fn api_key_page(Authenticated(user_info): Authenticated) -> Result<Response, Error> {
+    let user = user_info
+        .as_ref()
         .ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
 
     // Get the user's API key from user-service
@@ -21,14 +20,15 @@ pub async fn api_key_page(
         "user.api_key.get",
         UserApiKeyRequest {
             user_id: user.user_id.to_string(),
-        }
-    ).await?;
+        },
+    )
+    .await?;
 
     let content = ApiKeyContent {
         api_key: response.api_key,
     };
 
-    let layout = StandardLayout::new(content)
+    let layout = StandardLayout::new("/api/key", content)
         .prepare(user_info.clone())
         .await?;
 
@@ -56,9 +56,7 @@ struct ApiKeyContent {
 /// Delete user account with confirmation
 /// POST /api/delete
 #[handler]
-pub async fn delete_account(
-    Authenticated(_user_info): Authenticated,
-) -> Result<Response, Error> {
+pub async fn delete_account(Authenticated(_user_info): Authenticated) -> Result<Response, Error> {
     // TODO: Implement account deletion
     // Need to:
     // 1. Delete user's entities (projects/events they own)
@@ -67,7 +65,8 @@ pub async fn delete_account(
     // 4. Redirect to homepage
 
     // For now, return a placeholder response
-    Ok(poem::web::Html(r#"
+    Ok(poem::web::Html(
+        r#"
     <html>
       <head>
         <title>Account Deletion Not Yet Implemented</title>
@@ -79,5 +78,7 @@ pub async fn delete_account(
         <a href="/">Return to homepage</a>
       </body>
     </html>
-    "#).into_response())
+    "#,
+    )
+    .into_response())
 }

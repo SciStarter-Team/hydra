@@ -17,10 +17,6 @@ use crate::{
     component::{Component, Head, StandardLayout},
 };
 
-// ============================================================================
-// Routes
-// ============================================================================
-
 pub fn routes() -> impl Endpoint {
     Route::new()
         .at("/bounce", post(handle_bounce))
@@ -31,10 +27,6 @@ pub fn routes() -> impl Endpoint {
         )
         .at("/open", get(track_open))
 }
-
-// ============================================================================
-// AWS SNS Notification Structures
-// ============================================================================
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -251,9 +243,12 @@ async fn show_unsubscribe(Query(params): Query<UnsubscribeParams>) -> Result<Res
         None
     };
 
-    let layout = StandardLayout::new(UnsubscribeContent { email })
-        .prepare(None)
-        .await?;
+    let layout = StandardLayout::new(
+        "/messaging/emailer/unsubscribe",
+        UnsubscribeContent { email },
+    )
+    .prepare(None)
+    .await?;
 
     #[derive(sailfish::TemplateOnce)]
     #[template(path = "emailer/unsubscribe.stpl.html")]
@@ -301,9 +296,12 @@ async fn process_unsubscribe(Query(params): Query<UnsubscribeParams>) -> Result<
     // Show success page
     let email_display = if email.is_empty() { None } else { Some(email) };
 
-    let layout = StandardLayout::new(UnsubscribedContent {
-        email: email_display,
-    })
+    let layout = StandardLayout::new(
+        "/messaging/emailer/unsubscribe",
+        UnsubscribedContent {
+            email: email_display,
+        },
+    )
     .prepare(None)
     .await?;
 
@@ -346,8 +344,11 @@ async fn track_open(Query(params): Query<UnsubscribeParams>) -> Response {
             use common::message::user::{UserEmailInfo, UserEmailInfoRequest};
             use common::service::request;
 
-            if let Ok(user) =
-                request::<UserEmailInfo>("user.info.email_info", UserEmailInfoRequest { user_id: uid }).await
+            if let Ok(user) = request::<UserEmailInfo>(
+                "user.info.email_info",
+                UserEmailInfoRequest { user_id: uid },
+            )
+            .await
             {
                 // Send open event to emailer service
                 let open_event = OpenEvent {

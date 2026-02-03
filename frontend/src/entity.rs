@@ -436,7 +436,7 @@ impl Entity {
                         content: Literal::new(content.as_utf8()?),
                     };
 
-                    let layout = StandardLayout::new(content_wrapper)
+                    let layout = StandardLayout::new(format!("/{}", &self.slug), content_wrapper)
                         .prepare(user_info.clone())
                         .await?;
 
@@ -460,7 +460,7 @@ impl Entity {
                         content: Literal::new(&html),
                     };
 
-                    let layout = StandardLayout::new(content_wrapper)
+                    let layout = StandardLayout::new(format!("/{}", &self.slug), content_wrapper)
                         .prepare(user_info.clone())
                         .await?;
 
@@ -508,7 +508,7 @@ impl Entity {
                         content: Literal::new(&html),
                     };
 
-                    let layout = StandardLayout::new(content_wrapper)
+                    let layout = StandardLayout::new(format!("/{}", &self.slug), content_wrapper)
                         .prepare(user_info.clone())
                         .await?;
 
@@ -540,7 +540,7 @@ impl Entity {
                 let prepared_content = wordpress_content.prepare(user_info.clone()).await?;
                 let title = prepared_content.title.clone();
 
-                let layout = StandardLayout::new(prepared_content)
+                let layout = StandardLayout::new(format!("/{}", &self.slug), prepared_content)
                     .prepare(user_info.clone())
                     .await?;
 
@@ -553,7 +553,7 @@ impl Entity {
                 .await?
             }
             EntityKind::Placeholder => {
-                StandardLayout::new(Placeholder)
+                StandardLayout::new(format!("/{}", &self.slug), Placeholder)
                     .into_response(user_info)
                     .await?
             }
@@ -572,7 +572,9 @@ impl Entity {
             error,
         };
 
-        let layout = StandardLayout::new(prompt).prepare(user_info).await?;
+        let layout = StandardLayout::new(format!("/{}", &self.slug), prompt)
+            .prepare(user_info)
+            .await?;
 
         Ok(EntityPasswordPage {
             head: Head::default().prepare(None).await?,

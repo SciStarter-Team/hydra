@@ -58,6 +58,10 @@ impl UserInfo for Authenticated {
     fn is_superuser(&self) -> bool {
         self.0.as_ref().map(|i| i.is_superuser()).unwrap_or(false)
     }
+
+    fn has_handle(&self) -> bool {
+        self.0.as_ref().map(|i| i.has_handle()).unwrap_or(false)
+    }
 }
 
 impl<'a> FromRequest<'a> for Authenticated {

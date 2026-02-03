@@ -5,6 +5,7 @@ use common::message::user::BasicInfo;
 use crate::component::{Component, Footer, Header, Sidebar};
 
 pub struct StandardLayout<C> {
+    path: String,
     collapsed: bool,
     content: C,
 }
@@ -13,8 +14,9 @@ impl<T> StandardLayout<T>
 where
     T: sailfish::TemplateOnce,
 {
-    pub fn new(content: T) -> Self {
+    pub fn new(path: impl Into<String>, content: T) -> Self {
         StandardLayout {
+            path: path.into(),
             collapsed: false,
             content,
         }
@@ -36,7 +38,10 @@ where
     async fn prepare(self, user: Self::Param) -> Result<Self::Prepared, anyhow::Error> {
         let header = Header::default().prepare(user.clone()).await?;
         let sidebar = Sidebar::default().prepare(user.clone()).await?;
-        let footer = Footer::default().prepare(user.clone()).await?;
+        let footer = Footer::default()
+            .config(&self.path)
+            .prepare(user.clone())
+            .await?;
 
         Ok(StandardLayoutPrepared {
             user,

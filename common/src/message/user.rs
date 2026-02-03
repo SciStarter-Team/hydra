@@ -61,6 +61,7 @@ pub trait UserInfo {
     fn handle(&self) -> &str;
     fn is_staff(&self) -> bool;
     fn is_superuser(&self) -> bool;
+    fn has_handle(&self) -> bool;
 
     fn can_access_admin(&self) -> bool {
         self.is_staff() | self.is_superuser()
@@ -94,6 +95,10 @@ impl UserInfo for Unauthenticated {
     }
 
     fn is_superuser(&self) -> bool {
+        false
+    }
+
+    fn has_handle(&self) -> bool {
         false
     }
 }
@@ -130,6 +135,10 @@ impl UserInfo for BasicInfo {
     fn is_superuser(&self) -> bool {
         self.is_superuser
     }
+
+    fn has_handle(&self) -> bool {
+        !self.handle.is_empty()
+    }
 }
 
 impl UserInfo for Option<BasicInfo> {
@@ -160,6 +169,13 @@ impl UserInfo for Option<BasicInfo> {
             None => Unauthenticated.is_superuser(),
         }
     }
+
+    fn has_handle(&self) -> bool {
+        match self {
+            Some(info) => info.has_handle(),
+            None => Unauthenticated.has_handle(),
+        }
+    }
 }
 
 impl UserInfo for Option<&BasicInfo> {
@@ -188,6 +204,13 @@ impl UserInfo for Option<&BasicInfo> {
         match self {
             Some(info) => info.is_superuser(),
             None => Unauthenticated.is_superuser(),
+        }
+    }
+
+    fn has_handle(&self) -> bool {
+        match self {
+            Some(info) => info.has_handle(),
+            None => Unauthenticated.has_handle(),
         }
     }
 }
@@ -565,8 +588,8 @@ pub struct AddressSetGetResponse {
     pub slug: String,
     pub name: String,
     pub addresses: Vec<String>,
-    pub total_count: u64,    // Total number of addresses in the set
-    pub has_more: bool,       // Whether there are more pages available
+    pub total_count: u64, // Total number of addresses in the set
+    pub has_more: bool,   // Whether there are more pages available
 }
 
 // User Sets
@@ -598,8 +621,8 @@ pub struct UserSetGetResponse {
     pub slug: String,
     pub name: String,
     pub user_ids: Vec<Ulid>,
-    pub total_count: u64,    // Total number of users in the set
-    pub has_more: bool,       // Whether there are more pages available
+    pub total_count: u64,      // Total number of users in the set
+    pub has_more: bool,        // Whether there are more pages available
     pub evaluation_id: String, // Identifier for this result set, use to release it when done
 }
 
@@ -618,20 +641,36 @@ pub struct UserSetReleaseResultsResponse {
 #[strum_discriminants(derive(strum::EnumString, strum::AsRefStr))]
 #[strum_discriminants(name(UserSetCriterionType))]
 pub enum UserSetCriterion {
-    HasTag { tag: String },
-    HasPointInRegion { geojson: String },
+    HasTag {
+        tag: String,
+    },
+    HasPointInRegion {
+        geojson: String,
+    },
     AffiliateParticipation {
         affiliate_id: Ulid,
         start: TimeString,
-        end: TimeString
+        end: TimeString,
     },
     IsPageManager,
     IsStaff,
     IsVerified,
-    ExplicitList { user_ids: Vec<Ulid> },
+    ExplicitList {
+        user_ids: Vec<Ulid>,
+    },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, strum::EnumString, strum::AsRefStr)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    strum::EnumString,
+    strum::AsRefStr,
+)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum CriterionOperation {
@@ -913,7 +952,7 @@ pub struct ProjectJoinCheckResponse {
 // Permissions
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PermissionCheckRequest {
-    pub user_id: String,  // ULID
+    pub user_id: String, // ULID
     pub resource_type: String,
     pub resource_id: String,
 }

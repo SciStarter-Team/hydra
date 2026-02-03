@@ -301,12 +301,15 @@ pub async fn login_signup_page(
         }
     }
 
-    let layout = StandardLayout::new(LoginSignupContent {
-        system: params.system.unwrap_or_default(),
-        password: params.password.unwrap_or_default(),
-        unauthorized: params.unauthorized.unwrap_or_default(),
-        user_info: user_info.clone(),
-    })
+    let layout = StandardLayout::new(
+        "/login",
+        LoginSignupContent {
+            system: params.system.unwrap_or_default(),
+            password: params.password.unwrap_or_default(),
+            unauthorized: params.unauthorized.unwrap_or_default(),
+            user_info: user_info.clone(),
+        },
+    )
     .prepare(user_info.clone())
     .await?;
 

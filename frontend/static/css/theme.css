@@ -70,6 +70,5 @@
   --text-xl-mobile: 1.5rem; /* 24px -- this keeps this accessible */
   --text-2xl-mobile: 1.755rem; /* 28.08px */
   --text-3xl-mobile:  2.05rem; /* 32.85px	*/
-  --text-4xl-mobile:  2.4rem /* 38.44px	*/
-
+  --text-4xl-mobile:  2.4rem; /* 38.44px	*/
 }

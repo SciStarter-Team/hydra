@@ -1,14 +1,13 @@
 // Page Builder administration - components, pages, slots, and engine room
 
 use poem::{
-    handler, get, post,
+    Route, get, handler, post,
     web::{Path, Query},
-    Route,
 };
 use sailfish::TemplateOnce;
 use std::sync::Arc;
 
-use crate::component::{admin_layout::AdminLayoutPrepared, AdminLayout, Component};
+use crate::component::{AdminLayout, Component, admin_layout::AdminLayoutPrepared};
 use crate::middleware::authorization::Authenticated;
 use common::message::user::BasicInfo;
 
@@ -803,7 +802,7 @@ async fn pb_page_preview(
         content: Literal::new(Box::leak(html.into_boxed_str())),
     };
 
-    let layout = StandardLayout::new(content_wrapper)
+    let layout = StandardLayout::new("fake-path", content_wrapper)
         .prepare(preview_user)
         .await?;
 
@@ -1000,10 +999,18 @@ async fn pb_slot_extract(
     let label = if let Some(cid) = component_id {
         match crate::pagebuilder::PageBuilderComponent::load(cid).await {
             Ok(component) => component.name,
-            Err(_) => slot_name.split('.').last().unwrap_or(&slot_name).to_string(),
+            Err(_) => slot_name
+                .split('.')
+                .last()
+                .unwrap_or(&slot_name)
+                .to_string(),
         }
     } else {
-        slot_name.split('.').last().unwrap_or(&slot_name).to_string()
+        slot_name
+            .split('.')
+            .last()
+            .unwrap_or(&slot_name)
+            .to_string()
     };
 
     let response = PbSlotExtractResponse {
@@ -1042,11 +1049,8 @@ async fn pb_slot_insert_raw(
     let page_id: ulid::Ulid = id.parse()?;
     let mut page = crate::pagebuilder::PageBuilderPage::load(page_id).await?;
 
-    let component_id: Option<ulid::Ulid> = data
-        .component_id
-        .as_ref()
-        .map(|s| s.parse())
-        .transpose()?;
+    let component_id: Option<ulid::Ulid> =
+        data.component_id.as_ref().map(|s| s.parse()).transpose()?;
 
     let new_source = insert_raw_source(
         &page.source,
@@ -1218,8 +1222,16 @@ pub fn engine_room_routes() -> Route {
         .at("/sync-page-managers", post(engine_room_sync_page_managers))
         .at("/components", get(pb_components_list))
         .at("/components/search", get(pb_components_search))
-        .at("/components/new", get(pb_components_new).post(pb_components_create))
-        .at("/components/:id", get(pb_components_edit).post(pb_components_update).delete(pb_components_delete))
+        .at(
+            "/components/new",
+            get(pb_components_new).post(pb_components_create),
+        )
+        .at(
+            "/components/:id",
+            get(pb_components_edit)
+                .post(pb_components_update)
+                .delete(pb_components_delete),
+        )
 }
 
 /// Routes for /-admin/component-pages/*
@@ -1231,12 +1243,27 @@ pub fn pages_routes() -> Route {
         .at("/:id", get(pb_page_editor).delete(pb_page_delete))
         .at("/:id/edit", get(pb_page_edit_details))
         .at("/:id/update", post(pb_page_update))
-        .at("/:id/source", get(pb_page_source_editor).post(pb_page_update_source))
+        .at(
+            "/:id/source",
+            get(pb_page_source_editor).post(pb_page_update_source),
+        )
         .at("/:id/preview", get(pb_page_preview))
-        .at("/:id/slot/:slot_name", post(pb_slot_insert).delete(pb_slot_clear))
-        .at("/:id/slot/:slot_name/params", get(pb_slot_params_form).put(pb_slot_update_params))
-        .at("/:id/slot/:target_slot/move-from/:source_slot", post(pb_slot_move))
-        .at("/:id/slot/:target_slot/copy-from/:source_slot", post(pb_slot_copy))
+        .at(
+            "/:id/slot/:slot_name",
+            post(pb_slot_insert).delete(pb_slot_clear),
+        )
+        .at(
+            "/:id/slot/:slot_name/params",
+            get(pb_slot_params_form).put(pb_slot_update_params),
+        )
+        .at(
+            "/:id/slot/:target_slot/move-from/:source_slot",
+            post(pb_slot_move),
+        )
+        .at(
+            "/:id/slot/:target_slot/copy-from/:source_slot",
+            post(pb_slot_copy),
+        )
         .at("/:id/slot/:slot_name/extract", get(pb_slot_extract))
         .at("/:id/slot/:slot_name/insert-raw", post(pb_slot_insert_raw))
 }

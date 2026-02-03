@@ -1,13 +1,16 @@
 // OAuth2 Authorization Endpoint
 
-use poem::{handler, Response, IntoResponse, web::{Query, Form, Redirect}};
-use anyhow::Error;
-use serde::Deserialize;
-use sailfish::TemplateOnce;
-use crate::middleware::authorization::Authenticated;
-use crate::oauth2::types::{Client, AuthorizationCode};
-use crate::peering::LoadStorePeered;
 use crate::component::{Component, Head, StandardLayout};
+use crate::middleware::authorization::Authenticated;
+use crate::oauth2::types::{AuthorizationCode, Client};
+use crate::peering::LoadStorePeered;
+use anyhow::Error;
+use poem::{
+    IntoResponse, Response, handler,
+    web::{Form, Query, Redirect},
+};
+use sailfish::TemplateOnce;
+use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct AuthorizeQuery {
@@ -79,14 +82,22 @@ pub async fn authorize_get(
 
     // Validate response_type
     if query.response_type != "code" {
-        return error_redirect(&query.redirect_uri, "unsupported_response_type", query.state.as_deref());
+        return error_redirect(
+            &query.redirect_uri,
+            "unsupported_response_type",
+            query.state.as_deref(),
+        );
     }
 
     // Load and validate client
     let client = match Client::load(query.client_id.clone()).await {
         Ok(client) => client,
         Err(_) => {
-            return error_redirect(&query.redirect_uri, "invalid_client", query.state.as_deref());
+            return error_redirect(
+                &query.redirect_uri,
+                "invalid_client",
+                query.state.as_deref(),
+            );
         }
     };
 
@@ -112,7 +123,9 @@ pub async fn authorize_get(
         code_challenge_method: query.code_challenge_method.unwrap_or_default(),
     };
 
-    let layout = StandardLayout::new(content).prepare(Some(user.clone())).await?;
+    let layout = StandardLayout::new("/oauth2/authorize", content)
+        .prepare(Some(user.clone()))
+        .await?;
     let head = Head::default();
 
     let page = ConsentPage { head, layout };

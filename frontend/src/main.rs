@@ -30,6 +30,7 @@ pub mod project;
 pub mod rating;
 pub mod review;
 pub mod schedule;
+pub mod search;
 pub mod session;
 pub mod ui;
 pub mod upload;
@@ -200,11 +201,14 @@ struct DemoForumContent {
 async fn demo_forum(
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    let layout = component::StandardLayout::new(DemoForumContent {
-        forum: component::Forum::new("general")
-            .prepare(user_info.clone())
-            .await?,
-    })
+    let layout = component::StandardLayout::new(
+        "/demo-forum",
+        DemoForumContent {
+            forum: component::Forum::new("general")
+                .prepare(user_info.clone())
+                .await?,
+        },
+    )
     .prepare(user_info.clone())
     .await?;
 
@@ -241,6 +245,7 @@ fn user_facing() -> impl Endpoint {
         .nest("/badges", badge::routes())
         .nest("/evolveme", evolveme::routes())
         .nest("/exchange", exchange::routes())
+        .nest("/-search", search::routes())
         .at("/-entity-password/*slug", post(entity_password_verify))
         .at("/*slug", get(entity_page))
         .with(middleware::analytics::AnalyticsMiddleware)

@@ -3,18 +3,26 @@ use common::shared::db;
 use jiff::Timestamp;
 use ulid::Ulid;
 
-use crate::peering::LoadStorePeered;
+use crate::{entity::EntityKind, peering::LoadStorePeered};
 
-/// Featured item with schedule details and entity information
+/// Featured item with all data needed for display in the homepage card.
+/// Schedule fields (title, content, url) override entity fields when present.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct FeaturedItem {
     pub schedule_id: Ulid,
-    pub title: String,
-    pub content: Option<String>,
-    pub url: Option<String>,
-    pub entity_name: String,
-    pub entity_image: String,
     pub entity_slug: String,
+    pub entity_kind: EntityKind,
+    /// Display name (schedule title overrides entity name)
+    pub name: String,
+    pub image: String,
+    pub presenter: String,
+    /// Display description (schedule content overrides entity description)
+    pub description: String,
+    /// Custom URL from schedule, if any (otherwise link to entity page)
+    pub custom_url: Option<String>,
+    pub location_display: String,
+    pub timing_display: String,
+    pub topics: Vec<String>,
 }
 
 #[derive(
@@ -139,14 +147,47 @@ impl Schedule {
 
         let items_raw = sqlx::query!(
             r#"SELECT s.schedule_id,
-                      s.title,
-                      s.content,
-                      s.url,
+                      s.title as schedule_title,
+                      s.content as schedule_content,
+                      s.url as schedule_url,
                       s.featured_entity,
-                      e.kind as entity_kind,
+                      e.kind as "entity_kind: EntityKind",
                       e.target as entity_target,
                       COALESCE(p.name, ev.name, '') as "entity_name: String",
-                      COALESCE(p.image, ev.image, '') as "entity_image: String"
+                      COALESCE(p.image, ev.image, '') as "entity_image: String",
+                      COALESCE(p.presenter, ev.presenter, '') as "presenter: String",
+                      COALESCE(p.description, ev.description, '') as "entity_description: String",
+                      COALESCE(p.location_type, ev.location_type, '') as "location_type: String",
+                      COALESCE(p.entirely_online, ev.entirely_online, 0) as "entirely_online: bool",
+                      COALESCE(p.city, ev.city, '') as "city: String",
+                      COALESCE(p.state, ev.state, '') as "state: String",
+                      COALESCE(p.country, ev.country, '') as "country: String",
+                      p.project_timing as "project_timing: String",
+                      (SELECT GROUP_CONCAT(topic, ', ')
+                       FROM project_topics
+                       WHERE project_id = e.target
+                         AND e.kind = 'Project') as "topics: String",
+                      (SELECT ei.begin
+                       FROM event_instances ei
+                       WHERE ei.event_id = e.target
+                         AND e.kind = 'Event'
+                         AND ei.begin >= ?2
+                       ORDER BY ei.begin ASC
+                       LIMIT 1) as "next_instance_begin: String",
+                      (SELECT ei.end
+                       FROM event_instances ei
+                       WHERE ei.event_id = e.target
+                         AND e.kind = 'Event'
+                         AND ei.begin >= ?2
+                       ORDER BY ei.begin ASC
+                       LIMIT 1) as "next_instance_end: String",
+                      (SELECT ei.begin
+                       FROM event_instances ei
+                       WHERE ei.event_id = e.target
+                         AND e.kind = 'Event'
+                         AND ei.end < ?2
+                       ORDER BY ei.end DESC
+                       LIMIT 1) as "last_instance_begin: String"
                FROM schedules s
                LEFT JOIN entities e ON s.featured_entity = e.slug
                LEFT JOIN projects p ON e.kind = 'Project' AND e.target = p.project_id
@@ -168,25 +209,161 @@ impl Schedule {
             .filter_map(|row| {
                 let schedule_id = row.schedule_id.parse().ok()?;
                 let entity_slug = row.featured_entity?;
-                let entity_name = row.entity_name;
-                let entity_image = row.entity_image;
+                let entity_kind = row.entity_kind?;
 
-                // Skip if entity name is empty (entity not found)
-                if entity_name.is_empty() {
+                // Schedule title overrides entity name when non-empty
+                let name = if row.schedule_title.is_empty() {
+                    row.entity_name.clone()
+                } else {
+                    row.schedule_title
+                };
+
+                // Skip if we have no name at all
+                if name.is_empty() {
                     return None;
                 }
 
+                // Schedule content overrides entity description when non-empty
+                let description = row
+                    .schedule_content
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(row.entity_description);
+
+                // Schedule URL provides custom link (None means link to entity page)
+                let custom_url = row.schedule_url.filter(|u| !u.is_empty());
+
+                // Compute location display string
+                let location_display = compute_location_display(
+                    &row.location_type,
+                    row.entirely_online,
+                    &row.city,
+                    &row.state,
+                    &row.country,
+                );
+
+                // Compute timing display string
+                let timing_display = compute_timing_display(
+                    &entity_kind,
+                    row.project_timing.as_deref(),
+                    row.next_instance_begin.as_deref(),
+                    row.next_instance_end.as_deref(),
+                    row.last_instance_begin.as_deref(),
+                );
+
+                // Parse topics from comma-separated string
+                let topics = row
+                    .topics
+                    .map(|t| t.split(", ").map(String::from).collect())
+                    .unwrap_or_default();
+
                 Some(FeaturedItem {
                     schedule_id,
-                    title: row.title,
-                    content: row.content,
-                    url: row.url,
-                    entity_name,
-                    entity_image,
                     entity_slug,
+                    entity_kind,
+                    name,
+                    image: row.entity_image,
+                    presenter: row.presenter,
+                    description,
+                    custom_url,
+                    location_display,
+                    timing_display,
+                    topics,
                 })
             })
             .collect())
+    }
+}
+
+/// Compute human-readable location display from location fields
+fn compute_location_display(
+    location_type: &str,
+    entirely_online: bool,
+    city: &str,
+    state: &str,
+    country: &str,
+) -> String {
+    // If entirely online or global location type
+    if entirely_online || location_type == "Global, anywhere on the planet" {
+        return "Anywhere".to_string();
+    }
+
+    // If we have city/state info
+    if !city.is_empty() && !state.is_empty() {
+        return format!("{}, {}", city, state);
+    }
+
+    if !city.is_empty() {
+        return city.to_string();
+    }
+
+    if !state.is_empty() {
+        return state.to_string();
+    }
+
+    if !country.is_empty() {
+        return country.to_string();
+    }
+
+    // Default
+    "Location varies".to_string()
+}
+
+/// Compute human-readable timing display
+fn compute_timing_display(
+    entity_kind: &EntityKind,
+    project_timing: Option<&str>,
+    next_instance_begin: Option<&str>,
+    next_instance_end: Option<&str>,
+    last_instance_begin: Option<&str>,
+) -> String {
+    match entity_kind {
+        EntityKind::Project => {
+            // Use project_timing if available
+            if let Some(timing) = project_timing {
+                if !timing.is_empty() {
+                    return timing.to_string();
+                }
+            }
+            "Ongoing".to_string()
+        }
+        EntityKind::Event => {
+            // Try to show the next upcoming instance
+            if let Some(begin) = next_instance_begin {
+                return format_event_date(begin, next_instance_end);
+            }
+            // If no upcoming instance, show the last one as past
+            if let Some(begin) = last_instance_begin {
+                return format!("Was {}", format_event_date(begin, None));
+            }
+            // No instances at all
+            "Date TBD".to_string()
+        }
+        _ => String::new(),
+    }
+}
+
+/// Format an event date for display
+fn format_event_date(begin: &str, end: Option<&str>) -> String {
+    // Parse the date string (expected format: YYYY-MM-DD or ISO timestamp)
+    let begin_date = begin.split('T').next().unwrap_or(begin);
+
+    if let Ok(date) = jiff::civil::Date::strptime("%Y-%m-%d", begin_date) {
+        let formatted = date.strftime("%b %d, %Y").to_string();
+
+        // If end date is different, show range
+        if let Some(end) = end {
+            let end_date = end.split('T').next().unwrap_or(end);
+            if end_date != begin_date {
+                if let Ok(end_parsed) = jiff::civil::Date::strptime("%Y-%m-%d", end_date) {
+                    return format!("{} - {}", formatted, end_parsed.strftime("%b %d, %Y"));
+                }
+            }
+        }
+
+        formatted
+    } else {
+        // Fallback: return as-is
+        begin.to_string()
     }
 }
 
