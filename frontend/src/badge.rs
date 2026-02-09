@@ -123,7 +123,7 @@ async fn badge_class(
         id: format!("https://{}/badges/{}", DOMAIN, badgeclass),
         name: badge.name().to_string(),
         description: badge.description().to_string(),
-        image: format!("https://{}/badges/{}", DOMAIN, badgeclass),
+        image: format!("https://{}/badges/{}/badge.png", DOMAIN, badgeclass),
         criteria: BadgeCriteria {
             type_: "Criteria".to_string(),
             id: format!("https://{}/badges/{}", DOMAIN, badgeclass),
