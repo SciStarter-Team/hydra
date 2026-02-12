@@ -20,6 +20,7 @@ struct IndexPageContent {
     #[allow(dead_code)]
     user_info: Option<Arc<BasicInfo>>,
     featured_items: Vec<crate::schedule::FeaturedItem>,
+    news_items: Vec<crate::news::RenderedNewsItem>,
 }
 
 #[handler]
@@ -42,11 +43,14 @@ pub async fn index_page(
         .await
         .unwrap_or_default();
 
+    let news_items = crate::news::NewsItem::get_rendered_active_items().await;
+
     let layout = StandardLayout::new(
         "/",
         IndexPageContent {
             user_info: user_info.clone(),
             featured_items,
+            news_items,
         },
     )
     .prepare(user_info.clone())
@@ -78,11 +82,14 @@ pub async fn index_page_pseudo_handler(
         .await
         .unwrap_or_default();
 
+    let news_items = crate::news::NewsItem::get_rendered_active_items().await;
+
     let layout = StandardLayout::new(
         "/",
         IndexPageContent {
             user_info: user_info.clone(),
             featured_items,
+            news_items,
         },
     )
     .prepare(user_info.clone())

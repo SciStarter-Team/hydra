@@ -11,6 +11,7 @@ pub mod entities;
 pub mod events;
 pub mod files;
 pub mod integrations;
+pub mod news;
 pub mod pagebuilder;
 pub mod projects;
 pub mod schedules;
@@ -56,6 +57,8 @@ pub fn routes() -> impl Endpoint {
         .at("/clear-modal", post(content::clear_modal))
         // Schedules
         .nest("/schedules", schedules::routes())
+        // News
+        .nest("/news", news::routes())
         // Email
         .nest("/email", email::routes())
         .nest("/email/address-sets", sets::address_sets_routes())

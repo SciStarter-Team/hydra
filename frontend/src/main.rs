@@ -20,6 +20,7 @@ pub mod lru_cache;
 pub mod mcp;
 pub mod middleware;
 pub mod misc;
+pub mod news;
 pub mod oauth2;
 pub mod page_manager;
 pub mod pagebuilder;
@@ -246,6 +247,7 @@ fn user_facing() -> impl Endpoint {
         .nest("/evolveme", evolveme::routes())
         .nest("/exchange", exchange::routes())
         .nest("/-search", search::routes())
+        .at("/-news/:id/content", get(news::news_content))
         .at("/-entity-password/*slug", post(entity_password_verify))
         .at("/*slug", get(entity_page))
         .with(middleware::analytics::AnalyticsMiddleware)
@@ -359,6 +361,7 @@ async fn main() -> Result<(), Error> {
     let _oauth2_access_token_updates = tokio::spawn(oauth2::types::AccessToken::peering_task());
     let _oauth2_refresh_token_updates = tokio::spawn(oauth2::types::RefreshToken::peering_task());
     let _wiki_page_updates = tokio::spawn(wiki::WikiPage::peering_task());
+    let _news_item_updates = tokio::spawn(news::NewsItem::peering_task());
     let _pagebuilder_component_updates =
         tokio::spawn(pagebuilder::PageBuilderComponent::peering_task());
     let _pagebuilder_page_updates = tokio::spawn(pagebuilder::PageBuilderPage::peering_task());

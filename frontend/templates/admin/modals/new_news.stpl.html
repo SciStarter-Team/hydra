@@ -1,0 +1,176 @@
+<!-- New News Item Modal -->
+<dialog class="rounded-lg shadow-xl w-11/12 md:w-3/4 max-h-[90vh] overflow-y-auto p-5 backdrop:bg-gray-500 backdrop:opacity-75 m-auto"
+        hx-on::load="this.showModal()"
+        hx-on:click="if (event.target.tagName === 'DIALOG') this.remove()"
+        x-data="{ sourceType: 'wordpress' }">
+    <div hx-on:click="event.stopPropagation()">
+        <!-- Modal Header -->
+        <div class="flex items-center justify-between pb-3">
+            <h3 class="text-lg font-bold text-gray-900">Create News Item</h3>
+            <button
+                class="text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm p-1.5 ml-auto inline-flex items-center"
+                hx-on:click="this.closest('dialog').remove()"
+            >
+                <wa-icon name="x" class="w-5 h-5"></wa-icon>
+            </button>
+        </div>
+
+        <!-- Message Container -->
+        <% if let Some(error) = &self.error_message { %>
+            <div class="mb-4 p-3 text-sm text-red-700 bg-red-100 rounded-lg border border-red-200">
+                <%= error %>
+            </div>
+        <% } %>
+
+        <!-- Modal Body -->
+        <div class="mt-3">
+            <form
+                hx-post="/-admin/news"
+                hx-target="closest dialog"
+                hx-swap="outerHTML"
+            >
+                <div class="grid grid-cols-1 gap-6">
+                    <!-- Source Type -->
+                    <div>
+                        <label for="source_type" class="block text-sm font-medium text-gray-700 mb-2">
+                            Source Type <span class="text-red-500">*</span>
+                        </label>
+                        <select
+                            id="source_type"
+                            name="source_type"
+                            required
+                            x-model="sourceType"
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        >
+                            <option value="wordpress">WordPress</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                    </div>
+
+                    <!-- WordPress URL (shown when sourceType=wordpress) -->
+                    <div x-show="sourceType === 'wordpress'">
+                        <label for="wp_url" class="block text-sm font-medium text-gray-700 mb-2">
+                            WordPress URL <span class="text-red-500">*</span>
+                        </label>
+                        <input
+                            type="url"
+                            id="wp_url"
+                            name="wp_url"
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            placeholder="https://blog.scistarter.org/2025/..."
+                        >
+                        <p class="mt-1 text-sm text-gray-500">Content and title will be fetched from this URL. Tag will be auto-set to "SciStarter Blog".</p>
+                    </div>
+
+                    <!-- Tag (shown when sourceType=custom) -->
+                    <div x-show="sourceType === 'custom'">
+                        <label for="tag" class="block text-sm font-medium text-gray-700 mb-2">
+                            Tag
+                        </label>
+                        <input
+                            type="text"
+                            id="tag"
+                            name="tag"
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            placeholder="e.g. SciStarter Newsletter"
+                        >
+                    </div>
+
+                    <!-- Title -->
+                    <div>
+                        <label for="title" class="block text-sm font-medium text-gray-700 mb-2">
+                            Title <span x-show="sourceType === 'custom'" class="text-red-500">*</span>
+                        </label>
+                        <input
+                            type="text"
+                            id="title"
+                            name="title"
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            placeholder="Enter title..."
+                        >
+                        <p x-show="sourceType === 'wordpress'" class="mt-1 text-sm text-gray-500">Leave blank to auto-fetch from WordPress.</p>
+                    </div>
+
+                    <!-- Content (shown when sourceType=custom) - plain textarea for create modal -->
+                    <div x-show="sourceType === 'custom'">
+                        <label for="content" class="block text-sm font-medium text-gray-700 mb-2">
+                            Content
+                        </label>
+                        <ss-rich-text
+                            name="content"
+                            placeholder="Write your news content...">
+                        </ss-rich-text>
+                    </div>
+
+                    <!-- Author -->
+                    <div>
+                        <label for="author" class="block text-sm font-medium text-gray-700 mb-2">
+                            Author
+                        </label>
+                        <input
+                            type="text"
+                            id="author"
+                            name="author"
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            placeholder="e.g. Emma Giles"
+                        >
+                    </div>
+
+                    <!-- Display Date -->
+                    <div>
+                        <label for="display_date" class="block text-sm font-medium text-gray-700 mb-2">
+                            Display Date
+                        </label>
+                        <wa-input type="date" id="display_date" name="display_date"></wa-input>
+                    </div>
+
+                    <!-- Sort Order -->
+                    <div>
+                        <label for="sort_order" class="block text-sm font-medium text-gray-700 mb-2">
+                            Sort Order
+                        </label>
+                        <input
+                            type="number"
+                            id="sort_order"
+                            name="sort_order"
+                            value="0"
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        >
+                        <p class="mt-1 text-sm text-gray-500">Lower numbers appear first.</p>
+                    </div>
+
+                    <!-- Active -->
+                    <div>
+                        <label class="flex items-center">
+                            <input
+                                type="checkbox"
+                                name="active"
+                                value="1"
+                                checked
+                                class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                            >
+                            <span class="ml-2 text-sm text-gray-700">Active</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Modal Footer -->
+                <div class="flex items-center justify-end pt-6 space-x-2">
+                    <button
+                        type="button"
+                        class="px-4 py-2 bg-gray-300 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300"
+                        hx-on:click="this.closest('dialog').remove()"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="submit"
+                        class="relative px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                        <span>Create</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</dialog>
