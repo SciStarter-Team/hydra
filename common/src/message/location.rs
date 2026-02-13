@@ -58,3 +58,42 @@ impl LocationInfo {
         })
     }
 }
+
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+pub struct GeocodeRequest {
+    pub query: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct GeocodeResult {
+    pub id: String,
+    pub formatted: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+pub struct GeocodeResponse {
+    pub results: Vec<GeocodeResult>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+pub struct GeocodeResolveRequest {
+    pub id: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+pub struct GeocodeResolveResponse {
+    pub formatted: String,
+    pub latitude: f64,
+    pub longitude: f64,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+pub struct GeocodeForwardRequest {
+    pub query: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+pub struct GeocodeForwardResponse {
+    pub latitude: f64,
+    pub longitude: f64,
+}

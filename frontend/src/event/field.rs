@@ -1011,11 +1011,43 @@ impl LoadStorePeered for EventField {
             EventFieldValue::LocationDescription(location_description) => {
                 self.save_location_description(location_description).await
             }
-            EventFieldValue::Address(address) => self.save_address(address).await,
-            EventFieldValue::City(city) => self.save_city(city).await,
+            EventFieldValue::Address(address) => {
+                let result = self.save_address(address).await;
+                if result.is_ok() {
+                    if let Err(e) = crate::geocode::geocode_and_update_event_point(self.event_id).await {
+                        eprintln!("Geocoding after address save failed: {e}");
+                    }
+                }
+                result
+            }
+            EventFieldValue::City(city) => {
+                let result = self.save_city(city).await;
+                if result.is_ok() {
+                    if let Err(e) = crate::geocode::geocode_and_update_event_point(self.event_id).await {
+                        eprintln!("Geocoding after city save failed: {e}");
+                    }
+                }
+                result
+            }
             EventFieldValue::Zip(zip) => self.save_zip(zip).await,
-            EventFieldValue::State(state) => self.save_state(state).await,
-            EventFieldValue::Country(country) => self.save_country(country).await,
+            EventFieldValue::State(state) => {
+                let result = self.save_state(state).await;
+                if result.is_ok() {
+                    if let Err(e) = crate::geocode::geocode_and_update_event_point(self.event_id).await {
+                        eprintln!("Geocoding after state save failed: {e}");
+                    }
+                }
+                result
+            }
+            EventFieldValue::Country(country) => {
+                let result = self.save_country(country).await;
+                if result.is_ok() {
+                    if let Err(e) = crate::geocode::geocode_and_update_event_point(self.event_id).await {
+                        eprintln!("Geocoding after country save failed: {e}");
+                    }
+                }
+                result
+            }
             EventFieldValue::EventType(event_type) => self.save_event_type(event_type).await,
             EventFieldValue::TicketingBegins(ticketing_begins) => {
                 self.save_ticketing_begins(ticketing_begins).await

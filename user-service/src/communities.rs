@@ -7,7 +7,7 @@ use common::{
         CommunityMemberCheckRequest, CommunityMemberCheckResponse, CommunitySuccessResponse,
         CommunityUpdateRequest, UserCommunitiesRequest, UserCommunitiesResponse,
     },
-    service::decode_structured_message,
+    service::{decode_structured_message, log_activity, trigger_email, TriggerEvent},
     shared::db,
     timestring::TimeString,
     ulid::AsUlid,
@@ -255,6 +255,21 @@ pub async fn join(req: &Request) -> Result<CommunitySuccessResponse, Error> {
     .execute(db())
     .await?;
 
+    let community_row = sqlx::query!(
+        "SELECT name, slug FROM communities WHERE community_id = ?",
+        community_id
+    )
+    .fetch_one(db())
+    .await?;
+
+    log_activity(None, "community-join", message.user_id, message.community_id, None).await.ok();
+    let community_url = format!("/communities/{}", community_row.slug);
+    trigger_email(TriggerEvent::CommunityJoin, message.user_id, Some(&[
+        ("community_id".to_string(), message.community_id.to_string()),
+        ("community_name".to_string(), community_row.name),
+        ("community_url".to_string(), community_url),
+    ])).await.ok();
+
     Ok(CommunitySuccessResponse {
         success: true,
         message: "Joined community successfully".to_string(),
@@ -274,6 +289,21 @@ pub async fn leave(req: &Request) -> Result<CommunitySuccessResponse, Error> {
     )
     .execute(db())
     .await?;
+
+    let community_row = sqlx::query!(
+        "SELECT name, slug FROM communities WHERE community_id = ?",
+        community_id
+    )
+    .fetch_one(db())
+    .await?;
+
+    log_activity(None, "community-leave", message.user_id, message.community_id, None).await.ok();
+    let community_url = format!("/communities/{}", community_row.slug);
+    trigger_email(TriggerEvent::CommunityLeave, message.user_id, Some(&[
+        ("community_id".to_string(), message.community_id.to_string()),
+        ("community_name".to_string(), community_row.name),
+        ("community_url".to_string(), community_url),
+    ])).await.ok();
 
     Ok(CommunitySuccessResponse {
         success: true,

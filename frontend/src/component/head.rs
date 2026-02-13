@@ -10,6 +10,7 @@ pub struct Head {
     enable_maplibre: bool,
     enable_slick: bool,
     enable_jquery: bool,
+    enable_geosearch: bool,
 }
 
 impl Default for Head {
@@ -22,6 +23,7 @@ impl Default for Head {
             enable_maplibre: false,
             enable_slick: false,
             enable_jquery: false,
+            enable_geosearch: false,
         }
     }
 }
@@ -106,8 +108,20 @@ impl Head {
     }
 
     #[tracing::instrument]
+    pub fn with_geosearch(mut self) -> Self {
+        self.enable_geosearch = true;
+        self
+    }
+
+    #[tracing::instrument]
     pub fn without_jquery(mut self) -> Self {
         self.enable_jquery = false;
         self.without_slick()
+    }
+
+    #[tracing::instrument]
+    pub fn without_geosearch(mut self) -> Self {
+        self.enable_geosearch = false;
+        self
     }
 }

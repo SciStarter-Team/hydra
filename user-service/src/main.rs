@@ -16,6 +16,7 @@ pub mod address_sets;
 pub mod auth;
 pub mod bookmarks;
 pub mod communities;
+pub mod geocode;
 pub mod health;
 pub mod permissions;
 pub mod project_joins;
@@ -1547,6 +1548,11 @@ async fn main() {
     toplevel.spawn(handler!(user_sets, "add_criterion", user_sets::add_criterion));
     toplevel.spawn(handler!(user_sets, "remove_criterion", user_sets::remove_criterion));
     toplevel.spawn(handler!(user_sets, "release_results", user_sets::release_results));
+
+    let geocode = service.group("user.geocode");
+    toplevel.spawn(handler!(geocode, "search", geocode::geocode));
+    toplevel.spawn(handler!(geocode, "resolve", geocode::resolve));
+    toplevel.spawn(handler!(geocode, "forward", geocode::forward));
 
     // Set up graceful shutdown
     use tokio::signal::unix::{SignalKind, signal};

@@ -3848,11 +3848,43 @@ impl LoadStorePeered for ProjectField {
             ProjectFieldValue::SpecialSkills(special_skills) => {
                 self.save_special_skills(special_skills).await
             }
-            ProjectFieldValue::Country(country) => self.save_country(country).await,
-            ProjectFieldValue::State(state) => self.save_state(state).await,
-            ProjectFieldValue::City(city) => self.save_city(city).await,
+            ProjectFieldValue::Country(country) => {
+                let result = self.save_country(country).await;
+                if result.is_ok() {
+                    if let Err(e) = crate::geocode::geocode_and_update_project_point(self.project_id).await {
+                        eprintln!("Geocoding after country save failed: {e}");
+                    }
+                }
+                result
+            }
+            ProjectFieldValue::State(state) => {
+                let result = self.save_state(state).await;
+                if result.is_ok() {
+                    if let Err(e) = crate::geocode::geocode_and_update_project_point(self.project_id).await {
+                        eprintln!("Geocoding after state save failed: {e}");
+                    }
+                }
+                result
+            }
+            ProjectFieldValue::City(city) => {
+                let result = self.save_city(city).await;
+                if result.is_ok() {
+                    if let Err(e) = crate::geocode::geocode_and_update_project_point(self.project_id).await {
+                        eprintln!("Geocoding after city save failed: {e}");
+                    }
+                }
+                result
+            }
             ProjectFieldValue::Zip(zip) => self.save_zip(zip).await,
-            ProjectFieldValue::Address(address) => self.save_address(address).await,
+            ProjectFieldValue::Address(address) => {
+                let result = self.save_address(address).await;
+                if result.is_ok() {
+                    if let Err(e) = crate::geocode::geocode_and_update_project_point(self.project_id).await {
+                        eprintln!("Geocoding after address save failed: {e}");
+                    }
+                }
+                result
+            }
             ProjectFieldValue::LocationName(location_name) => {
                 self.save_location_name(location_name).await
             }

@@ -15,6 +15,7 @@ pub mod evolveme;
 pub mod exchange;
 pub mod external_link;
 pub mod form;
+pub mod geocode;
 pub mod gourl;
 pub mod health;
 pub mod lru_cache;
@@ -248,6 +249,7 @@ fn user_facing() -> impl Endpoint {
         .nest("/evolveme", evolveme::routes())
         .nest("/exchange", exchange::routes())
         .nest("/-search", search::routes())
+        .at("/finder", get(search::handle_finder))
         .at("/-news/:id/content", get(news::news_content))
         .nest("/communities", communities::routes())
         .nest("/dashboard/communities", communities::dashboard_routes())

@@ -354,6 +354,15 @@ impl LoadStorePeered for EventAll {
 
         tx.commit().await?;
 
+        // Auto-geocode if point is missing but address fields exist
+        if self.point.is_none()
+            && (!self.city.is_empty() || !self.state.is_empty() || !self.country.is_empty())
+        {
+            if let Err(e) = crate::geocode::geocode_and_update_event_point(self.event_id).await {
+                eprintln!("Auto-geocode for event {} failed: {e}", self.event_id);
+            }
+        }
+
         Ok(())
     }
 

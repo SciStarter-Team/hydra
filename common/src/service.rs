@@ -616,6 +616,12 @@ pub enum TriggerEvent {
 
     /// Sent when Libraries supplemental signup is completed
     LibrariesHubsSupplemental,
+
+    /// Sent when a user joins a community
+    CommunityJoin,
+
+    /// Sent when a user leaves a community
+    CommunityLeave,
 }
 
 impl TriggerEvent {
@@ -638,6 +644,8 @@ impl TriggerEvent {
             Self::FoundationsDebris => "When Debris Tracker project is completed (Foundations)",
             Self::LibrariesHubsTutorial => "When Libraries tutorial is completed",
             Self::LibrariesHubsSupplemental => "When Libraries supplemental signup is completed",
+            Self::CommunityJoin => "When a user joins a community",
+            Self::CommunityLeave => "When a user leaves a community",
         }
     }
 
@@ -659,6 +667,7 @@ impl TriggerEvent {
             | Self::FoundationsDebris
             | Self::LibrariesHubsTutorial
             | Self::LibrariesHubsSupplemental => "workflow",
+            Self::CommunityJoin | Self::CommunityLeave => "community",
         }
     }
 }

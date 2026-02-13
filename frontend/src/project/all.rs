@@ -1385,6 +1385,17 @@ impl LoadStorePeered for ProjectAll {
 
         tx.commit().await?;
 
+        // Auto-geocode if point is missing but address fields exist
+        if data.point.is_none()
+            && (!data.city.is_empty() || !data.state.is_empty() || !data.country.is_empty())
+        {
+            if let Err(e) =
+                crate::geocode::geocode_and_update_project_point(data.project_id).await
+            {
+                eprintln!("Auto-geocode for project {} failed: {e}", data.project_id);
+            }
+        }
+
         Ok(())
     }
 

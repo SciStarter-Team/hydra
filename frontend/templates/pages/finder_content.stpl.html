@@ -1,0 +1,102 @@
+<!-- SEARCH BAR -->
+<div id="ss-omni-search-wrapper" class="border-b border-linework">
+  <div class="ss-container mx-auto">
+    <div id="ss-omni-search" class="py-6">
+      <form action="/finder" method="get">
+        <fieldset class="flex flex-col md:flex-row gap-4">
+          <wa-input class="flex-1" name="q" placeholder="Search by keyword or topic" value="<%= self.query %>" with-clear></wa-input>
+          <div class="relative flex-1">
+            <div id="geosearch-location"></div>
+            <input type="hidden" name="lat" id="geosearch-lat" value="<%= self.lat %>" />
+            <input type="hidden" name="lng" id="geosearch-lng" value="<%= self.lng %>" />
+            <input type="hidden" name="location_name" id="geosearch-name" value="<%= self.location_name %>" />
+          </div>
+          <button type="submit" class="btn btn-primary btn-icon md:gap-0! !border-primary-action justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="fill-primary-action w-[15px] md:mr-3"><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352a144 144 0 1 0 0-288 144 144 0 1 0 0 288z"/></svg>
+            Search
+          </button>
+        </fieldset>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- RESULTS -->
+<div class="ss-container mx-auto my-8">
+  <% if self.query.is_empty() && self.location_name.is_empty() { %>
+  <p class="text-gray-500">Enter a search term or location to find projects and events.</p>
+  <% } else if self.results.is_empty() { %>
+  <p class="text-gray-500">No results found<% if !self.query.is_empty() { %> for "<%= self.query %>"<% } %><% if !self.location_name.is_empty() { %> near <%= self.location_name %><% } %>.</p>
+  <% } else { %>
+  <h2 class="font-header-lg font-bold text-primary-dark mb-6"><%
+    if !self.query.is_empty() && !self.location_name.is_empty() {
+  %>Results for "<%= self.query %>" near <%= self.location_name %><%
+    } else if !self.query.is_empty() {
+  %>Results for "<%= self.query %>"<%
+    } else {
+  %>Projects &amp; Events near <%= self.location_name %><%
+    }
+  %></h2>
+  <div class="flex flex-col gap-4">
+    <% for result in &self.results { %>
+    <a href="/<%= result.slug %>" class="flex gap-4 p-4 border border-linework rounded-lg hover:bg-primary-light no-underline text-primary-dark">
+      <% if !result.image.is_empty() { %>
+      <img src="<%= result.image %>" alt="" class="w-24 h-24 object-cover rounded flex-shrink-0" />
+      <% } %>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 mb-1">
+          <h3 class="text-lg font-bold mb-0"><%= result.title %></h3>
+          <span class="text-xs px-2 py-0.5 rounded-full bg-primary-light text-primary-dark flex-shrink-0"><%= result.entity_type %></span>
+        </div>
+        <% if !result.location_display.is_empty() { %>
+        <div class="text-sm text-gray-600 mb-1">
+          <% if let Some(km) = result.distance_km { %>
+            <%= result.location_display %> (<%= format!("{:.0}", km) %> km)
+          <% } else { %>
+            <%= result.location_display %>
+          <% } %>
+        </div>
+        <% } %>
+        <% if !result.description_snippet.is_empty() { %>
+        <p class="text-sm mb-0 line-clamp-2"><%= result.description_snippet %></p>
+        <% } %>
+      </div>
+    </a>
+    <% } %>
+  </div>
+  <% } %>
+</div>
+
+<!-- Geosearch widget setup -->
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    function clearLocationFields() {
+      document.getElementById('geosearch-lat').value = '';
+      document.getElementById('geosearch-lng').value = '';
+      document.getElementById('geosearch-name').value = '';
+    }
+    opencage.algoliaAutocomplete({
+      container: '#geosearch-location',
+      placeholder: 'Location',
+      <% if !self.location_name.is_empty() { %>
+      initialState: { query: '<%= self.location_name %>' },
+      <% } %>
+      onReset: function() { clearLocationFields(); },
+      onStateChange: function(params) {
+        if (!params.state.query) { clearLocationFields(); }
+      },
+      plugins: [
+        opencage.OpenCageGeoSearchPlugin(
+          { key: '<%= self.geosearch_key %>' },
+          {
+            onSelect: function(params) {
+              document.getElementById('geosearch-lat').value = params.item.geometry.lat;
+              document.getElementById('geosearch-lng').value = params.item.geometry.lng;
+              document.getElementById('geosearch-name').value = params.item.formatted;
+            }
+          }
+        )
+      ]
+    });
+  });
+</script>
