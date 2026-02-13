@@ -4,6 +4,7 @@ pub mod analytics;
 pub mod archive;
 pub mod autocomplete;
 pub mod badges;
+pub mod communities;
 pub mod content;
 pub mod dashboard;
 pub mod email;
@@ -59,6 +60,8 @@ pub fn routes() -> impl Endpoint {
         .nest("/schedules", schedules::routes())
         // News
         .nest("/news", news::routes())
+        // Communities
+        .nest("/communities", communities::routes())
         // Email
         .nest("/email", email::routes())
         .nest("/email/address-sets", sets::address_sets_routes())

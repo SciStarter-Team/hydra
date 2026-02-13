@@ -4,6 +4,7 @@ pub mod auth;
 pub mod badge;
 pub mod builder;
 pub mod channel;
+pub mod communities;
 pub mod component;
 pub mod contact;
 pub mod dev;
@@ -248,6 +249,8 @@ fn user_facing() -> impl Endpoint {
         .nest("/exchange", exchange::routes())
         .nest("/-search", search::routes())
         .at("/-news/:id/content", get(news::news_content))
+        .nest("/communities", communities::routes())
+        .nest("/dashboard/communities", communities::dashboard_routes())
         .at("/-entity-password/*slug", post(entity_password_verify))
         .at("/*slug", get(entity_page))
         .with(middleware::analytics::AnalyticsMiddleware)

@@ -1,0 +1,16 @@
+<div id="community-bar" class="community-bar bg-primary-dark text-white rounded-lg p-4 flex items-center justify-between -mt-4 relative z-10">
+    <div class="flex items-center gap-4">
+        <span class="font-semibold"><%= self.community.member_count %> Members</span>
+    </div>
+    <div>
+        <% if self.is_logged_in { %>
+            <% if self.is_member { %>
+                <button class="btn btn-accent1" hx-post="/communities/<%= self.community.slug %>/leave" hx-target="#community-bar" hx-swap="outerHTML">Leave Community</button>
+            <% } else { %>
+                <button class="btn btn-accent1" hx-post="/communities/<%= self.community.slug %>/join" hx-target="#community-bar" hx-swap="outerHTML">Join Community</button>
+            <% } %>
+        <% } else { %>
+            <a href="/login" class="btn btn-accent1">Join Community</a>
+        <% } %>
+    </div>
+</div>

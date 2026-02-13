@@ -1,0 +1,109 @@
+<div id="communities-content">
+    <!-- Search Bar -->
+    <div class="px-6 py-4">
+        <form hx-get="/-admin/communities/search" hx-target="#communities-content" hx-swap="innerHTML">
+            <div class="relative">
+                <input
+                    type="text"
+                    name="search"
+                    placeholder="Search communities..."
+                    value="<% if let Some(ref q) = self.search_query { %><%= q %><% } %>"
+                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                />
+            </div>
+        </form>
+    </div>
+
+    <!-- Content Table -->
+    <div class="bg-white shadow-md rounded-lg overflow-hidden">
+        <% if self.items.is_empty() { %>
+            <div class="px-6 py-8 text-center text-gray-500">
+                No communities found. <a href="#" hx-get="/-admin/communities/new" hx-target="body" hx-swap="beforeend" class="text-indigo-600 hover:text-indigo-800">Create one now</a>
+            </div>
+        <% } else { %>
+            <!-- Header Row -->
+            <div class="hidden xl:grid xl:grid-cols-20 bg-gray-50 px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
+                <div class="col-span-5">Name</div>
+                <div class="col-span-3">Slug</div>
+                <div class="col-span-3">Partner Tag</div>
+                <div class="col-span-2">Members</div>
+                <div class="col-span-2">Order</div>
+                <div class="col-span-3">Status</div>
+                <div class="col-span-2 text-right">Actions</div>
+            </div>
+
+            <div class="divide-y divide-gray-200">
+                <% for item in &self.items { %>
+                    <div id="community-<%= item.community_id|disp %>" class="flex flex-col xl:grid xl:grid-cols-20 gap-3 xl:gap-4 xl:items-center px-6 py-4 hover:bg-gray-50 transition-colors">
+                        <!-- Name -->
+                        <div class="xl:col-span-5">
+                            <div class="xl:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Name</div>
+                            <div class="text-sm font-medium text-gray-900"><a href="/-admin/communities/<%= item.slug %>" class="text-indigo-600 hover:text-indigo-900 no-underline"><%= item.name %></a></div>
+                        </div>
+
+                        <!-- Slug -->
+                        <div class="xl:col-span-3">
+                            <div class="xl:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Slug</div>
+                            <div class="text-sm text-gray-600"><%= item.slug %></div>
+                        </div>
+
+                        <!-- Partner Tag -->
+                        <div class="xl:col-span-3">
+                            <div class="xl:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Partner Tag</div>
+                            <div class="text-sm text-gray-600"><%= item.partner_tag %></div>
+                        </div>
+
+                        <!-- Members -->
+                        <div class="xl:col-span-2">
+                            <div class="xl:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Members</div>
+                            <div class="text-sm text-gray-600"><%= item.member_count %></div>
+                        </div>
+
+                        <!-- Sort Order -->
+                        <div class="xl:col-span-2">
+                            <div class="xl:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Order</div>
+                            <div class="text-sm text-gray-600"><%= item.sort_order %></div>
+                        </div>
+
+                        <!-- Status -->
+                        <div class="xl:col-span-3">
+                            <div class="xl:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Status</div>
+                            <div class="flex gap-1">
+                                <% if item.active { %>
+                                    <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Active</span>
+                                <% } else { %>
+                                    <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">Inactive</span>
+                                <% } %>
+                                <% if item.featured { %>
+                                    <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">Featured</span>
+                                <% } %>
+                            </div>
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="xl:col-span-2">
+                            <div class="xl:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Actions</div>
+                            <div class="flex items-center space-x-2 xl:justify-end">
+                                <a
+                                    href="/-admin/communities/<%= item.slug %>"
+                                    class="text-indigo-600 hover:text-indigo-900 transition-colors no-underline"
+                                >
+                                    <wa-icon name="pencil" class="w-4 h-4"></wa-icon>
+                                </a>
+                                <button
+                                    class="text-red-600 hover:text-red-900 transition-colors"
+                                    hx-delete="/-admin/communities/<%= item.slug %>"
+                                    hx-confirm="Are you sure you want to delete this community? This will also remove all memberships."
+                                    hx-target="#community-<%= item.community_id|disp %>"
+                                    hx-swap="outerHTML swap:0s"
+                                >
+                                    <wa-icon name="trash" class="w-4 h-4"></wa-icon>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                <% } %>
+            </div>
+        <% } %>
+    </div>
+</div>

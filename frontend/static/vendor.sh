@@ -36,6 +36,8 @@ curl -L https://cdn.jsdelivr.net/npm/maplibre-gl@5/dist/maplibre-gl.min.js -o ma
 curl -L https://cdn.jsdelivr.net/npm/maplibre-gl@5/dist/maplibre-gl.min.css -o maplibre-gl.min.css
 
 # Slick
+curl -L https://cdn.jsdelivr.net/npm/@accessible360/accessible-slick@1/slick/fonts/slick.woff -o fonts/slick.woff
+curl -L https://cdn.jsdelivr.net/npm/@accessible360/accessible-slick@1/slick/fonts/slick.ttf -o fonts/slick.ttf
 curl -L https://cdn.jsdelivr.net/npm/@accessible360/accessible-slick@1/slick/slick.min.css -o slick.min.css
 curl -L https://cdn.jsdelivr.net/npm/@accessible360/accessible-slick@1/slick/accessible-slick-theme.min.css -o accessible-slick-theme.min.css
 curl -L https://cdn.jsdelivr.net/npm/@accessible360/accessible-slick@1/slick/slick.min.js -o slick.min.js

@@ -1114,3 +1114,118 @@ pub struct PermissionListByResourceRequest {
 pub struct PermissionListByResourceResponse {
     pub permissions: Vec<Permission>,
 }
+
+// ============================================================================
+// Communities
+// ============================================================================
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CommunityInfo {
+    pub community_id: Ulid,
+    pub name: String,
+    pub slug: String,
+    pub subtitle: String,
+    pub intro: String,
+    pub description: String,
+    pub image_url: String,
+    pub partner_tag: String,
+    pub topics: Vec<String>,
+    pub external_url: String,
+    pub active: bool,
+    pub featured: bool,
+    pub sort_order: i32,
+    pub member_count: i64,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CommunityListRequest {
+    pub active_only: bool,
+    pub featured_only: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CommunityListResponse {
+    pub communities: Vec<CommunityInfo>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CommunityGetRequest {
+    pub slug: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CommunityCreateRequest {
+    pub name: String,
+    pub slug: String,
+    pub subtitle: String,
+    pub intro: String,
+    pub description: String,
+    pub image_url: String,
+    pub partner_tag: String,
+    pub topics: Vec<String>,
+    pub external_url: String,
+    pub active: bool,
+    pub featured: bool,
+    pub sort_order: i32,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CommunityUpdateRequest {
+    pub community_id: Ulid,
+    pub name: String,
+    pub slug: String,
+    pub subtitle: String,
+    pub intro: String,
+    pub description: String,
+    pub image_url: String,
+    pub partner_tag: String,
+    pub topics: Vec<String>,
+    pub external_url: String,
+    pub active: bool,
+    pub featured: bool,
+    pub sort_order: i32,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CommunityDeleteRequest {
+    pub community_id: Ulid,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CommunityJoinRequest {
+    pub community_id: Ulid,
+    pub user_id: Ulid,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CommunityLeaveRequest {
+    pub community_id: Ulid,
+    pub user_id: Ulid,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CommunityMemberCheckRequest {
+    pub community_id: Ulid,
+    pub user_id: Ulid,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CommunityMemberCheckResponse {
+    pub is_member: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserCommunitiesRequest {
+    pub user_id: Ulid,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserCommunitiesResponse {
+    pub communities: Vec<CommunityInfo>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CommunitySuccessResponse {
+    pub success: bool,
+    pub message: String,
+}

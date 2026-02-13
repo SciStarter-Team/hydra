@@ -15,6 +15,7 @@ use ulid::Ulid;
 pub mod address_sets;
 pub mod auth;
 pub mod bookmarks;
+pub mod communities;
 pub mod health;
 pub mod permissions;
 pub mod project_joins;
@@ -1433,6 +1434,18 @@ async fn main() {
     let page_manager = service.group("user.page_manager");
     toplevel.spawn(handler!(page_manager, "sync", users::page_manager_sync));
     toplevel.spawn(handler!(page_manager, "update", users::page_manager_update));
+
+    // Community endpoints
+    let communities = service.group("user.communities");
+    toplevel.spawn(handler!(communities, "list", communities::list));
+    toplevel.spawn(handler!(communities, "get", communities::get));
+    toplevel.spawn(handler!(communities, "create", communities::create));
+    toplevel.spawn(handler!(communities, "update", communities::update));
+    toplevel.spawn(handler!(communities, "delete", communities::delete));
+    toplevel.spawn(handler!(communities, "join", communities::join));
+    toplevel.spawn(handler!(communities, "leave", communities::leave));
+    toplevel.spawn(handler!(communities, "check", communities::check_membership));
+    toplevel.spawn(handler!(communities, "user_list", communities::user_communities));
 
     // Bookmark endpoints
     let bookmarks = service.group("user.bookmarks");

@@ -1,4 +1,4 @@
-use common::message::{location::LocationInfo, user::BasicInfo};
+use common::message::{location::LocationInfo, user::BasicInfo, user::CommunityInfo};
 use poem::{Response, handler, http::HeaderMap, session::Session, web::RealIp};
 use std::sync::Arc;
 
@@ -21,6 +21,7 @@ struct IndexPageContent {
     user_info: Option<Arc<BasicInfo>>,
     featured_items: Vec<crate::schedule::FeaturedItem>,
     news_items: Vec<crate::news::RenderedNewsItem>,
+    featured_communities: Vec<CommunityInfo>,
 }
 
 #[handler]
@@ -45,12 +46,17 @@ pub async fn index_page(
 
     let news_items = crate::news::NewsItem::get_rendered_active_items().await;
 
+    let featured_communities = crate::communities::list_communities(true, true)
+        .await
+        .unwrap_or_default();
+
     let layout = StandardLayout::new(
         "/",
         IndexPageContent {
             user_info: user_info.clone(),
             featured_items,
             news_items,
+            featured_communities,
         },
     )
     .prepare(user_info.clone())
@@ -84,12 +90,17 @@ pub async fn index_page_pseudo_handler(
 
     let news_items = crate::news::NewsItem::get_rendered_active_items().await;
 
+    let featured_communities = crate::communities::list_communities(true, true)
+        .await
+        .unwrap_or_default();
+
     let layout = StandardLayout::new(
         "/",
         IndexPageContent {
             user_info: user_info.clone(),
             featured_items,
             news_items,
+            featured_communities,
         },
     )
     .prepare(user_info.clone())

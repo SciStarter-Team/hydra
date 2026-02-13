@@ -258,22 +258,13 @@ header #nav--users a:hover{
 /* logged in nav is 200px 768px – 1024px */
 @media (min-width:768px){
   
-  .logged-in header nav, .logged-in #main-content, .logged-in footer, .logged-in #ss-omni-search-wrapper  {
+  .logged-in header nav, .logged-in #main-content, .logged-in footer {
     margin-left:200px;
   }
 
-  .logged-in-collapsed.logged-in header nav, .logged-in-collapsed.logged-in #main-content, .logged-in-collapsed.logged-in footer, .logged-in-collapsed.logged-in #ss-omni-search-wrapper {
+  .logged-in-collapsed.logged-in header nav, .logged-in-collapsed.logged-in #main-content, .logged-in-collapsed.logged-in footer {
     margin-left: 80px;
   }
-
-  .logged-in-collapsed.logged-in #ss-omni-search-wrapper .ss-container {
-   padding: 0 1rem!important;
-  }
-
-  .logged-in.logged-in-open #ss-omni-search-wrapper fieldset {
-    @apply flex-col;
-  }
-
 }
 
 @media (min-width:930px) {
@@ -286,13 +277,9 @@ header #nav--users a:hover{
 /* logged in nav is 280px at 1024px */
 @media (min-width:1024px){
   
-  .logged-in header nav, .logged-in #main-content, .logged-in footer, .logged-in #ss-omni-search-wrapper {
+  .logged-in header nav, .logged-in #main-content, .logged-in footer {
     margin-left:280px;
   }
-  .logged-in #ss-omni-search-wrapper .ss-container {
-   padding: 0 1rem!important;
-  }
-
 }
 
 

@@ -4,8 +4,15 @@ use common::message::user::{BasicInfo, UserInfo};
 
 use super::Component;
 
-#[derive(Default)]
-pub struct Sidebar;
+pub struct Sidebar {
+    path: String,
+}
+
+impl Sidebar {
+    pub fn new(path: impl Into<String>) -> Self {
+        Sidebar { path: path.into() }
+    }
+}
 
 impl Component for Sidebar {
     type Param = Option<Arc<BasicInfo>>;
@@ -13,7 +20,10 @@ impl Component for Sidebar {
     type Prepared = SidebarPrepared;
 
     async fn prepare(self, param: Self::Param) -> Result<Self::Prepared, anyhow::Error> {
-        Ok(SidebarPrepared { basic_info: param })
+        Ok(SidebarPrepared {
+            basic_info: param,
+            path: self.path,
+        })
     }
 }
 
@@ -21,4 +31,5 @@ impl Component for Sidebar {
 #[template(path = "site/sidebar.stpl.html")]
 pub struct SidebarPrepared {
     basic_info: Option<Arc<BasicInfo>>,
+    path: String,
 }

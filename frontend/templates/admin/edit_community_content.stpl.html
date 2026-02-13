@@ -1,0 +1,239 @@
+<!-- Edit Community Form Content -->
+<div class="bg-white rounded-lg shadow border border-gray-200">
+    <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+        <h3 class="text-lg font-medium text-gray-900">Edit Community</h3>
+        <a
+            href="/-admin/communities"
+            class="text-sm text-gray-600 hover:text-gray-900"
+        >
+            Back to Communities
+        </a>
+    </div>
+
+    <div class="p-6">
+        <% if let Some(error) = &self.error_message { %>
+            <div class="mb-4 p-3 text-sm text-red-700 bg-red-100 rounded-lg border border-red-200">
+                <%= error %>
+            </div>
+        <% } %>
+
+        <form
+            hx-post="/-admin/communities/<%= self.item.slug %>"
+            hx-target="body"
+        >
+            <div class="grid grid-cols-1 gap-6">
+                <!-- Name -->
+                <div>
+                    <label for="name" class="block text-sm font-medium text-gray-700 mb-2">
+                        Name <span class="text-red-500">*</span>
+                    </label>
+                    <input
+                        type="text"
+                        id="name"
+                        name="name"
+                        required
+                        value="<%= self.item.name %>"
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    >
+                </div>
+
+                <!-- Slug -->
+                <div>
+                    <label for="slug" class="block text-sm font-medium text-gray-700 mb-2">
+                        Slug <span class="text-red-500">*</span>
+                    </label>
+                    <input
+                        type="text"
+                        id="slug"
+                        name="slug"
+                        required
+                        value="<%= self.item.slug %>"
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    >
+                    <p class="mt-1 text-sm text-gray-500">URL-friendly identifier. Use lowercase letters, numbers, and hyphens.</p>
+                </div>
+
+                <!-- Subtitle -->
+                <div>
+                    <label for="subtitle" class="block text-sm font-medium text-gray-700 mb-2">
+                        Subtitle
+                    </label>
+                    <input
+                        type="text"
+                        id="subtitle"
+                        name="subtitle"
+                        value="<%= self.item.subtitle %>"
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    >
+                </div>
+
+                <!-- Intro -->
+                <div>
+                    <label for="intro" class="block text-sm font-medium text-gray-700 mb-2">
+                        Intro
+                    </label>
+                    <textarea
+                        id="intro"
+                        name="intro"
+                        rows="3"
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        placeholder="A short plain-text paragraph shown next to the hero image"
+                    ><%= self.item.intro %></textarea>
+                </div>
+
+                <!-- Description -->
+                <div>
+                    <label for="description" class="block text-sm font-medium text-gray-700 mb-2">
+                        Description
+                    </label>
+                    <ss-rich-text
+                        name="description"
+                        value='<%= self.item.description %>'
+                        placeholder="Describe this community...">
+                    </ss-rich-text>
+                </div>
+
+                <!-- Image -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Image
+                    </label>
+                    <div class="space-y-3">
+                        <div class="flex items-center gap-3">
+                            <label class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 cursor-pointer">
+                                <wa-icon name="upload" class="w-4 h-4 mr-2"></wa-icon>
+                                Upload Image
+                                <input type="file" accept="image/*" class="hidden" hx-on:change="
+                                    let input = this;
+                                    let form = new FormData();
+                                    form.append('file', input.files[0]);
+                                    fetch('/-upload/file', { method: 'POST', body: form })
+                                        .then(r => r.json())
+                                        .then(data => {
+                                            let urlInput = input.closest('.space-y-3').querySelector('[name=image_url]');
+                                            urlInput.value = window.location.origin + data.file_path;
+                                            let preview = input.closest('.space-y-3').querySelector('.image-preview');
+                                            preview.src = data.file_path;
+                                            preview.classList.remove('hidden');
+                                        });
+                                ">
+                            </label>
+                            <span class="text-sm text-gray-500">or enter a URL below</span>
+                        </div>
+                        <input
+                            type="url"
+                            id="image_url"
+                            name="image_url"
+                            value="<%= self.item.image_url %>"
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        >
+                        <img src="<%= self.item.image_url %>" alt="Image preview" class="image-preview <% if self.item.image_url.is_empty() { %>hidden<% } %> max-h-32 rounded-md border border-gray-200">
+                    </div>
+                </div>
+
+                <!-- Partner Tag -->
+                <div>
+                    <label for="partner_tag" class="block text-sm font-medium text-gray-700 mb-2">
+                        Partner Tag
+                    </label>
+                    <input
+                        type="text"
+                        id="partner_tag"
+                        name="partner_tag"
+                        value="<%= self.item.partner_tag %>"
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    >
+                </div>
+
+                <!-- Topics -->
+                <div>
+                    <label for="topics" class="block text-sm font-medium text-gray-700 mb-2">
+                        Topics
+                    </label>
+                    <input
+                        type="text"
+                        id="topics"
+                        name="topics"
+                        value="<%= self.item.topics.join(", ") %>"
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    >
+                    <p class="mt-1 text-sm text-gray-500">Comma-separated topic tags.</p>
+                </div>
+
+                <!-- External URL -->
+                <div>
+                    <label for="external_url" class="block text-sm font-medium text-gray-700 mb-2">
+                        External URL
+                    </label>
+                    <input
+                        type="url"
+                        id="external_url"
+                        name="external_url"
+                        value="<%= self.item.external_url %>"
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    >
+                    <p class="mt-1 text-sm text-gray-500">Optional "Visit" link for the community.</p>
+                </div>
+
+                <!-- Sort Order -->
+                <div>
+                    <label for="sort_order" class="block text-sm font-medium text-gray-700 mb-2">
+                        Sort Order
+                    </label>
+                    <input
+                        type="number"
+                        id="sort_order"
+                        name="sort_order"
+                        value="<%= self.item.sort_order %>"
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    >
+                    <p class="mt-1 text-sm text-gray-500">Lower numbers appear first.</p>
+                </div>
+
+                <!-- Featured -->
+                <div>
+                    <label class="flex items-center">
+                        <input
+                            type="checkbox"
+                            name="featured"
+                            value="1"
+                            <% if self.item.featured { %>checked<% } %>
+                            class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                        >
+                        <span class="ml-2 text-sm text-gray-700">Featured (show on index page)</span>
+                    </label>
+                </div>
+
+                <!-- Active -->
+                <div>
+                    <label class="flex items-center">
+                        <input
+                            type="checkbox"
+                            name="active"
+                            value="1"
+                            <% if self.item.active { %>checked<% } %>
+                            class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                        >
+                        <span class="ml-2 text-sm text-gray-700">Active</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="flex items-center justify-end pt-6 space-x-2 border-t border-gray-200 mt-6">
+                <a
+                    href="/-admin/communities"
+                    class="px-4 py-2 bg-gray-300 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300"
+                >
+                    Cancel
+                </a>
+                <button
+                    type="submit"
+                    class="relative px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                    <span>Update Community</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>

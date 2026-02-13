@@ -1,0 +1,1 @@
+ALTER TABLE communities ADD COLUMN intro TEXT NOT NULL DEFAULT '';
