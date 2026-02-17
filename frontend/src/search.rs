@@ -9,6 +9,7 @@ use sailfish::TemplateOnce;
 use serde::Deserialize;
 use crate::{
     component::{Component, Head, StandardLayout},
+    form::QsQuery,
     middleware::authorization::Authenticated,
 };
 
@@ -45,6 +46,17 @@ pub struct FinderQuery {
     #[serde(default, deserialize_with = "deserialize_optional_f64")]
     pub lng: Option<f64>,
     pub location_name: Option<String>,
+    pub page: Option<u32>,
+    pub location_type: Option<String>,
+    #[serde(default)]
+    pub topic: Vec<String>,
+    #[serde(default)]
+    pub audience: Vec<String>,
+    #[serde(default)]
+    pub activity: Vec<String>,
+    pub show_completed: Option<String>,
+    #[serde(default)]
+    pub misc_filter: Vec<String>,
 }
 
 #[derive(Debug, TemplateOnce)]
@@ -133,6 +145,13 @@ pub struct FinderResult {
     pub image: String,
     pub description_snippet: String,
     pub distance_km: Option<f64>,
+    pub goal: String,
+    pub task: String,
+    pub event_date_month: String,
+    pub event_date_day: String,
+    pub event_date_year: String,
+    pub is_completed: bool,
+    pub geo_json: Option<String>,
 }
 
 #[derive(TemplateOnce)]
@@ -151,408 +170,801 @@ struct FinderContent {
     lat: String,
     lng: String,
     geosearch_key: String,
+    // Pagination
+    current_page: u32,
+    has_previous: bool,
+    has_next: bool,
+    total_pages: u32,
+    // Filter options
+    available_topics: Vec<String>,
+    available_audiences: Vec<String>,
+    available_activities: Vec<String>,
+    // Current filter state
+    location_type: String,
+    selected_topics: Vec<String>,
+    selected_audiences: Vec<String>,
+    selected_activities: Vec<String>,
+    show_completed: bool,
+    has_classroom_materials: bool,
+    has_app: bool,
+    is_affiliate: bool,
+    usa_only: bool,
+    outside_usa: bool,
+    exclusively_outdoors: bool,
 }
 
-async fn search_text_only(query: &str) -> Result<Vec<FinderResult>, Error> {
-    let search_term = format!("{}*", query);
+impl FinderContent {
+    fn pagination_params(&self, page: u32) -> String {
+        let mut params = Vec::new();
+        params.push(format!("page={}", page));
+        if !self.query.is_empty() {
+            params.push(format!("q={}", urlencoding::encode(&self.query)));
+        }
+        if !self.lat.is_empty() {
+            params.push(format!("lat={}", urlencoding::encode(&self.lat)));
+        }
+        if !self.lng.is_empty() {
+            params.push(format!("lng={}", urlencoding::encode(&self.lng)));
+        }
+        if !self.location_name.is_empty() {
+            params.push(format!(
+                "location_name={}",
+                urlencoding::encode(&self.location_name)
+            ));
+        }
+        if self.location_type != "either" {
+            params.push(format!("location_type={}", &self.location_type));
+        }
+        for t in &self.selected_topics {
+            params.push(format!("topic[]={}", urlencoding::encode(t)));
+        }
+        for a in &self.selected_audiences {
+            params.push(format!("audience[]={}", urlencoding::encode(a)));
+        }
+        for a in &self.selected_activities {
+            params.push(format!("activity[]={}", urlencoding::encode(a)));
+        }
+        if self.show_completed {
+            params.push("show_completed=on".to_string());
+        }
+        for (flag, key) in [
+            (self.has_classroom_materials, "has_classroom_materials"),
+            (self.has_app, "has_app"),
+            (self.is_affiliate, "is_affiliate"),
+            (self.usa_only, "usa_only"),
+            (self.outside_usa, "outside_usa"),
+            (self.exclusively_outdoors, "exclusively_outdoors"),
+        ] {
+            if flag {
+                params.push(format!("misc_filter[]={}", key));
+            }
+        }
+        params.join("&")
+    }
+}
 
-    let rows = sqlx::query!(
-        r#"SELECT f.slug as "slug: String",
-                  f.entity_type as "entity_type: String",
-                  f.title as "title: String",
-                  COALESCE(p.description, ev.description, '') as "description: String",
-                  COALESCE(p.image, ev.image, '') as "image: String",
-                  CASE
-                    WHEN COALESCE(p.entirely_online, ev.entirely_online, 0) = 1 THEN 'Online'
-                    WHEN COALESCE(p.city, ev.city, '') != '' AND COALESCE(p.state, ev.state, '') != '' THEN COALESCE(p.city, ev.city, '') || ', ' || COALESCE(p.state, ev.state, '')
-                    WHEN COALESCE(p.location_name, ev.location_name, '') != '' THEN COALESCE(p.location_name, ev.location_name, '')
-                    ELSE ''
-                  END as "location_display: String"
+const FINDER_PER_PAGE: u32 = 24;
+
+/// Load available filter options from the database
+async fn load_filter_options() -> Result<(Vec<String>, Vec<String>, Vec<String>), Error> {
+    let topics = sqlx::query_scalar!("SELECT DISTINCT topic FROM project_topics ORDER BY topic")
+        .fetch_all(db())
+        .await?;
+    let audiences =
+        sqlx::query_scalar!("SELECT DISTINCT audience FROM project_audiences ORDER BY audience")
+            .fetch_all(db())
+            .await?;
+    let activities =
+        sqlx::query_scalar!("SELECT DISTINCT activity FROM project_activities ORDER BY activity")
+            .fetch_all(db())
+            .await?;
+    Ok((topics, audiences, activities))
+}
+
+/// Apply project-specific filters to a QueryBuilder
+fn apply_project_filters<'a>(
+    qb: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
+    query: &'a FinderQuery,
+) {
+    let location_type = query.location_type.as_deref().unwrap_or("either");
+    match location_type {
+        "remote" => {
+            qb.push(" AND p.entirely_online = 1");
+        }
+        "onsite" => {
+            qb.push(" AND p.in_person = 1");
+        }
+        _ => {}
+    }
+
+    if query.show_completed.is_none() {
+        qb.push(" AND p.status != 'Complete'");
+        qb.push(" AND (p.end IS NULL OR p.end = '' OR p.end >= datetime('now'))");
+    }
+
+    if !query.topic.is_empty() {
+        qb.push(" AND p.project_id IN (SELECT project_id FROM project_topics WHERE topic IN (");
+        let mut sep = qb.separated(", ");
+        for t in &query.topic {
+            sep.push_bind(t);
+        }
+        qb.push("))");
+    }
+
+    if !query.audience.is_empty() {
+        qb.push(
+            " AND p.project_id IN (SELECT project_id FROM project_audiences WHERE audience IN (",
+        );
+        let mut sep = qb.separated(", ");
+        for a in &query.audience {
+            sep.push_bind(a);
+        }
+        qb.push("))");
+    }
+
+    if !query.activity.is_empty() {
+        qb.push(
+            " AND p.project_id IN (SELECT project_id FROM project_activities WHERE activity IN (",
+        );
+        let mut sep = qb.separated(", ");
+        for a in &query.activity {
+            sep.push_bind(a);
+        }
+        qb.push("))");
+    }
+
+    let mf = &query.misc_filter;
+    if mf.iter().any(|v| v == "has_classroom_materials") {
+        qb.push(" AND p.classroom_materials != ''");
+    }
+    if mf.iter().any(|v| v == "has_app") {
+        qb.push(
+            " AND (p.mobile_app_url != '' OR p.mobile_app_url_android != '' OR p.mobile_app_url_ios != '')",
+        );
+    }
+    if mf.iter().any(|v| v == "is_affiliate") {
+        qb.push(" AND p.is_affiliate = 1");
+    }
+    if mf.iter().any(|v| v == "usa_only") {
+        qb.push(" AND p.country = 'United States'");
+    }
+    if mf.iter().any(|v| v == "outside_usa") {
+        qb.push(" AND p.country != 'United States' AND p.country != ''");
+    }
+    if mf.iter().any(|v| v == "exclusively_outdoors") {
+        qb.push(" AND p.outdoors = 1 AND p.indoors = 0");
+    }
+}
+
+/// Apply event-specific filters to a QueryBuilder
+fn apply_event_filters<'a>(
+    qb: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
+    query: &'a FinderQuery,
+) {
+    let location_type = query.location_type.as_deref().unwrap_or("either");
+    match location_type {
+        "remote" => {
+            qb.push(" AND ev.entirely_online = 1");
+        }
+        "onsite" => {
+            qb.push(" AND ev.entirely_online = 0");
+        }
+        _ => {}
+    }
+
+    if query.show_completed.is_none() {
+        qb.push(" AND ev.event_id IN (SELECT ei.event_id FROM event_instances ei WHERE ei.begin >= datetime('now'))");
+    }
+
+    if !query.topic.is_empty() {
+        qb.push(" AND ev.event_id IN (SELECT event_id FROM event_tags WHERE tag IN (");
+        let mut sep = qb.separated(", ");
+        for t in &query.topic {
+            sep.push_bind(t);
+        }
+        qb.push("))");
+    }
+}
+
+fn make_snippet(desc: &str) -> String {
+    if desc.len() > 200 {
+        format!(
+            "{}...",
+            &desc[..desc
+                .char_indices()
+                .take(200)
+                .last()
+                .map(|(i, _)| i)
+                .unwrap_or(200)]
+        )
+    } else {
+        desc.to_string()
+    }
+}
+
+fn parse_event_date(begin: &Option<String>) -> (String, String, String) {
+    if let Some(s) = begin {
+        if s.len() >= 10 {
+            let parts: Vec<&str> = s[..10].split('-').collect();
+            if parts.len() == 3 {
+                let month_num: u32 = parts[1].parse().unwrap_or(0);
+                let month = match month_num {
+                    1 => "JAN",
+                    2 => "FEB",
+                    3 => "MAR",
+                    4 => "APR",
+                    5 => "MAY",
+                    6 => "JUN",
+                    7 => "JUL",
+                    8 => "AUG",
+                    9 => "SEP",
+                    10 => "OCT",
+                    11 => "NOV",
+                    12 => "DEC",
+                    _ => "",
+                };
+                let day = parts[2].trim_start_matches('0');
+                return (month.to_string(), day.to_string(), parts[0].to_string());
+            }
+        }
+    }
+    (String::new(), String::new(), String::new())
+}
+
+struct FinderSearchResult {
+    results: Vec<FinderResult>,
+    total: u32,
+}
+
+/// Count projects matching text search + filters
+fn build_project_count_text<'a>(
+    search_term: &'a str,
+    fq: &'a FinderQuery,
+) -> sqlx::QueryBuilder<'a, sqlx::Sqlite> {
+    let mut qb = sqlx::QueryBuilder::new(
+        "SELECT COUNT(*) FROM entities_fts f JOIN entities e ON f.slug = e.slug JOIN projects p ON e.target = p.project_id WHERE e.kind = 'Project' AND entities_fts MATCH ",
+    );
+    qb.push_bind(search_term);
+    qb.push(" AND e.publish = 1");
+    apply_project_filters(&mut qb, fq);
+    qb
+}
+
+/// Count events matching text search + filters
+fn build_event_count_text<'a>(
+    search_term: &'a str,
+    fq: &'a FinderQuery,
+) -> sqlx::QueryBuilder<'a, sqlx::Sqlite> {
+    let mut qb = sqlx::QueryBuilder::new(
+        "SELECT COUNT(*) FROM entities_fts f JOIN entities e ON f.slug = e.slug JOIN events ev ON e.target = ev.event_id WHERE e.kind = 'Event' AND entities_fts MATCH ",
+    );
+    qb.push_bind(search_term);
+    qb.push(" AND e.publish = 1");
+    apply_event_filters(&mut qb, fq);
+    qb
+}
+
+/// Search all published entities with no text or location filter, just pagination and sidebar filters
+async fn search_all(fq: &FinderQuery, page: u32) -> Result<FinderSearchResult, Error> {
+    let limit = FINDER_PER_PAGE as i64;
+    let offset = ((page - 1) * FINDER_PER_PAGE) as i64;
+
+    // Count
+    let mut proj_qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new(
+        "SELECT COUNT(*) FROM entities e JOIN projects p ON e.target = p.project_id WHERE e.kind = 'Project' AND e.publish = 1",
+    );
+    apply_project_filters(&mut proj_qb, fq);
+    let proj_count: i64 = proj_qb.build_query_scalar().fetch_one(db()).await?;
+
+    let mut evt_qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new(
+        "SELECT COUNT(*) FROM entities e JOIN events ev ON e.target = ev.event_id WHERE e.kind = 'Event' AND e.publish = 1",
+    );
+    apply_event_filters(&mut evt_qb, fq);
+    let evt_count: i64 = evt_qb.build_query_scalar().fetch_one(db()).await?;
+    let total = (proj_count + evt_count) as u32;
+
+    // Build UNION ALL query
+    let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new("SELECT * FROM (");
+
+    // Project subquery
+    qb.push(
+        "SELECT e.slug, 'Project' AS entity_type, p.name AS title, p.description, p.image, p.goal, p.task, p.status, CASE WHEN p.entirely_online = 1 THEN 'Online' WHEN p.city != '' AND p.state != '' THEN p.city || ', ' || p.state WHEN p.location_name != '' THEN p.location_name ELSE '' END AS location_display, NULL AS event_begin, CASE WHEN p.regions IS NOT NULL THEN AsGeoJSON(p.regions) WHEN p.point IS NOT NULL THEN AsGeoJSON(p.point) ELSE NULL END AS geo_json FROM entities e JOIN projects p ON e.target = p.project_id WHERE e.kind = 'Project' AND e.publish = 1",
+    );
+    apply_project_filters(&mut qb, fq);
+
+    qb.push(" UNION ALL ");
+
+    // Event subquery
+    qb.push(
+        "SELECT e.slug, 'Event' AS entity_type, ev.name AS title, ev.description, ev.image, '' AS goal, '' AS task, '' AS status, CASE WHEN ev.entirely_online = 1 THEN 'Online' WHEN ev.city != '' AND ev.state != '' THEN ev.city || ', ' || ev.state WHEN ev.location_name != '' THEN ev.location_name ELSE '' END AS location_display, (SELECT ei.begin FROM event_instances ei WHERE ei.event_id = ev.event_id AND ei.begin >= datetime('now') ORDER BY ei.begin LIMIT 1) AS event_begin, CASE WHEN ev.regions IS NOT NULL THEN AsGeoJSON(ev.regions) WHEN ev.point IS NOT NULL THEN AsGeoJSON(ev.point) ELSE NULL END AS geo_json FROM entities e JOIN events ev ON e.target = ev.event_id WHERE e.kind = 'Event' AND e.publish = 1",
+    );
+    apply_event_filters(&mut qb, fq);
+
+    qb.push(") ORDER BY event_begin IS NULL, event_begin, title LIMIT ");
+    qb.push_bind(limit);
+    qb.push(" OFFSET ");
+    qb.push_bind(offset);
+
+    let rows = qb
+        .build_query_as::<(
+            String,         // slug
+            String,         // entity_type
+            String,         // title
+            String,         // description
+            String,         // image
+            String,         // goal
+            String,         // task
+            String,         // status
+            String,         // location_display
+            Option<String>, // event_begin
+            Option<String>, // geo_json
+        )>()
+        .fetch_all(db())
+        .await?;
+
+    let results = rows
+        .into_iter()
+        .map(|row| {
+            let (month, day, year) = parse_event_date(&row.9);
+            FinderResult {
+                slug: row.0,
+                entity_type: row.1,
+                title: row.2,
+                description_snippet: make_snippet(&row.3),
+                image: row.4,
+                goal: row.5,
+                task: row.6,
+                is_completed: row.7 == "Complete",
+                location_display: row.8,
+                event_date_month: month,
+                event_date_day: day,
+                event_date_year: year,
+                distance_km: None,
+                geo_json: row.10,
+            }
+        })
+        .collect();
+
+    Ok(FinderSearchResult { results, total })
+}
+
+async fn search_text_only(fq: &FinderQuery, page: u32) -> Result<FinderSearchResult, Error> {
+    let q = fq.q.as_deref().unwrap_or("");
+    let search_term = format!("{}*", q);
+    let limit = FINDER_PER_PAGE as i64;
+    let offset = ((page - 1) * FINDER_PER_PAGE) as i64;
+
+    // Count
+    let proj_count: i64 = build_project_count_text(&search_term, fq)
+        .build_query_scalar()
+        .fetch_one(db())
+        .await?;
+    let evt_count: i64 = build_event_count_text(&search_term, fq)
+        .build_query_scalar()
+        .fetch_one(db())
+        .await?;
+    let total = (proj_count + evt_count) as u32;
+
+    // Build UNION ALL query
+    let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new("SELECT * FROM (");
+
+    // Project subquery
+    qb.push(
+        r#"SELECT f.slug, 'Project' AS entity_type, f.title, p.description, p.image,
+           p.goal, p.task, p.status,
+           CASE
+             WHEN p.entirely_online = 1 THEN 'Online'
+             WHEN p.city != '' AND p.state != '' THEN p.city || ', ' || p.state
+             WHEN p.location_name != '' THEN p.location_name
+             ELSE ''
+           END AS location_display,
+           NULL AS event_begin,
+           rank AS sort_rank,
+           CASE WHEN p.regions IS NOT NULL THEN AsGeoJSON(p.regions) WHEN p.point IS NOT NULL THEN AsGeoJSON(p.point) ELSE NULL END AS geo_json
            FROM entities_fts f
            JOIN entities e ON f.slug = e.slug
-           LEFT JOIN projects p ON e.kind = 'Project' AND e.target = p.project_id
-           LEFT JOIN events ev ON e.kind = 'Event' AND e.target = ev.event_id
-           WHERE entities_fts MATCH ?1
-             AND e.publish = 1
-             AND e.kind IN ('Project', 'Event')
-           GROUP BY f.slug
-           ORDER BY rank
-           LIMIT 50"#,
-        search_term
-    )
-    .fetch_all(db())
-    .await?;
+           JOIN projects p ON e.target = p.project_id
+           WHERE e.kind = 'Project' AND entities_fts MATCH "#,
+    );
+    qb.push_bind(search_term.clone());
+    qb.push(" AND e.publish = 1");
+    apply_project_filters(&mut qb, fq);
 
-    Ok(rows
+    qb.push(" UNION ALL ");
+
+    // Event subquery
+    qb.push(
+        r#"SELECT f.slug, 'Event' AS entity_type, f.title, ev.description, ev.image,
+           '' AS goal, '' AS task, '' AS status,
+           CASE
+             WHEN ev.entirely_online = 1 THEN 'Online'
+             WHEN ev.city != '' AND ev.state != '' THEN ev.city || ', ' || ev.state
+             WHEN ev.location_name != '' THEN ev.location_name
+             ELSE ''
+           END AS location_display,
+           (SELECT ei.begin FROM event_instances ei WHERE ei.event_id = ev.event_id AND ei.begin >= datetime('now') ORDER BY ei.begin LIMIT 1) AS event_begin,
+           rank AS sort_rank,
+           CASE WHEN ev.regions IS NOT NULL THEN AsGeoJSON(ev.regions) WHEN ev.point IS NOT NULL THEN AsGeoJSON(ev.point) ELSE NULL END AS geo_json
+           FROM entities_fts f
+           JOIN entities e ON f.slug = e.slug
+           JOIN events ev ON e.target = ev.event_id
+           WHERE e.kind = 'Event' AND entities_fts MATCH "#,
+    );
+    qb.push_bind(search_term.clone());
+    qb.push(" AND e.publish = 1");
+    apply_event_filters(&mut qb, fq);
+
+    qb.push(") ORDER BY sort_rank LIMIT ");
+    qb.push_bind(limit);
+    qb.push(" OFFSET ");
+    qb.push_bind(offset);
+
+    let rows = qb
+        .build_query_as::<(
+            String,         // slug
+            String,         // entity_type
+            Option<String>, // title
+            String,         // description
+            String,         // image
+            String,         // goal
+            String,         // task
+            String,         // status
+            String,         // location_display
+            Option<String>, // event_begin
+            f64,            // sort_rank
+            Option<String>, // geo_json
+        )>()
+        .fetch_all(db())
+        .await?;
+
+    let results = rows
         .into_iter()
-        .filter_map(|row| {
-            let entity_type = row.entity_type?;
-            let display_type = match entity_type.to_lowercase().as_str() {
-                "project" => "Project",
-                "event" => "Event",
-                _ => return None,
-            };
-            let desc = row.description.unwrap_or_default();
-            let snippet = if desc.len() > 200 {
-                format!(
-                    "{}...",
-                    &desc[..desc
-                        .char_indices()
-                        .take(200)
-                        .last()
-                        .map(|(i, _)| i)
-                        .unwrap_or(200)]
-                )
-            } else {
-                desc
-            };
-            Some(FinderResult {
-                slug: row.slug?,
-                entity_type: display_type.to_string(),
-                title: row.title.unwrap_or_default(),
-                location_display: row.location_display.unwrap_or_default(),
-                image: row.image.unwrap_or_default(),
-                description_snippet: snippet,
+        .map(|row| {
+            let (month, day, year) = parse_event_date(&row.9);
+            FinderResult {
+                slug: row.0,
+                entity_type: row.1,
+                title: row.2.unwrap_or_default(),
+                description_snippet: make_snippet(&row.3),
+                image: row.4,
+                goal: row.5,
+                task: row.6,
+                is_completed: row.7 == "Complete",
+                location_display: row.8,
+                event_date_month: month,
+                event_date_day: day,
+                event_date_year: year,
                 distance_km: None,
-            })
+                geo_json: row.11,
+            }
         })
-        .collect())
-}
+        .collect();
 
-struct SpatialRow {
-    slug: String,
-    entity_type: String,
-    title: String,
-    description: String,
-    image: String,
-    location_display: String,
-    distance: Option<f64>,
-    region_area: Option<f64>,
+    Ok(FinderSearchResult { results, total })
 }
 
 async fn search_with_location(
-    query: &str,
+    fq: &FinderQuery,
     lat: f64,
     lng: f64,
-) -> Result<Vec<FinderResult>, Error> {
-    let search_term = format!("{}*", query);
+    page: u32,
+) -> Result<FinderSearchResult, Error> {
+    let q = fq.q.as_deref().unwrap_or("");
+    let search_term = format!("{}*", q);
 
-    // Query projects
-    let project_rows = sqlx::query!(
-        r#"SELECT f.slug as "slug: String",
-                  f.title as "title: String",
-                  p.description as "description: String",
-                  p.image as "image: String",
-                  CASE
-                    WHEN p.entirely_online = 1 THEN 'Online'
-                    WHEN p.city != '' AND p.state != '' THEN p.city || ', ' || p.state
-                    WHEN p.location_name != '' THEN p.location_name
-                    ELSE ''
-                  END as "location_display: String",
-                  ST_Distance(p.point, MakePoint(?2, ?3, 4326), 1) as "distance: Option<f64>",
-                  CASE WHEN p.regions IS NOT NULL AND ST_Contains(p.regions, MakePoint(?2, ?3, 4326))
-                       THEN ST_Area(p.regions, 1)
-                       ELSE NULL
-                  END as "region_area: Option<f64>"
-           FROM entities_fts f
-           JOIN entities e ON f.slug = e.slug
-           JOIN projects p ON e.target = p.project_id
-           WHERE e.kind = 'Project'
-             AND entities_fts MATCH ?1
-             AND e.publish = 1
-           GROUP BY f.slug
-           LIMIT 50"#,
-        search_term,
-        lng,
-        lat
-    )
-    .fetch_all(db())
-    .await?;
+    // Count
+    let proj_count: i64 = build_project_count_text(&search_term, fq)
+        .build_query_scalar()
+        .fetch_one(db())
+        .await?;
+    let evt_count: i64 = build_event_count_text(&search_term, fq)
+        .build_query_scalar()
+        .fetch_one(db())
+        .await?;
+    let total = (proj_count + evt_count) as u32;
 
-    // Query events
-    let event_rows = sqlx::query!(
-        r#"SELECT f.slug as "slug: String",
-                  f.title as "title: String",
-                  ev.description as "description: String",
-                  ev.image as "image: String",
-                  CASE
-                    WHEN ev.entirely_online = 1 THEN 'Online'
-                    WHEN ev.city != '' AND ev.state != '' THEN ev.city || ', ' || ev.state
-                    WHEN ev.location_name != '' THEN ev.location_name
-                    ELSE ''
-                  END as "location_display: String",
-                  ST_Distance(ev.point, MakePoint(?2, ?3, 4326), 1) as "distance: Option<f64>",
-                  CASE WHEN ev.regions IS NOT NULL AND ST_Contains(ev.regions, MakePoint(?2, ?3, 4326))
-                       THEN ST_Area(ev.regions, 1)
-                       ELSE NULL
-                  END as "region_area: Option<f64>"
-           FROM entities_fts f
-           JOIN entities e ON f.slug = e.slug
-           JOIN events ev ON e.target = ev.event_id
-           WHERE e.kind = 'Event'
-             AND entities_fts MATCH ?1
-             AND e.publish = 1
-           GROUP BY f.slug
-           LIMIT 50"#,
-        search_term,
-        lng,
-        lat
-    )
-    .fetch_all(db())
-    .await?;
+    let limit = FINDER_PER_PAGE as i64;
+    let offset = ((page - 1) * FINDER_PER_PAGE) as i64;
 
-    let mut spatial: Vec<SpatialRow> = Vec::new();
+    // Build UNION ALL with spatial columns
+    let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new("SELECT * FROM (");
 
-    for row in project_rows {
-        spatial.push(SpatialRow {
-            slug: row.slug.unwrap_or_default(),
-            entity_type: "Project".to_string(),
-            title: row.title.unwrap_or_default(),
-            description: row.description,
-            image: row.image,
-            location_display: row.location_display.unwrap_or_default(),
-            distance: row.distance.flatten(),
-            region_area: row.region_area.flatten(),
-        });
-    }
+    // Project subquery
+    qb.push(
+        "SELECT f.slug, 'Project' AS entity_type, f.title, p.description, p.image, p.goal, p.task, p.status, CASE WHEN p.entirely_online = 1 THEN 'Online' WHEN p.city != '' AND p.state != '' THEN p.city || ', ' || p.state WHEN p.location_name != '' THEN p.location_name ELSE '' END AS location_display, NULL AS event_begin, ST_Distance(p.point, MakePoint(",
+    );
+    qb.push_bind(lng);
+    qb.push(", ");
+    qb.push_bind(lat);
+    qb.push(
+        ", 4326), 1) AS distance, CASE WHEN p.regions IS NOT NULL AND ST_Contains(p.regions, MakePoint(",
+    );
+    qb.push_bind(lng);
+    qb.push(", ");
+    qb.push_bind(lat);
+    qb.push(
+        ", 4326)) THEN ST_Area(p.regions, 1) ELSE NULL END AS region_area, CASE WHEN p.regions IS NOT NULL THEN AsGeoJSON(p.regions) WHEN p.point IS NOT NULL THEN AsGeoJSON(p.point) ELSE NULL END AS geo_json FROM entities_fts f JOIN entities e ON f.slug = e.slug JOIN projects p ON e.target = p.project_id WHERE e.kind = 'Project' AND entities_fts MATCH ",
+    );
+    qb.push_bind(search_term.clone());
+    qb.push(" AND e.publish = 1");
+    apply_project_filters(&mut qb, fq);
+    qb.push(" GROUP BY f.slug");
 
-    for row in event_rows {
-        spatial.push(SpatialRow {
-            slug: row.slug.unwrap_or_default(),
-            entity_type: "Event".to_string(),
-            title: row.title.unwrap_or_default(),
-            description: row.description,
-            image: row.image,
-            location_display: row.location_display.unwrap_or_default(),
-            distance: row.distance.flatten(),
-            region_area: row.region_area.flatten(),
-        });
-    }
+    qb.push(" UNION ALL ");
 
-    // Sort: region containment first (smaller area wins), then by distance
-    spatial.sort_by(|a, b| match (&a.region_area, &b.region_area) {
-        (Some(area_a), Some(area_b)) => area_a
-            .partial_cmp(area_b)
-            .unwrap_or(std::cmp::Ordering::Equal),
-        (Some(_), None) => std::cmp::Ordering::Less,
-        (None, Some(_)) => std::cmp::Ordering::Greater,
-        (None, None) => {
-            let dist_a = a.distance.unwrap_or(f64::MAX);
-            let dist_b = b.distance.unwrap_or(f64::MAX);
-            dist_a
-                .partial_cmp(&dist_b)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        }
-    });
+    // Event subquery
+    qb.push(
+        "SELECT f.slug, 'Event' AS entity_type, f.title, ev.description, ev.image, '' AS goal, '' AS task, '' AS status, CASE WHEN ev.entirely_online = 1 THEN 'Online' WHEN ev.city != '' AND ev.state != '' THEN ev.city || ', ' || ev.state WHEN ev.location_name != '' THEN ev.location_name ELSE '' END AS location_display, (SELECT ei.begin FROM event_instances ei WHERE ei.event_id = ev.event_id AND ei.begin >= datetime('now') ORDER BY ei.begin LIMIT 1) AS event_begin, ST_Distance(ev.point, MakePoint(",
+    );
+    qb.push_bind(lng);
+    qb.push(", ");
+    qb.push_bind(lat);
+    qb.push(
+        ", 4326), 1) AS distance, CASE WHEN ev.regions IS NOT NULL AND ST_Contains(ev.regions, MakePoint(",
+    );
+    qb.push_bind(lng);
+    qb.push(", ");
+    qb.push_bind(lat);
+    qb.push(
+        ", 4326)) THEN ST_Area(ev.regions, 1) ELSE NULL END AS region_area, CASE WHEN ev.regions IS NOT NULL THEN AsGeoJSON(ev.regions) WHEN ev.point IS NOT NULL THEN AsGeoJSON(ev.point) ELSE NULL END AS geo_json FROM entities_fts f JOIN entities e ON f.slug = e.slug JOIN events ev ON e.target = ev.event_id WHERE e.kind = 'Event' AND entities_fts MATCH ",
+    );
+    qb.push_bind(search_term.clone());
+    qb.push(" AND e.publish = 1");
+    apply_event_filters(&mut qb, fq);
+    qb.push(" GROUP BY f.slug");
 
-    spatial.truncate(50);
+    // Sort by region containment (smaller area first), then distance
+    qb.push(
+        ") ORDER BY CASE WHEN region_area IS NOT NULL THEN 0 ELSE 1 END, region_area, distance LIMIT ",
+    );
+    qb.push_bind(limit);
+    qb.push(" OFFSET ");
+    qb.push_bind(offset);
 
-    Ok(spatial
+    let rows = qb
+        .build_query_as::<(
+            String,         // slug
+            String,         // entity_type
+            Option<String>, // title
+            String,         // description
+            String,         // image
+            String,         // goal
+            String,         // task
+            String,         // status
+            String,         // location_display
+            Option<String>, // event_begin
+            Option<f64>,    // distance
+            Option<f64>,    // region_area
+            Option<String>, // geo_json
+        )>()
+        .fetch_all(db())
+        .await?;
+
+    let results = rows
         .into_iter()
         .map(|row| {
-            let desc = row.description;
-            let snippet = if desc.len() > 200 {
-                format!(
-                    "{}...",
-                    &desc[..desc
-                        .char_indices()
-                        .take(200)
-                        .last()
-                        .map(|(i, _)| i)
-                        .unwrap_or(200)]
-                )
-            } else {
-                desc
-            };
-            let distance_km = row.distance.map(|d| d / 1000.0);
+            let (month, day, year) = parse_event_date(&row.9);
             FinderResult {
-                slug: row.slug,
-                entity_type: row.entity_type,
-                title: row.title,
-                location_display: row.location_display,
-                image: row.image,
-                description_snippet: snippet,
-                distance_km,
+                slug: row.0,
+                entity_type: row.1,
+                title: row.2.unwrap_or_default(),
+                description_snippet: make_snippet(&row.3),
+                image: row.4,
+                goal: row.5,
+                task: row.6,
+                is_completed: row.7 == "Complete",
+                location_display: row.8,
+                event_date_month: month,
+                event_date_day: day,
+                event_date_year: year,
+                distance_km: row.10.map(|d| d / 1000.0),
+                geo_json: row.12,
             }
         })
-        .collect())
+        .collect();
+
+    Ok(FinderSearchResult { results, total })
 }
 
-async fn search_location_only(lat: f64, lng: f64) -> Result<Vec<FinderResult>, Error> {
-    // Query nearby projects
-    let project_rows = sqlx::query!(
-        r#"SELECT e.slug as "slug: String",
-                  p.name as "title: String",
-                  p.description as "description: String",
-                  p.image as "image: String",
-                  CASE
-                    WHEN p.entirely_online = 1 THEN 'Online'
-                    WHEN p.city != '' AND p.state != '' THEN p.city || ', ' || p.state
-                    WHEN p.location_name != '' THEN p.location_name
-                    ELSE ''
-                  END as "location_display: String",
-                  ST_Distance(p.point, MakePoint(?1, ?2, 4326), 1) as "distance: Option<f64>",
-                  CASE WHEN p.regions IS NOT NULL AND ST_Contains(p.regions, MakePoint(?1, ?2, 4326))
-                       THEN ST_Area(p.regions, 1)
-                       ELSE NULL
-                  END as "region_area: Option<f64>"
-           FROM entities e
-           JOIN projects p ON e.target = p.project_id
-           WHERE e.kind = 'Project'
-             AND e.publish = 1
-             AND (p.point IS NOT NULL OR p.regions IS NOT NULL OR p.entirely_online = 1)
-           ORDER BY
-             CASE WHEN p.regions IS NOT NULL AND ST_Contains(p.regions, MakePoint(?1, ?2, 4326))
-                  THEN 0 ELSE 1 END,
-             ST_Distance(p.point, MakePoint(?1, ?2, 4326), 1)
-           LIMIT 50"#,
-        lng,
-        lat
-    )
-    .fetch_all(db())
-    .await?;
+/// Count projects matching location-only + filters
+fn build_project_count_location<'a>(
+    fq: &'a FinderQuery,
+) -> sqlx::QueryBuilder<'a, sqlx::Sqlite> {
+    let mut qb = sqlx::QueryBuilder::new(
+        "SELECT COUNT(*) FROM entities e JOIN projects p ON e.target = p.project_id WHERE e.kind = 'Project' AND e.publish = 1 AND (p.point IS NOT NULL OR p.regions IS NOT NULL OR p.entirely_online = 1)",
+    );
+    apply_project_filters(&mut qb, fq);
+    qb
+}
 
-    // Query nearby events
-    let event_rows = sqlx::query!(
-        r#"SELECT e.slug as "slug: String",
-                  ev.name as "title: String",
-                  ev.description as "description: String",
-                  ev.image as "image: String",
-                  CASE
-                    WHEN ev.entirely_online = 1 THEN 'Online'
-                    WHEN ev.city != '' AND ev.state != '' THEN ev.city || ', ' || ev.state
-                    WHEN ev.location_name != '' THEN ev.location_name
-                    ELSE ''
-                  END as "location_display: String",
-                  ST_Distance(ev.point, MakePoint(?1, ?2, 4326), 1) as "distance: Option<f64>",
-                  CASE WHEN ev.regions IS NOT NULL AND ST_Contains(ev.regions, MakePoint(?1, ?2, 4326))
-                       THEN ST_Area(ev.regions, 1)
-                       ELSE NULL
-                  END as "region_area: Option<f64>"
-           FROM entities e
-           JOIN events ev ON e.target = ev.event_id
-           WHERE e.kind = 'Event'
-             AND e.publish = 1
-             AND (ev.point IS NOT NULL OR ev.regions IS NOT NULL OR ev.entirely_online = 1)
-           ORDER BY
-             CASE WHEN ev.regions IS NOT NULL AND ST_Contains(ev.regions, MakePoint(?1, ?2, 4326))
-                  THEN 0 ELSE 1 END,
-             ST_Distance(ev.point, MakePoint(?1, ?2, 4326), 1)
-           LIMIT 50"#,
-        lng,
-        lat
-    )
-    .fetch_all(db())
-    .await?;
+/// Count events matching location-only + filters
+fn build_event_count_location<'a>(
+    fq: &'a FinderQuery,
+) -> sqlx::QueryBuilder<'a, sqlx::Sqlite> {
+    let mut qb = sqlx::QueryBuilder::new(
+        "SELECT COUNT(*) FROM entities e JOIN events ev ON e.target = ev.event_id WHERE e.kind = 'Event' AND e.publish = 1 AND (ev.point IS NOT NULL OR ev.regions IS NOT NULL OR ev.entirely_online = 1)",
+    );
+    apply_event_filters(&mut qb, fq);
+    qb
+}
 
-    let mut spatial: Vec<SpatialRow> = Vec::new();
+async fn search_location_only(
+    fq: &FinderQuery,
+    lat: f64,
+    lng: f64,
+    page: u32,
+) -> Result<FinderSearchResult, Error> {
+    // Count
+    let proj_count: i64 = build_project_count_location(fq)
+        .build_query_scalar()
+        .fetch_one(db())
+        .await?;
+    let evt_count: i64 = build_event_count_location(fq)
+        .build_query_scalar()
+        .fetch_one(db())
+        .await?;
+    let total = (proj_count + evt_count) as u32;
 
-    for row in project_rows {
-        spatial.push(SpatialRow {
-            slug: row.slug,
-            entity_type: "Project".to_string(),
-            title: row.title,
-            description: row.description,
-            image: row.image,
-            location_display: row.location_display,
-            distance: row.distance.flatten(),
-            region_area: row.region_area.flatten(),
-        });
-    }
+    let limit = FINDER_PER_PAGE as i64;
+    let offset = ((page - 1) * FINDER_PER_PAGE) as i64;
 
-    for row in event_rows {
-        spatial.push(SpatialRow {
-            slug: row.slug,
-            entity_type: "Event".to_string(),
-            title: row.title,
-            description: row.description,
-            image: row.image,
-            location_display: row.location_display,
-            distance: row.distance.flatten(),
-            region_area: row.region_area.flatten(),
-        });
-    }
+    let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new("SELECT * FROM (");
 
-    // Sort: region containment first (smaller area wins), then by distance
-    spatial.sort_by(|a, b| match (&a.region_area, &b.region_area) {
-        (Some(area_a), Some(area_b)) => area_a
-            .partial_cmp(area_b)
-            .unwrap_or(std::cmp::Ordering::Equal),
-        (Some(_), None) => std::cmp::Ordering::Less,
-        (None, Some(_)) => std::cmp::Ordering::Greater,
-        (None, None) => {
-            let dist_a = a.distance.unwrap_or(f64::MAX);
-            let dist_b = b.distance.unwrap_or(f64::MAX);
-            dist_a
-                .partial_cmp(&dist_b)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        }
-    });
+    // Project subquery
+    qb.push(
+        "SELECT e.slug, 'Project' AS entity_type, p.name AS title, p.description, p.image, p.goal, p.task, p.status, CASE WHEN p.entirely_online = 1 THEN 'Online' WHEN p.city != '' AND p.state != '' THEN p.city || ', ' || p.state WHEN p.location_name != '' THEN p.location_name ELSE '' END AS location_display, NULL AS event_begin, ST_Distance(p.point, MakePoint(",
+    );
+    qb.push_bind(lng);
+    qb.push(", ");
+    qb.push_bind(lat);
+    qb.push(
+        ", 4326), 1) AS distance, CASE WHEN p.regions IS NOT NULL AND ST_Contains(p.regions, MakePoint(",
+    );
+    qb.push_bind(lng);
+    qb.push(", ");
+    qb.push_bind(lat);
+    qb.push(
+        ", 4326)) THEN ST_Area(p.regions, 1) ELSE NULL END AS region_area, CASE WHEN p.regions IS NOT NULL THEN AsGeoJSON(p.regions) WHEN p.point IS NOT NULL THEN AsGeoJSON(p.point) ELSE NULL END AS geo_json FROM entities e JOIN projects p ON e.target = p.project_id WHERE e.kind = 'Project' AND e.publish = 1 AND (p.point IS NOT NULL OR p.regions IS NOT NULL OR p.entirely_online = 1)",
+    );
+    apply_project_filters(&mut qb, fq);
 
-    spatial.truncate(50);
+    qb.push(" UNION ALL ");
 
-    Ok(spatial
+    // Event subquery
+    qb.push(
+        "SELECT e.slug, 'Event' AS entity_type, ev.name AS title, ev.description, ev.image, '' AS goal, '' AS task, '' AS status, CASE WHEN ev.entirely_online = 1 THEN 'Online' WHEN ev.city != '' AND ev.state != '' THEN ev.city || ', ' || ev.state WHEN ev.location_name != '' THEN ev.location_name ELSE '' END AS location_display, (SELECT ei.begin FROM event_instances ei WHERE ei.event_id = ev.event_id AND ei.begin >= datetime('now') ORDER BY ei.begin LIMIT 1) AS event_begin, ST_Distance(ev.point, MakePoint(",
+    );
+    qb.push_bind(lng);
+    qb.push(", ");
+    qb.push_bind(lat);
+    qb.push(
+        ", 4326), 1) AS distance, CASE WHEN ev.regions IS NOT NULL AND ST_Contains(ev.regions, MakePoint(",
+    );
+    qb.push_bind(lng);
+    qb.push(", ");
+    qb.push_bind(lat);
+    qb.push(
+        ", 4326)) THEN ST_Area(ev.regions, 1) ELSE NULL END AS region_area, CASE WHEN ev.regions IS NOT NULL THEN AsGeoJSON(ev.regions) WHEN ev.point IS NOT NULL THEN AsGeoJSON(ev.point) ELSE NULL END AS geo_json FROM entities e JOIN events ev ON e.target = ev.event_id WHERE e.kind = 'Event' AND e.publish = 1 AND (ev.point IS NOT NULL OR ev.regions IS NOT NULL OR ev.entirely_online = 1)",
+    );
+    apply_event_filters(&mut qb, fq);
+
+    qb.push(
+        ") ORDER BY CASE WHEN region_area IS NOT NULL THEN 0 ELSE 1 END, region_area, distance LIMIT ",
+    );
+    qb.push_bind(limit);
+    qb.push(" OFFSET ");
+    qb.push_bind(offset);
+
+    let rows = qb
+        .build_query_as::<(
+            String,         // slug
+            String,         // entity_type
+            String,         // title
+            String,         // description
+            String,         // image
+            String,         // goal
+            String,         // task
+            String,         // status
+            String,         // location_display
+            Option<String>, // event_begin
+            Option<f64>,    // distance
+            Option<f64>,    // region_area
+            Option<String>, // geo_json
+        )>()
+        .fetch_all(db())
+        .await?;
+
+    let results = rows
         .into_iter()
         .map(|row| {
-            let desc = row.description;
-            let snippet = if desc.len() > 200 {
-                format!(
-                    "{}...",
-                    &desc[..desc
-                        .char_indices()
-                        .take(200)
-                        .last()
-                        .map(|(i, _)| i)
-                        .unwrap_or(200)]
-                )
-            } else {
-                desc
-            };
-            let distance_km = row.distance.map(|d| d / 1000.0);
+            let (month, day, year) = parse_event_date(&row.9);
             FinderResult {
-                slug: row.slug,
-                entity_type: row.entity_type,
-                title: row.title,
-                location_display: row.location_display,
-                image: row.image,
-                description_snippet: snippet,
-                distance_km,
+                slug: row.0,
+                entity_type: row.1,
+                title: row.2,
+                description_snippet: make_snippet(&row.3),
+                image: row.4,
+                goal: row.5,
+                task: row.6,
+                is_completed: row.7 == "Complete",
+                location_display: row.8,
+                event_date_month: month,
+                event_date_day: day,
+                event_date_year: year,
+                distance_km: row.10.map(|d| d / 1000.0),
+                geo_json: row.12,
             }
         })
-        .collect())
+        .collect();
+
+    Ok(FinderSearchResult { results, total })
 }
 
 #[handler]
 pub async fn handle_finder(
     _session: &Session,
-    Query(query): Query<FinderQuery>,
+    QsQuery(query): QsQuery<FinderQuery>,
     Authenticated(user_info): Authenticated,
 ) -> Result<Response, poem::Error> {
     let q = query.q.as_deref().unwrap_or("").trim().to_string();
     let lat = query.lat;
     let lng = query.lng;
-    let location_name = query.location_name.unwrap_or_default();
+    let location_name = query.location_name.clone().unwrap_or_default();
+    let page = query.page.unwrap_or(1).max(1);
 
     let has_location = lat.is_some() && lng.is_some();
     let has_query = !q.is_empty();
 
-    let results = if !has_query && !has_location {
-        Vec::new()
-    } else if has_location {
+    let (available_topics, available_audiences, available_activities) =
+        load_filter_options().await.map_err(|e| {
+            poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+        })?;
+
+    let search_result = if has_location {
         let lat_val = lat.unwrap();
         let lng_val = lng.unwrap();
         if has_query {
-            search_with_location(&q, lat_val, lng_val)
+            search_with_location(&query, lat_val, lng_val, page)
                 .await
-                .unwrap_or_default()
+                .unwrap_or(FinderSearchResult {
+                    results: Vec::new(),
+                    total: 0,
+                })
         } else {
-            search_location_only(lat_val, lng_val)
+            search_location_only(&query, lat_val, lng_val, page)
                 .await
-                .unwrap_or_default()
+                .unwrap_or(FinderSearchResult {
+                    results: Vec::new(),
+                    total: 0,
+                })
         }
+    } else if has_query {
+        search_text_only(&query, page)
+            .await
+            .unwrap_or(FinderSearchResult {
+                results: Vec::new(),
+                total: 0,
+            })
     } else {
-        search_text_only(&q).await.unwrap_or_default()
+        search_all(&query, page)
+            .await
+            .unwrap_or(FinderSearchResult {
+                results: Vec::new(),
+                total: 0,
+            })
     };
+
+    let total_pages = if search_result.total == 0 {
+        0
+    } else {
+        (search_result.total + FINDER_PER_PAGE - 1) / FINDER_PER_PAGE
+    };
+
+    let location_type = query
+        .location_type
+        .as_deref()
+        .unwrap_or("either")
+        .to_string();
 
     let lat_str = lat.map(|v| v.to_string()).unwrap_or_default();
     let lng_str = lng.map(|v| v.to_string()).unwrap_or_default();
@@ -560,12 +972,30 @@ pub async fn handle_finder(
     let layout = StandardLayout::new(
         "/finder",
         FinderContent {
-            results,
+            results: search_result.results,
             query: q,
             location_name,
             lat: lat_str,
             lng: lng_str,
             geosearch_key: env!("GEOSEARCH_KEY").to_string(),
+            current_page: page,
+            has_previous: page > 1,
+            has_next: page < total_pages,
+            total_pages,
+            available_topics,
+            available_audiences,
+            available_activities,
+            location_type,
+            selected_topics: query.topic.clone(),
+            selected_audiences: query.audience.clone(),
+            selected_activities: query.activity.clone(),
+            show_completed: query.show_completed.is_some(),
+            has_classroom_materials: query.misc_filter.iter().any(|v| v == "has_classroom_materials"),
+            has_app: query.misc_filter.iter().any(|v| v == "has_app"),
+            is_affiliate: query.misc_filter.iter().any(|v| v == "is_affiliate"),
+            usa_only: query.misc_filter.iter().any(|v| v == "usa_only"),
+            outside_usa: query.misc_filter.iter().any(|v| v == "outside_usa"),
+            exclusively_outdoors: query.misc_filter.iter().any(|v| v == "exclusively_outdoors"),
         },
     )
     .prepare(user_info.clone())
@@ -575,9 +1005,17 @@ pub async fn handle_finder(
     })?;
 
     FinderPage {
-        head: Head::default().with_geosearch().prepare(None).await.map_err(|e| {
-            poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-        })?,
+        head: Head::default()
+            .with_geosearch()
+            .with_maplibre()
+            .prepare(None)
+            .await
+            .map_err(|e| {
+                poem::Error::from_string(
+                    e.to_string(),
+                    poem::http::StatusCode::INTERNAL_SERVER_ERROR,
+                )
+            })?,
         layout,
     }
     .into_response(None)

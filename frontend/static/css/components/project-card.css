@@ -152,6 +152,12 @@
     @apply mb-4;
 }
 
+.event-finder .ef-info img {
+    object-fit: contain;
+    width: 100%;
+    max-height: 180px;
+}
+
 .event-finder .ef-info {
     @apply pl-4 pb-4 pr-4;
 }

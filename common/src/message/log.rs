@@ -247,3 +247,51 @@ pub struct ExternalLinkClickthroughRequest {
 pub struct ExternalLinkClickthroughResponse {
     pub url: Option<String>,  // None if link_id not found
 }
+
+// Acts of Science / Citizen Science Month
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[repr(i16)]
+pub enum ActsOfScienceSource {
+    Empty = 0,
+    Form = 1,
+    Affiliate = 2,
+    Incidental = 3,
+    Admin = 4,
+    GoogleForm = 5,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActsOfScienceCreateRequest {
+    pub user_id: Option<Ulid>,
+    pub email: Option<String>,
+    pub country: Option<String>,
+    pub newsletter: bool,
+    pub name: Option<String>,
+    pub contributions: i64,
+    pub act: Option<String>,
+    pub organization: Option<String>,
+    pub num_others: i64,
+    pub others: Option<String>,
+    pub project: Option<String>,
+    pub notes: Option<String>,
+    pub source: ActsOfScienceSource,
+    pub entity_slug: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActsOfScienceCreateResponse {
+    pub act_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActsToDateRequest {
+    pub year: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActsToDateResponse {
+    pub date: String,
+    pub number: i64,
+    pub date_reached: Option<String>,
+}
