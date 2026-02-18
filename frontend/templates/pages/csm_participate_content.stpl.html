@@ -1,0 +1,471 @@
+<% use crate::csm::{CsmPhase, CsmHero, CsmNav, CsmSponsors}; %>
+<%+ CsmHero { phase: self.phase } %>
+
+<% if self.phase == CsmPhase::April || self.phase == CsmPhase::AprilReached { %>
+<!-- COUNTDOWN-->
+<div class="ss-container mx-auto hidden sm:block">
+  <div class="countdown bg-primary-dark rounded-md flex justify-center gap-4 items-center">
+    <h3 class="text-right text-white text-lg sm:mb-0">Time Left to Participate:</h3>
+    <div class="tick" data-did-init="handleTickInit" id="reverse-flip">
+      <div data-repeat="true" data-layout="horizontal fit" data-transform="preset(d, h, m, s) -> delay">
+        <div class="tick-group">
+          <div data-key="value" data-repeat="true" data-transform="pad(00) -> split -> delay">
+            <span data-view="flip"></span>
+          </div>
+          <span data-key="label" data-view="text" class="tick-label"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<% } %>
+
+<div class="ss-container mx-auto mt-8">
+  <%+ CsmNav { phase: self.phase, active: "participate" } %>
+
+  <% match self.phase { CsmPhase::PreApril => { %>
+  <!-- CSM PAGE CONTENT -->
+  <div class="ss-container mx-auto pt-12">
+
+    <div class="w-full mx-auto text-left my-8">
+      <h2 class="text-primary-dark text-center">Participate in Real Research During Citizen Science Month</h2>
+      <p class="intro text-center">Every contribution during April 2026 counts toward 2.50 Million <em>Acts of Science</em>!</p>
+      <p>Anyone can do <em>Acts of Science</em> by participating in a citizen science project or event. You can participate on your own, with friends, or as part of a live or local gathering.</p>
+      <p>No experience is required.</p>
+    </div>
+
+    <div class="w-full mx-auto text-left my-8">
+      <h2 class="text-primary-dark text-center">Start in Minutes</h2>
+      <p class="intro text-center">You can participate in any of the ways below.</p>
+      <p class="text-center">All count toward the shared goal of 2.50 Million <em>Acts of Science</em>.</p>
+    </div>
+
+    <div class="flex flex-col md:flex-row gap-4">
+      <div class="csm-card" style="background-color: #e8f7ff">
+        <div class="csm-card-header">
+          <h4 class="text-center text-primary-dark">Join a Citizen Science Project</h4>
+          <p>Participate in projects about nature, space, health, climate, and history. Anytime, anywhere.</p>
+        </div>
+        <div class="csm-card-actions">
+          <a href="#projects" class="btn btn-primary">Find a Project</a><br>
+          <p class="text-center"><small>Choose your own adventure.</small></p>
+        </div>
+      </div>
+
+      <div class="csm-card" style="background-color: #e8f7ff">
+        <div class="csm-card-header">
+          <h4 class="text-center text-primary-dark">Join an Event</h4>
+          <p>Attend virtual or in-person events hosted by libraries, museums, schools, and community groups.</p>
+        </div>
+        <div class="csm-card-actions">
+          <a href="#events" class="btn btn-primary">See Events</a><br>
+          <p class="text-center"><small>&nbsp;</small></p>
+        </div>
+      </div>
+
+      <div class="csm-card" style="background-color: #e8f7ff">
+        <div class="csm-card-header">
+          <h4 class="text-center text-primary-dark"><em>Acts of Science: Connected</em></h4>
+          <p><span style="display: inline-block; background-color: #f54017; color: #fff; padding: 1px 6px; border-radius: 3px;">New in 2026!</span> One project. Two Hours. Many locations. Collective impact on science.</p>
+        </div>
+        <div class="csm-card-actions">
+          <a href="/connected" class="btn btn-primary">Explore <em>Connected</em> Events</a><br>
+          <p class="text-center"><small>Look for "signature event" on the event list below</small></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="text-center px-4 my-4">
+      <small>Whether you participate for five minutes or five hours, <strong>every <em>Act of Science</em> counts</strong>.</small>
+    </div>
+
+    <div class="ss-accordion2 w-full mx-auto border border-linework shadow mb-8 max-w-[1024px]">
+      <button type="button" class="w-full flex justify-between items-center px-4 py-3 text-left font-semibold focus:outline-none focus-visible:ring focus-visible:ring-primary-action" aria-expanded="false" aria-controls="accordion-panel-1" id="accordion-header-1">
+        <h2 class="text-lg mb-0 text-primary">Make It Count</h2>
+        <svg class="w-5 h-5 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+        </svg>
+      </button>
+      <div id="accordion-panel-1" role="region" aria-labelledby="accordion-header-1" class="px-4 py-3 mx-auto hidden">
+        <div class="max-w-[960px]">
+          <p>Your participation helps reach the collective goal.</p>
+          <ul class="px-4 my-2" style="list-style-type: disc">
+            <li>Participation in <strong><a href="/finder?projects=true&active=true&filters=4" target="_blank">SciStarter Affiliate Projects</a></strong> is tracked automatically. SciStarter Affiliate projects are marked with a <img alt="the SciStarter affiliate logo" src="/-static/img/affiliate-logo.svg" style="display: inline-block; height: 2rem"> logo.</li>
+            <li><strong>Coming soon:</strong> Report any <em>Act of Science</em> using the <strong>Report Acts</strong> tab. You do not need an account on SciStarter to use the Report tool.</li>
+          </ul>
+          <p>Sharing your experience helps inspire others and social media posts count as <em>Acts of Science</em>. Post a photo using <strong>#ActsofScience</strong> to appear on the <strong>Wall of Fame</strong>.</p>
+          <p>Participants who participate in and report <em>Acts of Science</em> are eligible for prizes and recognition during Citizen Science Month.</p>
+          <div class="flex flex-col md:flex-row" style="gap: 10px;justify-content: left;">
+            <a style="pointer-events: none; opacity: 0.25; display:flex; justify-content:center; align-items:center; text-align:center;" href="/citizensciencemonth/report" class="btn btn-primary" title="Make sure your Act is counted">Report Acts (Coming Soon)</a>
+            <a href="https://pages.scistarter.org/citizen-science-month-rewards/" class="btn btn-primary" title="" style="display:flex; justify-content:center; align-items:center; text-align:center;">Learn About Prizes</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ss-accordion2 w-full mx-auto border border-linework shadow mb-8 max-w-[1024px]">
+      <button type="button" class="w-full flex justify-between items-center px-4 py-3 text-left font-semibold focus:outline-none focus-visible:ring focus-visible:ring-primary-action" aria-expanded="false" aria-controls="accordion-panel-2" id="accordion-header-2">
+        <h2 class="text-lg mb-0 text-primary">Participate With Others</h2>
+        <svg class="w-5 h-5 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+        </svg>
+      </button>
+      <div id="accordion-panel-2" role="region" aria-labelledby="accordion-header-2" class="px-4 py-3 mx-auto hidden">
+        <div class="max-w-[960px]">
+          <p>Citizen science is more fun together.</p>
+          <ul class="px-4 my-2" style="list-style-type: disc">
+            <li>Join friends or family</li>
+            <li>Attend community events</li>
+            <li>Participate through schools, libraries, and museums</li>
+            <li>Invite others to join you</li>
+          </ul>
+          <p>Looking to bring people together? Hosting is easy.</p>
+          <div class="flex flex-col md:flex-row" style="gap: 10px;justify-content: left;">
+            <a href="#events" class="btn btn-primary" style="display:flex; justify-content:center; align-items:center; text-align:center;">Find an Event</a>
+            <a href="https://pages.scistarter.org/citizensciencemonth-resources" class="btn btn-primary" style="display:flex; justify-content:center; align-items:center; text-align:center;">Host an Event</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <hr class="border-linework my-16" id="events"/>
+
+    <!-- EVENTS (loaded via HTMX) -->
+    <div class="csm-events" hx-trigger="intersect once" hx-swap="outerHTML" hx-get="/-csm/events" style="opacity: 0.5">
+      <div class="flex justify-between mb-8">
+        <div class="flex items-center gap-4">
+          <img src="/-static/img/projects-molecule.svg" alt="molecule icon" />
+          <h3 class="mb-0">Events</h3>
+        </div>
+      </div>
+      <p class="text-center text-gray-500">Loading events...</p>
+    </div>
+
+    <!-- PROJECTS -->
+    <div class="flex flex-col sm:flex-row gap-y-8 sm:gap-y-0 justify-between mb-8" id="projects">
+      <div class="flex items-center gap-4">
+        <img src="/-static/img/projects-molecule.svg" alt="molecule icon" />
+        <h3 class="mb-0">Projects Picked by Staff</h3>
+      </div>
+      <a href="/finder" class="btn btn-accent self-center">See all projects</a>
+    </div>
+
+    <div hx-trigger="intersect once" hx-swap="outerHTML" hx-get="/-csm/picks" style="opacity: 0.5">
+      <p class="text-center text-gray-500">Loading projects...</p>
+    </div>
+
+    <a id="csm-more-projects" class="text-center my-8 w-full flex justify-center items-center gap-2" href="#">
+      <span>View More Staff Picks</span>
+      <svg version="1.1" xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="451.847px" height="451.847px" viewBox="0 0 451.847 451.847" class="fill-primary-action h-[12px] w-[12px]"><path d="M225.923,354.706c-8.098,0-16.195-3.092-22.369-9.263L9.27,151.157c-12.359-12.359-12.359-32.397,0-44.751 c12.354-12.354,32.388-12.354,44.748,0l171.905,171.915l171.906-171.909c12.359-12.354,32.391-12.354,44.744,0 c12.365,12.354,12.365,32.392,0,44.751L248.292,345.449C242.115,351.621,234.018,354.706,225.923,354.706z"/></svg>
+    </a>
+
+    <hr class="border-linework my-16" />
+
+    <div class="bg-primary-light p-8 mx-auto mb-6">
+      <div class="text-center">
+        <img src="/-static/img/csm/gift.svg" alt="gift icon" width="80px" class="mx-auto" />
+        <h2 class="text-xl">Participants are eligible for prizes!</h2>
+        <p>A limited number of eligible participants will be selected to receive prizes in May 2026.</p>
+        <div class="find-more"><a href="https://pages.scistarter.org/citizen-science-month-rewards/" class="btn btn-primary">Find Out More &raquo;</a></div>
+      </div>
+    </div>
+
+    <!-- FAQ LINK -->
+    <div class="text-center px-4 my-16">
+      <h3 class="text-center text-primary-dark font-header-lg mb-1">Questions?</h3>
+      <p>Check out our <a href="https://pages.scistarter.org/citizensciencemonth-about#faq">Frequently Asked Questions</a> page.</p>
+    </div>
+
+  </div>
+
+  <% } CsmPhase::April | CsmPhase::AprilReached => { %>
+  <!-- CSM PAGE CONTENT -->
+  <div class="ss-container mx-auto pt-12">
+
+    <div class="w-full mx-auto text-left my-8">
+      <h2 class="text-primary-dark text-center">Participate in Real Research During Citizen Science Month</h2>
+      <p class="intro text-center">Every contribution counts toward 2.50 Million <em>Acts of Science</em>!</p>
+      <p>Anyone can do <em>Acts of Science</em> by participating in a citizen science project or event. You can participate on your own, with friends, or as part of a live or local gathering.</p>
+      <p>No experience is required.</p>
+    </div>
+
+    <div class="w-full mx-auto text-left my-8">
+      <h2 class="text-primary-dark text-center">Start in Minutes</h2>
+      <p class="intro text-center">You can participate in any of the ways below.</p>
+      <p class="text-center">All count toward the shared goal of 2.50 Million <em>Acts of Science</em>.</p>
+    </div>
+
+    <div class="flex flex-col md:flex-row gap-4">
+      <div class="csm-card" style="background-color: #e8f7ff">
+        <div class="csm-card-header">
+          <h4 class="text-center text-primary-dark">Join a Citizen Science Project</h4>
+          <p>Participate in projects about nature, space, health, climate, and history. Anytime, anywhere.</p>
+        </div>
+        <div class="csm-card-actions">
+          <a href="#projects" class="btn btn-primary">Find a Project</a><br>
+          <p class="text-center"><small>Choose your own adventure.</small></p>
+        </div>
+      </div>
+
+      <div class="csm-card" style="background-color: #e8f7ff">
+        <div class="csm-card-header">
+          <h4 class="text-center text-primary-dark">Join an Event</h4>
+          <p>Attend virtual or in-person events hosted by libraries, museums, schools, and community groups.</p>
+        </div>
+        <div class="csm-card-actions">
+          <a href="#events" class="btn btn-primary">See Events</a><br>
+          <p class="text-center"><small>&nbsp;</small></p>
+        </div>
+      </div>
+
+      <div class="csm-card" style="background-color: #e8f7ff">
+        <div class="csm-card-header">
+          <h4 class="text-center text-primary-dark"><em>Acts of Science: Connected</em></h4>
+          <p><span style="display: inline-block; background-color: #f54017; color: #fff; padding: 1px 6px; border-radius: 3px;">New in 2026!</span> One project. Two Hours. Many locations. Collective impact on science.</p>
+        </div>
+        <div class="csm-card-actions">
+          <a href="/connected" class="btn btn-primary">Explore <em>Connected</em> Events</a><br>
+          <p class="text-center"><small>Look for "signature event" on the event list below</small></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="text-center px-4 my-4">
+      <small>Whether you participate for five minutes or five hours, <strong>every <em>Act of Science</em> counts</strong>.</small>
+    </div>
+
+    <div class="ss-accordion2 w-full mx-auto border border-linework shadow mb-8 max-w-[1024px]">
+      <button type="button" class="w-full flex justify-between items-center px-4 py-3 text-left font-semibold focus:outline-none focus-visible:ring focus-visible:ring-primary-action" aria-expanded="false" aria-controls="accordion-panel-1" id="accordion-header-1">
+        <h2 class="text-lg mb-0 text-primary">Make It Count</h2>
+        <svg class="w-5 h-5 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+        </svg>
+      </button>
+      <div id="accordion-panel-1" role="region" aria-labelledby="accordion-header-1" class="px-4 py-3 mx-auto hidden">
+        <div class="max-w-[960px]">
+          <p>Your participation helps reach the collective goal.</p>
+          <ul class="px-4 my-2" style="list-style-type: disc">
+            <li>Participation in <strong><a href="/finder?projects=true&active=true&filters=4" target="_blank">SciStarter Affiliate Projects</a></strong> is tracked automatically. SciStarter Affiliate projects are marked with a <img alt="the SciStarter affiliate logo" src="/-static/img/affiliate-logo.svg" style="display: inline-block; height: 2rem"> logo.</li>
+            <li>Report any <em>Act of Science</em> using the <strong><a href="/citizensciencemonth/report">Report Acts</a></strong> tab. You do not need an account on SciStarter to use the Report tool.</li>
+          </ul>
+          <p>Sharing your experience helps inspire others and social media posts count as <em>Acts of Science</em>. Post a photo using <strong>#ActsofScience</strong> to appear on the <strong>Wall of Fame</strong>.</p>
+          <p>Participants who participate in and report <em>Acts of Science</em> are eligible for prizes and recognition during Citizen Science Month.</p>
+          <div class="flex flex-col md:flex-row" style="gap: 10px;justify-content: left;">
+            <a href="/citizensciencemonth/report" class="btn btn-primary" title="Make sure your Act is counted" style="display:flex; justify-content:center; align-items:center; text-align:center;">Report Your Acts</a>
+            <a href="https://pages.scistarter.org/citizen-science-month-rewards/" class="btn btn-primary" title="" style="display:flex; justify-content:center; align-items:center; text-align:center;">Learn About Prizes</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ss-accordion2 w-full mx-auto border border-linework shadow mb-8 max-w-[1024px]">
+      <button type="button" class="w-full flex justify-between items-center px-4 py-3 text-left font-semibold focus:outline-none focus-visible:ring focus-visible:ring-primary-action" aria-expanded="false" aria-controls="accordion-panel-2" id="accordion-header-2">
+        <h2 class="text-lg mb-0 text-primary">Participate With Others</h2>
+        <svg class="w-5 h-5 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+        </svg>
+      </button>
+      <div id="accordion-panel-2" role="region" aria-labelledby="accordion-header-2" class="px-4 py-3 mx-auto hidden">
+        <div class="max-w-[960px]">
+          <p>Citizen science is more fun together.</p>
+          <ul class="px-4 my-2" style="list-style-type: disc">
+            <li>Join friends or family</li>
+            <li>Attend community events</li>
+            <li>Participate through schools, libraries, and museums</li>
+            <li>Invite others to join you</li>
+          </ul>
+          <p>Looking to bring people together? Hosting is easy.</p>
+          <div class="flex flex-col md:flex-row" style="gap: 10px;justify-content: left;">
+            <a href="#events" class="btn btn-primary" style="display:flex; justify-content:center; align-items:center; text-align:center;">Find an Event</a>
+            <a href="https://pages.scistarter.org/citizensciencemonth-resources" class="btn btn-primary" style="display:flex; justify-content:center; align-items:center; text-align:center;">Host an Event</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <hr class="border-linework my-16" id="events"/>
+
+    <!-- EVENTS (loaded via HTMX) -->
+    <div class="csm-events" hx-trigger="intersect once" hx-swap="outerHTML" hx-get="/-csm/events" style="opacity: 0.5">
+      <div class="flex justify-between mb-8">
+        <div class="flex items-center gap-4">
+          <img src="/-static/img/projects-molecule.svg" alt="molecule icon" />
+          <h3 class="mb-0">Events</h3>
+        </div>
+      </div>
+      <p class="text-center text-gray-500">Loading events...</p>
+    </div>
+
+    <!-- PROJECTS -->
+    <div class="flex flex-col sm:flex-row gap-y-8 sm:gap-y-0 justify-between mb-8" id="projects">
+      <div class="flex items-center gap-4">
+        <img src="/-static/img/projects-molecule.svg" alt="molecule icon" />
+        <h3 class="mb-0">Projects Picked by Staff</h3>
+      </div>
+      <a href="/finder" class="btn btn-accent self-center">See all projects</a>
+    </div>
+
+    <div hx-trigger="intersect once" hx-swap="outerHTML" hx-get="/-csm/picks" style="opacity: 0.5">
+      <p class="text-center text-gray-500">Loading projects...</p>
+    </div>
+
+    <a id="csm-more-projects" class="text-center my-8 w-full flex justify-center items-center gap-2" href="#">
+      <span>View More Staff Picks</span>
+      <svg version="1.1" xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="451.847px" height="451.847px" viewBox="0 0 451.847 451.847" class="fill-primary-action h-[12px] w-[12px]"><path d="M225.923,354.706c-8.098,0-16.195-3.092-22.369-9.263L9.27,151.157c-12.359-12.359-12.359-32.397,0-44.751 c12.354-12.354,32.388-12.354,44.748,0l171.905,171.915l171.906-171.909c12.359-12.354,32.391-12.354,44.744,0 c12.365,12.354,12.365,32.392,0,44.751L248.292,345.449C242.115,351.621,234.018,354.706,225.923,354.706z"/></svg>
+    </a>
+
+    <hr class="border-linework my-16" />
+
+    <div class="bg-primary-light p-8 mx-auto mb-6">
+      <div class="text-center">
+        <img src="/-static/img/csm/gift.svg" alt="gift icon" width="80px" class="mx-auto" />
+        <h2 class="text-xl">Participants are eligible for prizes!</h2>
+        <p>A limited number of eligible participants will be selected to receive prizes in May 2026.</p>
+        <div class="find-more"><a href="https://pages.scistarter.org/citizen-science-month-rewards/" class="btn btn-primary">Find Out More &raquo;</a></div>
+      </div>
+    </div>
+
+    <!-- FAQ LINK -->
+    <div class="text-center px-4 my-16">
+      <h3 class="text-center text-primary-dark font-header-lg mb-1">Questions?</h3>
+      <p>Check out our <a href="https://pages.scistarter.org/citizensciencemonth-about#faq">Frequently Asked Questions</a> page.</p>
+    </div>
+
+  </div>
+
+  <% } CsmPhase::May => { %>
+  <!-- CSM PAGE CONTENT -->
+  <div class="border-linework border mb-8 border-t-0 p-4">
+    <div class="max-w-[960px] mx-auto pt-12">
+      <img src="/-static/img/csm/CitSci_Horizontal_v1.svg" alt="Citizen Science Month Logo" class="max-w-[600px] w-full mx-auto mb-8" />
+
+      <div class="w-full mx-auto text-center mb-16">
+        <h2 class="text-primary-dark">Thank You for Participating!</h2>
+        <p class="intro">Citizen Science Month may be over, but you can keep contributing to science all year long!</p>
+        <div class="flex flex-col md:flex-row justify-center gap-4 mb-8">
+          <a href="/finder" class="btn btn-primary">Find Projects &raquo;</a>
+        </div>
+      </div>
+
+      <div class="w-full mx-auto text-center mb-16">
+        <p><a class="underline" href="https://pages.scistarter.org/citizensciencemonth-about">Learn more about the goals, impact, and history of Citizen Science Month</a></p>
+      </div>
+    </div>
+  </div>
+  <% } } %>
+</div>
+
+<%+ CsmSponsors {} %>
+
+<% if self.phase == CsmPhase::April || self.phase == CsmPhase::AprilReached { %>
+<!-- COUNTDOWN TIMER -->
+<script src="https://unpkg.com/@pqina/flip/dist/flip.min.js"></script>
+<script>
+function handleTickInit(tick) {
+    var counter = Tick.count.down(new Date().getFullYear() + "-04-30T00:00:00");
+    counter.onupdate = function(value) { tick.value = value; };
+    counter.onended = function() {};
+}
+</script>
+<% } %>
+
+<!-- TABS JS -->
+<script>
+(function(){
+  const tabRow = document.getElementById('tabRow');
+  const chevron = document.getElementById('chevron');
+  const chevBtn = document.getElementById('chevBtn');
+  if (!tabRow || !chevron || !chevBtn) return;
+  function updateChevron(){
+    const overflowRight = tabRow.scrollWidth - (tabRow.scrollLeft + tabRow.clientWidth);
+    if (overflowRight > 1) chevron.classList.remove('hidden');
+    else chevron.classList.add('hidden');
+  }
+  chevBtn.addEventListener('click', () => {
+    tabRow.scrollBy({ left: tabRow.clientWidth*0.7, behavior: 'smooth' });
+  });
+  tabRow.addEventListener('scroll', updateChevron, { passive:true });
+  window.addEventListener('resize', updateChevron);
+  window.addEventListener('load', updateChevron);
+})();
+</script>
+
+<!-- Slick Carousel for Sponsors (jQuery + Slick loaded via Head.with_slick()) -->
+<script>
+$(function(){
+  $('.sponsor-slideshow').slick({
+    infinite: false,
+    slidesToShow: 3,
+    slidesToScroll: 3,
+    responsive: [
+      { breakpoint: 1024, settings: { slidesToShow: 3, slidesToScroll: 3, infinite: true, dots: true } },
+      { breakpoint: 600, settings: { slidesToShow: 2, slidesToScroll: 2 } },
+      { breakpoint: 480, settings: { slidesToShow: 1, slidesToScroll: 1 } }
+    ]
+  });
+});
+</script>
+
+<!-- Accordion JS -->
+<script>
+for(let btn of document.querySelectorAll(".ss-accordion2 > button:first-child")) {
+  btn.addEventListener("click", function() {
+    const panel = document.getElementById(btn.getAttribute('aria-controls'));
+    const expanded = btn.getAttribute('aria-expanded') === 'true';
+    if (expanded) {
+      btn.setAttribute('aria-expanded', 'false');
+      btn.querySelector('svg').classList.remove('rotate-180');
+      panel.classList.add('hidden');
+    } else {
+      btn.setAttribute('aria-expanded', 'true');
+      btn.querySelector('svg').classList.add('rotate-180');
+      panel.classList.remove('hidden');
+    }
+  });
+}
+</script>
+
+<!-- More Projects Toggle -->
+<script>
+(function() {
+  var btn = document.getElementById("csm-more-projects");
+  if (!btn) return;
+  btn.addEventListener("click", function(e) {
+    e.preventDefault();
+    var moreDiv = document.querySelector("div.csm-more-projects");
+    if (!moreDiv) return;
+    var shown = moreDiv.classList.toggle('shown');
+    var label = btn.querySelector("span");
+    label.textContent = shown ? 'View Less Staff Picks' : 'View More Staff Picks';
+    btn.setAttribute('aria-expanded', shown ? 'true' : 'false');
+  });
+})();
+</script>
+
+<!-- Events time formatting after HTMX swap -->
+<script>
+document.addEventListener('htmx:afterSwap', function(evt) {
+  if (evt.detail.elt.classList && evt.detail.elt.classList.contains('csm-events')) {
+    document.querySelectorAll('.featured-event-time[data-begin]').forEach(function(el) {
+      var beginStr = el.getAttribute('data-begin');
+      var endStr = el.getAttribute('data-end');
+      if (!beginStr) return;
+      var begin = new Date(beginStr);
+      if (isNaN(begin.getTime())) return;
+      var dateOpts = { month: '2-digit', day: '2-digit', year: 'numeric' };
+      var timeOpts = { hour: 'numeric', minute: '2-digit', hour12: true };
+      var dateFormatted = begin.toLocaleDateString(undefined, dateOpts);
+      var beginTime = begin.toLocaleTimeString(undefined, timeOpts);
+      if (endStr) {
+        var end = new Date(endStr);
+        if (!isNaN(end.getTime())) {
+          var endTime = end.toLocaleTimeString(undefined, timeOpts);
+          el.textContent = dateFormatted + ', ' + beginTime + ' to ' + endTime;
+          return;
+        }
+      }
+      el.textContent = dateFormatted + ', ' + beginTime;
+    });
+  }
+});
+</script>

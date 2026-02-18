@@ -1,0 +1,167 @@
+<% fn pagination_qs(query: &crate::csm::CsmEventsQuery, page: i64) -> String {
+    let mut qs = format!("page={page}");
+    if let Some(lat) = query.lat { qs.push_str(&format!("&lat={lat}")); }
+    if let Some(lng) = query.lng { qs.push_str(&format!("&lng={lng}")); }
+    if let Some(ref n) = query.location_name { if !n.is_empty() { qs.push_str(&format!("&location_name={n}")); } }
+    if let Some(ref d) = query.start_date { if !d.is_empty() { qs.push_str(&format!("&start_date={d}")); } }
+    if let Some(ref k) = query.keywords { if !k.is_empty() { qs.push_str(&format!("&keywords={k}")); } }
+    if query.online_only == Some(true) { qs.push_str("&online_only=true"); }
+    if query.signature_only == Some(true) { qs.push_str("&signature_only=true"); }
+    qs
+} %>
+<div class="csm-events" id="csm-events-container">
+  <!-- header -->
+  <div class="flex justify-between mb-8">
+    <div class="flex items-center gap-4">
+      <img src="/-static/img/projects-molecule.svg" alt="molecule icon" />
+      <h3 class="mb-0">Events</h3>
+    </div>
+  </div>
+  <div class="csm2-tabs-container acts-container acts-container-wide">
+    <div class="csm2-tab-content csm2-tab1 csm2-active">
+      <div class="grid grid-cols-1 lg:grid-cols-[25%_75%] gap-6">
+        <!-- SIDEBAR: search form -->
+        <div>
+          <form class="csm-events-form" hx-get="/-csm/events" hx-target="#csm-events-container" hx-swap="outerHTML">
+            <div class="csm-events-input-group">
+              <label>Location</label>
+              <div id="csm-geosearch-location"></div>
+              <input type="hidden" name="lat" id="csm-geosearch-lat" value="<%= self.query.lat.map(|v| v.to_string()).unwrap_or_default() %>" />
+              <input type="hidden" name="lng" id="csm-geosearch-lng" value="<%= self.query.lng.map(|v| v.to_string()).unwrap_or_default() %>" />
+              <input type="hidden" name="location_name" id="csm-geosearch-name" value="<%= self.query.location_name.as_deref().unwrap_or("") %>" />
+            </div>
+            <div class="csm-events-input-group">
+              <label for="csm-events-start-date">Start Date</label>
+              <div class="csm-events-date-input">
+                <input type="date" id="csm-events-start-date" name="start_date" class="csm-events-input" value="<%= self.query.start_date.as_deref().unwrap_or("") %>">
+                <span class="csm-events-icon"><svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 14 14">
+                  <path d="M2.1,14h9.8c1,0,1.9-.8,1.9-1.9V2.9c0-1-.8-1.9-1.9-1.9h-.7v-.5c0-.3-.2-.5-.5-.5s-.5.2-.5.5v.5H3.9v-.5c0-.3-.2-.5-.5-.5s-.5.2-.5.5v.5h-.7C1.1,1,.3,1.9.3,2.9v9.3c0,1,.8,1.9,1.9,1.9ZM1.3,2.9c0-.5.4-.8.8-.8h.7v.5c0,.3.2.5.5.5s.5-.2.5-.5v-.5h6.2v.5c0,.3.2.5.5.5s.5-.2.5-.5v-.5h.7c.5,0,.8.4.8.8v1.5H1.3v-1.5ZM1.3,5.4h11.4v6.7c0,.5-.4.8-.8.8H2.1c-.5,0-.8-.4-.8-.8v-6.7Z"></path>
+                </svg></span>
+              </div>
+            </div>
+            <div class="csm-events-input-group">
+              <label for="csm-events-keywords">Keywords</label>
+              <input type="text" id="csm-events-keywords" name="keywords" class="csm-events-input no-icon" placeholder="Enter keywords" value="<%= self.query.keywords.as_deref().unwrap_or("") %>">
+            </div>
+            <div class="csm-events-checkbox-group">
+              <label for="csm-events-online-only">
+                <input type="checkbox" id="csm-events-online-only" name="online_only" value="true" class="csm-events-checkbox"<% if self.query.online_only == Some(true) { %> checked<% } %>>
+                Show Only Virtual Events
+              </label>
+            </div>
+            <div class="csm-events-checkbox-group">
+              <label for="csm-events-sci-picks">
+                <input type="checkbox" id="csm-events-sci-picks" name="signature_only" value="true" class="csm-events-checkbox"<% if self.query.signature_only == Some(true) { %> checked<% } %>>
+                <img src="/-static/img/csm/signature.svg" alt="signature icon" id="sig-label" /> Show only Signature Events
+              </label>
+            </div>
+            <div class="csm-events-button-row">
+              <button type="submit" class="btn btn-primary">Search</button>
+              <button type="button" class="text-btn" hx-get="/-csm/events" hx-target="#csm-events-container" hx-swap="outerHTML">Clear filters</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- RESULTS -->
+        <div>
+          <% if self.events.is_empty() { %>
+          <p class="text-center text-gray-500 py-8">No events found matching your criteria.</p>
+          <% } else { %>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-12">
+            <% for event in &self.events { %>
+            <div class="featured-event">
+              <div class="flex">
+                <div class="featured-event__datetime">
+                  <div class="featured-event__month"><%= event.month_abbrev() %></div>
+                  <div class="featured-event__date"><%= event.day() %></div>
+                </div>
+                <div class="featured-event__info">
+                  <% if event.signature { %>
+                  <div class="csm-signature"><span>Signature Event</span></div>
+                  <% } %>
+                  <h3><a href="/<%= event.slug %>"><%= event.name %></a></h3>
+                  <span class="featured-event-time" data-begin="<%= event.begin %>" data-end="<%= event.end %>"></span>
+                  <a class="featured-event-location" href="/<%= event.slug %>"><%= event.location_display() %></a>
+                </div>
+              </div>
+            </div>
+            <% } %>
+          </div>
+
+          <% if self.total_pages > 1 { %>
+          <!-- pagination -->
+          <div class="flex items-center mx-auto bg-white px-4 py-3 sm:px-6 mt-4">
+            <div class="flex items-center justify-center w-full">
+              <nav class="isolate inline-flex -space-x-px rounded-md shadow-xs" aria-label="Pagination">
+                <% if self.page > 1 { %>
+                <a hx-get="/-csm/events?<%= pagination_qs(&self.query, self.page - 1) %>" hx-target="#csm-events-container" hx-swap="outerHTML"
+                   class="relative inline-flex items-center rounded-l-md px-2 py-2 text-primary-action ring-1 ring-inset ring-gray-300 focus:z-20 focus:outline-offset-0 hover:text-white hover:bg-primary-action cursor-pointer">
+                  <span class="sr-only">Previous</span>
+                  <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path fill-rule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clip-rule="evenodd" />
+                  </svg>
+                </a>
+                <% } %>
+                <% for p in 1..=self.total_pages { %>
+                <% if p == self.page { %>
+                <span aria-current="page" class="relative z-10 inline-flex items-center bg-primary-action px-4 py-2 text-sm font-semibold text-white focus:z-20"><%= p %></span>
+                <% } else if p == 1 || p == self.total_pages || (p >= self.page - 1 && p <= self.page + 1) { %>
+                <a hx-get="/-csm/events?<%= pagination_qs(&self.query, p) %>" hx-target="#csm-events-container" hx-swap="outerHTML"
+                   class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-primary-action ring-1 ring-inset hover:bg-primary-action hover:text-white focus:z-20 focus:outline-offset-0 cursor-pointer"><%= p %></a>
+                <% } else if p == 2 || p == self.total_pages - 1 { %>
+                <span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-700 ring-1 ring-inset focus:outline-offset-0">...</span>
+                <% } %>
+                <% } %>
+                <% if self.page < self.total_pages { %>
+                <a hx-get="/-csm/events?<%= pagination_qs(&self.query, self.page + 1) %>" hx-target="#csm-events-container" hx-swap="outerHTML"
+                   class="relative inline-flex items-center rounded-r-md px-2 py-2 text-primary-action ring-1 ring-inset hover:bg-primary-action hover:text-white focus:z-20 focus:outline-offset-0 cursor-pointer">
+                  <span class="sr-only">Next</span>
+                  <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
+                  </svg>
+                </a>
+                <% } %>
+              </nav>
+            </div>
+          </div>
+          <% } %>
+          <% } %>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Geosearch widget setup for CSM events -->
+<script>
+(function() {
+  function clearLocationFields() {
+    document.getElementById('csm-geosearch-lat').value = '';
+    document.getElementById('csm-geosearch-lng').value = '';
+    document.getElementById('csm-geosearch-name').value = '';
+  }
+  if (typeof opencage === 'undefined') return;
+  opencage.algoliaAutocomplete({
+    container: '#csm-geosearch-location',
+    placeholder: 'City, State, or Zip Code',
+    <% if self.query.location_name.as_deref().unwrap_or("") != "" { %>
+    initialState: { query: '<%= self.query.location_name.as_deref().unwrap_or("") %>' },
+    <% } %>
+    onStateChange: function(params) {
+      if (!params.state.query) { clearLocationFields(); }
+    },
+    plugins: [
+      opencage.OpenCageGeoSearchPlugin(
+        { key: '<%= self.geosearch_key %>' },
+        {
+          onSelect: function(params) {
+            document.getElementById('csm-geosearch-lat').value = params.item.geometry.lat;
+            document.getElementById('csm-geosearch-lng').value = params.item.geometry.lng;
+            document.getElementById('csm-geosearch-name').value = params.item.formatted;
+          }
+        }
+      )
+    ]
+  });
+})();
+</script>

@@ -630,6 +630,179 @@ async fn insert_join_as_clickthrough(database: &Database, join: &JoinData) -> Re
     Ok(())
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActsOfScienceData {
+    pub id: i32,
+    pub when: String,
+    pub email: String,
+    pub country: String,
+    pub newsletter: i16,
+    pub name: String,
+    pub contributions: i32,
+    pub act: String,
+    pub organization: String,
+    pub num_others: i32,
+    pub others: String,
+    pub project: String,
+    pub notes: String,
+    pub source: i16,
+    pub accepted: bool,
+    pub entity_processed: bool,
+    pub user_ulid: Option<String>,
+    pub entity_ulid: Option<String>,
+}
+
+pub async fn acts_of_science_synchronize(
+    database: Arc<Database>,
+    cancellation_token: CancellationToken,
+) {
+    loop {
+        if cancellation_token.is_cancelled() {
+            println!("Acts of science sync cancelled, exiting gracefully");
+            return;
+        }
+
+        let last = get_sync_bookmark(&database, "acts-sync-bookmark")
+            .await
+            .unwrap_or_else(|_| String::from("1900-01-01T00:00:00Z"));
+        let last_id = get_sync_last_id(&database, "acts-sync-last-id")
+            .await
+            .unwrap_or_else(|_| 0);
+
+        println!(
+            "Syncing acts of science since {} with last_id {}",
+            last, last_id
+        );
+
+        let sync_token = env!("SYNC_TOKEN");
+        let client = reqwest::Client::new();
+
+        let acts: Vec<ActsOfScienceData> = match client
+            .get("https://scistarter.org/staff/sync/acts_of_science")
+            .bearer_auth(sync_token)
+            .query(&[("since", &last), ("last_id", &last_id.to_string())])
+            .send()
+            .await
+        {
+            Ok(response) => match response.error_for_status() {
+                Ok(resp) => {
+                    let response_text = match resp.text().await {
+                        Ok(text) => text,
+                        Err(e) => {
+                            eprintln!("Failed to read response body: {}", e);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    };
+
+                    match serde_json::from_str(&response_text) {
+                        Ok(events) => events,
+                        Err(e) => {
+                            eprintln!("JSON parsing error: {}", e);
+                            eprintln!("Response body: {}", response_text);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("HTTP error: {}", e);
+                    sleep(Duration::from_secs(60)).await;
+                    continue;
+                }
+            },
+            Err(e) => {
+                eprintln!("Request error: {}", e);
+                sleep(Duration::from_secs(60)).await;
+                continue;
+            }
+        };
+
+        let got_acts = acts.len();
+
+        if got_acts == 0 {
+            println!("No new acts of science to sync");
+        } else {
+            let mut bookmark = last.clone();
+            let mut bookmark_id = last_id;
+
+            for act in acts {
+                if let Err(e) = insert_act_of_science(&act).await {
+                    eprintln!("Failed to insert act of science: {}", e);
+                    continue;
+                }
+
+                if act.when > bookmark || (act.when == bookmark && act.id > bookmark_id) {
+                    bookmark = act.when.clone();
+                    bookmark_id = act.id;
+                }
+
+                println!("Inserted act of science {}", act.id);
+            }
+
+            set_sync_bookmark(&database, "acts-sync-bookmark", &bookmark)
+                .await
+                .expect("Failed to save sync bookmark");
+            set_sync_last_id(&database, "acts-sync-last-id", bookmark_id)
+                .await
+                .expect("Failed to save sync last_id");
+        }
+
+        let sleep_duration = if got_acts == 500 {
+            Duration::from_secs(60)
+        } else {
+            Duration::from_secs(60 * 60)
+        };
+
+        tokio::select! {
+            _ = sleep(sleep_duration) => {}
+            _ = cancellation_token.cancelled() => {
+                println!("Acts of science sync cancelled during sleep, exiting gracefully");
+                return;
+            }
+        }
+    }
+}
+
+async fn insert_act_of_science(act: &ActsOfScienceData) -> Result<()> {
+    let act_id = ulid::Ulid::new().to_string();
+    let newsletter = act.newsletter as i32;
+    let contributions = act.contributions as i64;
+    let num_others = act.num_others as i64;
+    let source = act.source as i32;
+    let accepted = act.accepted as i32;
+    let entity_slug = act.entity_ulid.as_deref();
+
+    sqlx::query!(
+        r#"INSERT OR IGNORE INTO acts_of_science
+           (act_id, user_id, created_at, email, country, newsletter, name,
+            contributions, act, organization, num_others, others, project,
+            notes, source, entity_slug, accepted)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        act_id,
+        act.user_ulid,
+        act.when,
+        act.email,
+        act.country,
+        newsletter,
+        act.name,
+        contributions,
+        act.act,
+        act.organization,
+        num_others,
+        act.others,
+        act.project,
+        act.notes,
+        source,
+        entity_slug,
+        accepted,
+    )
+    .execute(common::shared::db())
+    .await?;
+
+    Ok(())
+}
+
 async fn insert_golink_as_clickthrough(database: &Database, golink: &GolinkData) -> Result<()> {
     use log_service::database::tables::ClickthroughRow;
 

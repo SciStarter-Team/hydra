@@ -11,7 +11,8 @@ mod sync;
 mod exchange;
 
 use handlers::{
-    handle_activity_log, handle_affiliate_participation, handle_articulate_completion,
+    handle_activity_log, handle_acts_of_science_create, handle_acts_to_date,
+    handle_affiliate_participation, handle_articulate_completion,
     handle_articulate_completion_record, handle_clickthrough, handle_clickthrough_analytics,
     handle_email_event, handle_external_link_clickthrough, handle_external_links,
     handle_go_url_stats, handle_health_check, handle_join, handle_page_view,
@@ -21,7 +22,7 @@ use handlers::{
 };
 use log_service::{Database, run_compactor_service};
 use parking_lot::RwLock;
-use sync::{bookmark_synchronize, golink_synchronize, join_synchronize, participation_synchronize};
+use sync::{acts_of_science_synchronize, bookmark_synchronize, golink_synchronize, join_synchronize, participation_synchronize};
 
 // Global database instance for handler access - using RwLock<Option<>> so we can take ownership for shutdown
 pub static DATABASE: RwLock<Option<Arc<Database>>> = RwLock::new(None);
@@ -52,6 +53,7 @@ async fn main() -> Result<()> {
     let bookmark_cancel = CancellationToken::new();
     let join_cancel = CancellationToken::new();
     let golink_cancel = CancellationToken::new();
+    let acts_cancel = CancellationToken::new();
     let compactor_cancel = CancellationToken::new();
 
     // Spawn WAL compactor service
@@ -93,6 +95,14 @@ async fn main() -> Result<()> {
     let golink_database = Arc::clone(&database);
     background_tasks.spawn(async move {
         golink_synchronize(golink_database, golink_cancel_clone).await;
+        Ok::<(), anyhow::Error>(())
+    });
+
+    // Spawn acts of science sync task
+    let acts_cancel_clone = acts_cancel.clone();
+    let acts_database = Arc::clone(&database);
+    background_tasks.spawn(async move {
+        acts_of_science_synchronize(acts_database, acts_cancel_clone).await;
         Ok::<(), anyhow::Error>(())
     });
 
@@ -192,6 +202,11 @@ async fn main() -> Result<()> {
     toplevel.spawn(handler!(links_group, "get_or_create", handle_external_links));
     toplevel.spawn(handler!(links_group, "clickthrough", handle_external_link_clickthrough));
 
+    // Acts of Science endpoints
+    let acts_group = svc.group("log.acts");
+    toplevel.spawn(handler!(acts_group, "create", handle_acts_of_science_create));
+    toplevel.spawn(handler!(acts_group, "to_date", handle_acts_to_date));
+
     // Health endpoint
     let health_group = svc.group("log.health");
     toplevel.spawn(handler!(health_group, "check", handle_health_check));
@@ -218,6 +233,7 @@ async fn main() -> Result<()> {
     println!("  - bookmark sync running in background");
     println!("  - join sync running in background");
     println!("  - golink sync running in background");
+    println!("  - acts of science sync running in background");
     println!("  - WAL compactor running in background");
 
     // Set up signal handling
@@ -284,6 +300,7 @@ async fn main() -> Result<()> {
     bookmark_cancel.cancel();
     join_cancel.cancel();
     golink_cancel.cancel();
+    acts_cancel.cancel();
     compactor_cancel.cancel();
 
     // Wait for critical background tasks to finish gracefully (no force timeout for data safety)

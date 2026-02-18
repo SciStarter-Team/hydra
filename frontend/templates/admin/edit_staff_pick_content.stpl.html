@@ -1,0 +1,188 @@
+<!-- Edit Staff Pick Form Content -->
+<div class="bg-white rounded-lg shadow border border-gray-200">
+    <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+        <h3 class="text-lg font-medium text-gray-900">Edit Staff Pick</h3>
+        <a
+            href="/-admin/staff-picks"
+            class="text-sm text-gray-600 hover:text-gray-900"
+        >
+            Back to Staff Picks
+        </a>
+    </div>
+
+    <div class="p-6">
+        <% if let Some(error) = &self.error_message { %>
+            <div class="mb-4 p-3 text-sm text-red-700 bg-red-100 rounded-lg border border-red-200">
+                <%= error %>
+            </div>
+        <% } %>
+
+        <form
+            hx-post="/-admin/staff-picks/<%= self.pick.id|disp %>"
+            hx-target="body"
+        >
+            <div class="grid grid-cols-1 gap-6">
+                <!-- Project Slug -->
+                <div>
+                    <label for="project_slug" class="block text-sm font-medium text-gray-700 mb-2">
+                        Project Slug <span class="text-red-500">*</span>
+                    </label>
+                    <input
+                        type="text"
+                        id="project_slug"
+                        name="project_slug"
+                        value="<%= self.pick.project_slug %>"
+                        required
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        placeholder="e.g. globe-observer"
+                    >
+                </div>
+
+                <!-- Label -->
+                <div>
+                    <label for="label" class="block text-sm font-medium text-gray-700 mb-2">
+                        Display Name
+                    </label>
+                    <input
+                        type="text"
+                        id="label"
+                        name="label"
+                        value="<%= self.pick.label %>"
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        placeholder="Display name for the project"
+                    >
+                </div>
+
+                <!-- Description -->
+                <div>
+                    <label for="description" class="block text-sm font-medium text-gray-700 mb-2">
+                        Description
+                    </label>
+                    <textarea
+                        id="description"
+                        name="description"
+                        rows="3"
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        placeholder="Brief description of the project"
+                    ><%= self.pick.description %></textarea>
+                </div>
+
+                <!-- Location -->
+                <div>
+                    <label for="location" class="block text-sm font-medium text-gray-700 mb-2">
+                        Location
+                    </label>
+                    <input
+                        type="text"
+                        id="location"
+                        name="location"
+                        value="<%= self.pick.location %>"
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        placeholder="e.g. Anywhere, Outdoors"
+                    >
+                </div>
+
+                <!-- Acts Per Hour -->
+                <div>
+                    <label for="acts_per_hour" class="block text-sm font-medium text-gray-700 mb-2">
+                        Estimated Time to Act
+                    </label>
+                    <input
+                        type="text"
+                        id="acts_per_hour"
+                        name="acts_per_hour"
+                        value="<%= self.pick.acts_per_hour %>"
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        placeholder="e.g. 15 minutes"
+                    >
+                </div>
+
+                <!-- Picker Name -->
+                <div>
+                    <label for="picker_name" class="block text-sm font-medium text-gray-700 mb-2">
+                        Picker Name <span class="text-red-500">*</span>
+                    </label>
+                    <input
+                        type="text"
+                        id="picker_name"
+                        name="picker_name"
+                        value="<%= self.pick.picker_name %>"
+                        required
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        placeholder="Name of the person who picked this project"
+                    >
+                </div>
+
+                <!-- Picker Image -->
+                <div>
+                    <label for="picker_image" class="block text-sm font-medium text-gray-700 mb-2">
+                        Picker Image Path
+                    </label>
+                    <input
+                        type="text"
+                        id="picker_image"
+                        name="picker_image"
+                        value="<%= self.pick.picker_image %>"
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        placeholder="Path on media.scistarter.org"
+                    >
+                </div>
+
+                <!-- Picker Quote -->
+                <div>
+                    <label for="picker_quote" class="block text-sm font-medium text-gray-700 mb-2">
+                        Picker Quote
+                    </label>
+                    <textarea
+                        id="picker_quote"
+                        name="picker_quote"
+                        rows="2"
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        placeholder="Why did they pick this project?"
+                    ><%= self.pick.picker_quote %></textarea>
+                </div>
+
+                <!-- Priority -->
+                <div>
+                    <label for="priority" class="block text-sm font-medium text-gray-700 mb-2">
+                        Priority
+                    </label>
+                    <input
+                        type="number"
+                        id="priority"
+                        name="priority"
+                        value="<%= self.pick.priority %>"
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    >
+                    <p class="mt-1 text-sm text-gray-500">Higher numbers appear first.</p>
+                </div>
+
+                <!-- Date Range -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <wa-input type="date" id="begin_date" label="Begin Date" name="begin_date" value="<%= self.pick.begin_date %>" required></wa-input>
+                    </div>
+                    <div>
+                        <wa-input type="date" id="end_date" label="End Date" name="end_date" value="<%= self.pick.end_date %>" required></wa-input>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="flex items-center justify-end pt-6 space-x-2 border-t border-gray-200 mt-6">
+                <a
+                    href="/-admin/staff-picks"
+                    class="px-4 py-2 bg-gray-300 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300"
+                >
+                    Cancel
+                </a>
+                <button
+                    type="submit"
+                    class="relative px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                    <span>Update Staff Pick</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>

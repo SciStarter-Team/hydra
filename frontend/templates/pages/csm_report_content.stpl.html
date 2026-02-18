@@ -1,0 +1,208 @@
+<% use crate::csm::{CsmPhase, CsmHero, CsmNav, CsmSponsors}; %>
+<%+ CsmHero { phase: CsmPhase::April } %>
+
+<div class="ss-container mx-auto mt-8">
+  <%+ CsmNav { phase: CsmPhase::April, active: "report" } %>
+
+  <!-- CSM PAGE CONTENT -->
+  <div class="border-linework border mb-8 border-t-0 p-4">
+    <div class="max-w-[960px] mx-auto pt-12">
+
+      <% if self.success { %>
+      <!-- SUCCESS MESSAGE -->
+      <div class="bg-green-50 border border-green-200 rounded-md p-8 text-center mb-8">
+        <h2 class="text-green-800">Thank You!</h2>
+        <p class="text-green-700">Your acts of science have been reported successfully. Together, we're making a difference!</p>
+        <p>Showcase your participation! Use <strong>#ActsofScience</strong> and tag <strong>@SciStarter</strong> to be featured on our website!</p>
+        <a href="/citizensciencemonth" class="btn btn-primary">Back to Overview &raquo;</a>
+      </div>
+      <% } else { %>
+
+      <% if let Some(ref error) = self.error_message { %>
+      <div class="bg-red-50 border border-red-200 rounded-md p-4 mb-8">
+        <p class="text-red-700 mb-0"><strong>Error:</strong> <%= error %></p>
+      </div>
+      <% } %>
+
+      <h2 class="text-xl text-center">Report Your Acts</h2>
+      <div class="flex flex-col md:flex-row gap-4 mb-8">
+        <div class="border border-linework p-8 w-full md:w-1/2 text-center rounded-md flex flex-col justify-between items-center" id="individual-card">
+          <img src="/-static/img/csm/single.svg" alt="icon of one person doing science" class="max-w-[180px]" />
+          <h2 class="text-primary-dark">
+            <span class="block text-base">Report Science Acts</span>
+            <span class="block text-xl">You Did</span>
+          </h2>
+          <button class="btn btn-primary" hx-on:click="document.getElementById('individual-form').classList.remove('hidden'); document.getElementById('group-form').classList.add('hidden'); document.getElementById('individual-card').classList.add('ring-2','ring-primary'); document.getElementById('group-card').classList.remove('ring-2','ring-primary');">Report Now &raquo;</button>
+        </div>
+        <div class="border border-linework p-8 w-full md:w-1/2 text-center rounded-md flex flex-col justify-between items-center" id="group-card">
+          <img src="/-static/img/csm/group.svg" alt="icon of multiple people doing science" class="max-w-[180px]" />
+          <h2 class="text-primary-dark">
+            <span class="block text-base">Report Science Acts</span>
+            <span class="block text-xl mb-0">You Facilitated</span>
+            <span class="block text-base">for many people</span>
+          </h2>
+          <button class="btn btn-primary" hx-on:click="document.getElementById('group-form').classList.remove('hidden'); document.getElementById('individual-form').classList.add('hidden'); document.getElementById('group-card').classList.add('ring-2','ring-primary'); document.getElementById('individual-card').classList.remove('ring-2','ring-primary');">Report Now &raquo;</button>
+        </div>
+      </div>
+
+      <!-- INDIVIDUAL FORM -->
+      <div id="individual-form" class="hidden">
+        <h3 class="text-center text-primary-dark">Report Your Individual Acts</h3>
+        <form method="POST" action="/citizensciencemonth/report" class="max-w-[600px] mx-auto">
+          <input type="hidden" name="report_type" value="individual" />
+
+          <% if self.user_info.is_none() { %>
+          <div class="mb-4">
+            <label for="ind-email" class="block font-semibold mb-1">Email <span class="text-red-500">*</span></label>
+            <input type="email" id="ind-email" name="email" required class="wa-input w-full" placeholder="your@email.com" />
+          </div>
+          <% } %>
+
+          <div class="mb-4">
+            <label for="ind-name" class="block font-semibold mb-1">Your Name <span class="text-red-500">*</span></label>
+            <input type="text" id="ind-name" name="name" required class="wa-input w-full" />
+          </div>
+
+          <div class="mb-4">
+            <label for="ind-act" class="block font-semibold mb-1">What did you do? <span class="text-red-500">*</span></label>
+            <textarea id="ind-act" name="act" required class="wa-input w-full" rows="3" placeholder="Describe your act of science..."></textarea>
+          </div>
+
+          <div class="mb-4">
+            <label for="ind-project" class="block font-semibold mb-1">Project Name (optional)</label>
+            <input type="text" id="ind-project" name="project" class="wa-input w-full" />
+          </div>
+
+          <div class="mb-4">
+            <label for="ind-country" class="block font-semibold mb-1">Country (optional)</label>
+            <input type="text" id="ind-country" name="country" class="wa-input w-full" />
+          </div>
+
+          <div class="mb-4">
+            <label for="ind-notes" class="block font-semibold mb-1">Notes (optional)</label>
+            <textarea id="ind-notes" name="notes" class="wa-input w-full" rows="2"></textarea>
+          </div>
+
+          <div class="mb-4">
+            <label class="flex items-center gap-2">
+              <input type="checkbox" name="newsletter" value="yes" />
+              <span>Sign me up for the SciStarter newsletter</span>
+            </label>
+          </div>
+
+          <div class="text-center">
+            <button type="submit" class="btn btn-primary">Submit Your Report &raquo;</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- GROUP FORM -->
+      <div id="group-form" class="hidden">
+        <h3 class="text-center text-primary-dark">Report Group Acts You Facilitated</h3>
+        <form method="POST" action="/citizensciencemonth/report" class="max-w-[600px] mx-auto">
+          <input type="hidden" name="report_type" value="group" />
+
+          <% if self.user_info.is_none() { %>
+          <div class="mb-4">
+            <label for="grp-email" class="block font-semibold mb-1">Email <span class="text-red-500">*</span></label>
+            <input type="email" id="grp-email" name="email" required class="wa-input w-full" placeholder="your@email.com" />
+          </div>
+          <% } %>
+
+          <div class="mb-4">
+            <label for="grp-name" class="block font-semibold mb-1">Your Name <span class="text-red-500">*</span></label>
+            <input type="text" id="grp-name" name="name" required class="wa-input w-full" />
+          </div>
+
+          <div class="mb-4">
+            <label for="grp-act" class="block font-semibold mb-1">What did your group do? <span class="text-red-500">*</span></label>
+            <textarea id="grp-act" name="act" required class="wa-input w-full" rows="3" placeholder="Describe the activity..."></textarea>
+          </div>
+
+          <div class="mb-4">
+            <label for="grp-contributions" class="block font-semibold mb-1">Number of participants <span class="text-red-500">*</span></label>
+            <input type="number" id="grp-contributions" name="contributions" required min="1" class="wa-input w-full" />
+          </div>
+
+          <div class="mb-4">
+            <label for="grp-organization" class="block font-semibold mb-1">Organization (optional)</label>
+            <input type="text" id="grp-organization" name="organization" class="wa-input w-full" />
+          </div>
+
+          <div class="mb-4">
+            <label for="grp-project" class="block font-semibold mb-1">Project Name (optional)</label>
+            <input type="text" id="grp-project" name="project" class="wa-input w-full" />
+          </div>
+
+          <div class="mb-4">
+            <label for="grp-others" class="block font-semibold mb-1">Names of other participants (optional)</label>
+            <textarea id="grp-others" name="others" class="wa-input w-full" rows="2" placeholder="One per line"></textarea>
+          </div>
+
+          <div class="mb-4">
+            <label for="grp-country" class="block font-semibold mb-1">Country (optional)</label>
+            <input type="text" id="grp-country" name="country" class="wa-input w-full" />
+          </div>
+
+          <div class="mb-4">
+            <label for="grp-notes" class="block font-semibold mb-1">Notes (optional)</label>
+            <textarea id="grp-notes" name="notes" class="wa-input w-full" rows="2"></textarea>
+          </div>
+
+          <div class="mb-4">
+            <label class="flex items-center gap-2">
+              <input type="checkbox" name="newsletter" value="yes" />
+              <span>Sign me up for the SciStarter newsletter</span>
+            </label>
+          </div>
+
+          <div class="text-center">
+            <button type="submit" class="btn btn-primary">Submit Group Report &raquo;</button>
+          </div>
+        </form>
+      </div>
+
+      <% } %>
+
+    </div>
+  </div>
+</div>
+
+<%+ CsmSponsors {} %>
+
+<!-- TABS JS -->
+<script>
+(function(){
+  const tabRow = document.getElementById('tabRow');
+  const chevron = document.getElementById('chevron');
+  const chevBtn = document.getElementById('chevBtn');
+  if (!tabRow || !chevron || !chevBtn) return;
+  function updateChevron(){
+    const overflowRight = tabRow.scrollWidth - (tabRow.scrollLeft + tabRow.clientWidth);
+    if (overflowRight > 1) chevron.classList.remove('hidden');
+    else chevron.classList.add('hidden');
+  }
+  chevBtn.addEventListener('click', () => {
+    tabRow.scrollBy({ left: tabRow.clientWidth*0.7, behavior: 'smooth' });
+  });
+  tabRow.addEventListener('scroll', updateChevron, { passive:true });
+  window.addEventListener('resize', updateChevron);
+  window.addEventListener('load', updateChevron);
+})();
+</script>
+
+<!-- Slick Carousel for Sponsors (jQuery + Slick loaded via Head.with_slick()) -->
+<script>
+$(function(){
+  $('.sponsor-slideshow').slick({
+    infinite: false,
+    slidesToShow: 3,
+    slidesToScroll: 3,
+    responsive: [
+      { breakpoint: 1024, settings: { slidesToShow: 3, slidesToScroll: 3, infinite: true, dots: true } },
+      { breakpoint: 600, settings: { slidesToShow: 2, slidesToScroll: 2 } },
+      { breakpoint: 480, settings: { slidesToShow: 1, slidesToScroll: 1 } }
+    ]
+  });
+});
+</script>

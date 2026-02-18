@@ -6,6 +6,7 @@ pub mod builder;
 pub mod channel;
 pub mod communities;
 pub mod component;
+pub mod csm;
 pub mod contact;
 pub mod dev;
 pub mod emailer;
@@ -35,6 +36,7 @@ pub mod review;
 pub mod schedule;
 pub mod search;
 pub mod session;
+pub mod staff_pick;
 pub mod ui;
 pub mod upload;
 pub mod wiki;
@@ -253,6 +255,10 @@ fn user_facing() -> impl Endpoint {
         .at("/-news/:id/content", get(news::news_content))
         .nest("/communities", communities::routes())
         .nest("/dashboard/communities", communities::dashboard_routes())
+        .nest("/citizensciencemonth", csm::routes())
+        .at("/-csm/acts-to-date", get(csm::acts_to_date_api))
+        .at("/-csm/picks", get(csm::csm_picks))
+        .at("/-csm/events", get(csm::csm_events))
         .at("/-entity-password/*slug", post(entity_password_verify))
         .at("/*slug", get(entity_page))
         .with(middleware::analytics::AnalyticsMiddleware)
@@ -367,6 +373,7 @@ async fn main() -> Result<(), Error> {
     let _oauth2_refresh_token_updates = tokio::spawn(oauth2::types::RefreshToken::peering_task());
     let _wiki_page_updates = tokio::spawn(wiki::WikiPage::peering_task());
     let _news_item_updates = tokio::spawn(news::NewsItem::peering_task());
+    let _staff_pick_updates = tokio::spawn(staff_pick::StaffPick::peering_task());
     let _pagebuilder_component_updates =
         tokio::spawn(pagebuilder::PageBuilderComponent::peering_task());
     let _pagebuilder_page_updates = tokio::spawn(pagebuilder::PageBuilderPage::peering_task());

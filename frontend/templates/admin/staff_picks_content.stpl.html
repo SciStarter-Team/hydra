@@ -1,0 +1,145 @@
+<div id="staff-picks-content">
+    <!-- Search Bar -->
+    <div class="px-6 py-4">
+        <form hx-get="/-admin/staff-picks/search" hx-target="#staff-picks-content" hx-swap="innerHTML">
+            <div class="relative">
+                <input
+                    type="text"
+                    name="search"
+                    placeholder="Search staff picks..."
+                    value="<% if let Some(ref q) = self.search_query { %><%= q %><% } %>"
+                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                />
+            </div>
+        </form>
+    </div>
+
+    <!-- Content Table -->
+    <div class="bg-white shadow-md rounded-lg overflow-hidden">
+        <% if self.picks.is_empty() { %>
+            <div class="px-6 py-8 text-center text-gray-500">
+                No staff picks found. <a href="#" hx-get="/-admin/staff-picks/new" hx-target="body" hx-swap="beforeend" class="text-indigo-600 hover:text-indigo-800">Create one now</a>
+            </div>
+        <% } else { %>
+            <!-- Header Row -->
+            <div class="hidden xl:grid xl:grid-cols-20 bg-gray-50 px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
+                <div class="col-span-4">Label</div>
+                <div class="col-span-3">Project</div>
+                <div class="col-span-3">Picker</div>
+                <div class="col-span-3">Date Range</div>
+                <div class="col-span-2">Priority</div>
+                <div class="col-span-3">Status</div>
+                <div class="col-span-2 text-right">Actions</div>
+            </div>
+
+            <div class="divide-y divide-gray-200">
+                <% for pick in &self.picks { %>
+                    <% let today = jiff::Zoned::now().date().to_string(); %>
+                    <% let active = pick.begin_date <= today && today <= pick.end_date; %>
+                    <div id="pick-<%= pick.id|disp %>" class="flex flex-col xl:grid xl:grid-cols-20 gap-3 xl:gap-4 xl:items-center px-6 py-4 hover:bg-gray-50 transition-colors">
+                        <!-- Label -->
+                        <div class="xl:col-span-4">
+                            <div class="xl:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Label</div>
+                            <div class="text-sm font-medium text-gray-900"><% if !pick.label.is_empty() { %><%= pick.label %><% } else { %><span class="text-gray-400 italic">No label</span><% } %></div>
+                        </div>
+
+                        <!-- Project -->
+                        <div class="xl:col-span-3">
+                            <div class="xl:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Project</div>
+                            <div class="text-sm text-gray-600"><%= pick.project_slug %></div>
+                        </div>
+
+                        <!-- Picker -->
+                        <div class="xl:col-span-3">
+                            <div class="xl:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Picker</div>
+                            <div class="text-sm text-gray-600"><%= pick.picker_name %></div>
+                        </div>
+
+                        <!-- Date Range -->
+                        <div class="xl:col-span-3">
+                            <div class="xl:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Date Range</div>
+                            <div class="text-sm text-gray-600"><%= pick.begin_date %> to <%= pick.end_date %></div>
+                        </div>
+
+                        <!-- Priority -->
+                        <div class="xl:col-span-2">
+                            <div class="xl:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Priority</div>
+                            <div class="text-sm text-gray-600"><%= pick.priority %></div>
+                        </div>
+
+                        <!-- Status -->
+                        <div class="xl:col-span-3">
+                            <div class="xl:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Status</div>
+                            <% if active { %>
+                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                                    Active
+                                </span>
+                            <% } else if pick.begin_date > today { %>
+                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                                    Upcoming
+                                </span>
+                            <% } else { %>
+                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
+                                    Expired
+                                </span>
+                            <% } %>
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="xl:col-span-2">
+                            <div class="xl:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Actions</div>
+                            <div class="flex items-center space-x-2 xl:justify-end">
+                                <a
+                                    href="/-admin/staff-picks/<%= pick.id|disp %>"
+                                    class="text-indigo-600 hover:text-indigo-900 transition-colors no-underline"
+                                >
+                                    <wa-icon name="pencil" class="w-4 h-4"></wa-icon>
+                                </a>
+                                <button
+                                    class="text-red-600 hover:text-red-900 transition-colors"
+                                    hx-delete="/-admin/staff-picks/<%= pick.id|disp %>"
+                                    hx-confirm="Are you sure you want to delete this staff pick?"
+                                    hx-target="#pick-<%= pick.id|disp %>"
+                                    hx-swap="outerHTML swap:0s"
+                                >
+                                    <wa-icon name="trash" class="w-4 h-4"></wa-icon>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                <% } %>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- Pagination -->
+    <% if self.total_count > self.per_page { %>
+        <div class="mt-6 flex items-center justify-between px-6">
+            <div class="text-sm text-gray-700">
+                Showing <%= (self.page - 1) * self.per_page + 1 %> to <%= std::cmp::min(self.page * self.per_page, self.total_count) %> of <%= self.total_count %> results
+            </div>
+            <div class="flex space-x-2">
+                <% if self.page > 1 { %>
+                    <button
+                        class="px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+                        hx-get="/-admin/staff-picks/search?page=<%= self.page - 1 %>"
+                        hx-target="#staff-picks-content"
+                        hx-swap="innerHTML"
+                    >
+                        Previous
+                    </button>
+                <% } %>
+                <% if self.page * self.per_page < self.total_count { %>
+                    <button
+                        class="px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+                        hx-get="/-admin/staff-picks/search?page=<%= self.page + 1 %>"
+                        hx-target="#staff-picks-content"
+                        hx-swap="innerHTML"
+                    >
+                        Next
+                    </button>
+                <% } %>
+            </div>
+        </div>
+    <% } %>
+</div>

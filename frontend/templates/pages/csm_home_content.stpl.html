@@ -1,0 +1,270 @@
+<% use crate::csm::{CsmPhase, CsmHero, CsmNav, CsmSponsors}; %>
+<%+ CsmHero { phase: self.phase } %>
+
+<% if self.phase != CsmPhase::May { %>
+<!-- COUNTDOWN-->
+<div class="ss-container mx-auto hidden sm:block">
+  <div class="countdown bg-primary-dark rounded-md flex justify-center gap-4 items-center">
+    <% if self.phase == CsmPhase::PreApril { %>
+    <h3 class="text-right text-white text-lg sm:mb-0">Get Ready to Participate!</h3>
+    <% } else { %>
+    <h3 class="text-right text-white text-lg sm:mb-0">Time Left to Participate:</h3>
+    <% } %>
+    <div class="tick" data-did-init="handleTickInit" id="reverse-flip">
+      <div data-repeat="true" data-layout="horizontal fit" data-transform="preset(d, h, m, s) -> delay">
+        <div class="tick-group">
+          <div data-key="value" data-repeat="true" data-transform="pad(00) -> split -> delay">
+            <span data-view="flip"></span>
+          </div>
+          <span data-key="label" data-view="text" class="tick-label"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<% } %>
+
+<div class="ss-container mx-auto mt-8">
+  <%+ CsmNav { phase: self.phase, active: "overview" } %>
+
+  <!-- CSM PAGE CONTENT -->
+  <div class="border-linework border mb-8 border-t-0 p-4">
+    <div class="max-w-[960px] mx-auto pt-12">
+
+      <!-- CITSCIMONTH LOGO -->
+      <img src="/-static/img/csm/CitSci_Horizontal_v1.svg" alt="Citizen Science Month Logo" class="max-w-[600px] w-full mx-auto mb-8" />
+
+      <% match self.phase { CsmPhase::PreApril => { %>
+      <!-- INTRO TEXT -->
+      <div class="w-full mx-auto text-center mb-16">
+        <h2 class="text-primary-dark">April is Citizen Science Month!</h2>
+        <p class="intro">A global celebration of public participation in scientific research.</p>
+        <p>Each April, Citizen Science Month celebrates the people, projects, and scientific outcomes made possible through public participation. In 2026, we are also working together toward a shared goal of 2.50 Million <em>Acts of Science</em>, marking America's 250th Birthday through collective discovery, service, and impact.</p>
+        <p>Anyone can participate. No prior experience is needed. Every contribution counts.</p>
+        <p>No need to wait until April! Citizen science happens all year long. Join <a href="/">SciStarter</a> to discover ongoing projects and receive updates about Citizen Science Month.</p>
+        <div class="flex flex-col md:flex-row" style="gap: 10px;justify-content: center;">
+          <a href="/citizensciencemonth/participate" class="btn btn-primary">Do <em>Acts of Science</em></a>
+          <a href="https://pages.scistarter.org/citizensciencemonth-resources" class="btn btn-subdued">Host or Support an Event</a>
+        </div>
+      </div>
+
+      <div class="ss-accordion2 w-full mx-auto border border-linework shadow mb-8 max-w-[1024px]">
+        <button type="button" class="w-full flex justify-between items-center px-4 py-3 text-left font-semibold focus:outline-none focus-visible:ring focus-visible:ring-primary-action" aria-expanded="false" aria-controls="accordion-panel-1" id="accordion-header-1">
+          <h2 class="text-lg mb-0 text-primary">What Is an <em>Act of Science</em>?</h2>
+          <svg class="w-5 h-5 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+          </svg>
+        </button>
+        <div id="accordion-panel-1" role="region" aria-labelledby="accordion-header-1" class="px-4 py-3 mx-auto hidden">
+          <div class="max-w-[960px]">
+            <p>An <em>Act of Science</em> is any real way you help science. During Citizen Science Month, this can include sharing observations with a project, helping analyze data, attending a citizen science event, or completing the Foundations of Citizen Science training. Each of these actions counts as an <em>Act of Science</em>.</p>
+            <p>The goal of 2.50 Million <em>Acts of Science</em> shows how many small actions, taken together, can create a big scientific impact.</p>
+            <p>Learn about the fundamentals in our free self-guided <a href="/training">Foundations of Citizen Science</a> online training.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3 STEPS GRAPHIC-->
+      <div class="bg-primary-light p-4 rounded mb-16">
+        <h3 class="text-center max-w-[unset] text-primary-dark">What to Expect in April</h3>
+        <div class="flex pariticipate-points !mb-0">
+          <div style="padding-left: 1rem">
+            <span style="padding-right: 0.5px">1</span>
+            <h4 class="header-font">Participate</h4>
+            <p>Participate in any citizen science project or event you find on SciStarter in April.</p>
+          </div>
+          <div style="padding-left: 1rem">
+            <span style="padding-right: 0.5px">2</span>
+            <h4 class="header-font">Report</h4>
+            <p>Report your Act(s) on SciStarter.</p>
+          </div>
+          <div style="padding-left: 1rem">
+            <span style="padding-right: 0.5px">3</span>
+            <h4 class="header-font">Share</h4>
+            <p>Showcase your participation! Use #ActsofScience and tag @SciStarter to be featured on our website!</p>
+          </div>
+          <div id="participate-line2"></div>
+        </div>
+      </div>
+
+      <div class="w-full mx-auto text-center mb-16">
+        <p>Start in minutes! No experience needed. You can participate in Citizen Science Month in many ways. Visit <a href="/citizensciencemonth/participate">Participate</a> to get started.</p>
+      </div>
+
+      <!--OUTCOMES-->
+      <div class="acts-highlights-wrapper">
+        <h3 class="text-center">Impact In 2025</h3>
+        <div class="acts-highlights">
+          <div>
+            <img src="/-static/img/csm/help.svg" alt="volunteer icon" />
+            <h3><span>Nearly</span><span>Half a Million Volunteers</span><span>contributed to One Million <em>Acts of Science</em></span></h3>
+          </div>
+          <div>
+            <img src="/-static/img/csm/chemistry.svg" alt="science icon" />
+            <h3><span>Volunteers were involved in over</span><span>1000 projects &amp; events</span><span>benefitting scientific research</span></h3>
+          </div>
+          <div>
+            <img src="/-static/img/csm/growth.svg" alt="test tube with fireworks icon" />
+            <h3><span>A total of </span><span>3.06 million Acts</span><span>were tallied at the end of the month</span></h3>
+          </div>
+        </div>
+      </div>
+
+      <!-- FAQ LINK -->
+      <div class="text-center px-4 my-16">
+        <h3 class="text-center text-primary-dark font-header-lg mb-1">Curious about the story behind Citizen Science Month&mdash;its origins, impact, and the people who make it possible?</h3>
+        <p>Learn more and visit our Frequently Asked Questions page for answers and insights.</p>
+        <p><a class="btn btn-subdued" href="https://pages.scistarter.org/citizensciencemonth-about">Learn More</a></p>
+      </div>
+
+      <% } CsmPhase::April | CsmPhase::AprilReached => { %>
+      <!-- 3 STEPS GRAPHIC-->
+      <div class="bg-primary-light p-4 rounded mb-16">
+        <div class="flex pariticipate-points !mb-0">
+          <div>
+            <span>1</span>
+            <h4 class="header-font"><a href="/citizensciencemonth/participate" class="underline">Participate</a></h4>
+            <p>Participate in any citizen science project or event you find on <a href="/">SciStarter</a> in April.</p>
+          </div>
+          <div>
+            <span>2</span>
+            <h4 class="header-font"><a href="/citizensciencemonth/report" class="underline">Report</a></h4>
+            <p>Report your act(s) on SciStarter</p>
+          </div>
+          <div>
+            <span>3</span>
+            <h4 class="header-font">Share</h4>
+            <p>Showcase your participation! Use #ActsofScience and tag @SciStarter to be featured on our website!</p>
+          </div>
+          <div id="participate-line2"></div>
+        </div>
+      </div>
+
+      <!-- INTRO TEXT -->
+      <div class="w-full mx-auto text-center mb-16">
+        <h2 class="text-primary-dark">Citizen Science Month is April!</h2>
+        <p class="intro">Everyone, everywhere is invited to start preparing for this global effort to generate One Million Acts of Science and promote public participation in scientific research!</p>
+        <p>Did you know? Scientists can't be everywhere and they don't have all the answers! That's why they count on volunteers around the world to join their projects to help collect data when they don't have enough or help analyze data when they have too much.</p>
+        <p><a class="underline" href="https://pages.scistarter.org/citizensciencemonth-about">Learn more about the goals, impact, and history of Citizen Science Month</a></p>
+      </div>
+
+      <!-- WALL OF FAME -->
+      <div class="acts-wrapper mb-16">
+        <div class="acts-container text-center">
+          <img src="/-static/img/csm/wall-of-fame-complex.svg" alt="Wall of Fame" style="max-width:800px;display:block;margin:0 auto 1rem"/>
+          <p>Below you'll find all the participants in 1,000,000 Acts of Science.</p>
+        </div>
+      </div>
+
+      <!-- Social Shares -->
+      <div class="acts-wrapper mb-16">
+        <div class="acts-container text-center">
+          <h3 class="wall-h3">Some Great Social Shares!</h3>
+          <div id="frame-feed"><a href="https://curator.io" target="_blank" class="crt-logo crt-tag">Powered by Curator.io</a></div>
+        </div>
+      </div>
+      <% } CsmPhase::May => { %>
+      <!-- INTRO TEXT -->
+      <div class="w-full mx-auto text-center mb-16">
+        <h2 class="text-primary-dark">Thank You for an Amazing Citizen Science Month!</h2>
+        <p class="intro">Together, we achieved incredible things during this year's Citizen Science Month. Science is better together!</p>
+        <p>Find more projects and events all year-long on SciStarter.</p>
+        <p><a class="underline" href="https://pages.scistarter.org/citizensciencemonth-about">Learn more about the goals, impact, and history of Citizen Science Month</a></p>
+      </div>
+
+      <!-- WALL OF FAME -->
+      <div class="acts-wrapper mb-16">
+        <div class="acts-container text-center">
+          <img src="/-static/img/csm/wall-of-fame-complex.svg" alt="Wall of Fame" style="max-width:800px;display:block;margin:0 auto 1rem"/>
+          <p>Below you'll find all the participants in 1,000,000 Acts of Science.</p>
+        </div>
+      </div>
+
+      <!-- Social Shares -->
+      <div class="acts-wrapper mb-16">
+        <div class="acts-container text-center">
+          <h3 class="wall-h3">Some Great Social Shares!</h3>
+          <div id="frame-feed"><a href="https://curator.io" target="_blank" class="crt-logo crt-tag">Powered by Curator.io</a></div>
+        </div>
+      </div>
+      <% } } %>
+
+    </div>
+  </div>
+</div>
+
+<%+ CsmSponsors {} %>
+
+<% if self.phase != CsmPhase::May { %>
+<!-- COUNTDOWN TIMER -->
+<script src="https://unpkg.com/@pqina/flip/dist/flip.min.js"></script>
+<script>
+function handleTickInit(tick) {
+    var now = new Date();
+    <% if self.phase == CsmPhase::PreApril { %>
+    var year = now.getMonth() <= 2 ? now.getFullYear() : now.getFullYear() + 1;
+    var counter = Tick.count.down(year + "-04-01T00:00:00");
+    <% } else { %>
+    var counter = Tick.count.down(now.getFullYear() + "-04-30T00:00:00");
+    <% } %>
+    counter.onupdate = function(value) { tick.value = value; };
+    counter.onended = function() {};
+}
+</script>
+<% } %>
+
+<!-- TABS JS -->
+<script>
+(function(){
+  const tabRow = document.getElementById('tabRow');
+  const chevron = document.getElementById('chevron');
+  const chevBtn = document.getElementById('chevBtn');
+  if (!tabRow || !chevron || !chevBtn) return;
+  function updateChevron(){
+    const overflowRight = tabRow.scrollWidth - (tabRow.scrollLeft + tabRow.clientWidth);
+    if (overflowRight > 1) chevron.classList.remove('hidden');
+    else chevron.classList.add('hidden');
+  }
+  chevBtn.addEventListener('click', () => {
+    tabRow.scrollBy({ left: tabRow.clientWidth*0.7, behavior: 'smooth' });
+  });
+  tabRow.addEventListener('scroll', updateChevron, { passive:true });
+  window.addEventListener('resize', updateChevron);
+  window.addEventListener('load', updateChevron);
+})();
+</script>
+
+<!-- Slick Carousel for Sponsors (jQuery + Slick loaded via Head.with_slick()) -->
+<script>
+$(function(){
+  $('.sponsor-slideshow').slick({
+    infinite: false,
+    slidesToShow: 3,
+    slidesToScroll: 3,
+    responsive: [
+      { breakpoint: 1024, settings: { slidesToShow: 3, slidesToScroll: 3, infinite: true, dots: true } },
+      { breakpoint: 600, settings: { slidesToShow: 2, slidesToScroll: 2 } },
+      { breakpoint: 480, settings: { slidesToShow: 1, slidesToScroll: 1 } }
+    ]
+  });
+});
+</script>
+
+<!-- Accordion JS -->
+<script>
+for(let btn of document.querySelectorAll(".ss-accordion2 > button:first-child")) {
+  btn.addEventListener("click", function() {
+    const panel = document.getElementById(btn.getAttribute('aria-controls'));
+    const expanded = btn.getAttribute('aria-expanded') === 'true';
+    if (expanded) {
+      btn.setAttribute('aria-expanded', 'false');
+      btn.querySelector('svg').classList.remove('rotate-180');
+      panel.classList.add('hidden');
+    } else {
+      btn.setAttribute('aria-expanded', 'true');
+      btn.querySelector('svg').classList.add('rotate-180');
+      panel.classList.remove('hidden');
+    }
+  });
+}
+</script>

@@ -1,0 +1,278 @@
+<% use crate::csm::CsmPhase; %>
+<% match self.phase { CsmPhase::PreApril => { %>
+<!-- HEADER - PRE-APRIL -->
+<div class="mx-auto">
+  <div class="acts-hero">
+    <div id="stars"></div>
+    <div class="acts-hero-content ss-container mx-auto">
+      <div class="acts-hero-left">
+        <div>
+          <h2 class="relative left-[6px]">Help Us Achieve</h2>
+          <h1 class="sr-only">2.50 Million Acts of Science</h1>
+          <img src="/-static/img/csm/Acts_only_number_standard.svg" alt="2.50 Million Acts of Science Logo" />
+          <div class="flex-row gap-1 md:gap-4 items-center my-8 justify-center relative sm:left-[-20px] hidden sm:flex">
+            <p class="mb-0 uppercase text-primary-dark text-sm">Official partner of</p>
+            <img src="/-static/img/csm/America250_logo.svg" alt="America 250 logo" class="w-[60px] md:w-[60px] block" />
+          </div>
+        </div>
+      </div>
+      <div class="acts-hero-right">
+        <div>
+          <div id="test-tube">
+            <img id="test-tube-base" src="/-static/img/csm/test-tube.svg" alt="test tube data visualization">
+            <div id="test-tube-fill" style="height:3px"></div>
+            <div id="test-tube-fill-top" style="bottom:calc(0px + 41px);"></div>
+            <div id="test-tube-scale">
+              <div class="tube-tick tick0"></div>
+              <div class="tube-tick tick1"></div>
+              <div class="tube-tick tick2"></div>
+              <div class="tube-tick tick3"></div>
+              <div class="tube-tick tick4"></div>
+              <div class="tube-tick tick5"></div>
+              <div class="tube-tick tick6"></div>
+              <div class="tube-tick tick7"></div>
+              <div class="tube-tick tick8"></div>
+              <div class="tube-tick tick9"></div>
+              <div class="tube-tick tick10"></div>
+              <div class="num tick1">0.25 M</div>
+              <div class="num tick2">0.50 M</div>
+              <div class="num tick3">0.75 M</div>
+              <div class="num tick4">1.00 M</div>
+              <div class="num tick5">1.25 M</div>
+              <div class="num tick6">1.50 M</div>
+              <div class="num tick7">1.75 M</div>
+              <div class="num tick8">2.00 M</div>
+              <div class="num tick9">2.25 M</div>
+              <div class="num tick10">2.50 M</div>
+            </div>
+            <div id="test-tube-reflect"></div>
+            <div id="test-tube-counter" style="bottom:calc(80px + 0px);">
+              <div class="tt-date">Count Starts</div>
+              <div class="tt-count">April 1st</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MOBILE ONLY 250 PARTNER-->
+<div class="flex-row gap-1 md:gap-4 items-center my-8 justify-center relative sm:left-[-20px] flex sm:hidden bg-primary-light py-4">
+  <p class="mb-0 uppercase text-primary-dark text-sm">Official partner of</p>
+  <img src="/-static/img/csm/America250_logo.svg" alt="America 250 logo" class="w-[60px] md:w-[60px] block" />
+</div>
+<% } CsmPhase::April | CsmPhase::AprilReached => { %>
+<!-- HEADER - APRIL -->
+<div class="mx-auto">
+  <div class="acts-hero">
+    <div id="stars"></div>
+    <div class="acts-hero-content ss-container mx-auto">
+      <div class="acts-hero-left">
+        <div>
+          <h2 class="relative left-[6px]">Help Us Achieve</h2>
+          <h1 class="sr-only">2.50 Million Acts of Science</h1>
+          <img src="/-static/img/csm/Acts_only_number_standard.svg" alt="2.50 Million Acts of Science Logo" />
+          <div class="flex-row gap-1 md:gap-4 items-center my-8 justify-center relative sm:left-[-20px] hidden sm:flex">
+            <p class="mb-0 uppercase text-primary-dark text-sm">Official partner of</p>
+            <img src="/-static/img/csm/America250_logo.svg" alt="America 250 logo" class="w-[60px] md:w-[60px] block" />
+          </div>
+          <a href="/citizensciencemonth/report" class="btn btn-primary report-btn">Report Your Acts Now</a>
+        </div>
+      </div>
+      <div class="acts-hero-right">
+        <div>
+          <div id="test-tube">
+            <img id="test-tube-base" src="/-static/img/csm/test-tube.svg" alt="test tube data visualization">
+            <div id="test-tube-fill" style="height:2px"></div>
+            <div id="test-tube-fill-top" style="bottom:40px;"></div>
+            <div id="test-tube-scale">
+              <div class="tube-tick tick0"></div>
+              <div class="tube-tick tick1"></div>
+              <div class="tube-tick tick2"></div>
+              <div class="tube-tick tick3"></div>
+              <div class="tube-tick tick4"></div>
+              <div class="tube-tick tick5"></div>
+              <div class="tube-tick tick6"></div>
+              <div class="tube-tick tick7"></div>
+              <div class="tube-tick tick8"></div>
+              <div class="tube-tick tick9"></div>
+              <div class="tube-tick tick10"></div>
+              <div class="num tick1">0.25 M</div>
+              <div class="num tick2">0.50 M</div>
+              <div class="num tick3">0.75 M</div>
+              <div class="num tick4">1.00 M</div>
+              <div class="num tick5">1.25 M</div>
+              <div class="num tick6">1.50 M</div>
+              <div class="num tick7">1.75 M</div>
+              <div class="num tick8">2.00 M</div>
+              <div class="num tick9">2.25 M</div>
+              <div class="num tick10">2.50 M</div>
+            </div>
+            <div id="test-tube-reflect"></div>
+            <div id="test-tube-counter" style="bottom:6px;">
+              <div class="tt-date"></div>
+              <div class="tt-count"></div>
+            </div>
+            <div id="test-tube-over">
+              <div class="tt-date">Goal Reached</div>
+              <div class="tt-date" id="tt-day-reached">April 28!</div>
+              <div class="tt-count">2.50 Million</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="fireworks" class="hidden"><lottie-player src="/-static/img/csm/fireworks.json" background="transparent" speed="1" loop autoplay></lottie-player></div>
+    <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
+  </div>
+</div>
+
+<!-- MOBILE ONLY 250 PARTNER-->
+<div class="flex-row gap-1 md:gap-4 items-center my-8 justify-center relative sm:left-[-20px] flex sm:hidden bg-primary-light py-4">
+  <p class="mb-0 uppercase text-primary-dark text-sm">Official partner of</p>
+  <img src="/-static/img/csm/America250_logo.svg" alt="America 250 logo" class="w-[60px] md:w-[60px] block" />
+</div>
+
+<script>
+const USE_FAKE_DATA = false;
+const fakeData = { date: "2025-04-09", number: 1458054, date_reached: null };
+
+function parseDateOnly(dateString) {
+  if (!dateString || typeof dateString !== "string") return null;
+  const [year, month, day] = dateString.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+}
+
+async function fetchAPI() {
+  const res = await fetch("/-csm/acts-to-date");
+  if (!res.ok) throw new Error("Bad response from API");
+  return res.json();
+}
+
+async function updateTestTubeCounter() {
+  let data;
+  try {
+    data = USE_FAKE_DATA ? fakeData : await fetchAPI();
+  } catch (err) {
+    console.warn("API failed, using fallback", err);
+    data = fakeData;
+  }
+
+  const { date, number, date_reached } = data;
+  const cappedNumber = Math.min(number, 2500000);
+  const ratio = cappedNumber / 2500000;
+  const duration = 100 + (3000 - 100) * ratio;
+  const durationSec = duration / 1000;
+
+  const targetDate = parseDateOnly(date);
+  const formattedDate = targetDate.toLocaleDateString("en-US", { month: "long", day: "numeric" });
+
+  document.querySelector("#test-tube-counter .tt-date").textContent = formattedDate;
+  document.querySelector("#test-tube-counter .tt-count").textContent = number.toLocaleString();
+
+  const base = (cappedNumber / 250000) * 37;
+  const tt_counter = document.getElementById("test-tube-counter");
+  tt_counter.style.bottom = `${base + 6}px`;
+  tt_counter.style.opacity = 1;
+  document.getElementById("test-tube-fill").style.height = `${base + 2}px`;
+  document.getElementById("test-tube-fill-top").style.bottom = `${base + 40}px`;
+
+  [tt_counter, document.getElementById("test-tube-fill"), document.getElementById("test-tube-fill-top")].forEach(el => {
+    if (el) el.style.transition = `all ${durationSec}s ease-out`;
+  });
+
+  if (date_reached) {
+    const reachedDate = parseDateOnly(date_reached);
+    if (reachedDate < targetDate) handleEarlyReached(data);
+  }
+}
+
+function handleEarlyReached(data) {
+  const d = parseDateOnly(data.date_reached);
+  const formattedReached = d.toLocaleDateString("en-US", { month: "long", day: "numeric" }) + "!";
+  document.getElementById("test-tube-counter").classList.add("reached");
+  const overEl = document.getElementById("test-tube-over");
+  overEl.style.display = "block";
+  overEl.querySelector("#tt-day-reached").textContent = formattedReached;
+  document.getElementById("fireworks").style.display = "block";
+}
+
+document.addEventListener("DOMContentLoaded", updateTestTubeCounter);
+</script>
+<% } CsmPhase::May => { %>
+<!-- HEADER - MAY -->
+<div class="mx-auto">
+  <div class="acts-hero post-live">
+    <div class="post-live-logo max-w-[960px] mx-auto">
+      <img src="/-static/img/csm/Acts_horizontal_with-number-standard.svg" alt="2.50 Million Acts of Science Logo" />
+      <div class="flex-row gap-1 md:gap-4 items-center my-8 justify-center relative sm:left-[-20px] hidden sm:flex ml-auto">
+        <p class="mb-0 uppercase text-primary-dark text-sm">Official partner of</p>
+        <img src="/-static/img/csm/America250_logo.svg" alt="America 250 logo" class="w-[60px] md:w-[60px] block" />
+      </div>
+    </div>
+    <div class="acts-hero-content ss-container mx-auto">
+      <div class="acts-hero-left">
+        <div class="text-center">
+          <h2 class="relative left-[6px] text-center">We Did It!</h2>
+          <p>Well done everyone! Science is better, together. Find more projects and events all year-long on SciStarter.</p>
+          <div class="flex flex-col md:flex-row justify-center gap-4 mb-8">
+            <a href="/" class="btn btn-primary">Stay Involved All Year &raquo;</a>
+          </div>
+        </div>
+      </div>
+      <div class="acts-hero-right">
+        <div>
+          <div id="test-tube">
+            <img id="test-tube-base" src="/-static/img/csm/test-tube.svg" alt="test tube data visualization">
+            <div id="test-tube-fill" style="height: calc(370px + 2px)"></div>
+            <div id="test-tube-fill-top" style="bottom:calc(370px + 40px);"></div>
+            <div id="test-tube-scale">
+              <div class="tube-tick tick0"></div>
+              <div class="tube-tick tick1"></div>
+              <div class="tube-tick tick2"></div>
+              <div class="tube-tick tick3"></div>
+              <div class="tube-tick tick4"></div>
+              <div class="tube-tick tick5"></div>
+              <div class="tube-tick tick6"></div>
+              <div class="tube-tick tick7"></div>
+              <div class="tube-tick tick8"></div>
+              <div class="tube-tick tick9"></div>
+              <div class="tube-tick tick10"></div>
+              <div class="num tick1">0.25 M</div>
+              <div class="num tick2">0.50 M</div>
+              <div class="num tick3">0.75 M</div>
+              <div class="num tick4">1.00 M</div>
+              <div class="num tick5">1.25 M</div>
+              <div class="num tick6">1.50 M</div>
+              <div class="num tick7">1.75 M</div>
+              <div class="num tick8">2.00 M</div>
+              <div class="num tick9">2.25 M</div>
+              <div class="num tick10">2.50 M</div>
+            </div>
+            <div id="test-tube-reflect"></div>
+            <div id="test-tube-counter" class="reached">
+              <div class="tt-date">Final Count</div>
+              <div class="tt-count">2,542,543</div>
+            </div>
+            <div id="test-tube-over">
+              <div class="tt-date">Goal Reached</div>
+              <div class="tt-date">April 28!</div>
+              <div class="tt-count">2.50 Million</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="fireworks"><lottie-player src="/-static/img/csm/fireworks.json" background="transparent" speed="1" loop autoplay></lottie-player></div>
+    <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
+  </div>
+</div>
+
+<!-- MOBILE ONLY 250 PARTNER-->
+<div class="flex-row gap-1 md:gap-4 items-center my-8 justify-center relative sm:left-[-20px] flex sm:hidden bg-primary-light py-4">
+  <p class="mb-0 uppercase text-primary-dark text-sm">Official partner of</p>
+  <img src="/-static/img/csm/America250_logo.svg" alt="America 250 logo" class="w-[60px] md:w-[60px] block" />
+</div>
+<% } } %>

@@ -1,0 +1,71 @@
+<!-- INITIAL 3 CARDS-->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+  <% for pick in self.picks.iter().take(3) { %>
+  <div class="csm-card">
+    <div class="csm-card-header">
+      <div class="flex participate-image-flex">
+        <div>
+          <h2><a href="<%= pick.url() %>"><%= pick.label %></a></h2>
+          <p style="font-size: 95%"><%= pick.description %></p>
+          <div class="location">
+            <span class="icon"><img src="/-static/img/csm/map-marker.svg" alt="map marker icon" /></span>
+            <%= pick.location %>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="csm-card-actions">
+      <p class="per-hour">Estimated time to Act: <%= pick.acts_per_hour %></p>
+      <a href="<%= pick.url() %>" class="btn btn-primary">View project</a>
+      <% if !pick.picker_name.is_empty() { %>
+      <div class="csm-recommendations">
+        <% if !pick.picker_image.is_empty() { %>
+        <img src="https://media.scistarter.org/<%= pick.picker_image %>" alt="<%= pick.picker_name %>" />
+        <% } %>
+        <p><b>picked by: <%= pick.picker_name %></b></p>
+        <% if !pick.picker_quote.is_empty() { %>
+        <q><%= pick.picker_quote %></q>
+        <% } %>
+      </div>
+      <% } %>
+    </div>
+  </div>
+  <% } %>
+</div>
+<% if self.picks.len() > 3 { %>
+<div class="csm-more-projects mt-4">
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <% for pick in self.picks.iter().skip(3) { %>
+    <div class="csm-card">
+      <div class="csm-card-header">
+        <div class="flex participate-image-flex">
+          <div>
+            <h2><a href="<%= pick.url() %>"><%= pick.label %></a></h2>
+            <p style="font-size: 95%"><%= pick.description %></p>
+            <div class="location">
+              <span class="icon"><img src="/-static/img/csm/map-marker.svg" alt="map marker icon" /></span>
+              <%= pick.location %>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="csm-card-actions">
+        <p class="per-hour">Estimated time to Act: <%= pick.acts_per_hour %></p>
+        <a href="<%= pick.url() %>" class="btn btn-primary">View project</a>
+        <% if !pick.picker_name.is_empty() { %>
+        <div class="csm-recommendations">
+          <% if !pick.picker_image.is_empty() { %>
+          <img src="https://media.scistarter.org/<%= pick.picker_image %>" alt="<%= pick.picker_name %>" />
+          <% } %>
+          <p><b>picked by: <%= pick.picker_name %></b></p>
+          <% if !pick.picker_quote.is_empty() { %>
+          <q><%= pick.picker_quote %></q>
+          <% } %>
+        </div>
+        <% } %>
+      </div>
+    </div>
+    <% } %>
+  </div>
+</div>
+<% } %>

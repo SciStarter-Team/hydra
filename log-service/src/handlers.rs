@@ -1,12 +1,13 @@
 use anyhow::Result;
 use common::{
     message::log::{
-        AffiliateParticipantsRequest, AffiliateParticipantsResponse, AnalyticsQuery,
-        AnalyticsResponse, ArticulateCompletionRecord, ArticulateCompletionRequest,
-        ArticulateCompletionResponse, ExternalLinkClickthroughResponse, ExternalLinksResponse,
-        GoUrlStatsRequest, GoUrlStatsResponse, ProjectParticipationRecord,
-        ProjectParticipationRequest, ProjectParticipationResponse, RecentActivityRequest,
-        RecentActivityResponse,
+        ActsOfScienceCreateRequest, ActsOfScienceCreateResponse, ActsOfScienceSource,
+        ActsToDateRequest, ActsToDateResponse, AffiliateParticipantsRequest,
+        AffiliateParticipantsResponse, AnalyticsQuery, AnalyticsResponse,
+        ArticulateCompletionRecord, ArticulateCompletionRequest, ArticulateCompletionResponse,
+        ExternalLinkClickthroughResponse, ExternalLinksResponse, GoUrlStatsRequest,
+        GoUrlStatsResponse, ProjectParticipationRecord, ProjectParticipationRequest,
+        ProjectParticipationResponse, RecentActivityRequest, RecentActivityResponse,
     },
     service::decode_structured_message,
 };
@@ -545,6 +546,8 @@ pub async fn handle_project_participation_record(req: &async_nats::service::Requ
         task_name: record.task_name,
     };
 
+    let when_str = row.when.clone();
+
     {
         let database = DATABASE
             .read()
@@ -561,6 +564,29 @@ pub async fn handle_project_participation_record(req: &async_nats::service::Requ
         common::channel::Event::new("project_participation", &record.project_id),
     )
     .await?;
+
+    // If it's April, automatically create an Acts of Science entry
+    let is_april = when_str
+        .get(5..7)
+        .map(|m| m == "04")
+        .unwrap_or(false);
+    if is_april {
+        let act_id = Ulid::new().to_string();
+        let source = ActsOfScienceSource::Affiliate as i16;
+        sqlx::query!(
+            r#"INSERT OR IGNORE INTO acts_of_science
+               (act_id, user_id, created_at, contributions, source, entity_slug, accepted)
+               VALUES (?, ?, ?, 1, ?, ?, 1)"#,
+            act_id,
+            user_id_str,
+            when_str,
+            source,
+            record.project_id,
+        )
+        .execute(common::shared::db())
+        .await
+        .ok();
+    }
 
     Ok(())
 }
@@ -694,4 +720,83 @@ pub async fn handle_external_link_clickthrough(
     tx.commit().await?;
 
     Ok(ExternalLinkClickthroughResponse { url })
+}
+
+pub async fn handle_acts_of_science_create(
+    req: &async_nats::service::Request,
+) -> Result<ActsOfScienceCreateResponse, anyhow::Error> {
+    let request: ActsOfScienceCreateRequest = decode_structured_message(req.message.clone())?;
+
+    let act_id = Ulid::new().to_string();
+    let user_id = request.user_id.map(|u| u.to_string());
+    let source = request.source as i16;
+    let newsletter = if request.newsletter { 1i32 } else { 0i32 };
+    let contributions = request.contributions;
+    let num_others = request.num_others;
+
+    sqlx::query!(
+        r#"INSERT INTO acts_of_science
+           (act_id, user_id, email, country, newsletter, name, contributions, act,
+            organization, num_others, others, project, notes, source, entity_slug, accepted)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)"#,
+        act_id,
+        user_id,
+        request.email,
+        request.country,
+        newsletter,
+        request.name,
+        contributions,
+        request.act,
+        request.organization,
+        num_others,
+        request.others,
+        request.project,
+        request.notes,
+        source,
+        request.entity_slug,
+    )
+    .execute(common::shared::db())
+    .await?;
+
+    Ok(ActsOfScienceCreateResponse { act_id })
+}
+
+pub async fn handle_acts_to_date(
+    req: &async_nats::service::Request,
+) -> Result<ActsToDateResponse, anyhow::Error> {
+    let request: ActsToDateRequest = decode_structured_message(req.message.clone())?;
+
+    let today = jiff::Zoned::now().date();
+    let year = request.year.unwrap_or_else(|| {
+        let y: i32 = today.year().into();
+        if today.month() > 6 {
+            y + 1
+        } else {
+            y
+        }
+    });
+
+    let begin = format!("{}-04-01T00:00:00Z", year);
+    let end = format!("{}-05-04T00:00:00Z", year);
+    let incidental = ActsOfScienceSource::Incidental as i16;
+
+    let total: i64 = sqlx::query_scalar!(
+        r#"SELECT COALESCE(SUM(contributions), 0) as "total!: i64"
+           FROM acts_of_science
+           WHERE accepted = 1
+             AND source != ?
+             AND created_at >= ?
+             AND created_at < ?"#,
+        incidental,
+        begin,
+        end,
+    )
+    .fetch_one(common::shared::db())
+    .await?;
+
+    Ok(ActsToDateResponse {
+        date: today.to_string(),
+        number: total,
+        date_reached: None,
+    })
 }

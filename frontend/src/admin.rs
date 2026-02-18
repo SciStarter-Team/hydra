@@ -14,6 +14,7 @@ pub mod files;
 pub mod integrations;
 pub mod news;
 pub mod pagebuilder;
+pub mod staff_picks;
 pub mod projects;
 pub mod schedules;
 pub mod sets;
@@ -60,6 +61,8 @@ pub fn routes() -> impl Endpoint {
         .nest("/schedules", schedules::routes())
         // News
         .nest("/news", news::routes())
+        // Staff Picks (CSM)
+        .nest("/staff-picks", staff_picks::routes())
         // Communities
         .nest("/communities", communities::routes())
         // Email
