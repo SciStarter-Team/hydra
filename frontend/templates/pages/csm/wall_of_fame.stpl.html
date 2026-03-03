@@ -1,0 +1,101 @@
+<% fn wall_of_fame_qs(mode: &str, page: i32, letter: &str, phase_override: bool) -> String {
+    let mut qs = format!("mode={mode}&page={page}");
+    if mode == "name" {
+        qs.push_str(&format!("&letter={letter}"));
+    }
+    if phase_override {
+        qs.push_str("&phase_override=true");
+    }
+    qs
+} %>
+<div id="wall-of-fame">
+  <!-- Mode buttons -->
+  <div style="margin-bottom:1rem;display:flex;gap:6px;flex-wrap:wrap;justify-content:center">
+    <% let modes = [("date", "Date"), ("name", "Name"), ("project", "Project"), ("org", "Organization")]; %>
+    <% for &(key, label) in &modes { %>
+    <% if self.mode == key { %>
+    <button style="padding:6px 14px;border:1px solid #1a3a5c;cursor:pointer;background:#1a3a5c;color:#fff"
+            hx-get="/-csm/wall-of-fame?<%= wall_of_fame_qs(key, 1, &self.letter, self.phase_override) %>"
+            hx-target="#wall-of-fame" hx-swap="outerHTML"><%= label %></button>
+    <% } else { %>
+    <button style="padding:6px 14px;border:1px solid #1a3a5c;cursor:pointer;background:#fff;color:#1a3a5c"
+            hx-get="/-csm/wall-of-fame?<%= wall_of_fame_qs(key, 1, &self.letter, self.phase_override) %>"
+            hx-target="#wall-of-fame" hx-swap="outerHTML"><%= label %></button>
+    <% } %>
+    <% } %>
+  </div>
+
+  <% if self.mode == "name" { %>
+  <!-- Letter bar -->
+  <div style="margin-bottom:1rem;display:flex;gap:3px;flex-wrap:wrap;justify-content:center">
+    <% for c in b'A'..=b'Z' { let ch = String::from(c as char); %>
+    <% if self.letter == ch { %>
+    <button style="padding:4px 8px;border:1px solid #1a3a5c;cursor:pointer;min-width:30px;background:#1a3a5c;color:#fff"
+            hx-get="/-csm/wall-of-fame?<%= wall_of_fame_qs("name", 1, &ch, self.phase_override) %>"
+            hx-target="#wall-of-fame" hx-swap="outerHTML"><%= ch %></button>
+    <% } else { %>
+    <button style="padding:4px 8px;border:1px solid #1a3a5c;cursor:pointer;min-width:30px;background:#fff;color:#1a3a5c"
+            hx-get="/-csm/wall-of-fame?<%= wall_of_fame_qs("name", 1, &ch, self.phase_override) %>"
+            hx-target="#wall-of-fame" hx-swap="outerHTML"><%= ch %></button>
+    <% } %>
+    <% } %>
+  </div>
+  <% } %>
+
+  <!-- Table -->
+  <% if !self.contributors.is_empty() { %>
+  <table style="width:100%;border-collapse:collapse;text-align:left;margin-top:1rem">
+    <thead style="background:#1a3a5c;color:#fff"><tr>
+      <th style="padding:8px">Date</th>
+      <th style="padding:8px">Act</th>
+      <th style="padding:8px">Name</th>
+      <th style="padding:8px">Project</th>
+      <th style="padding:8px">Organization</th>
+    </tr></thead>
+    <tbody>
+      <% for (i, entry) in self.contributors.iter().enumerate() { %>
+      <tr style="background:<%= if i % 2 == 0 { "#fff" } else { "#f5f5f5" } %>">
+        <td style="padding:8px"><%= entry.date.as_deref().unwrap_or("") %></td>
+        <td style="padding:8px"><%= entry.act.as_deref().unwrap_or("") %></td>
+        <td style="padding:8px"><%= entry.name.as_deref().unwrap_or("") %></td>
+        <td style="padding:8px"><% if let (Some(slug), Some(proj)) = (&entry.entity_slug, &entry.project) { %><a href="/<%= slug %>"><%= proj %></a><% } else { %><%= entry.project.as_deref().unwrap_or("") %><% } %></td>
+        <td style="padding:8px"><%= entry.organization.as_deref().unwrap_or("") %></td>
+      </tr>
+      <% } %>
+    </tbody>
+  </table>
+  <% } else { %>
+  <p style="margin-top:1rem;color:#666">No contributors found.</p>
+  <% } %>
+
+  <!-- Pagination -->
+  <% if self.pages > 1 { %>
+  <div style="margin-top:1rem;display:flex;gap:6px;justify-content:center;flex-wrap:wrap">
+    <% if self.page > 1 { %>
+    <button style="padding:4px 12px;border:1px solid #1a3a5c;cursor:pointer;background:#fff;color:#1a3a5c"
+            hx-get="/-csm/wall-of-fame?<%= wall_of_fame_qs(&self.mode, self.page - 1, &self.letter, self.phase_override) %>"
+            hx-target="#wall-of-fame" hx-swap="outerHTML">&laquo; Prev</button>
+    <% } %>
+    <%
+    let start_page = std::cmp::max(1, self.page - 3);
+    let end_page = std::cmp::min(self.pages, self.page + 3);
+    %>
+    <% for p in start_page..=end_page { %>
+    <% if p == self.page { %>
+    <button style="padding:4px 10px;border:1px solid #1a3a5c;cursor:pointer;min-width:34px;background:#1a3a5c;color:#fff"
+            hx-get="/-csm/wall-of-fame?<%= wall_of_fame_qs(&self.mode, p, &self.letter, self.phase_override) %>"
+            hx-target="#wall-of-fame" hx-swap="outerHTML"><%= p %></button>
+    <% } else { %>
+    <button style="padding:4px 10px;border:1px solid #1a3a5c;cursor:pointer;min-width:34px;background:#fff;color:#1a3a5c"
+            hx-get="/-csm/wall-of-fame?<%= wall_of_fame_qs(&self.mode, p, &self.letter, self.phase_override) %>"
+            hx-target="#wall-of-fame" hx-swap="outerHTML"><%= p %></button>
+    <% } %>
+    <% } %>
+    <% if self.page < self.pages { %>
+    <button style="padding:4px 12px;border:1px solid #1a3a5c;cursor:pointer;background:#fff;color:#1a3a5c"
+            hx-get="/-csm/wall-of-fame?<%= wall_of_fame_qs(&self.mode, self.page + 1, &self.letter, self.phase_override) %>"
+            hx-target="#wall-of-fame" hx-swap="outerHTML">Next &raquo;</button>
+    <% } %>
+  </div>
+  <% } %>
+</div>

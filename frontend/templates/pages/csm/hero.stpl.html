@@ -64,6 +64,9 @@
   <img src="/-static/img/csm/America250_logo.svg" alt="America 250 logo" class="w-[60px] md:w-[60px] block" />
 </div>
 <% } CsmPhase::April | CsmPhase::AprilReached => { %>
+<%
+let (fill_height, fill_top, counter_bottom, formatted_date, formatted_count, anim_duration, goal_reached, goal_reached_date) = self.tube_values();
+%>
 <!-- HEADER - APRIL -->
 <div class="mx-auto">
   <div class="acts-hero">
@@ -86,8 +89,22 @@
         <div>
           <div id="test-tube">
             <img id="test-tube-base" src="/-static/img/csm/test-tube.svg" alt="test tube data visualization">
-            <div id="test-tube-fill" style="height:2px"></div>
-            <div id="test-tube-fill-top" style="bottom:40px;"></div>
+            <style>
+              @keyframes tubeFillGrow {
+                from { height: 2px; }
+                to { height: <%= fill_height %>px; }
+              }
+              @keyframes tubeFillTopGrow {
+                from { bottom: 40px; }
+                to { bottom: <%= fill_top %>px; }
+              }
+              @keyframes tubeCounterGrow {
+                from { bottom: 6px; }
+                to { bottom: <%= counter_bottom %>px; }
+              }
+            </style>
+            <div id="test-tube-fill" style="height:<%= fill_height %>px;animation:tubeFillGrow <%= anim_duration %>s ease-out"></div>
+            <div id="test-tube-fill-top" style="bottom:<%= fill_top %>px;animation:tubeFillTopGrow <%= anim_duration %>s ease-out"></div>
             <div id="test-tube-scale">
               <div class="tube-tick tick0"></div>
               <div class="tube-tick tick1"></div>
@@ -112,20 +129,20 @@
               <div class="num tick10"><strong>2.50 M</strong></div>
             </div>
             <div id="test-tube-reflect"></div>
-            <div id="test-tube-counter" style="bottom:6px;">
-              <div class="tt-date"></div>
-              <div class="tt-count"></div>
+            <div id="test-tube-counter" style="bottom:<%= counter_bottom %>px;animation:tubeCounterGrow <%= anim_duration %>s ease-out<% if goal_reached { %>" class="reached<% } %>">
+              <div class="tt-date"><%= formatted_date %></div>
+              <div class="tt-count"><%= formatted_count %></div>
             </div>
-            <div id="test-tube-over">
+            <div id="test-tube-over"<% if goal_reached { %> style="display:block"<% } %>>
               <div class="tt-date">Goal Reached</div>
-              <div class="tt-date" id="tt-day-reached">April 28!</div>
+              <div class="tt-date"><%= goal_reached_date.as_deref().unwrap_or("") %></div>
               <div class="tt-count">2.50 Million</div>
             </div>
           </div>
         </div>
       </div>
     </div>
-    <div id="fireworks" class="hidden"><lottie-player src="/-static/img/csm/fireworks.json" background="transparent" speed="1" loop autoplay></lottie-player></div>
+    <div id="fireworks"<% if !goal_reached { %> class="hidden"<% } %>><lottie-player src="/-static/img/csm/fireworks.json" background="transparent" speed="1" loop autoplay></lottie-player></div>
     <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
   </div>
 </div>
@@ -135,75 +152,10 @@
   <p class="mb-0 uppercase text-primary-dark text-sm">Official partner of</p>
   <img src="/-static/img/csm/America250_logo.svg" alt="America 250 logo" class="w-[60px] md:w-[60px] block" />
 </div>
-
-<script>
-const USE_FAKE_DATA = false;
-const fakeData = { date: "2025-04-09", number: 1458054, date_reached: null };
-
-function parseDateOnly(dateString) {
-  if (!dateString || typeof dateString !== "string") return null;
-  const [year, month, day] = dateString.split("-").map(Number);
-  if (!year || !month || !day) return null;
-  return new Date(year, month - 1, day);
-}
-
-async function fetchAPI() {
-  const res = await fetch("/-csm/acts-to-date");
-  if (!res.ok) throw new Error("Bad response from API");
-  return res.json();
-}
-
-async function updateTestTubeCounter() {
-  let data;
-  try {
-    data = USE_FAKE_DATA ? fakeData : await fetchAPI();
-  } catch (err) {
-    console.warn("API failed, using fallback", err);
-    data = fakeData;
-  }
-
-  const { date, number, date_reached } = data;
-  const cappedNumber = Math.min(number, 2500000);
-  const ratio = cappedNumber / 2500000;
-  const duration = 100 + (3000 - 100) * ratio;
-  const durationSec = duration / 1000;
-
-  const targetDate = parseDateOnly(date);
-  const formattedDate = targetDate.toLocaleDateString("en-US", { month: "long", day: "numeric" });
-
-  document.querySelector("#test-tube-counter .tt-date").textContent = formattedDate;
-  document.querySelector("#test-tube-counter .tt-count").textContent = number.toLocaleString();
-
-  const base = (cappedNumber / 250000) * 37;
-  const tt_counter = document.getElementById("test-tube-counter");
-  tt_counter.style.bottom = `${base + 6}px`;
-  tt_counter.style.opacity = 1;
-  document.getElementById("test-tube-fill").style.height = `${base + 2}px`;
-  document.getElementById("test-tube-fill-top").style.bottom = `${base + 40}px`;
-
-  [tt_counter, document.getElementById("test-tube-fill"), document.getElementById("test-tube-fill-top")].forEach(el => {
-    if (el) el.style.transition = `all ${durationSec}s ease-out`;
-  });
-
-  if (date_reached) {
-    const reachedDate = parseDateOnly(date_reached);
-    if (reachedDate < targetDate) handleEarlyReached(data);
-  }
-}
-
-function handleEarlyReached(data) {
-  const d = parseDateOnly(data.date_reached);
-  const formattedReached = d.toLocaleDateString("en-US", { month: "long", day: "numeric" }) + "!";
-  document.getElementById("test-tube-counter").classList.add("reached");
-  const overEl = document.getElementById("test-tube-over");
-  overEl.style.display = "block";
-  overEl.querySelector("#tt-day-reached").textContent = formattedReached;
-  document.getElementById("fireworks").style.display = "block";
-}
-
-document.addEventListener("DOMContentLoaded", updateTestTubeCounter);
-</script>
 <% } CsmPhase::May => { %>
+<%
+let (fill_height, fill_top, _counter_bottom, _formatted_date, formatted_count, _anim_duration, _goal_reached, goal_reached_date) = self.tube_values();
+%>
 <!-- HEADER - MAY -->
 <div class="mx-auto">
   <div class="acts-hero post-live">
@@ -228,8 +180,8 @@ document.addEventListener("DOMContentLoaded", updateTestTubeCounter);
         <div>
           <div id="test-tube">
             <img id="test-tube-base" src="/-static/img/csm/test-tube.svg" alt="test tube data visualization">
-            <div id="test-tube-fill" style="height: calc(370px + 2px)"></div>
-            <div id="test-tube-fill-top" style="bottom:calc(370px + 40px);"></div>
+            <div id="test-tube-fill" style="height: calc(<%= fill_height %>px)"></div>
+            <div id="test-tube-fill-top" style="bottom:calc(<%= fill_top %>px);"></div>
             <div id="test-tube-scale">
               <div class="tube-tick tick0"></div>
               <div class="tube-tick tick1"></div>
@@ -256,11 +208,11 @@ document.addEventListener("DOMContentLoaded", updateTestTubeCounter);
             <div id="test-tube-reflect"></div>
             <div id="test-tube-counter" class="reached">
               <div class="tt-date">Final Count</div>
-              <div class="tt-count">2,542,543</div>
+              <div class="tt-count"><%= formatted_count %></div>
             </div>
             <div id="test-tube-over">
               <div class="tt-date">Goal Reached</div>
-              <div class="tt-date">April 28!</div>
+              <div class="tt-date"><%= goal_reached_date.as_deref().unwrap_or("") %></div>
               <div class="tt-count">2.50 Million</div>
             </div>
           </div>

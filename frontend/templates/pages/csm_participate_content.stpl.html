@@ -1,5 +1,5 @@
 <% use crate::csm::{CsmPhase, CsmHero, CsmNav, CsmSponsors}; %>
-<%+ CsmHero { phase: self.phase } %>
+<%+ CsmHero { phase: self.phase, acts: self.acts.clone(), phase_override: self.phase_override } %>
 
 <% if self.phase == CsmPhase::April || self.phase == CsmPhase::AprilReached { %>
 <!-- COUNTDOWN-->

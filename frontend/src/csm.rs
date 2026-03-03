@@ -1,4 +1,4 @@
-use common::message::log::{ActsOfScienceCreateRequest, ActsOfScienceCreateResponse, ActsOfScienceSource, ActsToDateRequest, ActsToDateResponse};
+use common::message::log::{ActsOfScienceCreateRequest, ActsOfScienceCreateResponse, ActsOfScienceSource, ActsToDateRequest, ActsToDateResponse, ContributorEntry, ContributorsRequest, ContributorsResponse};
 use common::message::user::BasicInfo;
 use common::shared::db;
 use poem::{Endpoint, Route, get, handler, Response};
@@ -14,20 +14,88 @@ use crate::middleware::authorization::Authenticated;
 // Shared fragment templates
 #[derive(TemplateOnce)]
 #[template(path = "pages/csm/hero.stpl.html")]
-struct CsmHero {
-    phase: CsmPhase,
+pub struct CsmHero {
+    pub phase: CsmPhase,
+    pub acts: Option<ActsToDateResponse>,
+    pub phase_override: bool,
+}
+
+impl CsmHero {
+    /// Compute test tube display values from acts data.
+    /// Returns (fill_height_px, fill_top_px, counter_bottom_px, formatted_date, formatted_count, animation_duration_s, goal_reached, goal_reached_date)
+    fn tube_values(&self) -> (f64, f64, f64, String, String, f64, bool, Option<String>) {
+        let acts = match &self.acts {
+            Some(a) => a,
+            None => return (2.0, 40.0, 6.0, String::new(), String::new(), 0.1, false, None),
+        };
+
+        let capped = (acts.number as f64).min(2_500_000.0);
+        let ratio = capped / 2_500_000.0;
+        let base = ratio * 370.0;
+        let fill_height_px = base + 2.0;
+        let fill_top_px = base + 40.0;
+        let counter_bottom_px = base + 6.0;
+        let animation_duration_s = 0.1 + 2.9 * ratio;
+
+        let formatted_date = format_acts_date(&acts.date);
+        let formatted_count = format_number(acts.number);
+
+        let goal_reached = acts.date_reached.is_some();
+        let goal_reached_date = acts.date_reached.as_ref().map(|d| {
+            format!("{}!", format_acts_date(d))
+        });
+
+        (fill_height_px, fill_top_px, counter_bottom_px, formatted_date, formatted_count, animation_duration_s, goal_reached, goal_reached_date)
+    }
+}
+
+fn format_acts_date(date_str: &str) -> String {
+    // Parse "YYYY-MM-DD" and format as "April 9"
+    let parts: Vec<&str> = date_str.split('-').collect();
+    if parts.len() < 3 {
+        return date_str.to_string();
+    }
+    let month = match parts[1] {
+        "01" => "January",
+        "02" => "February",
+        "03" => "March",
+        "04" => "April",
+        "05" => "May",
+        "06" => "June",
+        "07" => "July",
+        "08" => "August",
+        "09" => "September",
+        "10" => "October",
+        "11" => "November",
+        "12" => "December",
+        _ => return date_str.to_string(),
+    };
+    let day = parts[2].trim_start_matches('0');
+    format!("{month} {day}")
+}
+
+fn format_number(n: i64) -> String {
+    let s = n.to_string();
+    let mut result = String::new();
+    for (i, c) in s.chars().rev().enumerate() {
+        if i > 0 && i % 3 == 0 {
+            result.push(',');
+        }
+        result.push(c);
+    }
+    result.chars().rev().collect()
 }
 
 #[derive(TemplateOnce)]
 #[template(path = "pages/csm/nav.stpl.html")]
-struct CsmNav {
-    phase: CsmPhase,
-    active: &'static str,
+pub struct CsmNav {
+    pub phase: CsmPhase,
+    pub active: &'static str,
 }
 
 #[derive(TemplateOnce)]
 #[template(path = "pages/csm/sponsors.stpl.html")]
-struct CsmSponsors;
+pub struct CsmSponsors;
 
 // Phase detection
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -48,31 +116,66 @@ impl CsmPhase {
             _ => None,
         }
     }
+}
 
+pub struct CsmPhaseInfo {
+    pub phase: CsmPhase,
+    pub acts_to_date: Option<ActsToDateResponse>,
+    pub phase_override: bool,
+}
+
+impl CsmPhaseInfo {
     pub async fn detect(override_phase: Option<&str>) -> Self {
-        if let Some(phase) = override_phase.and_then(Self::from_str) {
-            return phase;
+        if let Some(phase) = override_phase.and_then(CsmPhase::from_str) {
+            let today = jiff::Zoned::now().date().to_string();
+            let (acts, phase_override) = match phase {
+                CsmPhase::April => (Some(ActsToDateResponse {
+                    date: today,
+                    number: 1_234_567,
+                    date_reached: None,
+                }), true),
+                CsmPhase::AprilReached => (Some(ActsToDateResponse {
+                    date: today.clone(),
+                    number: 1_234_567,
+                    date_reached: Some(today),
+                }), true),
+                CsmPhase::May => (Some(ActsToDateResponse {
+                    date: today.clone(),
+                    number: 9_999_999,
+                    date_reached: Some(today),
+                }), true),
+                CsmPhase::PreApril => (None, true),
+            };
+            return CsmPhaseInfo { phase, acts_to_date: acts, phase_override };
         }
 
         let today = jiff::Zoned::now().date();
         let month: i32 = today.month().into();
 
         if month < 4 {
-            return CsmPhase::PreApril;
+            return CsmPhaseInfo { phase: CsmPhase::PreApril, acts_to_date: None, phase_override: false };
         }
 
         if month >= 6 {
-            return CsmPhase::PreApril;
+            return CsmPhaseInfo { phase: CsmPhase::PreApril, acts_to_date: None, phase_override: false };
         }
 
         if month == 5 {
-            return CsmPhase::May;
+            let acts = acts_to_date(None).await.ok();
+            return CsmPhaseInfo { phase: CsmPhase::May, acts_to_date: acts, phase_override: false };
         }
 
         // month == 4, check if goal reached
         match acts_to_date(None).await {
-            Ok(response) if response.date_reached.is_some() => CsmPhase::AprilReached,
-            _ => CsmPhase::April,
+            Ok(response) => {
+                let phase = if response.date_reached.is_some() {
+                    CsmPhase::AprilReached
+                } else {
+                    CsmPhase::April
+                };
+                CsmPhaseInfo { phase, acts_to_date: Some(response), phase_override: false }
+            }
+            Err(_) => CsmPhaseInfo { phase: CsmPhase::April, acts_to_date: None, phase_override: false },
         }
     }
 }
@@ -103,6 +206,8 @@ struct CsmHomePage {
 #[template(path = "pages/csm_home_content.stpl.html")]
 struct CsmHomeContent {
     phase: CsmPhase,
+    acts: Option<ActsToDateResponse>,
+    phase_override: bool,
     show_social_feed: bool,
 }
 
@@ -113,7 +218,7 @@ async fn csm_home(
     Authenticated(user_info): Authenticated,
     Query(query): Query<CsmQuery>,
 ) -> Result<Response, anyhow::Error> {
-    let phase = CsmPhase::detect(query.phase.as_deref()).await;
+    let info = CsmPhaseInfo::detect(query.phase.as_deref()).await;
 
     let show_social_feed = {
         let today = jiff::Zoned::now().date();
@@ -124,7 +229,12 @@ async fn csm_home(
 
     let layout = StandardLayout::new(
         "/citizensciencemonth",
-        CsmHomeContent { phase, show_social_feed },
+        CsmHomeContent {
+            phase: info.phase,
+            acts: info.acts_to_date,
+            phase_override: info.phase_override,
+            show_social_feed,
+        },
     )
     .prepare(user_info.clone())
     .await?;
@@ -152,6 +262,8 @@ struct CsmParticipatePage {
 #[template(path = "pages/csm_participate_content.stpl.html")]
 struct CsmParticipateContent {
     phase: CsmPhase,
+    acts: Option<ActsToDateResponse>,
+    phase_override: bool,
 }
 
 #[handler]
@@ -161,11 +273,15 @@ async fn csm_participate(
     Authenticated(user_info): Authenticated,
     Query(query): Query<CsmQuery>,
 ) -> Result<Response, anyhow::Error> {
-    let phase = CsmPhase::detect(query.phase.as_deref()).await;
+    let info = CsmPhaseInfo::detect(query.phase.as_deref()).await;
 
     let layout = StandardLayout::new(
         "/citizensciencemonth/participate",
-        CsmParticipateContent { phase },
+        CsmParticipateContent {
+            phase: info.phase,
+            acts: info.acts_to_date,
+            phase_override: info.phase_override,
+        },
     )
     .prepare(user_info.clone())
     .await?;
@@ -310,31 +426,76 @@ pub async fn acts_to_date_api(
 }
 
 // ============================================================================
-// API: Contributors / Wall of Fame (JSON)
+// HTMX: Wall of Fame Fragment
 // ============================================================================
 
 #[derive(Deserialize)]
-struct ContributorsQuery {
+struct WallOfFameQuery {
     mode: Option<String>,
     page: Option<i32>,
     letter: Option<String>,
+    phase_override: Option<bool>,
+}
+
+#[derive(TemplateOnce)]
+#[template(path = "pages/csm/wall_of_fame.stpl.html")]
+struct WallOfFameFragment {
+    contributors: Vec<ContributorEntry>,
+    pages: i32,
+    mode: String,
+    page: i32,
+    letter: String,
+    phase_override: bool,
+}
+
+fn fake_contributors() -> Vec<ContributorEntry> {
+    vec![
+        ContributorEntry { date: Some("Apr 17".into()), act: Some("Attended an event".into()), name: Some("David K.".into()), project: Some("BioBlitz".into()), organization: Some("National Geographic".into()), entity_slug: None },
+        ContributorEntry { date: Some("Apr 15".into()), act: Some("Completed a project".into()), name: Some("Sarah L.".into()), project: Some("CoCoRaHS".into()), organization: Some("Colorado State University".into()), entity_slug: None },
+        ContributorEntry { date: Some("Apr 13".into()), act: Some("Submitted observations".into()), name: Some("Kenji M.".into()), project: Some("eBird".into()), organization: Some("Cornell Lab of Ornithology".into()), entity_slug: None },
+        ContributorEntry { date: Some("Apr 11".into()), act: Some("Completed training".into()), name: Some("Emily W.".into()), project: Some("Foundations of Citizen Science".into()), organization: Some("SciStarter".into()), entity_slug: None },
+        ContributorEntry { date: Some("Apr 9".into()), act: Some("Analyzed data".into()), name: Some("Carlos R.".into()), project: Some("Zooniverse".into()), organization: Some("University of Oxford".into()), entity_slug: None },
+        ContributorEntry { date: Some("Apr 7".into()), act: Some("Submitted observations".into()), name: Some("Priya S.".into()), project: Some("iNaturalist".into()), organization: Some("California Academy of Sciences".into()), entity_slug: None },
+        ContributorEntry { date: Some("Apr 5".into()), act: Some("Attended an event".into()), name: Some("James T.".into()), project: Some("City Nature Challenge".into()), organization: Some("Natural History Museum".into()), entity_slug: None },
+        ContributorEntry { date: Some("Apr 3".into()), act: Some("Completed a project".into()), name: Some("Maria G.".into()), project: Some("Globe Observer".into()), organization: Some("NASA".into()), entity_slug: None },
+    ]
 }
 
 #[handler]
-pub async fn contributors_api(
-    Query(query): Query<ContributorsQuery>,
-) -> Result<Json<common::message::log::ContributorsResponse>, anyhow::Error> {
-    use common::message::log::{ContributorsRequest, ContributorsResponse};
+pub async fn csm_wall_of_fame(
+    Query(query): Query<WallOfFameQuery>,
+) -> Result<Response, anyhow::Error> {
+    let mode = query.mode.unwrap_or_else(|| "date".to_string());
+    let page = query.page.unwrap_or(1).max(1);
+    let letter = query.letter.unwrap_or_else(|| "A".to_string());
+    let phase_override = query.phase_override.unwrap_or(false);
 
-    let request = ContributorsRequest {
-        mode: query.mode,
-        page: query.page,
-        letter: query.letter,
+    let (contributors, pages) = if phase_override {
+        (fake_contributors(), 3)
+    } else {
+        let request = ContributorsRequest {
+            mode: Some(mode.clone()),
+            page: Some(page),
+            letter: if mode == "name" { Some(letter.clone()) } else { None },
+        };
+        let response: ContributorsResponse =
+            common::service::request("log.acts.contributors", request).await?;
+        (response.contributors, response.pages)
     };
 
-    let response: ContributorsResponse =
-        common::service::request("log.acts.contributors", request).await?;
-    Ok(Json(response))
+    let html = WallOfFameFragment {
+        contributors,
+        pages,
+        mode,
+        page,
+        letter,
+        phase_override,
+    }
+    .render_once()?;
+
+    Ok(Response::builder()
+        .content_type("text/html")
+        .body(html))
 }
 
 // ============================================================================
