@@ -103,6 +103,7 @@ struct CsmHomePage {
 #[template(path = "pages/csm_home_content.stpl.html")]
 struct CsmHomeContent {
     phase: CsmPhase,
+    show_social_feed: bool,
 }
 
 #[handler]
@@ -114,9 +115,16 @@ async fn csm_home(
 ) -> Result<Response, anyhow::Error> {
     let phase = CsmPhase::detect(query.phase.as_deref()).await;
 
+    let show_social_feed = {
+        let today = jiff::Zoned::now().date();
+        let month: i32 = today.month().into();
+        let day: i32 = today.day().into();
+        month == 3 && day >= 25
+    };
+
     let layout = StandardLayout::new(
         "/citizensciencemonth",
-        CsmHomeContent { phase },
+        CsmHomeContent { phase, show_social_feed },
     )
     .prepare(user_info.clone())
     .await?;
@@ -298,6 +306,34 @@ pub async fn acts_to_date_api(
     Query(query): Query<ActsToDateRequest>,
 ) -> Result<Json<ActsToDateResponse>, anyhow::Error> {
     let response = acts_to_date(query.year).await?;
+    Ok(Json(response))
+}
+
+// ============================================================================
+// API: Contributors / Wall of Fame (JSON)
+// ============================================================================
+
+#[derive(Deserialize)]
+struct ContributorsQuery {
+    mode: Option<String>,
+    page: Option<i32>,
+    letter: Option<String>,
+}
+
+#[handler]
+pub async fn contributors_api(
+    Query(query): Query<ContributorsQuery>,
+) -> Result<Json<common::message::log::ContributorsResponse>, anyhow::Error> {
+    use common::message::log::{ContributorsRequest, ContributorsResponse};
+
+    let request = ContributorsRequest {
+        mode: query.mode,
+        page: query.page,
+        letter: query.letter,
+    };
+
+    let response: ContributorsResponse =
+        common::service::request("log.acts.contributors", request).await?;
     Ok(Json(response))
 }
 

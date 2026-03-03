@@ -110,6 +110,16 @@
         </div>
       </div>
 
+      <% if self.show_social_feed { %>
+      <!-- Social Shares (from March 25) -->
+      <div class="acts-wrapper mb-16">
+        <div class="acts-container text-center">
+          <h3 class="wall-h3">Some Great Social Shares!</h3>
+          <div id="curator-feed-default-feed-layout"><a href="https://curator.io" target="_blank" class="crt-logo crt-tag">Powered by Curator.io</a></div>
+        </div>
+      </div>
+      <% } %>
+
       <!-- FAQ LINK -->
       <div class="text-center px-4 my-16">
         <h3 class="text-center text-primary-dark font-header-lg mb-1">Curious about the story behind Citizen Science Month&mdash;its origins, impact, and the people who make it possible?</h3>
@@ -152,7 +162,8 @@
       <div class="acts-wrapper mb-16">
         <div class="acts-container text-center">
           <img src="/-static/img/csm/wall-of-fame-complex.svg" alt="Wall of Fame" style="max-width:800px;display:block;margin:0 auto 1rem"/>
-          <p>Below you'll find all the participants in 1,000,000 Acts of Science.</p>
+          <p>Below you'll find all the participants in 2,500,000 Acts of Science.</p>
+          <div id="wall-of-fame"></div>
         </div>
       </div>
 
@@ -160,7 +171,7 @@
       <div class="acts-wrapper mb-16">
         <div class="acts-container text-center">
           <h3 class="wall-h3">Some Great Social Shares!</h3>
-          <div id="frame-feed"><a href="https://curator.io" target="_blank" class="crt-logo crt-tag">Powered by Curator.io</a></div>
+          <div id="curator-feed-default-feed-layout"><a href="https://curator.io" target="_blank" class="crt-logo crt-tag">Powered by Curator.io</a></div>
         </div>
       </div>
       <% } CsmPhase::May => { %>
@@ -176,7 +187,8 @@
       <div class="acts-wrapper mb-16">
         <div class="acts-container text-center">
           <img src="/-static/img/csm/wall-of-fame-complex.svg" alt="Wall of Fame" style="max-width:800px;display:block;margin:0 auto 1rem"/>
-          <p>Below you'll find all the participants in 1,000,000 Acts of Science.</p>
+          <p>Below you'll find all the participants in 2,500,000 Acts of Science.</p>
+          <div id="wall-of-fame"></div>
         </div>
       </div>
 
@@ -184,7 +196,7 @@
       <div class="acts-wrapper mb-16">
         <div class="acts-container text-center">
           <h3 class="wall-h3">Some Great Social Shares!</h3>
-          <div id="frame-feed"><a href="https://curator.io" target="_blank" class="crt-logo crt-tag">Powered by Curator.io</a></div>
+          <div id="curator-feed-default-feed-layout"><a href="https://curator.io" target="_blank" class="crt-logo crt-tag">Powered by Curator.io</a></div>
         </div>
       </div>
       <% } } %>
@@ -234,6 +246,17 @@ function handleTickInit(tick) {
 })();
 </script>
 
+<!-- Curator.io social feed -->
+<script>
+if (document.getElementById('curator-feed-default-feed-layout')) {
+  (function(){
+    var i,e,d=document,s="script";i=d.createElement("script");i.async=1;i.charset="UTF-8";
+    i.src="https://cdn.curator.io/published/9acd2fa2-8cb5-4bb8-aa94-c4e46af90e9f.js";
+    e=d.getElementsByTagName(s)[0];e.parentNode.insertBefore(i, e);
+  })();
+}
+</script>
+
 <!-- Slick Carousel for Sponsors (jQuery + Slick loaded via Head.with_slick()) -->
 <script>
 $(function(){
@@ -248,6 +271,129 @@ $(function(){
     ]
   });
 });
+</script>
+
+<!-- Wall of Fame JS -->
+<script>
+(function() {
+  var container = document.getElementById('wall-of-fame');
+  if (!container) return;
+
+  var state = { mode: 'date', page: 1, letter: 'A', contributors: [], pages: 0 };
+
+  function fetchContributors() {
+    var params = '?mode=' + encodeURIComponent(state.mode) + '&page=' + state.page;
+    if (state.mode === 'name') params += '&letter=' + encodeURIComponent(state.letter);
+    fetch('/-csm/contributors' + params)
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        state.contributors = data.contributors || [];
+        state.pages = data.pages || 0;
+        render();
+      })
+      .catch(function() {
+        state.contributors = [];
+        state.pages = 0;
+        render();
+      });
+  }
+
+  function render() {
+    var html = '';
+
+    // Sort mode buttons
+    html += '<div style="margin-bottom:1rem;display:flex;gap:6px;flex-wrap:wrap;justify-content:center">';
+    var modes = [['date','Date'],['name','Name'],['project','Project'],['org','Organization']];
+    for (var i = 0; i < modes.length; i++) {
+      var m = modes[i];
+      var active = state.mode === m[0];
+      html += '<button data-wof-mode="' + m[0] + '" style="padding:6px 14px;border:1px solid #1a3a5c;cursor:pointer;' +
+        (active ? 'background:#1a3a5c;color:#fff' : 'background:#fff;color:#1a3a5c') + '">' + m[1] + '</button>';
+    }
+    html += '</div>';
+
+    // Letter bar (name mode only)
+    if (state.mode === 'name') {
+      html += '<div style="margin-bottom:1rem;display:flex;gap:3px;flex-wrap:wrap;justify-content:center">';
+      for (var c = 65; c <= 90; c++) {
+        var ch = String.fromCharCode(c);
+        var active = state.letter === ch;
+        html += '<button data-wof-letter="' + ch + '" style="padding:4px 8px;border:1px solid #1a3a5c;cursor:pointer;min-width:30px;' +
+          (active ? 'background:#1a3a5c;color:#fff' : 'background:#fff;color:#1a3a5c') + '">' + ch + '</button>';
+      }
+      html += '</div>';
+    }
+
+    // Table
+    if (state.contributors.length > 0) {
+      html += '<table style="width:100%;border-collapse:collapse;text-align:left;margin-top:1rem">';
+      html += '<thead style="background:#1a3a5c;color:#fff"><tr>';
+      html += '<th style="padding:8px">Date</th><th style="padding:8px">Act</th><th style="padding:8px">Name</th><th style="padding:8px">Project</th><th style="padding:8px">Organization</th>';
+      html += '</tr></thead><tbody>';
+      for (var j = 0; j < state.contributors.length; j++) {
+        var e = state.contributors[j];
+        var bg = j % 2 === 0 ? '#fff' : '#f5f5f5';
+        var proj = e.entity__slug && e.project ? '<a href="/' + e.entity__slug + '">' + e.project + '</a>' : (e.project || '');
+        html += '<tr style="background:' + bg + '">';
+        html += '<td style="padding:8px">' + (e.date || '') + '</td>';
+        html += '<td style="padding:8px">' + (e.act || '') + '</td>';
+        html += '<td style="padding:8px">' + (e.name || '') + '</td>';
+        html += '<td style="padding:8px">' + proj + '</td>';
+        html += '<td style="padding:8px">' + (e.organization || '') + '</td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+    } else {
+      html += '<p style="margin-top:1rem;color:#666">No contributors found.</p>';
+    }
+
+    // Pagination
+    if (state.pages > 1) {
+      html += '<div style="margin-top:1rem;display:flex;gap:6px;justify-content:center;flex-wrap:wrap">';
+      if (state.page > 1) {
+        html += '<button data-wof-page="' + (state.page - 1) + '" style="padding:4px 12px;border:1px solid #1a3a5c;cursor:pointer;background:#fff;color:#1a3a5c">&laquo; Prev</button>';
+      }
+      var startPage = Math.max(1, state.page - 3);
+      var endPage = Math.min(state.pages, state.page + 3);
+      for (var p = startPage; p <= endPage; p++) {
+        var active = p === state.page;
+        html += '<button data-wof-page="' + p + '" style="padding:4px 10px;border:1px solid #1a3a5c;cursor:pointer;min-width:34px;' +
+          (active ? 'background:#1a3a5c;color:#fff' : 'background:#fff;color:#1a3a5c') + '">' + p + '</button>';
+      }
+      if (state.page < state.pages) {
+        html += '<button data-wof-page="' + (state.page + 1) + '" style="padding:4px 12px;border:1px solid #1a3a5c;cursor:pointer;background:#fff;color:#1a3a5c">Next &raquo;</button>';
+      }
+      html += '</div>';
+    }
+
+    container.innerHTML = html;
+  }
+
+  container.addEventListener('click', function(ev) {
+    var btn = ev.target.closest('[data-wof-mode]');
+    if (btn) {
+      state.mode = btn.getAttribute('data-wof-mode');
+      state.page = 1;
+      fetchContributors();
+      return;
+    }
+    btn = ev.target.closest('[data-wof-letter]');
+    if (btn) {
+      state.letter = btn.getAttribute('data-wof-letter');
+      state.page = 1;
+      fetchContributors();
+      return;
+    }
+    btn = ev.target.closest('[data-wof-page]');
+    if (btn) {
+      state.page = parseInt(btn.getAttribute('data-wof-page'), 10);
+      fetchContributors();
+      return;
+    }
+  });
+
+  fetchContributors();
+})();
 </script>
 
 <!-- Accordion JS -->

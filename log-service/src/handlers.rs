@@ -1,8 +1,8 @@
 use anyhow::Result;
 use common::{
     message::log::{
-        ActsOfScienceCreateRequest, ActsOfScienceCreateResponse, ActsOfScienceSource,
-        ActsToDateRequest, ActsToDateResponse, AffiliateParticipantsRequest,
+        ActsOfScienceCreateRequest, ActsOfScienceCreateResponse, ActsOfScienceSource, ActsToDateRequest,
+        ActsToDateResponse, AffiliateParticipantsRequest,
         AffiliateParticipantsResponse, AnalyticsQuery, AnalyticsResponse,
         ArticulateCompletionRecord, ArticulateCompletionRequest, ArticulateCompletionResponse,
         ExternalLinkClickthroughResponse, ExternalLinksResponse, GoUrlStatsRequest,
@@ -720,6 +720,123 @@ pub async fn handle_external_link_clickthrough(
     tx.commit().await?;
 
     Ok(ExternalLinkClickthroughResponse { url })
+}
+
+pub async fn handle_contributors(
+    req: &async_nats::service::Request,
+) -> Result<common::message::log::ContributorsResponse, anyhow::Error> {
+    use common::message::log::{ContributorEntry, ContributorsRequest, ContributorsResponse};
+
+    let request: ContributorsRequest = decode_structured_message(req.message.clone())?;
+
+    let mode = match request.mode.as_deref() {
+        Some(m) if !m.is_empty() => m.to_string(),
+        _ => return Ok(ContributorsResponse { contributors: vec![], pages: 0 }),
+    };
+
+    let letter = request.letter.clone().unwrap_or_default().to_uppercase();
+
+    // For name mode, require a letter
+    if mode == "name" && letter.is_empty() {
+        return Ok(ContributorsResponse { contributors: vec![], pages: 0 });
+    }
+
+    let page = request.page.unwrap_or(1).max(1);
+    const PAGE_SIZE: i32 = 50;
+    let offset = (page - 1) * PAGE_SIZE;
+
+    let today = jiff::Zoned::now().date();
+    let month: i32 = today.month().into();
+    let year: i32 = today.year().into();
+    let csm_year = if month > 6 { year + 1 } else { year };
+    let begin = format!("{}-04-01T00:00:00Z", csm_year);
+    let end = format!("{}-05-04T00:00:00Z", csm_year);
+    let incidental = ActsOfScienceSource::Incidental as i16;
+
+    let db = common::shared::db();
+
+    // Build the query dynamically based on mode
+    let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new(
+        "SELECT name, act, project, organization, entity_slug, DATE(created_at) as date FROM acts_of_science WHERE accepted = 1 AND source != "
+    );
+    qb.push_bind(incidental);
+    qb.push(" AND created_at >= ");
+    qb.push_bind(begin.clone());
+    qb.push(" AND created_at < ");
+    qb.push_bind(end.clone());
+
+    match mode.as_str() {
+        "name" => {
+            qb.push(" AND UPPER(SUBSTR(name, 1, 1)) = ");
+            qb.push_bind(letter.clone());
+            qb.push(" ORDER BY name, date DESC, created_at DESC");
+        }
+        "project" => {
+            qb.push(" AND project != '' AND project IS NOT NULL ORDER BY project, date DESC, created_at DESC");
+        }
+        "org" => {
+            qb.push(" AND organization != '' AND organization IS NOT NULL ORDER BY organization, date DESC, created_at DESC");
+        }
+        "date" | _ => {
+            qb.push(" ORDER BY date DESC, source, created_at DESC");
+        }
+    }
+
+    // Count query
+    let mut count_qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new(
+        "SELECT COUNT(*) FROM acts_of_science WHERE accepted = 1 AND source != "
+    );
+    count_qb.push_bind(incidental);
+    count_qb.push(" AND created_at >= ");
+    count_qb.push_bind(begin);
+    count_qb.push(" AND created_at < ");
+    count_qb.push_bind(end);
+
+    match mode.as_str() {
+        "name" => {
+            count_qb.push(" AND UPPER(SUBSTR(name, 1, 1)) = ");
+            count_qb.push_bind(letter);
+        }
+        "project" => {
+            count_qb.push(" AND project != '' AND project IS NOT NULL");
+        }
+        "org" => {
+            count_qb.push(" AND organization != '' AND organization IS NOT NULL");
+        }
+        _ => {}
+    }
+
+    let total: i64 = count_qb
+        .build_query_scalar()
+        .fetch_one(db)
+        .await?;
+
+    let pages = ((total as f64) / (PAGE_SIZE as f64)).ceil() as i32;
+
+    // Add pagination
+    qb.push(" LIMIT ");
+    qb.push_bind(PAGE_SIZE);
+    qb.push(" OFFSET ");
+    qb.push_bind(offset);
+
+    let rows = qb
+        .build_query_as::<(Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>)>()
+        .fetch_all(db)
+        .await?;
+
+    let contributors: Vec<ContributorEntry> = rows
+        .into_iter()
+        .map(|r| ContributorEntry {
+            name: r.0,
+            act: r.1,
+            project: r.2,
+            organization: r.3,
+            entity_slug: r.4,
+            date: r.5,
+        })
+        .collect();
+
+    Ok(ContributorsResponse { contributors, pages })
 }
 
 pub async fn handle_acts_of_science_create(

@@ -259,6 +259,7 @@ fn user_facing() -> impl Endpoint {
         .at("/-csm/acts-to-date", get(csm::acts_to_date_api))
         .at("/-csm/picks", get(csm::csm_picks))
         .at("/-csm/events", get(csm::csm_events))
+        .at("/-csm/contributors", get(csm::contributors_api))
         .at("/-entity-password/*slug", post(entity_password_verify))
         .at("/*slug", get(entity_page))
         .with(middleware::analytics::AnalyticsMiddleware)

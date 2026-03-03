@@ -1,0 +1,927 @@
+<!--
+  CSM Overview page for legacy site with JavaScript-based phase detection.
+
+  Phases:
+    pre-april  — Jan-Mar (and Jun-Dec for next year's cycle)
+    april      — April (checks API for goal-reached state)
+    may        — May (post-campaign wrap-up)
+
+  Curator.io social feed appears from March 25 onward.
+
+  This file has two sections:
+    1. HTML snippet (goes in the page content area inside <main class="ss-page">)
+    2. JavaScript (inline portion + --DEFER-- + deferred portion)
+-->
+
+
+<!-- ================================================================== -->
+<!-- HTML SNIPPET                                                       -->
+<!-- ================================================================== -->
+
+<main class="ss-page">
+<style>
+[data-csm-phase] { display: none; }
+.btn {
+  display: inline-block;
+  line-height: 1;
+  cursor: pointer;
+  text-align: center;
+  box-sizing: border-box;
+  transition: .35s ease;
+  border: 1px solid #dcdfe6;
+  padding: 12px 20px;
+}
+.btn-subdued {
+  border-color: #47a8d4;
+  color: #47a8d4;
+  background-color: #fff;
+}
+</style>
+
+<!-- ============================================ -->
+<!-- HERO: PRE-APRIL                              -->
+<!-- ============================================ -->
+<div data-csm-phase="pre-april">
+  <div class="mx-auto">
+    <div class="acts-hero">
+      <div id="stars"></div>
+      <div style="width: 100%;text-align: center;z-index: 99;position: relative; top: -5rem;"><a href="/citizensciencemonth-participate" class="active" style="padding: 5px 10px;"><span>Get Involved</span></a></div>
+      <div class="acts-hero-content ss-container mx-auto">
+        <div class="acts-hero-left">
+          <div>
+            <h2 class="relative left-[6px]">Help Us Achieve</h2>
+            <h1 class="sr-only">2.50 Million Acts of Science</h1>
+            <img src="https://static.scistarter.org/backport/img/csm/Acts_only_number_standard.svg" alt="2.50 Million Acts of Science Logo" />
+            <div class="flex-row gap-1 md:gap-4 items-center my-8 justify-center relative sm:left-[-20px] hidden sm:flex">
+              <p class="mb-0 uppercase text-primary-dark text-sm">Official partner of</p>
+              <img src="https://static.scistarter.org/backport/img/csm/America250_logo.svg" alt="America 250 logo" class="w-[60px] md:w-[60px] block" />
+            </div>
+          </div>
+        </div>
+        <div class="acts-hero-right">
+          <div>
+            <div id="test-tube">
+              <img id="test-tube-base" src="https://static.scistarter.org/backport/img/csm/test-tube.svg" alt="test tube data visualization">
+              <div id="test-tube-fill" style="height:3px"></div>
+              <div id="test-tube-fill-top" style="bottom:calc(0px + 41px);"></div>
+              <div id="test-tube-scale">
+                <div class="tube-tick tick0"></div>
+                <div class="tube-tick tick1"></div>
+                <div class="tube-tick tick2"></div>
+                <div class="tube-tick tick3"></div>
+                <div class="tube-tick tick4"></div>
+                <div class="tube-tick tick5"></div>
+                <div class="tube-tick tick6"></div>
+                <div class="tube-tick tick7"></div>
+                <div class="tube-tick tick8"></div>
+                <div class="tube-tick tick9"></div>
+                <div class="tube-tick tick10"></div>
+                <div class="num tick1">0.25 M</div>
+                <div class="num tick2"><strong>0.50 M</strong></div>
+                <div class="num tick3">0.75 M</div>
+                <div class="num tick4"><strong>1.00 M</strong></div>
+                <div class="num tick5">1.25 M</div>
+                <div class="num tick6"><strong>1.50 M</strong></div>
+                <div class="num tick7">1.75 M</div>
+                <div class="num tick8"><strong>2.00 M</strong></div>
+                <div class="num tick9">2.25 M</div>
+                <div class="num tick10"><strong>2.50 M</strong></div>
+              </div>
+              <div id="test-tube-reflect"></div>
+              <div id="test-tube-counter" style="bottom:calc(80px + 0px);">
+                <div class="tt-date">Count Starts</div>
+                <div class="tt-count">April 1st</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- HERO: APRIL (also handles AprilReached)      -->
+<!-- ============================================ -->
+<div data-csm-phase="april">
+  <div class="mx-auto">
+    <div class="acts-hero">
+      <div id="stars"></div>
+      <div style="width: 100%;text-align: center;z-index: 99;position: relative; top: -5rem;"><a href="/citizensciencemonth-participate" class="active" style="padding: 5px 10px;"><span>Get Involved</span></a></div>
+      <div class="acts-hero-content ss-container mx-auto">
+        <div class="acts-hero-left">
+          <div>
+            <h2 class="relative left-[6px]">Help Us Achieve</h2>
+            <h1 class="sr-only">2.50 Million Acts of Science</h1>
+            <img src="https://static.scistarter.org/backport/img/csm/Acts_only_number_standard.svg" alt="2.50 Million Acts of Science Logo" />
+            <div class="flex-row gap-1 md:gap-4 items-center my-8 justify-center relative sm:left-[-20px] hidden sm:flex">
+              <p class="mb-0 uppercase text-primary-dark text-sm">Official partner of</p>
+              <img src="https://static.scistarter.org/backport/img/csm/America250_logo.svg" alt="America 250 logo" class="w-[60px] md:w-[60px] block" />
+            </div>
+            <a href="/citizensciencemonth-report" class="btn btn-primary report-btn">Report Your Acts Now</a>
+          </div>
+        </div>
+        <div class="acts-hero-right">
+          <div>
+            <div id="test-tube">
+              <img id="test-tube-base" src="https://static.scistarter.org/backport/img/csm/test-tube.svg" alt="test tube data visualization">
+              <div id="test-tube-fill" style="height:2px"></div>
+              <div id="test-tube-fill-top" style="bottom:40px;"></div>
+              <div id="test-tube-scale">
+                <div class="tube-tick tick0"></div>
+                <div class="tube-tick tick1"></div>
+                <div class="tube-tick tick2"></div>
+                <div class="tube-tick tick3"></div>
+                <div class="tube-tick tick4"></div>
+                <div class="tube-tick tick5"></div>
+                <div class="tube-tick tick6"></div>
+                <div class="tube-tick tick7"></div>
+                <div class="tube-tick tick8"></div>
+                <div class="tube-tick tick9"></div>
+                <div class="tube-tick tick10"></div>
+                <div class="num tick1">0.25 M</div>
+                <div class="num tick2"><strong>0.50 M</strong></div>
+                <div class="num tick3">0.75 M</div>
+                <div class="num tick4"><strong>1.00 M</strong></div>
+                <div class="num tick5">1.25 M</div>
+                <div class="num tick6"><strong>1.50 M</strong></div>
+                <div class="num tick7">1.75 M</div>
+                <div class="num tick8"><strong>2.00 M</strong></div>
+                <div class="num tick9">2.25 M</div>
+                <div class="num tick10"><strong>2.50 M</strong></div>
+              </div>
+              <div id="test-tube-reflect"></div>
+              <div id="test-tube-counter" style="bottom:6px;">
+                <div class="tt-date"></div>
+                <div class="tt-count"></div>
+              </div>
+              <div id="test-tube-over" style="display:none">
+                <div class="tt-date">Goal Reached</div>
+                <div class="tt-date" id="tt-day-reached">April 28!</div>
+                <div class="tt-count">2.50 Million</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="fireworks" class="hidden"><lottie-player src="https://static.scistarter.org/backport/img/csm/fireworks.json" background="transparent" speed="1" loop autoplay></lottie-player></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- HERO: MAY                                    -->
+<!-- ============================================ -->
+<div data-csm-phase="may">
+  <div class="mx-auto">
+    <div class="acts-hero post-live">
+      <div class="post-live-logo max-w-[960px] mx-auto">
+        <img src="https://static.scistarter.org/backport/img/csm/Acts_horizontal_with-number-standard.svg" alt="2.50 Million Acts of Science Logo" />
+        <div class="flex-row gap-1 md:gap-4 items-center my-8 justify-center relative sm:left-[-20px] hidden sm:flex ml-auto">
+          <p class="mb-0 uppercase text-primary-dark text-sm">Official partner of</p>
+          <img src="https://static.scistarter.org/backport/img/csm/America250_logo.svg" alt="America 250 logo" class="w-[60px] md:w-[60px] block" />
+        </div>
+      </div>
+      <div class="acts-hero-content ss-container mx-auto">
+        <div class="acts-hero-left">
+          <div class="text-center">
+            <h2 class="relative left-[6px] text-center">We Did It!</h2>
+            <p>Well done everyone! Science is better, together. Find more projects and events all year-long on SciStarter.</p>
+            <div class="flex flex-col md:flex-row justify-center gap-4 mb-8">
+              <a href="/" class="btn btn-primary">Stay Involved All Year &raquo;</a>
+            </div>
+          </div>
+        </div>
+        <div class="acts-hero-right">
+          <div>
+            <div id="test-tube">
+              <img id="test-tube-base" src="https://static.scistarter.org/backport/img/csm/test-tube.svg" alt="test tube data visualization">
+              <div id="test-tube-fill" style="height: calc(370px + 2px)"></div>
+              <div id="test-tube-fill-top" style="bottom:calc(370px + 40px);"></div>
+              <div id="test-tube-scale">
+                <div class="tube-tick tick0"></div>
+                <div class="tube-tick tick1"></div>
+                <div class="tube-tick tick2"></div>
+                <div class="tube-tick tick3"></div>
+                <div class="tube-tick tick4"></div>
+                <div class="tube-tick tick5"></div>
+                <div class="tube-tick tick6"></div>
+                <div class="tube-tick tick7"></div>
+                <div class="tube-tick tick8"></div>
+                <div class="tube-tick tick9"></div>
+                <div class="tube-tick tick10"></div>
+                <div class="num tick1">0.25 M</div>
+                <div class="num tick2"><strong>0.50 M</strong></div>
+                <div class="num tick3">0.75 M</div>
+                <div class="num tick4"><strong>1.00 M</strong></div>
+                <div class="num tick5">1.25 M</div>
+                <div class="num tick6"><strong>1.50 M</strong></div>
+                <div class="num tick7">1.75 M</div>
+                <div class="num tick8"><strong>2.00 M</strong></div>
+                <div class="num tick9">2.25 M</div>
+                <div class="num tick10"><strong>2.50 M</strong></div>
+              </div>
+              <div id="test-tube-reflect"></div>
+              <div id="test-tube-counter" class="reached">
+                <div class="tt-date">Final Count</div>
+                <div class="tt-count">2,542,543</div>
+              </div>
+              <div id="test-tube-over">
+                <div class="tt-date">Goal Reached</div>
+                <div class="tt-date">April 28!</div>
+                <div class="tt-count">2.50 Million</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="fireworks"><lottie-player src="https://static.scistarter.org/backport/img/csm/fireworks.json" background="transparent" speed="1" loop autoplay></lottie-player></div>
+    </div>
+  </div>
+</div>
+
+<!-- MOBILE ONLY 250 PARTNER (always shown) -->
+<div class="flex-row gap-1 md:gap-4 items-center my-8 justify-center relative sm:left-[-20px] flex sm:hidden bg-primary-light py-4">
+  <p class="mb-0 uppercase text-primary-dark text-sm">Official partner of</p>
+  <img src="https://static.scistarter.org/backport/img/csm/America250_logo.svg" alt="America 250 logo" class="w-[60px] md:w-[60px] block" />
+</div>
+
+<!-- ============================================ -->
+<!-- COUNTDOWN: PRE-APRIL (to April 1)            -->
+<!-- ============================================ -->
+<div data-csm-phase="pre-april">
+  <div class="ss-container mx-auto hidden sm:block">
+    <div class="countdown bg-primary-dark rounded-md flex justify-center gap-4 items-center">
+      <h3 class="text-right text-white text-lg sm:mb-0">Get Ready to Participate!</h3>
+      <div class="tick" data-did-init="handleTickInit" id="reverse-flip">
+        <div data-repeat="true" data-layout="horizontal fit" data-transform="preset(d, h, m, s) -> delay">
+          <div class="tick-group">
+            <div data-key="value" data-repeat="true" data-transform="pad(00) -> split -> delay">
+              <span data-view="flip"></span>
+            </div>
+            <span data-key="label" data-view="text" class="tick-label"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- COUNTDOWN: APRIL (to April 30)               -->
+<!-- ============================================ -->
+<div data-csm-phase="april">
+  <div class="ss-container mx-auto hidden sm:block">
+    <div class="countdown bg-primary-dark rounded-md flex justify-center gap-4 items-center">
+      <h3 class="text-right text-white text-lg sm:mb-0">Time Left to Participate:</h3>
+      <div class="tick" data-did-init="handleTickInit" id="reverse-flip">
+        <div data-repeat="true" data-layout="horizontal fit" data-transform="preset(d, h, m, s) -> delay">
+          <div class="tick-group">
+            <div data-key="value" data-repeat="true" data-transform="pad(00) -> split -> delay">
+              <span data-view="flip"></span>
+            </div>
+            <span data-key="label" data-view="text" class="tick-label"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- NAV + CONTENT                                -->
+<!-- ============================================ -->
+<div class="ss-container mx-auto mt-8">
+
+  <!-- TABS NAVIGATION -->
+  <nav class="tabs-wrapper sticky z-50" aria-label="Primary" id="csm-tabs">
+    <div class="tabs tabs-bar" role="tablist" aria-label="Main tabs" id="tabRow">
+      <a href="/citizensciencemonth" class="tab tab-icon active" id="overview">
+        <svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 24 24">
+          <path d="M12,.5C5.7.5.5,5.7.5,12s5.2,11.5,11.5,11.5,11.5-5.2,11.5-11.5S18.3.5,12,.5ZM12,21.2c-5.1,0-9.2-4.1-9.2-9.2S6.9,2.8,12,2.8s9.2,4.1,9.2,9.2-4.1,9.2-9.2,9.2Z"/>
+          <path d="M9.7,9.7l-3.5,8.1,8.1-3.5,3.5-8.1-8.1,3.5ZM12,13.2c-.6,0-1.2-.5-1.2-1.2s.5-1.2,1.2-1.2,1.2.5,1.2,1.2-.5,1.2-1.2,1.2Z"/>
+        </svg>
+        <span>Overview</span>
+      </a>
+      <a href="/citizensciencemonth-participate" class="tab tab-icon" id="participate">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12.75,12c1.32-1.02,2.12-2.59,2.12-4.27,0-2.98-2.43-5.41-5.41-5.41s-5.4,2.43-5.4,5.41c0,1.67.8,3.25,2.12,4.27C2.5,13.25,0,16.52,0,20.17v1.24c0,.48.38.86.86.86s.85-.38.85-.86v-1.24c0-3.88,3.48-7.03,7.76-7.03s7.77,3.15,7.77,7.03v1.24c0,.48.38.86.85.86s.86-.38.86-.86v-1.24c0-3.64-2.51-6.92-6.18-8.17ZM9.46,4.01c2.05,0,3.72,1.67,3.72,3.72s-1.67,3.71-3.72,3.71-3.71-1.66-3.71-3.71,1.67-3.72,3.71-3.72Z"/><path d="M24,18.42v.97c0,.47-.38.85-.85.85s-.85-.38-.85-.85v-.97c0-2.91-2.57-5.28-5.74-5.28-.47,0-.85-.39-.85-.86s.38-.85.85-.85c1.49,0,2.7-1.21,2.7-2.7s-1.21-2.7-2.7-2.7c-.47,0-.85-.38-.85-.85s.38-.85.85-.85c2.42,0,4.39,1.97,4.39,4.39,0,1.26-.53,2.44-1.47,3.27,2.72,1.09,4.51,3.6,4.51,6.4Z"/></svg>
+        <span>Participate</span>
+      </a>
+      <a href="https://scistarter.org/citizensciencemonth-resources" class="tab tab-icon">
+        <svg class="fill-primary" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 14 14">
+          <path d="M2.1,14h9.8c1,0,1.9-.8,1.9-1.9V2.9c0-1-.8-1.9-1.9-1.9h-.7v-.5c0-.3-.2-.5-.5-.5s-.5.2-.5.5v.5H3.9v-.5c0-.3-.2-.5-.5-.5s-.5.2-.5.5v.5h-.7C1.1,1,.3,1.9.3,2.9v9.3c0,1,.8,1.9,1.9,1.9ZM1.3,2.9c0-.5.4-.8.8-.8h.7v.5c0,.3.2.5.5.5s.5-.2.5-.5v-.5h6.2v.5c0,.3.2.5.5.5s.5-.2.5-.5v-.5h.7c.5,0,.8.4.8.8v1.5H1.3v-1.5ZM1.3,5.4h11.4v6.7c0,.5-.4.8-.8.8H2.1c-.5,0-.8-.4-.8-.8v-6.7Z"/>
+        </svg>
+        <span>Plan an Event</span>
+      </a>
+      <!-- Report tab: April only -->
+      <a href="/citizensciencemonth-report" class="tab tab-icon" data-csm-phase="april">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5.14,6h8.57c.47,0,.86-.38.86-.86s-.38-.86-.86-.86H5.14c-.47,0-.86.38-.86.86s.38.86.86.86Z"/><path d="M5.14,9.43h8.57c.47,0,.86-.38.86-.86s-.38-.86-.86-.86H5.14c-.47,0-.86.38-.86.86s.38.86.86.86Z"/><path d="M8.57,11.14h-3.43c-.47,0-.86.38-.86.86s.38.86.86.86h3.43c.47,0,.86-.38.86-.86s-.38-.86-.86-.86Z"/><path d="M23.14,9.78c0-.68-.27-1.34-.75-1.82-1.02-.97-2.62-.97-3.64,0l-.75.75V2.57c0-1.42-1.15-2.57-2.57-2.57H3.43C2.01,0,.86,1.15.86,2.57v18.86c0,1.42,1.15,2.57,2.57,2.57h12c1.42,0,2.57-1.15,2.57-2.57v-5.44l4.39-4.39c.48-.48.76-1.14.75-1.82h0ZM16.29,21.43c0,.47-.38.86-.86.86H3.43c-.47,0-.86-.38-.86-.86V2.57c0-.47.38-.86.86-.86h12c.47,0,.86.38.86.86v7.86l-5.61,5.61c-.12.12-.2.27-.23.43l-.64,3.07c-.1.46.2.92.66,1.02.06.01.12.02.18.02.06,0,.12,0,.18-.02l3.07-.65c.16-.03.31-.12.43-.23l1.97-1.97v3.73ZM21.18,10.39l-7.89,7.89-1.54.32.32-1.53,7.89-7.89c.34-.33.87-.33,1.21,0,.33.33.33.88,0,1.21h0Z"/></svg>
+        <span>Report Your Acts</span>
+      </a>
+    </div>
+    <div class="chevron" id="chevron">
+      <button class="chev-btn" id="chevBtn" aria-hidden="false" aria-label="Show more tabs">
+        <svg class="chev-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M9 6l6 6-6 6"></path>
+        </svg>
+      </button>
+    </div>
+  </nav>
+
+  <!-- CSM PAGE CONTENT -->
+  <div class="border-linework border mb-8 border-t-0 p-4">
+    <div class="max-w-[960px] mx-auto pt-12">
+
+      <!-- CITSCIMONTH LOGO (shared) -->
+      <img src="https://static.scistarter.org/backport/img/csm/CitSci_Horizontal_v1.svg" alt="Citizen Science Month Logo" class="max-w-[600px] w-full mx-auto mb-8" />
+
+      <!-- ======================================== -->
+      <!-- CONTENT: PRE-APRIL                       -->
+      <!-- ======================================== -->
+      <div data-csm-phase="pre-april">
+
+        <!-- INTRO TEXT -->
+        <div class="w-full mx-auto text-center mb-16">
+          <h2 class="text-primary-dark">April is Citizen Science Month!</h2>
+          <p class="intro">A global celebration of public participation in scientific research.</p>
+          <p>Each April, Citizen Science Month celebrates the people, projects, and scientific outcomes made possible through public participation. In 2026, we are also working together toward a shared goal of 2.50 Million <em>Acts of Science</em>, marking America's 250th Birthday through collective discovery, service, and impact.</p>
+          <p>Anyone can participate. No prior experience is needed. Every contribution counts.</p>
+          <p>No need to wait until April! Citizen science happens all year long. Join <a href="/">SciStarter</a> to discover ongoing projects and receive updates about Citizen Science Month.</p>
+          <div class="flex flex-col md:flex-row" style="gap: 10px;justify-content: center;">
+            <a href="/citizensciencemonth-participate" class="btn btn-primary">Do <em>Acts of Science</em></a>
+            <a href="https://pages.scistarter.org/citizensciencemonth-resources" class="btn btn-subdued">Host or Support an Event</a>
+          </div>
+        </div>
+
+        <div class="ss-accordion2 w-full mx-auto border border-linework shadow mb-8 max-w-[1024px]">
+          <button type="button" class="w-full flex justify-between items-center px-4 py-3 text-left font-semibold focus:outline-none focus-visible:ring focus-visible:ring-primary-action" aria-expanded="false" aria-controls="accordion-panel-1" id="accordion-header-1">
+            <h2 class="text-lg mb-0 text-primary">What Is an <em>Act of Science</em>?</h2>
+            <svg class="w-5 h-5 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+            </svg>
+          </button>
+          <div id="accordion-panel-1" role="region" aria-labelledby="accordion-header-1" class="px-4 py-3 mx-auto hidden">
+            <div class="max-w-[960px]">
+              <p>An <em>Act of Science</em> is any real way you help science. During Citizen Science Month, this can include sharing observations with a project, helping analyze data, attending a citizen science event, or completing the Foundations of Citizen Science training. Each of these actions counts as an <em>Act of Science</em>.</p>
+              <p>The goal of 2.50 Million <em>Acts of Science</em> shows how many small actions, taken together, can create a big scientific impact.</p>
+              <p>Learn about the fundamentals in our free self-guided <a href="https://scistarter.org/training">Foundations of Citizen Science</a> online training.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3 STEPS GRAPHIC -->
+        <div class="bg-primary-light p-4 rounded mb-16">
+          <h3 class="text-center max-w-[unset] text-primary-dark">What to Expect in April</h3>
+          <div class="flex pariticipate-points !mb-0">
+            <div style="padding-left: 1rem">
+              <span style="padding-right: 0.5px">1</span>
+              <h4 class="header-font">Participate</h4>
+              <p>Participate in any citizen science project or event you find on SciStarter in April.</p>
+            </div>
+            <div style="padding-left: 1rem">
+              <span style="padding-right: 0.5px">2</span>
+              <h4 class="header-font">Report</h4>
+              <p>Report your Act(s) on SciStarter.</p>
+            </div>
+            <div style="padding-left: 1rem">
+              <span style="padding-right: 0.5px">3</span>
+              <h4 class="header-font">Share</h4>
+              <p>Showcase your participation! Use #ActsofScience and tag @SciStarter to be featured on our website!</p>
+            </div>
+            <div id="participate-line2"></div>
+          </div>
+        </div>
+
+        <div class="w-full mx-auto text-center mb-16">
+          <p>Start in minutes! No experience needed. You can participate in Citizen Science Month in many ways. Visit <a href="/citizensciencemonth-participate">Participate</a> to get started.</p>
+        </div>
+
+        <!-- OUTCOMES -->
+        <div class="acts-highlights-wrapper">
+          <h3 class="text-center">Impact In 2025</h3>
+          <div class="acts-highlights">
+            <div>
+              <img src="https://static.scistarter.org/backport/img/csm/help.svg" alt="volunteer icon" />
+              <h3><span>Nearly</span><span>Half a Million Volunteers</span><span>contributed to One Million <em>Acts of Science</em></span></h3>
+            </div>
+            <div>
+              <img src="https://static.scistarter.org/backport/img/csm/chemistry.svg" alt="science icon" />
+              <h3><span>Volunteers were involved in over</span><span>1000 projects &amp; events</span><span>benefitting scientific research</span></h3>
+            </div>
+            <div>
+              <img src="https://static.scistarter.org/backport/img/csm/growth.svg" alt="test tube with fireworks icon" />
+              <h3><span>A total of </span><span>3.06 million Acts</span><span>were tallied at the end of the month</span></h3>
+            </div>
+          </div>
+        </div>
+
+        <!-- Social Shares (shown from March 25 via JS) -->
+        <div id="csm-social-feed" class="acts-wrapper mb-16">
+          <div class="acts-container text-center">
+            <h3 class="wall-h3">Some Great Social Shares!</h3>
+            <div id="curator-feed-default-feed-layout"><a href="https://curator.io" target="_blank" class="crt-logo crt-tag">Powered by Curator.io</a></div>
+          </div>
+        </div>
+
+        <!-- FAQ LINK -->
+        <div class="text-center px-4 my-16">
+          <h3 class="text-center text-primary-dark font-header-lg mb-1">Curious about the story behind Citizen Science Month&mdash;its origins, impact, and the people who make it possible?</h3>
+          <p>Learn more and visit our Frequently Asked Questions page for answers and insights.</p>
+          <p><a class="btn btn-subdued" href="https://pages.scistarter.org/citizensciencemonth-about">Learn More</a></p>
+        </div>
+
+      </div><!-- /pre-april content -->
+
+      <!-- ======================================== -->
+      <!-- CONTENT: APRIL                           -->
+      <!-- ======================================== -->
+      <div data-csm-phase="april">
+
+        <!-- 3 STEPS GRAPHIC -->
+        <div class="bg-primary-light p-4 rounded mb-16">
+          <div class="flex pariticipate-points !mb-0">
+            <div>
+              <span>1</span>
+              <h4 class="header-font"><a href="/citizensciencemonth-participate" class="underline">Participate</a></h4>
+              <p>Participate in any citizen science project or event you find on <a href="/">SciStarter</a> in April.</p>
+            </div>
+            <div>
+              <span>2</span>
+              <h4 class="header-font"><a href="/citizensciencemonth-report" class="underline">Report</a></h4>
+              <p>Report your act(s) on SciStarter</p>
+            </div>
+            <div>
+              <span>3</span>
+              <h4 class="header-font">Share</h4>
+              <p>Showcase your participation! Use #ActsofScience and tag @SciStarter to be featured on our website!</p>
+            </div>
+            <div id="participate-line2"></div>
+          </div>
+        </div>
+
+        <!-- INTRO TEXT -->
+        <div class="w-full mx-auto text-center mb-16">
+          <h2 class="text-primary-dark">Citizen Science Month is April!</h2>
+          <p class="intro">Everyone, everywhere is invited to start preparing for this global effort to generate One Million Acts of Science and promote public participation in scientific research!</p>
+          <p>Did you know? Scientists can't be everywhere and they don't have all the answers! That's why they count on volunteers around the world to join their projects to help collect data when they don't have enough or help analyze data when they have too much.</p>
+          <p><a class="underline" href="https://pages.scistarter.org/citizensciencemonth-about">Learn more about the goals, impact, and history of Citizen Science Month</a></p>
+        </div>
+
+        <!-- WALL OF FAME -->
+        <div class="acts-wrapper mb-16">
+          <div class="acts-container text-center">
+            <img src="https://static.scistarter.org/backport/img/csm/wall-of-fame-complex.svg" alt="Wall of Fame" style="max-width:800px;display:block;margin:0 auto 1rem"/>
+            <p>Below you'll find all the participants in 2,500,000 Acts of Science.</p>
+            <div id="wall-of-fame"></div>
+          </div>
+        </div>
+
+        <!-- Social Shares -->
+        <div class="acts-wrapper mb-16">
+          <div class="acts-container text-center">
+            <h3 class="wall-h3">Some Great Social Shares!</h3>
+            <div id="curator-feed-default-feed-layout"><a href="https://curator.io" target="_blank" class="crt-logo crt-tag">Powered by Curator.io</a></div>
+          </div>
+        </div>
+
+      </div><!-- /april content -->
+
+      <!-- ======================================== -->
+      <!-- CONTENT: MAY                             -->
+      <!-- ======================================== -->
+      <div data-csm-phase="may">
+
+        <!-- INTRO TEXT -->
+        <div class="w-full mx-auto text-center mb-16">
+          <h2 class="text-primary-dark">Thank You for an Amazing Citizen Science Month!</h2>
+          <p class="intro">Together, we achieved incredible things during this year's Citizen Science Month. Science is better together!</p>
+          <p>Find more projects and events all year-long on SciStarter.</p>
+          <p><a class="underline" href="https://pages.scistarter.org/citizensciencemonth-about">Learn more about the goals, impact, and history of Citizen Science Month</a></p>
+        </div>
+
+        <!-- WALL OF FAME -->
+        <div class="acts-wrapper mb-16">
+          <div class="acts-container text-center">
+            <img src="https://static.scistarter.org/backport/img/csm/wall-of-fame-complex.svg" alt="Wall of Fame" style="max-width:800px;display:block;margin:0 auto 1rem"/>
+            <p>Below you'll find all the participants in 2,500,000 Acts of Science.</p>
+            <div id="wall-of-fame"></div>
+          </div>
+        </div>
+
+        <!-- Social Shares -->
+        <div class="acts-wrapper mb-16">
+          <div class="acts-container text-center">
+            <h3 class="wall-h3">Some Great Social Shares!</h3>
+            <div id="curator-feed-default-feed-layout"><a href="https://curator.io" target="_blank" class="crt-logo crt-tag">Powered by Curator.io</a></div>
+          </div>
+        </div>
+
+      </div><!-- /may content -->
+
+    </div>
+  </div>
+</div><!-- /.ss-container -->
+
+<!-- FUNDERS (always shown) -->
+<div class="csm-funders ss-container mx-auto">
+  <div class="csm-funder-top mb-8">
+    <h3 class="text-center max-w-[unset] text-primary-dark">Presented By:</h3>
+    <div class="flex flex-col md:flex-row gap-8 justify-center items-center">
+      <img class="w-[280px] h-auto object-contain block" src="https://static.scistarter.org/backport/img/csm/Standard__tagline-dark.png" alt="SciStarter logo" />
+      <img class="w-[350px] h-auto object-contain block" src="https://static.scistarter.org/backport/img/csm/asu.jpg" alt="Arizona State University School for the Future of Innovation in Society Logo" />
+    </div>
+  </div>
+</div>
+
+<!-- SPONSORS (always shown) -->
+<div class="ss-container mx-auto py-8!">
+  <h4 class="text-center max-w-[unset] text-primary-dark text-lg">Promotional and Community Engagement provided by:</h4>
+  <div class="p-8">
+    <div class="sponsor-slideshow slideshow">
+      <div class="!flex justify-center items-center h-[160px] px-8 py-4"><img src="https://static.scistarter.org/img/csm-logo-a250.png" alt="America 250" class="max-h-[160px]" /></div>
+      <div class="!flex justify-center items-center h-[160px] px-8 py-4"><img src="https://static.scistarter.org/img/csm-logo-nasa.png" alt="NASA" class="max-h-[160px] max-w-[200px]" /></div>
+      <div class="!flex justify-center items-center h-[160px] px-8 py-4"><img src="https://static.scistarter.org/img/csm-logo-ssa.png" alt="Solar System Ambassadors" class="max-h-[160px]" /></div>
+      <div class="!flex justify-center items-center h-[160px] px-8 py-4"><img src="https://static.scistarter.org/img/csm-logo-starnet.png" alt="StarNet" class="max-h-[160px]" /></div>
+      <div class="!flex justify-center items-center h-[160px] px-8 py-4"><img src="https://static.scistarter.org/img/csm-logo-ricap.png" alt="Red Iberoamericana de Ciencia Participativa" class="max-h-[160px]" /></div>
+      <div class="!flex justify-center items-center h-[160px] px-8 py-4"><img src="https://static.scistarter.org/img/csm-logo-cslp.png" alt="Collaborative Summer Library Program" class="max-h-[160px]" /></div>
+      <div class="!flex justify-center items-center h-[160px] px-8 py-4"><img src="https://static.scistarter.org/img/csm-logo-aaps.png" alt="Association for Advancing Participatory Science" class="max-h-[160px]" /></div>
+      <div class="!flex justify-center items-center h-[160px] px-8 py-4"><img src="https://static.scistarter.org/img/csm-logo-aot.png" alt="Astronomy On Tap" class="max-h-[160px]" /></div>
+      <div class="!flex justify-center items-center h-[160px] px-8 py-4"><img src="https://static.scistarter.org/img/csm-logo-nise.png" alt="National Informal STEM Education" class="max-h-[160px]" /></div>
+      <div class="!flex justify-center items-center h-[160px] px-8 py-4"><img src="https://static.scistarter.org/img/csm-logo-arsl.png" alt="Association for Rural and Small Libraries" class="max-h-[160px]" /></div>
+      <div class="!flex justify-center items-center h-[160px] px-8 py-4"><img src="https://static.scistarter.org/img/csm-logo-colabfield.png" alt="CoLab Field" class="max-h-[160px]" /></div>
+      <div class="!flex justify-center items-center h-[160px] px-8 py-4"><img src="https://static.scistarter.org/img/csm-logo-noirlab.jpg" alt="NoirLab" class="max-h-[160px]" /></div>
+      <div class="!flex justify-center items-center h-[160px] px-8 py-4"><img src="https://static.scistarter.org/img/csm-logo-darksky.png" alt="DarkSky" class="max-h-[160px]" /></div>
+      <div class="!flex justify-center items-center h-[160px] px-8 py-4"><img src="https://static.scistarter.org/img/csm-logo-idealist.png" alt="Idealist" class="max-h-[160px]" /></div>
+    </div>
+  </div>
+</div>
+
+</main>
+
+
+// ==================================================================
+// INLINE JAVASCRIPT
+// ==================================================================
+
+--DEFER--
+// ==================================================================
+// LATE JAVASCRIPT
+// ==================================================================
+
+// ── Phase detection ──────────────────────────────────────────────────
+// Detects current CSM phase and shows/hides phase-specific elements.
+// The CSS rule [data-csm-phase] { display: none } hides everything by
+// default; this script shows the matching phase and removes the rest.
+(function() {
+var now = new Date();
+var month = now.getMonth(); // 0-indexed: Jan=0 ... Dec=11
+var day = now.getDate();
+
+// Allow ?phase= override for testing (pre-april, april, april-reached, may)
+var params = new URLSearchParams(window.location.search);
+var phaseOverride = params.get('phase');
+var validPhases = ['pre-april', 'april', 'april-reached', 'may'];
+var phase;
+
+if (phaseOverride && validPhases.indexOf(phaseOverride) !== -1) {
+// april-reached uses the april HTML with goal-reached handled below
+phase = phaseOverride === 'april-reached' ? 'april' : phaseOverride;
+} else if (month <= 2) phase = 'pre-april'; // Jan – Mar
+else if (month === 3) phase = 'april';       // April
+else if (month === 4) phase = 'may';         // May
+else phase = 'pre-april';                    // Jun – Dec (next year)
+
+window.csmPhase = phase;
+window.csmPhaseOverride = phaseOverride;
+
+// Show matching phase elements, remove non-matching
+var els = document.querySelectorAll('[data-csm-phase]');
+for (var i = 0; i < els.length; i++) {
+var el = els[i];
+var phases = el.getAttribute('data-csm-phase').split(' ');
+if (phases.indexOf(phase) !== -1) {
+el.removeAttribute('data-csm-phase');
+} else {
+el.parentNode.removeChild(el);
+}
+}
+
+// Social feed: always in april/may; in pre-april only from March 25 (or if overridden)
+var showFeed = phaseOverride || (phase !== 'pre-april') || (month === 2 && day >= 25);
+if (!showFeed) {
+var feed = document.getElementById('csm-social-feed');
+if (feed) feed.parentNode.removeChild(feed);
+}
+})();
+
+// ── Countdown timer callback ─────────────────────────────────────────
+function handleTickInit(tick) {
+var now = new Date();
+var target;
+if (window.csmPhase === 'pre-april') {
+var year = now.getMonth() <= 2 ? now.getFullYear() : now.getFullYear() + 1;
+target = year + "-04-01T00:00:00";
+} else {
+target = now.getFullYear() + "-04-30T00:00:00";
+}
+var counter = Tick.count.down(target);
+counter.onupdate = function(value) { tick.value = value; };
+counter.onended = function() {};
+}
+
+// ── Load flip countdown library ──────────────────────────────────────
+if (!!SciStarter) {
+  SciStarter.inject_script('https://unpkg.com/@pqina/flip/dist/flip.min.js');
+}
+
+// ── April: load lottie player for fireworks ──────────────────────────
+if (window.csmPhase === 'april' && !!SciStarter) {
+  SciStarter.inject_script('https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js');
+}
+
+// ── April: live test-tube counter via API ────────────────────────────
+if (window.csmPhase === 'april') {
+  (function() {
+    function parseDateOnly(dateString) {
+      if (!dateString || typeof dateString !== 'string') return null;
+      var parts = dateString.split('-');
+      var year = parseInt(parts[0], 10);
+      var month = parseInt(parts[1], 10);
+      var day = parseInt(parts[2], 10);
+      if (!year || !month || !day) return null;
+      return new Date(year, month - 1, day);
+    }
+
+    var fakeData = { date: new Date().toISOString().slice(0, 10), number: 1230000, date_reached: null };
+
+    async function updateTestTubeCounter() {
+      var data;
+      if (window.csmPhaseOverride) {
+        data = fakeData;
+      } else {
+        try {
+          var res = await fetch('/-csm/acts-to-date');
+          if (!res.ok) throw new Error('Bad response');
+          data = await res.json();
+        } catch (err) {
+          console.warn('Acts API failed', err);
+          return;
+        }
+      }
+
+      var number = data.number;
+      var date = data.date;
+      var date_reached = data.date_reached;
+      var cappedNumber = Math.min(number, 2500000);
+      var ratio = cappedNumber / 2500000;
+      var duration = 100 + (3000 - 100) * ratio;
+      var durationSec = duration / 1000;
+
+      var targetDate = parseDateOnly(date);
+      var formattedDate = targetDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+
+      document.querySelector('#test-tube-counter .tt-date').textContent = formattedDate;
+      document.querySelector('#test-tube-counter .tt-count').textContent = number.toLocaleString();
+
+      var base = (cappedNumber / 250000) * 37;
+      var tt_counter = document.getElementById('test-tube-counter');
+      tt_counter.style.bottom = (base + 6) + 'px';
+      tt_counter.style.opacity = 1;
+      document.getElementById('test-tube-fill').style.height = (base + 2) + 'px';
+      document.getElementById('test-tube-fill-top').style.bottom = (base + 40) + 'px';
+
+      [tt_counter, document.getElementById('test-tube-fill'), document.getElementById('test-tube-fill-top')].forEach(function(el) {
+        if (el) el.style.transition = 'all ' + durationSec + 's ease-out';
+      });
+
+      // Check if goal was reached early (or forced via ?phase=april-reached)
+      if (date_reached || window.csmPhaseOverride === 'april-reached') {
+        var reachedDate = date_reached ? parseDateOnly(date_reached) : new Date();
+        if (window.csmPhaseOverride === 'april-reached' || (reachedDate && reachedDate < targetDate)) {
+          var formattedReached = reachedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) + '!';
+          tt_counter.classList.add('reached');
+          var overEl = document.getElementById('test-tube-over');
+          overEl.style.display = 'block';
+          var dayReached = document.getElementById('tt-day-reached');
+          if (dayReached) dayReached.textContent = formattedReached;
+          document.getElementById('fireworks').classList.remove('hidden');
+          document.getElementById('fireworks').style.display = 'block';
+        }
+      }
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', updateTestTubeCounter);
+    } else {
+      updateTestTubeCounter();
+    }
+  })();
+}
+
+// ── May: load lottie player for fireworks ────────────────────────────
+if (window.csmPhase === 'may' && !!SciStarter) {
+  SciStarter.inject_script('https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js');
+}
+
+// ── Tab chevron scroll ───────────────────────────────────────────────
+;(function() {
+  var tabRow = document.getElementById('tabRow');
+  var chevron = document.getElementById('chevron');
+  var chevBtn = document.getElementById('chevBtn');
+  if (!tabRow || !chevron || !chevBtn) return;
+
+  function updateChevron() {
+    var overflowRight = tabRow.scrollWidth - (tabRow.scrollLeft + tabRow.clientWidth);
+    if (overflowRight > 1) chevron.classList.remove('hidden');
+    else chevron.classList.add('hidden');
+  }
+  chevBtn.addEventListener('click', function() {
+    tabRow.scrollBy({ left: tabRow.clientWidth * 0.7, behavior: 'smooth' });
+  });
+  tabRow.addEventListener('scroll', updateChevron, { passive: true });
+  window.addEventListener('resize', updateChevron);
+  window.addEventListener('load', updateChevron);
+})();
+
+// ── Curator.io social feed ───────────────────────────────────────────
+if (document.getElementById('curator-feed-default-feed-layout')) {
+  (function(){
+    var i,e,d=document,s="script";i=d.createElement("script");i.async=1;i.charset="UTF-8";
+    i.src="https://cdn.curator.io/published/9acd2fa2-8cb5-4bb8-aa94-c4e46af90e9f.js";
+    e=d.getElementsByTagName(s)[0];e.parentNode.insertBefore(i, e);
+  })();
+}
+
+// ── Wall of Fame widget ─────────────────────────────────────────────
+(function() {
+  var container = document.getElementById('wall-of-fame');
+  if (!container) return;
+
+  var fakeEntries = window.csmPhaseOverride ? [
+    { date: 'Apr 17', act: 'Attended an event', name: 'David K.', project: 'BioBlitz', organization: 'National Geographic' },
+    { date: 'Apr 15', act: 'Completed a project', name: 'Sarah L.', project: 'CoCoRaHS', organization: 'Colorado State University' },
+    { date: 'Apr 13', act: 'Submitted observations', name: 'Kenji M.', project: 'eBird', organization: 'Cornell Lab of Ornithology' },
+    { date: 'Apr 11', act: 'Completed training', name: 'Emily W.', project: 'Foundations of Citizen Science', organization: 'SciStarter' },
+    { date: 'Apr 9', act: 'Analyzed data', name: 'Carlos R.', project: 'Zooniverse', organization: 'University of Oxford' },
+    { date: 'Apr 7', act: 'Submitted observations', name: 'Priya S.', project: 'iNaturalist', organization: 'California Academy of Sciences' },
+    { date: 'Apr 5', act: 'Attended an event', name: 'James T.', project: 'City Nature Challenge', organization: 'Natural History Museum' },
+    { date: 'Apr 3', act: 'Completed a project', name: 'Maria G.', project: 'Globe Observer', organization: 'NASA' },
+  ] : null;
+
+  var state = { mode: 'date', page: 1, letter: 'A', contributors: fakeEntries || [], pages: fakeEntries ? 3 : 0 };
+
+  function fetchContributors() {
+    if (fakeEntries) {
+      state.contributors = fakeEntries;
+      state.pages = 3;
+      render();
+      return;
+    }
+    var params = '?mode=' + encodeURIComponent(state.mode) + '&page=' + state.page;
+    if (state.mode === 'name') params += '&letter=' + encodeURIComponent(state.letter);
+    fetch('/-csm/contributors' + params)
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        state.contributors = data.contributors || [];
+        state.pages = data.pages || 0;
+        render();
+      })
+      .catch(function() {
+        state.contributors = [];
+        state.pages = 0;
+        render();
+      });
+  }
+
+  function render() {
+    var html = '';
+
+    // Sort mode buttons
+    html += '<div style="margin-bottom:1rem;display:flex;gap:6px;flex-wrap:wrap;justify-content:center">';
+    var modes = [['date','Date'],['name','Name'],['project','Project'],['org','Organization']];
+    for (var i = 0; i < modes.length; i++) {
+      var m = modes[i];
+      var active = state.mode === m[0];
+      html += '<button data-wof-mode="' + m[0] + '" style="padding:6px 14px;border:1px solid #1a3a5c;cursor:pointer;' +
+        (active ? 'background:#1a3a5c;color:#fff' : 'background:#fff;color:#1a3a5c') + '">' + m[1] + '</button>';
+    }
+    html += '</div>';
+
+    // Letter bar (name mode only)
+    if (state.mode === 'name') {
+      html += '<div style="margin-bottom:1rem;display:flex;gap:3px;flex-wrap:wrap;justify-content:center">';
+      for (var c = 65; c <= 90; c++) {
+        var ch = String.fromCharCode(c);
+        var active = state.letter === ch;
+        html += '<button data-wof-letter="' + ch + '" style="padding:4px 8px;border:1px solid #1a3a5c;cursor:pointer;min-width:30px;' +
+          (active ? 'background:#1a3a5c;color:#fff' : 'background:#fff;color:#1a3a5c') + '">' + ch + '</button>';
+      }
+      html += '</div>';
+    }
+
+    // Table
+    if (state.contributors.length > 0) {
+      html += '<table style="width:100%;border-collapse:collapse;text-align:left;margin-top:1rem">';
+      html += '<thead style="background:#1a3a5c;color:#fff"><tr>';
+      html += '<th style="padding:8px">Date</th><th style="padding:8px">Act</th><th style="padding:8px">Name</th><th style="padding:8px">Project</th><th style="padding:8px">Organization</th>';
+      html += '</tr></thead><tbody>';
+      for (var j = 0; j < state.contributors.length; j++) {
+        var e = state.contributors[j];
+        var bg = j % 2 === 0 ? '#fff' : '#f5f5f5';
+        var proj = e.entity__slug && e.project ? '<a href="/' + e.entity__slug + '">' + e.project + '</a>' : (e.project || '');
+        html += '<tr style="background:' + bg + '">';
+        html += '<td style="padding:8px">' + (e.date || '') + '</td>';
+        html += '<td style="padding:8px">' + (e.act || '') + '</td>';
+        html += '<td style="padding:8px">' + (e.name || '') + '</td>';
+        html += '<td style="padding:8px">' + proj + '</td>';
+        html += '<td style="padding:8px">' + (e.organization || '') + '</td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+    } else {
+      html += '<p style="margin-top:1rem;color:#666">No contributors found.</p>';
+    }
+
+    // Pagination
+    if (state.pages > 1) {
+      html += '<div style="margin-top:1rem;display:flex;gap:6px;justify-content:center;flex-wrap:wrap">';
+      if (state.page > 1) {
+        html += '<button data-wof-page="' + (state.page - 1) + '" style="padding:4px 12px;border:1px solid #1a3a5c;cursor:pointer;background:#fff;color:#1a3a5c">&laquo; Prev</button>';
+      }
+      var startPage = Math.max(1, state.page - 3);
+      var endPage = Math.min(state.pages, state.page + 3);
+      for (var p = startPage; p <= endPage; p++) {
+        var active = p === state.page;
+        html += '<button data-wof-page="' + p + '" style="padding:4px 10px;border:1px solid #1a3a5c;cursor:pointer;min-width:34px;' +
+          (active ? 'background:#1a3a5c;color:#fff' : 'background:#fff;color:#1a3a5c') + '">' + p + '</button>';
+      }
+      if (state.page < state.pages) {
+        html += '<button data-wof-page="' + (state.page + 1) + '" style="padding:4px 12px;border:1px solid #1a3a5c;cursor:pointer;background:#fff;color:#1a3a5c">Next &raquo;</button>';
+      }
+      html += '</div>';
+    }
+
+    container.innerHTML = html;
+  }
+
+  container.addEventListener('click', function(ev) {
+    var btn = ev.target.closest('[data-wof-mode]');
+    if (btn) {
+      state.mode = btn.getAttribute('data-wof-mode');
+      state.page = 1;
+      fetchContributors();
+      return;
+    }
+    btn = ev.target.closest('[data-wof-letter]');
+    if (btn) {
+      state.letter = btn.getAttribute('data-wof-letter');
+      state.page = 1;
+      fetchContributors();
+      return;
+    }
+    btn = ev.target.closest('[data-wof-page]');
+    if (btn) {
+      state.page = parseInt(btn.getAttribute('data-wof-page'), 10);
+      fetchContributors();
+      return;
+    }
+  });
+
+  fetchContributors();
+})();
+
+// ── Slick carousel for sponsors ──────────────────────────────────────
+$(function() {
+  $('.sponsor-slideshow').slick({
+    infinite: false,
+    slidesToShow: 3,
+    slidesToScroll: 3,
+    responsive: [
+      { breakpoint: 1024, settings: { slidesToShow: 3, slidesToScroll: 3, infinite: true, dots: true } },
+      { breakpoint: 600, settings: { slidesToShow: 2, slidesToScroll: 2 } },
+      { breakpoint: 480, settings: { slidesToShow: 1, slidesToScroll: 1 } }
+    ]
+  });
+});
+
+// ── Accordion ────────────────────────────────────────────────────────
+;(function() {
+  var buttons = document.querySelectorAll('.ss-accordion2 > button:first-child');
+  for (var i = 0; i < buttons.length; i++) {
+    (function(btn) {
+      btn.addEventListener('click', function() {
+        var panel = document.getElementById(btn.getAttribute('aria-controls'));
+        var expanded = btn.getAttribute('aria-expanded') === 'true';
+        if (expanded) {
+          btn.setAttribute('aria-expanded', 'false');
+          btn.querySelector('svg').classList.remove('rotate-180');
+          panel.classList.add('hidden');
+        } else {
+          btn.setAttribute('aria-expanded', 'true');
+          btn.querySelector('svg').classList.add('rotate-180');
+          panel.classList.remove('hidden');
+        }
+      });
+    })(buttons[i]);
+  }
+})();

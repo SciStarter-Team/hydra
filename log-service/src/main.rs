@@ -14,9 +14,9 @@ use handlers::{
     handle_activity_log, handle_acts_of_science_create, handle_acts_to_date,
     handle_affiliate_participation, handle_articulate_completion,
     handle_articulate_completion_record, handle_clickthrough, handle_clickthrough_analytics,
-    handle_email_event, handle_external_link_clickthrough, handle_external_links,
-    handle_go_url_stats, handle_health_check, handle_join, handle_page_view,
-    handle_participation_analytics, handle_project_participation,
+    handle_contributors, handle_email_event, handle_external_link_clickthrough,
+    handle_external_links, handle_go_url_stats, handle_health_check, handle_join,
+    handle_page_view, handle_participation_analytics, handle_project_participation,
     handle_project_participation_record, handle_recent_activity, handle_top_performers_analytics,
     handle_user_emails_update, handle_user_tags_update,
 };
@@ -206,6 +206,7 @@ async fn main() -> Result<()> {
     let acts_group = svc.group("log.acts");
     toplevel.spawn(handler!(acts_group, "create", handle_acts_of_science_create));
     toplevel.spawn(handler!(acts_group, "to_date", handle_acts_to_date));
+    toplevel.spawn(handler!(acts_group, "contributors", handle_contributors));
 
     // Health endpoint
     let health_group = svc.group("log.health");
@@ -226,6 +227,7 @@ async fn main() -> Result<()> {
     println!("  - log.recent_activity");
     println!("  - log.affiliate_participants");
     println!("  - log.stats.go_url");
+    println!("  - log.acts.contributors");
     println!("  - log.cache.user_tags_update");
     println!("  - log.cache.user_emails_update");
     println!("  - log.health.check");

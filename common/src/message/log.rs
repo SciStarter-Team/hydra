@@ -248,6 +248,32 @@ pub struct ExternalLinkClickthroughResponse {
     pub url: Option<String>,  // None if link_id not found
 }
 
+// Wall of Fame Contributors
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContributorsRequest {
+    pub mode: Option<String>,
+    pub page: Option<i32>,
+    pub letter: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContributorEntry {
+    pub name: Option<String>,
+    pub act: Option<String>,
+    pub project: Option<String>,
+    pub organization: Option<String>,
+    #[serde(rename = "entity__slug")]
+    pub entity_slug: Option<String>,
+    pub date: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContributorsResponse {
+    pub contributors: Vec<ContributorEntry>,
+    pub pages: i32,
+}
+
 // Acts of Science / Citizen Science Month
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

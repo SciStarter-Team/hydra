@@ -3,6 +3,7 @@ use poem::{Route, get, post, Endpoint};
 pub mod v2;
 pub mod user;
 pub mod middleware;
+pub mod import;
 
 /// External API routes - for partner projects (no session auth required)
 /// These use API keys, JWT, or OAuth for authentication
@@ -18,6 +19,8 @@ pub fn external_routes() -> impl Endpoint {
         .at("/participation/articulate", post(v2::record_event_articulate))
         .at("/participation/openid/:slug", post(v2::record_event_openid))
         .at("/participation/openid", post(v2::record_event_openid))
+        // Event import
+        .at("/v2/events/import", post(import::events_import))
 }
 
 /// Authenticated API routes - for logged-in users
