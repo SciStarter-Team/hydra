@@ -3,9 +3,9 @@
 
 <% if self.phase == CsmPhase::April || self.phase == CsmPhase::AprilReached { %>
 <!-- COUNTDOWN-->
-<div class="ss-container mx-auto hidden sm:block">
-  <div class="countdown bg-primary-dark rounded-md flex justify-center gap-4 items-center">
-    <h3 class="text-right text-white text-lg sm:mb-0">Time Left to Participate:</h3>
+<div class="ss-container mx-auto">
+  <div class="countdown bg-primary-dark rounded-md flex flex-wrap justify-center gap-4 items-center">
+    <h3 class="text-center text-white text-lg sm:mb-0">Time Left to Participate:</h3>
     <div class="tick" data-did-init="handleTickInit" id="reverse-flip">
       <div data-repeat="true" data-layout="horizontal fit" data-transform="preset(d, h, m, s) -> delay">
         <div class="tick-group">

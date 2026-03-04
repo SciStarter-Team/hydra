@@ -44,7 +44,8 @@
 
   <!-- Table -->
   <% if !self.contributors.is_empty() { %>
-  <table style="width:100%;border-collapse:collapse;text-align:left;margin-top:1rem">
+  <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+  <table style="width:100%;border-collapse:collapse;text-align:left;margin-top:1rem;min-width:600px">
     <thead style="background:#1a3a5c;color:#fff"><tr>
       <th style="padding:8px">Date</th>
       <th style="padding:8px">Act</th>
@@ -64,6 +65,7 @@
       <% } %>
     </tbody>
   </table>
+  </div>
   <% } else { %>
   <p style="margin-top:1rem;color:#666">No contributors found.</p>
   <% } %>

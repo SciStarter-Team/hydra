@@ -3,12 +3,12 @@
 
 <% if self.phase != CsmPhase::May { %>
 <!-- COUNTDOWN-->
-<div class="ss-container mx-auto hidden sm:block">
-  <div class="countdown bg-primary-dark rounded-md flex justify-center gap-4 items-center">
+<div class="ss-container mx-auto">
+  <div class="countdown bg-primary-dark rounded-md flex flex-wrap justify-center gap-4 items-center">
     <% if self.phase == CsmPhase::PreApril { %>
-    <h3 class="text-right text-white text-lg sm:mb-0">Get Ready to Participate!</h3>
+    <h3 class="text-center text-white text-lg sm:mb-0">Get Ready to Participate!</h3>
     <% } else { %>
-    <h3 class="text-right text-white text-lg sm:mb-0">Time Left to Participate:</h3>
+    <h3 class="text-center text-white text-lg sm:mb-0">Time Left to Participate:</h3>
     <% } %>
     <div class="tick" data-did-init="handleTickInit" id="reverse-flip">
       <div data-repeat="true" data-layout="horizontal fit" data-transform="preset(d, h, m, s) -> delay">
@@ -114,8 +114,8 @@
       <!-- Social Shares (from March 25) -->
       <div class="acts-wrapper mb-16">
         <div class="acts-container text-center">
-          <h3 class="wall-h3">Some Great Social Shares!</h3>
-          <div id="curator-feed-default-feed-layout"><a href="https://curator.io" target="_blank" class="crt-logo crt-tag">Powered by Curator.io</a></div>
+          <h3 class="wall-h3 mt-8">Some Great Social Shares!</h3>
+          <div id="curator-feed-default-feed-layout" style="position:relative;z-index:0"><a href="https://curator.io" target="_blank" class="crt-logo crt-tag">Powered by Curator.io</a></div>
         </div>
       </div>
       <% } %>
@@ -174,8 +174,8 @@
       <!-- Social Shares -->
       <div class="acts-wrapper mb-16">
         <div class="acts-container text-center">
-          <h3 class="wall-h3">Some Great Social Shares!</h3>
-          <div id="curator-feed-default-feed-layout"><a href="https://curator.io" target="_blank" class="crt-logo crt-tag">Powered by Curator.io</a></div>
+          <h3 class="wall-h3 mt-8">Some Great Social Shares!</h3>
+          <div id="curator-feed-default-feed-layout" style="position:relative;z-index:0"><a href="https://curator.io" target="_blank" class="crt-logo crt-tag">Powered by Curator.io</a></div>
         </div>
       </div>
       <% } CsmPhase::May => { %>
@@ -203,8 +203,8 @@
       <!-- Social Shares -->
       <div class="acts-wrapper mb-16">
         <div class="acts-container text-center">
-          <h3 class="wall-h3">Some Great Social Shares!</h3>
-          <div id="curator-feed-default-feed-layout"><a href="https://curator.io" target="_blank" class="crt-logo crt-tag">Powered by Curator.io</a></div>
+          <h3 class="wall-h3 mt-8">Some Great Social Shares!</h3>
+          <div id="curator-feed-default-feed-layout" style="position:relative;z-index:0"><a href="https://curator.io" target="_blank" class="crt-logo crt-tag">Powered by Curator.io</a></div>
         </div>
       </div>
       <% } } %>
