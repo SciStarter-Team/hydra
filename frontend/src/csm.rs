@@ -1,9 +1,13 @@
-use common::message::log::{ActsOfScienceCreateRequest, ActsOfScienceCreateResponse, ActsOfScienceSource, ActsToDateRequest, ActsToDateResponse, ContributorEntry, ContributorsRequest, ContributorsResponse};
+use common::message::log::{
+    ActsOfScienceCreateRequest, ActsOfScienceCreateResponse, ActsOfScienceSource,
+    ActsToDateRequest, ActsToDateResponse, ContributorEntry, ContributorsRequest,
+    ContributorsResponse,
+};
 use common::message::user::BasicInfo;
 use common::shared::db;
-use poem::{Endpoint, Route, get, handler, Response};
 use poem::session::Session;
 use poem::web::{Form, Json, Query, RealIp};
+use poem::{Endpoint, Response, Route, get, handler};
 use sailfish::TemplateOnce;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -26,7 +30,18 @@ impl CsmHero {
     fn tube_values(&self) -> (f64, f64, f64, String, String, f64, bool, Option<String>) {
         let acts = match &self.acts {
             Some(a) => a,
-            None => return (2.0, 40.0, 6.0, String::new(), String::new(), 0.1, false, None),
+            None => {
+                return (
+                    2.0,
+                    40.0,
+                    6.0,
+                    String::new(),
+                    String::new(),
+                    0.1,
+                    false,
+                    None,
+                );
+            }
         };
 
         let capped = (acts.number as f64).min(2_500_000.0);
@@ -41,11 +56,21 @@ impl CsmHero {
         let formatted_count = format_number(acts.number);
 
         let goal_reached = acts.date_reached.is_some();
-        let goal_reached_date = acts.date_reached.as_ref().map(|d| {
-            format!("{}!", format_acts_date(d))
-        });
+        let goal_reached_date = acts
+            .date_reached
+            .as_ref()
+            .map(|d| format!("{}!", format_acts_date(d)));
 
-        (fill_height_px, fill_top_px, counter_bottom_px, formatted_date, formatted_count, animation_duration_s, goal_reached, goal_reached_date)
+        (
+            fill_height_px,
+            fill_top_px,
+            counter_bottom_px,
+            formatted_date,
+            formatted_count,
+            animation_duration_s,
+            goal_reached,
+            goal_reached_date,
+        )
     }
 }
 
@@ -129,40 +154,65 @@ impl CsmPhaseInfo {
         if let Some(phase) = override_phase.and_then(CsmPhase::from_str) {
             let today = jiff::Zoned::now().date().to_string();
             let (acts, phase_override) = match phase {
-                CsmPhase::April => (Some(ActsToDateResponse {
-                    date: today,
-                    number: 1_234_567,
-                    date_reached: None,
-                }), true),
-                CsmPhase::AprilReached => (Some(ActsToDateResponse {
-                    date: today.clone(),
-                    number: 1_234_567,
-                    date_reached: Some(today),
-                }), true),
-                CsmPhase::May => (Some(ActsToDateResponse {
-                    date: today.clone(),
-                    number: 9_999_999,
-                    date_reached: Some(today),
-                }), true),
+                CsmPhase::April => (
+                    Some(ActsToDateResponse {
+                        date: today,
+                        number: 1_234_567,
+                        date_reached: None,
+                    }),
+                    true,
+                ),
+                CsmPhase::AprilReached => (
+                    Some(ActsToDateResponse {
+                        date: today.clone(),
+                        number: 1_234_567,
+                        date_reached: Some(today),
+                    }),
+                    true,
+                ),
+                CsmPhase::May => (
+                    Some(ActsToDateResponse {
+                        date: today.clone(),
+                        number: 9_999_999,
+                        date_reached: Some(today),
+                    }),
+                    true,
+                ),
                 CsmPhase::PreApril => (None, true),
             };
-            return CsmPhaseInfo { phase, acts_to_date: acts, phase_override };
+            return CsmPhaseInfo {
+                phase,
+                acts_to_date: acts,
+                phase_override,
+            };
         }
 
         let today = jiff::Zoned::now().date();
         let month: i32 = today.month().into();
 
         if month < 4 {
-            return CsmPhaseInfo { phase: CsmPhase::PreApril, acts_to_date: None, phase_override: false };
+            return CsmPhaseInfo {
+                phase: CsmPhase::PreApril,
+                acts_to_date: None,
+                phase_override: false,
+            };
         }
 
         if month >= 6 {
-            return CsmPhaseInfo { phase: CsmPhase::PreApril, acts_to_date: None, phase_override: false };
+            return CsmPhaseInfo {
+                phase: CsmPhase::PreApril,
+                acts_to_date: None,
+                phase_override: false,
+            };
         }
 
         if month == 5 {
             let acts = acts_to_date(None).await.ok();
-            return CsmPhaseInfo { phase: CsmPhase::May, acts_to_date: acts, phase_override: false };
+            return CsmPhaseInfo {
+                phase: CsmPhase::May,
+                acts_to_date: acts,
+                phase_override: false,
+            };
         }
 
         // month == 4, check if goal reached
@@ -173,9 +223,17 @@ impl CsmPhaseInfo {
                 } else {
                     CsmPhase::April
                 };
-                CsmPhaseInfo { phase, acts_to_date: Some(response), phase_override: false }
+                CsmPhaseInfo {
+                    phase,
+                    acts_to_date: Some(response),
+                    phase_override: false,
+                }
             }
-            Err(_) => CsmPhaseInfo { phase: CsmPhase::April, acts_to_date: None, phase_override: false },
+            Err(_) => CsmPhaseInfo {
+                phase: CsmPhase::April,
+                acts_to_date: None,
+                phase_override: false,
+            },
         }
     }
 }
@@ -287,7 +345,11 @@ async fn csm_participate(
     .await?;
 
     CsmParticipatePage {
-        head: Head::default().with_slick().with_geosearch().prepare(None).await?,
+        head: Head::default()
+            .with_slick()
+            .with_geosearch()
+            .prepare(None)
+            .await?,
         layout,
     }
     .into_response(None)
@@ -311,6 +373,7 @@ struct CsmReportContent {
     user_info: Option<Arc<BasicInfo>>,
     error_message: Option<String>,
     success: bool,
+    reporting_open: bool,
 }
 
 #[handler]
@@ -319,12 +382,18 @@ async fn csm_report(
     RealIp(_client_ip): RealIp,
     Authenticated(user_info): Authenticated,
 ) -> Result<Response, anyhow::Error> {
+    let today = jiff::Zoned::now().date();
+    let month: i32 = today.month().into();
+    let day: i32 = today.day().into();
+    let reporting_open = month == 4 || (month == 5 && day <= 3);
+
     let layout = StandardLayout::new(
         "/citizensciencemonth/report",
         CsmReportContent {
             user_info: user_info.clone(),
             error_message: None,
             success: false,
+            reporting_open,
         },
     )
     .prepare(user_info.clone())
@@ -394,12 +463,18 @@ async fn csm_report_submit(
         Err(e) => (Some(e.to_string()), false),
     };
 
+    let today = jiff::Zoned::now().date();
+    let month: i32 = today.month().into();
+    let day: i32 = today.day().into();
+    let reporting_open = month == 4 || (month == 5 && day <= 3);
+
     let layout = StandardLayout::new(
         "/citizensciencemonth/report",
         CsmReportContent {
             user_info: user_info.clone(),
             error_message,
             success,
+            reporting_open,
         },
     )
     .prepare(user_info.clone())
@@ -450,14 +525,70 @@ struct WallOfFameFragment {
 
 fn fake_contributors() -> Vec<ContributorEntry> {
     vec![
-        ContributorEntry { date: Some("Apr 17".into()), act: Some("Attended an event".into()), name: Some("David K.".into()), project: Some("BioBlitz".into()), organization: Some("National Geographic".into()), entity_slug: None },
-        ContributorEntry { date: Some("Apr 15".into()), act: Some("Completed a project".into()), name: Some("Sarah L.".into()), project: Some("CoCoRaHS".into()), organization: Some("Colorado State University".into()), entity_slug: None },
-        ContributorEntry { date: Some("Apr 13".into()), act: Some("Submitted observations".into()), name: Some("Kenji M.".into()), project: Some("eBird".into()), organization: Some("Cornell Lab of Ornithology".into()), entity_slug: None },
-        ContributorEntry { date: Some("Apr 11".into()), act: Some("Completed training".into()), name: Some("Emily W.".into()), project: Some("Foundations of Citizen Science".into()), organization: Some("SciStarter".into()), entity_slug: None },
-        ContributorEntry { date: Some("Apr 9".into()), act: Some("Analyzed data".into()), name: Some("Carlos R.".into()), project: Some("Zooniverse".into()), organization: Some("University of Oxford".into()), entity_slug: None },
-        ContributorEntry { date: Some("Apr 7".into()), act: Some("Submitted observations".into()), name: Some("Priya S.".into()), project: Some("iNaturalist".into()), organization: Some("California Academy of Sciences".into()), entity_slug: None },
-        ContributorEntry { date: Some("Apr 5".into()), act: Some("Attended an event".into()), name: Some("James T.".into()), project: Some("City Nature Challenge".into()), organization: Some("Natural History Museum".into()), entity_slug: None },
-        ContributorEntry { date: Some("Apr 3".into()), act: Some("Completed a project".into()), name: Some("Maria G.".into()), project: Some("Globe Observer".into()), organization: Some("NASA".into()), entity_slug: None },
+        ContributorEntry {
+            date: Some("Apr 17".into()),
+            act: Some("Attended an event".into()),
+            name: Some("David K.".into()),
+            project: Some("BioBlitz".into()),
+            organization: Some("National Geographic".into()),
+            entity_slug: None,
+        },
+        ContributorEntry {
+            date: Some("Apr 15".into()),
+            act: Some("Completed a project".into()),
+            name: Some("Sarah L.".into()),
+            project: Some("CoCoRaHS".into()),
+            organization: Some("Colorado State University".into()),
+            entity_slug: None,
+        },
+        ContributorEntry {
+            date: Some("Apr 13".into()),
+            act: Some("Submitted observations".into()),
+            name: Some("Kenji M.".into()),
+            project: Some("eBird".into()),
+            organization: Some("Cornell Lab of Ornithology".into()),
+            entity_slug: None,
+        },
+        ContributorEntry {
+            date: Some("Apr 11".into()),
+            act: Some("Completed training".into()),
+            name: Some("Emily W.".into()),
+            project: Some("Foundations of Citizen Science".into()),
+            organization: Some("SciStarter".into()),
+            entity_slug: None,
+        },
+        ContributorEntry {
+            date: Some("Apr 9".into()),
+            act: Some("Analyzed data".into()),
+            name: Some("Carlos R.".into()),
+            project: Some("Zooniverse".into()),
+            organization: Some("University of Oxford".into()),
+            entity_slug: None,
+        },
+        ContributorEntry {
+            date: Some("Apr 7".into()),
+            act: Some("Submitted observations".into()),
+            name: Some("Priya S.".into()),
+            project: Some("iNaturalist".into()),
+            organization: Some("California Academy of Sciences".into()),
+            entity_slug: None,
+        },
+        ContributorEntry {
+            date: Some("Apr 5".into()),
+            act: Some("Attended an event".into()),
+            name: Some("James T.".into()),
+            project: Some("City Nature Challenge".into()),
+            organization: Some("Natural History Museum".into()),
+            entity_slug: None,
+        },
+        ContributorEntry {
+            date: Some("Apr 3".into()),
+            act: Some("Completed a project".into()),
+            name: Some("Maria G.".into()),
+            project: Some("Globe Observer".into()),
+            organization: Some("NASA".into()),
+            entity_slug: None,
+        },
     ]
 }
 
@@ -476,7 +607,11 @@ pub async fn csm_wall_of_fame(
         let request = ContributorsRequest {
             mode: Some(mode.clone()),
             page: Some(page),
-            letter: if mode == "name" { Some(letter.clone()) } else { None },
+            letter: if mode == "name" {
+                Some(letter.clone())
+            } else {
+                None
+            },
         };
         let response: ContributorsResponse =
             common::service::request("log.acts.contributors", request).await?;
@@ -493,14 +628,18 @@ pub async fn csm_wall_of_fame(
     }
     .render_once()?;
 
-    Ok(Response::builder()
-        .content_type("text/html")
-        .body(html))
+    Ok(Response::builder().content_type("text/html").body(html))
 }
 
 // ============================================================================
 // HTMX: Staff Picks Fragment
 // ============================================================================
+
+fn truncate_string(src: impl Into<String>, at: usize) -> String {
+    let mut ret = src.into();
+    ret.truncate(at);
+    ret
+}
 
 #[derive(TemplateOnce)]
 #[template(path = "pages/csm/picks.stpl.html")]
@@ -516,9 +655,7 @@ pub async fn csm_picks() -> Result<Response, anyhow::Error> {
 
     let html = CsmPicksFragment { picks }.render_once()?;
 
-    Ok(Response::builder()
-        .content_type("text/html")
-        .body(html))
+    Ok(Response::builder().content_type("text/html").body(html))
 }
 
 // ============================================================================
@@ -634,14 +771,16 @@ fn get_april_range() -> (String, String) {
 const LOCATION_RADIUS_METERS: f64 = 160934.0;
 
 #[handler]
-pub async fn csm_events(
-    Query(query): Query<CsmEventsQuery>,
-) -> Result<Response, anyhow::Error> {
+pub async fn csm_events(Query(query): Query<CsmEventsQuery>) -> Result<Response, anyhow::Error> {
     let page = query.page.unwrap_or(1).max(1);
     let offset = (page - 1) * EVENTS_PAGE_SIZE;
 
     let (default_start, april_end) = get_april_range();
-    let start_date = query.start_date.as_deref().filter(|s| !s.is_empty()).unwrap_or(&default_start);
+    let start_date = query
+        .start_date
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .unwrap_or(&default_start);
     let online_only = query.online_only.unwrap_or(false);
     let signature_only = query.signature_only.unwrap_or(false);
     let keywords_filter = query
@@ -720,10 +859,7 @@ pub async fn csm_events(
         lng,
     );
 
-    let total_count: i64 = count_qb
-        .build_query_scalar()
-        .fetch_one(db())
-        .await?;
+    let total_count: i64 = count_qb.build_query_scalar().fetch_one(db()).await?;
 
     let total_pages = (total_count + EVENTS_PAGE_SIZE - 1) / EVENTS_PAGE_SIZE;
 
@@ -755,7 +891,17 @@ pub async fn csm_events(
     results_qb.push_bind(offset);
 
     let rows = results_qb
-        .build_query_as::<(String, String, String, String, bool, String, String, String, String)>()
+        .build_query_as::<(
+            String,
+            String,
+            String,
+            String,
+            bool,
+            String,
+            String,
+            String,
+            String,
+        )>()
         .fetch_all(db())
         .await?;
 
@@ -792,9 +938,154 @@ pub async fn csm_events(
     }
     .render_once()?;
 
+    Ok(Response::builder().content_type("text/html").body(html))
+}
+
+// ============================================================================
+// HTMX: CSM Project/Event Autocomplete (April-filtered)
+// ============================================================================
+
+#[derive(Deserialize)]
+struct CsmAutocompleteQuery {
+    project: Option<String>,
+}
+
+#[handler]
+pub async fn csm_autocomplete_projects(
+    Query(query): Query<CsmAutocompleteQuery>,
+) -> Result<Response, anyhow::Error> {
+    let search_term = query.project.as_deref().unwrap_or("").trim().to_string();
+    if search_term.len() < 3 {
+        return Ok(Response::builder()
+            .content_type("text/html")
+            .body(r#"<datalist id="projects"></datalist>"#));
+    }
+
+    let today = jiff::Zoned::now().date();
+    let year: i32 = today.year().into();
+    let april_start = format!("{}-04-01", year);
+    let april_end = format!("{}-04-30T23:59:59", year);
+    let search_pattern = format!("%{}%", search_term);
+
+    // Search published projects overlapping April
+    let project_rows = sqlx::query_as::<_, (String,)>(
+        "SELECT p.name FROM projects p \
+         JOIN entities e ON e.target = p.project_id AND e.kind = 'Project' \
+         WHERE e.publish = 1 \
+         AND p.name LIKE ?1 \
+         AND (p.begin IS NULL OR p.begin = '' OR p.begin <= ?2) \
+         AND (p.end IS NULL OR p.end = '' OR p.end >= ?3) \
+         ORDER BY p.name LIMIT 10",
+    )
+    .bind(&search_pattern)
+    .bind(&april_end)
+    .bind(&april_start)
+    .fetch_all(db())
+    .await
+    .unwrap_or_default();
+
+    // Search published events with instances overlapping April
+    let event_rows = sqlx::query_as::<_, (String,)>(
+        "SELECT DISTINCT ev.name FROM events ev \
+         JOIN entities e ON e.target = ev.event_id AND e.kind = 'Event' \
+         JOIN event_instances ei ON ei.event_id = ev.event_id \
+         WHERE e.publish = 1 \
+         AND ev.name LIKE ?1 \
+         AND ei.begin <= ?2 \
+         AND ei.end >= ?3 \
+         ORDER BY ev.name LIMIT 10",
+    )
+    .bind(&search_pattern)
+    .bind(&april_end)
+    .bind(&april_start)
+    .fetch_all(db())
+    .await
+    .unwrap_or_default();
+
+    let mut names: Vec<String> = project_rows
+        .into_iter()
+        .chain(event_rows.into_iter())
+        .map(|(name,)| name)
+        .collect();
+    names.sort();
+    names.truncate(20);
+
+    let options: String = names
+        .iter()
+        .map(|n| format!(r#"<option value="{}"></option>"#, html_escape(n)))
+        .collect();
+
     Ok(Response::builder()
         .content_type("text/html")
-        .body(html))
+        .body(format!(r#"<datalist id="projects">{}</datalist>"#, options)))
+}
+
+fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
+// ============================================================================
+// HTMX: CSM Country Autocomplete
+// ============================================================================
+
+#[derive(Deserialize)]
+struct CsmCountryQuery {
+    country: Option<String>,
+}
+
+const COUNTRIES: &[&str] = &include!("countries.txt");
+
+#[handler]
+pub async fn csm_autocomplete_countries(
+    Query(query): Query<CsmCountryQuery>,
+) -> Result<Response, anyhow::Error> {
+    let search_term = query
+        .country
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .to_lowercase();
+    if search_term.len() < 2 {
+        return Ok(Response::builder()
+            .content_type("text/html")
+            .body(r#"<datalist id="countries"></datalist>"#));
+    }
+
+    let abbreviations: &[(&str, &str)] = &[
+        ("usa", "United States of America"),
+        ("us", "United States of America"),
+        ("uk", "United Kingdom of Great Britain and Northern Ireland"),
+        ("uae", "United Arab Emirates"),
+    ];
+
+    let mut matches: Vec<&str> = COUNTRIES
+        .iter()
+        .filter(|c| !c.is_empty() && c.to_lowercase().contains(&search_term))
+        .copied()
+        .collect();
+
+    if let Some((_, full)) = abbreviations.iter().find(|(abbr, _)| *abbr == search_term) {
+        if !matches.iter().any(|m| m == full) {
+            matches.insert(0, full);
+        }
+    }
+
+    matches.truncate(20);
+
+    let options: String = matches
+        .iter()
+        .map(|c| format!(r#"<option value="{}"></option>"#, html_escape(c)))
+        .collect();
+
+    Ok(Response::builder()
+        .content_type("text/html")
+        .body(format!(
+            r#"<datalist id="countries">{}</datalist>"#,
+            options
+        )))
 }
 
 // ============================================================================

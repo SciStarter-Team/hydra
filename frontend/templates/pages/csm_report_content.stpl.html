@@ -1,6 +1,14 @@
 <% use crate::csm::{CsmPhase, CsmHero, CsmNav, CsmSponsors}; %>
 <%+ CsmHero { phase: CsmPhase::April, acts: None, phase_override: false } %>
 
+<style>
+.was-validated input:invalid,
+.was-validated textarea:invalid {
+  outline: 2px solid #dc2626;
+  outline-offset: -1px;
+}
+</style>
+
 <div class="ss-container mx-auto mt-8">
   <%+ CsmNav { phase: CsmPhase::April, active: "report" } %>
 
@@ -70,12 +78,12 @@
 
           <div class="mb-4">
             <label for="ind-project" class="block font-semibold mb-1">Project Name (optional)</label>
-            <input type="text" id="ind-project" name="project" class="wa-input w-full" />
+            <input type="text" id="ind-project" name="project" class="wa-input w-full" list="projects" hx-get="/-csm/autocomplete/projects" hx-trigger="keyup changed delay:300ms" hx-target="#projects" />
           </div>
 
           <div class="mb-4">
             <label for="ind-country" class="block font-semibold mb-1">Country (optional)</label>
-            <input type="text" id="ind-country" name="country" class="wa-input w-full" />
+            <input type="text" id="ind-country" name="country" class="wa-input w-full" list="countries" hx-get="/-csm/autocomplete/countries" hx-trigger="keyup changed delay:300ms" hx-target="#countries" />
           </div>
 
           <div class="mb-4">
@@ -91,7 +99,11 @@
           </div>
 
           <div class="text-center">
+            <% if self.reporting_open { %>
             <button type="submit" class="btn btn-primary">Submit Your Report &raquo;</button>
+            <% } else { %>
+            <button type="button" class="btn btn-primary" disabled>Reporting Starts April 1</button>
+            <% } %>
           </div>
         </form>
       </div>
@@ -131,7 +143,7 @@
 
           <div class="mb-4">
             <label for="grp-project" class="block font-semibold mb-1">Project Name (optional)</label>
-            <input type="text" id="grp-project" name="project" class="wa-input w-full" />
+            <input type="text" id="grp-project" name="project" class="wa-input w-full" list="projects" hx-get="/-csm/autocomplete/projects" hx-trigger="keyup changed delay:300ms" hx-target="#projects" />
           </div>
 
           <div class="mb-4">
@@ -141,7 +153,7 @@
 
           <div class="mb-4">
             <label for="grp-country" class="block font-semibold mb-1">Country (optional)</label>
-            <input type="text" id="grp-country" name="country" class="wa-input w-full" />
+            <input type="text" id="grp-country" name="country" class="wa-input w-full" list="countries" hx-get="/-csm/autocomplete/countries" hx-trigger="keyup changed delay:300ms" hx-target="#countries" />
           </div>
 
           <div class="mb-4">
@@ -157,7 +169,11 @@
           </div>
 
           <div class="text-center">
+            <% if self.reporting_open { %>
             <button type="submit" class="btn btn-primary">Submit Group Report &raquo;</button>
+            <% } else { %>
+            <button type="button" class="btn btn-primary" disabled>Reporting Starts April 1</button>
+            <% } %>
           </div>
         </form>
       </div>
@@ -167,6 +183,9 @@
     </div>
   </div>
 </div>
+
+<datalist id="projects"></datalist>
+<datalist id="countries"></datalist>
 
 <%+ CsmSponsors {} %>
 
@@ -189,6 +208,20 @@
   window.addEventListener('resize', updateChevron);
   window.addEventListener('load', updateChevron);
 })();
+</script>
+
+<!-- Form validation visual cue -->
+<script>
+document.querySelectorAll('.acts-form-form, form[action*="report"]').forEach(function(form) {
+  form.addEventListener('submit', function() {
+    this.classList.add('was-validated');
+  });
+  form.querySelectorAll('input, textarea').forEach(function(el) {
+    el.addEventListener('invalid', function() {
+      this.closest('form').classList.add('was-validated');
+    });
+  });
+});
 </script>
 
 <!-- Slick Carousel for Sponsors (jQuery + Slick loaded via Head.with_slick()) -->

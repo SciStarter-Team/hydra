@@ -17,6 +17,7 @@ mod scheduled;
 mod sends;
 mod ses;
 mod stored_emails;
+mod sync;
 mod template;
 mod triggers;
 
@@ -153,6 +154,9 @@ async fn main() {
     toplevel.spawn(async move {
         processor::run_scheduled_processor().await;
     });
+
+    // Spawn unsubscribe sync background task
+    toplevel.spawn(sync::synchronize_unsubscribes());
 
     println!("Emailer service ready");
 

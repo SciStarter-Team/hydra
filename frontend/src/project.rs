@@ -1,6 +1,8 @@
 pub mod all;
 pub mod field;
 pub mod field_source;
+pub mod investigator;
+pub mod reference;
 
 #[derive(Clone, Copy, Default, Debug, sqlx::Type, serde::Serialize, serde::Deserialize)]
 pub enum ProjectStatus {

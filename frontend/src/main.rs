@@ -3,6 +3,7 @@ pub mod api;
 pub mod auth;
 pub mod badge;
 pub mod builder;
+pub mod certificates;
 pub mod channel;
 pub mod communities;
 pub mod component;
@@ -11,6 +12,7 @@ pub mod contact;
 pub mod dev;
 pub mod emailer;
 pub mod entity;
+pub mod entity_list;
 pub mod event;
 pub mod evolveme;
 pub mod exchange;
@@ -260,6 +262,8 @@ fn user_facing() -> impl Endpoint {
         .at("/-csm/picks", get(csm::csm_picks))
         .at("/-csm/events", get(csm::csm_events))
         .at("/-csm/wall-of-fame", get(csm::csm_wall_of_fame))
+        .at("/-csm/autocomplete/projects", get(csm::csm_autocomplete_projects))
+        .at("/-csm/autocomplete/countries", get(csm::csm_autocomplete_countries))
         .at("/-entity-password/*slug", post(entity_password_verify))
         .at("/*slug", get(entity_page))
         .with(middleware::analytics::AnalyticsMiddleware)
@@ -281,6 +285,10 @@ fn dynamic() -> impl Endpoint {
         .nest("/-admin", admin::routes().catch_all_error(error_dispatch))
         .nest("/-channel", channel::routes())
         .nest("/-ui", ui::routes())
+        .at(
+            "/-certificate/:certificate_id",
+            get(certificates::download_certificate),
+        )
         .nest("/-upload", upload::authenticated_routes())
         .nest("/-forum", component::forum::forum_routes())
         .nest("/-webauthn", auth::webauthn_routes())
@@ -378,9 +386,19 @@ async fn main() -> Result<(), Error> {
     let _pagebuilder_component_updates =
         tokio::spawn(pagebuilder::PageBuilderComponent::peering_task());
     let _pagebuilder_page_updates = tokio::spawn(pagebuilder::PageBuilderPage::peering_task());
+    let _project_reference_updates =
+        tokio::spawn(project::reference::ProjectReference::peering_task());
+    let _project_investigator_updates =
+        tokio::spawn(project::investigator::ProjectInvestigator::peering_task());
+    let _entity_list_updates = tokio::spawn(entity_list::EntityList::peering_task());
+    let _entity_list_entry_updates = tokio::spawn(entity_list::EntityListEntry::peering_task());
 
     let _synchronize_projects = tokio::spawn(sync::synchronize_projects());
     let _synchronize_events = tokio::spawn(sync::synchronize_events());
+    let _synchronize_references = tokio::spawn(sync::synchronize_references());
+    let _synchronize_investigators = tokio::spawn(sync::synchronize_investigators());
+    let _synchronize_entity_lists = tokio::spawn(sync::synchronize_entity_lists());
+    let _synchronize_entity_list_entries = tokio::spawn(sync::synchronize_entity_list_entries());
     let _update_expired_statuses = tokio::spawn(sync::update_expired_statuses());
     let _periodic_maintenance = tokio::spawn(periodic_maintenance());
 
@@ -1513,6 +1531,589 @@ mod sync {
                 .expect("Saving sync bookmark failed");
 
             if got_events == 50 {
+                sleep(Duration::from_secs(60)).await;
+            } else {
+                sleep(Duration::from_secs(60 * 60)).await;
+            }
+        }
+    }
+
+    #[derive(Debug, serde::Deserialize)]
+    struct ReferenceData {
+        id: i32,
+        entity_ulid: String,
+        label: String,
+        reference_type: String,
+        url: String,
+        citation: String,
+        detailed_citation: String,
+        updated: String,
+    }
+
+    #[tracing::instrument]
+    pub async fn synchronize_references() -> Result<(), anyhow::Error> {
+        use crate::project::reference::{ProjectReference, ReferenceType};
+
+        loop {
+            let last_update = misc::get("reference-sync-bookmark-update")
+                .await
+                .expect("Retrieving sync bookmark failed")
+                .unwrap_or_else(|| String::from("2000-01-01T00:00:00.0Z"));
+
+            let last_id = misc::get("reference-sync-bookmark-id")
+                .await
+                .expect("Retrieving sync bookmark failed.")
+                .unwrap_or(0);
+
+            let client = reqwest::Client::new();
+
+            tracing::info!(
+                "Retrieving references since {} {}...",
+                &last_update,
+                last_id
+            );
+
+            let references: Vec<ReferenceData> = match client
+                .get("https://scistarter.org/staff/sync/references")
+                .bearer_auth(env!("SYNC_TOKEN"))
+                .query(&[("since", &last_update), ("last_id", &last_id.to_string())])
+                .send()
+                .await
+            {
+                Ok(response) => match response.error_for_status() {
+                    Ok(resp) => {
+                        let response_text = match resp.text().await {
+                            Ok(text) => text,
+                            Err(e) => {
+                                eprintln!("Failed to read response body: {}", e);
+                                sleep(Duration::from_secs(60)).await;
+                                continue;
+                            }
+                        };
+
+                        match serde_json::from_str(&response_text) {
+                            Ok(refs) => refs,
+                            Err(e) => {
+                                eprintln!("JSON parsing error: {}", e);
+                                eprintln!("Response body: {}", response_text);
+                                sleep(Duration::from_secs(60)).await;
+                                continue;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("HTTP error: {}", e);
+                        sleep(Duration::from_secs(60)).await;
+                        continue;
+                    }
+                },
+                Err(e) => {
+                    eprintln!("Request error: {}", e);
+                    sleep(Duration::from_secs(60)).await;
+                    continue;
+                }
+            };
+
+            let mut bookmark = (last_update.clone(), last_id);
+
+            let got_references = references.len();
+            tracing::info!("Synchronization received {} references", got_references);
+
+            for data in references {
+                let entity_id: Ulid = match data.entity_ulid.parse() {
+                    Ok(ulid) => ulid,
+                    Err(err) => {
+                        tracing::error!(
+                            "Error parsing entity ULID {:?}: {}",
+                            data.entity_ulid,
+                            err
+                        );
+                        continue;
+                    }
+                };
+
+                let reference_type: ReferenceType =
+                    data.reference_type.parse().unwrap_or_default();
+
+                let reference = ProjectReference {
+                    reference_id: Ulid::new(),
+                    entity_id,
+                    label: data.label,
+                    reference_type,
+                    url: data.url,
+                    citation: data.citation,
+                    detailed_citation: data.detailed_citation,
+                    sort_order: 0,
+                };
+
+                if let Err(err) = reference.store().await {
+                    tracing::error!("Error saving reference: {}", err);
+                    continue;
+                }
+
+                let new_bookmark = (data.updated.clone(), data.id);
+                if new_bookmark > bookmark {
+                    bookmark = new_bookmark;
+                }
+            }
+
+            misc::set("reference-sync-bookmark-update", bookmark.0)
+                .await
+                .expect("Saving sync bookmark failed");
+
+            misc::set("reference-sync-bookmark-id", bookmark.1)
+                .await
+                .expect("Saving sync bookmark failed");
+
+            if got_references == 500 {
+                sleep(Duration::from_secs(60)).await;
+            } else {
+                sleep(Duration::from_secs(60 * 60)).await;
+            }
+        }
+    }
+
+    #[derive(Debug, serde::Deserialize)]
+    struct InvestigatorData {
+        id: i32,
+        entity_ulid: String,
+        name: String,
+        affiliation: String,
+        updated: String,
+    }
+
+    #[tracing::instrument]
+    pub async fn synchronize_investigators() -> Result<(), anyhow::Error> {
+        use crate::project::investigator::ProjectInvestigator;
+
+        loop {
+            let last_update = misc::get("investigator-sync-bookmark-update")
+                .await
+                .expect("Retrieving sync bookmark failed")
+                .unwrap_or_else(|| String::from("2000-01-01T00:00:00.0Z"));
+
+            let last_id = misc::get("investigator-sync-bookmark-id")
+                .await
+                .expect("Retrieving sync bookmark failed.")
+                .unwrap_or(0);
+
+            let client = reqwest::Client::new();
+
+            tracing::info!(
+                "Retrieving investigators since {} {}...",
+                &last_update,
+                last_id
+            );
+
+            let investigators: Vec<InvestigatorData> = match client
+                .get("https://scistarter.org/staff/sync/investigators")
+                .bearer_auth(env!("SYNC_TOKEN"))
+                .query(&[("since", &last_update), ("last_id", &last_id.to_string())])
+                .send()
+                .await
+            {
+                Ok(response) => match response.error_for_status() {
+                    Ok(resp) => {
+                        let response_text = match resp.text().await {
+                            Ok(text) => text,
+                            Err(e) => {
+                                eprintln!("Failed to read response body: {}", e);
+                                sleep(Duration::from_secs(60)).await;
+                                continue;
+                            }
+                        };
+
+                        match serde_json::from_str(&response_text) {
+                            Ok(invs) => invs,
+                            Err(e) => {
+                                eprintln!("JSON parsing error: {}", e);
+                                eprintln!("Response body: {}", response_text);
+                                sleep(Duration::from_secs(60)).await;
+                                continue;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("HTTP error: {}", e);
+                        sleep(Duration::from_secs(60)).await;
+                        continue;
+                    }
+                },
+                Err(e) => {
+                    eprintln!("Request error: {}", e);
+                    sleep(Duration::from_secs(60)).await;
+                    continue;
+                }
+            };
+
+            let mut bookmark = (last_update.clone(), last_id);
+
+            let got_investigators = investigators.len();
+            tracing::info!(
+                "Synchronization received {} investigators",
+                got_investigators
+            );
+
+            for data in investigators {
+                let entity_id: Ulid = match data.entity_ulid.parse() {
+                    Ok(ulid) => ulid,
+                    Err(err) => {
+                        tracing::error!(
+                            "Error parsing entity ULID {:?}: {}",
+                            data.entity_ulid,
+                            err
+                        );
+                        continue;
+                    }
+                };
+
+                let investigator = ProjectInvestigator {
+                    investigator_id: Ulid::new(),
+                    entity_id,
+                    name: data.name,
+                    affiliation: data.affiliation,
+                    sort_order: 0,
+                };
+
+                if let Err(err) = investigator.store().await {
+                    tracing::error!("Error saving investigator: {}", err);
+                    continue;
+                }
+
+                let new_bookmark = (data.updated.clone(), data.id);
+                if new_bookmark > bookmark {
+                    bookmark = new_bookmark;
+                }
+            }
+
+            misc::set("investigator-sync-bookmark-update", bookmark.0)
+                .await
+                .expect("Saving sync bookmark failed");
+
+            misc::set("investigator-sync-bookmark-id", bookmark.1)
+                .await
+                .expect("Saving sync bookmark failed");
+
+            if got_investigators == 500 {
+                sleep(Duration::from_secs(60)).await;
+            } else {
+                sleep(Duration::from_secs(60 * 60)).await;
+            }
+        }
+    }
+
+    #[derive(Debug, serde::Deserialize)]
+    struct EntityListData {
+        id: i32,
+        created: String,
+        private: bool,
+        owner_ulid: String,
+        delegate_ulid: Option<String>,
+        name: String,
+        note: String,
+        sidebar: String,
+        slug: Option<String>,
+        hide_identity_form: bool,
+        image: Option<String>,
+    }
+
+    #[tracing::instrument]
+    pub async fn synchronize_entity_lists() -> Result<(), anyhow::Error> {
+        use crate::entity_list::EntityList;
+        use common::shared::db;
+
+        loop {
+            let last_update = misc::get("entity-list-sync-bookmark-update")
+                .await
+                .expect("Retrieving sync bookmark failed")
+                .unwrap_or_else(|| String::from("2000-01-01T00:00:00.0Z"));
+
+            let last_id = misc::get("entity-list-sync-bookmark-id")
+                .await
+                .expect("Retrieving sync bookmark failed.")
+                .unwrap_or(0);
+
+            let client = reqwest::Client::new();
+
+            tracing::info!(
+                "Retrieving entity lists since {} {}...",
+                &last_update,
+                last_id
+            );
+
+            let lists: Vec<EntityListData> = match client
+                .get("https://scistarter.org/staff/sync/entity_lists")
+                .bearer_auth(env!("SYNC_TOKEN"))
+                .query(&[("since", &last_update), ("last_id", &last_id.to_string())])
+                .send()
+                .await
+            {
+                Ok(response) => match response.error_for_status() {
+                    Ok(resp) => {
+                        let response_text = match resp.text().await {
+                            Ok(text) => text,
+                            Err(e) => {
+                                eprintln!("Failed to read response body: {}", e);
+                                sleep(Duration::from_secs(60)).await;
+                                continue;
+                            }
+                        };
+
+                        match serde_json::from_str(&response_text) {
+                            Ok(lists) => lists,
+                            Err(e) => {
+                                eprintln!("JSON parsing error: {}", e);
+                                eprintln!("Response body: {}", response_text);
+                                sleep(Duration::from_secs(60)).await;
+                                continue;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("HTTP error: {}", e);
+                        sleep(Duration::from_secs(60)).await;
+                        continue;
+                    }
+                },
+                Err(e) => {
+                    eprintln!("Request error: {}", e);
+                    sleep(Duration::from_secs(60)).await;
+                    continue;
+                }
+            };
+
+            let mut bookmark = (last_update.clone(), last_id);
+
+            let got_lists = lists.len();
+            tracing::info!("Synchronization received {} entity lists", got_lists);
+
+            for data in lists {
+                let owner_id: Ulid = match data.owner_ulid.parse() {
+                    Ok(ulid) => ulid,
+                    Err(err) => {
+                        tracing::error!(
+                            "Error parsing owner ULID {:?}: {}",
+                            data.owner_ulid,
+                            err
+                        );
+                        continue;
+                    }
+                };
+
+                let delegate_id: Option<Ulid> = data
+                    .delegate_ulid
+                    .as_deref()
+                    .and_then(|s| s.parse().ok());
+
+                // Check if we already have a mapping for this orrery ID
+                let existing = sqlx::query_scalar!(
+                    "SELECT list_id FROM entity_list_id_map WHERE orrery_id = ?",
+                    data.id,
+                )
+                .fetch_optional(db())
+                .await
+                .ok()
+                .flatten();
+
+                let list_id: Ulid = if let Some(existing_id) = existing {
+                    existing_id.parse().unwrap_or_else(|_| Ulid::new())
+                } else {
+                    Ulid::new()
+                };
+
+                let entity_list = EntityList {
+                    list_id,
+                    created_at: data.created,
+                    private: data.private,
+                    owner_id,
+                    delegate_id,
+                    name: data.name,
+                    note: data.note,
+                    sidebar: data.sidebar,
+                    slug: data.slug,
+                    hide_identity_form: data.hide_identity_form,
+                    image: data.image.unwrap_or_default(),
+                };
+
+                if let Err(err) = entity_list.store().await {
+                    tracing::error!("Error saving entity list: {}", err);
+                    continue;
+                }
+
+                // Store orrery ID → hydra ULID mapping
+                let list_id_str = list_id.to_string();
+                sqlx::query!(
+                    "INSERT OR REPLACE INTO entity_list_id_map (orrery_id, list_id) VALUES (?, ?)",
+                    data.id,
+                    list_id_str,
+                )
+                .execute(db())
+                .await
+                .ok();
+
+                let new_bookmark = (entity_list.created_at.clone(), data.id);
+                if new_bookmark > bookmark {
+                    bookmark = new_bookmark;
+                }
+            }
+
+            misc::set("entity-list-sync-bookmark-update", bookmark.0)
+                .await
+                .expect("Saving sync bookmark failed");
+
+            misc::set("entity-list-sync-bookmark-id", bookmark.1)
+                .await
+                .expect("Saving sync bookmark failed");
+
+            if got_lists == 500 {
+                sleep(Duration::from_secs(60)).await;
+            } else {
+                sleep(Duration::from_secs(60 * 60)).await;
+            }
+        }
+    }
+
+    #[derive(Debug, serde::Deserialize)]
+    struct EntityListEntryData {
+        id: i32,
+        list_orrery_id: i32,
+        priority: i32,
+        when: String,
+        entity_slug: String,
+        note: String,
+        link: String,
+    }
+
+    #[tracing::instrument]
+    pub async fn synchronize_entity_list_entries() -> Result<(), anyhow::Error> {
+        use crate::entity_list::EntityListEntry;
+        use common::shared::db;
+
+        loop {
+            let last_update = misc::get("entity-list-entry-sync-bookmark-update")
+                .await
+                .expect("Retrieving sync bookmark failed")
+                .unwrap_or_else(|| String::from("2000-01-01T00:00:00.0Z"));
+
+            let last_id = misc::get("entity-list-entry-sync-bookmark-id")
+                .await
+                .expect("Retrieving sync bookmark failed.")
+                .unwrap_or(0);
+
+            let client = reqwest::Client::new();
+
+            tracing::info!(
+                "Retrieving entity list entries since {} {}...",
+                &last_update,
+                last_id
+            );
+
+            let entries: Vec<EntityListEntryData> = match client
+                .get("https://scistarter.org/staff/sync/entity_list_entries")
+                .bearer_auth(env!("SYNC_TOKEN"))
+                .query(&[("since", &last_update), ("last_id", &last_id.to_string())])
+                .send()
+                .await
+            {
+                Ok(response) => match response.error_for_status() {
+                    Ok(resp) => {
+                        let response_text = match resp.text().await {
+                            Ok(text) => text,
+                            Err(e) => {
+                                eprintln!("Failed to read response body: {}", e);
+                                sleep(Duration::from_secs(60)).await;
+                                continue;
+                            }
+                        };
+
+                        match serde_json::from_str(&response_text) {
+                            Ok(entries) => entries,
+                            Err(e) => {
+                                eprintln!("JSON parsing error: {}", e);
+                                eprintln!("Response body: {}", response_text);
+                                sleep(Duration::from_secs(60)).await;
+                                continue;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("HTTP error: {}", e);
+                        sleep(Duration::from_secs(60)).await;
+                        continue;
+                    }
+                },
+                Err(e) => {
+                    eprintln!("Request error: {}", e);
+                    sleep(Duration::from_secs(60)).await;
+                    continue;
+                }
+            };
+
+            let mut bookmark = (last_update.clone(), last_id);
+
+            let got_entries = entries.len();
+            tracing::info!(
+                "Synchronization received {} entity list entries",
+                got_entries
+            );
+
+            for data in entries {
+                // Look up the hydra list_id from the orrery ID mapping
+                let list_id_str = match sqlx::query_scalar!(
+                    "SELECT list_id FROM entity_list_id_map WHERE orrery_id = ?",
+                    data.list_orrery_id,
+                )
+                .fetch_optional(db())
+                .await
+                {
+                    Ok(Some(id)) => id,
+                    _ => {
+                        tracing::warn!(
+                            "No entity list mapping for orrery_id {}, skipping entry",
+                            data.list_orrery_id
+                        );
+                        continue;
+                    }
+                };
+
+                let list_id: Ulid = match list_id_str.parse() {
+                    Ok(ulid) => ulid,
+                    Err(err) => {
+                        tracing::error!("Error parsing list ULID {:?}: {}", list_id_str, err);
+                        continue;
+                    }
+                };
+
+                let entry = EntityListEntry {
+                    entry_id: Ulid::new(),
+                    list_id,
+                    priority: data.priority,
+                    added_at: data.when.clone(),
+                    entity_slug: data.entity_slug,
+                    note: data.note,
+                    link: data.link,
+                };
+
+                if let Err(err) = entry.store().await {
+                    tracing::error!("Error saving entity list entry: {}", err);
+                    continue;
+                }
+
+                let new_bookmark = (data.when.clone(), data.id);
+                if new_bookmark > bookmark {
+                    bookmark = new_bookmark;
+                }
+            }
+
+            misc::set("entity-list-entry-sync-bookmark-update", bookmark.0)
+                .await
+                .expect("Saving sync bookmark failed");
+
+            misc::set("entity-list-entry-sync-bookmark-id", bookmark.1)
+                .await
+                .expect("Saving sync bookmark failed");
+
+            if got_entries == 500 {
                 sleep(Duration::from_secs(60)).await;
             } else {
                 sleep(Duration::from_secs(60 * 60)).await;

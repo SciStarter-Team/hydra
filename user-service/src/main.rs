@@ -15,9 +15,11 @@ use ulid::Ulid;
 pub mod address_sets;
 pub mod auth;
 pub mod bookmarks;
+pub mod certificates;
 pub mod communities;
 pub mod geocode;
 pub mod health;
+pub mod inat;
 pub mod permissions;
 pub mod project_joins;
 pub mod recipient_search;
@@ -1304,6 +1306,451 @@ async fn userbadges_synchronize() {
     }
 }
 
+async fn certificates_synchronize() {
+    #[derive(serde::Deserialize)]
+    struct CertificateDataImport {
+        id: i32,
+        user_ulid: String,
+        project: String,
+        mode: String,
+        when: String,
+    }
+
+    loop {
+        let last = misc::get("certificate-sync-bookmark")
+            .await
+            .expect("Retrieving sync bookmark failed")
+            .unwrap_or_else(|| String::from("1900-01-01T00:00:00Z"));
+        let last_id = misc::get("certificate-sync-last-id")
+            .await
+            .expect("Retrieving sync last_id failed")
+            .unwrap_or(0);
+
+        let client = reqwest::Client::new();
+
+        let certs: Vec<CertificateDataImport> = match client
+            .get("https://scistarter.org/staff/sync/certificates")
+            .bearer_auth(env!("SYNC_TOKEN"))
+            .query(&[("since", &last), ("last_id", &last_id.to_string())])
+            .send()
+            .await
+        {
+            Ok(response) => match response.error_for_status() {
+                Ok(resp) => {
+                    let response_text = match resp.text().await {
+                        Ok(text) => text,
+                        Err(e) => {
+                            eprintln!("Failed to read response body: {}", e);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    };
+
+                    match serde_json::from_str(&response_text) {
+                        Ok(certs) => certs,
+                        Err(e) => {
+                            eprintln!("JSON parsing error: {}", e);
+                            eprintln!("Response body: {}", response_text);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("HTTP error: {}", e);
+                    sleep(Duration::from_secs(60)).await;
+                    continue;
+                }
+            },
+            Err(e) => {
+                eprintln!("Request error: {}", e);
+                sleep(Duration::from_secs(60)).await;
+                continue;
+            }
+        };
+
+        let mut bookmark = last.clone();
+        let mut bookmark_id = last_id;
+
+        let got_certs = certs.len();
+
+        for cert in certs {
+            if cert.when > bookmark || (cert.when == bookmark && cert.id > bookmark_id) {
+                bookmark = cert.when.clone();
+                bookmark_id = cert.id;
+            }
+
+            let certificate_id = Ulid::new().to_string();
+
+            // INSERT OR IGNORE deduplicates on (user_id, project, mode)
+            if let Err(e) = sqlx::query!(
+                r#"INSERT OR IGNORE INTO certificates (certificate_id, created_at, user_id, project, mode)
+                   VALUES (?, ?, ?, ?, ?)"#,
+                certificate_id,
+                cert.when,
+                cert.user_ulid,
+                cert.project,
+                cert.mode,
+            )
+            .execute(db())
+            .await
+            {
+                eprintln!(
+                    "Failed to save certificate for user {}: {}",
+                    cert.user_ulid, e
+                );
+            }
+        }
+
+        misc::set("certificate-sync-bookmark", bookmark)
+            .await
+            .expect("Saving sync bookmark failed");
+        misc::set("certificate-sync-last-id", bookmark_id)
+            .await
+            .expect("Saving sync last_id failed");
+
+        if got_certs == 500 {
+            sleep(Duration::from_secs(60)).await;
+        } else {
+            sleep(Duration::from_secs(60 * 60)).await;
+        }
+    }
+}
+
+async fn workflow_states_synchronize() {
+    #[derive(serde::Deserialize)]
+    struct WorkflowStateImport {
+        id: i32,
+        ulid: String,
+        workflow: String,
+        state: String,
+        state_changed: String,
+    }
+
+    loop {
+        let last = misc::get("workflow-state-sync-bookmark")
+            .await
+            .expect("Retrieving sync bookmark failed")
+            .unwrap_or_else(|| String::from("1900-01-01T00:00:00Z"));
+        let last_id = misc::get("workflow-state-sync-last-id")
+            .await
+            .expect("Retrieving sync last_id failed")
+            .unwrap_or(0);
+
+        let client = reqwest::Client::new();
+
+        let states: Vec<WorkflowStateImport> = match client
+            .get("https://scistarter.org/staff/sync/workflow_states")
+            .bearer_auth(env!("SYNC_TOKEN"))
+            .query(&[("since", &last), ("last_id", &last_id.to_string())])
+            .send()
+            .await
+        {
+            Ok(response) => match response.error_for_status() {
+                Ok(resp) => {
+                    let response_text = match resp.text().await {
+                        Ok(text) => text,
+                        Err(e) => {
+                            eprintln!("Failed to read workflow_states response body: {}", e);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    };
+
+                    match serde_json::from_str(&response_text) {
+                        Ok(states) => states,
+                        Err(e) => {
+                            eprintln!("JSON parsing error for workflow_states: {}", e);
+                            eprintln!("Response body: {}", response_text);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("HTTP error for workflow_states: {}", e);
+                    sleep(Duration::from_secs(60)).await;
+                    continue;
+                }
+            },
+            Err(e) => {
+                eprintln!("Request error for workflow_states: {}", e);
+                sleep(Duration::from_secs(60)).await;
+                continue;
+            }
+        };
+
+        let db = db();
+        let mut bookmark = last.clone();
+        let mut bookmark_id = last_id;
+
+        let got_states = states.len();
+
+        for ws in states {
+            if ws.state_changed > bookmark
+                || (ws.state_changed == bookmark && ws.id > bookmark_id)
+            {
+                bookmark = ws.state_changed.clone();
+                bookmark_id = ws.id;
+            }
+
+            // Use state_changed as the upper bound for completed step timestamps
+            let ts = &ws.state_changed;
+
+            let result = match ws.workflow.as_str() {
+                "foundations" => apply_foundations_state(db, &ws.ulid, &ws.state, ts).await,
+                "libraries_hubs" => {
+                    apply_libraries_hubs_state(db, &ws.ulid, &ws.state, ts).await
+                }
+                "ambassador" => apply_ambassador_state(db, &ws.ulid, &ws.state, ts).await,
+                "data_literacy" => {
+                    apply_simple_tutorial_state(db, "data_literacy_progress", &ws.ulid, &ws.state, ts).await
+                }
+                "higher_ed" => {
+                    apply_higher_ed_state(db, &ws.ulid, &ws.state, ts).await
+                }
+                "data_ethics" => {
+                    apply_simple_tutorial_state(db, "data_ethics_progress", &ws.ulid, &ws.state, ts).await
+                }
+                "ideal" => {
+                    apply_simple_tutorial_state(db, "ideal_progress", &ws.ulid, &ws.state, ts).await
+                }
+                other => {
+                    eprintln!("Unknown workflow type: {}", other);
+                    Ok(())
+                }
+            };
+
+            if let Err(e) = result {
+                eprintln!(
+                    "Failed to apply workflow state {} {} for user {}: {}",
+                    ws.workflow, ws.state, ws.ulid, e
+                );
+            }
+        }
+
+        misc::set("workflow-state-sync-bookmark", bookmark)
+            .await
+            .expect("Saving sync bookmark failed");
+        misc::set("workflow-state-sync-last-id", bookmark_id)
+            .await
+            .expect("Saving sync last_id failed");
+
+        if got_states == 500 {
+            sleep(Duration::from_secs(60)).await;
+        } else {
+            sleep(Duration::from_secs(60 * 60)).await;
+        }
+    }
+}
+
+/// Foundations states: initial → hour1 → squirrel/stall/debris → bookmark2
+/// Each later state implies all earlier steps were completed.
+async fn apply_foundations_state(
+    db: &sqlx::SqlitePool,
+    user_id: &str,
+    state: &str,
+    ts: &str,
+) -> Result<(), anyhow::Error> {
+    // Ensure row exists
+    sqlx::query!(
+        "INSERT OR IGNORE INTO foundations_progress (user_id) VALUES (?)",
+        user_id
+    )
+    .execute(db)
+    .await?;
+
+    match state {
+        "hour1" => {
+            sqlx::query!(
+                "UPDATE foundations_progress SET hour1_completed_at = COALESCE(hour1_completed_at, ?) WHERE user_id = ?",
+                ts, user_id
+            ).execute(db).await?;
+        }
+        "squirrel" => {
+            sqlx::query!(
+                "UPDATE foundations_progress SET hour1_completed_at = COALESCE(hour1_completed_at, ?), squirrel_completed_at = COALESCE(squirrel_completed_at, ?) WHERE user_id = ?",
+                ts, ts, user_id
+            ).execute(db).await?;
+        }
+        "stall" => {
+            sqlx::query!(
+                "UPDATE foundations_progress SET hour1_completed_at = COALESCE(hour1_completed_at, ?), stall_completed_at = COALESCE(stall_completed_at, ?) WHERE user_id = ?",
+                ts, ts, user_id
+            ).execute(db).await?;
+        }
+        "debris" => {
+            sqlx::query!(
+                "UPDATE foundations_progress SET hour1_completed_at = COALESCE(hour1_completed_at, ?), debris_completed_at = COALESCE(debris_completed_at, ?) WHERE user_id = ?",
+                ts, ts, user_id
+            ).execute(db).await?;
+        }
+        "bookmark2" => {
+            sqlx::query!(
+                r#"UPDATE foundations_progress SET
+                    hour1_completed_at = COALESCE(hour1_completed_at, ?),
+                    squirrel_completed_at = COALESCE(squirrel_completed_at, ?),
+                    stall_completed_at = COALESCE(stall_completed_at, ?),
+                    debris_completed_at = COALESCE(debris_completed_at, ?),
+                    badge_granted_at = COALESCE(badge_granted_at, ?)
+                   WHERE user_id = ?"#,
+                ts, ts, ts, ts, ts, user_id
+            ).execute(db).await?;
+        }
+        // Legacy intermediate states
+        "participation" | "bookmark1" => {
+            sqlx::query!(
+                "UPDATE foundations_progress SET hour1_completed_at = COALESCE(hour1_completed_at, ?) WHERE user_id = ?",
+                ts, user_id
+            ).execute(db).await?;
+        }
+        _ => {}
+    }
+
+    Ok(())
+}
+
+/// Libraries Hubs states: initial → hour2 → supplemental
+async fn apply_libraries_hubs_state(
+    db: &sqlx::SqlitePool,
+    user_id: &str,
+    state: &str,
+    ts: &str,
+) -> Result<(), anyhow::Error> {
+    sqlx::query!(
+        "INSERT OR IGNORE INTO libraries_hubs_progress (user_id) VALUES (?)",
+        user_id
+    )
+    .execute(db)
+    .await?;
+
+    match state {
+        "hour2" => {
+            sqlx::query!(
+                "UPDATE libraries_hubs_progress SET hour2_completed_at = COALESCE(hour2_completed_at, ?) WHERE user_id = ?",
+                ts, user_id
+            ).execute(db).await?;
+        }
+        "supplemental" => {
+            sqlx::query!(
+                r#"UPDATE libraries_hubs_progress SET
+                    hour2_completed_at = COALESCE(hour2_completed_at, ?),
+                    supplemental_signup_at = COALESCE(supplemental_signup_at, ?),
+                    badge_granted_at = COALESCE(badge_granted_at, ?)
+                   WHERE user_id = ?"#,
+                ts, ts, ts, user_id
+            ).execute(db).await?;
+        }
+        _ => {}
+    }
+
+    Ok(())
+}
+
+/// Ambassador states: initial → tutorial → application → verified → passed
+async fn apply_ambassador_state(
+    db: &sqlx::SqlitePool,
+    user_id: &str,
+    state: &str,
+    ts: &str,
+) -> Result<(), anyhow::Error> {
+    sqlx::query!(
+        "INSERT OR IGNORE INTO ambassador_progress (user_id) VALUES (?)",
+        user_id
+    )
+    .execute(db)
+    .await?;
+
+    match state {
+        "tutorial" | "application" | "verified" | "international" | "rejected" | "failed" => {
+            sqlx::query!(
+                "UPDATE ambassador_progress SET tutorial_completed_at = COALESCE(tutorial_completed_at, ?) WHERE user_id = ?",
+                ts, user_id
+            ).execute(db).await?;
+        }
+        "passed" => {
+            sqlx::query!(
+                r#"UPDATE ambassador_progress SET
+                    tutorial_completed_at = COALESCE(tutorial_completed_at, ?),
+                    badge_granted_at = COALESCE(badge_granted_at, ?)
+                   WHERE user_id = ?"#,
+                ts, ts, user_id
+            ).execute(db).await?;
+        }
+        _ => {}
+    }
+
+    Ok(())
+}
+
+/// Higher Ed states: initial → tutorial → list → explore
+async fn apply_higher_ed_state(
+    db: &sqlx::SqlitePool,
+    user_id: &str,
+    state: &str,
+    ts: &str,
+) -> Result<(), anyhow::Error> {
+    sqlx::query!(
+        "INSERT OR IGNORE INTO higher_ed_progress (user_id) VALUES (?)",
+        user_id
+    )
+    .execute(db)
+    .await?;
+
+    match state {
+        "tutorial" | "list" => {
+            sqlx::query!(
+                "UPDATE higher_ed_progress SET tutorial_completed_at = COALESCE(tutorial_completed_at, ?) WHERE user_id = ?",
+                ts, user_id
+            ).execute(db).await?;
+        }
+        "explore" => {
+            sqlx::query!(
+                r#"UPDATE higher_ed_progress SET
+                    tutorial_completed_at = COALESCE(tutorial_completed_at, ?),
+                    badge_granted_at = COALESCE(badge_granted_at, ?)
+                   WHERE user_id = ?"#,
+                ts, ts, user_id
+            ).execute(db).await?;
+        }
+        _ => {}
+    }
+
+    Ok(())
+}
+
+/// Simple tutorial workflows (data_literacy, data_ethics, ideal):
+/// initial → tutorial (terminal, grants badge)
+async fn apply_simple_tutorial_state(
+    db: &sqlx::SqlitePool,
+    table: &str,
+    user_id: &str,
+    state: &str,
+    ts: &str,
+) -> Result<(), anyhow::Error> {
+    // Can't use sqlx::query! with dynamic table names, use query_scalar
+    sqlx::query(&format!(
+        "INSERT OR IGNORE INTO {} (user_id) VALUES (?)", table
+    ))
+    .bind(user_id)
+    .execute(db)
+    .await?;
+
+    if state == "tutorial" {
+        sqlx::query(&format!(
+            "UPDATE {} SET tutorial_completed_at = COALESCE(tutorial_completed_at, ?), badge_granted_at = COALESCE(badge_granted_at, ?) WHERE user_id = ?",
+            table
+        ))
+        .bind(ts)
+        .bind(ts)
+        .bind(user_id)
+        .execute(db)
+        .await?;
+    }
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() {
     common::shared::init("user").await;
@@ -1322,6 +1769,10 @@ async fn main() {
     let users_sync_task = spawn(users_synchronize());
 
     let userbadges_sync_task = spawn(userbadges_synchronize());
+
+    let _certificates_sync_task = spawn(certificates_synchronize());
+
+    let _workflow_states_sync_task = spawn(workflow_states_synchronize());
 
     // WebAuthn session cleanup task
     let webauthn_cleanup_task = spawn(async {
@@ -1457,6 +1908,7 @@ async fn main() {
     let joins = service.group("user.joins");
     toplevel.spawn(handler!(joins, "create", project_joins::create_join));
     toplevel.spawn(handler!(joins, "check", project_joins::check_join));
+    toplevel.spawn(handler!(joins, "list_by_user", project_joins::list_user_joins));
 
     let permissions = service.group("user.permissions");
     toplevel.spawn(handler!(permissions, "check", permissions::check_permission));
@@ -1481,6 +1933,12 @@ async fn main() {
     // Opaque ID retrieval
     let opaque_id = service.group("user.opaque_id");
     toplevel.spawn(handler!(opaque_id, "get", user_matching::get_opaque_id));
+
+    // Profile ID lookup and API user creation (v1 API compat)
+    let profile = service.group("user.profile");
+    toplevel.spawn(handler!(profile, "lookup", user_matching::lookup_profile_id));
+    toplevel.spawn(handler!(profile, "api_create", user_matching::api_create_user));
+    toplevel.spawn(handler!(profile, "ai_opted_out", user_matching::ai_opted_out));
 
     // Workflow progress tracking
     let workflow_group = service.group("user.workflow");
@@ -1553,6 +2011,18 @@ async fn main() {
     toplevel.spawn(handler!(geocode, "search", geocode::geocode));
     toplevel.spawn(handler!(geocode, "resolve", geocode::resolve));
     toplevel.spawn(handler!(geocode, "forward", geocode::forward));
+
+    // Certificate endpoints
+    let certs = service.group("user.certificates");
+    toplevel.spawn(handler!(certs, "create", certificates::create));
+    toplevel.spawn(handler!(certs, "check", certificates::check));
+    toplevel.spawn(handler!(certs, "list", certificates::list));
+    toplevel.spawn(handler!(certs, "get", certificates::get));
+
+    // iNaturalist endpoints
+    let inat = service.group("user.inat");
+    toplevel.spawn(handler!(inat, "list_users", inat::list_users));
+    toplevel.spawn(recv_handler!(inat, "update_last_sync", inat::update_last_sync));
 
     // Set up graceful shutdown
     use tokio::signal::unix::{SignalKind, signal};

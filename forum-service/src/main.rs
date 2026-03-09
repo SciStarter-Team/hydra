@@ -11,8 +11,10 @@ pub mod categories;
 pub mod content_filter;
 pub mod forums;
 pub mod health;
+pub mod messaging;
 pub mod moderation;
 pub mod posts;
+pub mod sync;
 pub mod topics;
 
 #[tokio::main]
@@ -135,6 +137,19 @@ async fn main() {
         categories::delete_forum_category
     ));
 
+    // Messaging endpoints (personal forum-based)
+    let messaging = service.group("forum.messaging");
+    toplevel.spawn(handler!(messaging, "send", messaging::send_message));
+    toplevel.spawn(handler!(messaging, "reply", messaging::reply_to_message));
+    toplevel.spawn(handler!(messaging, "inbox", messaging::inbox));
+    toplevel.spawn(recv_handler!(messaging, "read", messaging::mark_read));
+    toplevel.spawn(recv_handler!(messaging, "discard", messaging::discard));
+    toplevel.spawn(handler!(
+        messaging,
+        "unread_count",
+        messaging::unread_count
+    ));
+
     // Content filtering endpoints
     let filter = service.group("forum.filter");
     toplevel.spawn(handler!(filter, "check", content_filter::check_content));
@@ -153,6 +168,9 @@ async fn main() {
     // Health check endpoint
     let health = service.group("forum.health");
     toplevel.spawn(handler!(health, "check", health::health_check));
+
+    // Background sync task
+    toplevel.spawn(sync::synchronize_messages());
 
     // Set up graceful shutdown
     use tokio::signal::unix::{SignalKind, signal};

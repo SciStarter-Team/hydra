@@ -6,6 +6,7 @@ use std::sync::Arc;
 use tokio::{signal, task::JoinSet};
 use tokio_util::sync::CancellationToken;
 
+mod bridges;
 mod handlers;
 mod sync;
 mod exchange;
@@ -22,6 +23,10 @@ use handlers::{
 };
 use log_service::{Database, run_compactor_service};
 use parking_lot::RwLock;
+use bridges::{
+    inaturalist::inaturalist_synchronize,
+    zooniverse::{zooniverse_sync_projects, zooniverse_sync_users, zooniverse_synchronize},
+};
 use sync::{acts_of_science_synchronize, bookmark_synchronize, golink_synchronize, join_synchronize, participation_synchronize};
 
 // Global database instance for handler access - using RwLock<Option<>> so we can take ownership for shutdown
@@ -54,6 +59,10 @@ async fn main() -> Result<()> {
     let join_cancel = CancellationToken::new();
     let golink_cancel = CancellationToken::new();
     let acts_cancel = CancellationToken::new();
+    let zoo_projects_cancel = CancellationToken::new();
+    let zoo_users_cancel = CancellationToken::new();
+    let zoo_sync_cancel = CancellationToken::new();
+    let inat_cancel = CancellationToken::new();
     let compactor_cancel = CancellationToken::new();
 
     // Spawn WAL compactor service
@@ -103,6 +112,38 @@ async fn main() -> Result<()> {
     let acts_database = Arc::clone(&database);
     background_tasks.spawn(async move {
         acts_of_science_synchronize(acts_database, acts_cancel_clone).await;
+        Ok::<(), anyhow::Error>(())
+    });
+
+    // Spawn Zooniverse project sync task
+    let zoo_projects_cancel_clone = zoo_projects_cancel.clone();
+    let zoo_projects_database = Arc::clone(&database);
+    background_tasks.spawn(async move {
+        zooniverse_sync_projects(zoo_projects_database, zoo_projects_cancel_clone).await;
+        Ok::<(), anyhow::Error>(())
+    });
+
+    // Spawn Zooniverse user sync task
+    let zoo_users_cancel_clone = zoo_users_cancel.clone();
+    let zoo_users_database = Arc::clone(&database);
+    background_tasks.spawn(async move {
+        zooniverse_sync_users(zoo_users_database, zoo_users_cancel_clone).await;
+        Ok::<(), anyhow::Error>(())
+    });
+
+    // Spawn Zooniverse classification sync task
+    let zoo_sync_cancel_clone = zoo_sync_cancel.clone();
+    let zoo_sync_database = Arc::clone(&database);
+    background_tasks.spawn(async move {
+        zooniverse_synchronize(zoo_sync_database, zoo_sync_cancel_clone).await;
+        Ok::<(), anyhow::Error>(())
+    });
+
+    // Spawn iNaturalist sync task
+    let inat_cancel_clone = inat_cancel.clone();
+    let inat_database = Arc::clone(&database);
+    background_tasks.spawn(async move {
+        inaturalist_synchronize(inat_database, inat_cancel_clone).await;
         Ok::<(), anyhow::Error>(())
     });
 
@@ -236,6 +277,10 @@ async fn main() -> Result<()> {
     println!("  - join sync running in background");
     println!("  - golink sync running in background");
     println!("  - acts of science sync running in background");
+    println!("  - zooniverse project sync running in background");
+    println!("  - zooniverse user sync running in background");
+    println!("  - zooniverse classification sync running in background");
+    println!("  - iNaturalist sync running in background");
     println!("  - WAL compactor running in background");
 
     // Set up signal handling
@@ -303,6 +348,10 @@ async fn main() -> Result<()> {
     join_cancel.cancel();
     golink_cancel.cancel();
     acts_cancel.cancel();
+    zoo_projects_cancel.cancel();
+    zoo_users_cancel.cancel();
+    zoo_sync_cancel.cancel();
+    inat_cancel.cancel();
     compactor_cancel.cancel();
 
     // Wait for critical background tasks to finish gracefully (no force timeout for data safety)

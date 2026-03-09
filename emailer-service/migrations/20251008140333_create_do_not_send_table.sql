@@ -2,7 +2,6 @@
 CREATE TABLE do_not_send (
     email_address TEXT PRIMARY KEY,
     reason TEXT NOT NULL,         -- 'bounce', 'complaint', 'unsubscribe'
-    added_at TEXT NOT NULL,       -- TimeString
     details TEXT                  -- Optional additional info (bounce type, etc.)
 );
 

@@ -949,6 +949,38 @@ pub struct ProjectJoinCheckResponse {
     pub has_joined: bool,
 }
 
+// List all project joins for a user (for API check-join endpoint)
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserJoinsListRequest {
+    pub opaque_id: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserJoinsListResponse {
+    pub found: bool,
+    pub projects: Vec<UserJoinEntry>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserJoinEntry {
+    pub project_id: String,
+}
+
+// List all users who opted out of AI
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AiOptedOutRequest {}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AiOptedOutResponse {
+    pub opted_out: Vec<AiOptedOutEntry>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AiOptedOutEntry {
+    pub opaque_id: String,
+    pub opted_out_at: Option<String>,
+}
+
 // Permissions
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PermissionCheckRequest {
@@ -1020,6 +1052,53 @@ pub struct UserMatchRequest {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct UserMatchResponse {
     pub user_id: Option<String>, // ULID, None = no match (discard for privacy)
+}
+
+// ============================================================================
+// Legacy Profile ID Lookup (for v1 API compat)
+// ============================================================================
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ProfileIdLookupRequest {
+    pub identifier: String,
+    pub identifier_type: ProfileIdLookupType,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub enum ProfileIdLookupType {
+    Email,
+    Hashed,
+    LegacyProfileId,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ProfileIdLookupResponse {
+    pub user_id: Option<String>,
+    pub legacy_profile_id: Option<i64>,
+    pub opaque_id: Option<String>,
+    pub known: bool,
+}
+
+// ============================================================================
+// API User Creation (for v1 API compat)
+// ============================================================================
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ApiCreateUserRequest {
+    pub email: String,
+    pub handle: Option<String>,
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+    pub zipcode: Option<String>,
+    pub password: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ApiCreateUserResponse {
+    pub user_id: String,
+    pub legacy_profile_id: Option<i64>,
+    pub opaque_id: Option<String>,
+    pub already_existed: bool,
 }
 
 // ============================================================================
@@ -1228,4 +1307,91 @@ pub struct UserCommunitiesResponse {
 pub struct CommunitySuccessResponse {
     pub success: bool,
     pub message: String,
+}
+
+// ============================================================================
+// Certificates
+// ============================================================================
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CertificateCreateRequest {
+    pub user_id: Ulid,
+    pub project: String,
+    pub mode: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CertificateCreateResponse {
+    pub certificate_id: Ulid,
+    pub already_existed: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CertificateCheckRequest {
+    pub user_id: Ulid,
+    pub project: String,
+    pub mode: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CertificateCheckResponse {
+    pub exists: bool,
+    pub certificate_id: Option<Ulid>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserCertificatesRequest {
+    pub user_id: Ulid,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserCertificatesResponse {
+    pub certificates: Vec<CertificateInfo>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CertificateInfo {
+    pub certificate_id: Ulid,
+    pub created_at: String,
+    pub user_id: Ulid,
+    pub project: String,
+    pub mode: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CertificateGetRequest {
+    pub certificate_id: Ulid,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CertificateGetResponse {
+    pub certificate_id: Ulid,
+    pub created_at: String,
+    pub user_id: Ulid,
+    pub project: String,
+    pub mode: String,
+    pub display_name: String,
+}
+
+// ============================================================================
+// iNaturalist
+// ============================================================================
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct InatListUsersRequest {
+    pub offset: i64,
+    pub limit: i64,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct InatUser {
+    pub user_id: Ulid,
+    pub inat_username: String,
+    pub inat_last_update: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct InatUpdateLastSync {
+    pub user_id: Ulid,
+    pub inat_last_update: String,
 }

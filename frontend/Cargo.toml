@@ -47,6 +47,7 @@ aho-corasick = "1.1"
 fxhash = "0.2.1"
 parking_lot = "0.12.5"
 smallvec = "1.15"
+oxidize-pdf = "2.0.0"
 
 [dev-dependencies]
 assert2 = "0.3.16"

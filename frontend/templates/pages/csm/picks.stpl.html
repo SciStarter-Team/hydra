@@ -1,6 +1,23 @@
 <!-- INITIAL 3 CARDS-->
+<style>
+ .csm-recommendations summary {
+     cursor: pointer;
+ }
+ .csm-recommendations details[open] > summary .closed {
+     display: none;
+ }
+ .csm-recommendations details[open] > summary .open {
+     display: inline;
+ }
+ .csm-recommendations details:not([open]) > summary .closed {
+     display: inline;
+ }
+ .csm-recommendations details:not([open]) > summary .open {
+     display: none;
+ }
+</style>
 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-  <% for pick in self.picks.iter().take(3) { %>
+  <% for pick in self.picks.iter().take(6) { %>
   <div class="csm-card">
     <div class="csm-card-header">
       <div class="flex participate-image-flex">
@@ -24,7 +41,7 @@
         <% } %>
         <p><b>picked by: <%= pick.picker_name %></b></p>
         <% if !pick.picker_quote.is_empty() { %>
-        <q><%= pick.picker_quote %></q>
+          <details><summary><q class="closed"><%= truncate_string(&pick.picker_quote, 48) %>&hellip;</q> <a class="closed">(see more)</a><a class="open">(see less)</a></summary><q><%= pick.picker_quote %></q></details>
         <% } %>
       </div>
       <% } %>
@@ -35,7 +52,7 @@
 <% if self.picks.len() > 3 { %>
 <div class="csm-more-projects mt-4">
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-    <% for pick in self.picks.iter().skip(3) { %>
+    <% for pick in self.picks.iter().skip(6) { %>
     <div class="csm-card">
       <div class="csm-card-header">
         <div class="flex participate-image-flex">
@@ -59,7 +76,7 @@
           <% } %>
           <p><b>picked by: <%= pick.picker_name %></b></p>
           <% if !pick.picker_quote.is_empty() { %>
-          <q><%= pick.picker_quote %></q>
+            <details><summary><q class="closed"><%= truncate_string(&pick.picker_quote, 48) %>&hellip;</q> <a class="closed">(see more)</a><a class="open">(see less)</a></summary><q><%= pick.picker_quote %></q></details>
           <% } %>
         </div>
         <% } %>

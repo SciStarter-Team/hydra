@@ -239,3 +239,83 @@ pub struct GetForumCategories {
     pub forum_id: Ulid,
     pub active_only: Option<bool>,
 }
+
+// ============================================================================
+// Messaging (personal forum-based)
+// ============================================================================
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SendMessage {
+    pub from_user_id: Ulid,
+    pub to_user_id: Ulid,
+    pub subject: String,
+    pub body: String,
+    pub reply_ref: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SendMessageResponse {
+    pub topic_id: Ulid,
+    pub post_id: Ulid,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ReplyToMessage {
+    pub user_id: Ulid,
+    pub topic_id: Ulid,
+    pub body: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ReplyToMessageResponse {
+    pub post_id: Ulid,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct InboxQuery {
+    pub user_id: Ulid,
+    pub include_discarded: bool,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct InboxResponse {
+    pub conversations: Vec<ConversationSummary>,
+    pub total: i64,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ConversationSummary {
+    pub topic_id: Ulid,
+    pub subject: String,
+    pub other_user_id: Ulid,
+    pub other_user_handle: String,
+    pub last_message_at: TimeString,
+    pub last_message_preview: String,
+    pub post_count: i64,
+    pub seen: bool,
+    pub discarded: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct MarkMessageRead {
+    pub user_id: Ulid,
+    pub topic_id: Ulid,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DiscardMessage {
+    pub user_id: Ulid,
+    pub topic_id: Ulid,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct UnreadCountRequest {
+    pub user_id: Ulid,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct UnreadCountResponse {
+    pub count: i64,
+}

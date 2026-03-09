@@ -622,6 +622,9 @@ pub enum TriggerEvent {
 
     /// Sent when a user leaves a community
     CommunityLeave,
+
+    /// Sent when a user earns a certificate
+    CertificateEarned,
 }
 
 impl TriggerEvent {
@@ -646,6 +649,7 @@ impl TriggerEvent {
             Self::LibrariesHubsSupplemental => "When Libraries supplemental signup is completed",
             Self::CommunityJoin => "When a user joins a community",
             Self::CommunityLeave => "When a user leaves a community",
+            Self::CertificateEarned => "When a user earns a certificate",
         }
     }
 
@@ -668,6 +672,7 @@ impl TriggerEvent {
             | Self::LibrariesHubsTutorial
             | Self::LibrariesHubsSupplemental => "workflow",
             Self::CommunityJoin | Self::CommunityLeave => "community",
+            Self::CertificateEarned => "certificate",
         }
     }
 }
