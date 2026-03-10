@@ -107,7 +107,9 @@ fn build_base_where_clause<'a>(
                     p.image,
                     p.image_credit,
                     p.goal,
-                    p.task
+                    p.task,
+                    COALESCE(pex.name, ''),
+                    'https://scistarter.org/-admin/projects/' || p.project_id
                 FROM projects p"#,
             );
         }
@@ -116,6 +118,7 @@ fn build_base_where_clause<'a>(
             r#"
             JOIN projects_fts f ON p.project_id = f.project_id
             LEFT JOIN entities ent ON ent.target = p.project_id AND ent.kind = 'Project'
+            LEFT JOIN exchanges pex ON pex.exchange_id = p.exchange
             WHERE projects_fts MATCH "#,
         );
 
@@ -154,7 +157,9 @@ fn build_base_where_clause<'a>(
                     p.image,
                     p.image_credit,
                     p.goal,
-                    p.task
+                    p.task,
+                    COALESCE(pex.name, ''),
+                    'https://scistarter.org/-admin/projects/' || p.project_id
                 FROM projects p"#,
             );
         }
@@ -162,6 +167,7 @@ fn build_base_where_clause<'a>(
         query_builder.push(
             r#"
             LEFT JOIN entities ent ON ent.target = p.project_id AND ent.kind = 'Project'
+            LEFT JOIN exchanges pex ON pex.exchange_id = p.exchange
             WHERE ent.publish = 1
             AND p.flagged = false
             AND p.duplicate = false
@@ -723,14 +729,14 @@ pub async fn exchange_home(
     query_builder.push_bind(offset as i64);
 
     let rows = query_builder
-        .build_query_as::<(String, String, String, String, String, String, String)>()
+        .build_query_as::<(String, String, String, String, String, String, String, String, String)>()
         .fetch_all(common::shared::db())
         .await?;
 
     let projects: Vec<ProjectSummary> = rows
         .into_iter()
         .map(
-            |(_, slug, name, image, image_credit, goal, task)| ProjectSummary {
+            |(_, slug, name, image, image_credit, goal, task, _, _)| ProjectSummary {
                 slug,
                 name,
                 image,
@@ -827,14 +833,14 @@ pub async fn exchange_results(
 
     // Execute query
     let rows = query_builder
-        .build_query_as::<(String, String, String, String, String, String, String)>()
+        .build_query_as::<(String, String, String, String, String, String, String, String, String)>()
         .fetch_all(common::shared::db())
         .await?;
 
     let projects: Vec<ProjectSummary> = rows
         .into_iter()
         .map(
-            |(_, slug, name, image, image_credit, goal, task)| ProjectSummary {
+            |(_, slug, name, image, image_credit, goal, task, _, _)| ProjectSummary {
                 slug,
                 name,
                 image,
@@ -923,15 +929,19 @@ pub async fn exchange_csv(
 
     // Execute query (no LIMIT - get all results for CSV)
     let rows = query_builder
-        .build_query_as::<(String, String, String, String, String, String, String)>()
+        .build_query_as::<(String, String, String, String, String, String, String, String, String)>()
         .fetch_all(common::shared::db())
         .await?;
 
     // Build CSV content
     let mut csv_content = String::new();
-    csv_content.push_str("project_id,slug,name,image,image_credit,goal,task\n");
+    if has_permission {
+        csv_content.push_str("project_id,slug,name,image,image_credit,goal,task,exchange,admin_link\n");
+    } else {
+        csv_content.push_str("project_id,slug,name,image,image_credit,goal,task,exchange\n");
+    }
 
-    for (project_id, slug, name, image, image_credit, goal, task) in rows {
+    for (project_id, slug, name, image, image_credit, goal, task, exchange, admin_link) in rows {
         // Escape CSV fields (basic escaping - wrap in quotes if contains comma or quote)
         let escape_csv = |s: &str| -> String {
             if s.contains(',') || s.contains('"') || s.contains('\n') {
@@ -941,16 +951,32 @@ pub async fn exchange_csv(
             }
         };
 
-        csv_content.push_str(&format!(
-            "{},{},{},{},{},{},{}\n",
-            escape_csv(&project_id),
-            escape_csv(&slug),
-            escape_csv(&name),
-            escape_csv(&image),
-            escape_csv(&image_credit),
-            escape_csv(&goal),
-            escape_csv(&task)
-        ));
+        if has_permission {
+            csv_content.push_str(&format!(
+                "{},{},{},{},{},{},{},{},{}\n",
+                escape_csv(&project_id),
+                escape_csv(&slug),
+                escape_csv(&name),
+                escape_csv(&image),
+                escape_csv(&image_credit),
+                escape_csv(&goal),
+                escape_csv(&task),
+                escape_csv(&exchange),
+                escape_csv(&admin_link)
+            ));
+        } else {
+            csv_content.push_str(&format!(
+                "{},{},{},{},{},{},{},{}\n",
+                escape_csv(&project_id),
+                escape_csv(&slug),
+                escape_csv(&name),
+                escape_csv(&image),
+                escape_csv(&image_credit),
+                escape_csv(&goal),
+                escape_csv(&task),
+                escape_csv(&exchange)
+            ));
+        }
     }
 
     Ok(poem::Response::builder()
