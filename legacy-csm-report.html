@@ -8,6 +8,11 @@
   outline: 2px solid #dc2626;
   outline-offset: -1px;
 }
+.form-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
 </style>
   <!-- HEADER - PRE-APRIL -->
   <div class="mx-auto">
@@ -353,19 +358,19 @@
 --DEFER--
 
 // Disable submit buttons when reporting is closed
-(function() {
-  var now = new Date();
-  var month = now.getMonth(); // 0-indexed
-  var day = now.getDate();
-  var reportingOpen = (month === 3) || (month === 4 && day <= 3);
-  if (!reportingOpen) {
-    document.querySelectorAll('.acts-form-form button[type="submit"]').forEach(function(btn) {
-      btn.disabled = true;
-      btn.type = 'button';
-      btn.textContent = 'Reporting Starts April 1';
-    });
-  }
-})();
+(SciStarter.wait_for_authentication().then(function() {
+var now = new Date();
+var month = now.getMonth(); // 0-indexed
+var day = now.getDate();
+var reportingOpen = (month === 3) || (month === 4 && day <= 3) || (!!ss_app.user.is_staff);
+if (!reportingOpen) {
+document.querySelectorAll('.acts-form-form button[type="submit"]').forEach(function(btn) {
+btn.disabled = true;
+btn.type = 'button';
+btn.textContent = 'Reporting Starts April 1';
+});
+}
+}));
 
 // Form validation visual cue
 document.querySelectorAll('.acts-form-form').forEach(function(form) {

@@ -98,12 +98,13 @@
             </label>
           </div>
 
-          <div class="text-center">
+          <div class="flex justify-between items-center mt-8">
             <% if self.reporting_open { %>
             <button type="submit" class="btn btn-primary">Submit Your Report &raquo;</button>
             <% } else { %>
             <button type="button" class="btn btn-primary" disabled>Reporting Starts April 1</button>
             <% } %>
+            <button type="button" class="btn" hx-on:click="document.getElementById('individual-form').classList.add('hidden'); document.getElementById('individual-card').classList.remove('ring-2','ring-primary');">Cancel</button>
           </div>
         </form>
       </div>
@@ -168,12 +169,13 @@
             </label>
           </div>
 
-          <div class="text-center">
+          <div class="flex justify-between items-center mt-8">
             <% if self.reporting_open { %>
             <button type="submit" class="btn btn-primary">Submit Group Report &raquo;</button>
             <% } else { %>
             <button type="button" class="btn btn-primary" disabled>Reporting Starts April 1</button>
             <% } %>
+            <button type="button" class="btn" hx-on:click="document.getElementById('group-form').classList.add('hidden'); document.getElementById('group-card').classList.remove('ring-2','ring-primary');">Cancel</button>
           </div>
         </form>
       </div>

@@ -215,6 +215,43 @@ impl UserInfo for Option<&BasicInfo> {
     }
 }
 
+impl UserInfo for Option<Arc<BasicInfo>> {
+    fn user_id(&self) -> Option<Ulid> {
+        match self {
+            Some(info) => info.user_id(),
+            None => Unauthenticated.user_id(),
+        }
+    }
+
+    fn handle(&self) -> &str {
+        match self {
+            Some(info) => info.handle(),
+            None => Unauthenticated.handle(),
+        }
+    }
+
+    fn is_staff(&self) -> bool {
+        match self {
+            Some(info) => info.is_staff(),
+            None => Unauthenticated.is_staff(),
+        }
+    }
+
+    fn is_superuser(&self) -> bool {
+        match self {
+            Some(info) => info.is_superuser(),
+            None => Unauthenticated.is_superuser(),
+        }
+    }
+
+    fn has_handle(&self) -> bool {
+        match self {
+            Some(info) => info.has_handle(),
+            None => Unauthenticated.has_handle(),
+        }
+    }
+}
+
 pub trait UserDisplayStr {
     fn display_str(&self) -> String;
 }

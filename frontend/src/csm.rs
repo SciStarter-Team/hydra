@@ -3,7 +3,7 @@ use common::message::log::{
     ActsToDateRequest, ActsToDateResponse, ContributorEntry, ContributorsRequest,
     ContributorsResponse,
 };
-use common::message::user::BasicInfo;
+use common::message::user::{BasicInfo, UserInfo};
 use common::shared::db;
 use poem::session::Session;
 use poem::web::{Form, Json, Query, RealIp};
@@ -385,7 +385,8 @@ async fn csm_report(
     let today = jiff::Zoned::now().date();
     let month: i32 = today.month().into();
     let day: i32 = today.day().into();
-    let reporting_open = month == 4 || (month == 5 && day <= 3);
+    let reporting_open =
+        month == 4 || (month == 5 && day <= 3) || user_info.is_staff();
 
     let layout = StandardLayout::new(
         "/citizensciencemonth/report",
@@ -466,7 +467,8 @@ async fn csm_report_submit(
     let today = jiff::Zoned::now().date();
     let month: i32 = today.month().into();
     let day: i32 = today.day().into();
-    let reporting_open = month == 4 || (month == 5 && day <= 3);
+    let reporting_open =
+        month == 4 || (month == 5 && day <= 3) || user_info.is_staff();
 
     let layout = StandardLayout::new(
         "/citizensciencemonth/report",
