@@ -55,52 +55,66 @@
 
       <!-- INDIVIDUAL FORM -->
       <div id="individual-form" class="hidden">
-        <h3 class="text-center text-primary-dark">Report Your Individual Acts</h3>
         <form method="POST" action="/citizensciencemonth/report" class="max-w-[600px] mx-auto">
           <input type="hidden" name="report_type" value="individual" />
 
           <% if self.user_info.is_none() { %>
-          <div class="mb-4">
-            <label for="ind-email" class="block font-semibold mb-1">Email <span class="text-red-500">*</span></label>
-            <input type="email" id="ind-email" name="email" required class="wa-input w-full" placeholder="your@email.com" />
-          </div>
+          <p class="bg-blue-50 border border-blue-200 rounded-md p-4">
+            You are not logged into your SciStarter account. <a href="/login?next=/citizensciencemonth/report">Sign up or login</a> to ensure you receive a one-time digital badge upon submitting your first report!
+          </p>
           <% } %>
 
+          <p>All Acts are displayed on the Wall of Fame on <a href="https://citizensciencemonth.org/">CitizenScienceMonth.org</a>.</p>
+
           <div class="mb-4">
-            <label for="ind-name" class="block font-semibold mb-1">Your Name <span class="text-red-500">*</span></label>
+            <label for="ind-name" class="block font-semibold mb-1">How would you like your name displayed? <span class="text-red-500">(required)</span></label>
             <input type="text" id="ind-name" name="name" required class="wa-input w-full" />
+            <small class="text-gray-500">We recommend using your full first name and first initial of your last name.</small>
           </div>
 
           <div class="mb-4">
-            <label for="ind-act" class="block font-semibold mb-1">What did you do? <span class="text-red-500">*</span></label>
-            <textarea id="ind-act" name="act" required class="wa-input w-full" rows="3" placeholder="Describe your act of science..."></textarea>
+            <label for="ind-country" class="block font-semibold mb-1">Your Country</label>
+            <input type="text" id="ind-country" name="country" class="wa-input w-full" placeholder="Select your country" list="countries" hx-get="/-csm/autocomplete/countries" hx-trigger="keyup changed delay:300ms" hx-target="#countries" />
           </div>
 
           <div class="mb-4">
-            <label for="ind-project" class="block font-semibold mb-1">Project Name (optional)</label>
-            <input type="text" id="ind-project" name="project" class="wa-input w-full" list="projects" hx-get="/-csm/autocomplete/projects" hx-trigger="keyup changed delay:300ms" hx-target="#projects" />
+            <label for="ind-email" class="block font-semibold mb-1">Your Email <span class="text-red-500">(required)</span></label>
+            <input type="email" id="ind-email" name="email" required class="wa-input w-full"<% if let Some(ref info) = self.user_info { %> value="<%= info.handle %>"<% } %> />
+            <small class="text-gray-500">We won't share this. We do require this to validate reports.</small>
           </div>
 
-          <div class="mb-4">
-            <label for="ind-country" class="block font-semibold mb-1">Country (optional)</label>
-            <input type="text" id="ind-country" name="country" class="wa-input w-full" list="countries" hx-get="/-csm/autocomplete/countries" hx-trigger="keyup changed delay:300ms" hx-target="#countries" />
-          </div>
+          <h3>Your Act(s)</h3>
 
-          <div class="mb-4">
-            <label for="ind-notes" class="block font-semibold mb-1">Notes (optional)</label>
-            <textarea id="ind-notes" name="notes" class="wa-input w-full" rows="2"></textarea>
+          <div class="flex flex-col md:flex-row gap-4 mb-4">
+            <div class="flex-1">
+              <label for="ind-act" class="block font-semibold mb-1">In less than 10 words, describe your Act(s) <span class="text-red-500">(required)</span></label>
+              <input type="text" id="ind-act" name="act" required class="wa-input w-full" />
+              <small class="text-gray-500">Example: Attended NASA event. Logged data about pollinators. Completed Trainings.</small>
+            </div>
+            <div class="flex-1">
+              <label for="ind-contributions" class="block font-semibold mb-1">Estimated # of Acts <span class="text-red-500">(required)</span></label>
+              <input type="number" id="ind-contributions" name="contributions" required min="1" class="wa-input w-full" />
+              <small class="text-gray-500">How many times did you participate: attend events, log data, analyze data, etc?</small>
+            </div>
+            <div class="flex-1">
+              <label for="ind-project" class="block font-semibold mb-1">If you participated in a project or event, give it a shout out here! <span>(optional)</span></label>
+              <input type="text" id="ind-project" name="project" class="wa-input w-full" list="projects" hx-get="/-csm/autocomplete/projects" hx-trigger="keyup changed delay:300ms" hx-target="#projects" />
+              <small class="text-gray-500">You can select from our drop down menu or type a different project or event name</small>
+            </div>
           </div>
 
           <div class="mb-4">
             <label class="flex items-center gap-2">
               <input type="checkbox" name="newsletter" value="yes" />
-              <span>Sign me up for the SciStarter newsletter</span>
+              <span>Please send me the SciStarter Newsletter every other week so I can learn about new projects and events near me!</span>
             </label>
           </div>
 
+          <p>Thank you and well done! Thank you for being part of 2.50 Million <em>Acts of Science</em>!</p>
+
           <div class="flex justify-between items-center mt-8">
             <% if self.reporting_open { %>
-            <button type="submit" class="btn btn-primary">Submit Your Report &raquo;</button>
+            <button type="submit" class="btn btn-primary">Submit &raquo;</button>
             <% } else { %>
             <button type="button" class="btn btn-primary" disabled>Reporting Starts April 1</button>
             <% } %>
@@ -111,67 +125,77 @@
 
       <!-- GROUP FORM -->
       <div id="group-form" class="hidden">
-        <h3 class="text-center text-primary-dark">Report Group Acts You Facilitated</h3>
         <form method="POST" action="/citizensciencemonth/report" class="max-w-[600px] mx-auto">
           <input type="hidden" name="report_type" value="group" />
 
           <% if self.user_info.is_none() { %>
-          <div class="mb-4">
-            <label for="grp-email" class="block font-semibold mb-1">Email <span class="text-red-500">*</span></label>
-            <input type="email" id="grp-email" name="email" required class="wa-input w-full" placeholder="your@email.com" />
-          </div>
+          <p class="bg-blue-50 border border-blue-200 rounded-md p-4">
+            You are not logged into your SciStarter account. <a href="/login?next=/citizensciencemonth/report">Sign up or login</a> to ensure you receive a one-time digital badge upon submitting your first report!
+          </p>
           <% } %>
 
+          <p>All Acts are displayed on the Wall of Fame on <a href="https://citizensciencemonth.org/">CitizenScienceMonth.org</a>.</p>
+
           <div class="mb-4">
-            <label for="grp-name" class="block font-semibold mb-1">Your Name <span class="text-red-500">*</span></label>
+            <label for="grp-name" class="block font-semibold mb-1">How would you like your class, organization, or team name displayed? <span class="text-red-500">(required)</span></label>
             <input type="text" id="grp-name" name="name" required class="wa-input w-full" />
           </div>
 
           <div class="mb-4">
-            <label for="grp-act" class="block font-semibold mb-1">What did your group do? <span class="text-red-500">*</span></label>
-            <textarea id="grp-act" name="act" required class="wa-input w-full" rows="3" placeholder="Describe the activity..."></textarea>
+            <label for="grp-country" class="block font-semibold mb-1">Your Country</label>
+            <input type="text" id="grp-country" name="country" class="wa-input w-full" placeholder="Select your country" list="countries" hx-get="/-csm/autocomplete/countries" hx-trigger="keyup changed delay:300ms" hx-target="#countries" />
           </div>
 
           <div class="mb-4">
-            <label for="grp-contributions" class="block font-semibold mb-1">Number of participants <span class="text-red-500">*</span></label>
-            <input type="number" id="grp-contributions" name="contributions" required min="1" class="wa-input w-full" />
+            <label for="grp-email" class="block font-semibold mb-1">Your Email <span class="text-red-500">(required)</span></label>
+            <input type="email" id="grp-email" name="email" required class="wa-input w-full"<% if let Some(ref info) = self.user_info { %> value="<%= info.handle %>"<% } %> />
+            <small class="text-gray-500">We won't share this. We do require this to validate reports.</small>
+          </div>
+
+          <h3><em>Acts of Science</em></h3>
+
+          <div class="mb-4">
+            <label for="grp-act" class="block font-semibold mb-1">In less than 10 words, describe the Act(s) <span class="text-red-500">(required)</span></label>
+            <input type="text" id="grp-act" name="act" required class="wa-input w-full" />
+            <small class="text-gray-500">Example: Joined <em>Acts of Science Connected</em>; Attended NASA event. Logged data about pollinators. Completed Trainings.</small>
+          </div>
+
+          <div class="flex flex-col md:flex-row gap-4 mb-4">
+            <div class="flex-1">
+              <label for="grp-num-others" class="block font-semibold mb-1">Estimated # of Participants <span class="text-red-500">(required)</span></label>
+              <input type="number" id="grp-num-others" name="num_others" required min="1" class="wa-input w-full" />
+            </div>
+            <div class="flex-1">
+              <label for="grp-contributions" class="block font-semibold mb-1">Estimated # of Acts <span class="text-red-500">(required)</span></label>
+              <input type="number" id="grp-contributions" name="contributions" required min="1" class="wa-input w-full" />
+              <small class="text-gray-500">How many times did participants attend events, log data, analyze data, etc?</small>
+            </div>
           </div>
 
           <div class="mb-4">
-            <label for="grp-organization" class="block font-semibold mb-1">Organization (optional)</label>
-            <input type="text" id="grp-organization" name="organization" class="wa-input w-full" />
+            <label for="grp-others" class="block font-semibold mb-1">Display Names of Participants <span>(optional)</span></label>
+            <small class="text-gray-500">Type one name per line as you'd like them to appear on <a href="https://citizensciencemonth.org/">CitizenScienceMonth.org</a>'s Wall of Fame. We recommend using the full first name and the last name's initial.</small>
+            <textarea id="grp-others" name="others" class="wa-input w-full" rows="3"></textarea>
           </div>
 
           <div class="mb-4">
-            <label for="grp-project" class="block font-semibold mb-1">Project Name (optional)</label>
+            <label for="grp-project" class="block font-semibold mb-1">Did your team participate in a project or event? Give it a shout out here! <span>(optional)</span></label>
             <input type="text" id="grp-project" name="project" class="wa-input w-full" list="projects" hx-get="/-csm/autocomplete/projects" hx-trigger="keyup changed delay:300ms" hx-target="#projects" />
-          </div>
-
-          <div class="mb-4">
-            <label for="grp-others" class="block font-semibold mb-1">Names of other participants (optional)</label>
-            <textarea id="grp-others" name="others" class="wa-input w-full" rows="2" placeholder="One per line"></textarea>
-          </div>
-
-          <div class="mb-4">
-            <label for="grp-country" class="block font-semibold mb-1">Country (optional)</label>
-            <input type="text" id="grp-country" name="country" class="wa-input w-full" list="countries" hx-get="/-csm/autocomplete/countries" hx-trigger="keyup changed delay:300ms" hx-target="#countries" />
-          </div>
-
-          <div class="mb-4">
-            <label for="grp-notes" class="block font-semibold mb-1">Notes (optional)</label>
-            <textarea id="grp-notes" name="notes" class="wa-input w-full" rows="2"></textarea>
+            <small class="text-gray-500">You can select from our drop down menu or type a different project or event name.</small>
           </div>
 
           <div class="mb-4">
             <label class="flex items-center gap-2">
               <input type="checkbox" name="newsletter" value="yes" />
-              <span>Sign me up for the SciStarter newsletter</span>
+              <span>Please send me the SciStarter Newsletter every other week so I can learn about new projects and events near me!</span>
             </label>
           </div>
 
+          <p>Thank you and well done! Thank you for being part of 2.50 Million <em>Acts of Science</em>!</p>
+
           <div class="flex justify-between items-center mt-8">
             <% if self.reporting_open { %>
-            <button type="submit" class="btn btn-primary">Submit Group Report &raquo;</button>
+            <button type="submit" class="btn btn-primary">Submit &raquo;</button>
             <% } else { %>
             <button type="button" class="btn btn-primary" disabled>Reporting Starts April 1</button>
             <% } %>
