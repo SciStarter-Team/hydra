@@ -1,24 +1,32 @@
 // V2 API endpoints for participation recording
 // Ported from orrery/orrery/api/views/v2.py
 
-use poem::{handler, web::{Path, Form, Query}, Response, IntoResponse, http::HeaderMap};
-use serde::Deserialize;
-use anyhow::Error;
-use ulid::Ulid;
-use common::message::user::{IdentifierType, UserMatchRequest, UserMatchResponse, UserOpaqueIdRequest, UserOpaqueIdResponse, ValidateApiKeyRequest, ValidateApiKeyResponse, WorkflowProgressRequest, WorkflowProgressResponse, WorkflowType};
-use common::message::log::ProjectParticipationRecord;
-use common::service::{request, send};
-use common::shared::db;
 use crate::middleware::authorization::Authenticated;
 use crate::oauth2::types::AccessToken;
 use crate::peering::LoadStorePeered;
+use anyhow::Error;
+use common::message::log::ProjectParticipationRecord;
+use common::message::user::{
+    IdentifierType, UserMatchRequest, UserMatchResponse, UserOpaqueIdRequest, UserOpaqueIdResponse,
+    ValidateApiKeyRequest, ValidateApiKeyResponse, WorkflowProgressRequest,
+    WorkflowProgressResponse, WorkflowType,
+};
+use common::service::{request, send};
+use common::shared::db;
+use poem::{
+    IntoResponse, Response, handler,
+    http::HeaderMap,
+    web::{Form, Path, Query},
+};
+use serde::Deserialize;
+use ulid::Ulid;
 
 /// Form data for participation recording
 #[derive(Debug, Deserialize)]
 struct ParticipationForm {
     #[serde(rename = "where")]
-    where_point: Option<String>,  // GeoJSON point
-    when: Option<String>,          // ISO datetime
+    where_point: Option<String>, // GeoJSON point
+    when: Option<String>, // ISO datetime
     #[serde(rename = "type")]
     event_type: Option<String>,
     origin: Option<i16>,
@@ -31,10 +39,10 @@ struct ParticipationForm {
     hashed: Option<String>,
     opaque: Option<String>,
     email: Option<String>,
-    #[serde(rename = "Email")]  // Handle both cases
+    #[serde(rename = "Email")] // Handle both cases
     email_cap: Option<String>,
     token: Option<String>,
-    #[serde(rename = "Token")]  // Handle both cases
+    #[serde(rename = "Token")] // Handle both cases
     token_cap: Option<String>,
 
     // API key for authentication
@@ -49,12 +57,9 @@ struct ApiKeyQuery {
 
 /// Lightweight helper to get entity_id (target) from slug
 async fn get_entity_id_for_slug(slug: &str) -> Result<String, Error> {
-    let row = sqlx::query!(
-        "SELECT target FROM entities WHERE slug = ? LIMIT 1",
-        slug
-    )
-    .fetch_one(db())
-    .await?;
+    let row = sqlx::query!("SELECT target FROM entities WHERE slug = ? LIMIT 1", slug)
+        .fetch_one(db())
+        .await?;
 
     Ok(row.target)
 }
@@ -66,8 +71,9 @@ async fn check_api_key_permission(api_key: &str, project_id: &str) -> Result<boo
         "user.api_key.validate",
         ValidateApiKeyRequest {
             api_key: api_key.to_string(),
-        }
-    ).await?;
+        },
+    )
+    .await?;
 
     if !validation.valid {
         return Ok(false);
@@ -116,12 +122,14 @@ async fn record_participation(
         if event_type == "incidental" {
             return Ok(poem::web::Json(serde_json::json!({
                 "result": "Not saving incidental event"
-            })).into_response());
+            }))
+            .into_response());
         }
     }
 
     // Verify project exists and get entity_id
-    let entity_id = get_entity_id_for_slug(slug).await
+    let entity_id = get_entity_id_for_slug(slug)
+        .await
         .map_err(|_| anyhow::anyhow!("Project slug does not identify a project"))?;
 
     // Match user by identifier
@@ -130,8 +138,9 @@ async fn record_participation(
         UserMatchRequest {
             identifier: identifier.to_string(),
             identifier_type,
-        }
-    ).await?;
+        },
+    )
+    .await?;
 
     let Some(user_id_str) = user_match.user_id else {
         // User doesn't exist - return success but don't record (privacy)
@@ -139,7 +148,8 @@ async fn record_participation(
             "result": "success",
             "operation": "discard",
             "identifier": identifier
-        })).into_response());
+        }))
+        .into_response());
     };
 
     let user_id = Ulid::from_string(&user_id_str)?;
@@ -169,13 +179,15 @@ async fn record_participation(
             extra: form.extra.or(Some(String::new())),
             fidelity: form.fidelity,
             task_name: form.event_type,
-        }
-    ).await?;
+        },
+    )
+    .await?;
 
     Ok(poem::web::Json(serde_json::json!({
         "result": "success",
         "operation": "record"
-    })).into_response())
+    }))
+    .into_response())
 }
 
 /// Record participation event via hashed email
@@ -191,7 +203,9 @@ pub async fn record_event_hashed(
         form.key = query.key;
     }
 
-    let hashed = form.hashed.clone()
+    let hashed = form
+        .hashed
+        .clone()
         .ok_or_else(|| anyhow::anyhow!("Missing 'hashed' field"))?;
 
     record_participation(
@@ -200,8 +214,9 @@ pub async fn record_event_hashed(
         IdentifierType::Hashed,
         form,
         None, // API key handled separately for hashed endpoint
-        3, // origin 3 = hashed email
-    ).await
+        3,    // origin 3 = hashed email
+    )
+    .await
 }
 
 #[derive(Debug, Deserialize)]
@@ -218,7 +233,8 @@ async fn do_connect_opaque(
     user_info: Option<std::sync::Arc<common::message::user::BasicInfo>>,
 ) -> Result<Response, Error> {
     // Get entity_id (target) from slug
-    let entity_id = get_entity_id_for_slug(&slug).await
+    let entity_id = get_entity_id_for_slug(&slug)
+        .await
         .map_err(|_| anyhow::anyhow!("Project slug does not identify a project"))?;
 
     // Query the appropriate connect URL from projects table
@@ -260,8 +276,9 @@ async fn do_connect_opaque(
             "user.opaque_id.get",
             UserOpaqueIdRequest {
                 user_id: user.user_id.to_string(),
-            }
-        ).await?;
+            },
+        )
+        .await?;
 
         // If opaque_id exists, append it to URL
         if let Some(opaque_id) = opaque_response.opaque_id {
@@ -280,7 +297,11 @@ async fn do_connect_opaque(
         Ok(poem::web::Redirect::see_other(target).into_response())
     } else {
         // Not authenticated and not allowing anonymous - redirect to login
-        Ok(poem::web::Redirect::see_other(format!("/login?next=/api/participation/connect/{}", slug)).into_response())
+        Ok(poem::web::Redirect::see_other(format!(
+            "/login?next=/api/participation/connect/{}",
+            slug
+        ))
+        .into_response())
     }
 }
 
@@ -319,7 +340,9 @@ pub async fn record_event_opaque(
         form.key = query.key;
     }
 
-    let opaque = form.opaque.clone()
+    let opaque = form
+        .opaque
+        .clone()
         .ok_or_else(|| anyhow::anyhow!("Missing 'opaque' field"))?;
 
     let api_key = form.key.clone();
@@ -331,7 +354,8 @@ pub async fn record_event_opaque(
         form,
         api_key,
         7, // origin 7 = opaque ID
-    ).await
+    )
+    .await
 }
 
 /// Record participation event via plaintext email
@@ -348,7 +372,9 @@ pub async fn record_event_email(
     }
 
     // Handle both 'email' and 'Email' fields
-    let email = form.email.clone()
+    let email = form
+        .email
+        .clone()
         .or(form.email_cap.clone())
         .ok_or_else(|| anyhow::anyhow!("The email value is required"))?;
 
@@ -361,7 +387,8 @@ pub async fn record_event_email(
         form,
         api_key,
         8, // origin 8 = plaintext email
-    ).await
+    )
+    .await
 }
 
 /// Record participation event via link token
@@ -378,7 +405,9 @@ pub async fn record_event_link_token(
     }
 
     // Handle both 'token' and 'Token' fields
-    let token = form.token.clone()
+    let token = form
+        .token
+        .clone()
         .or(form.token_cap.clone())
         .ok_or_else(|| anyhow::anyhow!("The token value is required"))?;
 
@@ -391,16 +420,15 @@ pub async fn record_event_link_token(
         form,
         api_key,
         9, // origin 9 = link token
-    ).await
+    )
+    .await
 }
 
 /// Record Articulate completion event
 /// POST /api/participation/articulate
 #[handler]
-pub async fn record_event_articulate(
-    Form(form): Form<ArticulateForm>,
-) -> Result<Response, Error> {
-    use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
+pub async fn record_event_articulate(Form(form): Form<ArticulateForm>) -> Result<Response, Error> {
+    use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 
     // Get JWT secret from compile-time environment
     let jwt_secret = env!("SCISTARTER_JWT_SECRET");
@@ -410,7 +438,8 @@ pub async fn record_event_articulate(
         &form.token,
         &DecodingKey::from_secret(jwt_secret.as_bytes()),
         &Validation::new(Algorithm::HS256),
-    ).map_err(|e| anyhow::anyhow!("Invalid JWT token: {}", e))?;
+    )
+    .map_err(|e| anyhow::anyhow!("Invalid JWT token: {}", e))?;
 
     let claims = token_data.claims;
 
@@ -418,7 +447,10 @@ pub async fn record_event_articulate(
     let activity = form.activity.trim_end_matches('/').to_lowercase();
 
     // Extract ULID from pseudo-email format (e.g., "01HXYZ...@articulate.scistarter.org")
-    let user_id_str = claims.email.split('@').next()
+    let user_id_str = claims
+        .email
+        .split('@')
+        .next()
         .ok_or_else(|| anyhow::anyhow!("Invalid JWT email format"))?
         .to_string();
 
@@ -500,7 +532,7 @@ pub async fn record_event_articulate(
         }
 
         // Data Ethics
-        "http://dataethicsxapisept72022" => {
+        "http://dataethicsxapisept72022" | /* spanish */ "http://4xi0y6kwb69qegbwdc8i-kkmgeymlbul_rise" | /* portuguese */ "http://k632u-oqbl5kbcd5jfnucao1cr2sekoh_rise" => {
             let _: WorkflowProgressResponse = request(
                 "user.workflow.progress",
                 WorkflowProgressRequest {
@@ -542,7 +574,8 @@ pub async fn record_event_articulate(
 
     Ok(poem::web::Json(serde_json::json!({
         "result": "ok"
-    })).into_response())
+    }))
+    .into_response())
 }
 
 #[derive(Debug, Deserialize)]
@@ -587,7 +620,9 @@ pub async fn record_event_openid(
     // Check if token has participation scope
     let scopes: Vec<&str> = access_token.scope.split_whitespace().collect();
     if !scopes.contains(&"participation") {
-        return Err(anyhow::anyhow!("Access token does not have participation scope"));
+        return Err(anyhow::anyhow!(
+            "Access token does not have participation scope"
+        ));
     }
 
     // Parse user_id from access token
@@ -597,7 +632,8 @@ pub async fn record_event_openid(
     // Determine project ID
     let project_id = if let Some(Path(project_slug)) = slug {
         // Slug provided: look up entity and get its target (project_id)
-        get_entity_id_for_slug(&project_slug).await
+        get_entity_id_for_slug(&project_slug)
+            .await
             .map_err(|_| anyhow::anyhow!("Project slug does not identify a project"))?
     } else {
         // No slug: find the unique project owned by the client owner
@@ -606,8 +642,9 @@ pub async fn record_event_openid(
             .await
             .map_err(|_| anyhow::anyhow!("Could not find OAuth2 client"))?;
 
-        let owner_user_id = client.owner_user_id
-            .ok_or_else(|| anyhow::anyhow!("Token does not identify a project and no project slug provided"))?;
+        let owner_user_id = client.owner_user_id.ok_or_else(|| {
+            anyhow::anyhow!("Token does not identify a project and no project slug provided")
+        })?;
 
         // Query for projects created by the client owner
         let projects = sqlx::query_scalar!(
@@ -620,7 +657,11 @@ pub async fn record_event_openid(
         match projects.len() {
             0 => return Err(anyhow::anyhow!("Client owner has no projects")),
             1 => projects[0].clone(),
-            _ => return Err(anyhow::anyhow!("Client owner has multiple projects, slug required")),
+            _ => {
+                return Err(anyhow::anyhow!(
+                    "Client owner has multiple projects, slug required"
+                ));
+            }
         }
     };
 
@@ -651,7 +692,8 @@ pub async fn record_event_openid(
     Ok(poem::web::Json(serde_json::json!({
         "result": "success",
         "operation": "record"
-    })).into_response())
+    }))
+    .into_response())
 }
 
 /// Helper to extract Bearer token from Authorization header
