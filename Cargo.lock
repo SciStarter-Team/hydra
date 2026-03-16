@@ -7675,6 +7675,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "thumbnail-service"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "image",
+ "poem",
+ "reqwest",
+ "serde",
+ "tokio",
+]
+
+[[package]]
 name = "tiff"
 version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
