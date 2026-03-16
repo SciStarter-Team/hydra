@@ -2889,6 +2889,7 @@ dependencies = [
  "governor",
  "html2md",
  "jiff",
+ "regex",
  "reqwest",
  "sailfish",
  "serde",

@@ -137,7 +137,18 @@
                 </div>
 
                 <!-- Form Footer -->
-                <div class="flex items-center justify-end pt-6 space-x-2 border-t border-gray-200 mt-6">
+                <div class="flex items-center justify-between pt-6 border-t border-gray-200 mt-6">
+                    <div class="flex items-center space-x-2">
+                        <button
+                            type="button"
+                            class="px-4 py-2 bg-amber-600 text-white text-sm font-medium rounded-md hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            hx-post="/-admin/email/stored/<%= self.stored_email_id|disp %>/convert-to-oneoff"
+                            hx-confirm="Convert this stored email to a one-off email? The slug will be removed."
+                        >
+                            Convert to One-off
+                        </button>
+                    </div>
+                    <div class="flex items-center space-x-2">
                     <a
                         href="/-admin/email/stored"
                         class="px-4 py-2 bg-gray-300 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300"
@@ -169,6 +180,7 @@
                     >
                         <span x-text="isDirty ? 'Save and Send' : 'Send'">Send</span>
                     </button>
+                    </div>
                 </div>
             </form>
         </div>

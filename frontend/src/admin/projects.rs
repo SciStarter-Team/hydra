@@ -27,6 +27,7 @@ use ulid::Ulid;
 
 use super::types::lookup_user_email;
 use common::message::user::BasicInfo;
+use common::service::{trigger_email, TriggerEvent};
 
 pub fn routes() -> Route {
     Route::new()
@@ -1437,6 +1438,28 @@ async fn projects_publish(
             EntityTarget::Ulid(project_ulid),
         )
         .await?;
+    }
+
+    // Fire publish trigger to the project creator
+    if let Ok(project_info) = sqlx::query!(
+        "SELECT name, page_creator_id FROM projects WHERE project_id = ?",
+        project_id_str
+    )
+    .fetch_one(db())
+    .await
+    {
+        if let Ok(creator_id) = project_info.page_creator_id.parse::<Ulid>() {
+            trigger_email(
+                TriggerEvent::ProjectPublished,
+                creator_id,
+                Some(&[
+                    ("project_name".to_string(), project_info.name),
+                    ("project_id".to_string(), project_id_str.clone()),
+                ]),
+            )
+            .await
+            .ok();
+        }
     }
 
     // Check if this is from the edit page
@@ -3220,6 +3243,29 @@ async fn projects_create(
                 format!("name={}", form.name),
             )
             .await?;
+
+            // Fire project submission triggers
+            trigger_email(
+                TriggerEvent::ProjectSubmitted,
+                user_info.user_id,
+                Some(&[
+                    ("project_name".to_string(), form.name.clone()),
+                    ("project_id".to_string(), project_id.to_string()),
+                ]),
+            )
+            .await
+            .ok();
+
+            trigger_email(
+                TriggerEvent::ProjectCreatedStaff,
+                user_info.user_id,
+                Some(&[
+                    ("project_name".to_string(), form.name.clone()),
+                    ("project_id".to_string(), project_id.to_string()),
+                ]),
+            )
+            .await
+            .ok();
 
             // Redirect to the project edit page
             Ok(poem::Response::builder()

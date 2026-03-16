@@ -87,13 +87,13 @@ async fn process_user(
             Ok(r) => match r.json().await {
                 Ok(d) => d,
                 Err(e) => {
-                    eprintln!("iNat JSON parse error: {}", e);
+                    eprintln!("iNat JSON parse error for {}: {}", user.inat_username, e);
                     break;
                 }
             },
             Err(e) => {
-                eprintln!("iNat HTTP error: {}", e);
-                break;
+                eprintln!("iNat HTTP error for {}: {} — skipping user", user.inat_username, e);
+                return;
             }
         };
 

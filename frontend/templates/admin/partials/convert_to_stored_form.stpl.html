@@ -1,0 +1,33 @@
+<div class="p-4 bg-gray-50 rounded-lg border border-gray-200">
+    <h4 class="text-sm font-medium text-gray-900 mb-3">Convert to Stored Email</h4>
+    <div class="flex items-end gap-3">
+        <div class="flex-1">
+            <label for="convert-slug" class="block text-sm font-medium text-gray-700 mb-1">
+                Slug <span class="text-red-500">*</span>
+            </label>
+            <input
+                type="text"
+                id="convert-slug"
+                value="<%= self.suggested_slug %>"
+                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                placeholder="email-template-slug"
+            >
+        </div>
+        <button
+            type="button"
+            class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            hx-post="/-admin/email/oneoff/<%= self.oneoff_email_id|disp %>/convert-to-stored"
+            hx-vals="js:{slug: document.getElementById('convert-slug').value}"
+            hx-swap="none"
+        >
+            Convert
+        </button>
+        <button
+            type="button"
+            class="px-4 py-2 bg-gray-300 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300"
+            hx-on:click="this.closest('[id=convert-to-stored-container]').innerHTML = ''"
+        >
+            Cancel
+        </button>
+    </div>
+</div>

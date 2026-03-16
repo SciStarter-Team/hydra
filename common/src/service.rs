@@ -625,6 +625,42 @@ pub enum TriggerEvent {
 
     /// Sent when a user earns a certificate
     CertificateEarned,
+
+    /// Sent when a user needs to verify their email address
+    EmailValidation,
+
+    /// Sent when a project is published
+    ProjectPublished,
+
+    /// Sent when a new project is submitted for review (staff notification)
+    ProjectCreatedStaff,
+
+    /// Sent when a new forum post is created
+    ForumNewPost,
+
+    /// Sent when someone replies to a forum post
+    ForumPostReply,
+
+    /// Sent when a forum post is edited
+    ForumPostEdited,
+
+    /// Sent when a user makes their first contribution to a project
+    FirstContribution,
+
+    /// Sent to confirm a people finder request was submitted
+    PeopleFinderConfirmation,
+
+    /// Sent when a new people finder request needs approval
+    PeopleFinderNewRequest,
+
+    /// Sent when an Acts of Science Connected application is submitted
+    ActsOfScienceApplication,
+
+    /// Sent to confirm Acts of Science participation
+    ActsOfScienceConfirmation,
+
+    /// Generic notification sent to staff
+    StaffNotification,
 }
 
 impl TriggerEvent {
@@ -650,14 +686,29 @@ impl TriggerEvent {
             Self::CommunityJoin => "When a user joins a community",
             Self::CommunityLeave => "When a user leaves a community",
             Self::CertificateEarned => "When a user earns a certificate",
+            Self::EmailValidation => "When a user needs to verify their email address",
+            Self::ProjectPublished => "When a project is published",
+            Self::ProjectCreatedStaff => "When a new project is submitted for review (staff notification)",
+            Self::ForumNewPost => "When a new forum post is created",
+            Self::ForumPostReply => "When someone replies to a forum post",
+            Self::ForumPostEdited => "When a forum post is edited",
+            Self::FirstContribution => "When a user makes their first contribution to a project",
+            Self::PeopleFinderConfirmation => "When a people finder request is submitted",
+            Self::PeopleFinderNewRequest => "When a new people finder request needs approval",
+            Self::ActsOfScienceApplication => "When an Acts of Science Connected application is submitted",
+            Self::ActsOfScienceConfirmation => "When Acts of Science participation is confirmed",
+            Self::StaffNotification => "Generic notification sent to staff",
         }
     }
 
     /// Get the category for this trigger (e.g., "user", "project")
     pub fn category(&self) -> &'static str {
         match self {
-            Self::UserWelcome => "user",
-            Self::ProjectSubmitted | Self::ProjectApproved => "project",
+            Self::UserWelcome | Self::EmailValidation | Self::FirstContribution => "user",
+            Self::ProjectSubmitted
+            | Self::ProjectApproved
+            | Self::ProjectPublished
+            | Self::ProjectCreatedStaff => "project",
             Self::BadgeFoundations
             | Self::BadgeLibrariesHubs
             | Self::BadgeDataLiteracy
@@ -673,6 +724,10 @@ impl TriggerEvent {
             | Self::LibrariesHubsSupplemental => "workflow",
             Self::CommunityJoin | Self::CommunityLeave => "community",
             Self::CertificateEarned => "certificate",
+            Self::ForumNewPost | Self::ForumPostReply | Self::ForumPostEdited => "forum",
+            Self::PeopleFinderConfirmation | Self::PeopleFinderNewRequest => "messaging",
+            Self::ActsOfScienceApplication | Self::ActsOfScienceConfirmation => "acts",
+            Self::StaffNotification => "staff",
         }
     }
 }

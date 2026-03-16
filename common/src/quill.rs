@@ -464,7 +464,7 @@ pub fn to_delta(content: &str, format: impl Into<Option<ContentFormat>>) -> Resu
 }
 
 /// Convert HTML to Delta format
-fn html_to_delta(html: &str) -> Result<String, anyhow::Error> {
+pub fn html_to_delta(html: &str) -> Result<String, anyhow::Error> {
     let document = Html::parse_fragment(html);
     let mut ops = Vec::new();
 

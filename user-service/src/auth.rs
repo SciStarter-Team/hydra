@@ -2,7 +2,7 @@ use anyhow::Error;
 use async_nats::service::Request;
 use common::{
     message::user::{BasicInfo, Login, Signup},
-    service::log_activity,
+    service::{log_activity, trigger_email, TriggerEvent},
     shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower},
     ulid::AsUlid,
 };
@@ -142,6 +142,14 @@ pub async fn signup(req: &Request) -> Result<Option<BasicInfo>, Error> {
     tx.commit().await?;
 
     log_activity(None, "signup", user_id, None, None).await.ok();
+
+    trigger_email(
+        TriggerEvent::UserWelcome,
+        user_id,
+        Some(&[("handle".to_string(), handle.clone())]),
+    )
+    .await
+    .ok();
 
     Ok(Some(BasicInfo {
         user_id: user_id,

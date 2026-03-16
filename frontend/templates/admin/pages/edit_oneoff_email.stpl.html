@@ -127,6 +127,9 @@
                     </div>
                 </div>
 
+                <!-- Convert to Stored -->
+                <div id="convert-to-stored-container" class="mt-6"></div>
+
                 <!-- Form Footer -->
                 <div class="flex items-center justify-between pt-6 border-t border-gray-200 mt-6">
                     <div class="flex items-center space-x-2">
@@ -158,6 +161,15 @@
                                 <span>Archive</span>
                             </button>
                         <% } %>
+                        <button
+                            type="button"
+                            class="px-4 py-2 bg-amber-600 text-white text-sm font-medium rounded-md hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            hx-get="/-admin/email/oneoff/<%= self.oneoff_email_id|disp %>/convert-to-stored"
+                            hx-target="#convert-to-stored-container"
+                            hx-swap="innerHTML"
+                        >
+                            Convert to Stored
+                        </button>
                     </div>
                     <div class="flex items-center space-x-2">
                         <a

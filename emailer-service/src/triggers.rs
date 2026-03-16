@@ -24,6 +24,7 @@ struct TriggerRow {
     action_type: Option<String>,
     delay_seconds: Option<i64>,
     cancellation_trigger_name: Option<String>,
+    recipients: Option<String>,
     active: Option<bool>,
     created_at: Option<String>,
     updated_at: Option<String>,
@@ -58,10 +59,54 @@ fn convert_trigger_row(row: TriggerRow) -> Result<TriggerInfo> {
         action_type,
         delay_seconds: row.delay_seconds,
         cancellation_trigger_name: row.cancellation_trigger_name,
+        recipients: row.recipients,
         active: row.active.ok_or_else(|| anyhow::anyhow!("active is NULL"))?,
         created_at,
         updated_at,
     })
+}
+
+/// Resolve the recipients JSON into a list of EmailRecipient values.
+/// When NULL or empty, defaults to sending to the triggering user.
+/// JSON format: ["triggering_user", {"address_set": "slug"}, {"user_set": "slug"}, {"email": "addr"}]
+fn resolve_trigger_recipients(recipients_json: &Option<String>, user_id: Ulid) -> Vec<EmailRecipient> {
+    let Some(json) = recipients_json else {
+        return vec![EmailRecipient::UserId(user_id)];
+    };
+
+    let Ok(entries) = serde_json::from_str::<Vec<serde_json::Value>>(json) else {
+        tracing::warn!(recipients = %json, "Invalid recipients JSON, falling back to triggering user");
+        return vec![EmailRecipient::UserId(user_id)];
+    };
+
+    if entries.is_empty() {
+        return vec![EmailRecipient::UserId(user_id)];
+    }
+
+    entries
+        .into_iter()
+        .filter_map(|entry| match entry {
+            serde_json::Value::String(s) if s == "triggering_user" => {
+                Some(EmailRecipient::UserId(user_id))
+            }
+            serde_json::Value::Object(ref map) => {
+                if let Some(slug) = map.get("address_set").and_then(|v| v.as_str()) {
+                    Some(EmailRecipient::AddressSet { slug: slug.to_string() })
+                } else if let Some(slug) = map.get("user_set").and_then(|v| v.as_str()) {
+                    Some(EmailRecipient::UserSet { slug: slug.to_string() })
+                } else if let Some(email) = map.get("email").and_then(|v| v.as_str()) {
+                    Some(EmailRecipient::Email(email.to_string()))
+                } else {
+                    tracing::warn!(?entry, "Unknown recipient entry");
+                    None
+                }
+            }
+            _ => {
+                tracing::warn!(?entry, "Unknown recipient entry");
+                None
+            }
+        })
+        .collect()
 }
 
 // ============================================================================
@@ -82,14 +127,15 @@ pub async fn handle_create_trigger(req: &Request) -> Result<CreateTriggerRespons
 
     sqlx::query!(
         r#"INSERT INTO email_triggers
-           (trigger_id, trigger_name, stored_email_id, action_type, delay_seconds, cancellation_trigger_name, active, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)"#,
+           (trigger_id, trigger_name, stored_email_id, action_type, delay_seconds, cancellation_trigger_name, recipients, active, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)"#,
         trigger_id_str,
         request.trigger_name,
         stored_email_id_str,
         action_type_str,
         request.delay_seconds,
         request.cancellation_trigger_name,
+        request.recipients,
         created_at,
         updated_at
     )
@@ -135,6 +181,11 @@ pub async fn handle_update_trigger(req: &Request) -> Result<UpdateTriggerRespons
     if let Some(cancellation_trigger_name) = request.cancellation_trigger_name {
         separated.push("cancellation_trigger_name = ");
         separated.push_bind_unseparated(cancellation_trigger_name);
+    }
+
+    if let Some(recipients) = request.recipients {
+        separated.push("recipients = ");
+        separated.push_bind_unseparated(recipients);
     }
 
     if let Some(active) = request.active {
@@ -189,7 +240,7 @@ pub async fn handle_list_triggers(req: &Request) -> Result<ListTriggersResponse,
     let rows: Vec<TriggerRow> = if request.active_only {
         sqlx::query_as!(
             TriggerRow,
-            r#"SELECT trigger_id, trigger_name, stored_email_id, action_type, delay_seconds, cancellation_trigger_name, active, created_at, updated_at
+            r#"SELECT trigger_id, trigger_name, stored_email_id, action_type, delay_seconds, cancellation_trigger_name, recipients, active, created_at, updated_at
                FROM email_triggers
                WHERE active = 1
                ORDER BY created_at DESC"#
@@ -199,7 +250,7 @@ pub async fn handle_list_triggers(req: &Request) -> Result<ListTriggersResponse,
     } else {
         sqlx::query_as!(
             TriggerRow,
-            r#"SELECT trigger_id, trigger_name, stored_email_id, action_type, delay_seconds, cancellation_trigger_name, active, created_at, updated_at
+            r#"SELECT trigger_id, trigger_name, stored_email_id, action_type, delay_seconds, cancellation_trigger_name, recipients, active, created_at, updated_at
                FROM email_triggers
                ORDER BY created_at DESC"#
         )
@@ -224,7 +275,7 @@ pub async fn handle_get_trigger(req: &Request) -> Result<GetTriggerResponse, Err
 
     let row = sqlx::query_as!(
         TriggerRow,
-        r#"SELECT trigger_id, trigger_name, stored_email_id, action_type, delay_seconds, cancellation_trigger_name, active, created_at, updated_at
+        r#"SELECT trigger_id, trigger_name, stored_email_id, action_type, delay_seconds, cancellation_trigger_name, recipients, active, created_at, updated_at
            FROM email_triggers
            WHERE trigger_id = ?"#,
         trigger_id_str
@@ -296,7 +347,7 @@ pub async fn handle_trigger_event(req: &Request) -> Result<TriggerEmailResponse,
     // Now, look up active triggers for this event
     let trigger_rows = sqlx::query_as!(
         TriggerRow,
-        r#"SELECT trigger_id, trigger_name, stored_email_id, action_type, delay_seconds, cancellation_trigger_name, active, created_at, updated_at
+        r#"SELECT trigger_id, trigger_name, stored_email_id, action_type, delay_seconds, cancellation_trigger_name, recipients, active, created_at, updated_at
            FROM email_triggers
            WHERE trigger_name = ? AND active = 1"#,
         request.trigger_name
@@ -334,13 +385,15 @@ pub async fn handle_trigger_event(req: &Request) -> Result<TriggerEmailResponse,
         let mut additional_data = request.additional_data.clone().unwrap_or_default();
         additional_data.push(("user_id".to_string(), request.user_id.to_string()));
 
+        let recipients = resolve_trigger_recipients(&trigger.recipients, request.user_id);
+
         match trigger.action_type {
             TriggerActionType::Immediate => {
                 // Send immediately
                 let _sending_id = send_email(
                     template_html,
                     stored_email.subject,
-                    vec![EmailRecipient::UserId(request.user_id)],
+                    recipients,
                     datasets,
                     Some(additional_data),
                 )
@@ -371,6 +424,7 @@ pub async fn handle_trigger_event(req: &Request) -> Result<TriggerEmailResponse,
                     stored_email.subject,
                     datasets,
                     Some(additional_data),
+                    trigger.recipients.clone(),
                 )
                 .await?;
 

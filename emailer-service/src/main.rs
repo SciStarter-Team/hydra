@@ -158,6 +158,9 @@ async fn main() {
     // Spawn unsubscribe sync background task
     toplevel.spawn(sync::synchronize_unsubscribes());
 
+    // Spawn message template sync background task
+    toplevel.spawn(sync::synchronize_message_templates());
+
     println!("Emailer service ready");
 
     // Wait for all handlers to complete (they shouldn't unless there's an error)

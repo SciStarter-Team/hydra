@@ -19,6 +19,7 @@ struct OneoffEmailRow {
     datasets: Option<String>,
     created_at: Option<String>,
     archived: Option<i64>,
+    legacy_slug: Option<String>,
 }
 
 // ============================================================================
@@ -35,7 +36,7 @@ pub async fn handle_list_oneoff_emails(req: &Request) -> Result<ListOneoffEmails
         let rows = sqlx::query_as!(
             OneoffEmailRow,
             r#"
-            SELECT oneoff_email_id, subject, body_delta, datasets, created_at, archived
+            SELECT oneoff_email_id, subject, body_delta, datasets, created_at, archived, legacy_slug
             FROM oneoff_emails
             ORDER BY created_at DESC
             LIMIT ? OFFSET ?
@@ -55,7 +56,7 @@ pub async fn handle_list_oneoff_emails(req: &Request) -> Result<ListOneoffEmails
         let rows = sqlx::query_as!(
             OneoffEmailRow,
             r#"
-            SELECT oneoff_email_id, subject, body_delta, datasets, created_at, archived
+            SELECT oneoff_email_id, subject, body_delta, datasets, created_at, archived, legacy_slug
             FROM oneoff_emails
             WHERE archived = 0
             ORDER BY created_at DESC
@@ -88,6 +89,7 @@ pub async fn handle_list_oneoff_emails(req: &Request) -> Result<ListOneoffEmails
                 datasets,
                 created_at,
                 archived: row.archived.ok_or_else(|| anyhow::anyhow!("archived is NULL"))? != 0,
+                legacy_slug: row.legacy_slug,
             })
         })
         .collect::<Result<Vec<_>, Error>>()?;
@@ -106,7 +108,7 @@ pub async fn handle_get_oneoff_email(req: &Request) -> Result<GetOneoffEmailResp
     let row = sqlx::query_as!(
         OneoffEmailRow,
         r#"
-        SELECT oneoff_email_id, subject, body_delta, datasets, created_at, archived
+        SELECT oneoff_email_id, subject, body_delta, datasets, created_at, archived, legacy_slug
         FROM oneoff_emails
         WHERE oneoff_email_id = ?
         "#,
@@ -128,6 +130,7 @@ pub async fn handle_get_oneoff_email(req: &Request) -> Result<GetOneoffEmailResp
             datasets,
             created_at,
             archived: row.archived.ok_or_else(|| anyhow::anyhow!("archived is NULL"))? != 0,
+            legacy_slug: row.legacy_slug,
         },
     })
 }

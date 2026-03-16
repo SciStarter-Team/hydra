@@ -18,6 +18,10 @@ pub fn routes() -> Route {
             get(email_oneoff_edit).post(email_oneoff_update),
         )
         .at("/oneoff/:id/send", post(email_oneoff_send))
+        .at(
+            "/oneoff/:id/convert-to-stored",
+            get(email_oneoff_convert_form).post(email_oneoff_to_stored),
+        )
         .at("/stored", get(email_stored).post(email_stored_create))
         .at("/stored/new", get(email_stored_new))
         .at(
@@ -25,6 +29,7 @@ pub fn routes() -> Route {
             get(email_stored_edit).post(email_stored_update),
         )
         .at("/stored/:id/send", post(email_stored_send))
+        .at("/stored/:id/convert-to-oneoff", post(email_stored_to_oneoff))
         .at("/stored/autocomplete", get(email_stored_autocomplete))
         .at(
             "/triggers",
@@ -585,6 +590,7 @@ pub struct EditOneoffEmailPage {
     pub selected_datasets: Vec<String>,
     pub error_message: Option<String>,
     pub available_datasets: Vec<common::message::email::DatasetInfo>,
+    pub legacy_slug: Option<String>,
 }
 
 #[handler]
@@ -623,6 +629,7 @@ async fn email_oneoff_edit(
                 selected_datasets: email.datasets,
                 error_message: None,
                 available_datasets: datasets_response.datasets,
+                legacy_slug: email.legacy_slug,
             };
             AdminLayout::new("Edit One-off Email", content)
                 .with_breadcrumb("One-off Emails", Some("/-admin/email/oneoff"))
@@ -823,6 +830,7 @@ pub struct EditTriggerModal {
     pub trigger: common::message::email::TriggerInfo,
     pub available_trigger_events: Vec<(String, String, String)>, // (name, description, category)
     pub stored_email: Option<(String, String)>,                  // (slug, subject)
+    pub current_recipients: Vec<(String, String)>,               // (form_value, display_label)
 }
 
 #[handler]
@@ -956,6 +964,58 @@ async fn email_stored_autocomplete(
         .body(html))
 }
 
+/// Convert a form recipient value to its JSON representation.
+/// Form values use a prefix convention:
+/// - "triggering_user" → "triggering_user"
+/// - "address_set:slug" → {"address_set": "slug"}
+/// - "user_set:slug" → {"user_set": "slug"}
+/// - "email:addr" → {"email": "addr"}
+fn recipient_form_value_to_json(value: &str) -> serde_json::Value {
+    if value == "triggering_user" {
+        serde_json::Value::String("triggering_user".to_string())
+    } else if let Some(slug) = value.strip_prefix("address_set:") {
+        serde_json::json!({"address_set": slug})
+    } else if let Some(slug) = value.strip_prefix("user_set:") {
+        serde_json::json!({"user_set": slug})
+    } else if let Some(email) = value.strip_prefix("email:") {
+        serde_json::json!({"email": email})
+    } else {
+        serde_json::Value::String(value.to_string())
+    }
+}
+
+/// Convert recipients JSON back to form values for display.
+fn recipients_json_to_form_values(json: &Option<String>) -> Vec<(String, String)> {
+    let Some(json) = json else {
+        return vec![("triggering_user".to_string(), "Triggering User".to_string())];
+    };
+
+    let Ok(entries) = serde_json::from_str::<Vec<serde_json::Value>>(json) else {
+        return vec![("triggering_user".to_string(), "Triggering User".to_string())];
+    };
+
+    entries
+        .into_iter()
+        .filter_map(|entry| match entry {
+            serde_json::Value::String(s) if s == "triggering_user" => {
+                Some(("triggering_user".to_string(), "Triggering User".to_string()))
+            }
+            serde_json::Value::Object(ref map) => {
+                if let Some(slug) = map.get("address_set").and_then(|v| v.as_str()) {
+                    Some((format!("address_set:{}", slug), format!("Address Set: {}", slug)))
+                } else if let Some(slug) = map.get("user_set").and_then(|v| v.as_str()) {
+                    Some((format!("user_set:{}", slug), format!("User Set: {}", slug)))
+                } else if let Some(email) = map.get("email").and_then(|v| v.as_str()) {
+                    Some((format!("email:{}", email), format!("Email: {}", email)))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        })
+        .collect()
+}
+
 // Create email trigger
 #[derive(Debug, Deserialize)]
 pub struct CreateTriggerForm {
@@ -964,6 +1024,8 @@ pub struct CreateTriggerForm {
     action_type: String,
     delay_seconds: Option<String>,
     cancellation_trigger_name: Option<String>,
+    #[serde(default)]
+    recipients: Vec<String>,
 }
 
 #[handler]
@@ -999,12 +1061,24 @@ async fn email_trigger_create(
 
     let cancellation_trigger_name = form.cancellation_trigger_name.filter(|s| !s.is_empty());
 
+    let recipients = if form.recipients.is_empty() {
+        None
+    } else {
+        let entries: Vec<serde_json::Value> = form
+            .recipients
+            .iter()
+            .map(|r| recipient_form_value_to_json(r))
+            .collect();
+        Some(serde_json::to_string(&entries).unwrap_or_default())
+    };
+
     let create_request = CreateTriggerRequest {
         trigger_name: form.trigger_name,
         stored_email_id,
         action_type,
         delay_seconds,
         cancellation_trigger_name,
+        recipients,
     };
 
     let _response: CreateTriggerResponse =
@@ -1098,11 +1172,14 @@ async fn email_trigger_edit(
         None
     };
 
+    let current_recipients = recipients_json_to_form_values(&trigger.recipients);
+
     // Render the modal
     let modal = EditTriggerModal {
         trigger,
         available_trigger_events,
         stored_email,
+        current_recipients,
     };
 
     Ok(poem::Response::builder()
@@ -1117,6 +1194,8 @@ pub struct UpdateTriggerForm {
     action_type: Option<String>,
     delay_seconds: Option<String>,
     cancellation_trigger_name: Option<String>,
+    #[serde(default)]
+    recipients: Option<Vec<String>>,
     active: Option<String>,
 }
 
@@ -1170,12 +1249,21 @@ async fn email_trigger_update(
 
     let active = form.active.map(|s| s == "true" || s == "1");
 
+    let recipients = form.recipients.map(|r| {
+        let entries: Vec<serde_json::Value> = r
+            .iter()
+            .map(|v| recipient_form_value_to_json(v))
+            .collect();
+        serde_json::to_string(&entries).unwrap_or_default()
+    });
+
     let update_request = UpdateTriggerRequest {
         trigger_id,
         stored_email_id,
         action_type,
         delay_seconds,
         cancellation_trigger_name,
+        recipients,
         active,
     };
 
@@ -1359,13 +1447,13 @@ pub struct MergeFieldsPartial {
 
 #[handler]
 async fn email_merge_fields(
-    Query(query): Query<MergeFieldsQuery>,
+    crate::form::QsQuery(query): crate::form::QsQuery<MergeFieldsQuery>,
     Authenticated(_user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     let mut all_fields = Vec::new();
 
     // Fetch variables for each selected dataset
-    for dataset_name in query.datasets {
+    for dataset_name in &query.datasets {
         let request = common::message::email::GetDatasetVariablesRequest {
             dataset_name: dataset_name.clone(),
         };
@@ -1379,12 +1467,156 @@ async fn email_merge_fields(
         }
     }
 
-    let content = MergeFieldsPartial { fields: all_fields };
+    let content = MergeFieldsPartial {
+        fields: all_fields,
+    };
     let html = content.render_once()?;
 
     Ok(poem::Response::builder()
         .content_type("text/html")
         .body(html))
+}
+
+// Convert one-off email to stored: form fragment
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/partials/convert_to_stored_form.stpl.html")]
+pub struct ConvertToStoredForm {
+    pub oneoff_email_id: ulid::Ulid,
+    pub suggested_slug: String,
+}
+
+#[handler]
+async fn email_oneoff_convert_form(
+    Path(id): Path<String>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let oneoff_email_id = id
+        .parse::<ulid::Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid oneoff email ID format"))?;
+
+    // Fetch the email to get legacy_slug for pre-fill
+    let response: common::message::email::GetOneoffEmailResponse = common::service::request(
+        "emailer.oneoff.get",
+        common::message::email::GetOneoffEmailRequest { oneoff_email_id },
+    )
+    .await?;
+
+    let suggested_slug = response.email.legacy_slug.unwrap_or_default();
+
+    let content = ConvertToStoredForm {
+        oneoff_email_id,
+        suggested_slug,
+    };
+    let html = content.render_once()?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(html))
+}
+
+// Convert one-off email to stored: POST handler
+#[derive(Debug, Deserialize)]
+pub struct ConvertToStoredEmailForm {
+    slug: String,
+}
+
+#[handler]
+async fn email_oneoff_to_stored(
+    Path(id): Path<String>,
+    Form(form): Form<ConvertToStoredEmailForm>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let oneoff_email_id = id
+        .parse::<ulid::Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid oneoff email ID format"))?;
+
+    // Fetch the one-off email
+    let response: common::message::email::GetOneoffEmailResponse = common::service::request(
+        "emailer.oneoff.get",
+        common::message::email::GetOneoffEmailRequest { oneoff_email_id },
+    )
+    .await?;
+
+    let email = response.email;
+
+    // Create new stored email
+    let create_response: common::message::email::CreateStoredEmailResponse =
+        common::service::request(
+            "emailer.stored.create",
+            common::message::email::CreateStoredEmailRequest {
+                slug: form.slug,
+                subject: email.subject,
+                body_delta: email.body_delta,
+                datasets: email.datasets,
+            },
+        )
+        .await?;
+
+    // Delete the one-off email
+    let _: common::message::email::DeleteOneoffEmailResponse = common::service::request(
+        "emailer.oneoff.delete",
+        common::message::email::DeleteOneoffEmailRequest { oneoff_email_id },
+    )
+    .await?;
+
+    let redirect_url = format!(
+        "/-admin/email/stored/{}",
+        create_response.stored_email_id
+    );
+
+    Ok(poem::Response::builder()
+        .header("HX-Redirect", &redirect_url)
+        .body(""))
+}
+
+// Convert stored email to one-off: POST handler
+#[handler]
+async fn email_stored_to_oneoff(
+    Path(id): Path<String>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let stored_email_id = id
+        .parse::<ulid::Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid stored email ID format"))?;
+
+    // Fetch the stored email
+    let response: common::message::email::GetStoredEmailResponse = common::service::request(
+        "emailer.stored.get",
+        common::message::email::GetStoredEmailRequest { stored_email_id },
+    )
+    .await?;
+
+    let email = response.email;
+
+    // Create new one-off email
+    let create_response: common::message::email::CreateOneoffEmailResponse =
+        common::service::request(
+            "emailer.oneoff.create",
+            common::message::email::CreateOneoffEmailRequest {
+                subject: email.subject,
+                body_delta: email.body_delta,
+                datasets: email.datasets,
+            },
+        )
+        .await?;
+
+    // Delete the stored email
+    let _: common::message::email::DeleteStoredEmailResponse = common::service::request(
+        "emailer.stored.delete",
+        common::message::email::DeleteStoredEmailRequest { stored_email_id },
+    )
+    .await?;
+
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::SEE_OTHER)
+        .header(
+            "Location",
+            format!(
+                "/-admin/email/oneoff/{}",
+                create_response.oneoff_email_id
+            ),
+        )
+        .finish())
 }
 
 // API endpoint to fetch dataset variables

@@ -9,7 +9,7 @@ use common::{
         GoUrlStatsResponse, ProjectParticipationRecord, ProjectParticipationRequest,
         ProjectParticipationResponse, RecentActivityRequest, RecentActivityResponse,
     },
-    service::decode_structured_message,
+    service::{decode_structured_message, trigger_email, TriggerEvent},
 };
 use datafusion::prelude::*;
 use ulid::Ulid;
@@ -519,7 +519,7 @@ pub async fn handle_project_participation_record(req: &async_nats::service::Requ
     let now = common::timestring::TimeString::now().to_string();
 
     // Insert into cache (ignore if already exists)
-    sqlx::query!(
+    let cache_result = sqlx::query!(
         r#"
         INSERT OR IGNORE INTO project_participations_cache (user_id, project_id)
         VALUES (?, ?)
@@ -529,6 +529,19 @@ pub async fn handle_project_participation_record(req: &async_nats::service::Requ
     )
     .execute(common::shared::db())
     .await?;
+
+    // If this was a new row, it's the user's first contribution to this project
+    if cache_result.rows_affected() > 0 {
+        trigger_email(
+            TriggerEvent::FirstContribution,
+            record.user_id,
+            Some(&[
+                ("project_id".to_string(), record.project_id.clone()),
+            ]),
+        )
+        .await
+        .ok();
+    }
 
     // Record to participation table for permanent record
     use log_service::database::tables::ParticipationRow;

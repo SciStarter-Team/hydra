@@ -55,6 +55,7 @@ pub struct ScheduleSendRequest {
     pub subject: String,
     pub data_sets: Vec<String>,
     pub additional_data: Option<Vec<(String, String)>>,
+    pub recipients: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -303,6 +304,7 @@ pub struct OneoffEmail {
     pub datasets: Vec<String>, // Dataset names
     pub created_at: TimeString,
     pub archived: bool,
+    pub legacy_slug: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -437,6 +439,7 @@ pub struct TriggerInfo {
     pub action_type: TriggerActionType,
     pub delay_seconds: Option<i64>,
     pub cancellation_trigger_name: Option<String>,
+    pub recipients: Option<String>,
     pub active: bool,
     pub created_at: TimeString,
     pub updated_at: TimeString,
@@ -449,6 +452,7 @@ pub struct CreateTriggerRequest {
     pub action_type: TriggerActionType,
     pub delay_seconds: Option<i64>,
     pub cancellation_trigger_name: Option<String>,
+    pub recipients: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -463,6 +467,7 @@ pub struct UpdateTriggerRequest {
     pub action_type: Option<TriggerActionType>,
     pub delay_seconds: Option<i64>,
     pub cancellation_trigger_name: Option<String>,
+    pub recipients: Option<String>,
     pub active: Option<bool>,
 }
 
