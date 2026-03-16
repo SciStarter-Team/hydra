@@ -7680,6 +7680,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "image",
+ "object_store",
  "poem",
  "reqwest",
  "serde",
