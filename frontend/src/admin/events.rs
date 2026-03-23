@@ -4,7 +4,7 @@
 //! and field updates.
 
 use super::types::lookup_user_email;
-use crate::component::{admin_layout::AdminLayoutPrepared, AdminLayout, Component};
+use crate::component::{AdminLayout, Component, admin_layout::AdminLayoutPrepared};
 use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
 use common::message::user::BasicInfo;
@@ -12,7 +12,7 @@ use common::shared::db;
 use common::timestring::TimeString;
 use poem::handler;
 use poem::web::{Form, Path, Query};
-use poem::{get, put, Route};
+use poem::{Route, get, put};
 use sailfish::TemplateOnce;
 use serde::Deserialize;
 use std::sync::Arc;

@@ -174,8 +174,20 @@ mod tests {
 
         let attrs: Vec<_> = parser.collect();
         assert_eq!(attrs.len(), 2);
-        assert_eq!(attrs[0], ParsedAttr { key: "foo", value: "bar" });
-        assert_eq!(attrs[1], ParsedAttr { key: "baz", value: "qux" });
+        assert_eq!(
+            attrs[0],
+            ParsedAttr {
+                key: "foo",
+                value: "bar"
+            }
+        );
+        assert_eq!(
+            attrs[1],
+            ParsedAttr {
+                key: "baz",
+                value: "qux"
+            }
+        );
     }
 
     #[test]
@@ -185,8 +197,20 @@ mod tests {
 
         let attrs: Vec<_> = parser.collect();
         assert_eq!(attrs.len(), 2);
-        assert_eq!(attrs[0], ParsedAttr { key: "text", value: "This is a paragraph, yo." });
-        assert_eq!(attrs[1], ParsedAttr { key: "count", value: "5" });
+        assert_eq!(
+            attrs[0],
+            ParsedAttr {
+                key: "text",
+                value: "This is a paragraph, yo."
+            }
+        );
+        assert_eq!(
+            attrs[1],
+            ParsedAttr {
+                key: "count",
+                value: "5"
+            }
+        );
     }
 
     #[test]
@@ -196,7 +220,13 @@ mod tests {
 
         let attrs: Vec<_> = parser.collect();
         assert_eq!(attrs.len(), 1);
-        assert_eq!(attrs[0], ParsedAttr { key: "text", value: "Hello World" });
+        assert_eq!(
+            attrs[0],
+            ParsedAttr {
+                key: "text",
+                value: "Hello World"
+            }
+        );
     }
 
     #[test]
@@ -206,7 +236,13 @@ mod tests {
 
         let attrs: Vec<_> = parser.collect();
         assert_eq!(attrs.len(), 1);
-        assert_eq!(attrs[0], ParsedAttr { key: "text", value: r#"Hello \"World\""# });
+        assert_eq!(
+            attrs[0],
+            ParsedAttr {
+                key: "text",
+                value: r#"Hello \"World\""#
+            }
+        );
     }
 
     #[test]

@@ -385,8 +385,7 @@ async fn csm_report(
     let today = jiff::Zoned::now().date();
     let month: i32 = today.month().into();
     let day: i32 = today.day().into();
-    let reporting_open =
-        month == 4 || (month == 5 && day <= 3) || user_info.is_staff();
+    let reporting_open = month == 4 || (month == 5 && day <= 3) || user_info.is_staff();
 
     let layout = StandardLayout::new(
         "/citizensciencemonth/report",
@@ -467,8 +466,7 @@ async fn csm_report_submit(
     let today = jiff::Zoned::now().date();
     let month: i32 = today.month().into();
     let day: i32 = today.day().into();
-    let reporting_open =
-        month == 4 || (month == 5 && day <= 3) || user_info.is_staff();
+    let reporting_open = month == 4 || (month == 5 && day <= 3) || user_info.is_staff();
 
     let layout = StandardLayout::new(
         "/citizensciencemonth/report",
@@ -867,7 +865,7 @@ pub async fn csm_events(Query(query): Query<CsmEventsQuery>) -> Result<Response,
 
     // Results query
     let mut results_qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new(
-        "SELECT e.slug, ev.name, ei.begin, ei.end, \
+        "SELECT e.slug, ev.name, MIN(ei.begin), MIN(ei.end), \
          ev.entirely_online, ev.event_type, \
          ev.address, ev.city, ev.state \
          FROM events ev \
@@ -887,7 +885,7 @@ pub async fn csm_events(Query(query): Query<CsmEventsQuery>) -> Result<Response,
         lat,
         lng,
     );
-    results_qb.push(" GROUP BY ev.event_id ORDER BY ei.begin ASC, ev.name ASC LIMIT ");
+    results_qb.push(" GROUP BY ev.event_id ORDER BY MIN(ei.begin) ASC, ev.name ASC LIMIT ");
     results_qb.push_bind(EVENTS_PAGE_SIZE);
     results_qb.push(" OFFSET ");
     results_qb.push_bind(offset);
@@ -1044,12 +1042,7 @@ const COUNTRIES: &[&str] = &include!("countries.txt");
 pub async fn csm_autocomplete_countries(
     Query(query): Query<CsmCountryQuery>,
 ) -> Result<Response, anyhow::Error> {
-    let search_term = query
-        .country
-        .as_deref()
-        .unwrap_or("")
-        .trim()
-        .to_lowercase();
+    let search_term = query.country.as_deref().unwrap_or("").trim().to_lowercase();
     if search_term.len() < 2 {
         return Ok(Response::builder()
             .content_type("text/html")
@@ -1082,12 +1075,10 @@ pub async fn csm_autocomplete_countries(
         .map(|c| format!(r#"<option value="{}"></option>"#, html_escape(c)))
         .collect();
 
-    Ok(Response::builder()
-        .content_type("text/html")
-        .body(format!(
-            r#"<datalist id="countries">{}</datalist>"#,
-            options
-        )))
+    Ok(Response::builder().content_type("text/html").body(format!(
+        r#"<datalist id="countries">{}</datalist>"#,
+        options
+    )))
 }
 
 // ============================================================================

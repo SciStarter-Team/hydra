@@ -223,7 +223,12 @@ impl Compactor {
                     let batch_size = self.batch_size;
 
                     let result = tokio::task::spawn_blocking(move || {
-                        Self::stream_wal_to_parquet(&wal_file_path, &parquet_dir, &schema, batch_size)
+                        Self::stream_wal_to_parquet(
+                            &wal_file_path,
+                            &parquet_dir,
+                            &schema,
+                            batch_size,
+                        )
                     })
                     .await?;
 

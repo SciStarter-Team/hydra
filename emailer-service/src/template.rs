@@ -2,7 +2,11 @@ use aho_corasick::AhoCorasick;
 use anyhow::Error;
 
 /// Merge template with field values using aho-corasick for efficient multi-pattern replacement
-pub fn merge_template(template: &str, field_names: &[String], field_values: &[String]) -> Result<String, Error> {
+pub fn merge_template(
+    template: &str,
+    field_names: &[String],
+    field_values: &[String],
+) -> Result<String, Error> {
     if field_names.len() != field_values.len() {
         anyhow::bail!("Field names and values must have the same length");
     }

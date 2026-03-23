@@ -10,7 +10,10 @@ use common::{
     service::request,
     shared::db,
 };
-use poem::{handler, web::{Json, Query}, IntoResponse, Response};
+use poem::{
+    IntoResponse, Response, handler,
+    web::{Json, Query},
+};
 use serde::Deserialize;
 
 // ============================================================================
@@ -47,11 +50,8 @@ pub async fn affiliated() -> Result<Response, Error> {
 
 #[handler]
 pub async fn ai_opted_out() -> Result<Response, Error> {
-    let response: AiOptedOutResponse = request(
-        "user.profile.ai_opted_out",
-        AiOptedOutRequest {},
-    )
-    .await?;
+    let response: AiOptedOutResponse =
+        request("user.profile.ai_opted_out", AiOptedOutRequest {}).await?;
 
     let mut opted_out = serde_json::Map::new();
     for entry in response.opted_out {
@@ -78,9 +78,7 @@ struct CheckJoinQuery {
 }
 
 #[handler]
-pub async fn check_join(
-    Query(query): Query<CheckJoinQuery>,
-) -> Result<Response, Error> {
+pub async fn check_join(Query(query): Query<CheckJoinQuery>) -> Result<Response, Error> {
     // Validate API key
     let Some(key) = query.key else {
         return Ok(poem::http::StatusCode::NOT_FOUND.into());

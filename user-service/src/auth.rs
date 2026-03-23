@@ -2,7 +2,7 @@ use anyhow::Error;
 use async_nats::service::Request;
 use common::{
     message::user::{BasicInfo, Login, Signup},
-    service::{log_activity, trigger_email, TriggerEvent},
+    service::{TriggerEvent, log_activity, trigger_email},
     shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower},
     ulid::AsUlid,
 };

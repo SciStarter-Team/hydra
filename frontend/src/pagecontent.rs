@@ -25,11 +25,7 @@ pub struct PageContent {
 }
 
 impl PageContent {
-    pub fn new(
-        kind: PageContentKind,
-        name: impl Into<String>,
-        content: &[u8],
-    ) -> PageContent {
+    pub fn new(kind: PageContentKind, name: impl Into<String>, content: &[u8]) -> PageContent {
         PageContent {
             pagecontent_id: Ulid::new(),
             kind,

@@ -8,11 +8,11 @@ use object_store::ObjectStore;
 use object_store::aws::AmazonS3Builder;
 use object_store::path::Path as ObjectPath;
 use poem::http::StatusCode;
+use poem::listener::TcpListener;
 #[cfg(not(debug_assertions))]
 use poem::listener::{Listener, RustlsCertificate, RustlsConfig};
-use poem::listener::TcpListener;
-use poem::{EndpointExt, Route, Server, get, handler};
 use poem::web::{Data, Query, RealIp};
+use poem::{EndpointExt, Route, Server, get, handler};
 use serde::Deserialize;
 
 const MEDIA_BASE: &str = "https://media.scistarter.org";
@@ -268,10 +268,7 @@ async fn save_to_cache(path: &Path, data: &[u8]) -> Result<(), Error> {
     match tokio::fs::write(path, data).await {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::StorageFull => {
-            eprintln!(
-                "Warning: not enough disk space to cache {}",
-                path.display()
-            );
+            eprintln!("Warning: not enough disk space to cache {}", path.display());
             Ok(())
         }
         Err(e) => Err(e.into()),
@@ -321,9 +318,7 @@ async fn main() -> Result<(), Error> {
     {
         eprintln!("thumbnail-service listening on {}", listen_on);
 
-        Server::new(TcpListener::bind(listen_on))
-            .run(app)
-            .await?;
+        Server::new(TcpListener::bind(listen_on)).run(app).await?;
     }
 
     Ok(())

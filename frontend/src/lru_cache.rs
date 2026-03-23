@@ -52,7 +52,9 @@ impl<T: Clone> LruCache<T> {
 
         // If at capacity, remove entry with earliest expiration (least recently used)
         if self.entries.len() >= self.max_size {
-            if let Some(min_pos) = self.entries.iter()
+            if let Some(min_pos) = self
+                .entries
+                .iter()
                 .enumerate()
                 .min_by_key(|(_, entry)| entry.expires_at)
                 .map(|(pos, _)| pos)

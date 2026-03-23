@@ -1,8 +1,4 @@
-use common::message::{
-    location::LocationInfo,
-    user::BasicInfo,
-    user::CommunityInfo,
-};
+use common::message::{location::LocationInfo, user::BasicInfo, user::CommunityInfo};
 use poem::{Response, handler, http::HeaderMap, session::Session, web::RealIp};
 use std::sync::Arc;
 
@@ -89,7 +85,11 @@ pub async fn index_page(
     .await?;
 
     IndexPage {
-        head: Head::default().with_slick().with_geosearch().prepare(None).await?,
+        head: Head::default()
+            .with_slick()
+            .with_geosearch()
+            .prepare(None)
+            .await?,
         layout,
     }
     .into_response(None)
@@ -141,7 +141,11 @@ pub async fn index_page_pseudo_handler(
     .await?;
 
     IndexPage {
-        head: Head::default().with_slick().with_geosearch().prepare(None).await?,
+        head: Head::default()
+            .with_slick()
+            .with_geosearch()
+            .prepare(None)
+            .await?,
         layout,
     }
     .into_response(None)

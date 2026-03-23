@@ -1,7 +1,7 @@
 use governor::{
+    Quota, RateLimiter,
     clock::DefaultClock,
     state::{InMemoryState, NotKeyed},
-    Quota, RateLimiter,
 };
 use jiff::Zoned;
 use std::num::NonZeroU32;
@@ -51,7 +51,10 @@ impl QuotaTracker {
             // Quota reached - wait until next day (midnight UTC)
             let now = Zoned::now();
             let tomorrow_date = now.date().tomorrow().unwrap();
-            let tomorrow_midnight = tomorrow_date.at(0, 0, 0, 0).to_zoned(jiff::tz::TimeZone::UTC).unwrap();
+            let tomorrow_midnight = tomorrow_date
+                .at(0, 0, 0, 0)
+                .to_zoned(jiff::tz::TimeZone::UTC)
+                .unwrap();
             let duration = tomorrow_midnight.duration_since(&now);
 
             tracing::info!(

@@ -317,9 +317,12 @@ impl LoadStorePeered for Exchange {
     async fn delete_from_database(exchange_id: Ulid) -> Result<(), Error> {
         let exchange_id_str = exchange_id.to_string();
         // Delete exchange and all related data (CASCADE handles predefined_searches and hidden_projects)
-        sqlx::query!("DELETE FROM exchanges WHERE exchange_id = ?", exchange_id_str)
-            .execute(db())
-            .await?;
+        sqlx::query!(
+            "DELETE FROM exchanges WHERE exchange_id = ?",
+            exchange_id_str
+        )
+        .execute(db())
+        .await?;
 
         Ok(())
     }
@@ -327,9 +330,9 @@ impl LoadStorePeered for Exchange {
 
 // Template helper types
 
-use std::sync::Arc;
-use common::message::user::BasicInfo;
 use crate::middleware::authorization::Authenticated;
+use common::message::user::BasicInfo;
+use std::sync::Arc;
 
 /// Wrapper for user info that templates can use
 #[derive(Debug, Clone)]

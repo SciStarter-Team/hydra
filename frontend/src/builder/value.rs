@@ -41,7 +41,12 @@ impl Expression {
         }
 
         // Check for integer literal (including negative)
-        if s.starts_with('-') || s.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
+        if s.starts_with('-')
+            || s.chars()
+                .next()
+                .map(|c| c.is_ascii_digit())
+                .unwrap_or(false)
+        {
             if let Ok(n) = s.parse::<i64>() {
                 return Ok(Expression::IntegerLiteral(n));
             }

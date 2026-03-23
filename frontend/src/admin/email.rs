@@ -1,11 +1,11 @@
 //! Email management handlers for stored emails, one-off emails, triggers, and queue.
 
-use crate::form::{deserialize_string_or_vec, QsForm};
 use crate::component::{AdminLayout, Component};
+use crate::form::{QsForm, deserialize_string_or_vec};
 use crate::middleware::authorization::Authenticated;
 use poem::handler;
 use poem::web::{Form, Path, Query};
-use poem::{get, patch, post, Route};
+use poem::{Route, get, patch, post};
 use sailfish::TemplateOnce;
 use serde::Deserialize;
 
@@ -29,12 +29,12 @@ pub fn routes() -> Route {
             get(email_stored_edit).post(email_stored_update),
         )
         .at("/stored/:id/send", post(email_stored_send))
-        .at("/stored/:id/convert-to-oneoff", post(email_stored_to_oneoff))
-        .at("/stored/autocomplete", get(email_stored_autocomplete))
         .at(
-            "/triggers",
-            get(email_triggers).post(email_trigger_create),
+            "/stored/:id/convert-to-oneoff",
+            post(email_stored_to_oneoff),
         )
+        .at("/stored/autocomplete", get(email_stored_autocomplete))
+        .at("/triggers", get(email_triggers).post(email_trigger_create))
         .at("/triggers/:id/edit", get(email_trigger_edit))
         .at(
             "/triggers/:id",
@@ -42,10 +42,7 @@ pub fn routes() -> Route {
         )
         .at("/queue", get(email_queue))
         .at("/queue-content", get(email_queue_content))
-        .at(
-            "/dataset/:name/variables",
-            get(email_dataset_variables),
-        )
+        .at("/dataset/:name/variables", get(email_dataset_variables))
         .at("/merge-fields", get(email_merge_fields))
 }
 
@@ -840,7 +837,7 @@ async fn email_triggers(
     use common::message::email::{
         GetStoredEmailRequest, GetStoredEmailResponse, ListTriggersRequest, ListTriggersResponse,
     };
-    use common::service::{request, TriggerEvent};
+    use common::service::{TriggerEvent, request};
     use std::collections::HashMap;
     use strum::IntoEnumIterator;
 
@@ -1002,7 +999,10 @@ fn recipients_json_to_form_values(json: &Option<String>) -> Vec<(String, String)
             }
             serde_json::Value::Object(ref map) => {
                 if let Some(slug) = map.get("address_set").and_then(|v| v.as_str()) {
-                    Some((format!("address_set:{}", slug), format!("Address Set: {}", slug)))
+                    Some((
+                        format!("address_set:{}", slug),
+                        format!("Address Set: {}", slug),
+                    ))
                 } else if let Some(slug) = map.get("user_set").and_then(|v| v.as_str()) {
                     Some((format!("user_set:{}", slug), format!("User Set: {}", slug)))
                 } else if let Some(email) = map.get("email").and_then(|v| v.as_str()) {
@@ -1134,7 +1134,7 @@ async fn email_trigger_edit(
     use common::message::email::{
         GetStoredEmailRequest, GetStoredEmailResponse, GetTriggerRequest, GetTriggerResponse,
     };
-    use common::service::{request, TriggerEvent};
+    use common::service::{TriggerEvent, request};
     use strum::IntoEnumIterator;
 
     let trigger_id = id
@@ -1250,10 +1250,8 @@ async fn email_trigger_update(
     let active = form.active.map(|s| s == "true" || s == "1");
 
     let recipients = form.recipients.map(|r| {
-        let entries: Vec<serde_json::Value> = r
-            .iter()
-            .map(|v| recipient_form_value_to_json(v))
-            .collect();
+        let entries: Vec<serde_json::Value> =
+            r.iter().map(|v| recipient_form_value_to_json(v)).collect();
         serde_json::to_string(&entries).unwrap_or_default()
     });
 
@@ -1467,9 +1465,7 @@ async fn email_merge_fields(
         }
     }
 
-    let content = MergeFieldsPartial {
-        fields: all_fields,
-    };
+    let content = MergeFieldsPartial { fields: all_fields };
     let html = content.render_once()?;
 
     Ok(poem::Response::builder()
@@ -1559,10 +1555,7 @@ async fn email_oneoff_to_stored(
     )
     .await?;
 
-    let redirect_url = format!(
-        "/-admin/email/stored/{}",
-        create_response.stored_email_id
-    );
+    let redirect_url = format!("/-admin/email/stored/{}", create_response.stored_email_id);
 
     Ok(poem::Response::builder()
         .header("HX-Redirect", &redirect_url)
@@ -1611,10 +1604,7 @@ async fn email_stored_to_oneoff(
         .status(poem::http::StatusCode::SEE_OTHER)
         .header(
             "Location",
-            format!(
-                "/-admin/email/oneoff/{}",
-                create_response.oneoff_email_id
-            ),
+            format!("/-admin/email/oneoff/{}", create_response.oneoff_email_id),
         )
         .finish())
 }

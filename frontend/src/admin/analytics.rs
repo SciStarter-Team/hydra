@@ -851,7 +851,10 @@ async fn analytics_export_events(
 pub fn routes() -> impl Endpoint {
     Route::new()
         .at("/", get(analytics))
-        .at("/recent-activity-table", get(analytics_recent_activity_table))
+        .at(
+            "/recent-activity-table",
+            get(analytics_recent_activity_table),
+        )
         .at("/top-performers", get(analytics_top_performers))
         .at("/export/users", get(analytics_export_users))
         .at("/export/projects", get(analytics_export_projects))

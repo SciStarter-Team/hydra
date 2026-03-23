@@ -8,13 +8,13 @@ use common::{
     shared::db,
     timestring::TimeString,
 };
-use poem::{handler, http::HeaderMap, web::Json, IntoResponse, Response};
+use poem::{IntoResponse, Response, handler, http::HeaderMap, web::Json};
 use serde::Deserialize;
 use ulid::Ulid;
 
 use crate::{
     entity::{Entity, EntityKind, EntityTarget},
-    event::{all::EventAll, EventInstance},
+    event::{EventInstance, all::EventAll},
     peering::LoadStorePeered,
 };
 
@@ -172,9 +172,7 @@ async fn import_single_event(event: ImportEvent) -> Result<(), Error> {
     // Determine URL and entirely_online
     let (url, entirely_online, address) = match event.location {
         Some(ImportEventLocation::Online { url }) => (url, true, String::new()),
-        Some(ImportEventLocation::Physical { address }) => {
-            (event.source_url, false, address)
-        }
+        Some(ImportEventLocation::Physical { address }) => (event.source_url, false, address),
         None => (event.source_url, false, String::new()),
     };
 

@@ -2,8 +2,14 @@
 // Returns None when user doesn't exist (API caller handles this by returning success/discard)
 
 use async_nats::service::Request;
+use common::message::user::{
+    AiOptedOutEntry, AiOptedOutRequest, AiOptedOutResponse, ApiCreateUserRequest,
+    ApiCreateUserResponse, IdentifierType, ProfileIdLookupRequest, ProfileIdLookupResponse,
+    ProfileIdLookupType, UserApiKeyRequest, UserApiKeyResponse, UserMatchRequest,
+    UserMatchResponse, UserOpaqueIdRequest, UserOpaqueIdResponse, ValidateApiKeyRequest,
+    ValidateApiKeyResponse,
+};
 use common::{service::decode_structured_message, shared::db};
-use common::message::user::{IdentifierType, UserMatchRequest, UserMatchResponse, UserApiKeyRequest, UserApiKeyResponse, UserOpaqueIdRequest, UserOpaqueIdResponse, ValidateApiKeyRequest, ValidateApiKeyResponse, ProfileIdLookupRequest, ProfileIdLookupType, ProfileIdLookupResponse, ApiCreateUserRequest, ApiCreateUserResponse, AiOptedOutRequest, AiOptedOutResponse, AiOptedOutEntry};
 
 /// Match user by identifier (hashed email, opaque ID, email, or link token)
 pub async fn match_user(req: &Request) -> Result<UserMatchResponse, anyhow::Error> {
@@ -50,12 +56,9 @@ async fn match_by_opaque_id(opaque_id: &str) -> Result<Option<String>, anyhow::E
 
 /// Match user by plaintext email
 async fn match_by_email(email: &str) -> Result<Option<String>, anyhow::Error> {
-    let row = sqlx::query!(
-        "SELECT user_id FROM emails WHERE email = ? LIMIT 1",
-        email
-    )
-    .fetch_optional(db())
-    .await?;
+    let row = sqlx::query!("SELECT user_id FROM emails WHERE email = ? LIMIT 1", email)
+        .fetch_optional(db())
+        .await?;
 
     Ok(row.map(|r| r.user_id))
 }
@@ -243,10 +246,8 @@ pub async fn api_create_user(req: &Request) -> Result<ApiCreateUserResponse, any
         disabled_password: false,
     };
 
-    let basic_info: Option<common::message::user::BasicInfo> = common::service::request(
-        "user.auth.signup",
-        signup,
-    ).await?;
+    let basic_info: Option<common::message::user::BasicInfo> =
+        common::service::request("user.auth.signup", signup).await?;
 
     let basic_info = basic_info.ok_or_else(|| anyhow::anyhow!("Failed to create user"))?;
     let user_id = basic_info.user_id.to_string();

@@ -10,10 +10,7 @@ use common::message::log::{RecentActivityRequest, RecentActivityResponse};
 use common::message::user::BasicInfo;
 use common::service::request_timeout;
 use common::shared::db;
-use poem::{
-    Endpoint, Route, get, handler,
-    web::Query,
-};
+use poem::{Endpoint, Route, get, handler, web::Query};
 use sailfish::TemplateOnce;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -517,7 +514,5 @@ async fn help(
 
 // Routes export
 pub fn routes() -> impl Endpoint {
-    Route::new()
-        .at("/", get(dashboard))
-        .at("/help", get(help))
+    Route::new().at("/", get(dashboard)).at("/help", get(help))
 }

@@ -2,10 +2,7 @@ use anyhow::Result;
 use async_nats::service::Request;
 use common::timestring::TimeString;
 use common::{
-    message::{
-        forum::*,
-        user::BasicInfo,
-    },
+    message::{forum::*, user::BasicInfo},
     service::request as nats_request,
     shared::db,
 };
@@ -264,15 +261,12 @@ pub async fn inbox(req: &Request) -> Result<InboxResponse> {
             row.author_id.clone()
         };
 
-        let other_user_handle = match nats_request::<BasicInfo>(
-            "user.basic_info.by_user_id",
-            &other_user_id_str,
-        )
-        .await
-        {
-            Ok(info) => info.handle.clone(),
-            Err(_) => other_user_id_str.clone(),
-        };
+        let other_user_handle =
+            match nats_request::<BasicInfo>("user.basic_info.by_user_id", &other_user_id_str).await
+            {
+                Ok(info) => info.handle.clone(),
+                Err(_) => other_user_id_str.clone(),
+            };
 
         let last_message_at = row.updated_at.unwrap_or(row.created_at);
         let preview = row
@@ -287,7 +281,9 @@ pub async fn inbox(req: &Request) -> Result<InboxResponse> {
             subject: row.title,
             other_user_id: other_user_id_str.parse().unwrap_or_default(),
             other_user_handle,
-            last_message_at: last_message_at.try_into().unwrap_or_else(|_| TimeString::now()),
+            last_message_at: last_message_at
+                .try_into()
+                .unwrap_or_else(|_| TimeString::now()),
             last_message_preview: preview,
             post_count: row.post_count,
             seen: row.seen != 0,

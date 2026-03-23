@@ -525,5 +525,10 @@ pub fn routes() -> impl Endpoint {
         .at("/", get(schedules_list).post(schedules_create))
         .at("/search", get(schedules_search))
         .at("/new", get(schedules_new))
-        .at("/:id", get(schedules_edit).post(schedules_update).delete(schedules_delete))
+        .at(
+            "/:id",
+            get(schedules_edit)
+                .post(schedules_update)
+                .delete(schedules_delete),
+        )
 }

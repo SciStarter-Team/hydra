@@ -1,11 +1,11 @@
 use anyhow::Result;
 use common::message::user::{BasicInfo, CertificateGetRequest, CertificateGetResponse};
-use oxidize_pdf::{measure_text, Color, Document, Font, Image, Page};
+use oxidize_pdf::{Color, Document, Font, Image, Page, measure_text};
+use poem::Response;
 use poem::handler;
 use poem::http::StatusCode;
 use poem::session::Session;
 use poem::web::Path;
-use poem::Response;
 use ulid::Ulid;
 
 use crate::Static;
@@ -273,7 +273,11 @@ pub fn filename_for_mode(mode: &str) -> &'static str {
 
 pub fn projects_for_mode<'a>(mode: &str, project: &'a str) -> Vec<&'a str> {
     match mode {
-        "inventing-tomorrow" | "citscicon2021" | "csm2022" | "champion" | "champion__watermarked"
+        "inventing-tomorrow"
+        | "citscicon2021"
+        | "csm2022"
+        | "champion"
+        | "champion__watermarked"
         | "broward_coach" => vec![],
         "citsciday2019" | "explorer2021" => project.lines().collect(),
         _ => {

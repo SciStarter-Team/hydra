@@ -6,10 +6,7 @@ use serde::Deserialize;
 use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 
-use log_service::database::{
-    Database,
-    tables::ParticipationRow,
-};
+use log_service::database::{Database, tables::ParticipationRow};
 
 const INATURALIST_ORIGIN: i16 = 5;
 const INAT_USER_PAGE_SIZE: i64 = 500;
@@ -92,7 +89,10 @@ async fn process_user(
                 }
             },
             Err(e) => {
-                eprintln!("iNat HTTP error for {}: {} — skipping user", user.inat_username, e);
+                eprintln!(
+                    "iNat HTTP error for {}: {} — skipping user",
+                    user.inat_username, e
+                );
                 return;
             }
         };
@@ -235,7 +235,14 @@ pub async fn inaturalist_synchronize(
                 if cancellation_token.is_cancelled() {
                     return;
                 }
-                process_user(user, &database, &project_mappings, &client, &cancellation_token).await;
+                process_user(
+                    user,
+                    &database,
+                    &project_mappings,
+                    &client,
+                    &cancellation_token,
+                )
+                .await;
                 processed_any = true;
             }
 

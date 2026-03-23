@@ -1,8 +1,14 @@
-use anyhow::{anyhow, Error};
+use anyhow::{Error, anyhow};
 use async_nats::service::Request;
 use common::{
-    message::email::{AddTargetsToSendingRequest, AddTargetsToSendingResponse, EmailRecipient, SendEmailRequest, SendEmailResponse},
-    message::user::{UserSetGetRequest, UserSetGetResponse, UserSetReleaseResultsRequest, AddressSetGetRequest, AddressSetGetResponse},
+    message::email::{
+        AddTargetsToSendingRequest, AddTargetsToSendingResponse, EmailRecipient, SendEmailRequest,
+        SendEmailResponse,
+    },
+    message::user::{
+        AddressSetGetRequest, AddressSetGetResponse, UserSetGetRequest, UserSetGetResponse,
+        UserSetReleaseResultsRequest,
+    },
     service::request,
     shared::db,
     timestring::TimeString,
@@ -408,7 +414,9 @@ pub async fn send_email(
             subject,
             data_sets_json,
             additional_data_json,
-        ).await {
+        )
+        .await
+        {
             tracing::error!(
                 sending_id = %sending_id_for_task,
                 error = %e,
@@ -449,7 +457,9 @@ pub async fn handle_send_request(req: &Request) -> Result<SendEmailResponse, Err
 /// Handle a request to add additional targets to an existing sending
 /// Returns immediately and processes recipients in the background
 #[tracing::instrument(skip(req))]
-pub async fn handle_add_targets_request(req: &Request) -> Result<AddTargetsToSendingResponse, Error> {
+pub async fn handle_add_targets_request(
+    req: &Request,
+) -> Result<AddTargetsToSendingResponse, Error> {
     let request: AddTargetsToSendingRequest = flexbuffers::from_slice(&req.message.payload)?;
     let sending_id_str = request.sending_id.to_string();
 
@@ -475,7 +485,9 @@ pub async fn handle_add_targets_request(req: &Request) -> Result<AddTargetsToSen
             sending.subject,
             sending.data_sets,
             sending.additional_data,
-        ).await {
+        )
+        .await
+        {
             tracing::error!(
                 sending_id = %sending_id_for_task,
                 error = %e,

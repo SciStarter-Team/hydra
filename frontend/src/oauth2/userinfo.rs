@@ -1,12 +1,12 @@
 // OAuth2 UserInfo Endpoint
 
-use poem::{handler, Response, IntoResponse, http::HeaderMap};
-use anyhow::Error;
-use serde::{Serialize, Deserialize};
-use serde_json::json;
 use crate::oauth2::types::AccessToken;
 use crate::peering::LoadStorePeered;
+use anyhow::Error;
 use common::service;
+use poem::{IntoResponse, Response, handler, http::HeaderMap};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 #[derive(Debug, Serialize)]
 struct UserinfoErrorResponse {

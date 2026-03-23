@@ -55,7 +55,12 @@ impl<C: TemplateOnce> AdminLayout<C> {
         self
     }
 
-    pub fn with_breadcrumb_short(mut self, label: &str, short_label: &str, url: Option<&str>) -> Self {
+    pub fn with_breadcrumb_short(
+        mut self,
+        label: &str,
+        short_label: &str,
+        url: Option<&str>,
+    ) -> Self {
         self.breadcrumbs.push(Breadcrumb {
             label: label.to_string(),
             url: url.map(|s| s.to_string()),

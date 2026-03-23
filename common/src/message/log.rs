@@ -1,6 +1,6 @@
+use crate::timestring::TimeString;
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
-use crate::timestring::TimeString;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JoinRequest {
@@ -73,7 +73,7 @@ pub struct TopPerformersQuery {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TopItemCount {
-    pub identifier: String,  // Can be path, program_id, or entity_id depending on criterion
+    pub identifier: String, // Can be path, program_id, or entity_id depending on criterion
     pub count: i64,
 }
 
@@ -166,36 +166,36 @@ pub struct ArticulateCompletionRecord {
 pub struct ProjectParticipationRecord {
     pub user_id: Ulid,
     pub project_id: String,
-    pub origin: Option<i16>,          // Source of participation (defaults to 0 = web)
-    pub when: Option<String>,         // Timestamp (defaults to now)
-    pub duration: Option<f64>,        // Duration in hours (defaults to 1.0)
-    pub where_point: Option<String>,  // GeoJSON point
-    pub magnitude: Option<i32>,       // Magnitude/intensity (defaults to 1)
-    pub authenticated: Option<bool>,  // Whether user was authenticated (defaults to true)
-    pub extra: Option<String>,        // Extra data (defaults to empty)
-    pub fidelity: Option<f64>,        // Fidelity score (defaults to 1.0)
-    pub task_name: Option<String>,    // Task name
+    pub origin: Option<i16>,  // Source of participation (defaults to 0 = web)
+    pub when: Option<String>, // Timestamp (defaults to now)
+    pub duration: Option<f64>, // Duration in hours (defaults to 1.0)
+    pub where_point: Option<String>, // GeoJSON point
+    pub magnitude: Option<i32>, // Magnitude/intensity (defaults to 1)
+    pub authenticated: Option<bool>, // Whether user was authenticated (defaults to true)
+    pub extra: Option<String>, // Extra data (defaults to empty)
+    pub fidelity: Option<f64>, // Fidelity score (defaults to 1.0)
+    pub task_name: Option<String>, // Task name
 }
 
 // Exchange Analytics
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExchangeEvent {
-    pub event_id: String,          // ULID
-    pub exchange_id: String,       // ULID
-    pub user_id: Option<String>,   // ULID, None for anonymous
-    pub device_id: String,         // Device identifier (persistent)
-    pub interaction_id: String,    // Interaction identifier (1 hour expiry)
-    pub when_occurred: String,     // TimeString
-    pub page: String,              // "home", "project", "results"
-    pub page_id: Option<String>,   // e.g., project_id
-    pub action: String,            // "view", "search", "vote", "save"
-    pub extra: Option<String>,     // JSON for additional context
+    pub event_id: String,        // ULID
+    pub exchange_id: String,     // ULID
+    pub user_id: Option<String>, // ULID, None for anonymous
+    pub device_id: String,       // Device identifier (persistent)
+    pub interaction_id: String,  // Interaction identifier (1 hour expiry)
+    pub when_occurred: String,   // TimeString
+    pub page: String,            // "home", "project", "results"
+    pub page_id: Option<String>, // e.g., project_id
+    pub action: String,          // "view", "search", "vote", "save"
+    pub extra: Option<String>,   // JSON for additional context
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExchangeEngagementRequest {
-    pub exchange_id: String,       // ULID
-    pub year: Option<i32>,         // None = all time
+    pub exchange_id: String, // ULID
+    pub year: Option<i32>,   // None = all time
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -204,8 +204,8 @@ pub struct ExchangeEngagementResponse {
     pub visitors: i32,
     pub views: i32,
     pub saves: i32,
-    pub clickthroughs: i32,       // System-wide total
-    pub contributions: i32,        // System-wide total
+    pub clickthroughs: i32, // System-wide total
+    pub contributions: i32, // System-wide total
     pub available_years: Vec<i32>,
     pub top_views: Vec<ProjectCount>,
     pub top_saves: Vec<ProjectCount>,
@@ -213,39 +213,39 @@ pub struct ExchangeEngagementResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectCount {
-    pub project_id: String,  // ULID
+    pub project_id: String, // ULID
     pub count: i32,
 }
 
 // External Links - Get or create ULIDs for URLs
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExternalLinksRequest {
-    pub slug: String,                // Entity slug where links are found
+    pub slug: String, // Entity slug where links are found
     pub urls: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExternalLinksResponse {
-    pub links: std::collections::HashMap<String, ulid::Ulid>,  // URL -> ULID
+    pub links: std::collections::HashMap<String, ulid::Ulid>, // URL -> ULID
 }
 
 // External Link Clickthrough - Get URL for ULID and record click
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExternalLinkClickthroughRequest {
     pub link_id: ulid::Ulid,
-    pub when: Option<String>,         // Optional timestamp, defaults to now
+    pub when: Option<String>, // Optional timestamp, defaults to now
     pub ip_address: String,
     pub device_id: String,
     pub interaction_id: String,
     pub user_id: Option<ulid::Ulid>,
-    pub link_type: String,            // Type of link (e.g., "external_link")
+    pub link_type: String, // Type of link (e.g., "external_link")
     pub program_id: Option<String>,
-    pub geolocation: Option<String>,  // Optional GeoJSON point, will be resolved from IP if not provided
+    pub geolocation: Option<String>, // Optional GeoJSON point, will be resolved from IP if not provided
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExternalLinkClickthroughResponse {
-    pub url: Option<String>,  // None if link_id not found
+    pub url: Option<String>, // None if link_id not found
 }
 
 // Wall of Fame Contributors

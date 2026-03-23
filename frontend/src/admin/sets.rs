@@ -969,7 +969,12 @@ pub fn address_sets_routes() -> impl Endpoint {
     Route::new()
         .at("/", get(address_sets_list))
         .at("/new", get(address_sets_new).post(address_sets_create))
-        .at("/:slug", get(address_sets_edit).post(address_sets_update).delete(address_sets_delete))
+        .at(
+            "/:slug",
+            get(address_sets_edit)
+                .post(address_sets_update)
+                .delete(address_sets_delete),
+        )
         .at("/:slug/members", post(address_sets_add_member))
         .at("/:slug/members/:email", delete(address_sets_remove_member))
 }
@@ -979,9 +984,20 @@ pub fn user_sets_routes() -> impl Endpoint {
         .at("/", get(user_sets_list))
         .at("/new", get(user_sets_new).post(user_sets_create))
         .at("/criterion-fields", get(user_sets_criterion_fields))
-        .at("/explicit-list-widget", post(user_sets_explicit_list_add_user))
-        .at("/explicit-list-widget/:user_id", delete(user_sets_explicit_list_remove_user))
-        .at("/:slug", get(user_sets_edit).post(user_sets_update).delete(user_sets_delete))
+        .at(
+            "/explicit-list-widget",
+            post(user_sets_explicit_list_add_user),
+        )
+        .at(
+            "/explicit-list-widget/:user_id",
+            delete(user_sets_explicit_list_remove_user),
+        )
+        .at(
+            "/:slug",
+            get(user_sets_edit)
+                .post(user_sets_update)
+                .delete(user_sets_delete),
+        )
         .at("/:slug/criteria", post(user_sets_add_criterion))
         .at("/:slug/criteria/:id", delete(user_sets_remove_criterion))
 }

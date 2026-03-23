@@ -4,10 +4,10 @@ use async_nats::service::Request;
 use common::message::log::{AffiliateParticipantsRequest, AffiliateParticipantsResponse};
 use common::message::user::{
     CriterionOperation, UserSetAddCriterionRequest, UserSetCreateRequest, UserSetCriterion,
-    UserSetCriterionResponse, UserSetCriterionWithId, UserSetDeleteRequest,
-    UserSetDetailResponse, UserSetGetRequest, UserSetGetResponse, UserSetInfo,
-    UserSetListResponse, UserSetReleaseResultsRequest, UserSetReleaseResultsResponse,
-    UserSetRemoveCriterionRequest, UserSetResponse, UserSetUpdateRequest,
+    UserSetCriterionResponse, UserSetCriterionWithId, UserSetDeleteRequest, UserSetDetailResponse,
+    UserSetGetRequest, UserSetGetResponse, UserSetInfo, UserSetListResponse,
+    UserSetReleaseResultsRequest, UserSetReleaseResultsResponse, UserSetRemoveCriterionRequest,
+    UserSetResponse, UserSetUpdateRequest,
 };
 use common::service::{decode_structured_message, request};
 use ulid::Ulid;
@@ -54,7 +54,8 @@ pub async fn get(req: &Request) -> Result<UserSetGetResponse> {
         )
         .fetch_one(db())
         .await?
-        .count > 0;
+        .count
+            > 0;
 
         if !exists {
             return Err(anyhow!("Result set not found or has been released"));
@@ -77,8 +78,8 @@ pub async fn get(req: &Request) -> Result<UserSetGetResponse> {
 
         // Process each criterion
         for (index, row) in criteria_rows.iter().enumerate() {
-            let criterion: UserSetCriterion =
-                flexbuffers::from_slice(&row.criterion_data).map_err(|e| {
+            let criterion: UserSetCriterion = flexbuffers::from_slice(&row.criterion_data)
+                .map_err(|e| {
                     anyhow!(
                         "Failed to deserialize criterion data for type {}: {}",
                         row.criterion_type,
@@ -86,23 +87,34 @@ pub async fn get(req: &Request) -> Result<UserSetGetResponse> {
                     )
                 })?;
 
-            let operation = row.operation.parse::<CriterionOperation>().unwrap_or_default();
+            let operation = row
+                .operation
+                .parse::<CriterionOperation>()
+                .unwrap_or_default();
 
             match operation {
                 CriterionOperation::Union => {
                     // For union criteria, just insert users into the union set
-                    evaluate_criterion(&criterion, &new_evaluation_id, index as i64, "union").await?;
+                    evaluate_criterion(&criterion, &new_evaluation_id, index as i64, "union")
+                        .await?;
                 }
                 CriterionOperation::Intersect => {
                     if !has_intersect {
                         // First intersect criterion - initialize the intersect set
-                        evaluate_criterion(&criterion, &new_evaluation_id, index as i64, "intersect").await?;
+                        evaluate_criterion(
+                            &criterion,
+                            &new_evaluation_id,
+                            index as i64,
+                            "intersect",
+                        )
+                        .await?;
                         has_intersect = true;
                     } else {
                         // Subsequent intersect criteria - progressively narrow the intersect set
                         // Create a temp table for this criterion's results
                         let temp_eval_id = format!("{}_temp_{}", new_evaluation_id, index);
-                        evaluate_criterion(&criterion, &temp_eval_id, index as i64, "intersect").await?;
+                        evaluate_criterion(&criterion, &temp_eval_id, index as i64, "intersect")
+                            .await?;
 
                         // Delete from intersect set any users NOT in the new criterion
                         sqlx::query!(
@@ -465,7 +477,10 @@ pub async fn get_detail(req: &Request) -> Result<UserSetDetailResponse> {
         .into_iter()
         .filter_map(|row| {
             let criterion: UserSetCriterion = flexbuffers::from_slice(&row.criterion_data).ok()?;
-            let operation = row.operation.parse::<CriterionOperation>().unwrap_or_default();
+            let operation = row
+                .operation
+                .parse::<CriterionOperation>()
+                .unwrap_or_default();
             Some(UserSetCriterionWithId {
                 id: row.id,
                 criterion,

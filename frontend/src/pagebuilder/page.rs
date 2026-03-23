@@ -32,11 +32,7 @@ impl PageBuilderPage {
     }
 
     /// Create a new page with a specific ID
-    pub fn new_with_id(
-        page_id: Ulid,
-        name: impl Into<String>,
-        source: impl Into<String>,
-    ) -> Self {
+    pub fn new_with_id(page_id: Ulid, name: impl Into<String>, source: impl Into<String>) -> Self {
         let now = TimeString::now();
         Self {
             page_id,

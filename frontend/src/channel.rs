@@ -15,7 +15,7 @@ use poem::{
 use crate::middleware::authorization::{Authenticated, SessionSubject};
 
 // Re-export common channel functions
-pub use common::channel::{send, send_to_user, Event};
+pub use common::channel::{Event, send, send_to_user};
 
 pub fn routes() -> Route {
     Route::new()

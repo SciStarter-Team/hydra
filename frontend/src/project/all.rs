@@ -15,8 +15,8 @@ use crate::{
 use strum::IntoEnumIterator;
 
 use super::{
-    field::ProjectFieldType, field_source::FieldSource, ProjectParticipationDegree,
-    ProjectPromotionTime, ProjectStatus,
+    ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus, field::ProjectFieldType,
+    field_source::FieldSource,
 };
 
 /// Container for all project fields.
@@ -220,7 +220,10 @@ pub struct ProjectAll {
 impl ProjectAll {
     /// Gets the set of field types that are protected from this source
     /// (i.e., fields where the existing source has higher priority)
-    async fn get_protected_fields(&self, new_source: FieldSource) -> Result<HashSet<ProjectFieldType>, Error> {
+    async fn get_protected_fields(
+        &self,
+        new_source: FieldSource,
+    ) -> Result<HashSet<ProjectFieldType>, Error> {
         let project_id_str = self.project_id.to_string();
 
         let existing_sources = sqlx::query!(
@@ -330,7 +333,11 @@ impl ProjectAll {
             extra: merge_field!(extra, Extra),
             project_last_editor: merge_field!(project_last_editor, ProjectLastEditor, copy),
             project_last_edited: merge_field!(project_last_edited, ProjectLastEdited),
-            scistarter_last_editor: merge_field!(scistarter_last_editor, ScistarterLastEditor, copy),
+            scistarter_last_editor: merge_field!(
+                scistarter_last_editor,
+                ScistarterLastEditor,
+                copy
+            ),
             scistarter_last_edited: merge_field!(scistarter_last_edited, ScistarterLastEdited),
             reviewed: merge_field!(reviewed, Reviewed, copy),
 
@@ -339,8 +346,14 @@ impl ProjectAll {
             name: merge_field!(name, Name),
             tags: merge_field!(tags, Tags),
             participation_degree: merge_field!(participation_degree, ParticipationDegree, copy),
-            participant_instructions: merge_field!(participant_instructions, ParticipantInstructions),
-            participant_instructions_email: merge_field!(participant_instructions_email, ParticipantInstructionsEmail),
+            participant_instructions: merge_field!(
+                participant_instructions,
+                ParticipantInstructions
+            ),
+            participant_instructions_email: merge_field!(
+                participant_instructions_email,
+                ParticipantInstructionsEmail
+            ),
             participant_files: merge_field!(participant_files, ParticipantFiles),
             us_federally_funded: merge_field!(us_federally_funded, UsFederallyFunded, copy),
             presenter: merge_field!(presenter, Presenter),
@@ -387,8 +400,14 @@ impl ProjectAll {
             consent_statement_date: merge_field!(consent_statement_date, ConsentStatementDate),
             participation_tools: merge_field!(participation_tools, ParticipationTools, copy),
             participation_prompt: merge_field!(participation_prompt, ParticipationPrompt),
-            participation_confirmation_message: merge_field!(participation_confirmation_message, ParticipationConfirmationMessage),
-            participation_notification_email: merge_field!(participation_notification_email, ParticipationNotificationEmail),
+            participation_confirmation_message: merge_field!(
+                participation_confirmation_message,
+                ParticipationConfirmationMessage
+            ),
+            participation_notification_email: merge_field!(
+                participation_notification_email,
+                ParticipationNotificationEmail
+            ),
             participation_usage: merge_field!(participation_usage, ParticipationUsage),
 
             // Relations section
@@ -447,7 +466,10 @@ impl ProjectAll {
             data_visualization: merge_field!(data_visualization, DataVisualization, copy),
             data_access: merge_field!(data_access, DataAccess),
             data_quality: merge_field!(data_quality, DataQuality, copy),
-            metadata_publication_url: merge_field!(metadata_publication_url, MetadataPublicationUrl),
+            metadata_publication_url: merge_field!(
+                metadata_publication_url,
+                MetadataPublicationUrl
+            ),
             data_publication_url: merge_field!(data_publication_url, DataPublicationUrl),
             data_license: merge_field!(data_license, DataLicense),
 
@@ -460,7 +482,10 @@ impl ProjectAll {
             sponsors: merge_field!(sponsors, Sponsors),
             stakeholders: merge_field!(stakeholders, Stakeholders),
             circuit_id: merge_field!(circuit_id, CircuitId),
-            sustainable_development_goals: merge_field!(sustainable_development_goals, SustainableDevelopmentGoals),
+            sustainable_development_goals: merge_field!(
+                sustainable_development_goals,
+                SustainableDevelopmentGoals
+            ),
         }
     }
 }
@@ -475,30 +500,32 @@ impl LoadStorePeered for ProjectAll {
     #[tracing::instrument]
     async fn save_to_database(&self) -> Result<(), Error> {
         // Check for protected fields if update_source is specified
-        let (data, protected): (&Self, HashSet<ProjectFieldType>) = if let Some(source) = self.update_source {
-            let protected = self.get_protected_fields(source).await?;
-            if protected.is_empty() {
-                (self, protected)
+        let (data, protected): (&Self, HashSet<ProjectFieldType>) =
+            if let Some(source) = self.update_source {
+                let protected = self.get_protected_fields(source).await?;
+                if protected.is_empty() {
+                    (self, protected)
+                } else {
+                    // Need to merge with current state to preserve protected fields
+                    let current = Self::read_from_database(self.project_id).await?;
+                    let merged = self.merge_protected(&current, &protected);
+                    // Recursively save the merged data, but clear update_source to avoid infinite loop
+                    // and skip source tracking since we'll do it in the outer call
+                    let mut merged_no_source = merged;
+                    merged_no_source.update_source = None;
+                    Box::pin(merged_no_source.save_to_database()).await?;
+
+                    // Now update source tracking for non-protected fields
+                    let mut tx = Immediate::begin_with_retry(db(), None, None).await?;
+                    self.update_source_tracking(&mut tx, source, &protected)
+                        .await?;
+                    tx.commit().await?;
+
+                    return Ok(());
+                }
             } else {
-                // Need to merge with current state to preserve protected fields
-                let current = Self::read_from_database(self.project_id).await?;
-                let merged = self.merge_protected(&current, &protected);
-                // Recursively save the merged data, but clear update_source to avoid infinite loop
-                // and skip source tracking since we'll do it in the outer call
-                let mut merged_no_source = merged;
-                merged_no_source.update_source = None;
-                Box::pin(merged_no_source.save_to_database()).await?;
-
-                // Now update source tracking for non-protected fields
-                let mut tx = Immediate::begin_with_retry(db(), None, None).await?;
-                self.update_source_tracking(&mut tx, source, &protected).await?;
-                tx.commit().await?;
-
-                return Ok(());
-            }
-        } else {
-            (self, HashSet::new())
-        };
+                (self, HashSet::new())
+            };
 
         let mut tx = Immediate::begin_with_retry(db(), None, None).await?;
 
@@ -1380,7 +1407,8 @@ impl LoadStorePeered for ProjectAll {
         // Update source tracking for all fields if update_source is specified
         // (This only runs when there are no protected fields, otherwise we returned early)
         if let Some(source) = self.update_source {
-            self.update_source_tracking(&mut tx, source, &protected).await?;
+            self.update_source_tracking(&mut tx, source, &protected)
+                .await?;
         }
 
         tx.commit().await?;
@@ -1389,8 +1417,7 @@ impl LoadStorePeered for ProjectAll {
         if data.point.is_none()
             && (!data.city.is_empty() || !data.state.is_empty() || !data.country.is_empty())
         {
-            if let Err(e) =
-                crate::geocode::geocode_and_update_project_point(data.project_id).await
+            if let Err(e) = crate::geocode::geocode_and_update_project_point(data.project_id).await
             {
                 eprintln!("Auto-geocode for project {} failed: {e}", data.project_id);
             }

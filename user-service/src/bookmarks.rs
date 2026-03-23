@@ -1,7 +1,9 @@
 use anyhow::Error;
 use async_nats::service::Request;
 use common::{
-    message::user::{BookmarkCheckRequest, BookmarkCheckResponse, BookmarkCreateRequest, BookmarkCreateResponse},
+    message::user::{
+        BookmarkCheckRequest, BookmarkCheckResponse, BookmarkCreateRequest, BookmarkCreateResponse,
+    },
     service::{decode_structured_message, log_activity},
     shared::db,
     timestring::TimeString,

@@ -5,13 +5,9 @@
 
 use anyhow::Error;
 use common::shared::db;
-use poem::{
-    handler,
-    web::Json,
-    IntoResponse, Response,
-};
+use poem::{IntoResponse, Response, handler, web::Json};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use ulid::Ulid;
 
 /// Base URL for SciStarter
@@ -494,21 +490,19 @@ async fn tool_get_event(args: Value) -> Result<String, Error> {
 }
 
 async fn tool_list_topics() -> Result<String, Error> {
-    let topics: Vec<String> = sqlx::query_scalar!(
-        "SELECT DISTINCT topic FROM project_topics ORDER BY topic"
-    )
-    .fetch_all(db())
-    .await?;
+    let topics: Vec<String> =
+        sqlx::query_scalar!("SELECT DISTINCT topic FROM project_topics ORDER BY topic")
+            .fetch_all(db())
+            .await?;
 
     Ok(serde_json::to_string_pretty(&topics)?)
 }
 
 async fn tool_list_activities() -> Result<String, Error> {
-    let activities: Vec<String> = sqlx::query_scalar!(
-        "SELECT DISTINCT activity FROM project_activities ORDER BY activity"
-    )
-    .fetch_all(db())
-    .await?;
+    let activities: Vec<String> =
+        sqlx::query_scalar!("SELECT DISTINCT activity FROM project_activities ORDER BY activity")
+            .fetch_all(db())
+            .await?;
 
     Ok(serde_json::to_string_pretty(&activities)?)
 }

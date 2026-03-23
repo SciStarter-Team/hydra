@@ -3,20 +3,19 @@
 //! This module handles user CRUD operations, user search/listing,
 //! password reset, and user email management.
 
-use crate::component::{admin_layout::AdminLayoutPrepared, AdminLayout, Component};
+use crate::component::{AdminLayout, Component, admin_layout::AdminLayoutPrepared};
 use crate::middleware::authorization::Authenticated;
 use common::message::user::{
-    AdminPasswordResetRequest, AdminPasswordResetResponse, UserDetails,
-    UserDetailsCreateRequest, UserDetailsDeleteRequest, UserDetailsDeleteResponse,
-    UserDetailsGetRequest, UserDetailsListRequest, UserDetailsListResponse, UserDetailsResponse,
-    UserDetailsSearchRequest, UserDetailsUpdateRequest, UserEmail, UserEmailAddRequest,
-    UserEmailDeleteRequest, UserEmailResponse, UserEmailToggleVerifiedRequest,
-    UserEmailUpdateRequest,
+    AdminPasswordResetRequest, AdminPasswordResetResponse, UserDetails, UserDetailsCreateRequest,
+    UserDetailsDeleteRequest, UserDetailsDeleteResponse, UserDetailsGetRequest,
+    UserDetailsListRequest, UserDetailsListResponse, UserDetailsResponse, UserDetailsSearchRequest,
+    UserDetailsUpdateRequest, UserEmail, UserEmailAddRequest, UserEmailDeleteRequest,
+    UserEmailResponse, UserEmailToggleVerifiedRequest, UserEmailUpdateRequest,
 };
 use common::service::{request, request_with_retry};
 use poem::handler;
 use poem::web::{Form, Path, Query};
-use poem::{get, post, put, Route};
+use poem::{Route, get, post, put};
 use sailfish::TemplateOnce;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -80,10 +79,9 @@ impl Component for UsersPage {
             limit: Some(25),
         };
 
-        let response: UserDetailsListResponse =
-            request("user.admin.user_list", user_request)
-                .await
-                .map_err(|e| anyhow::anyhow!("Failed to fetch users: {}", e))?;
+        let response: UserDetailsListResponse = request("user.admin.user_list", user_request)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to fetch users: {}", e))?;
 
         let users_list = response.users;
 
@@ -209,10 +207,9 @@ async fn users_search_internal(query: UserSearchQuery) -> Result<UsersPagePrepar
         limit: Some(25),
     };
 
-    let response: UserDetailsListResponse =
-        request("user.admin.user_search", search_request)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to search users: {}", e))?;
+    let response: UserDetailsListResponse = request("user.admin.user_search", search_request)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to search users: {}", e))?;
 
     let users_list = response.users;
 
@@ -579,7 +576,8 @@ async fn users_create(
         verified: form.verified,
     };
 
-    match request_with_retry::<UserDetailsResponse>("user.admin.user_create", create_request).await {
+    match request_with_retry::<UserDetailsResponse>("user.admin.user_create", create_request).await
+    {
         Ok(response) => {
             // Log the activity
             if let Some(user_info) = &user_info {
@@ -721,7 +719,8 @@ async fn users_update(
         orcid,
     };
 
-    match request_with_retry::<UserDetailsResponse>("user.admin.user_update", update_request).await {
+    match request_with_retry::<UserDetailsResponse>("user.admin.user_update", update_request).await
+    {
         Ok(_response) => {
             // Log the activity
             if let Some(user_info) = &user_info {
@@ -1009,8 +1008,11 @@ async fn users_emails_toggle_verified(
         email: email.clone(),
     };
 
-    match request_with_retry::<UserDetailsResponse>("user.admin.email_toggle_verified", email_request)
-        .await
+    match request_with_retry::<UserDetailsResponse>(
+        "user.admin.email_toggle_verified",
+        email_request,
+    )
+    .await
     {
         Ok(response) => {
             // Find the toggled email and render just that row

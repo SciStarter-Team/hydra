@@ -522,5 +522,8 @@ pub fn routes() -> impl Endpoint {
         .at("/", get(files_links).post(files_links_create_redirect))
         .at("/search", get(files_links_search))
         .at("/:slug", delete(files_links_delete_go_url))
-        .at("/:slug/stats", get(files_links_get_stats).post(files_links_post_stats))
+        .at(
+            "/:slug/stats",
+            get(files_links_get_stats).post(files_links_post_stats),
+        )
 }

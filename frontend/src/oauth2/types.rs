@@ -1,9 +1,9 @@
 // OAuth2 / OIDC types and database structures
 
+use crate::peering::LoadStorePeered;
 use anyhow::Error;
 use common::{shared::db, timestring::TimeString};
 use serde::{Deserialize, Serialize};
-use crate::peering::LoadStorePeered;
 
 /// OAuth2 Client
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -26,7 +26,9 @@ impl Client {
     /// Verify scope is allowed for this client
     pub fn verify_scope(&self, scope: &str) -> bool {
         let requested_scopes: Vec<&str> = scope.split_whitespace().collect();
-        requested_scopes.iter().all(|s| self.allowed_scopes.contains(&s.to_string()))
+        requested_scopes
+            .iter()
+            .all(|s| self.allowed_scopes.contains(&s.to_string()))
     }
 
     /// Verify client secret
@@ -77,7 +79,11 @@ impl LoadStorePeered for Client {
             client_secret: row.client_secret,
             client_name: row.client_name,
             redirect_uris: row.redirect_uris.lines().map(|s| s.to_string()).collect(),
-            allowed_scopes: row.allowed_scopes.split_whitespace().map(|s| s.to_string()).collect(),
+            allowed_scopes: row
+                .allowed_scopes
+                .split_whitespace()
+                .map(|s| s.to_string())
+                .collect(),
             created: row.created.try_into()?,
             owner_user_id: row.owner_user_id,
         })
@@ -201,9 +207,12 @@ impl LoadStorePeered for AuthorizationCode {
     }
 
     async fn delete_from_database(code: Self::DatabaseKey) -> Result<(), Error> {
-        sqlx::query!("DELETE FROM oauth2_authorization_codes WHERE code = ?", code)
-            .execute(db())
-            .await?;
+        sqlx::query!(
+            "DELETE FROM oauth2_authorization_codes WHERE code = ?",
+            code
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 }

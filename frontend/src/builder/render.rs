@@ -86,10 +86,7 @@ enum Node {
         body: Vec<Node>,
     },
     /// Repeat body N times
-    Times {
-        count: Expression,
-        body: Vec<Node>,
-    },
+    Times { count: Expression, body: Vec<Node> },
     /// Slot block for page builder
     /// In editing mode: renders as droppable container with metadata
     /// In presenting mode: applies param bindings and renders body
@@ -192,7 +189,11 @@ fn extract_vars_from_nodes(
                     extract_vars_from_nodes(body, vars, bound_vars);
                 }
             }
-            Node::Each { var, collection, body } => {
+            Node::Each {
+                var,
+                collection,
+                body,
+            } => {
                 if let Expression::Variable(name) = collection {
                     if !bound_vars.contains(name) {
                         vars.insert(name.clone());
@@ -248,7 +249,10 @@ enum Item<'a> {
     /// {$ /if $}
     EndIf,
     /// {$ each var in expr $}
-    Each { var: &'a str, collection: Expression },
+    Each {
+        var: &'a str,
+        collection: Expression,
+    },
     /// {$ /each $}
     EndEach,
     /// {$ times expr $} where expr evaluates to a count
@@ -390,7 +394,9 @@ fn parse_slot_item(rest: &str) -> Result<Item<'_>, Error> {
     use super::parse::{parse_attributes, unescape_value};
 
     let mut parser = parse_attributes(rest);
-    let name = parser.name().ok_or_else(|| anyhow!("slot requires a name"))?;
+    let name = parser
+        .name()
+        .ok_or_else(|| anyhow!("slot requires a name"))?;
 
     let mut component = None;
     let mut params = Vec::new();
@@ -456,7 +462,9 @@ fn parse_param_item(rest: &str) -> Result<Item<'_>, Error> {
         }
 
         // Find key
-        let eq_pos = remaining.find('=').ok_or_else(|| anyhow!("Invalid param attribute syntax"))?;
+        let eq_pos = remaining
+            .find('=')
+            .ok_or_else(|| anyhow!("Invalid param attribute syntax"))?;
         let key = remaining[..eq_pos].trim();
         remaining = &remaining[eq_pos + 1..];
         remaining = remaining.trim_start();
@@ -465,24 +473,33 @@ fn parse_param_item(rest: &str) -> Result<Item<'_>, Error> {
         let attr_value = if remaining.starts_with('"') {
             // Double-quoted string
             remaining = &remaining[1..];
-            let close_pos = remaining.find('"').ok_or_else(|| anyhow!("Unterminated quoted value"))?;
+            let close_pos = remaining
+                .find('"')
+                .ok_or_else(|| anyhow!("Unterminated quoted value"))?;
             let value = &remaining[..close_pos];
             remaining = &remaining[close_pos + 1..];
             ParamAttrValue::String(value)
         } else if remaining.starts_with('\'') {
             // Single-quoted string
             remaining = &remaining[1..];
-            let close_pos = remaining.find('\'').ok_or_else(|| anyhow!("Unterminated quoted value"))?;
+            let close_pos = remaining
+                .find('\'')
+                .ok_or_else(|| anyhow!("Unterminated quoted value"))?;
             let value = &remaining[..close_pos];
             remaining = &remaining[close_pos + 1..];
             ParamAttrValue::String(value)
         } else {
             // Unquoted value - must be an integer, read until whitespace
-            let end_pos = remaining.find(char::is_whitespace).unwrap_or(remaining.len());
+            let end_pos = remaining
+                .find(char::is_whitespace)
+                .unwrap_or(remaining.len());
             let value_str = &remaining[..end_pos];
             remaining = &remaining[end_pos..];
             let n = value_str.parse::<i64>().map_err(|_| {
-                anyhow!("Unquoted param attribute value must be an integer: '{}'", value_str)
+                anyhow!(
+                    "Unquoted param attribute value must be an integer: '{}'",
+                    value_str
+                )
             })?;
             ParamAttrValue::Integer(n)
         };
@@ -515,7 +532,12 @@ fn parse_param_item(rest: &str) -> Result<Item<'_>, Error> {
                         "textarea" => ParamInputType::Textarea,
                         "richtext" => ParamInputType::RichText,
                         "fileurl" => ParamInputType::FileUrl,
-                        _ => return Err(anyhow!("Unknown param type: '{}'. Valid types: text, textarea, richtext, fileurl", s)),
+                        _ => {
+                            return Err(anyhow!(
+                                "Unknown param type: '{}'. Valid types: text, textarea, richtext, fileurl",
+                                s
+                            ));
+                        }
                     };
                 } else {
                     return Err(anyhow!("type must be a quoted string"));
@@ -1101,7 +1123,9 @@ fn render_nodes<'a>(
                             let parts: Vec<&str> = slot_path.split('.').collect();
                             for (i, part) in parts.iter().enumerate() {
                                 if i > 0 {
-                                    buffer.extend_from_slice(b"<span class=\"pb-badge-sep\">/</span>");
+                                    buffer.extend_from_slice(
+                                        b"<span class=\"pb-badge-sep\">/</span>",
+                                    );
                                 }
                                 // Build the path up to this segment
                                 let partial_path: String = parts[..=i].join(".");
@@ -1374,7 +1398,8 @@ mod tests {
         let source = b"{$ if foo $}content{$ /if $}";
         let tokens = tokenize(source);
         let initial_cond = Expression::Variable("foo".to_string());
-        let (branches, end_idx) = parse_if_branches(source, &tokens, 1, initial_cond.clone()).unwrap();
+        let (branches, end_idx) =
+            parse_if_branches(source, &tokens, 1, initial_cond.clone()).unwrap();
 
         check!(branches.len() == 1);
         check!(branches[0].0 == Some(initial_cond));
@@ -1386,7 +1411,8 @@ mod tests {
         let source = b"{$ if foo $}yes{$ else $}no{$ /if $}";
         let tokens = tokenize(source);
         let initial_cond = Expression::Variable("foo".to_string());
-        let (branches, end_idx) = parse_if_branches(source, &tokens, 1, initial_cond.clone()).unwrap();
+        let (branches, end_idx) =
+            parse_if_branches(source, &tokens, 1, initial_cond.clone()).unwrap();
 
         check!(branches.len() == 2);
         check!(branches[0].0 == Some(initial_cond));
@@ -1399,7 +1425,8 @@ mod tests {
         let source = b"{$ if a $}A{$ else if b $}B{$ else $}C{$ /if $}";
         let tokens = tokenize(source);
         let initial_cond = Expression::Variable("a".to_string());
-        let (branches, _end_idx) = parse_if_branches(source, &tokens, 1, initial_cond.clone()).unwrap();
+        let (branches, _end_idx) =
+            parse_if_branches(source, &tokens, 1, initial_cond.clone()).unwrap();
 
         check!(branches.len() == 3);
         check!(branches[0].0 == Some(initial_cond));
@@ -1714,7 +1741,9 @@ mod tests {
     async fn test_render_times_variable() {
         let ctx = test_ctx().await;
         ctx.bind_string("count", "4").unwrap();
-        let result = render(&ctx, "{$ times count $}Y{$ /times $}").await.unwrap();
+        let result = render(&ctx, "{$ times count $}Y{$ /times $}")
+            .await
+            .unwrap();
         check!(result == "YYYY");
     }
 
@@ -1793,7 +1822,9 @@ mod tests {
     #[tokio::test]
     async fn test_if_string_literal_truthy() {
         let ctx = test_ctx().await;
-        let result = render(&ctx, "{$ if \"yes\" $}shown{$ /if $}").await.unwrap();
+        let result = render(&ctx, "{$ if \"yes\" $}shown{$ /if $}")
+            .await
+            .unwrap();
         check!(result == "shown");
     }
 
@@ -2257,7 +2288,12 @@ mod tests {
     fn test_parse_item_param_unquoted_non_integer_error() {
         let result = parse_item(b"{$ param title default=some_var $}");
         check!(result.is_err());
-        check!(result.unwrap_err().to_string().contains("must be an integer"));
+        check!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("must be an integer")
+        );
     }
 
     #[test]
@@ -2302,8 +2338,9 @@ mod tests {
         let template = CompiledTemplate::compile(
             r#"{$ param title label="Title" default="Hello" $}
 {$ param subtitle default='World' $}
-<h1>{$= title $}</h1>"#
-        ).unwrap();
+<h1>{$= title $}</h1>"#,
+        )
+        .unwrap();
 
         let params = template.extract_params();
         check!(params.len() == 2);
@@ -2321,8 +2358,9 @@ mod tests {
     fn test_extract_params_with_textarea() {
         let template = CompiledTemplate::compile(
             r#"{$ param body label="Body" type="textarea" $}
-<div>{$= body $}</div>"#
-        ).unwrap();
+<div>{$= body $}</div>"#,
+        )
+        .unwrap();
 
         let params = template.extract_params();
         check!(params.len() == 1);
@@ -2335,8 +2373,9 @@ mod tests {
         let template = CompiledTemplate::compile(
             r#"{$ param title $}
 <h1>Content</h1>
-{$ param ignored $}"#
-        ).unwrap();
+{$ param ignored $}"#,
+        )
+        .unwrap();
 
         let params = template.extract_params();
         // Should only extract params before first non-whitespace content
@@ -2348,8 +2387,9 @@ mod tests {
     fn test_extract_params_integer_default() {
         let template = CompiledTemplate::compile(
             r#"{$ param count default=5 $}
-{$= count $}"#
-        ).unwrap();
+{$= count $}"#,
+        )
+        .unwrap();
 
         let params = template.extract_params();
         check!(params.len() == 1);
@@ -2367,7 +2407,9 @@ mod tests {
     #[tokio::test]
     async fn test_render_param_produces_nothing() {
         let ctx = test_ctx().await;
-        let result = render(&ctx, "{$ param title default=\"Test\" $}Content").await.unwrap();
+        let result = render(&ctx, "{$ param title default=\"Test\" $}Content")
+            .await
+            .unwrap();
         // Param declarations should render nothing
         check!(result == "Content");
     }

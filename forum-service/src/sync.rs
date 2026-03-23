@@ -171,8 +171,15 @@ async fn insert_message(msg: &MessageData) -> Result<()> {
             .execute(db)
             .await?;
 
-            update_message_status(db, from_ulid, to_ulid, &topic_id_str, msg.seen, msg.discarded)
-                .await?;
+            update_message_status(
+                db,
+                from_ulid,
+                to_ulid,
+                &topic_id_str,
+                msg.seen,
+                msg.discarded,
+            )
+            .await?;
 
             return Ok(());
         }

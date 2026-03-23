@@ -3,8 +3,8 @@ use async_nats::service::Request;
 use common::{
     message::user::{
         Permission, PermissionCheckRequest, PermissionCheckResponse, PermissionGrantRequest,
-        PermissionListRequest, PermissionListResponse, PermissionListByResourceRequest,
-        PermissionListByResourceResponse, PermissionRevokeRequest,
+        PermissionListByResourceRequest, PermissionListByResourceResponse, PermissionListRequest,
+        PermissionListResponse, PermissionRevokeRequest,
     },
     service::decode_structured_message,
     shared::db,

@@ -7,27 +7,30 @@ use tokio::{signal, task::JoinSet};
 use tokio_util::sync::CancellationToken;
 
 mod bridges;
+mod exchange;
 mod handlers;
 mod sync;
-mod exchange;
 
+use bridges::{
+    inaturalist::inaturalist_synchronize,
+    zooniverse::{zooniverse_sync_projects, zooniverse_sync_users, zooniverse_synchronize},
+};
 use handlers::{
     handle_activity_log, handle_acts_of_science_create, handle_acts_to_date,
     handle_affiliate_participation, handle_articulate_completion,
     handle_articulate_completion_record, handle_clickthrough, handle_clickthrough_analytics,
     handle_contributors, handle_email_event, handle_external_link_clickthrough,
-    handle_external_links, handle_go_url_stats, handle_health_check, handle_join,
-    handle_page_view, handle_participation_analytics, handle_project_participation,
+    handle_external_links, handle_go_url_stats, handle_health_check, handle_join, handle_page_view,
+    handle_participation_analytics, handle_project_participation,
     handle_project_participation_record, handle_recent_activity, handle_top_performers_analytics,
     handle_user_emails_update, handle_user_tags_update,
 };
 use log_service::{Database, run_compactor_service};
 use parking_lot::RwLock;
-use bridges::{
-    inaturalist::inaturalist_synchronize,
-    zooniverse::{zooniverse_sync_projects, zooniverse_sync_users, zooniverse_synchronize},
+use sync::{
+    acts_of_science_synchronize, bookmark_synchronize, golink_synchronize, join_synchronize,
+    participation_synchronize,
 };
-use sync::{acts_of_science_synchronize, bookmark_synchronize, golink_synchronize, join_synchronize, participation_synchronize};
 
 // Global database instance for handler access - using RwLock<Option<>> so we can take ownership for shutdown
 pub static DATABASE: RwLock<Option<Arc<Database>>> = RwLock::new(None);
@@ -173,8 +176,16 @@ async fn main() -> Result<()> {
     ));
     toplevel.spawn(recv_handler!(log_group, "join", handle_join));
     toplevel.spawn(recv_handler!(log_group, "email_event", handle_email_event));
-    toplevel.spawn(recv_handler!(log_group, "exchange_event", exchange::record_exchange_event));
-    toplevel.spawn(handler!(log_group, "exchange_engagement", exchange::get_engagement_stats));
+    toplevel.spawn(recv_handler!(
+        log_group,
+        "exchange_event",
+        exchange::record_exchange_event
+    ));
+    toplevel.spawn(handler!(
+        log_group,
+        "exchange_engagement",
+        exchange::get_engagement_stats
+    ));
     toplevel.spawn(handler!(
         log_group,
         "clickthrough_analytics",
@@ -240,12 +251,24 @@ async fn main() -> Result<()> {
 
     // External links endpoints
     let links_group = svc.group("log.links");
-    toplevel.spawn(handler!(links_group, "get_or_create", handle_external_links));
-    toplevel.spawn(handler!(links_group, "clickthrough", handle_external_link_clickthrough));
+    toplevel.spawn(handler!(
+        links_group,
+        "get_or_create",
+        handle_external_links
+    ));
+    toplevel.spawn(handler!(
+        links_group,
+        "clickthrough",
+        handle_external_link_clickthrough
+    ));
 
     // Acts of Science endpoints
     let acts_group = svc.group("log.acts");
-    toplevel.spawn(handler!(acts_group, "create", handle_acts_of_science_create));
+    toplevel.spawn(handler!(
+        acts_group,
+        "create",
+        handle_acts_of_science_create
+    ));
     toplevel.spawn(handler!(acts_group, "to_date", handle_acts_to_date));
     toplevel.spawn(handler!(acts_group, "contributors", handle_contributors));
 

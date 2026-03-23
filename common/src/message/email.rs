@@ -11,7 +11,7 @@ use crate::timestring::TimeString;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SendEmailRequest {
     pub template_html: String,
-    pub subject: String,         // Email subject (will be processed for merge fields)
+    pub subject: String, // Email subject (will be processed for merge fields)
     pub recipients: Vec<EmailRecipient>,
     pub data_sets: Vec<String>, // Names of data sets to use
     pub additional_data: Option<Vec<(String, String)>>, // Custom merge fields
@@ -223,7 +223,7 @@ pub struct StoredEmail {
     pub stored_email_id: Ulid,
     pub slug: String,
     pub subject: String,
-    pub body_delta: String, // Quill Delta JSON
+    pub body_delta: String,    // Quill Delta JSON
     pub datasets: Vec<String>, // Dataset names
     pub created_at: TimeString,
     pub updated_at: TimeString,
@@ -258,7 +258,7 @@ pub struct GetStoredEmailResponse {
 pub struct CreateStoredEmailRequest {
     pub slug: String,
     pub subject: String,
-    pub body_delta: String, // Quill Delta JSON
+    pub body_delta: String,    // Quill Delta JSON
     pub datasets: Vec<String>, // Dataset names
 }
 
@@ -272,7 +272,7 @@ pub struct UpdateStoredEmailRequest {
     pub stored_email_id: Ulid,
     pub slug: Option<String>,
     pub subject: Option<String>,
-    pub body_delta: Option<String>, // Quill Delta JSON
+    pub body_delta: Option<String>,    // Quill Delta JSON
     pub datasets: Option<Vec<String>>, // Dataset names
 }
 
@@ -300,7 +300,7 @@ pub struct DeleteStoredEmailResponse {
 pub struct OneoffEmail {
     pub oneoff_email_id: Ulid,
     pub subject: String,
-    pub body_delta: String, // Quill Delta JSON
+    pub body_delta: String,    // Quill Delta JSON
     pub datasets: Vec<String>, // Dataset names
     pub created_at: TimeString,
     pub archived: bool,
@@ -335,7 +335,7 @@ pub struct GetOneoffEmailResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateOneoffEmailRequest {
     pub subject: String,
-    pub body_delta: String, // Quill Delta JSON
+    pub body_delta: String,    // Quill Delta JSON
     pub datasets: Vec<String>, // Dataset names
 }
 
@@ -348,7 +348,7 @@ pub struct CreateOneoffEmailResponse {
 pub struct UpdateOneoffEmailRequest {
     pub oneoff_email_id: Ulid,
     pub subject: Option<String>,
-    pub body_delta: Option<String>, // Quill Delta JSON
+    pub body_delta: Option<String>,    // Quill Delta JSON
     pub datasets: Option<Vec<String>>, // Dataset names
 }
 

@@ -1,8 +1,8 @@
+use crate::lru_cache::LruCache;
 use anyhow::Result;
-use url::Url;
 use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
-use crate::lru_cache::LruCache;
+use url::Url;
 
 #[derive(Debug, Clone)]
 pub struct WordPressPageWithStyles {
@@ -57,7 +57,8 @@ pub async fn fetch_page_with_styles(page_url: &str) -> Result<WordPressPageWithS
     // Extract title
     let title_selector = Selector::parse("h1.wp-block-heading, h1.entry-title, title")
         .map_err(|e| anyhow::anyhow!("Invalid CSS selector: {:?}", e))?;
-    let title = document.select(&title_selector)
+    let title = document
+        .select(&title_selector)
         .next()
         .map(|el| el.text().collect::<String>())
         .unwrap_or_default();
@@ -65,7 +66,8 @@ pub async fn fetch_page_with_styles(page_url: &str) -> Result<WordPressPageWithS
     // Extract main content
     let content_selector = Selector::parse(".entry-content, .wp-block-post-content, article")
         .map_err(|e| anyhow::anyhow!("Invalid CSS selector: {:?}", e))?;
-    let content = document.select(&content_selector)
+    let content = document
+        .select(&content_selector)
         .next()
         .map(|el| el.html())
         .unwrap_or_default();
@@ -104,7 +106,11 @@ pub async fn fetch_page_with_styles(page_url: &str) -> Result<WordPressPageWithS
         }
     }
 
-    tracing::debug!("Found {} stylesheets and {} inline styles", stylesheets.len(), inline_styles.len());
+    tracing::debug!(
+        "Found {} stylesheets and {} inline styles",
+        stylesheets.len(),
+        inline_styles.len()
+    );
 
     let result = WordPressPageWithStyles {
         title,
@@ -114,7 +120,10 @@ pub async fn fetch_page_with_styles(page_url: &str) -> Result<WordPressPageWithS
     };
 
     // Store in cache
-    WORDPRESS_CACHE.lock().unwrap().insert(page_url.to_string(), result.clone());
+    WORDPRESS_CACHE
+        .lock()
+        .unwrap()
+        .insert(page_url.to_string(), result.clone());
 
     Ok(result)
 }
@@ -140,4 +149,3 @@ fn transform_css_for_shadow_dom(css: &str) -> String {
 
     result
 }
-

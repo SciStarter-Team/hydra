@@ -172,9 +172,7 @@ async fn search_impl(query: &SearchQuery) -> Result<String, anyhow::Error> {
 
 // Handlers
 #[handler]
-async fn list(
-    Authenticated(user_info): Authenticated,
-) -> Result<poem::Response, anyhow::Error> {
+async fn list(Authenticated(user_info): Authenticated) -> Result<poem::Response, anyhow::Error> {
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
 
     let search_results = search_impl(&SearchQuery {
@@ -403,9 +401,7 @@ async fn delete(
             .await?;
     }
 
-    Ok(poem::Response::builder()
-        .content_type("text/html")
-        .body(""))
+    Ok(poem::Response::builder().content_type("text/html").body(""))
 }
 
 // Routes export

@@ -96,188 +96,197 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
     // Process the email, handling errors with retry logic
     let result = async {
         // Resolve email address
-    let (email_address, user_id_opt) = match item.target_type.as_str() {
-        "email" => {
-            tracing::debug!(email = %item.target_value, "Target is email address");
-            (item.target_value.clone(), None)
-        }
-        "user_id" => {
-            let user_id = item.target_value.parse::<Ulid>()?;
-            tracing::debug!(user_id = %user_id, "Fetching user email info from user-service");
-            tracing::debug!("Calling NATS endpoint: user.info.email_info");
-            let user_info =
-                request::<UserEmailInfo>("user.info.email_info", UserEmailInfoRequest { user_id }).await
-                    .map_err(|e| {
-                        tracing::error!(
-                            user_id = %user_id,
-                            endpoint = "user.info.email_info",
-                            error = %e,
-                            "Failed to call user-service endpoint"
-                        );
-                        e
-                    })?;
-            tracing::debug!(
-                user_id = %user_id,
-                email = %user_info.primary_email,
-                "Resolved user to email address"
-            );
-            (user_info.primary_email, Some(user_id))
-        }
-        _ => anyhow::bail!("Invalid target_type: {}", item.target_type),
-    };
-
-    // Check do_not_send table
-    let is_blocked = sqlx::query!(
-        r#"SELECT email_address FROM do_not_send WHERE email_address = ?"#,
-        email_address
-    )
-    .fetch_optional(db())
-    .await?;
-
-    if is_blocked.is_some() {
-        // Email is blocked, skip sending
-        tracing::warn!(
-            email = %email_address,
-            sending_id = %item.sending_id,
-            "Email address is on do-not-send list, skipping"
-        );
-        let queue_id = item.queue_id.as_deref().ok_or_else(|| anyhow::anyhow!("queue_id is NULL"))?;
-        record_skip(queue_id, &item.sending_id, &email_address, "blocked").await?;
-        delete_from_queue(queue_id).await?;
-        update_sending_skipped(&item.sending_id).await?;
-        return Ok(true);
-    }
-
-    // Load data sets and collect merge fields
-    let data_set_names: Vec<String> = serde_json::from_str(&item.data_sets)?;
-    let mut all_field_names = Vec::new();
-    let mut all_field_values = Vec::new();
-
-    tracing::debug!(
-        datasets = ?data_set_names,
-        has_user_id = user_id_opt.is_some(),
-        "Loading datasets for merge fields"
-    );
-
-    if let Some(uid) = user_id_opt {
-        for dataset_name in &data_set_names {
-            if let Some(dataset) = DATASET_REGISTRY.get(dataset_name) {
-                let (field_names, field_values) = dataset.get_values(uid).await?;
+        let (email_address, user_id_opt) = match item.target_type.as_str() {
+            "email" => {
+                tracing::debug!(email = %item.target_value, "Target is email address");
+                (item.target_value.clone(), None)
+            }
+            "user_id" => {
+                let user_id = item.target_value.parse::<Ulid>()?;
+                tracing::debug!(user_id = %user_id, "Fetching user email info from user-service");
+                tracing::debug!("Calling NATS endpoint: user.info.email_info");
+                let user_info = request::<UserEmailInfo>(
+                    "user.info.email_info",
+                    UserEmailInfoRequest { user_id },
+                )
+                .await
+                .map_err(|e| {
+                    tracing::error!(
+                        user_id = %user_id,
+                        endpoint = "user.info.email_info",
+                        error = %e,
+                        "Failed to call user-service endpoint"
+                    );
+                    e
+                })?;
                 tracing::debug!(
-                    dataset = %dataset_name,
-                    field_count = field_names.len(),
-                    "Loaded dataset values"
+                    user_id = %user_id,
+                    email = %user_info.primary_email,
+                    "Resolved user to email address"
                 );
-                all_field_names.extend(field_names);
-                all_field_values.extend(field_values);
-            } else {
-                tracing::warn!("Unknown dataset: {}", dataset_name);
+                (user_info.primary_email, Some(user_id))
+            }
+            _ => anyhow::bail!("Invalid target_type: {}", item.target_type),
+        };
+
+        // Check do_not_send table
+        let is_blocked = sqlx::query!(
+            r#"SELECT email_address FROM do_not_send WHERE email_address = ?"#,
+            email_address
+        )
+        .fetch_optional(db())
+        .await?;
+
+        if is_blocked.is_some() {
+            // Email is blocked, skip sending
+            tracing::warn!(
+                email = %email_address,
+                sending_id = %item.sending_id,
+                "Email address is on do-not-send list, skipping"
+            );
+            let queue_id = item
+                .queue_id
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("queue_id is NULL"))?;
+            record_skip(queue_id, &item.sending_id, &email_address, "blocked").await?;
+            delete_from_queue(queue_id).await?;
+            update_sending_skipped(&item.sending_id).await?;
+            return Ok(true);
+        }
+
+        // Load data sets and collect merge fields
+        let data_set_names: Vec<String> = serde_json::from_str(&item.data_sets)?;
+        let mut all_field_names = Vec::new();
+        let mut all_field_values = Vec::new();
+
+        tracing::debug!(
+            datasets = ?data_set_names,
+            has_user_id = user_id_opt.is_some(),
+            "Loading datasets for merge fields"
+        );
+
+        if let Some(uid) = user_id_opt {
+            for dataset_name in &data_set_names {
+                if let Some(dataset) = DATASET_REGISTRY.get(dataset_name) {
+                    let (field_names, field_values) = dataset.get_values(uid).await?;
+                    tracing::debug!(
+                        dataset = %dataset_name,
+                        field_count = field_names.len(),
+                        "Loaded dataset values"
+                    );
+                    all_field_names.extend(field_names);
+                    all_field_values.extend(field_values);
+                } else {
+                    tracing::warn!("Unknown dataset: {}", dataset_name);
+                }
             }
         }
+
+        // Add additional custom merge fields
+        let additional_data: Vec<(String, String)> = serde_json::from_str(&item.additional_data)?;
+        let (add_names, add_values): (Vec<String>, Vec<String>) =
+            additional_data.into_iter().unzip();
+        all_field_names.extend(add_names);
+        all_field_values.extend(add_values);
+
+        // Add unsubscribe URL field
+        // Use user_id if available, otherwise use email address for non-user recipients
+        let unsubscribe_param = user_id_opt
+            .map(|id| id.to_string())
+            .unwrap_or_else(|| email_address.clone());
+        let unsubscribe_path = format!(
+            "/messaging/emailer/unsubscribe?a={}&b={}",
+            item.sending_id, unsubscribe_param
+        );
+        let open_path = format!(
+            "/messaging/emailer/open?a={}&b={}",
+            item.sending_id, unsubscribe_param
+        );
+        all_field_names.push("UNSUBSCRIBE_URL".to_string());
+        all_field_values.push(format!("https://{}{}", env!("DOMAIN"), unsubscribe_path));
+
+        // Merge template
+        let merged_html = merge_template(&item.template_html, &all_field_names, &all_field_values)?;
+
+        // Merge subject
+        let merged_subject = merge_template(&item.subject, &all_field_names, &all_field_values)?;
+
+        // Wrap in layout
+        let final_html = wrap_html_layout(&merged_html, &unsubscribe_path, &open_path);
+
+        // Convert to plain text
+        let plain_text = html_to_markdown(&merged_html);
+        let final_text = add_footer_to_plain_text(&plain_text);
+
+        // Wait for rate limit and quota
+        wait_until_can_send().await;
+
+        tracing::info!(
+            email = %email_address,
+            subject = %merged_subject,
+            sending_id = %item.sending_id,
+            "Sending email via SES"
+        );
+
+        // Send via SES
+        let sending_ulid = item.sending_id.parse::<Ulid>()?;
+        let ses_message_id = match send_email(
+            ses_client,
+            from_email(),
+            &email_address,
+            &merged_subject,
+            &final_html,
+            &final_text,
+            sending_ulid,
+            user_id_opt,
+        )
+        .await
+        {
+            Ok(msg_id) => {
+                tracing::info!(
+                    email = %email_address,
+                    ses_message_id = %msg_id,
+                    sending_id = %item.sending_id,
+                    "SES accepted email"
+                );
+                msg_id
+            }
+            Err(e) => {
+                tracing::error!(
+                    email = %email_address,
+                    sending_id = %item.sending_id,
+                    error = %e,
+                    "SES rejected email"
+                );
+                return Err(e);
+            }
+        };
+
+        // Record success
+        let queue_id = item
+            .queue_id
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("queue_id is NULL"))?;
+        record_sent(queue_id, &item.sending_id, &email_address, &ses_message_id).await?;
+
+        // Delete from queue
+        delete_from_queue(queue_id).await?;
+
+        // Update sending metrics
+        update_sending_sent(&item.sending_id).await?;
+
+        // Mark as sent for quota tracking
+        mark_sent().await;
+
+        tracing::info!(
+            queue_id = %queue_id,
+            email = %email_address,
+            "Email sent successfully"
+        );
+
+        Ok(true)
     }
-
-    // Add additional custom merge fields
-    let additional_data: Vec<(String, String)> = serde_json::from_str(&item.additional_data)?;
-    let (add_names, add_values): (Vec<String>, Vec<String>) = additional_data.into_iter().unzip();
-    all_field_names.extend(add_names);
-    all_field_values.extend(add_values);
-
-    // Add unsubscribe URL field
-    // Use user_id if available, otherwise use email address for non-user recipients
-    let unsubscribe_param = user_id_opt
-        .map(|id| id.to_string())
-        .unwrap_or_else(|| email_address.clone());
-    let unsubscribe_path = format!(
-        "/messaging/emailer/unsubscribe?a={}&b={}",
-        item.sending_id,
-        unsubscribe_param
-    );
-    let open_path = format!(
-        "/messaging/emailer/open?a={}&b={}",
-        item.sending_id,
-        unsubscribe_param
-    );
-    all_field_names.push("UNSUBSCRIBE_URL".to_string());
-    all_field_values.push(format!("https://{}{}", env!("DOMAIN"), unsubscribe_path));
-
-    // Merge template
-    let merged_html = merge_template(&item.template_html, &all_field_names, &all_field_values)?;
-
-    // Merge subject
-    let merged_subject = merge_template(&item.subject, &all_field_names, &all_field_values)?;
-
-    // Wrap in layout
-    let final_html = wrap_html_layout(&merged_html, &unsubscribe_path, &open_path);
-
-    // Convert to plain text
-    let plain_text = html_to_markdown(&merged_html);
-    let final_text = add_footer_to_plain_text(&plain_text);
-
-    // Wait for rate limit and quota
-    wait_until_can_send().await;
-
-    tracing::info!(
-        email = %email_address,
-        subject = %merged_subject,
-        sending_id = %item.sending_id,
-        "Sending email via SES"
-    );
-
-    // Send via SES
-    let sending_ulid = item.sending_id.parse::<Ulid>()?;
-    let ses_message_id = match send_email(
-        ses_client,
-        from_email(),
-        &email_address,
-        &merged_subject,
-        &final_html,
-        &final_text,
-        sending_ulid,
-        user_id_opt,
-    )
-    .await
-    {
-        Ok(msg_id) => {
-            tracing::info!(
-                email = %email_address,
-                ses_message_id = %msg_id,
-                sending_id = %item.sending_id,
-                "SES accepted email"
-            );
-            msg_id
-        }
-        Err(e) => {
-            tracing::error!(
-                email = %email_address,
-                sending_id = %item.sending_id,
-                error = %e,
-                "SES rejected email"
-            );
-            return Err(e);
-        }
-    };
-
-    // Record success
-    let queue_id = item.queue_id.as_deref().ok_or_else(|| anyhow::anyhow!("queue_id is NULL"))?;
-    record_sent(queue_id, &item.sending_id, &email_address, &ses_message_id).await?;
-
-    // Delete from queue
-    delete_from_queue(queue_id).await?;
-
-    // Update sending metrics
-    update_sending_sent(&item.sending_id).await?;
-
-    // Mark as sent for quota tracking
-    mark_sent().await;
-
-    tracing::info!(
-        queue_id = %queue_id,
-        email = %email_address,
-        "Email sent successfully"
-    );
-
-    Ok(true)
-    }.await;
+    .await;
 
     // Handle result with retry logic
     match result {
@@ -301,7 +310,13 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
                     "Max retries reached, marking as failed"
                 );
 
-                record_skip(queue_id, &item.sending_id, &item.target_value, &format!("max_retries: {}", e)).await?;
+                record_skip(
+                    queue_id,
+                    &item.sending_id,
+                    &item.target_value,
+                    &format!("max_retries: {}", e),
+                )
+                .await?;
                 delete_from_queue(queue_id).await?;
                 update_sending_skipped(&item.sending_id).await?;
             } else {

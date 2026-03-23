@@ -2,8 +2,8 @@ use anyhow::Error;
 use async_nats::service::Request;
 use common::{
     message::user::{
-        ProjectJoinCheckRequest, ProjectJoinCheckResponse, ProjectJoinRequest,
-        ProjectJoinResponse, UserJoinEntry, UserJoinsListRequest, UserJoinsListResponse,
+        ProjectJoinCheckRequest, ProjectJoinCheckResponse, ProjectJoinRequest, ProjectJoinResponse,
+        UserJoinEntry, UserJoinsListRequest, UserJoinsListResponse,
     },
     service::{decode_structured_message, log_activity},
     shared::db,

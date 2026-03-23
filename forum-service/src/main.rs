@@ -144,11 +144,7 @@ async fn main() {
     toplevel.spawn(handler!(messaging, "inbox", messaging::inbox));
     toplevel.spawn(recv_handler!(messaging, "read", messaging::mark_read));
     toplevel.spawn(recv_handler!(messaging, "discard", messaging::discard));
-    toplevel.spawn(handler!(
-        messaging,
-        "unread_count",
-        messaging::unread_count
-    ));
+    toplevel.spawn(handler!(messaging, "unread_count", messaging::unread_count));
 
     // Content filtering endpoints
     let filter = service.group("forum.filter");

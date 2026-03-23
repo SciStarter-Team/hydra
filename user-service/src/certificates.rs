@@ -6,7 +6,7 @@ use common::{
         CertificateCreateResponse, CertificateGetRequest, CertificateGetResponse, CertificateInfo,
         UserCertificatesRequest, UserCertificatesResponse,
     },
-    service::{trigger_email, TriggerEvent},
+    service::{TriggerEvent, trigger_email},
     shared::db,
 };
 use ulid::Ulid;

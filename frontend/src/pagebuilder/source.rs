@@ -279,11 +279,7 @@ pub fn move_slot_content(
     let source_body = &page_source[source.body_start..source.body_end];
 
     // Build new target slot tag with source's component and params
-    let new_tag = build_slot_tag(
-        &target.name,
-        source.component_id.as_ref(),
-        &source.params,
-    );
+    let new_tag = build_slot_tag(&target.name, source.component_id.as_ref(), &source.params);
 
     // Build empty source slot tag
     let empty_source_tag = build_slot_tag(&source.name, None, &[]);
@@ -307,7 +303,12 @@ pub fn move_slot_content(
         let source = slots
             .iter()
             .find(|s| s.path == source_path)
-            .ok_or_else(|| anyhow!("Source slot '{}' not found after first modification", source_path))?;
+            .ok_or_else(|| {
+                anyhow!(
+                    "Source slot '{}' not found after first modification",
+                    source_path
+                )
+            })?;
         // Clear source slot
         let mut final_result = String::with_capacity(intermediate.len());
         final_result.push_str(&intermediate[..source.start]);
@@ -328,7 +329,12 @@ pub fn move_slot_content(
         let target = slots
             .iter()
             .find(|s| s.path == target_path)
-            .ok_or_else(|| anyhow!("Target slot '{}' not found after first modification", target_path))?;
+            .ok_or_else(|| {
+                anyhow!(
+                    "Target slot '{}' not found after first modification",
+                    target_path
+                )
+            })?;
         // Replace target with source content
         let mut final_result = String::with_capacity(intermediate.len() + source_body.len());
         final_result.push_str(&intermediate[..target.start]);
@@ -419,11 +425,7 @@ pub fn copy_slot_content(
     let source_body = &page_source[source.body_start..source.body_end];
 
     // Build new target slot tag with source's component and params
-    let new_tag = build_slot_tag(
-        &target.name,
-        source.component_id.as_ref(),
-        &source.params,
-    );
+    let new_tag = build_slot_tag(&target.name, source.component_id.as_ref(), &source.params);
 
     // Replace target slot with source content
     let mut result = String::with_capacity(page_source.len() + source_body.len());
@@ -437,11 +439,7 @@ pub fn copy_slot_content(
 }
 
 /// Build a slot tag string with optional component and params
-fn build_slot_tag(
-    name: &str,
-    component_id: Option<&Ulid>,
-    params: &[(String, String)],
-) -> String {
+fn build_slot_tag(name: &str, component_id: Option<&Ulid>, params: &[(String, String)]) -> String {
     let mut tag = format!("{{$ slot {}", name);
 
     if let Some(cid) = component_id {
@@ -500,11 +498,7 @@ fn find_tag_end(bytes: &[u8], from: usize) -> Option<usize> {
 }
 
 /// Find the matching /slot end tag
-fn find_slot_end(
-    bytes: &[u8],
-    from: usize,
-    _name: &str,
-) -> Result<(usize, usize), Error> {
+fn find_slot_end(bytes: &[u8], from: usize, _name: &str) -> Result<(usize, usize), Error> {
     let mut depth = 0;
     let mut pos = from;
 
@@ -557,8 +551,7 @@ fn parse_slot_attributes(
         let value = unescape_value(attr.value);
         if attr.key == "component" {
             component_id = Some(
-                Ulid::from_string(&value)
-                    .map_err(|e| anyhow!("Invalid component ULID: {}", e))?,
+                Ulid::from_string(&value).map_err(|e| anyhow!("Invalid component ULID: {}", e))?,
             );
         } else {
             params.push((attr.key.to_string(), value));
@@ -617,8 +610,14 @@ mod tests {
         let slots = extract_slots(source).unwrap();
         assert_eq!(slots.len(), 1);
         assert_eq!(slots[0].params.len(), 2);
-        assert_eq!(slots[0].params[0], ("title".to_string(), "Welcome".to_string()));
-        assert_eq!(slots[0].params[1], ("color".to_string(), "blue".to_string()));
+        assert_eq!(
+            slots[0].params[0],
+            ("title".to_string(), "Welcome".to_string())
+        );
+        assert_eq!(
+            slots[0].params[1],
+            ("color".to_string(), "blue".to_string())
+        );
     }
 
     #[test]
@@ -627,7 +626,10 @@ mod tests {
         let slots = extract_slots(source).unwrap();
         assert_eq!(slots.len(), 1);
         assert_eq!(slots[0].params.len(), 2);
-        assert_eq!(slots[0].params[0], ("text".to_string(), "This is a paragraph, yo.".to_string()));
+        assert_eq!(
+            slots[0].params[0],
+            ("text".to_string(), "This is a paragraph, yo.".to_string())
+        );
         assert_eq!(slots[0].params[1], ("count".to_string(), "5".to_string()));
     }
 
@@ -637,7 +639,10 @@ mod tests {
         let slots = extract_slots(source).unwrap();
         assert_eq!(slots.len(), 1);
         assert_eq!(slots[0].params.len(), 1);
-        assert_eq!(slots[0].params[0], ("text".to_string(), "Hello \"World\"".to_string()));
+        assert_eq!(
+            slots[0].params[0],
+            ("text".to_string(), "Hello \"World\"".to_string())
+        );
     }
 
     #[test]
@@ -698,7 +703,8 @@ mod tests {
 
     #[test]
     fn test_clear_slot() {
-        let source = "{$ slot main component=01ARZ3NDEKTSV4RRFFQ69G5FAV $}<p>Content</p>{$ /slot $}";
+        let source =
+            "{$ slot main component=01ARZ3NDEKTSV4RRFFQ69G5FAV $}<p>Content</p>{$ /slot $}";
         let result = clear_slot(source, "main").unwrap();
         assert_eq!(result, "{$ slot main $}{$ /slot $}");
     }

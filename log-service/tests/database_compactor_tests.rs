@@ -754,7 +754,8 @@ async fn test_compactor_directory_creation() -> Result<()> {
 
     // Run compactor for at least one cycle
     let cancellation_token = CancellationToken::new();
-    let compactor = Compactor::with_config(database.clone(), Duration::from_millis(100), 30, 10_000);
+    let compactor =
+        Compactor::with_config(database.clone(), Duration::from_millis(100), 30, 10_000);
 
     let compactor_task = {
         let token = cancellation_token.clone();

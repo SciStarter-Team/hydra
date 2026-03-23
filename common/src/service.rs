@@ -671,7 +671,9 @@ impl TriggerEvent {
             Self::ProjectSubmitted => "When a project is submitted for review",
             Self::ProjectApproved => "When a project is approved",
             Self::BadgeFoundations => "When the Foundations of Citizen Science badge is earned",
-            Self::BadgeLibrariesHubs => "When the Libraries as Hubs for Citizen Science badge is earned",
+            Self::BadgeLibrariesHubs => {
+                "When the Libraries as Hubs for Citizen Science badge is earned"
+            }
             Self::BadgeDataLiteracy => "When the Building Data Literacy badge is earned",
             Self::BadgeHigherEd => "When the Teaching in Higher Education badge is earned",
             Self::BadgeDataEthics => "When the Data Ethics for Practitioners badge is earned",
@@ -688,14 +690,18 @@ impl TriggerEvent {
             Self::CertificateEarned => "When a user earns a certificate",
             Self::EmailValidation => "When a user needs to verify their email address",
             Self::ProjectPublished => "When a project is published",
-            Self::ProjectCreatedStaff => "When a new project is submitted for review (staff notification)",
+            Self::ProjectCreatedStaff => {
+                "When a new project is submitted for review (staff notification)"
+            }
             Self::ForumNewPost => "When a new forum post is created",
             Self::ForumPostReply => "When someone replies to a forum post",
             Self::ForumPostEdited => "When a forum post is edited",
             Self::FirstContribution => "When a user makes their first contribution to a project",
             Self::PeopleFinderConfirmation => "When a people finder request is submitted",
             Self::PeopleFinderNewRequest => "When a new people finder request needs approval",
-            Self::ActsOfScienceApplication => "When an Acts of Science Connected application is submitted",
+            Self::ActsOfScienceApplication => {
+                "When an Acts of Science Connected application is submitted"
+            }
             Self::ActsOfScienceConfirmation => "When Acts of Science participation is confirmed",
             Self::StaffNotification => "Generic notification sent to staff",
         }

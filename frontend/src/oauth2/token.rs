@@ -1,10 +1,10 @@
 // OAuth2 Token Endpoint
 
-use poem::{handler, Response, IntoResponse, web::Form};
-use anyhow::Error;
-use serde::{Deserialize, Serialize};
-use crate::oauth2::types::{Client, AuthorizationCode, AccessToken, RefreshToken};
+use crate::oauth2::types::{AccessToken, AuthorizationCode, Client, RefreshToken};
 use crate::peering::LoadStorePeered;
+use anyhow::Error;
+use poem::{IntoResponse, Response, handler, web::Form};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
 pub struct TokenRequest {
@@ -39,9 +39,7 @@ pub struct TokenErrorResponse {
 /// POST /oauth2/token
 /// Exchanges authorization code for access token
 #[handler]
-pub async fn token_endpoint(
-    Form(req): Form<TokenRequest>,
-) -> Result<Response, Error> {
+pub async fn token_endpoint(Form(req): Form<TokenRequest>) -> Result<Response, Error> {
     match req.grant_type.as_str() {
         "authorization_code" => handle_authorization_code_grant(req).await,
         "refresh_token" => handle_refresh_token_grant(req).await,
@@ -53,12 +51,22 @@ async fn handle_authorization_code_grant(req: TokenRequest) -> Result<Response, 
     // Validate required parameters
     let code = match req.code {
         Some(c) => c,
-        None => return Ok(error_response("invalid_request", Some("Missing code parameter"))),
+        None => {
+            return Ok(error_response(
+                "invalid_request",
+                Some("Missing code parameter"),
+            ));
+        }
     };
 
     let redirect_uri = match req.redirect_uri {
         Some(uri) => uri,
-        None => return Ok(error_response("invalid_request", Some("Missing redirect_uri parameter"))),
+        None => {
+            return Ok(error_response(
+                "invalid_request",
+                Some("Missing redirect_uri parameter"),
+            ));
+        }
     };
 
     // Load client
@@ -70,47 +78,81 @@ async fn handle_authorization_code_grant(req: TokenRequest) -> Result<Response, 
     // Verify client_secret
     if let Some(secret) = req.client_secret {
         if client.client_secret != secret {
-            return Ok(error_response("invalid_client", Some("Invalid client_secret")));
+            return Ok(error_response(
+                "invalid_client",
+                Some("Invalid client_secret"),
+            ));
         }
     } else {
-        return Ok(error_response("invalid_request", Some("Missing client_secret")));
+        return Ok(error_response(
+            "invalid_request",
+            Some("Missing client_secret"),
+        ));
     }
 
     // Load authorization code
     let auth_code = match AuthorizationCode::load(code.clone()).await {
         Ok(ac) => ac,
-        Err(_) => return Ok(error_response("invalid_grant", Some("Invalid or expired authorization code"))),
+        Err(_) => {
+            return Ok(error_response(
+                "invalid_grant",
+                Some("Invalid or expired authorization code"),
+            ));
+        }
     };
 
     // Validate authorization code
     if auth_code.client_id != req.client_id {
-        return Ok(error_response("invalid_grant", Some("Code was issued to different client")));
+        return Ok(error_response(
+            "invalid_grant",
+            Some("Code was issued to different client"),
+        ));
     }
 
     if auth_code.redirect_uri != redirect_uri {
-        return Ok(error_response("invalid_grant", Some("redirect_uri mismatch")));
+        return Ok(error_response(
+            "invalid_grant",
+            Some("redirect_uri mismatch"),
+        ));
     }
 
     // Check if code has expired
     let now: jiff::Timestamp = jiff::Timestamp::now();
-    let expires_at: jiff::Timestamp = auth_code.expires_at.clone().try_into()
+    let expires_at: jiff::Timestamp = auth_code
+        .expires_at
+        .clone()
+        .try_into()
         .map_err(|e| anyhow::anyhow!("Failed to parse expires_at: {}", e))?;
 
     if now > expires_at {
         AuthorizationCode::delete(code.clone()).await?;
-        return Ok(error_response("invalid_grant", Some("Authorization code has expired")));
+        return Ok(error_response(
+            "invalid_grant",
+            Some("Authorization code has expired"),
+        ));
     }
 
     // Verify PKCE if code_challenge was used
     if let Some(challenge) = &auth_code.code_challenge {
         let verifier = match req.code_verifier {
             Some(v) => v,
-            None => return Ok(error_response("invalid_request", Some("code_verifier required"))),
+            None => {
+                return Ok(error_response(
+                    "invalid_request",
+                    Some("code_verifier required"),
+                ));
+            }
         };
 
-        let method = auth_code.code_challenge_method.as_deref().unwrap_or("plain");
+        let method = auth_code
+            .code_challenge_method
+            .as_deref()
+            .unwrap_or("plain");
         if !verify_pkce(challenge, &verifier, method) {
-            return Ok(error_response("invalid_grant", Some("PKCE verification failed")));
+            return Ok(error_response(
+                "invalid_grant",
+                Some("PKCE verification failed"),
+            ));
         }
     }
 
@@ -163,7 +205,12 @@ async fn handle_refresh_token_grant(req: TokenRequest) -> Result<Response, Error
     // Validate required parameters
     let refresh_token_str = match req.refresh_token {
         Some(t) => t,
-        None => return Ok(error_response("invalid_request", Some("Missing refresh_token parameter"))),
+        None => {
+            return Ok(error_response(
+                "invalid_request",
+                Some("Missing refresh_token parameter"),
+            ));
+        }
     };
 
     // Load client
@@ -175,31 +222,51 @@ async fn handle_refresh_token_grant(req: TokenRequest) -> Result<Response, Error
     // Verify client_secret
     if let Some(secret) = req.client_secret {
         if client.client_secret != secret {
-            return Ok(error_response("invalid_client", Some("Invalid client_secret")));
+            return Ok(error_response(
+                "invalid_client",
+                Some("Invalid client_secret"),
+            ));
         }
     } else {
-        return Ok(error_response("invalid_request", Some("Missing client_secret")));
+        return Ok(error_response(
+            "invalid_request",
+            Some("Missing client_secret"),
+        ));
     }
 
     // Load refresh token
     let old_refresh = match RefreshToken::load(refresh_token_str.clone()).await {
         Ok(rt) => rt,
-        Err(_) => return Ok(error_response("invalid_grant", Some("Invalid refresh token"))),
+        Err(_) => {
+            return Ok(error_response(
+                "invalid_grant",
+                Some("Invalid refresh token"),
+            ));
+        }
     };
 
     // Validate refresh token
     if old_refresh.client_id != req.client_id {
-        return Ok(error_response("invalid_grant", Some("Token was issued to different client")));
+        return Ok(error_response(
+            "invalid_grant",
+            Some("Token was issued to different client"),
+        ));
     }
 
     // Check if refresh token has expired
     let now: jiff::Timestamp = jiff::Timestamp::now();
-    let expires_at: jiff::Timestamp = old_refresh.expires_at.clone().try_into()
+    let expires_at: jiff::Timestamp = old_refresh
+        .expires_at
+        .clone()
+        .try_into()
         .map_err(|e| anyhow::anyhow!("Failed to parse expires_at: {}", e))?;
 
     if now > expires_at {
         RefreshToken::delete(refresh_token_str.clone()).await?;
-        return Ok(error_response("invalid_grant", Some("Refresh token has expired")));
+        return Ok(error_response(
+            "invalid_grant",
+            Some("Refresh token has expired"),
+        ));
     }
 
     // Delete old access token
@@ -250,9 +317,9 @@ fn verify_pkce(challenge: &str, verifier: &str, method: &str) -> bool {
     match method {
         "plain" => challenge == verifier,
         "S256" => {
-            use sha2::{Sha256, Digest};
             use base64::engine::Engine;
             use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+            use sha2::{Digest, Sha256};
 
             let hash = Sha256::digest(verifier.as_bytes());
             let computed_challenge = URL_SAFE_NO_PAD.encode(&hash);
@@ -263,7 +330,7 @@ fn verify_pkce(challenge: &str, verifier: &str, method: &str) -> bool {
 }
 
 fn generate_id_token(user_id: &str, client_id: &str) -> Result<String, Error> {
-    use jsonwebtoken::{encode, EncodingKey, Header, Algorithm};
+    use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
     use serde::Serialize;
 
     #[derive(Serialize)]
@@ -287,8 +354,8 @@ fn generate_id_token(user_id: &str, client_id: &str) -> Result<String, Error> {
     };
 
     // Use RSA private key for signing
-    use rsa::pkcs1::{DecodeRsaPrivateKey, EncodeRsaPrivateKey};
     use rsa::RsaPrivateKey;
+    use rsa::pkcs1::{DecodeRsaPrivateKey, EncodeRsaPrivateKey};
 
     let pem = env!("OIDC_RSA_PRIVATE_KEY");
     let private_key = RsaPrivateKey::from_pkcs1_pem(pem)?;
@@ -297,11 +364,7 @@ fn generate_id_token(user_id: &str, client_id: &str) -> Result<String, Error> {
     let mut header = Header::new(Algorithm::RS256);
     header.kid = Some("scistarter-oidc-key".to_string());
 
-    let token = encode(
-        &header,
-        &claims,
-        &EncodingKey::from_rsa_der(der.as_bytes()),
-    )?;
+    let token = encode(&header, &claims, &EncodingKey::from_rsa_der(der.as_bytes()))?;
 
     Ok(token)
 }
@@ -320,15 +383,15 @@ fn error_response(error: &str, description: Option<&str>) -> Response {
         error_description: description.map(|s| s.to_string()),
     };
 
-    let mut response = poem::web::Json(err)
-        .with_status(status)
-        .into_response();
+    let mut response = poem::web::Json(err).with_status(status).into_response();
 
     // Add WWW-Authenticate header for 401 responses per OAuth2 spec
     if status == StatusCode::UNAUTHORIZED {
         response.headers_mut().insert(
             "WWW-Authenticate",
-            "Basic realm=\"OAuth2 Client Authentication\"".parse().unwrap(),
+            "Basic realm=\"OAuth2 Client Authentication\""
+                .parse()
+                .unwrap(),
         );
     }
 

@@ -1,9 +1,15 @@
 // Workflow progress tracking for Articulate training programs
 
 use async_nats::service::Request;
-use common::{service::{decode_structured_message, send, trigger_email, TriggerEvent}, shared::db};
-use common::message::user::{WorkflowProgressRequest, WorkflowProgressResponse, WorkflowType, WorkflowStatusRequest, WorkflowStatusResponse, UserAndBadge};
 use common::badge::Badge;
+use common::message::user::{
+    UserAndBadge, WorkflowProgressRequest, WorkflowProgressResponse, WorkflowStatusRequest,
+    WorkflowStatusResponse, WorkflowType,
+};
+use common::{
+    service::{TriggerEvent, decode_structured_message, send, trigger_email},
+    shared::db,
+};
 use ulid::Ulid;
 
 /// Record workflow progress step completion
@@ -28,9 +34,7 @@ pub async fn record_progress(req: &Request) -> Result<WorkflowProgressResponse, 
         WorkflowType::DataEthics => {
             update_data_ethics_progress(&request.user_id, &request.step, &now).await?
         }
-        WorkflowType::Ideal => {
-            update_ideal_progress(&request.user_id, &request.step, &now).await?
-        }
+        WorkflowType::Ideal => update_ideal_progress(&request.user_id, &request.step, &now).await?,
         WorkflowType::Ambassador => {
             update_ambassador_progress(&request.user_id, &request.step, &now).await?
         }
@@ -43,7 +47,11 @@ pub async fn record_progress(req: &Request) -> Result<WorkflowProgressResponse, 
 }
 
 /// Update Foundations of Citizen Science progress
-async fn update_foundations_progress(user_id: &str, step: &str, now: &str) -> Result<bool, anyhow::Error> {
+async fn update_foundations_progress(
+    user_id: &str,
+    step: &str,
+    now: &str,
+) -> Result<bool, anyhow::Error> {
     // Ensure row exists
     sqlx::query!(
         "INSERT OR IGNORE INTO foundations_progress (user_id) VALUES (?)",
@@ -143,29 +151,42 @@ async fn check_foundations_badge(user_id: &str) -> Result<bool, anyhow::Error> {
     }
 
     // Check: hour1 + at least 2 of the 3 projects
-    let project_count = [row.has_squirrel.unwrap_or(false), row.has_stall.unwrap_or(false), row.has_debris.unwrap_or(false)]
-        .iter()
-        .filter(|&&x| x)
-        .count();
+    let project_count = [
+        row.has_squirrel.unwrap_or(false),
+        row.has_stall.unwrap_or(false),
+        row.has_debris.unwrap_or(false),
+    ]
+    .iter()
+    .filter(|&&x| x)
+    .count();
 
     if row.has_hour1.unwrap_or(false) && project_count >= 2 {
         let now = jiff::Zoned::now().to_string();
         sqlx::query!(
             "UPDATE foundations_progress SET badge_granted_at = ? WHERE user_id = ?",
-            now, user_id
+            now,
+            user_id
         )
         .execute(db())
         .await?;
 
         // Add user tag
-        send("user.tags.add", (user_id.to_string(), "foundations-badge".to_string())).await?;
+        send(
+            "user.tags.add",
+            (user_id.to_string(), "foundations-badge".to_string()),
+        )
+        .await?;
 
         // Grant badge
         let user_ulid = Ulid::from_string(user_id)?;
-        send("user.badges.grant", UserAndBadge {
-            user_id: user_ulid,
-            badge: Badge::FoundationsOfCitizenScience,
-        }).await?;
+        send(
+            "user.badges.grant",
+            UserAndBadge {
+                user_id: user_ulid,
+                badge: Badge::FoundationsOfCitizenScience,
+            },
+        )
+        .await?;
 
         // Trigger email notification
         trigger_email(TriggerEvent::BadgeFoundations, user_ulid, None).await?;
@@ -177,7 +198,11 @@ async fn check_foundations_badge(user_id: &str) -> Result<bool, anyhow::Error> {
 }
 
 /// Update Libraries as Community Hubs progress
-async fn update_libraries_hubs_progress(user_id: &str, step: &str, now: &str) -> Result<bool, anyhow::Error> {
+async fn update_libraries_hubs_progress(
+    user_id: &str,
+    step: &str,
+    now: &str,
+) -> Result<bool, anyhow::Error> {
     sqlx::query!(
         "INSERT OR IGNORE INTO libraries_hubs_progress (user_id) VALUES (?)",
         user_id
@@ -245,20 +270,29 @@ async fn check_libraries_hubs_badge(user_id: &str) -> Result<bool, anyhow::Error
         let now = jiff::Zoned::now().to_string();
         sqlx::query!(
             "UPDATE libraries_hubs_progress SET badge_granted_at = ? WHERE user_id = ?",
-            now, user_id
+            now,
+            user_id
         )
         .execute(db())
         .await?;
 
         // Add user tag
-        send("user.tags.add", (user_id.to_string(), "libraries-hubs-badge".to_string())).await?;
+        send(
+            "user.tags.add",
+            (user_id.to_string(), "libraries-hubs-badge".to_string()),
+        )
+        .await?;
 
         // Grant badge
         let user_ulid = Ulid::from_string(user_id)?;
-        send("user.badges.grant", UserAndBadge {
-            user_id: user_ulid,
-            badge: Badge::LibrariesAsHubsForCitizenScience,
-        }).await?;
+        send(
+            "user.badges.grant",
+            UserAndBadge {
+                user_id: user_ulid,
+                badge: Badge::LibrariesAsHubsForCitizenScience,
+            },
+        )
+        .await?;
 
         // Trigger email notification
         trigger_email(TriggerEvent::BadgeLibrariesHubs, user_ulid, None).await?;
@@ -270,7 +304,11 @@ async fn check_libraries_hubs_badge(user_id: &str) -> Result<bool, anyhow::Error
 }
 
 /// Update Data Literacy progress (single step - grants badge immediately)
-async fn update_data_literacy_progress(user_id: &str, step: &str, now: &str) -> Result<bool, anyhow::Error> {
+async fn update_data_literacy_progress(
+    user_id: &str,
+    step: &str,
+    now: &str,
+) -> Result<bool, anyhow::Error> {
     if step != "tutorial" {
         return Ok(false);
     }
@@ -285,14 +323,22 @@ async fn update_data_literacy_progress(user_id: &str, step: &str, now: &str) -> 
     // Only grant badge if this is a new completion (rows_affected > 0)
     if result.rows_affected() > 0 {
         // Add user tag
-        send("user.tags.add", (user_id.to_string(), "data-literacy-badge".to_string())).await?;
+        send(
+            "user.tags.add",
+            (user_id.to_string(), "data-literacy-badge".to_string()),
+        )
+        .await?;
 
         // Grant badge
         let user_ulid = Ulid::from_string(user_id)?;
-        send("user.badges.grant", UserAndBadge {
-            user_id: user_ulid,
-            badge: Badge::BuildingDataLiteracyThroughCommunityAndCitizenScience,
-        }).await?;
+        send(
+            "user.badges.grant",
+            UserAndBadge {
+                user_id: user_ulid,
+                badge: Badge::BuildingDataLiteracyThroughCommunityAndCitizenScience,
+            },
+        )
+        .await?;
 
         // Trigger email notification
         trigger_email(TriggerEvent::BadgeDataLiteracy, user_ulid, None).await?;
@@ -304,7 +350,11 @@ async fn update_data_literacy_progress(user_id: &str, step: &str, now: &str) -> 
 }
 
 /// Update Higher Ed progress
-async fn update_higher_ed_progress(user_id: &str, step: &str, now: &str) -> Result<bool, anyhow::Error> {
+async fn update_higher_ed_progress(
+    user_id: &str,
+    step: &str,
+    now: &str,
+) -> Result<bool, anyhow::Error> {
     if step != "tutorial" {
         return Ok(false);
     }
@@ -319,14 +369,22 @@ async fn update_higher_ed_progress(user_id: &str, step: &str, now: &str) -> Resu
     // Only grant badge if this is a new completion
     if result.rows_affected() > 0 {
         // Add user tag
-        send("user.tags.add", (user_id.to_string(), "higher-ed-badge".to_string())).await?;
+        send(
+            "user.tags.add",
+            (user_id.to_string(), "higher-ed-badge".to_string()),
+        )
+        .await?;
 
         // Grant badge
         let user_ulid = Ulid::from_string(user_id)?;
-        send("user.badges.grant", UserAndBadge {
-            user_id: user_ulid,
-            badge: Badge::TeachingInHigherEducationWithCitizenScience,
-        }).await?;
+        send(
+            "user.badges.grant",
+            UserAndBadge {
+                user_id: user_ulid,
+                badge: Badge::TeachingInHigherEducationWithCitizenScience,
+            },
+        )
+        .await?;
 
         // Trigger email notification
         trigger_email(TriggerEvent::BadgeHigherEd, user_ulid, None).await?;
@@ -338,7 +396,11 @@ async fn update_higher_ed_progress(user_id: &str, step: &str, now: &str) -> Resu
 }
 
 /// Update Data Ethics progress (single step - grants badge immediately)
-async fn update_data_ethics_progress(user_id: &str, step: &str, now: &str) -> Result<bool, anyhow::Error> {
+async fn update_data_ethics_progress(
+    user_id: &str,
+    step: &str,
+    now: &str,
+) -> Result<bool, anyhow::Error> {
     if step != "tutorial" {
         return Ok(false);
     }
@@ -353,14 +415,22 @@ async fn update_data_ethics_progress(user_id: &str, step: &str, now: &str) -> Re
     // Only grant badge if this is a new completion
     if result.rows_affected() > 0 {
         // Add user tag
-        send("user.tags.add", (user_id.to_string(), "data-ethics-badge".to_string())).await?;
+        send(
+            "user.tags.add",
+            (user_id.to_string(), "data-ethics-badge".to_string()),
+        )
+        .await?;
 
         // Grant badge
         let user_ulid = Ulid::from_string(user_id)?;
-        send("user.badges.grant", UserAndBadge {
-            user_id: user_ulid,
-            badge: Badge::DataEthicsForPractitioners,
-        }).await?;
+        send(
+            "user.badges.grant",
+            UserAndBadge {
+                user_id: user_ulid,
+                badge: Badge::DataEthicsForPractitioners,
+            },
+        )
+        .await?;
 
         // Trigger email notification
         trigger_email(TriggerEvent::BadgeDataEthics, user_ulid, None).await?;
@@ -372,7 +442,11 @@ async fn update_data_ethics_progress(user_id: &str, step: &str, now: &str) -> Re
 }
 
 /// Update IDEAL progress (single step - grants badge immediately)
-async fn update_ideal_progress(user_id: &str, step: &str, now: &str) -> Result<bool, anyhow::Error> {
+async fn update_ideal_progress(
+    user_id: &str,
+    step: &str,
+    now: &str,
+) -> Result<bool, anyhow::Error> {
     if step != "tutorial" {
         return Ok(false);
     }
@@ -387,14 +461,22 @@ async fn update_ideal_progress(user_id: &str, step: &str, now: &str) -> Result<b
     // Only grant badge if this is a new completion
     if result.rows_affected() > 0 {
         // Add user tag
-        send("user.tags.add", (user_id.to_string(), "ideal-badge".to_string())).await?;
+        send(
+            "user.tags.add",
+            (user_id.to_string(), "ideal-badge".to_string()),
+        )
+        .await?;
 
         // Grant badge
         let user_ulid = Ulid::from_string(user_id)?;
-        send("user.badges.grant", UserAndBadge {
-            user_id: user_ulid,
-            badge: Badge::IdealParticipatoryScience,
-        }).await?;
+        send(
+            "user.badges.grant",
+            UserAndBadge {
+                user_id: user_ulid,
+                badge: Badge::IdealParticipatoryScience,
+            },
+        )
+        .await?;
 
         // Trigger email notification
         trigger_email(TriggerEvent::BadgeIdeal, user_ulid, None).await?;
@@ -406,7 +488,11 @@ async fn update_ideal_progress(user_id: &str, step: &str, now: &str) -> Result<b
 }
 
 /// Update Ambassador progress
-async fn update_ambassador_progress(user_id: &str, step: &str, now: &str) -> Result<bool, anyhow::Error> {
+async fn update_ambassador_progress(
+    user_id: &str,
+    step: &str,
+    now: &str,
+) -> Result<bool, anyhow::Error> {
     if step != "tutorial" {
         return Ok(false);
     }
@@ -421,14 +507,22 @@ async fn update_ambassador_progress(user_id: &str, step: &str, now: &str) -> Res
     // Only grant badge if this is a new completion
     if result.rows_affected() > 0 {
         // Add user tag
-        send("user.tags.add", (user_id.to_string(), "ambassador-badge".to_string())).await?;
+        send(
+            "user.tags.add",
+            (user_id.to_string(), "ambassador-badge".to_string()),
+        )
+        .await?;
 
         // Grant badge
         let user_ulid = Ulid::from_string(user_id)?;
-        send("user.badges.grant", UserAndBadge {
-            user_id: user_ulid,
-            badge: Badge::SciStarterAmbassador,
-        }).await?;
+        send(
+            "user.badges.grant",
+            UserAndBadge {
+                user_id: user_ulid,
+                badge: Badge::SciStarterAmbassador,
+            },
+        )
+        .await?;
 
         // Trigger email notification
         trigger_email(TriggerEvent::BadgeAmbassador, user_ulid, None).await?;

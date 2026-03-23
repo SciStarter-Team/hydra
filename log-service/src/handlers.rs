@@ -1,15 +1,15 @@
 use anyhow::Result;
 use common::{
     message::log::{
-        ActsOfScienceCreateRequest, ActsOfScienceCreateResponse, ActsOfScienceSource, ActsToDateRequest,
-        ActsToDateResponse, AffiliateParticipantsRequest,
+        ActsOfScienceCreateRequest, ActsOfScienceCreateResponse, ActsOfScienceSource,
+        ActsToDateRequest, ActsToDateResponse, AffiliateParticipantsRequest,
         AffiliateParticipantsResponse, AnalyticsQuery, AnalyticsResponse,
         ArticulateCompletionRecord, ArticulateCompletionRequest, ArticulateCompletionResponse,
         ExternalLinkClickthroughResponse, ExternalLinksResponse, GoUrlStatsRequest,
         GoUrlStatsResponse, ProjectParticipationRecord, ProjectParticipationRequest,
         ProjectParticipationResponse, RecentActivityRequest, RecentActivityResponse,
     },
-    service::{decode_structured_message, trigger_email, TriggerEvent},
+    service::{TriggerEvent, decode_structured_message, trigger_email},
 };
 use datafusion::prelude::*;
 use ulid::Ulid;
@@ -235,7 +235,9 @@ pub async fn handle_top_performers_analytics(
         .as_ref()
         .expect("Database not initialized")
         .clone();
-    get_top_performers(database, query).await.map_err(Into::into)
+    get_top_performers(database, query)
+        .await
+        .map_err(Into::into)
 }
 
 pub async fn handle_user_tags_update(req: &async_nats::service::Request) -> Result<()> {
@@ -462,9 +464,7 @@ pub async fn handle_project_participation(
     Ok(ProjectParticipationResponse { participated })
 }
 
-pub async fn handle_articulate_completion_record(
-    req: &async_nats::service::Request,
-) -> Result<()> {
+pub async fn handle_articulate_completion_record(req: &async_nats::service::Request) -> Result<()> {
     let record: ArticulateCompletionRecord = decode_structured_message(req.message.clone())?;
 
     let user_id_str = record.user_id.to_string();
@@ -535,9 +535,7 @@ pub async fn handle_project_participation_record(req: &async_nats::service::Requ
         trigger_email(
             TriggerEvent::FirstContribution,
             record.user_id,
-            Some(&[
-                ("project_id".to_string(), record.project_id.clone()),
-            ]),
+            Some(&[("project_id".to_string(), record.project_id.clone())]),
         )
         .await
         .ok();
@@ -546,7 +544,7 @@ pub async fn handle_project_participation_record(req: &async_nats::service::Requ
     // Record to participation table for permanent record
     use log_service::database::tables::ParticipationRow;
     let row = ParticipationRow {
-        origin: record.origin.unwrap_or(0),                  // 0 = web
+        origin: record.origin.unwrap_or(0), // 0 = web
         when: record.when.unwrap_or_else(|| now.clone()),
         duration: record.duration.unwrap_or(1.0),
         where_point: record.where_point,
@@ -579,10 +577,7 @@ pub async fn handle_project_participation_record(req: &async_nats::service::Requ
     .await?;
 
     // If it's April, automatically create an Acts of Science entry
-    let is_april = when_str
-        .get(5..7)
-        .map(|m| m == "04")
-        .unwrap_or(false);
+    let is_april = when_str.get(5..7).map(|m| m == "04").unwrap_or(false);
     if is_april {
         let act_id = Ulid::new().to_string();
         let source = ActsOfScienceSource::Affiliate as i16;
@@ -687,7 +682,9 @@ pub async fn handle_external_link_clickthrough(
 
     // If URL found, record the clickthrough
     if let Some(ref url_string) = url {
-        let when = request.when.unwrap_or_else(|| TimeString::now().to_string());
+        let when = request
+            .when
+            .unwrap_or_else(|| TimeString::now().to_string());
         let user_id = request.user_id.map(|id| id.to_string());
 
         // Resolve geolocation from IP if not provided
@@ -744,14 +741,22 @@ pub async fn handle_contributors(
 
     let mode = match request.mode.as_deref() {
         Some(m) if !m.is_empty() => m.to_string(),
-        _ => return Ok(ContributorsResponse { contributors: vec![], pages: 0 }),
+        _ => {
+            return Ok(ContributorsResponse {
+                contributors: vec![],
+                pages: 0,
+            });
+        }
     };
 
     let letter = request.letter.clone().unwrap_or_default().to_uppercase();
 
     // For name mode, require a letter
     if mode == "name" && letter.is_empty() {
-        return Ok(ContributorsResponse { contributors: vec![], pages: 0 });
+        return Ok(ContributorsResponse {
+            contributors: vec![],
+            pages: 0,
+        });
     }
 
     let page = request.page.unwrap_or(1).max(1);
@@ -770,7 +775,7 @@ pub async fn handle_contributors(
 
     // Build the query dynamically based on mode
     let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new(
-        "SELECT name, act, project, organization, entity_slug, DATE(created_at) as date FROM acts_of_science WHERE accepted = 1 AND source != "
+        "SELECT name, act, project, organization, entity_slug, DATE(created_at) as date FROM acts_of_science WHERE accepted = 1 AND source != ",
     );
     qb.push_bind(incidental);
     qb.push(" AND created_at >= ");
@@ -797,7 +802,7 @@ pub async fn handle_contributors(
 
     // Count query
     let mut count_qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new(
-        "SELECT COUNT(*) FROM acts_of_science WHERE accepted = 1 AND source != "
+        "SELECT COUNT(*) FROM acts_of_science WHERE accepted = 1 AND source != ",
     );
     count_qb.push_bind(incidental);
     count_qb.push(" AND created_at >= ");
@@ -819,10 +824,7 @@ pub async fn handle_contributors(
         _ => {}
     }
 
-    let total: i64 = count_qb
-        .build_query_scalar()
-        .fetch_one(db)
-        .await?;
+    let total: i64 = count_qb.build_query_scalar().fetch_one(db).await?;
 
     let pages = ((total as f64) / (PAGE_SIZE as f64)).ceil() as i32;
 
@@ -833,7 +835,14 @@ pub async fn handle_contributors(
     qb.push_bind(offset);
 
     let rows = qb
-        .build_query_as::<(Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>)>()
+        .build_query_as::<(
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        )>()
         .fetch_all(db)
         .await?;
 
@@ -849,7 +858,10 @@ pub async fn handle_contributors(
         })
         .collect();
 
-    Ok(ContributorsResponse { contributors, pages })
+    Ok(ContributorsResponse {
+        contributors,
+        pages,
+    })
 }
 
 pub async fn handle_acts_of_science_create(
@@ -899,11 +911,7 @@ pub async fn handle_acts_to_date(
     let today = jiff::Zoned::now().date();
     let year = request.year.unwrap_or_else(|| {
         let y: i32 = today.year().into();
-        if today.month() > 6 {
-            y + 1
-        } else {
-            y
-        }
+        if today.month() > 6 { y + 1 } else { y }
     });
 
     let begin = format!("{}-04-01T00:00:00Z", year);

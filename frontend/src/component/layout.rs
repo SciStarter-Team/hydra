@@ -36,7 +36,10 @@ where
     type Prepared = StandardLayoutPrepared<T>;
 
     async fn prepare(self, user: Self::Param) -> Result<Self::Prepared, anyhow::Error> {
-        let header = Header::default().prepare(user.clone()).await?;
+        let header = Header::default()
+            .with_current_uri(&self.path)
+            .prepare(user.clone())
+            .await?;
         let sidebar = Sidebar::new(&self.path).prepare(user.clone()).await?;
         let footer = Footer::default()
             .config(&self.path)

@@ -7,8 +7,7 @@ use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 
 use log_service::database::{
-    Database, get_sync_last_id, set_sync_last_id,
-    tables::ParticipationRow,
+    Database, get_sync_last_id, set_sync_last_id, tables::ParticipationRow,
 };
 
 const ZOONIVERSE_ORIGIN: i16 = 10; // Distinct origin for Zooniverse-sourced participation
@@ -85,7 +84,10 @@ pub async fn zooniverse_sync_projects(
         let projects: Vec<ZooniverseProjectData> = match client
             .get("https://scistarter.org/staff/sync/zooniverse_projects")
             .bearer_auth(sync_token)
-            .query(&[("since", "1900-01-01T00:00:00Z"), ("last_id", &last_id.to_string())])
+            .query(&[
+                ("since", "1900-01-01T00:00:00Z"),
+                ("last_id", &last_id.to_string()),
+            ])
             .send()
             .await
         {
@@ -179,7 +181,10 @@ pub async fn zooniverse_sync_users(
             let users: Vec<ZooniverseUserData> = match client
                 .get("https://scistarter.org/staff/sync/zooniverse_users")
                 .bearer_auth(sync_token)
-                .query(&[("since", "1900-01-01T00:00:00Z"), ("last_id", &last_id.to_string())])
+                .query(&[
+                    ("since", "1900-01-01T00:00:00Z"),
+                    ("last_id", &last_id.to_string()),
+                ])
                 .send()
                 .await
             {
@@ -284,97 +289,114 @@ pub async fn zooniverse_synchronize(
             }
         };
 
-        for project in projects {
+        'projects: for project in projects {
             if cancellation_token.is_cancelled() {
                 return;
             }
 
-            let resp = match client
-                .get("https://panoptes.zooniverse.org/api/classifications")
-                .bearer_auth(&token)
-                .header("Accept", "application/vnd.api+json; version=1")
-                .query(&[
-                    ("project_id", &project.zooniverse_id.to_string()),
-                    ("page_size", &"200".to_string()),
-                    (
-                        "id",
-                        &format!("{}...", project.last_classification_id + 1),
-                    ),
-                ])
-                .send()
-                .await
-            {
-                Ok(r) => r,
-                Err(e) => {
-                    eprintln!(
-                        "Zooniverse API error for project {}: {}",
-                        project.zooniverse_id, e
-                    );
-                    continue;
-                }
-            };
-
-            if resp.status() == 429 {
-                eprintln!("Zooniverse rate limit hit, backing off");
-                sleep(Duration::from_secs(60)).await;
-                continue;
-            }
-
-            let classifications: ClassificationsResponse = match resp.error_for_status() {
-                Ok(r) => match r.json().await {
-                    Ok(c) => c,
-                    Err(e) => {
-                        eprintln!("Zooniverse JSON parse error: {}", e);
-                        continue;
-                    }
-                },
-                Err(e) => {
-                    eprintln!("Zooniverse HTTP error: {}", e);
-                    continue;
-                }
-            };
-
             let mut max_id = project.last_classification_id;
+            let mut page: u32 = 1;
 
-            for classification in &classifications.classifications {
-                let class_id: i64 = classification.id.parse().unwrap_or(0);
-                if class_id > max_id {
-                    max_id = class_id;
-                }
-
-                // Resolve zooniverse user to hydra user_id
-                let user_id = if let Some(zoo_user_id) = &classification.links.user {
-                    let zoo_uid: i64 = zoo_user_id.parse().unwrap_or(0);
-                    sqlx::query_scalar!(
-                        "SELECT user_id FROM zooniverse_users WHERE zooniverse_id = ?",
-                        zoo_uid,
-                    )
-                    .fetch_optional(common::shared::db())
+            loop {
+                let resp = match client
+                    .get("https://panoptes.zooniverse.org/api/classifications/project")
+                    .bearer_auth(&token)
+                    .header("Accept", "application/vnd.api+json; version=1")
+                    .query(&[
+                        ("project_id", &project.zooniverse_id.to_string()),
+                        ("page_size", &"200".to_string()),
+                        ("last_id", &project.last_classification_id.to_string()),
+                        ("page", &page.to_string()),
+                        ("sort", &"-created_at".to_string()),
+                    ])
+                    .send()
                     .await
-                    .ok()
-                    .flatten()
-                    .flatten()
-                } else {
-                    None
+                {
+                    Ok(r) => r,
+                    Err(e) => {
+                        eprintln!(
+                            "Zooniverse API error for project {}: {}",
+                            project.zooniverse_id, e
+                        );
+                        continue 'projects;
+                    }
                 };
 
-                let row = ParticipationRow {
-                    origin: ZOONIVERSE_ORIGIN,
-                    when: classification.created_at.clone(),
-                    duration: 1.0,
-                    where_point: None,
-                    magnitude: 1,
-                    authenticated: true,
-                    extra: String::new(),
-                    fidelity: 0.5,
-                    entity_id: project.entity_id.clone(),
-                    user_id,
-                    task_name: None,
-                };
-
-                if let Err(e) = database.participation.insert(row).await {
-                    eprintln!("Error inserting zooniverse participation: {}", e);
+                if resp.status() == 429 {
+                    eprintln!("Zooniverse rate limit hit, backing off");
+                    sleep(Duration::from_secs(60)).await;
+                    continue 'projects;
                 }
+
+                let classifications: ClassificationsResponse = match resp.error_for_status() {
+                    Ok(r) => match r.json().await {
+                        Ok(c) => c,
+                        Err(e) => {
+                            eprintln!("Zooniverse JSON parse error: {}", e);
+                            continue 'projects;
+                        }
+                    },
+                    Err(e) => {
+                        eprintln!("Zooniverse HTTP error: {}", e);
+                        continue 'projects;
+                    }
+                };
+
+                if classifications.classifications.is_empty() {
+                    break;
+                }
+
+                let mut found_new = false;
+
+                for classification in &classifications.classifications {
+                    let class_id: i64 = classification.id.parse().unwrap_or(0);
+                    if class_id > max_id {
+                        max_id = class_id;
+                    }
+                    if class_id > project.last_classification_id {
+                        found_new = true;
+                    }
+
+                    // Resolve zooniverse user to hydra user_id
+                    let user_id = if let Some(zoo_user_id) = &classification.links.user {
+                        let zoo_uid: i64 = zoo_user_id.parse().unwrap_or(0);
+                        sqlx::query_scalar!(
+                            "SELECT user_id FROM zooniverse_users WHERE zooniverse_id = ?",
+                            zoo_uid,
+                        )
+                        .fetch_optional(common::shared::db())
+                        .await
+                        .ok()
+                        .flatten()
+                        .flatten()
+                    } else {
+                        None
+                    };
+
+                    let row = ParticipationRow {
+                        origin: ZOONIVERSE_ORIGIN,
+                        when: classification.created_at.clone(),
+                        duration: 1.0,
+                        where_point: None,
+                        magnitude: 1,
+                        authenticated: true,
+                        extra: String::new(),
+                        fidelity: 0.5,
+                        entity_id: project.entity_id.clone(),
+                        user_id,
+                        task_name: None,
+                    };
+
+                    if let Err(e) = database.participation.insert(row).await {
+                        eprintln!("Error inserting zooniverse participation: {}", e);
+                    }
+                }
+
+                if !found_new || classifications.classifications.len() < 200 {
+                    break;
+                }
+
+                page += 1;
             }
 
             // Update last_classification_id

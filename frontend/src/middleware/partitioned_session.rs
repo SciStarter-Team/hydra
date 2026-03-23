@@ -18,7 +18,6 @@
 ///
 /// The browser stores both variants and automatically sends the appropriate one
 /// based on context (top-level vs iframe).
-
 use poem::{Endpoint, IntoResponse, Middleware, Request, Response};
 
 /// Marker to indicate a response needs partitioned cookies

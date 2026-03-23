@@ -86,7 +86,9 @@ impl DataSet for UserIdentity {
         use common::message::user::{UserEmailInfo, UserEmailInfoRequest};
 
         // NATS call to user-service to get user info for email
-        let user = request::<UserEmailInfo>("user.info.email_info", UserEmailInfoRequest { user_id }).await?;
+        let user =
+            request::<UserEmailInfo>("user.info.email_info", UserEmailInfoRequest { user_id })
+                .await?;
 
         // Derive friendly name: use first_name if not empty, otherwise handle
         let friendly_name = if !user.first_name.is_empty() {

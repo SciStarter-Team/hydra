@@ -6,7 +6,9 @@ use ulid::Ulid;
 
 use crate::{contact::Contact, peering::LoadStorePeered};
 
-use super::{field_source::FieldSource, ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus};
+use super::{
+    ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus, field_source::FieldSource,
+};
 
 // Vocabulary constants for controlled fields
 pub const PARTICIPATION_TASKS_VOCABULARY: &[&str] = &[
@@ -218,7 +220,13 @@ pub struct ProjectField {
 #[derive(Debug, serde::Serialize, serde::Deserialize, strum::EnumDiscriminants)]
 #[strum_discriminants(
     name(ProjectFieldType),
-    derive(Hash, serde::Serialize, serde::Deserialize, strum::EnumIter, strum::Display),
+    derive(
+        Hash,
+        serde::Serialize,
+        serde::Deserialize,
+        strum::EnumIter,
+        strum::Display
+    ),
     strum(serialize_all = "snake_case")
 )]
 pub enum ProjectFieldValue {
@@ -386,7 +394,6 @@ impl TryFrom<&str> for ProjectFieldType {
         }
     }
 }
-
 
 impl From<ProjectFieldType> for String {
     fn from(field_type: ProjectFieldType) -> String {
@@ -3851,7 +3858,9 @@ impl LoadStorePeered for ProjectField {
             ProjectFieldValue::Country(country) => {
                 let result = self.save_country(country).await;
                 if result.is_ok() {
-                    if let Err(e) = crate::geocode::geocode_and_update_project_point(self.project_id).await {
+                    if let Err(e) =
+                        crate::geocode::geocode_and_update_project_point(self.project_id).await
+                    {
                         eprintln!("Geocoding after country save failed: {e}");
                     }
                 }
@@ -3860,7 +3869,9 @@ impl LoadStorePeered for ProjectField {
             ProjectFieldValue::State(state) => {
                 let result = self.save_state(state).await;
                 if result.is_ok() {
-                    if let Err(e) = crate::geocode::geocode_and_update_project_point(self.project_id).await {
+                    if let Err(e) =
+                        crate::geocode::geocode_and_update_project_point(self.project_id).await
+                    {
                         eprintln!("Geocoding after state save failed: {e}");
                     }
                 }
@@ -3869,7 +3880,9 @@ impl LoadStorePeered for ProjectField {
             ProjectFieldValue::City(city) => {
                 let result = self.save_city(city).await;
                 if result.is_ok() {
-                    if let Err(e) = crate::geocode::geocode_and_update_project_point(self.project_id).await {
+                    if let Err(e) =
+                        crate::geocode::geocode_and_update_project_point(self.project_id).await
+                    {
                         eprintln!("Geocoding after city save failed: {e}");
                     }
                 }
@@ -3879,7 +3892,9 @@ impl LoadStorePeered for ProjectField {
             ProjectFieldValue::Address(address) => {
                 let result = self.save_address(address).await;
                 if result.is_ok() {
-                    if let Err(e) = crate::geocode::geocode_and_update_project_point(self.project_id).await {
+                    if let Err(e) =
+                        crate::geocode::geocode_and_update_project_point(self.project_id).await
+                    {
                         eprintln!("Geocoding after address save failed: {e}");
                     }
                 }

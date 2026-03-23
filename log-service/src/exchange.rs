@@ -1,10 +1,12 @@
 use anyhow::Result;
 use common::{
-    message::log::{ExchangeEngagementRequest, ExchangeEngagementResponse, ExchangeEvent, ProjectCount},
+    message::log::{
+        ExchangeEngagementRequest, ExchangeEngagementResponse, ExchangeEvent, ProjectCount,
+    },
     service::decode_structured_message,
 };
-use datafusion::prelude::SessionContext;
 use datafusion::arrow::array::{Array, Int32Array, Int64Array, StringArray};
+use datafusion::prelude::SessionContext;
 
 use crate::DATABASE;
 use log_service::database::tables::ExchangeEventRow;
@@ -26,15 +28,25 @@ pub async fn record_exchange_event(req: &async_nats::service::Request) -> Result
         extra: event.extra.clone(),
     };
 
-    let database = DATABASE.read().as_ref().expect("Database not initialized").clone();
+    let database = DATABASE
+        .read()
+        .as_ref()
+        .expect("Database not initialized")
+        .clone();
     database.exchange_events.insert(row).await?;
 
     Ok(())
 }
 
-pub async fn get_engagement_stats(req: &async_nats::service::Request) -> Result<ExchangeEngagementResponse> {
+pub async fn get_engagement_stats(
+    req: &async_nats::service::Request,
+) -> Result<ExchangeEngagementResponse> {
     let request: ExchangeEngagementRequest = decode_structured_message(req.message.clone())?;
-    let database = DATABASE.read().as_ref().expect("Database not initialized").clone();
+    let database = DATABASE
+        .read()
+        .as_ref()
+        .expect("Database not initialized")
+        .clone();
     let ctx = database.context();
 
     // Build year filter for SQL queries

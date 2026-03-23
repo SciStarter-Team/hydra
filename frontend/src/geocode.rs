@@ -18,12 +18,10 @@ pub async fn geocode_address_to_point(city: &str, state: &str, country: &str) ->
 
     let query = parts.join(", ");
 
-    let response: GeocodeForwardResponse = common::service::request(
-        "user.geocode.forward",
-        GeocodeForwardRequest { query },
-    )
-    .await
-    .ok()?;
+    let response: GeocodeForwardResponse =
+        common::service::request("user.geocode.forward", GeocodeForwardRequest { query })
+            .await
+            .ok()?;
 
     let point = Point {
         latitude: response.latitude,

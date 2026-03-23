@@ -1,16 +1,12 @@
 use anyhow::{Error, Result};
 use async_nats::service::Request;
-use common::{
-    message::email::*,
-    shared::db,
-    timestring::TimeString,
-};
+use common::{message::email::*, shared::db, timestring::TimeString};
 use jiff::Zoned;
 use sqlx::QueryBuilder;
 use ulid::Ulid;
 
-use crate::sends::send_email;
 use crate::scheduled::schedule_send;
+use crate::sends::send_email;
 
 // ============================================================================
 // Database Row Structs
@@ -35,32 +31,41 @@ struct TriggerRow {
 // ============================================================================
 
 fn convert_trigger_row(row: TriggerRow) -> Result<TriggerInfo> {
-    let trigger_id = row.trigger_id
+    let trigger_id = row
+        .trigger_id
         .ok_or_else(|| anyhow::anyhow!("trigger_id is NULL"))?
         .parse::<Ulid>()?;
-    let stored_email_id = row.stored_email_id
+    let stored_email_id = row
+        .stored_email_id
         .ok_or_else(|| anyhow::anyhow!("stored_email_id is NULL"))?
         .parse::<Ulid>()?;
-    let action_type_str = row.action_type
+    let action_type_str = row
+        .action_type
         .ok_or_else(|| anyhow::anyhow!("action_type is NULL"))?;
     let action_type = TriggerActionType::from_str(&action_type_str)
         .ok_or_else(|| anyhow::anyhow!("Invalid action_type: {}", action_type_str))?;
     let created_at = TimeString::try_from(
-        row.created_at.ok_or_else(|| anyhow::anyhow!("created_at is NULL"))?
+        row.created_at
+            .ok_or_else(|| anyhow::anyhow!("created_at is NULL"))?,
     )?;
     let updated_at = TimeString::try_from(
-        row.updated_at.ok_or_else(|| anyhow::anyhow!("updated_at is NULL"))?
+        row.updated_at
+            .ok_or_else(|| anyhow::anyhow!("updated_at is NULL"))?,
     )?;
 
     Ok(TriggerInfo {
         trigger_id,
-        trigger_name: row.trigger_name.ok_or_else(|| anyhow::anyhow!("trigger_name is NULL"))?,
+        trigger_name: row
+            .trigger_name
+            .ok_or_else(|| anyhow::anyhow!("trigger_name is NULL"))?,
         stored_email_id,
         action_type,
         delay_seconds: row.delay_seconds,
         cancellation_trigger_name: row.cancellation_trigger_name,
         recipients: row.recipients,
-        active: row.active.ok_or_else(|| anyhow::anyhow!("active is NULL"))?,
+        active: row
+            .active
+            .ok_or_else(|| anyhow::anyhow!("active is NULL"))?,
         created_at,
         updated_at,
     })
@@ -69,7 +74,10 @@ fn convert_trigger_row(row: TriggerRow) -> Result<TriggerInfo> {
 /// Resolve the recipients JSON into a list of EmailRecipient values.
 /// When NULL or empty, defaults to sending to the triggering user.
 /// JSON format: ["triggering_user", {"address_set": "slug"}, {"user_set": "slug"}, {"email": "addr"}]
-fn resolve_trigger_recipients(recipients_json: &Option<String>, user_id: Ulid) -> Vec<EmailRecipient> {
+fn resolve_trigger_recipients(
+    recipients_json: &Option<String>,
+    user_id: Ulid,
+) -> Vec<EmailRecipient> {
     let Some(json) = recipients_json else {
         return vec![EmailRecipient::UserId(user_id)];
     };
@@ -91,9 +99,13 @@ fn resolve_trigger_recipients(recipients_json: &Option<String>, user_id: Ulid) -
             }
             serde_json::Value::Object(ref map) => {
                 if let Some(slug) = map.get("address_set").and_then(|v| v.as_str()) {
-                    Some(EmailRecipient::AddressSet { slug: slug.to_string() })
+                    Some(EmailRecipient::AddressSet {
+                        slug: slug.to_string(),
+                    })
                 } else if let Some(slug) = map.get("user_set").and_then(|v| v.as_str()) {
-                    Some(EmailRecipient::UserSet { slug: slug.to_string() })
+                    Some(EmailRecipient::UserSet {
+                        slug: slug.to_string(),
+                    })
                 } else if let Some(email) = map.get("email").and_then(|v| v.as_str()) {
                     Some(EmailRecipient::Email(email.to_string()))
                 } else {
@@ -376,7 +388,8 @@ pub async fn handle_trigger_event(req: &Request) -> Result<TriggerEmailResponse,
             continue;
         };
 
-        let datasets: Vec<String> = serde_json::from_str(&stored_email.datasets).unwrap_or_default();
+        let datasets: Vec<String> =
+            serde_json::from_str(&stored_email.datasets).unwrap_or_default();
 
         // Convert body_delta to HTML
         let template_html = common::quill::delta_to_html(&stored_email.body_delta)?;
@@ -410,8 +423,8 @@ pub async fn handle_trigger_event(req: &Request) -> Result<TriggerEmailResponse,
             TriggerActionType::Delayed => {
                 // Schedule for later
                 let delay_seconds = trigger.delay_seconds.unwrap_or(0);
-                let scheduled_zoned = Zoned::now()
-                    .checked_add(jiff::Span::new().seconds(delay_seconds))?;
+                let scheduled_zoned =
+                    Zoned::now().checked_add(jiff::Span::new().seconds(delay_seconds))?;
                 let scheduled_time = TimeString::from(scheduled_zoned.timestamp());
 
                 let hook = format!("trigger:{}", trigger.trigger_name);

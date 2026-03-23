@@ -1,9 +1,9 @@
 // Wiki functionality
 
+use crate::peering::LoadStorePeered;
 use anyhow::Error;
 use common::shared::db;
 use serde::{Deserialize, Serialize};
-use crate::peering::LoadStorePeered;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WikiPage {

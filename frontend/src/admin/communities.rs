@@ -77,9 +77,7 @@ struct UpdateCommunityForm {
 }
 
 // Helper functions
-async fn communities_search_impl(
-    query: &CommunitySearchQuery,
-) -> Result<String, anyhow::Error> {
+async fn communities_search_impl(query: &CommunitySearchQuery) -> Result<String, anyhow::Error> {
     let response: CommunityListResponse = common::service::request(
         "user.communities.list",
         CommunityListRequest {
@@ -238,9 +236,11 @@ async fn communities_edit(
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
 
     // Find community by slug (we use slug as the URL param for readability)
-    let item: CommunityInfo =
-        common::service::request("user.communities.get", common::message::user::CommunityGetRequest { slug: id_str })
-            .await?;
+    let item: CommunityInfo = common::service::request(
+        "user.communities.get",
+        common::message::user::CommunityGetRequest { slug: id_str },
+    )
+    .await?;
 
     let content = EditCommunityContent {
         item,
@@ -266,9 +266,11 @@ async fn communities_update(
     Form(form): Form<UpdateCommunityForm>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    let community: CommunityInfo =
-        common::service::request("user.communities.get", common::message::user::CommunityGetRequest { slug: id_str })
-            .await?;
+    let community: CommunityInfo = common::service::request(
+        "user.communities.get",
+        common::message::user::CommunityGetRequest { slug: id_str },
+    )
+    .await?;
 
     let topics: Vec<String> = form
         .topics
@@ -350,9 +352,11 @@ async fn communities_delete(
     Path(id_str): Path<String>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    let community: CommunityInfo =
-        common::service::request("user.communities.get", common::message::user::CommunityGetRequest { slug: id_str })
-            .await?;
+    let community: CommunityInfo = common::service::request(
+        "user.communities.get",
+        common::message::user::CommunityGetRequest { slug: id_str },
+    )
+    .await?;
 
     common::service::request::<CommunitySuccessResponse>(
         "user.communities.delete",
@@ -391,5 +395,10 @@ pub fn routes() -> impl Endpoint {
         .at("/", get(communities_list).post(communities_create))
         .at("/search", get(communities_search))
         .at("/new", get(communities_new))
-        .at("/:id", get(communities_edit).post(communities_update).delete(communities_delete))
+        .at(
+            "/:id",
+            get(communities_edit)
+                .post(communities_update)
+                .delete(communities_delete),
+        )
 }

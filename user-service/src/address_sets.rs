@@ -11,11 +11,10 @@ use common::service::decode_structured_message;
 
 /// List all address sets
 pub async fn list(_req: &Request) -> Result<AddressSetListResponse> {
-    let rows = sqlx::query!(
-        "SELECT slug, name, created_at FROM address_sets ORDER BY created_at DESC"
-    )
-    .fetch_all(db())
-    .await?;
+    let rows =
+        sqlx::query!("SELECT slug, name, created_at FROM address_sets ORDER BY created_at DESC")
+            .fetch_all(db())
+            .await?;
 
     let address_sets = rows
         .into_iter()

@@ -59,11 +59,10 @@ async fn wiki_page(
                 content: rendered_content,
             };
 
-            let prepared =
-                AdminLayout::new(&format!("Wiki: {}", page.title), content)
-                    .with_sidebar_active("wiki")
-                    .prepare(user_info)
-                    .await?;
+            let prepared = AdminLayout::new(&format!("Wiki: {}", page.title), content)
+                .with_sidebar_active("wiki")
+                .prepare(user_info)
+                .await?;
 
             Ok(poem::Response::builder()
                 .content_type("text/html")
@@ -77,14 +76,11 @@ async fn wiki_page(
                 is_new: true,
             };
 
-            let prepared = AdminLayout::new(
-                &format!("Create Wiki Page: {}", title),
-                content,
-            )
-            .with_sidebar_active("wiki")
-            .with_quill()
-            .prepare(user_info)
-            .await?;
+            let prepared = AdminLayout::new(&format!("Create Wiki Page: {}", title), content)
+                .with_sidebar_active("wiki")
+                .with_quill()
+                .prepare(user_info)
+                .await?;
 
             Ok(poem::Response::builder()
                 .content_type("text/html")
@@ -191,6 +187,9 @@ async fn wiki_delete(
 pub fn routes() -> impl Endpoint {
     Route::new()
         .at("/", get(wiki_index))
-        .at("/:title", get(wiki_page).post(wiki_save).delete(wiki_delete))
+        .at(
+            "/:title",
+            get(wiki_page).post(wiki_save).delete(wiki_delete),
+        )
         .at("/:title/edit", get(wiki_edit))
 }

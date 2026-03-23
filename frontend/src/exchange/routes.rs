@@ -24,9 +24,18 @@ pub fn routes() -> impl Endpoint {
             poem::delete(delete_predefined_search),
         )
         .at("/:exchange/staff", poem::post(add_exchange_staff))
-        .at("/:exchange/staff/:user_id", poem::delete(remove_exchange_staff))
-        .at("/:exchange/projects/:project_id/approve", poem::post(approve_exchange_project))
-        .at("/:exchange/projects/:project_id/reject", poem::delete(reject_exchange_project))
+        .at(
+            "/:exchange/staff/:user_id",
+            poem::delete(remove_exchange_staff),
+        )
+        .at(
+            "/:exchange/projects/:project_id/approve",
+            poem::post(approve_exchange_project),
+        )
+        .at(
+            "/:exchange/projects/:project_id/reject",
+            poem::delete(reject_exchange_project),
+        )
         .at(
             "/:exchange/:project_slug/project.html",
             poem::get(exchange_project),

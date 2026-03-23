@@ -1,6 +1,6 @@
+use common::message::user::BasicInfo;
 use sailfish::TemplateOnce;
 use std::sync::Arc;
-use common::message::user::BasicInfo;
 
 pub struct WordPressContent {
     pub page_url: String,
@@ -49,15 +49,19 @@ fn rewrite_urls(html: &str, base_url: &str) -> String {
 
     // Rewrite src="/wp-content/..." to src="https://base.url/wp-content/..."
     let src_pattern = Regex::new(r#"src="(/wp-content/[^"]+)""#).unwrap();
-    result = src_pattern.replace_all(&result, |caps: &regex::Captures| {
-        format!(r#"src="{}{}""#, base_url, &caps[1])
-    }).to_string();
+    result = src_pattern
+        .replace_all(&result, |caps: &regex::Captures| {
+            format!(r#"src="{}{}""#, base_url, &caps[1])
+        })
+        .to_string();
 
     // Rewrite href="/wp-content/..." to href="https://base.url/wp-content/..."
     let href_pattern = Regex::new(r#"href="(/wp-content/[^"]+)""#).unwrap();
-    result = href_pattern.replace_all(&result, |caps: &regex::Captures| {
-        format!(r#"href="{}{}""#, base_url, &caps[1])
-    }).to_string();
+    result = href_pattern
+        .replace_all(&result, |caps: &regex::Captures| {
+            format!(r#"href="{}{}""#, base_url, &caps[1])
+        })
+        .to_string();
 
     result
 }

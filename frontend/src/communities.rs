@@ -1,13 +1,13 @@
+use common::message::user::BasicInfo;
 use common::message::user::{
     CommunityGetRequest, CommunityInfo, CommunityJoinRequest, CommunityLeaveRequest,
     CommunityListRequest, CommunityListResponse, CommunityMemberCheckRequest,
     CommunityMemberCheckResponse, CommunitySuccessResponse, UserCommunitiesRequest,
     UserCommunitiesResponse,
 };
-use common::message::user::BasicInfo;
-use poem::{Endpoint, Route, get, handler, post, Response};
 use poem::session::Session;
 use poem::web::{Path, Query, RealIp};
+use poem::{Endpoint, Response, Route, get, handler, post};
 use sailfish::TemplateOnce;
 use std::sync::Arc;
 use ulid::Ulid;
@@ -17,7 +17,10 @@ use crate::middleware::authorization::Authenticated;
 
 // Helper functions wrapping NATS calls
 
-pub async fn list_communities(active_only: bool, featured_only: bool) -> Result<Vec<CommunityInfo>, anyhow::Error> {
+pub async fn list_communities(
+    active_only: bool,
+    featured_only: bool,
+) -> Result<Vec<CommunityInfo>, anyhow::Error> {
     let response: CommunityListResponse = common::service::request(
         "user.communities.list",
         CommunityListRequest {
@@ -147,8 +150,7 @@ async fn detail_page(
 ) -> Result<Response, anyhow::Error> {
     let community = get_community(&slug).await?;
 
-    let description_html = common::quill::delta_to_html(&community.description)
-        .unwrap_or_default();
+    let description_html = common::quill::delta_to_html(&community.description).unwrap_or_default();
 
     let is_member = if let Some(ref info) = user_info {
         check_membership(community.community_id, info.user_id)
@@ -203,7 +205,11 @@ struct JoinLeaveQuery {
     context: String,
 }
 
-fn render_join_leave_response(community: CommunityInfo, is_member: bool, context: &str) -> Result<Response, anyhow::Error> {
+fn render_join_leave_response(
+    community: CommunityInfo,
+    is_member: bool,
+    context: &str,
+) -> Result<Response, anyhow::Error> {
     let html = if context == "card" {
         CommunityCardActionsFragment {
             community,
@@ -219,9 +225,7 @@ fn render_join_leave_response(community: CommunityInfo, is_member: bool, context
         .render_once()?
     };
 
-    Ok(Response::builder()
-        .content_type("text/html")
-        .body(html))
+    Ok(Response::builder().content_type("text/html").body(html))
 }
 
 #[handler]

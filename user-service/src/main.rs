@@ -792,12 +792,13 @@ async fn users_synchronize() {
                     "6Jg_IwmfQTaJ2kUNePsO5Q" => {
                         // Foundations of Citizen Science
                         let exists = sqlx::query_scalar::<_, i64>(
-                            "SELECT COUNT(*) FROM foundations_progress WHERE user_id = ?"
+                            "SELECT COUNT(*) FROM foundations_progress WHERE user_id = ?",
                         )
                         .bind(&user.ulid)
                         .fetch_one(db)
                         .await
-                        .unwrap_or(0) > 0;
+                        .unwrap_or(0)
+                            > 0;
 
                         if !exists {
                             if let Err(e) = sqlx::query!(
@@ -815,12 +816,13 @@ async fn users_synchronize() {
                     "CWZrsNMPSZSHqKJoz8pLMQ" => {
                         // Libraries as Community Hubs
                         let exists = sqlx::query_scalar::<_, i64>(
-                            "SELECT COUNT(*) FROM libraries_hubs_progress WHERE user_id = ?"
+                            "SELECT COUNT(*) FROM libraries_hubs_progress WHERE user_id = ?",
                         )
                         .bind(&user.ulid)
                         .fetch_one(db)
                         .await
-                        .unwrap_or(0) > 0;
+                        .unwrap_or(0)
+                            > 0;
 
                         if !exists {
                             if let Err(e) = sqlx::query!(
@@ -838,12 +840,13 @@ async fn users_synchronize() {
                     "e_t41dudSc6dXymoEa8iNw" => {
                         // Data Literacy
                         let exists = sqlx::query_scalar::<_, i64>(
-                            "SELECT COUNT(*) FROM data_literacy_progress WHERE user_id = ?"
+                            "SELECT COUNT(*) FROM data_literacy_progress WHERE user_id = ?",
                         )
                         .bind(&user.ulid)
                         .fetch_one(db)
                         .await
-                        .unwrap_or(0) > 0;
+                        .unwrap_or(0)
+                            > 0;
 
                         if !exists {
                             if let Err(e) = sqlx::query!(
@@ -861,12 +864,13 @@ async fn users_synchronize() {
                     "OP_wrFm7QauZgaXrZY-DhA" => {
                         // Higher Education
                         let exists = sqlx::query_scalar::<_, i64>(
-                            "SELECT COUNT(*) FROM higher_ed_progress WHERE user_id = ?"
+                            "SELECT COUNT(*) FROM higher_ed_progress WHERE user_id = ?",
                         )
                         .bind(&user.ulid)
                         .fetch_one(db)
                         .await
-                        .unwrap_or(0) > 0;
+                        .unwrap_or(0)
+                            > 0;
 
                         if !exists {
                             if let Err(e) = sqlx::query!(
@@ -884,12 +888,13 @@ async fn users_synchronize() {
                     "1OeTfgY1Q-exWqz---kPAQ" => {
                         // Data Ethics
                         let exists = sqlx::query_scalar::<_, i64>(
-                            "SELECT COUNT(*) FROM data_ethics_progress WHERE user_id = ?"
+                            "SELECT COUNT(*) FROM data_ethics_progress WHERE user_id = ?",
                         )
                         .bind(&user.ulid)
                         .fetch_one(db)
                         .await
-                        .unwrap_or(0) > 0;
+                        .unwrap_or(0)
+                            > 0;
 
                         if !exists {
                             if let Err(e) = sqlx::query!(
@@ -907,12 +912,13 @@ async fn users_synchronize() {
                     "a8cFJfeBTRec05glGM3_9w" => {
                         // IDEAL
                         let exists = sqlx::query_scalar::<_, i64>(
-                            "SELECT COUNT(*) FROM ideal_progress WHERE user_id = ?"
+                            "SELECT COUNT(*) FROM ideal_progress WHERE user_id = ?",
                         )
                         .bind(&user.ulid)
                         .fetch_one(db)
                         .await
-                        .unwrap_or(0) > 0;
+                        .unwrap_or(0)
+                            > 0;
 
                         if !exists {
                             if let Err(e) = sqlx::query!(
@@ -930,12 +936,13 @@ async fn users_synchronize() {
                     "9csPkdhzQLSZuk-OWREaKg" => {
                         // Ambassador
                         let exists = sqlx::query_scalar::<_, i64>(
-                            "SELECT COUNT(*) FROM ambassador_progress WHERE user_id = ?"
+                            "SELECT COUNT(*) FROM ambassador_progress WHERE user_id = ?",
                         )
                         .bind(&user.ulid)
                         .fetch_one(db)
                         .await
-                        .unwrap_or(0) > 0;
+                        .unwrap_or(0)
+                            > 0;
 
                         if !exists {
                             if let Err(e) = sqlx::query!(
@@ -953,12 +960,13 @@ async fn users_synchronize() {
                     "QLLs6Nm9TfqIj3_722yFQg" => {
                         // One Million Acts 2024
                         let exists = sqlx::query_scalar::<_, i64>(
-                            "SELECT COUNT(*) FROM one_million_2024_progress WHERE user_id = ?"
+                            "SELECT COUNT(*) FROM one_million_2024_progress WHERE user_id = ?",
                         )
                         .bind(&user.ulid)
                         .fetch_one(db)
                         .await
-                        .unwrap_or(0) > 0;
+                        .unwrap_or(0)
+                            > 0;
 
                         if !exists {
                             if let Err(e) = sqlx::query!(
@@ -976,12 +984,13 @@ async fn users_synchronize() {
                     "U431wPFaTaKwUQO0WhQJRg" => {
                         // One Million Acts 2025
                         let exists = sqlx::query_scalar::<_, i64>(
-                            "SELECT COUNT(*) FROM one_million_2025_progress WHERE user_id = ?"
+                            "SELECT COUNT(*) FROM one_million_2025_progress WHERE user_id = ?",
                         )
                         .bind(&user.ulid)
                         .fetch_one(db)
                         .await
-                        .unwrap_or(0) > 0;
+                        .unwrap_or(0)
+                            > 0;
 
                         if !exists {
                             if let Err(e) = sqlx::query!(
@@ -1166,13 +1175,13 @@ async fn userbadges_synchronize() {
             // Only create workflow record if user exists in users table
             if result.rows_affected() > 0 {
                 // Check if user exists in users table first
-                let user_exists = sqlx::query_scalar::<_, i64>(
-                    "SELECT COUNT(*) FROM users WHERE user_id = ?"
-                )
-                .bind(&badge.user_ulid)
-                .fetch_one(db)
-                .await
-                .unwrap_or(0) > 0;
+                let user_exists =
+                    sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM users WHERE user_id = ?")
+                        .bind(&badge.user_ulid)
+                        .fetch_one(db)
+                        .await
+                        .unwrap_or(0)
+                        > 0;
 
                 if user_exists {
                     let now_str = badge_when.to_string();
@@ -1281,7 +1290,10 @@ async fn userbadges_synchronize() {
                         }
                     }
                 } else {
-                    println!("Badge {} for user {} - user not found in users table, skipping workflow record creation", badge.badgeclass, badge.user_ulid);
+                    println!(
+                        "Badge {} for user {} - user not found in users table, skipping workflow record creation",
+                        badge.badgeclass, badge.user_ulid
+                    );
                 }
             }
 
@@ -1487,8 +1499,7 @@ async fn workflow_states_synchronize() {
         let got_states = states.len();
 
         for ws in states {
-            if ws.state_changed > bookmark
-                || (ws.state_changed == bookmark && ws.id > bookmark_id)
+            if ws.state_changed > bookmark || (ws.state_changed == bookmark && ws.id > bookmark_id)
             {
                 bookmark = ws.state_changed.clone();
                 bookmark_id = ws.id;
@@ -1499,18 +1510,22 @@ async fn workflow_states_synchronize() {
 
             let result = match ws.workflow.as_str() {
                 "foundations" => apply_foundations_state(db, &ws.ulid, &ws.state, ts).await,
-                "libraries_hubs" => {
-                    apply_libraries_hubs_state(db, &ws.ulid, &ws.state, ts).await
-                }
+                "libraries_hubs" => apply_libraries_hubs_state(db, &ws.ulid, &ws.state, ts).await,
                 "ambassador" => apply_ambassador_state(db, &ws.ulid, &ws.state, ts).await,
                 "data_literacy" => {
-                    apply_simple_tutorial_state(db, "data_literacy_progress", &ws.ulid, &ws.state, ts).await
+                    apply_simple_tutorial_state(
+                        db,
+                        "data_literacy_progress",
+                        &ws.ulid,
+                        &ws.state,
+                        ts,
+                    )
+                    .await
                 }
-                "higher_ed" => {
-                    apply_higher_ed_state(db, &ws.ulid, &ws.state, ts).await
-                }
+                "higher_ed" => apply_higher_ed_state(db, &ws.ulid, &ws.state, ts).await,
                 "data_ethics" => {
-                    apply_simple_tutorial_state(db, "data_ethics_progress", &ws.ulid, &ws.state, ts).await
+                    apply_simple_tutorial_state(db, "data_ethics_progress", &ws.ulid, &ws.state, ts)
+                        .await
                 }
                 "ideal" => {
                     apply_simple_tutorial_state(db, "ideal_progress", &ws.ulid, &ws.state, ts).await
@@ -1594,8 +1609,15 @@ async fn apply_foundations_state(
                     debris_completed_at = COALESCE(debris_completed_at, ?),
                     badge_granted_at = COALESCE(badge_granted_at, ?)
                    WHERE user_id = ?"#,
-                ts, ts, ts, ts, ts, user_id
-            ).execute(db).await?;
+                ts,
+                ts,
+                ts,
+                ts,
+                ts,
+                user_id
+            )
+            .execute(db)
+            .await?;
         }
         // Legacy intermediate states
         "participation" | "bookmark1" => {
@@ -1638,8 +1660,13 @@ async fn apply_libraries_hubs_state(
                     supplemental_signup_at = COALESCE(supplemental_signup_at, ?),
                     badge_granted_at = COALESCE(badge_granted_at, ?)
                    WHERE user_id = ?"#,
-                ts, ts, ts, user_id
-            ).execute(db).await?;
+                ts,
+                ts,
+                ts,
+                user_id
+            )
+            .execute(db)
+            .await?;
         }
         _ => {}
     }
@@ -1674,8 +1701,12 @@ async fn apply_ambassador_state(
                     tutorial_completed_at = COALESCE(tutorial_completed_at, ?),
                     badge_granted_at = COALESCE(badge_granted_at, ?)
                    WHERE user_id = ?"#,
-                ts, ts, user_id
-            ).execute(db).await?;
+                ts,
+                ts,
+                user_id
+            )
+            .execute(db)
+            .await?;
         }
         _ => {}
     }
@@ -1710,8 +1741,12 @@ async fn apply_higher_ed_state(
                     tutorial_completed_at = COALESCE(tutorial_completed_at, ?),
                     badge_granted_at = COALESCE(badge_granted_at, ?)
                    WHERE user_id = ?"#,
-                ts, ts, user_id
-            ).execute(db).await?;
+                ts,
+                ts,
+                user_id
+            )
+            .execute(db)
+            .await?;
         }
         _ => {}
     }
@@ -1730,7 +1765,8 @@ async fn apply_simple_tutorial_state(
 ) -> Result<(), anyhow::Error> {
     // Can't use sqlx::query! with dynamic table names, use query_scalar
     sqlx::query(&format!(
-        "INSERT OR IGNORE INTO {} (user_id) VALUES (?)", table
+        "INSERT OR IGNORE INTO {} (user_id) VALUES (?)",
+        table
     ))
     .bind(user_id)
     .execute(db)
@@ -1896,8 +1932,16 @@ async fn main() {
     toplevel.spawn(handler!(communities, "delete", communities::delete));
     toplevel.spawn(handler!(communities, "join", communities::join));
     toplevel.spawn(handler!(communities, "leave", communities::leave));
-    toplevel.spawn(handler!(communities, "check", communities::check_membership));
-    toplevel.spawn(handler!(communities, "user_list", communities::user_communities));
+    toplevel.spawn(handler!(
+        communities,
+        "check",
+        communities::check_membership
+    ));
+    toplevel.spawn(handler!(
+        communities,
+        "user_list",
+        communities::user_communities
+    ));
 
     // Bookmark endpoints
     let bookmarks = service.group("user.bookmarks");
@@ -1908,12 +1952,28 @@ async fn main() {
     let joins = service.group("user.joins");
     toplevel.spawn(handler!(joins, "create", project_joins::create_join));
     toplevel.spawn(handler!(joins, "check", project_joins::check_join));
-    toplevel.spawn(handler!(joins, "list_by_user", project_joins::list_user_joins));
+    toplevel.spawn(handler!(
+        joins,
+        "list_by_user",
+        project_joins::list_user_joins
+    ));
 
     let permissions = service.group("user.permissions");
-    toplevel.spawn(handler!(permissions, "check", permissions::check_permission));
-    toplevel.spawn(handler!(permissions, "grant", permissions::grant_permission));
-    toplevel.spawn(handler!(permissions, "revoke", permissions::revoke_permission));
+    toplevel.spawn(handler!(
+        permissions,
+        "check",
+        permissions::check_permission
+    ));
+    toplevel.spawn(handler!(
+        permissions,
+        "grant",
+        permissions::grant_permission
+    ));
+    toplevel.spawn(handler!(
+        permissions,
+        "revoke",
+        permissions::revoke_permission
+    ));
     toplevel.spawn(handler!(permissions, "list", permissions::list_permissions));
     toplevel.spawn(handler!(
         permissions,
@@ -1928,7 +1988,11 @@ async fn main() {
     // API key management
     let api_key = service.group("user.api_key");
     toplevel.spawn(handler!(api_key, "get", user_matching::get_api_key));
-    toplevel.spawn(handler!(api_key, "validate", user_matching::validate_api_key));
+    toplevel.spawn(handler!(
+        api_key,
+        "validate",
+        user_matching::validate_api_key
+    ));
 
     // Opaque ID retrieval
     let opaque_id = service.group("user.opaque_id");
@@ -1936,13 +2000,29 @@ async fn main() {
 
     // Profile ID lookup and API user creation (v1 API compat)
     let profile = service.group("user.profile");
-    toplevel.spawn(handler!(profile, "lookup", user_matching::lookup_profile_id));
-    toplevel.spawn(handler!(profile, "api_create", user_matching::api_create_user));
-    toplevel.spawn(handler!(profile, "ai_opted_out", user_matching::ai_opted_out));
+    toplevel.spawn(handler!(
+        profile,
+        "lookup",
+        user_matching::lookup_profile_id
+    ));
+    toplevel.spawn(handler!(
+        profile,
+        "api_create",
+        user_matching::api_create_user
+    ));
+    toplevel.spawn(handler!(
+        profile,
+        "ai_opted_out",
+        user_matching::ai_opted_out
+    ));
 
     // Workflow progress tracking
     let workflow_group = service.group("user.workflow");
-    toplevel.spawn(handler!(workflow_group, "progress", workflow::record_progress));
+    toplevel.spawn(handler!(
+        workflow_group,
+        "progress",
+        workflow::record_progress
+    ));
     toplevel.spawn(handler!(workflow_group, "status", workflow::get_status));
 
     let health = service.group("user.health");
@@ -1992,8 +2072,16 @@ async fn main() {
     toplevel.spawn(handler!(address_sets, "create", address_sets::create));
     toplevel.spawn(handler!(address_sets, "update", address_sets::update));
     toplevel.spawn(handler!(address_sets, "delete", address_sets::delete));
-    toplevel.spawn(handler!(address_sets, "add_member", address_sets::add_member));
-    toplevel.spawn(handler!(address_sets, "remove_member", address_sets::remove_member));
+    toplevel.spawn(handler!(
+        address_sets,
+        "add_member",
+        address_sets::add_member
+    ));
+    toplevel.spawn(handler!(
+        address_sets,
+        "remove_member",
+        address_sets::remove_member
+    ));
 
     // User sets endpoints
     let user_sets = service.group("user.user_sets");
@@ -2003,9 +2091,21 @@ async fn main() {
     toplevel.spawn(handler!(user_sets, "update", user_sets::update));
     toplevel.spawn(handler!(user_sets, "delete", user_sets::delete));
     toplevel.spawn(handler!(user_sets, "get_detail", user_sets::get_detail));
-    toplevel.spawn(handler!(user_sets, "add_criterion", user_sets::add_criterion));
-    toplevel.spawn(handler!(user_sets, "remove_criterion", user_sets::remove_criterion));
-    toplevel.spawn(handler!(user_sets, "release_results", user_sets::release_results));
+    toplevel.spawn(handler!(
+        user_sets,
+        "add_criterion",
+        user_sets::add_criterion
+    ));
+    toplevel.spawn(handler!(
+        user_sets,
+        "remove_criterion",
+        user_sets::remove_criterion
+    ));
+    toplevel.spawn(handler!(
+        user_sets,
+        "release_results",
+        user_sets::release_results
+    ));
 
     let geocode = service.group("user.geocode");
     toplevel.spawn(handler!(geocode, "search", geocode::geocode));
@@ -2022,7 +2122,11 @@ async fn main() {
     // iNaturalist endpoints
     let inat = service.group("user.inat");
     toplevel.spawn(handler!(inat, "list_users", inat::list_users));
-    toplevel.spawn(recv_handler!(inat, "update_last_sync", inat::update_last_sync));
+    toplevel.spawn(recv_handler!(
+        inat,
+        "update_last_sync",
+        inat::update_last_sync
+    ));
 
     // Set up graceful shutdown
     use tokio::signal::unix::{SignalKind, signal};

@@ -147,13 +147,12 @@ async fn badges_holders(
         end_item,
     };
 
-    let prepared =
-        AdminLayout::new(&format!("{} - Badge Holders", badge.name()), content)
-            .with_sidebar_active("engine-room-badges")
-            .with_breadcrumb("Badges", Some("/-admin/badges"))
-            .with_breadcrumb(badge.name(), None)
-            .prepare(user_info)
-            .await?;
+    let prepared = AdminLayout::new(&format!("{} - Badge Holders", badge.name()), content)
+        .with_sidebar_active("engine-room-badges")
+        .with_breadcrumb("Badges", Some("/-admin/badges"))
+        .with_breadcrumb(badge.name(), None)
+        .prepare(user_info)
+        .await?;
 
     Ok(poem::Response::builder()
         .content_type("text/html")

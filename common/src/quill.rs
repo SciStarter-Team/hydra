@@ -1,7 +1,7 @@
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use pulldown_cmark::{Event, Parser, Tag, TagEnd};
 use scraper::Html;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Delta {
@@ -85,7 +85,12 @@ fn delta_to_html_impl(delta: &Delta) -> String {
                 } else {
                     BlockType::Paragraph
                 };
-                output_line(&mut html, &mut line_content, block_type, &mut current_list_type);
+                output_line(
+                    &mut html,
+                    &mut line_content,
+                    block_type,
+                    &mut current_list_type,
+                );
             } else if text.contains('\n') {
                 // Text contains embedded newlines - split and process
                 let parts: Vec<&str> = text.split('\n').collect();
@@ -104,7 +109,12 @@ fn delta_to_html_impl(delta: &Delta) -> String {
                     // If this is not the last part, we hit a newline
                     if i < parts.len() - 1 {
                         // Embedded newlines are treated as paragraph breaks
-                        output_line(&mut html, &mut line_content, BlockType::Paragraph, &mut current_list_type);
+                        output_line(
+                            &mut html,
+                            &mut line_content,
+                            BlockType::Paragraph,
+                            &mut current_list_type,
+                        );
                     }
                 }
             } else {
@@ -119,7 +129,12 @@ fn delta_to_html_impl(delta: &Delta) -> String {
         } else if let Some(Insert::Embed(embed)) = &op.insert {
             // Embeds like images and figures - close current line first
             if !line_content.is_empty() {
-                output_line(&mut html, &mut line_content, BlockType::Paragraph, &mut current_list_type);
+                output_line(
+                    &mut html,
+                    &mut line_content,
+                    BlockType::Paragraph,
+                    &mut current_list_type,
+                );
             }
 
             // Handle regular image embeds
@@ -134,7 +149,10 @@ fn delta_to_html_impl(delta: &Delta) -> String {
                 if let Some(obj) = figure_data.as_object() {
                     let url = obj.get("url").and_then(|v| v.as_str()).unwrap_or("");
                     let caption = obj.get("caption").and_then(|v| v.as_str()).unwrap_or("");
-                    let align = obj.get("align").and_then(|v| v.as_str()).unwrap_or("center");
+                    let align = obj
+                        .get("align")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("center");
                     let width = obj.get("width").and_then(|v| v.as_str()).unwrap_or("");
 
                     let figure_class = get_figure_class(align);
@@ -142,20 +160,25 @@ fn delta_to_html_impl(delta: &Delta) -> String {
 
                     // Add width style if specified
                     if !width.is_empty() {
-                        html.push_str(&format!("<img src=\"{}\" alt=\"{}\" style=\"width: {}\" />",
+                        html.push_str(&format!(
+                            "<img src=\"{}\" alt=\"{}\" style=\"width: {}\" />",
                             html_escape(url),
                             html_escape(caption),
                             html_escape(width)
                         ));
                     } else {
-                        html.push_str(&format!("<img src=\"{}\" alt=\"{}\" />",
+                        html.push_str(&format!(
+                            "<img src=\"{}\" alt=\"{}\" />",
                             html_escape(url),
                             html_escape(caption)
                         ));
                     }
 
                     if !caption.is_empty() {
-                        html.push_str(&format!("<figcaption>{}</figcaption>", html_escape(caption)));
+                        html.push_str(&format!(
+                            "<figcaption>{}</figcaption>",
+                            html_escape(caption)
+                        ));
                     }
                     html.push_str("</figure>");
                 }
@@ -165,7 +188,12 @@ fn delta_to_html_impl(delta: &Delta) -> String {
 
     // Close any remaining line content
     if !line_content.is_empty() {
-        output_line(&mut html, &mut line_content, BlockType::Paragraph, &mut current_list_type);
+        output_line(
+            &mut html,
+            &mut line_content,
+            BlockType::Paragraph,
+            &mut current_list_type,
+        );
     }
 
     // Close any remaining list
@@ -176,9 +204,17 @@ fn delta_to_html_impl(delta: &Delta) -> String {
     html
 }
 
-fn output_line(html: &mut String, line_content: &mut String, block_type: BlockType, current_list_type: &mut BlockType) {
+fn output_line(
+    html: &mut String,
+    line_content: &mut String,
+    block_type: BlockType,
+    current_list_type: &mut BlockType,
+) {
     match block_type {
-        BlockType::OrderedList | BlockType::BulletList | BlockType::RowItem | BlockType::ColumnItem => {
+        BlockType::OrderedList
+        | BlockType::BulletList
+        | BlockType::RowItem
+        | BlockType::ColumnItem => {
             // Handle list items and row/column items
             if *current_list_type != block_type {
                 // Close previous list/container if different type
@@ -252,8 +288,12 @@ fn output_line(html: &mut String, line_content: &mut String, block_type: BlockTy
 
 fn open_list(html: &mut String, block_type: BlockType) {
     match block_type {
-        BlockType::OrderedList => html.push_str("<ol class=\"list-decimal list-outside ml-8 pl-2 mb-4\">"),
-        BlockType::BulletList => html.push_str("<ul class=\"list-disc list-outside ml-8 pl-2 mb-4\">"),
+        BlockType::OrderedList => {
+            html.push_str("<ol class=\"list-decimal list-outside ml-8 pl-2 mb-4\">")
+        }
+        BlockType::BulletList => {
+            html.push_str("<ul class=\"list-disc list-outside ml-8 pl-2 mb-4\">")
+        }
         BlockType::RowItem => html.push_str("<div class=\"flex flex-col md:flex-row gap-4 my-4\">"),
         BlockType::ColumnItem => html.push_str("<div class=\"flex flex-col gap-4 my-4\">"),
         _ => {}
@@ -275,9 +315,14 @@ fn open_block_tag(block_type: BlockType) -> Option<String> {
         BlockType::None => None,
         BlockType::Paragraph => Some("<p>".to_string()),
         BlockType::Header(level) => Some(format!("<h{}>", level)),
-        BlockType::Blockquote => Some("<blockquote class=\"border-l-4 border-[#0071b8] pl-4 mb-4\">".to_string()),
+        BlockType::Blockquote => {
+            Some("<blockquote class=\"border-l-4 border-[#0071b8] pl-4 mb-4\">".to_string())
+        }
         BlockType::CodeBlock => Some("<pre><code>".to_string()),
-        BlockType::OrderedList | BlockType::BulletList | BlockType::RowItem | BlockType::ColumnItem => None,
+        BlockType::OrderedList
+        | BlockType::BulletList
+        | BlockType::RowItem
+        | BlockType::ColumnItem => None,
     }
 }
 
@@ -288,7 +333,10 @@ fn close_block_tag(block_type: BlockType) -> Option<String> {
         BlockType::Header(level) => Some(format!("</h{}>", level)),
         BlockType::Blockquote => Some("</blockquote>".to_string()),
         BlockType::CodeBlock => Some("</code></pre>".to_string()),
-        BlockType::OrderedList | BlockType::BulletList | BlockType::RowItem | BlockType::ColumnItem => None,
+        BlockType::OrderedList
+        | BlockType::BulletList
+        | BlockType::RowItem
+        | BlockType::ColumnItem => None,
     }
 }
 
@@ -327,10 +375,7 @@ fn get_block_type_from_attrs(attrs: &HashMap<String, serde_json::Value>) -> Bloc
     }
 }
 
-fn apply_inline_formatting(
-    text: &str,
-    attrs: &HashMap<String, serde_json::Value>,
-) -> String {
+fn apply_inline_formatting(text: &str, attrs: &HashMap<String, serde_json::Value>) -> String {
     let mut result = html_escape(text);
 
     // Apply inline styles in order
@@ -378,7 +423,10 @@ fn apply_inline_formatting(
     // Handle background
     if let Some(background) = attrs.get("background") {
         if let Some(bg_val) = background.as_str() {
-            result = format!("<span style=\"background-color: {}\">{}</span>", bg_val, result);
+            result = format!(
+                "<span style=\"background-color: {}\">{}</span>",
+                bg_val, result
+            );
         }
     }
 
@@ -451,7 +499,10 @@ pub fn detect_format(content: &str) -> ContentFormat {
 /// // Force interpretation as Markdown
 /// let result = to_delta("**bold**", Some(ContentFormat::Markdown)).unwrap();
 /// ```
-pub fn to_delta(content: &str, format: impl Into<Option<ContentFormat>>) -> Result<String, anyhow::Error> {
+pub fn to_delta(
+    content: &str,
+    format: impl Into<Option<ContentFormat>>,
+) -> Result<String, anyhow::Error> {
     let trimmed = content.trim();
     let format = format.into().unwrap_or_else(|| detect_format(trimmed));
 
@@ -698,102 +749,99 @@ fn markdown_to_delta(markdown: &str) -> Result<String, anyhow::Error> {
 
     for event in parser {
         match event {
-            Event::Start(tag) => {
-                match tag {
-                    Tag::Paragraph => {}
-                    Tag::Heading { level, .. } => {
-                        current_attrs.insert("header".to_string(), serde_json::json!(level as u64));
-                    }
-                    Tag::BlockQuote(_) => {
-                        current_attrs.insert("blockquote".to_string(), serde_json::json!(true));
-                    }
-                    Tag::CodeBlock(_) => {
-                        current_attrs.insert("code-block".to_string(), serde_json::json!(true));
-                    }
-                    Tag::List(first_item) => {
-                        list_depth += 1;
-                        current_list_type = if first_item.is_some() {
-                            Some("ordered".to_string())
-                        } else {
-                            Some("bullet".to_string())
-                        };
-                    }
-                    Tag::Item => {}
-                    Tag::Emphasis => {
-                        current_attrs.insert("italic".to_string(), serde_json::json!(true));
-                    }
-                    Tag::Strong => {
-                        current_attrs.insert("bold".to_string(), serde_json::json!(true));
-                    }
-                    Tag::Strikethrough => {
-                        current_attrs.insert("strike".to_string(), serde_json::json!(true));
-                    }
-                    Tag::Link { dest_url, .. } => {
-                        current_attrs.insert("link".to_string(), serde_json::json!(dest_url.to_string()));
-                    }
-                    _ => {}
+            Event::Start(tag) => match tag {
+                Tag::Paragraph => {}
+                Tag::Heading { level, .. } => {
+                    current_attrs.insert("header".to_string(), serde_json::json!(level as u64));
                 }
-            }
-            Event::End(tag_end) => {
-                match tag_end {
-                    TagEnd::Paragraph => {
-                        ops.push(Op {
-                            insert: Some(Insert::Text("\n".to_string())),
-                            attributes: None,
-                        });
-                    }
-                    TagEnd::Heading(_) => {
-                        ops.push(Op {
-                            insert: Some(Insert::Text("\n".to_string())),
-                            attributes: Some(current_attrs.clone()),
-                        });
-                        current_attrs.clear();
-                    }
-                    TagEnd::BlockQuote(_) => {
-                        ops.push(Op {
-                            insert: Some(Insert::Text("\n".to_string())),
-                            attributes: Some(current_attrs.clone()),
-                        });
-                        current_attrs.remove("blockquote");
-                    }
-                    TagEnd::CodeBlock => {
-                        ops.push(Op {
-                            insert: Some(Insert::Text("\n".to_string())),
-                            attributes: Some(current_attrs.clone()),
-                        });
-                        current_attrs.remove("code-block");
-                    }
-                    TagEnd::List(_) => {
-                        list_depth -= 1;
-                        if list_depth == 0 {
-                            current_list_type = None;
-                        }
-                    }
-                    TagEnd::Item => {
-                        if let Some(ref list_type) = current_list_type {
-                            let mut list_attrs = HashMap::new();
-                            list_attrs.insert("list".to_string(), serde_json::json!(list_type));
-                            ops.push(Op {
-                                insert: Some(Insert::Text("\n".to_string())),
-                                attributes: Some(list_attrs),
-                            });
-                        }
-                    }
-                    TagEnd::Emphasis => {
-                        current_attrs.remove("italic");
-                    }
-                    TagEnd::Strong => {
-                        current_attrs.remove("bold");
-                    }
-                    TagEnd::Strikethrough => {
-                        current_attrs.remove("strike");
-                    }
-                    TagEnd::Link => {
-                        current_attrs.remove("link");
-                    }
-                    _ => {}
+                Tag::BlockQuote(_) => {
+                    current_attrs.insert("blockquote".to_string(), serde_json::json!(true));
                 }
-            }
+                Tag::CodeBlock(_) => {
+                    current_attrs.insert("code-block".to_string(), serde_json::json!(true));
+                }
+                Tag::List(first_item) => {
+                    list_depth += 1;
+                    current_list_type = if first_item.is_some() {
+                        Some("ordered".to_string())
+                    } else {
+                        Some("bullet".to_string())
+                    };
+                }
+                Tag::Item => {}
+                Tag::Emphasis => {
+                    current_attrs.insert("italic".to_string(), serde_json::json!(true));
+                }
+                Tag::Strong => {
+                    current_attrs.insert("bold".to_string(), serde_json::json!(true));
+                }
+                Tag::Strikethrough => {
+                    current_attrs.insert("strike".to_string(), serde_json::json!(true));
+                }
+                Tag::Link { dest_url, .. } => {
+                    current_attrs
+                        .insert("link".to_string(), serde_json::json!(dest_url.to_string()));
+                }
+                _ => {}
+            },
+            Event::End(tag_end) => match tag_end {
+                TagEnd::Paragraph => {
+                    ops.push(Op {
+                        insert: Some(Insert::Text("\n".to_string())),
+                        attributes: None,
+                    });
+                }
+                TagEnd::Heading(_) => {
+                    ops.push(Op {
+                        insert: Some(Insert::Text("\n".to_string())),
+                        attributes: Some(current_attrs.clone()),
+                    });
+                    current_attrs.clear();
+                }
+                TagEnd::BlockQuote(_) => {
+                    ops.push(Op {
+                        insert: Some(Insert::Text("\n".to_string())),
+                        attributes: Some(current_attrs.clone()),
+                    });
+                    current_attrs.remove("blockquote");
+                }
+                TagEnd::CodeBlock => {
+                    ops.push(Op {
+                        insert: Some(Insert::Text("\n".to_string())),
+                        attributes: Some(current_attrs.clone()),
+                    });
+                    current_attrs.remove("code-block");
+                }
+                TagEnd::List(_) => {
+                    list_depth -= 1;
+                    if list_depth == 0 {
+                        current_list_type = None;
+                    }
+                }
+                TagEnd::Item => {
+                    if let Some(ref list_type) = current_list_type {
+                        let mut list_attrs = HashMap::new();
+                        list_attrs.insert("list".to_string(), serde_json::json!(list_type));
+                        ops.push(Op {
+                            insert: Some(Insert::Text("\n".to_string())),
+                            attributes: Some(list_attrs),
+                        });
+                    }
+                }
+                TagEnd::Emphasis => {
+                    current_attrs.remove("italic");
+                }
+                TagEnd::Strong => {
+                    current_attrs.remove("bold");
+                }
+                TagEnd::Strikethrough => {
+                    current_attrs.remove("strike");
+                }
+                TagEnd::Link => {
+                    current_attrs.remove("link");
+                }
+                _ => {}
+            },
             Event::Text(text) => {
                 ops.push(Op {
                     insert: Some(Insert::Text(text.to_string())),
@@ -879,7 +927,11 @@ mod tests {
         let delta = r#"{"ops":[{"insert":"Here is an image with a caption:\n"},{"insert":{"figure":{"url":"https://example.com/image.jpg","caption":"A beautiful sunset","align":"center"}}},{"insert":"\n"}]}"#;
         let html = delta_to_html(delta).unwrap();
         assert!(html.contains("<figure class=\"text-center mx-auto mb-4\">"));
-        assert!(html.contains("<img src=\"https://example.com/image.jpg\" alt=\"A beautiful sunset\" />"));
+        assert!(
+            html.contains(
+                "<img src=\"https://example.com/image.jpg\" alt=\"A beautiful sunset\" />"
+            )
+        );
         assert!(html.contains("<figcaption>A beautiful sunset</figcaption>"));
     }
 
@@ -888,7 +940,9 @@ mod tests {
         let delta = r#"{"ops":[{"insert":{"figure":{"url":"https://example.com/test.png","caption":"Test image","align":"center","width":"50%"}}},{"insert":"\n"}]}"#;
         let html = delta_to_html(delta).unwrap();
         assert!(html.contains("<figure class=\"text-center mx-auto mb-4\">"));
-        assert!(html.contains("<img src=\"https://example.com/test.png\" alt=\"Test image\" style=\"width: 50%\" />"));
+        assert!(html.contains(
+            "<img src=\"https://example.com/test.png\" alt=\"Test image\" style=\"width: 50%\" />"
+        ));
         assert!(html.contains("<figcaption>Test image</figcaption>"));
     }
 
@@ -947,7 +1001,10 @@ mod tests {
         // Second op: "world" with bold attribute
         if let Some(Insert::Text(text)) = &parsed.ops[1].insert {
             assert_eq!(text, "world");
-            let attrs = parsed.ops[1].attributes.as_ref().expect("Expected attributes");
+            let attrs = parsed.ops[1]
+                .attributes
+                .as_ref()
+                .expect("Expected attributes");
             assert_eq!(attrs.get("bold").unwrap().as_bool().unwrap(), true);
         } else {
             panic!("Expected text insert for second op");
@@ -980,7 +1037,10 @@ mod tests {
         // Second op should be newline with header attribute
         if let Some(Insert::Text(text)) = &parsed.ops[1].insert {
             assert_eq!(text, "\n");
-            let attrs = parsed.ops[1].attributes.as_ref().expect("Expected header attribute");
+            let attrs = parsed.ops[1]
+                .attributes
+                .as_ref()
+                .expect("Expected header attribute");
             assert_eq!(attrs.get("header").unwrap().as_u64().unwrap(), 1);
         } else {
             panic!("Expected newline with header attribute");
@@ -1023,7 +1083,10 @@ mod tests {
         // Check the bold text
         if let Some(Insert::Text(text)) = &parsed.ops[1].insert {
             assert_eq!(text, "bold");
-            let attrs = parsed.ops[1].attributes.as_ref().expect("Expected bold attribute");
+            let attrs = parsed.ops[1]
+                .attributes
+                .as_ref()
+                .expect("Expected bold attribute");
             assert_eq!(attrs.get("bold").unwrap().as_bool().unwrap(), true);
         } else {
             panic!("Expected bold text");
@@ -1032,7 +1095,10 @@ mod tests {
         // Check the italic text
         if let Some(Insert::Text(text)) = &parsed.ops[3].insert {
             assert_eq!(text, "italic");
-            let attrs = parsed.ops[3].attributes.as_ref().expect("Expected italic attribute");
+            let attrs = parsed.ops[3]
+                .attributes
+                .as_ref()
+                .expect("Expected italic attribute");
             assert_eq!(attrs.get("italic").unwrap().as_bool().unwrap(), true);
         } else {
             panic!("Expected italic text");
@@ -1056,7 +1122,10 @@ mod tests {
 
         if let Some(Insert::Text(text)) = &parsed.ops[1].insert {
             assert_eq!(text, "\n");
-            let attrs = parsed.ops[1].attributes.as_ref().expect("Expected header attribute");
+            let attrs = parsed.ops[1]
+                .attributes
+                .as_ref()
+                .expect("Expected header attribute");
             assert_eq!(attrs.get("header").unwrap().as_u64().unwrap(), 2);
         } else {
             panic!("Expected newline with header attribute");
@@ -1082,7 +1151,10 @@ mod tests {
         // Check first newline has list attribute
         if let Some(Insert::Text(text)) = &parsed.ops[1].insert {
             assert_eq!(text, "\n");
-            let attrs = parsed.ops[1].attributes.as_ref().expect("Expected list attribute");
+            let attrs = parsed.ops[1]
+                .attributes
+                .as_ref()
+                .expect("Expected list attribute");
             assert_eq!(attrs.get("list").unwrap().as_str().unwrap(), "bullet");
         } else {
             panic!("Expected newline with list attribute");
@@ -1113,7 +1185,10 @@ mod tests {
 
         if let Some(Insert::Text(text)) = &parsed.ops[1].insert {
             assert_eq!(text, "\n");
-            let attrs = parsed.ops[1].attributes.as_ref().expect("Expected header attribute");
+            let attrs = parsed.ops[1]
+                .attributes
+                .as_ref()
+                .expect("Expected header attribute");
             assert_eq!(attrs.get("header").unwrap().as_u64().unwrap(), 1);
         } else {
             panic!("Expected newline with header attribute");
@@ -1139,7 +1214,10 @@ mod tests {
         // Check first newline with list attribute
         if let Some(Insert::Text(text)) = &parsed.ops[1].insert {
             assert_eq!(text, "\n");
-            let attrs = parsed.ops[1].attributes.as_ref().expect("Expected list attribute");
+            let attrs = parsed.ops[1]
+                .attributes
+                .as_ref()
+                .expect("Expected list attribute");
             assert_eq!(attrs.get("list").unwrap().as_str().unwrap(), "bullet");
         } else {
             panic!("Expected newline with list attribute");
@@ -1158,7 +1236,10 @@ mod tests {
         // Check bold text
         if let Some(Insert::Text(text)) = &parsed.ops[1].insert {
             assert_eq!(text, "bold");
-            let attrs = parsed.ops[1].attributes.as_ref().expect("Expected bold attribute");
+            let attrs = parsed.ops[1]
+                .attributes
+                .as_ref()
+                .expect("Expected bold attribute");
             assert_eq!(attrs.get("bold").unwrap().as_bool().unwrap(), true);
         } else {
             panic!("Expected bold text");
@@ -1167,7 +1248,10 @@ mod tests {
         // Check italic text
         if let Some(Insert::Text(text)) = &parsed.ops[3].insert {
             assert_eq!(text, "italic");
-            let attrs = parsed.ops[3].attributes.as_ref().expect("Expected italic attribute");
+            let attrs = parsed.ops[3]
+                .attributes
+                .as_ref()
+                .expect("Expected italic attribute");
             assert_eq!(attrs.get("italic").unwrap().as_bool().unwrap(), true);
         } else {
             panic!("Expected italic text");
@@ -1206,10 +1290,7 @@ mod tests {
 
     #[test]
     fn test_detect_format_html() {
-        assert_eq!(
-            detect_format("<p>Hello world</p>"),
-            ContentFormat::Html
-        );
+        assert_eq!(detect_format("<p>Hello world</p>"), ContentFormat::Html);
         assert_eq!(
             detect_format("Text with <strong>bold</strong>"),
             ContentFormat::Html

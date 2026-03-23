@@ -37,14 +37,13 @@ pub async fn handle_external_link(
     };
 
     // Call log service to record clickthrough and get URL
-    let response: ExternalLinkClickthroughResponse =
-        request("log.links.clickthrough", &req_data)
-            .await
-            .context("Failed to record external link clickthrough")
-            .map_err(|e| {
-                error!("External link clickthrough error: {}", e);
-                poem::Error::from_string("Link not found", StatusCode::NOT_FOUND)
-            })?;
+    let response: ExternalLinkClickthroughResponse = request("log.links.clickthrough", &req_data)
+        .await
+        .context("Failed to record external link clickthrough")
+        .map_err(|e| {
+            error!("External link clickthrough error: {}", e);
+            poem::Error::from_string("Link not found", StatusCode::NOT_FOUND)
+        })?;
 
     // If URL found, redirect to it
     if let Some(url) = response.url {

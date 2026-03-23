@@ -40,8 +40,16 @@ async fn test_compaction_respects_date_boundaries() -> Result<()> {
     sleep(Duration::from_millis(100)).await;
 
     let today_wal = wal_dir.join(format!("activity_log_{}.jsonl", today));
-    assert!(today_wal.exists(), "Today's WAL file should exist at {:?}", today_wal);
-    assert!(yesterday_wal.exists(), "Yesterday's WAL file should exist at {:?}", yesterday_wal);
+    assert!(
+        today_wal.exists(),
+        "Today's WAL file should exist at {:?}",
+        today_wal
+    );
+    assert!(
+        yesterday_wal.exists(),
+        "Yesterday's WAL file should exist at {:?}",
+        yesterday_wal
+    );
 
     // === Run compactor ===
     let compactor = Compactor::with_config(database.clone(), Duration::from_millis(50), 30, 10_000);

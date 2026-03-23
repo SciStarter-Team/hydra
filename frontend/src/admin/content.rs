@@ -330,12 +330,8 @@ async fn pagecontent_create(
         }
 
         let id = Ulid::new();
-        let pagecontent = PageContent::new_with_id(
-            id,
-            kind,
-            form.name.clone(),
-            form.content.as_bytes(),
-        );
+        let pagecontent =
+            PageContent::new_with_id(id, kind, form.name.clone(), form.content.as_bytes());
         pagecontent.store().await?;
 
         Ok(id)
@@ -1115,12 +1111,27 @@ pub fn pagecontent_routes() -> impl Endpoint {
         .at("/DressedHtml", get(dressed_html_list))
         .at("/DressedHtml/search", get(dressed_html_search))
         .at("/DressedHtml/new", get(dressed_html_new))
-        .at("/DressedHtml/:id", get(dressed_html_edit).post(dressed_html_update).delete(dressed_html_delete))
+        .at(
+            "/DressedHtml/:id",
+            get(dressed_html_edit)
+                .post(dressed_html_update)
+                .delete(dressed_html_delete),
+        )
         .at("/RawHtml", get(raw_html_list))
         .at("/RawHtml/search", get(raw_html_search))
         .at("/RawHtml/new", get(raw_html_new))
-        .at("/RawHtml/:id", get(raw_html_edit).post(raw_html_update).delete(raw_html_delete))
-        .at("/:kind/:id", get(pagecontent_edit).post(pagecontent_update).delete(pagecontent_delete))
+        .at(
+            "/RawHtml/:id",
+            get(raw_html_edit)
+                .post(raw_html_update)
+                .delete(raw_html_delete),
+        )
+        .at(
+            "/:kind/:id",
+            get(pagecontent_edit)
+                .post(pagecontent_update)
+                .delete(pagecontent_delete),
+        )
 }
 
 pub fn clear_modal_handler() -> impl Endpoint {

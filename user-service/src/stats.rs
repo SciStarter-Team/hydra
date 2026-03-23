@@ -192,8 +192,5 @@ pub async fn activity_analytics(
         })
         .collect();
 
-    Ok(ActivityAnalyticsResponse {
-        stats,
-        total_count,
-    })
+    Ok(ActivityAnalyticsResponse { stats, total_count })
 }

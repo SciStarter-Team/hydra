@@ -1,7 +1,7 @@
 // OIDC Discovery Endpoints
 
-use poem::{handler, Response, IntoResponse};
 use anyhow::Error;
+use poem::{IntoResponse, Response, handler};
 use serde_json::json;
 
 /// OpenID Connect Discovery endpoint
@@ -49,11 +49,11 @@ pub async fn openid_configuration() -> Result<Response, Error> {
 /// Spec: https://tools.ietf.org/html/rfc7517
 #[handler]
 pub async fn jwks() -> Result<Response, Error> {
-    use rsa::pkcs1::DecodeRsaPrivateKey;
-    use rsa::RsaPrivateKey;
-    use rsa::traits::PublicKeyParts;
     use base64::engine::Engine;
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    use rsa::RsaPrivateKey;
+    use rsa::pkcs1::DecodeRsaPrivateKey;
+    use rsa::traits::PublicKeyParts;
 
     // Load RSA private key from environment (same key orrery uses)
     let pem = env!("OIDC_RSA_PRIVATE_KEY");

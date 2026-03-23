@@ -42,9 +42,7 @@ impl TryFrom<EntityListDB> for EntityList {
             created_at: value.created_at,
             private: value.private != 0,
             owner_id: value.owner_id.parse()?,
-            delegate_id: value
-                .delegate_id
-                .and_then(|s| s.parse().ok()),
+            delegate_id: value.delegate_id.and_then(|s| s.parse().ok()),
             name: value.name,
             note: value.note,
             sidebar: value.sidebar,

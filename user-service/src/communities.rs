@@ -7,7 +7,7 @@ use common::{
         CommunityMemberCheckRequest, CommunityMemberCheckResponse, CommunitySuccessResponse,
         CommunityUpdateRequest, UserCommunitiesRequest, UserCommunitiesResponse,
     },
-    service::{decode_structured_message, log_activity, trigger_email, TriggerEvent},
+    service::{TriggerEvent, decode_structured_message, log_activity, trigger_email},
     shared::db,
     timestring::TimeString,
     ulid::AsUlid,
@@ -44,7 +44,10 @@ impl CommunityRow {
             topics: if self.topics.is_empty() {
                 vec![]
             } else {
-                self.topics.split(',').map(|s| s.trim().to_string()).collect()
+                self.topics
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .collect()
             },
             external_url: self.external_url,
             active: self.active,
@@ -262,13 +265,27 @@ pub async fn join(req: &Request) -> Result<CommunitySuccessResponse, Error> {
     .fetch_one(db())
     .await?;
 
-    log_activity(None, "community-join", message.user_id, message.community_id, None).await.ok();
+    log_activity(
+        None,
+        "community-join",
+        message.user_id,
+        message.community_id,
+        None,
+    )
+    .await
+    .ok();
     let community_url = format!("/communities/{}", community_row.slug);
-    trigger_email(TriggerEvent::CommunityJoin, message.user_id, Some(&[
-        ("community_id".to_string(), message.community_id.to_string()),
-        ("community_name".to_string(), community_row.name),
-        ("community_url".to_string(), community_url),
-    ])).await.ok();
+    trigger_email(
+        TriggerEvent::CommunityJoin,
+        message.user_id,
+        Some(&[
+            ("community_id".to_string(), message.community_id.to_string()),
+            ("community_name".to_string(), community_row.name),
+            ("community_url".to_string(), community_url),
+        ]),
+    )
+    .await
+    .ok();
 
     Ok(CommunitySuccessResponse {
         success: true,
@@ -297,13 +314,27 @@ pub async fn leave(req: &Request) -> Result<CommunitySuccessResponse, Error> {
     .fetch_one(db())
     .await?;
 
-    log_activity(None, "community-leave", message.user_id, message.community_id, None).await.ok();
+    log_activity(
+        None,
+        "community-leave",
+        message.user_id,
+        message.community_id,
+        None,
+    )
+    .await
+    .ok();
     let community_url = format!("/communities/{}", community_row.slug);
-    trigger_email(TriggerEvent::CommunityLeave, message.user_id, Some(&[
-        ("community_id".to_string(), message.community_id.to_string()),
-        ("community_name".to_string(), community_row.name),
-        ("community_url".to_string(), community_url),
-    ])).await.ok();
+    trigger_email(
+        TriggerEvent::CommunityLeave,
+        message.user_id,
+        Some(&[
+            ("community_id".to_string(), message.community_id.to_string()),
+            ("community_name".to_string(), community_row.name),
+            ("community_url".to_string(), community_url),
+        ]),
+    )
+    .await
+    .ok();
 
     Ok(CommunitySuccessResponse {
         success: true,

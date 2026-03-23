@@ -1,3 +1,4 @@
+use crate::pagecontent::PageContentKind;
 use anyhow::Error;
 use poem::{
     Endpoint, Response, Result, Route, get, handler,
@@ -6,7 +7,6 @@ use poem::{
 use sailfish::TemplateOnce;
 use serde::Deserialize;
 use ulid::Ulid;
-use crate::pagecontent::PageContentKind;
 
 #[derive(Debug, Clone)]
 pub enum AutocompleteEntityType {
@@ -473,7 +473,9 @@ pub async fn resolve_user_names(ids: Vec<Ulid>) -> Result<Vec<(Ulid, String)>, E
     Ok(results)
 }
 
-pub async fn search_pagecontent(query: &AutocompleteQuery) -> Result<Vec<AutocompleteResult>, Error> {
+pub async fn search_pagecontent(
+    query: &AutocompleteQuery,
+) -> Result<Vec<AutocompleteResult>, Error> {
     use common::shared::db;
 
     let search_term = query.search.as_deref().unwrap_or("").trim();
@@ -483,9 +485,8 @@ pub async fn search_pagecontent(query: &AutocompleteQuery) -> Result<Vec<Autocom
 
     let search_pattern = format!("%{}%", search_term);
 
-    let mut query_builder = sqlx::QueryBuilder::new(
-        "SELECT pagecontent_id, name FROM pagecontent WHERE name LIKE "
-    );
+    let mut query_builder =
+        sqlx::QueryBuilder::new("SELECT pagecontent_id, name FROM pagecontent WHERE name LIKE ");
     query_builder.push_bind(&search_pattern);
 
     // Add kind filter if specified
@@ -517,15 +518,18 @@ pub async fn search_pagecontent(query: &AutocompleteQuery) -> Result<Vec<Autocom
 pub async fn resolve_pagecontent_name(id: Ulid) -> Result<Option<String>, Error> {
     use common::shared::db;
 
-    let row = sqlx::query_as::<_, (String,)>("SELECT name FROM pagecontent WHERE pagecontent_id = ?")
-        .bind(id.to_string())
-        .fetch_optional(db())
-        .await?;
+    let row =
+        sqlx::query_as::<_, (String,)>("SELECT name FROM pagecontent WHERE pagecontent_id = ?")
+            .bind(id.to_string())
+            .fetch_optional(db())
+            .await?;
 
     Ok(row.map(|(name,)| name))
 }
 
-pub async fn search_pagebuilder_pages(query: &AutocompleteQuery) -> Result<Vec<AutocompleteResult>, Error> {
+pub async fn search_pagebuilder_pages(
+    query: &AutocompleteQuery,
+) -> Result<Vec<AutocompleteResult>, Error> {
     use common::shared::db;
 
     let search_term = query.search.as_deref().unwrap_or("").trim();
@@ -536,7 +540,7 @@ pub async fn search_pagebuilder_pages(query: &AutocompleteQuery) -> Result<Vec<A
     let search_pattern = format!("%{}%", search_term);
 
     let rows = sqlx::query_as::<_, (String, String)>(
-        "SELECT page_id, name FROM pagebuilder_pages WHERE name LIKE ? ORDER BY name LIMIT 10"
+        "SELECT page_id, name FROM pagebuilder_pages WHERE name LIKE ? ORDER BY name LIMIT 10",
     )
     .bind(&search_pattern)
     .fetch_all(db())
@@ -558,10 +562,11 @@ pub async fn search_pagebuilder_pages(query: &AutocompleteQuery) -> Result<Vec<A
 pub async fn resolve_pagebuilder_page_name(id: Ulid) -> Result<Option<String>, Error> {
     use common::shared::db;
 
-    let row = sqlx::query_as::<_, (String,)>("SELECT name FROM pagebuilder_pages WHERE page_id = ?")
-        .bind(id.to_string())
-        .fetch_optional(db())
-        .await?;
+    let row =
+        sqlx::query_as::<_, (String,)>("SELECT name FROM pagebuilder_pages WHERE page_id = ?")
+            .bind(id.to_string())
+            .fetch_optional(db())
+            .await?;
 
     Ok(row.map(|(name,)| name))
 }
@@ -573,8 +578,9 @@ pub async fn resolve_pagecontent_names(ids: Vec<Ulid>) -> Result<Vec<(Ulid, Stri
         return Ok(Vec::new());
     }
 
-    let mut query_builder =
-        sqlx::QueryBuilder::new("SELECT pagecontent_id, name FROM pagecontent WHERE pagecontent_id IN (");
+    let mut query_builder = sqlx::QueryBuilder::new(
+        "SELECT pagecontent_id, name FROM pagecontent WHERE pagecontent_id IN (",
+    );
     let mut separated = query_builder.separated(", ");
     for id in &ids {
         separated.push_bind(id.to_string());
@@ -667,7 +673,9 @@ impl SlugAutocomplete {
     }
 }
 
-pub async fn search_entity_slugs(query: &AutocompleteQuery) -> Result<Vec<SlugAutocompleteResult>, Error> {
+pub async fn search_entity_slugs(
+    query: &AutocompleteQuery,
+) -> Result<Vec<SlugAutocompleteResult>, Error> {
     use common::shared::db;
 
     let search_term = query.search.as_deref().unwrap_or("").trim();
@@ -722,11 +730,7 @@ pub async fn resolve_entity_slug_name(slug: &str) -> Result<Option<String>, Erro
 
     Ok(row.and_then(|r| {
         let name = r.entity_name?;
-        if name.is_empty() {
-            None
-        } else {
-            Some(name)
-        }
+        if name.is_empty() { None } else { Some(name) }
     }))
 }
 
@@ -741,9 +745,18 @@ pub fn routes() -> impl Endpoint {
         .at("/resolve/projects/:id", get(handle_resolve_project_widget))
         .at("/resolve/events/:id", get(handle_resolve_event_widget))
         .at("/resolve/users/:id", get(handle_resolve_user_widget))
-        .at("/resolve/pagecontent/:id", get(handle_resolve_pagecontent_widget))
-        .at("/resolve/pagebuilder/:id", get(handle_resolve_pagebuilder_widget))
-        .at("/resolve/entityslugs/:slug", get(handle_resolve_entityslug_widget))
+        .at(
+            "/resolve/pagecontent/:id",
+            get(handle_resolve_pagecontent_widget),
+        )
+        .at(
+            "/resolve/pagebuilder/:id",
+            get(handle_resolve_pagebuilder_widget),
+        )
+        .at(
+            "/resolve/entityslugs/:slug",
+            get(handle_resolve_entityslug_widget),
+        )
 }
 
 #[handler]
@@ -892,7 +905,9 @@ async fn handle_resolve_user_widget(
 }
 
 #[handler]
-async fn handle_pagecontent_autocomplete(Query(query): Query<AutocompleteQuery>) -> Result<Response> {
+async fn handle_pagecontent_autocomplete(
+    Query(query): Query<AutocompleteQuery>,
+) -> Result<Response> {
     let results = search_pagecontent(&query).await.map_err(|e| {
         poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
     })?;
@@ -939,7 +954,9 @@ async fn handle_resolve_pagecontent_widget(
 }
 
 #[handler]
-async fn handle_pagebuilder_autocomplete(Query(query): Query<AutocompleteQuery>) -> Result<Response> {
+async fn handle_pagebuilder_autocomplete(
+    Query(query): Query<AutocompleteQuery>,
+) -> Result<Response> {
     let results = search_pagebuilder_pages(&query).await.map_err(|e| {
         poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
     })?;
@@ -986,7 +1003,9 @@ async fn handle_resolve_pagebuilder_widget(
 }
 
 #[handler]
-async fn handle_entityslugs_autocomplete(Query(query): Query<AutocompleteQuery>) -> Result<Response> {
+async fn handle_entityslugs_autocomplete(
+    Query(query): Query<AutocompleteQuery>,
+) -> Result<Response> {
     let results = search_entity_slugs(&query).await.map_err(|e| {
         poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
     })?;
@@ -1015,18 +1034,10 @@ async fn handle_resolve_entityslug_widget(
     let name = resolve_entity_slug_name(&slug).await.ok().flatten();
 
     let mut widget = if let Some(entity_name) = name {
-        SlugAutocomplete::new(
-            query.field_name,
-            query.field_label,
-            query.placeholder,
-        )
-        .with_selected(slug, entity_name)
+        SlugAutocomplete::new(query.field_name, query.field_label, query.placeholder)
+            .with_selected(slug, entity_name)
     } else {
-        SlugAutocomplete::new(
-            query.field_name,
-            query.field_label,
-            query.placeholder,
-        )
+        SlugAutocomplete::new(query.field_name, query.field_label, query.placeholder)
     };
 
     if let Some(read_only) = query.read_only {

@@ -1,10 +1,6 @@
 use anyhow::{Error, Result};
 use async_nats::service::Request;
-use common::{
-    message::email::*,
-    shared::db,
-    timestring::TimeString,
-};
+use common::{message::email::*, shared::db, timestring::TimeString};
 use ulid::Ulid;
 
 // ============================================================================
@@ -86,16 +82,32 @@ pub async fn handle_list_stored_emails(req: &Request) -> Result<ListStoredEmails
     let emails = rows
         .into_iter()
         .map(|row| {
-            let stored_email_id = row.stored_email_id.ok_or_else(|| anyhow::anyhow!("stored_email_id is NULL"))?.parse::<Ulid>()?;
-            let created_at = TimeString::try_from(row.created_at.ok_or_else(|| anyhow::anyhow!("created_at is NULL"))?)?;
-            let updated_at = TimeString::try_from(row.updated_at.ok_or_else(|| anyhow::anyhow!("updated_at is NULL"))?)?;
-            let datasets_json = row.datasets.ok_or_else(|| anyhow::anyhow!("datasets is NULL"))?;
-            let datasets: Vec<String> = serde_json::from_str(&datasets_json).unwrap_or_else(|_| vec![]);
+            let stored_email_id = row
+                .stored_email_id
+                .ok_or_else(|| anyhow::anyhow!("stored_email_id is NULL"))?
+                .parse::<Ulid>()?;
+            let created_at = TimeString::try_from(
+                row.created_at
+                    .ok_or_else(|| anyhow::anyhow!("created_at is NULL"))?,
+            )?;
+            let updated_at = TimeString::try_from(
+                row.updated_at
+                    .ok_or_else(|| anyhow::anyhow!("updated_at is NULL"))?,
+            )?;
+            let datasets_json = row
+                .datasets
+                .ok_or_else(|| anyhow::anyhow!("datasets is NULL"))?;
+            let datasets: Vec<String> =
+                serde_json::from_str(&datasets_json).unwrap_or_else(|_| vec![]);
             Ok(StoredEmail {
                 stored_email_id,
                 slug: row.slug.ok_or_else(|| anyhow::anyhow!("slug is NULL"))?,
-                subject: row.subject.ok_or_else(|| anyhow::anyhow!("subject is NULL"))?,
-                body_delta: row.body_delta.ok_or_else(|| anyhow::anyhow!("body_delta is NULL"))?,
+                subject: row
+                    .subject
+                    .ok_or_else(|| anyhow::anyhow!("subject is NULL"))?,
+                body_delta: row
+                    .body_delta
+                    .ok_or_else(|| anyhow::anyhow!("body_delta is NULL"))?,
                 datasets,
                 created_at,
                 updated_at,
@@ -126,18 +138,33 @@ pub async fn handle_get_stored_email(req: &Request) -> Result<GetStoredEmailResp
     .fetch_one(db())
     .await?;
 
-    let stored_email_id = row.stored_email_id.ok_or_else(|| anyhow::anyhow!("stored_email_id is NULL"))?.parse::<Ulid>()?;
-    let created_at = TimeString::try_from(row.created_at.ok_or_else(|| anyhow::anyhow!("created_at is NULL"))?)?;
-    let updated_at = TimeString::try_from(row.updated_at.ok_or_else(|| anyhow::anyhow!("updated_at is NULL"))?)?;
-    let datasets_json = row.datasets.ok_or_else(|| anyhow::anyhow!("datasets is NULL"))?;
+    let stored_email_id = row
+        .stored_email_id
+        .ok_or_else(|| anyhow::anyhow!("stored_email_id is NULL"))?
+        .parse::<Ulid>()?;
+    let created_at = TimeString::try_from(
+        row.created_at
+            .ok_or_else(|| anyhow::anyhow!("created_at is NULL"))?,
+    )?;
+    let updated_at = TimeString::try_from(
+        row.updated_at
+            .ok_or_else(|| anyhow::anyhow!("updated_at is NULL"))?,
+    )?;
+    let datasets_json = row
+        .datasets
+        .ok_or_else(|| anyhow::anyhow!("datasets is NULL"))?;
     let datasets: Vec<String> = serde_json::from_str(&datasets_json).unwrap_or_else(|_| vec![]);
 
     Ok(GetStoredEmailResponse {
         email: StoredEmail {
             stored_email_id,
             slug: row.slug.ok_or_else(|| anyhow::anyhow!("slug is NULL"))?,
-            subject: row.subject.ok_or_else(|| anyhow::anyhow!("subject is NULL"))?,
-            body_delta: row.body_delta.ok_or_else(|| anyhow::anyhow!("body_delta is NULL"))?,
+            subject: row
+                .subject
+                .ok_or_else(|| anyhow::anyhow!("subject is NULL"))?,
+            body_delta: row
+                .body_delta
+                .ok_or_else(|| anyhow::anyhow!("body_delta is NULL"))?,
             datasets,
             created_at,
             updated_at,

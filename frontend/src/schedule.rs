@@ -439,9 +439,12 @@ impl LoadStorePeered for Schedule {
     #[tracing::instrument]
     async fn delete_from_database(schedule_id: Self::DatabaseKey) -> Result<(), Error> {
         let schedule_id_str = schedule_id.to_string();
-        sqlx::query!(r#"DELETE FROM schedules WHERE schedule_id = ?"#, schedule_id_str)
-            .execute(db())
-            .await?;
+        sqlx::query!(
+            r#"DELETE FROM schedules WHERE schedule_id = ?"#,
+            schedule_id_str
+        )
+        .execute(db())
+        .await?;
         Ok(())
     }
 }

@@ -1014,7 +1014,9 @@ impl LoadStorePeered for EventField {
             EventFieldValue::Address(address) => {
                 let result = self.save_address(address).await;
                 if result.is_ok() {
-                    if let Err(e) = crate::geocode::geocode_and_update_event_point(self.event_id).await {
+                    if let Err(e) =
+                        crate::geocode::geocode_and_update_event_point(self.event_id).await
+                    {
                         eprintln!("Geocoding after address save failed: {e}");
                     }
                 }
@@ -1023,7 +1025,9 @@ impl LoadStorePeered for EventField {
             EventFieldValue::City(city) => {
                 let result = self.save_city(city).await;
                 if result.is_ok() {
-                    if let Err(e) = crate::geocode::geocode_and_update_event_point(self.event_id).await {
+                    if let Err(e) =
+                        crate::geocode::geocode_and_update_event_point(self.event_id).await
+                    {
                         eprintln!("Geocoding after city save failed: {e}");
                     }
                 }
@@ -1033,7 +1037,9 @@ impl LoadStorePeered for EventField {
             EventFieldValue::State(state) => {
                 let result = self.save_state(state).await;
                 if result.is_ok() {
-                    if let Err(e) = crate::geocode::geocode_and_update_event_point(self.event_id).await {
+                    if let Err(e) =
+                        crate::geocode::geocode_and_update_event_point(self.event_id).await
+                    {
                         eprintln!("Geocoding after state save failed: {e}");
                     }
                 }
@@ -1042,7 +1048,9 @@ impl LoadStorePeered for EventField {
             EventFieldValue::Country(country) => {
                 let result = self.save_country(country).await;
                 if result.is_ok() {
-                    if let Err(e) = crate::geocode::geocode_and_update_event_point(self.event_id).await {
+                    if let Err(e) =
+                        crate::geocode::geocode_and_update_event_point(self.event_id).await
+                    {
                         eprintln!("Geocoding after country save failed: {e}");
                     }
                 }

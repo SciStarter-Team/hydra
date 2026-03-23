@@ -1,17 +1,13 @@
-use anyhow::Error;
-use common::shared::db;
-use poem::{
-    Endpoint, Response, Result, Route, get, handler,
-    session::Session,
-    web::Query,
-};
-use sailfish::TemplateOnce;
-use serde::Deserialize;
 use crate::{
     component::{Component, Head, StandardLayout},
     form::QsQuery,
     middleware::authorization::Authenticated,
 };
+use anyhow::Error;
+use common::shared::db;
+use poem::{Endpoint, Response, Result, Route, get, handler, session::Session, web::Query};
+use sailfish::TemplateOnce;
+use serde::Deserialize;
 
 /// A search result for public entity search
 #[derive(Debug, Clone)]
@@ -112,8 +108,7 @@ pub async fn search_entities(query: &str) -> Result<Vec<SearchResult>, Error> {
 }
 
 pub fn routes() -> impl Endpoint {
-    Route::new()
-        .at("/autocomplete", get(handle_search_autocomplete))
+    Route::new().at("/autocomplete", get(handle_search_autocomplete))
 }
 
 #[handler]
@@ -337,10 +332,7 @@ fn apply_project_filters<'a>(
 }
 
 /// Apply event-specific filters to a QueryBuilder
-fn apply_event_filters<'a>(
-    qb: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
-    query: &'a FinderQuery,
-) {
+fn apply_event_filters<'a>(qb: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>, query: &'a FinderQuery) {
     let location_type = query.location_type.as_deref().unwrap_or("either");
     match location_type {
         "remote" => {
@@ -767,9 +759,7 @@ async fn search_with_location(
 }
 
 /// Count projects matching location-only + filters
-fn build_project_count_location<'a>(
-    fq: &'a FinderQuery,
-) -> sqlx::QueryBuilder<'a, sqlx::Sqlite> {
+fn build_project_count_location<'a>(fq: &'a FinderQuery) -> sqlx::QueryBuilder<'a, sqlx::Sqlite> {
     let mut qb = sqlx::QueryBuilder::new(
         "SELECT COUNT(*) FROM entities e JOIN projects p ON e.target = p.project_id WHERE e.kind = 'Project' AND e.publish = 1 AND (p.point IS NOT NULL OR p.regions IS NOT NULL OR p.entirely_online = 1)",
     );
@@ -778,9 +768,7 @@ fn build_project_count_location<'a>(
 }
 
 /// Count events matching location-only + filters
-fn build_event_count_location<'a>(
-    fq: &'a FinderQuery,
-) -> sqlx::QueryBuilder<'a, sqlx::Sqlite> {
+fn build_event_count_location<'a>(fq: &'a FinderQuery) -> sqlx::QueryBuilder<'a, sqlx::Sqlite> {
     let mut qb = sqlx::QueryBuilder::new(
         "SELECT COUNT(*) FROM entities e JOIN events ev ON e.target = ev.event_id WHERE e.kind = 'Event' AND e.publish = 1 AND (ev.point IS NOT NULL OR ev.regions IS NOT NULL OR ev.entirely_online = 1)",
     );
@@ -990,12 +978,18 @@ pub async fn handle_finder(
             selected_audiences: query.audience.clone(),
             selected_activities: query.activity.clone(),
             show_completed: query.show_completed.is_some(),
-            has_classroom_materials: query.misc_filter.iter().any(|v| v == "has_classroom_materials"),
+            has_classroom_materials: query
+                .misc_filter
+                .iter()
+                .any(|v| v == "has_classroom_materials"),
             has_app: query.misc_filter.iter().any(|v| v == "has_app"),
             is_affiliate: query.misc_filter.iter().any(|v| v == "is_affiliate"),
             usa_only: query.misc_filter.iter().any(|v| v == "usa_only"),
             outside_usa: query.misc_filter.iter().any(|v| v == "outside_usa"),
-            exclusively_outdoors: query.misc_filter.iter().any(|v| v == "exclusively_outdoors"),
+            exclusively_outdoors: query
+                .misc_filter
+                .iter()
+                .any(|v| v == "exclusively_outdoors"),
         },
     )
     .prepare(user_info.clone())

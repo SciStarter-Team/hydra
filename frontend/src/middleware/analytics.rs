@@ -2,11 +2,16 @@ use std::{collections::HashSet, net::IpAddr, sync::Arc};
 
 use aho_corasick::AhoCorasick;
 use common::{
-    message::{log::{ExternalLinksRequest, ExternalLinksResponse}, user::UserInfo},
+    message::{
+        log::{ExternalLinksRequest, ExternalLinksResponse},
+        user::UserInfo,
+    },
     service::{log_pageview, request},
 };
 use jiff::{ToSpan, Zoned};
-use poem::{Endpoint, FromRequest, IntoResponse, Middleware, Response, session::Session, web::RealIp};
+use poem::{
+    Endpoint, FromRequest, IntoResponse, Middleware, Response, session::Session, web::RealIp,
+};
 use regex::Regex;
 use ulid::Ulid;
 

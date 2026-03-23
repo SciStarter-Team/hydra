@@ -27,7 +27,7 @@ use ulid::Ulid;
 
 use super::types::lookup_user_email;
 use common::message::user::BasicInfo;
-use common::service::{trigger_email, TriggerEvent};
+use common::service::{TriggerEvent, trigger_email};
 
 pub fn routes() -> Route {
     Route::new()

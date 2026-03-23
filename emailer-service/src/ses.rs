@@ -2,8 +2,8 @@ use anyhow::Error;
 use aws_sdk_sesv2::{
     Client as SesClient,
     config::{Credentials, Region},
-    types::{Destination, EmailContent, RawMessage},
     primitives::Blob,
+    types::{Destination, EmailContent, RawMessage},
 };
 use ulid::Ulid;
 
@@ -96,9 +96,7 @@ pub async fn send_email(
         .data(Blob::new(raw_email.as_bytes()))
         .build()?;
 
-    let email_content = EmailContent::builder()
-        .raw(raw_message)
-        .build();
+    let email_content = EmailContent::builder().raw(raw_message).build();
 
     // Send email
     let result = client

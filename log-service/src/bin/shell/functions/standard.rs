@@ -451,7 +451,10 @@ impl AnalyticsFunction for InitCompletionCache {
                 }
 
                 if articulate_count % 100 == 0 {
-                    progress(format!("Processed {} articulate completions...", articulate_count));
+                    progress(format!(
+                        "Processed {} articulate completions...",
+                        articulate_count
+                    ));
                 }
             }
 

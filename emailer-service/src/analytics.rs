@@ -3,8 +3,7 @@ use async_nats::service::Request;
 use common::{
     message::email::{
         CheckSendabilityRequest, CheckSendabilityResponse, GetSendingRequest, GetSendingResponse,
-        ListSendingsRequest, ListSendingsResponse, QueueStatusResponse,
-        SendingMetrics,
+        ListSendingsRequest, ListSendingsResponse, QueueStatusResponse, SendingMetrics,
     },
     shared::db,
     timestring::TimeString,
@@ -15,19 +14,17 @@ use ulid::Ulid;
 #[tracing::instrument(skip_all)]
 pub async fn handle_queue_status(_req: &Request) -> Result<QueueStatusResponse, Error> {
     // Count pending emails
-    let pending_result = sqlx::query!(
-        r#"SELECT COUNT(*) as count FROM send_queue WHERE status = 'pending'"#
-    )
-    .fetch_one(db())
-    .await?;
+    let pending_result =
+        sqlx::query!(r#"SELECT COUNT(*) as count FROM send_queue WHERE status = 'pending'"#)
+            .fetch_one(db())
+            .await?;
     let pending_count = pending_result.count as u32;
 
     // Count processing emails
-    let processing_result = sqlx::query!(
-        r#"SELECT COUNT(*) as count FROM send_queue WHERE status = 'processing'"#
-    )
-    .fetch_one(db())
-    .await?;
+    let processing_result =
+        sqlx::query!(r#"SELECT COUNT(*) as count FROM send_queue WHERE status = 'processing'"#)
+            .fetch_one(db())
+            .await?;
     let processing_count = processing_result.count as u32;
 
     // Calculate estimated completion time based on rate limit
@@ -122,7 +119,9 @@ pub async fn handle_list_sendings(req: &Request) -> Result<ListSendingsResponse,
 
     let mut sendings = Vec::new();
     for row in rows {
-        let sending_id_str = row.sending_id.ok_or_else(|| anyhow::anyhow!("sending_id is NULL"))?;
+        let sending_id_str = row
+            .sending_id
+            .ok_or_else(|| anyhow::anyhow!("sending_id is NULL"))?;
         let sending_id = sending_id_str.parse::<Ulid>()?;
         let created_at = TimeString::try_from(row.created_at)?;
 
@@ -164,7 +163,9 @@ pub async fn handle_get_sending(req: &Request) -> Result<GetSendingResponse, Err
         anyhow::bail!("Sending not found: {}", request.sending_id);
     };
 
-    let sending_id_str = row.sending_id.ok_or_else(|| anyhow::anyhow!("sending_id is NULL"))?;
+    let sending_id_str = row
+        .sending_id
+        .ok_or_else(|| anyhow::anyhow!("sending_id is NULL"))?;
     let sending_id = sending_id_str.parse::<Ulid>()?;
     let created_at = TimeString::try_from(row.created_at)?;
 

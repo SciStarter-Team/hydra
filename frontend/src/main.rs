@@ -7,8 +7,8 @@ pub mod certificates;
 pub mod channel;
 pub mod communities;
 pub mod component;
-pub mod csm;
 pub mod contact;
+pub mod csm;
 pub mod dev;
 pub mod emailer;
 pub mod entity;
@@ -262,8 +262,14 @@ fn user_facing() -> impl Endpoint {
         .at("/-csm/picks", get(csm::csm_picks))
         .at("/-csm/events", get(csm::csm_events))
         .at("/-csm/wall-of-fame", get(csm::csm_wall_of_fame))
-        .at("/-csm/autocomplete/projects", get(csm::csm_autocomplete_projects))
-        .at("/-csm/autocomplete/countries", get(csm::csm_autocomplete_countries))
+        .at(
+            "/-csm/autocomplete/projects",
+            get(csm::csm_autocomplete_projects),
+        )
+        .at(
+            "/-csm/autocomplete/countries",
+            get(csm::csm_autocomplete_countries),
+        )
         .at("/-entity-password/*slug", post(entity_password_verify))
         .at("/*slug", get(entity_page))
         .with(middleware::analytics::AnalyticsMiddleware)
@@ -1631,8 +1637,7 @@ mod sync {
                     }
                 };
 
-                let reference_type: ReferenceType =
-                    data.reference_type.parse().unwrap_or_default();
+                let reference_type: ReferenceType = data.reference_type.parse().unwrap_or_default();
 
                 let reference = ProjectReference {
                     reference_id: Ulid::new(),
@@ -1904,19 +1909,13 @@ mod sync {
                 let owner_id: Ulid = match data.owner_ulid.parse() {
                     Ok(ulid) => ulid,
                     Err(err) => {
-                        tracing::error!(
-                            "Error parsing owner ULID {:?}: {}",
-                            data.owner_ulid,
-                            err
-                        );
+                        tracing::error!("Error parsing owner ULID {:?}: {}", data.owner_ulid, err);
                         continue;
                     }
                 };
 
-                let delegate_id: Option<Ulid> = data
-                    .delegate_ulid
-                    .as_deref()
-                    .and_then(|s| s.parse().ok());
+                let delegate_id: Option<Ulid> =
+                    data.delegate_ulid.as_deref().and_then(|s| s.parse().ok());
 
                 // Check if we already have a mapping for this orrery ID
                 let existing = sqlx::query_scalar!(
@@ -1936,7 +1935,9 @@ mod sync {
 
                 let entity_list = EntityList {
                     list_id,
-                    created_at: data.created.unwrap_or_else(|| common::timestring::TimeString::now().to_string()),
+                    created_at: data
+                        .created
+                        .unwrap_or_else(|| common::timestring::TimeString::now().to_string()),
                     private: data.private,
                     owner_id,
                     delegate_id,

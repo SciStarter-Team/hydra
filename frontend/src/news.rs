@@ -167,9 +167,7 @@ impl NewsItem {
 }
 
 #[handler]
-pub async fn news_content(
-    Path(id_str): Path<String>,
-) -> Result<poem::Response, anyhow::Error> {
+pub async fn news_content(Path(id_str): Path<String>) -> Result<poem::Response, anyhow::Error> {
     let news_id: Ulid = id_str.parse()?;
     let item = NewsItem::load(news_id).await?;
 

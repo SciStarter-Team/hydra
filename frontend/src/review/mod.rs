@@ -84,7 +84,10 @@ impl ProjectReview {
     /// # Arguments
     /// * `project_id` - The project to get reviews for
     /// * `limit` - Maximum number of reviews to return (default 10 if None)
-    pub async fn list_for_project(project_id: Ulid, limit: Option<i64>) -> Result<Vec<Self>, Error> {
+    pub async fn list_for_project(
+        project_id: Ulid,
+        limit: Option<i64>,
+    ) -> Result<Vec<Self>, Error> {
         let project_id_str = project_id.to_string();
         let limit = limit.unwrap_or(10);
 

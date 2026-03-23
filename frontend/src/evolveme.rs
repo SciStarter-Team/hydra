@@ -175,7 +175,10 @@ impl EvolveMeParams {
 struct SearchParams {
     #[serde(default)]
     phrase: String,
-    #[serde(default, deserialize_with = "common::serde_utils::deserialize_empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "common::serde_utils::deserialize_empty_string_as_none"
+    )]
     topic: Option<i32>,
     #[serde(default)]
     online: bool,
@@ -323,7 +326,7 @@ struct ArticulateParams {
 
 impl ArticulateParams {
     fn new(lrs_url: &str, user: Arc<BasicInfo>) -> Self {
-        use jsonwebtoken::{encode, EncodingKey, Header};
+        use jsonwebtoken::{EncodingKey, Header, encode};
         use serde::Serialize;
 
         #[derive(Serialize)]
@@ -374,7 +377,10 @@ impl std::fmt::Display for ArticulateParams {
                     .to_string()
                 )
             ),
-            format!("auth={}", urlencoding::encode(&format!("Bearer {}", self.jwt))),
+            format!(
+                "auth={}",
+                urlencoding::encode(&format!("Bearer {}", self.jwt))
+            ),
         ];
 
         if let Some(activity) = &self.activity {

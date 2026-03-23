@@ -1,10 +1,6 @@
 use anyhow::{Error, Result};
 use async_nats::service::Request;
-use common::{
-    message::email::*,
-    shared::db,
-    timestring::TimeString,
-};
+use common::{message::email::*, shared::db, timestring::TimeString};
 use ulid::Ulid;
 
 // ============================================================================
@@ -68,9 +64,11 @@ pub async fn handle_list_oneoff_emails(req: &Request) -> Result<ListOneoffEmails
         .fetch_all(db())
         .await?;
 
-        let total_row = sqlx::query!(r#"SELECT COUNT(*) as "count: i64" FROM oneoff_emails WHERE archived = 0"#)
-            .fetch_one(db())
-            .await?;
+        let total_row = sqlx::query!(
+            r#"SELECT COUNT(*) as "count: i64" FROM oneoff_emails WHERE archived = 0"#
+        )
+        .fetch_one(db())
+        .await?;
 
         (rows, total_row.count as u32)
     };
@@ -78,17 +76,33 @@ pub async fn handle_list_oneoff_emails(req: &Request) -> Result<ListOneoffEmails
     let emails = rows
         .into_iter()
         .map(|row| {
-            let oneoff_email_id = row.oneoff_email_id.ok_or_else(|| anyhow::anyhow!("oneoff_email_id is NULL"))?.parse::<Ulid>()?;
-            let created_at = TimeString::try_from(row.created_at.ok_or_else(|| anyhow::anyhow!("created_at is NULL"))?)?;
-            let datasets_json = row.datasets.ok_or_else(|| anyhow::anyhow!("datasets is NULL"))?;
-            let datasets: Vec<String> = serde_json::from_str(&datasets_json).unwrap_or_else(|_| vec![]);
+            let oneoff_email_id = row
+                .oneoff_email_id
+                .ok_or_else(|| anyhow::anyhow!("oneoff_email_id is NULL"))?
+                .parse::<Ulid>()?;
+            let created_at = TimeString::try_from(
+                row.created_at
+                    .ok_or_else(|| anyhow::anyhow!("created_at is NULL"))?,
+            )?;
+            let datasets_json = row
+                .datasets
+                .ok_or_else(|| anyhow::anyhow!("datasets is NULL"))?;
+            let datasets: Vec<String> =
+                serde_json::from_str(&datasets_json).unwrap_or_else(|_| vec![]);
             Ok(OneoffEmail {
                 oneoff_email_id,
-                subject: row.subject.ok_or_else(|| anyhow::anyhow!("subject is NULL"))?,
-                body_delta: row.body_delta.ok_or_else(|| anyhow::anyhow!("body_delta is NULL"))?,
+                subject: row
+                    .subject
+                    .ok_or_else(|| anyhow::anyhow!("subject is NULL"))?,
+                body_delta: row
+                    .body_delta
+                    .ok_or_else(|| anyhow::anyhow!("body_delta is NULL"))?,
                 datasets,
                 created_at,
-                archived: row.archived.ok_or_else(|| anyhow::anyhow!("archived is NULL"))? != 0,
+                archived: row
+                    .archived
+                    .ok_or_else(|| anyhow::anyhow!("archived is NULL"))?
+                    != 0,
                 legacy_slug: row.legacy_slug,
             })
         })
@@ -117,19 +131,34 @@ pub async fn handle_get_oneoff_email(req: &Request) -> Result<GetOneoffEmailResp
     .fetch_one(db())
     .await?;
 
-    let oneoff_email_id = row.oneoff_email_id.ok_or_else(|| anyhow::anyhow!("oneoff_email_id is NULL"))?.parse::<Ulid>()?;
-    let created_at = TimeString::try_from(row.created_at.ok_or_else(|| anyhow::anyhow!("created_at is NULL"))?)?;
-    let datasets_json = row.datasets.ok_or_else(|| anyhow::anyhow!("datasets is NULL"))?;
+    let oneoff_email_id = row
+        .oneoff_email_id
+        .ok_or_else(|| anyhow::anyhow!("oneoff_email_id is NULL"))?
+        .parse::<Ulid>()?;
+    let created_at = TimeString::try_from(
+        row.created_at
+            .ok_or_else(|| anyhow::anyhow!("created_at is NULL"))?,
+    )?;
+    let datasets_json = row
+        .datasets
+        .ok_or_else(|| anyhow::anyhow!("datasets is NULL"))?;
     let datasets: Vec<String> = serde_json::from_str(&datasets_json).unwrap_or_else(|_| vec![]);
 
     Ok(GetOneoffEmailResponse {
         email: OneoffEmail {
             oneoff_email_id,
-            subject: row.subject.ok_or_else(|| anyhow::anyhow!("subject is NULL"))?,
-            body_delta: row.body_delta.ok_or_else(|| anyhow::anyhow!("body_delta is NULL"))?,
+            subject: row
+                .subject
+                .ok_or_else(|| anyhow::anyhow!("subject is NULL"))?,
+            body_delta: row
+                .body_delta
+                .ok_or_else(|| anyhow::anyhow!("body_delta is NULL"))?,
             datasets,
             created_at,
-            archived: row.archived.ok_or_else(|| anyhow::anyhow!("archived is NULL"))? != 0,
+            archived: row
+                .archived
+                .ok_or_else(|| anyhow::anyhow!("archived is NULL"))?
+                != 0,
             legacy_slug: row.legacy_slug,
         },
     })
@@ -228,7 +257,9 @@ pub async fn handle_delete_oneoff_email(req: &Request) -> Result<DeleteOneoffEma
 // Archive Oneoff Email
 // ============================================================================
 
-pub async fn handle_archive_oneoff_email(req: &Request) -> Result<ArchiveOneoffEmailResponse, Error> {
+pub async fn handle_archive_oneoff_email(
+    req: &Request,
+) -> Result<ArchiveOneoffEmailResponse, Error> {
     let request: ArchiveOneoffEmailRequest = flexbuffers::from_slice(&req.message.payload)?;
     let id = request.oneoff_email_id.to_string();
     let archived = if request.archived { 1 } else { 0 };

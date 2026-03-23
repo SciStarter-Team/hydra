@@ -590,12 +590,25 @@ pub fn exchange_routes() -> impl Endpoint {
     Route::new()
         .at("/", get(exchanges_list))
         .at("/create", get(exchange_create_page).post(exchange_create))
-        .at("/:id", get(exchange_edit_page).post(exchange_update).delete(exchange_delete))
+        .at(
+            "/:id",
+            get(exchange_edit_page)
+                .post(exchange_update)
+                .delete(exchange_delete),
+        )
 }
 
 pub fn oauth2_routes() -> impl Endpoint {
     Route::new()
         .at("/", get(oauth2_clients_list))
-        .at("/create", get(oauth2_client_create_page).post(oauth2_client_create))
-        .at("/:client_id", get(oauth2_client_edit_page).post(oauth2_client_update).delete(oauth2_client_delete))
+        .at(
+            "/create",
+            get(oauth2_client_create_page).post(oauth2_client_create),
+        )
+        .at(
+            "/:client_id",
+            get(oauth2_client_edit_page)
+                .post(oauth2_client_update)
+                .delete(oauth2_client_delete),
+        )
 }

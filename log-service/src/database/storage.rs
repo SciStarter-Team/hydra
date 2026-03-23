@@ -13,9 +13,9 @@ use datafusion::error::{DataFusionError, Result as DataFusionResult};
 use datafusion::execution::context::SessionContext;
 use datafusion::execution::memory_pool::FairSpillPool;
 use datafusion::execution::runtime_env::RuntimeEnvBuilder;
-use datafusion::prelude::SessionConfig;
 use datafusion::logical_expr::{Expr, TableProviderFilterPushDown};
 use datafusion::physical_plan::ExecutionPlan;
+use datafusion::prelude::SessionConfig;
 use object_store::local::LocalFileSystem;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
@@ -410,8 +410,7 @@ impl Database {
 
         // Check if any shutdown failed
         for result in [
-            results.0, results.1, results.2, results.3, results.4, results.5, results.6,
-            results.7,
+            results.0, results.1, results.2, results.3, results.4, results.5, results.6, results.7,
         ] {
             result?;
         }

@@ -1,7 +1,9 @@
 use crate::db;
 use anyhow::Result;
 use async_nats::service::Request;
-use common::message::user::{RecipientFilter, RecipientSearchRequest, RecipientSearchResponse, RecipientSearchResult};
+use common::message::user::{
+    RecipientFilter, RecipientSearchRequest, RecipientSearchResponse, RecipientSearchResult,
+};
 use common::service::decode_structured_message;
 
 /// Search for recipients across users, user sets, and address sets
@@ -13,9 +15,7 @@ pub async fn search(req: &Request) -> Result<RecipientSearchResponse> {
     let limit = request.limit.unwrap_or(10) as i64;
 
     if query.is_empty() {
-        return Ok(RecipientSearchResponse {
-            results: vec![],
-        });
+        return Ok(RecipientSearchResponse { results: vec![] });
     }
 
     let mut exact_matches = Vec::new();
@@ -50,7 +50,9 @@ pub async fn search(req: &Request) -> Result<RecipientSearchResponse> {
         let display_name = if row.first_name.is_empty() && row.last_name.is_empty() {
             row.handle.clone()
         } else {
-            format!("{} {}", row.first_name, row.last_name).trim().to_string()
+            format!("{} {}", row.first_name, row.last_name)
+                .trim()
+                .to_string()
         };
 
         let result = RecipientSearchResult::User {

@@ -2,8 +2,8 @@ use crate::error::{LogServiceError, Result};
 use common::badge::Badge;
 use common::message::log::{
     AnalyticsQuery, AnalyticsResponse, GoUrlChartPoint, GoUrlStatsRequest, GoUrlStatsResponse,
-    GoUrlViewEntry, TopItemCount, RecentActivityItem, RecentActivityRequest,
-    RecentActivityResponse, TopPerformersQuery, WeeklyCount,
+    GoUrlViewEntry, RecentActivityItem, RecentActivityRequest, RecentActivityResponse,
+    TopItemCount, TopPerformersQuery, WeeklyCount,
 };
 use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::functions_aggregate::expr_fn::count;
@@ -59,7 +59,9 @@ pub async fn get_join_analytics(
 
 /// Helper function to extract WeeklyCount data from Arrow RecordBatches
 fn extract_weekly_counts_from_batches(batches: Vec<RecordBatch>) -> Result<Vec<WeeklyCount>> {
-    use datafusion::arrow::array::{Array, Date32Array, Int64Array, StringArray, StringViewArray, TimestampNanosecondArray};
+    use datafusion::arrow::array::{
+        Array, Date32Array, Int64Array, StringArray, StringViewArray, TimestampNanosecondArray,
+    };
     let mut weekly_counts = Vec::new();
 
     for batch in batches {
@@ -95,21 +97,22 @@ fn extract_weekly_counts_from_batches(batches: Vec<RecordBatch>) -> Result<Vec<W
                         ))
                     })?;
                 date.to_string()
-            } else if let Some(timestamp_array) = week_start_array.as_any().downcast_ref::<TimestampNanosecondArray>()
+            } else if let Some(timestamp_array) = week_start_array
+                .as_any()
+                .downcast_ref::<TimestampNanosecondArray>()
             {
                 // Convert TimestampNanosecond to string format (YYYY-MM-DD)
                 let nanoseconds = timestamp_array.value(i);
                 // Convert nanoseconds to seconds for Timestamp::from_second
                 let seconds = nanoseconds / 1_000_000_000;
-                let timestamp = jiff::Timestamp::from_second(seconds)
-                    .map_err(|_| {
-                        LogServiceError::Analytics(format!(
-                            "Invalid timestamp value: {}",
-                            nanoseconds
-                        ))
-                    })?;
+                let timestamp = jiff::Timestamp::from_second(seconds).map_err(|_| {
+                    LogServiceError::Analytics(format!("Invalid timestamp value: {}", nanoseconds))
+                })?;
                 // Convert to date string (just the date part, not time)
-                timestamp.to_zoned(jiff::tz::TimeZone::UTC).date().to_string()
+                timestamp
+                    .to_zoned(jiff::tz::TimeZone::UTC)
+                    .date()
+                    .to_string()
             } else {
                 return Err(LogServiceError::UnsupportedDataType(format!(
                     "{:?}",
@@ -869,7 +872,7 @@ pub async fn get_top_performers(
             return Err(LogServiceError::Validation(format!(
                 "Invalid criterion: {}",
                 query.criterion
-            )))
+            )));
         }
     };
 
@@ -885,10 +888,7 @@ pub async fn get_top_performers(
         for i in 0..batch.num_rows() {
             if let Some(identifier) = extract_string_value(identifier_array, i) {
                 if let Some(count) = extract_count_value(count_array, i) {
-                    item_counts.push(TopItemCount {
-                        identifier,
-                        count,
-                    });
+                    item_counts.push(TopItemCount { identifier, count });
                 }
             }
         }
@@ -918,10 +918,7 @@ fn extract_string_value(
 }
 
 // Helper function to extract count values from Arrow arrays
-fn extract_count_value(
-    array: &datafusion::arrow::array::ArrayRef,
-    index: usize,
-) -> Option<i64> {
+fn extract_count_value(array: &datafusion::arrow::array::ArrayRef, index: usize) -> Option<i64> {
     use datafusion::arrow::array::{Array, Int64Array, UInt64Array};
 
     if let Some(int64_array) = array.as_any().downcast_ref::<Int64Array>() {

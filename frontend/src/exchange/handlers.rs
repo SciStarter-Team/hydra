@@ -729,7 +729,17 @@ pub async fn exchange_home(
     query_builder.push_bind(offset as i64);
 
     let rows = query_builder
-        .build_query_as::<(String, String, String, String, String, String, String, String, String)>()
+        .build_query_as::<(
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+        )>()
         .fetch_all(common::shared::db())
         .await?;
 
@@ -833,7 +843,17 @@ pub async fn exchange_results(
 
     // Execute query
     let rows = query_builder
-        .build_query_as::<(String, String, String, String, String, String, String, String, String)>()
+        .build_query_as::<(
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+        )>()
         .fetch_all(common::shared::db())
         .await?;
 
@@ -929,14 +949,25 @@ pub async fn exchange_csv(
 
     // Execute query (no LIMIT - get all results for CSV)
     let rows = query_builder
-        .build_query_as::<(String, String, String, String, String, String, String, String, String)>()
+        .build_query_as::<(
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+        )>()
         .fetch_all(common::shared::db())
         .await?;
 
     // Build CSV content
     let mut csv_content = String::new();
     if has_permission {
-        csv_content.push_str("project_id,slug,name,image,image_credit,goal,task,exchange,admin_link\n");
+        csv_content
+            .push_str("project_id,slug,name,image,image_credit,goal,task,exchange,admin_link\n");
     } else {
         csv_content.push_str("project_id,slug,name,image,image_credit,goal,task,exchange\n");
     }

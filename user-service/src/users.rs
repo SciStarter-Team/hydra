@@ -3,17 +3,17 @@ use async_nats::service::Request;
 use common::{
     badge::Badge,
     message::user::{
-        AdminPasswordResetRequest, AdminPasswordResetResponse, UserDetails, UserDetailsBatchGetRequest,
-        UserDetailsBatchGetResponse, UserDetailsCreateRequest, UserDetailsDeleteRequest,
-        UserDetailsDeleteResponse, UserDetailsExportRequest, UserDetailsExportResponse,
-        UserDetailsGetRequest, UserDetailsListRequest, UserDetailsListResponse,
-        UserDetailsResponse, UserDetailsSearchRequest, UserDetailsUpdateRequest, BadgeHolderInfo,
+        AdminPasswordResetRequest, AdminPasswordResetResponse, BadgeHolderInfo,
         BadgeHoldersRequest, BadgeHoldersResponse, BasicInfo, PageManagerSyncRequest,
-        PageManagerSyncResponse, PageManagerUpdateRequest, PageManagerUpdateResponse,
-        UserAndBadge, UserBadge, UserDisplayInfo, UserDisplayInfoBatchRequest,
-        UserDisplayInfoBatchResponse, UserEmail, UserEmailAddRequest, UserEmailDeleteRequest,
-        UserEmailResponse, UserEmailToggleVerifiedRequest, UserEmailUpdateRequest, UserEmailInfo,
-        UserEmailInfoRequest, UserNameMapping,
+        PageManagerSyncResponse, PageManagerUpdateRequest, PageManagerUpdateResponse, UserAndBadge,
+        UserBadge, UserDetails, UserDetailsBatchGetRequest, UserDetailsBatchGetResponse,
+        UserDetailsCreateRequest, UserDetailsDeleteRequest, UserDetailsDeleteResponse,
+        UserDetailsExportRequest, UserDetailsExportResponse, UserDetailsGetRequest,
+        UserDetailsListRequest, UserDetailsListResponse, UserDetailsResponse,
+        UserDetailsSearchRequest, UserDetailsUpdateRequest, UserDisplayInfo,
+        UserDisplayInfoBatchRequest, UserDisplayInfoBatchResponse, UserEmail, UserEmailAddRequest,
+        UserEmailDeleteRequest, UserEmailInfo, UserEmailInfoRequest, UserEmailResponse,
+        UserEmailToggleVerifiedRequest, UserEmailUpdateRequest, UserNameMapping,
     },
     service::{decode_structured_message, log_activity, send},
     shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower},
@@ -163,7 +163,9 @@ pub async fn search_by_handle(req: &Request) -> Result<Vec<BasicInfo>, Error> {
     Ok(users)
 }
 
-pub async fn user_by_email(req: &Request) -> Result<common::message::user::UserByEmailResponse, Error> {
+pub async fn user_by_email(
+    req: &Request,
+) -> Result<common::message::user::UserByEmailResponse, Error> {
     use common::message::user::{UserByEmailRequest, UserByEmailResponse};
 
     let request: UserByEmailRequest = decode_structured_message(req.message.clone())?;
@@ -721,8 +723,7 @@ pub async fn get_badge_holders(req: &Request) -> Result<BadgeHoldersResponse, Er
             .as_ulid()
             .map_err(|e| anyhow::anyhow!("Invalid user ID in database: {}", e))?;
 
-        let when = TimeString::try_from(row.when.clone())
-            .unwrap_or_else(|_| TimeString::now());
+        let when = TimeString::try_from(row.when.clone()).unwrap_or_else(|_| TimeString::now());
 
         holders.push(BadgeHolderInfo {
             user_id,
@@ -993,9 +994,7 @@ pub async fn user_details_export(req: &Request) -> Result<UserDetailsExportRespo
         });
     }
 
-    Ok(UserDetailsExportResponse {
-        users,
-    })
+    Ok(UserDetailsExportResponse { users })
 }
 
 pub async fn user_details_get(req: &Request) -> Result<UserDetailsResponse, Error> {
@@ -1138,9 +1137,7 @@ pub async fn user_details_batch_get(req: &Request) -> Result<UserDetailsBatchGet
     Ok(UserDetailsBatchGetResponse { users: users? })
 }
 
-pub async fn user_display_info_batch(
-    req: &Request,
-) -> Result<UserDisplayInfoBatchResponse, Error> {
+pub async fn user_display_info_batch(req: &Request) -> Result<UserDisplayInfoBatchResponse, Error> {
     let request: UserDisplayInfoBatchRequest = decode_structured_message(req.message.clone())?;
 
     if request.user_ids.is_empty() {
@@ -1148,8 +1145,9 @@ pub async fn user_display_info_batch(
     }
 
     // Build query to get user display info by IDs
-    let mut query_builder =
-        sqlx::QueryBuilder::new(r#"SELECT "user_id", "handle", "image" FROM "users" WHERE "user_id" IN ("#);
+    let mut query_builder = sqlx::QueryBuilder::new(
+        r#"SELECT "user_id", "handle", "image" FROM "users" WHERE "user_id" IN ("#,
+    );
     let mut separated = query_builder.separated(", ");
     for user_id in &request.user_ids {
         separated.push_bind(user_id.to_string());

@@ -15,16 +15,19 @@ use common::{
     shared::db,
     timestring::TimeString,
 };
-use poem::{handler, web::{Form, Json, Query}, IntoResponse, Response};
+use poem::{
+    IntoResponse, Response, handler,
+    web::{Form, Json, Query},
+};
 use serde::Deserialize;
 use ulid::Ulid;
 
 use crate::entity::{Entity, EntityKind, EntityTarget};
-use crate::event::all::EventAll;
 use crate::event::EventInstance;
+use crate::event::all::EventAll;
 use crate::peering::LoadStorePeered;
-use crate::project::all::ProjectAll;
 use crate::project::ProjectStatus;
+use crate::project::all::ProjectAll;
 
 #[derive(Debug, Deserialize)]
 struct ApiKeyQuery {
@@ -42,9 +45,7 @@ struct ProfileIdQuery {
 }
 
 #[handler]
-pub async fn get_profile_id(
-    Query(query): Query<ProfileIdQuery>,
-) -> Result<Response, Error> {
+pub async fn get_profile_id(Query(query): Query<ProfileIdQuery>) -> Result<Response, Error> {
     let (identifier, id_type) = if let Some(hashed) = query.hashed {
         (hashed, ProfileIdLookupType::Hashed)
     } else if let Some(identifier) = query.identifier {
@@ -53,7 +54,8 @@ pub async fn get_profile_id(
         return Ok(Json(serde_json::json!({
             "result": "error",
             "message": "profile identifier missing"
-        })).into_response());
+        }))
+        .into_response());
     };
 
     let response: ProfileIdLookupResponse = request(
@@ -71,12 +73,14 @@ pub async fn get_profile_id(
             "scistarter_profile_id": response.legacy_profile_id,
             "scistarter_profile_id_v2": response.opaque_id,
             "known": true
-        })).into_response())
+        }))
+        .into_response())
     } else {
         Ok(Json(serde_json::json!({
             "result": "error",
             "message": "Not a current SciStarter user"
-        })).into_response())
+        }))
+        .into_response())
     }
 }
 
@@ -112,7 +116,8 @@ pub async fn create_user(
         None => {
             return Ok(Json(serde_json::json!({
                 "error": "API key required"
-            })).into_response());
+            }))
+            .into_response());
         }
     };
 
@@ -127,10 +132,12 @@ pub async fn create_user(
     if !validation.valid {
         return Ok(Json(serde_json::json!({
             "error": "Invalid API key"
-        })).into_response());
+        }))
+        .into_response());
     }
 
-    let email = form.email
+    let email = form
+        .email
         .or(form.user_id.clone())
         .ok_or_else(|| anyhow::anyhow!("email or user_id required"))?;
 
@@ -158,7 +165,8 @@ pub async fn create_user(
         "profile_id": response.legacy_profile_id,
         "profile_id_v2": response.opaque_id,
         "user_id": response.user_id
-    })).into_response())
+    }))
+    .into_response())
 }
 
 // ============================================================================
@@ -200,14 +208,16 @@ pub async fn record_event(
         return Ok(Json(serde_json::json!({
             "result": "error",
             "message": "profile_id required"
-        })).into_response());
+        }))
+        .into_response());
     }
 
     if project_ids_str.is_empty() {
         return Ok(Json(serde_json::json!({
             "result": "error",
             "message": "project_id required"
-        })).into_response());
+        }))
+        .into_response());
     }
 
     // Determine origin
@@ -298,7 +308,8 @@ pub async fn record_event(
         "project_name": "deprecated",
         "errors": errors,
         "notes": []
-    })).into_response())
+    }))
+    .into_response())
 }
 
 // ============================================================================
@@ -323,7 +334,8 @@ pub async fn record_event_by_email(
         return Ok(Json(serde_json::json!({
             "result": "error",
             "message": "identifier or hashed required"
-        })).into_response());
+        }))
+        .into_response());
     };
 
     let user_lookup: ProfileIdLookupResponse = request(
@@ -341,7 +353,8 @@ pub async fn record_event_by_email(
             "event_id": "deprecated",
             "errors": [],
             "notes": ["User not found, discarding for privacy"]
-        })).into_response());
+        }))
+        .into_response());
     };
 
     let user_id: ulid::Ulid = user_id_str.parse()?;
@@ -351,7 +364,8 @@ pub async fn record_event_by_email(
         return Ok(Json(serde_json::json!({
             "result": "error",
             "message": "project_id required"
-        })).into_response());
+        }))
+        .into_response());
     }
 
     let origin: i16 = match form.origin.as_deref() {
@@ -414,7 +428,8 @@ pub async fn record_event_by_email(
         "event_id": "deprecated",
         "errors": errors,
         "notes": []
-    })).into_response())
+    }))
+    .into_response())
 }
 
 // ============================================================================
@@ -432,20 +447,19 @@ pub async fn get_project(
         None => {
             return Ok(Json(serde_json::json!({
                 "error": "API key required"
-            })).into_response());
+            }))
+            .into_response());
         }
     };
 
-    let validation: ValidateApiKeyResponse = request(
-        "user.api_key.validate",
-        ValidateApiKeyRequest { api_key },
-    )
-    .await?;
+    let validation: ValidateApiKeyResponse =
+        request("user.api_key.validate", ValidateApiKeyRequest { api_key }).await?;
 
     if !validation.valid {
         return Ok(Json(serde_json::json!({
             "error": "Invalid API key"
-        })).into_response());
+        }))
+        .into_response());
     }
 
     // Look up project by legacy ID
@@ -453,7 +467,8 @@ pub async fn get_project(
     let Some(entity_id) = entity_id else {
         return Ok(Json(serde_json::json!({
             "error": "Project not found"
-        })).into_response());
+        }))
+        .into_response());
     };
 
     // Fetch project data
@@ -473,7 +488,8 @@ pub async fn get_project(
     let Some(project) = project else {
         return Ok(Json(serde_json::json!({
             "error": "Project not found"
-        })).into_response());
+        }))
+        .into_response());
     };
 
     // Fetch tags
@@ -508,7 +524,8 @@ pub async fn get_project(
         "end_date": project.end,
         "tags": tags,
         "topics": topics
-    })).into_response())
+    }))
+    .into_response())
 }
 
 // ============================================================================
@@ -516,9 +533,7 @@ pub async fn get_project(
 // ============================================================================
 
 #[handler]
-pub async fn participation_failure(
-    Form(_form): Form<serde_json::Value>,
-) -> Response {
+pub async fn participation_failure(Form(_form): Form<serde_json::Value>) -> Response {
     // Just log and return 200 — this endpoint exists for error reporting
     poem::http::StatusCode::OK.into()
 }
@@ -551,11 +566,10 @@ fn ppsr_map_field(name: &str) -> &str {
 }
 
 #[handler]
-pub async fn project_add(
-    Json(mut data): Json<serde_json::Value>,
-) -> Result<Response, Error> {
+pub async fn project_add(Json(mut data): Json<serde_json::Value>) -> Result<Response, Error> {
     // Validate API key from JSON body
-    let api_key = data.get("key")
+    let api_key = data
+        .get("key")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
@@ -564,21 +578,20 @@ pub async fn project_add(
             "result": "error",
             "error": 400,
             "message": "API key required"
-        })).into_response());
+        }))
+        .into_response());
     };
 
-    let validation: ValidateApiKeyResponse = request(
-        "user.api_key.validate",
-        ValidateApiKeyRequest { api_key },
-    )
-    .await?;
+    let validation: ValidateApiKeyResponse =
+        request("user.api_key.validate", ValidateApiKeyRequest { api_key }).await?;
 
     if !validation.valid {
         return Ok(Json(serde_json::json!({
             "result": "error",
             "error": 403,
             "message": "Invalid API key"
-        })).into_response());
+        }))
+        .into_response());
     };
 
     // Apply PPSR field name mapping
@@ -594,10 +607,19 @@ pub async fn project_add(
         }
     }
 
-    let guid = data.get("guid").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let scistarter_id = data.get("scistarter_id").and_then(|v| v.as_str()).or_else(||
-        data.get("scistarter_id").and_then(|v| v.as_i64()).map(|_| "")
-    );
+    let guid = data
+        .get("guid")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let scistarter_id = data
+        .get("scistarter_id")
+        .and_then(|v| v.as_str())
+        .or_else(|| {
+            data.get("scistarter_id")
+                .and_then(|v| v.as_i64())
+                .map(|_| "")
+        });
     let scistarter_id_int = data.get("scistarter_id").and_then(|v| v.as_i64());
 
     if guid.is_empty() && scistarter_id.is_none() && scistarter_id_int.is_none() {
@@ -605,7 +627,8 @@ pub async fn project_add(
             "result": "error",
             "error": 400,
             "message": "guid or scistarter_id required"
-        })).into_response());
+        }))
+        .into_response());
     }
 
     // Try to find existing project by GUID or legacy ID
@@ -674,14 +697,27 @@ pub async fn project_add(
         proj.contacts = vec![crate::contact::Contact {
             contact_id: Ulid::new(),
             name: Some(v.to_string()),
-            email: obj.get("contact_email").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-            phone: obj.get("contact_phone").and_then(|v| v.as_str())
+            email: obj
+                .get("contact_email")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            phone: obj
+                .get("contact_phone")
+                .and_then(|v| v.as_str())
                 .or_else(|| obj.get("project_owner_phone").and_then(|v| v.as_str()))
                 .map(String::from),
-            affiliation: obj.get("contact_affiliation").and_then(|v| v.as_str()).map(String::from),
-            address: obj.get("contact_address").and_then(|v| v.as_str()).map(String::from),
+            affiliation: obj
+                .get("contact_affiliation")
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            address: obj
+                .get("contact_address")
+                .and_then(|v| v.as_str())
+                .map(String::from),
             role: crate::contact::ContactRole::ContactPerson,
-        }].into_boxed_slice();
+        }]
+        .into_boxed_slice();
     }
     if let Some(v) = obj.get("facebook_page").and_then(|v| v.as_str()) {
         proj.facebook_page = v.to_string();
@@ -715,7 +751,11 @@ pub async fn project_add(
     }
 
     // Status mapping
-    if let Some(v) = obj.get("status").or(obj.get("ProjectStatus")).and_then(|v| v.as_str()) {
+    if let Some(v) = obj
+        .get("status")
+        .or(obj.get("ProjectStatus"))
+        .and_then(|v| v.as_str())
+    {
         proj.status = match v.to_lowercase().as_str() {
             "starting" | "pending" => ProjectStatus::Pending,
             "active" => ProjectStatus::Active,
@@ -775,9 +815,14 @@ pub async fn project_add(
     // Tags
     if let Some(tags_val) = obj.get("tags") {
         let tag_list: Vec<String> = if let Some(arr) = tags_val.as_array() {
-            arr.iter().filter_map(|v| v.as_str().map(String::from)).collect()
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
         } else if let Some(s) = tags_val.as_str() {
-            s.split(',').map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect()
+            s.split(',')
+                .map(|t| t.trim().to_string())
+                .filter(|t| !t.is_empty())
+                .collect()
         } else {
             vec![]
         };
@@ -787,9 +832,14 @@ pub async fn project_add(
     // Topics
     if let Some(topics_val) = obj.get("topics") {
         let topic_list: Vec<String> = if let Some(arr) = topics_val.as_array() {
-            arr.iter().filter_map(|v| v.as_str().map(String::from)).collect()
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
         } else if let Some(s) = topics_val.as_str() {
-            s.split(',').map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect()
+            s.split(',')
+                .map(|t| t.trim().to_string())
+                .filter(|t| !t.is_empty())
+                .collect()
         } else {
             vec![]
         };
@@ -799,9 +849,14 @@ pub async fn project_add(
     // Audience
     if let Some(audience_val) = obj.get("audience") {
         let audience_list: Vec<String> = if let Some(arr) = audience_val.as_array() {
-            arr.iter().filter_map(|v| v.as_str().map(String::from)).collect()
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
         } else if let Some(s) = audience_val.as_str() {
-            s.split(',').map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect()
+            s.split(',')
+                .map(|t| t.trim().to_string())
+                .filter(|t| !t.is_empty())
+                .collect()
         } else {
             vec![]
         };
@@ -814,7 +869,8 @@ pub async fn project_add(
     }
 
     // Regions/border/ProjectCoverageBoundary → location_type + regions
-    if let Some(regions_val) = obj.get("regions")
+    if let Some(regions_val) = obj
+        .get("regions")
         .or(obj.get("border"))
         .or(obj.get("ProjectCoverageBoundary"))
     {
@@ -868,11 +924,7 @@ pub async fn project_add(
     // Create or update entity slug
     let slug = if is_new {
         let slug = generate_slug(&proj.name).await;
-        let entity = Entity::new(
-            &slug,
-            EntityKind::Project,
-            EntityTarget::Ulid(project_ulid),
-        );
+        let entity = Entity::new(&slug, EntityKind::Project, EntityTarget::Ulid(project_ulid));
         entity.store().await?;
         slug
     } else {
@@ -901,7 +953,8 @@ pub async fn project_add(
         "result": "success",
         "project_id": legacy_id.unwrap_or(0),
         "project_slug": slug
-    })).into_response())
+    }))
+    .into_response())
 }
 
 // ============================================================================
@@ -909,11 +962,10 @@ pub async fn project_add(
 // ============================================================================
 
 #[handler]
-pub async fn event_add(
-    Json(mut data): Json<serde_json::Value>,
-) -> Result<Response, Error> {
+pub async fn event_add(Json(mut data): Json<serde_json::Value>) -> Result<Response, Error> {
     // Validate API key from JSON body
-    let api_key = data.get("key")
+    let api_key = data
+        .get("key")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
@@ -922,37 +974,56 @@ pub async fn event_add(
             "result": "error",
             "error": 400,
             "message": "API key required"
-        })).into_response());
+        }))
+        .into_response());
     };
 
-    let validation: ValidateApiKeyResponse = request(
-        "user.api_key.validate",
-        ValidateApiKeyRequest { api_key },
-    )
-    .await?;
+    let validation: ValidateApiKeyResponse =
+        request("user.api_key.validate", ValidateApiKeyRequest { api_key }).await?;
 
     if !validation.valid {
         return Ok(Json(serde_json::json!({
             "result": "error",
             "error": 401,
             "message": "Invalid API key"
-        })).into_response());
+        }))
+        .into_response());
     };
 
-    let guid = data.get("guid").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let guid = data
+        .get("guid")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     if guid.is_empty() {
         return Ok(Json(serde_json::json!({
             "result": "error",
             "error": 400,
             "message": "guid required"
-        })).into_response());
+        }))
+        .into_response());
     }
 
     // Remove internal-only fields that shouldn't be set via API
     if let Some(obj) = data.as_object_mut() {
-        for key in &["slug", "value", "id", "legacy_id", "box", "link", "type",
-                     "publish", "created", "updated", "component", "_metadata",
-                     "authoritative", "redirect", "circuit_id", "key"] {
+        for key in &[
+            "slug",
+            "value",
+            "id",
+            "legacy_id",
+            "box",
+            "link",
+            "type",
+            "publish",
+            "created",
+            "updated",
+            "component",
+            "_metadata",
+            "authoritative",
+            "redirect",
+            "circuit_id",
+            "key",
+        ] {
             obj.remove(*key);
         }
     }
@@ -1000,7 +1071,11 @@ pub async fn event_add(
     if let Some(v) = obj.get("presenter").and_then(|v| v.as_str()) {
         evt.presenter = v.to_string();
     }
-    if let Some(v) = obj.get("image_url").or(obj.get("image")).and_then(|v| v.as_str()) {
+    if let Some(v) = obj
+        .get("image_url")
+        .or(obj.get("image"))
+        .and_then(|v| v.as_str())
+    {
         evt.image = v.to_string();
     }
     if let Some(v) = obj.get("address").and_then(|v| v.as_str()) {
@@ -1026,7 +1101,8 @@ pub async fn event_add(
     }
 
     // Origin
-    evt.origin = obj.get("origin")
+    evt.origin = obj
+        .get("origin")
         .and_then(|v| v.as_str())
         .unwrap_or("API")
         .to_string();
@@ -1034,7 +1110,8 @@ pub async fn event_add(
     // Location type
     if let Some(lt) = obj.get("location_type") {
         if let Some(lt_obj) = lt.as_object() {
-            evt.location_type = lt_obj.get("value")
+            evt.location_type = lt_obj
+                .get("value")
                 .and_then(|v| v.as_str())
                 .unwrap_or("ANY")
                 .to_string();
@@ -1056,9 +1133,14 @@ pub async fn event_add(
     // Tags
     if let Some(tags_val) = obj.get("tags") {
         let tag_list: Vec<String> = if let Some(arr) = tags_val.as_array() {
-            arr.iter().filter_map(|v| v.as_str().map(String::from)).collect()
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
         } else if let Some(s) = tags_val.as_str() {
-            s.split(',').map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect()
+            s.split(',')
+                .map(|t| t.trim().to_string())
+                .filter(|t| !t.is_empty())
+                .collect()
         } else {
             vec![]
         };
@@ -1066,17 +1148,20 @@ pub async fn event_add(
     }
 
     // Begin/end as event instances
-    let begin: Option<TimeString> = obj.get("begin")
+    let begin: Option<TimeString> = obj
+        .get("begin")
         .and_then(|v| v.as_str())
         .and_then(|s| TimeString::try_from(s.to_string()).ok());
-    let end: Option<TimeString> = obj.get("end")
+    let end: Option<TimeString> = obj
+        .get("end")
         .and_then(|v| v.as_str())
         .and_then(|s| TimeString::try_from(s.to_string()).ok());
     if begin.is_some() || end.is_some() {
         evt.instances = vec![EventInstance {
             begin: begin.unwrap_or_default(),
             end: end.unwrap_or_default(),
-        }].into_boxed_slice();
+        }]
+        .into_boxed_slice();
     }
 
     // Entirely online
@@ -1095,11 +1180,7 @@ pub async fn event_add(
         } else {
             generate_slug(&evt.name).await
         };
-        let entity = Entity::new(
-            &slug,
-            EntityKind::Event,
-            EntityTarget::Ulid(event_ulid),
-        );
+        let entity = Entity::new(&slug, EntityKind::Event, EntityTarget::Ulid(event_ulid));
         entity.store().await?;
         slug
     } else {
@@ -1116,7 +1197,8 @@ pub async fn event_add(
     Ok(Json(serde_json::json!({
         "result": "success",
         "slug": slug
-    })).into_response())
+    }))
+    .into_response())
 }
 
 // ============================================================================
