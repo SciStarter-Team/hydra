@@ -1,7 +1,7 @@
 # SciStarter Analytics Capabilities
 
 This document describes the analytics data available or obtainable from
-the Hydra platform, organized by topic.
+the SciStarter platform, organized by topic.
 
 ## Site Traffic & Visitor Metrics
 
@@ -16,6 +16,24 @@ the Hydra platform, organized by topic.
 - **Authenticated vs. anonymous traffic** split — user ID presence
   distinguishes logged-in visitors
 - **Pages per session** — count of page views grouped by interaction ID
+- **Time-of-day and day-of-week traffic patterns** — derivable from
+  page view timestamps
+- **Traffic trends** — weekly, monthly, and custom date range
+  aggregations
+
+## Go Link Traffic & Visitor Metrics
+
+Go Links permit collecting analytics as users traverse between a
+source page and a link target
+
+- **Page views** with full URL path and timestamp
+- **Unique visitors** by persistent device identifier
+- **Sessions** tracked via interaction identifiers (1-hour inactivity
+  expiry), enabling session count and session duration metrics
+- **Return visitor rate** — repeat device IDs across multiple days or
+  interaction sessions
+- **Authenticated vs. anonymous traffic** split — user ID presence
+  distinguishes logged-in visitors
 - **Time-of-day and day-of-week traffic patterns** — derivable from
   page view timestamps
 - **Traffic trends** — weekly, monthly, and custom date range
@@ -42,9 +60,10 @@ the Hydra platform, organized by topic.
 ## Referral & Attribution
 
 - **Referring domains** — HTTP Referer header captured on every page
-  view, enabling top referrer rankings and referral traffic volume
+  view, enabling top referrer rankings and referral traffic volume, if
+  the browser reports a referrer (referrer reporting is becoming rarer)
 - **Referral paths** — full referrer URLs available for detailed
-  analysis
+  analysis, if the browser reports a referrer
 - **Go link attribution** — go links (`/go/{slug}`) track all
   accesses with the originating slug, enabling campaign-specific
   traffic measurement
