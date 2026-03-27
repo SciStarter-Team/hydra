@@ -1,7 +1,10 @@
 use crate::{
     component::{Component, Head, StandardLayout},
     form::QsQuery,
-    middleware::authorization::Authenticated,
+    middleware::{
+        analytics::{Device, Interaction},
+        authorization::Authenticated,
+    },
 };
 use anyhow::Error;
 use common::shared::db;
@@ -149,6 +152,12 @@ pub struct FinderResult {
     pub geo_json: Option<String>,
 }
 
+impl FinderResult {
+    pub fn distance_mi(&self) -> Option<f64> {
+        self.distance_km.map(|km| km * 0.621371)
+    }
+}
+
 #[derive(TemplateOnce)]
 #[template(path = "pages/finder.stpl.html")]
 struct FinderPage {
@@ -261,6 +270,10 @@ fn apply_project_filters<'a>(
     qb: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
     query: &'a FinderQuery,
 ) {
+    // Filter out bad geographic data: (0,0) points and swapped lat/lng
+    qb.push(" AND NOT (p.point IS NOT NULL AND ST_X(p.point) = 0 AND ST_Y(p.point) = 0)");
+    qb.push(" AND NOT (p.point IS NOT NULL AND ABS(ST_Y(p.point)) > 90)");
+
     let location_type = query.location_type.as_deref().unwrap_or("either");
     match location_type {
         "remote" => {
@@ -333,6 +346,10 @@ fn apply_project_filters<'a>(
 
 /// Apply event-specific filters to a QueryBuilder
 fn apply_event_filters<'a>(qb: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>, query: &'a FinderQuery) {
+    // Filter out bad geographic data: (0,0) points and swapped lat/lng
+    qb.push(" AND NOT (ev.point IS NOT NULL AND ST_X(ev.point) = 0 AND ST_Y(ev.point) = 0)");
+    qb.push(" AND NOT (ev.point IS NOT NULL AND ABS(ST_Y(ev.point)) > 90)");
+
     let location_type = query.location_type.as_deref().unwrap_or("either");
     match location_type {
         "remote" => {
@@ -460,7 +477,21 @@ async fn search_all(fq: &FinderQuery, page: u32) -> Result<FinderSearchResult, E
 
     // Project subquery
     qb.push(
-        "SELECT e.slug, 'Project' AS entity_type, p.name AS title, p.description, p.image, p.goal, p.task, p.status, CASE WHEN p.entirely_online = 1 THEN 'Online' WHEN p.city != '' AND p.state != '' THEN p.city || ', ' || p.state WHEN p.location_name != '' THEN p.location_name ELSE '' END AS location_display, NULL AS event_begin, CASE WHEN p.regions IS NOT NULL THEN AsGeoJSON(p.regions) WHEN p.point IS NOT NULL THEN AsGeoJSON(p.point) ELSE NULL END AS geo_json FROM entities e JOIN projects p ON e.target = p.project_id WHERE e.kind = 'Project' AND e.publish = 1",
+        "SELECT e.slug, 'Project' AS entity_type, p.name AS title, p.description, p.image, \
+         p.goal, p.task, p.status, \
+         CASE WHEN p.entirely_online = 1 THEN 'Online' \
+              WHEN p.city != '' AND p.state != '' THEN p.city || ', ' || p.state \
+              WHEN p.location_name != '' THEN p.location_name \
+              ELSE '' END AS location_display, \
+         NULL AS event_begin, \
+         CASE WHEN p.regions IS NOT NULL THEN AsGeoJSON(p.regions) \
+              WHEN p.point IS NOT NULL THEN AsGeoJSON(p.point) \
+              ELSE NULL END AS geo_json, \
+         CASE WHEN p.entirely_online = 1 THEN 200.0 \
+              WHEN p.regions IS NOT NULL THEN COALESCE(NULLIF(SQRT(ST_Area(ST_MakeValid(p.regions), 1) / 1000000.0), 0.0), 22583.0) \
+              ELSE 0.0 END * 1.0 AS comparison_value \
+         FROM entities e JOIN projects p ON e.target = p.project_id \
+         WHERE e.kind = 'Project' AND e.publish = 1",
     );
     apply_project_filters(&mut qb, fq);
 
@@ -468,11 +499,26 @@ async fn search_all(fq: &FinderQuery, page: u32) -> Result<FinderSearchResult, E
 
     // Event subquery
     qb.push(
-        "SELECT e.slug, 'Event' AS entity_type, ev.name AS title, ev.description, ev.image, '' AS goal, '' AS task, '' AS status, CASE WHEN ev.entirely_online = 1 THEN 'Online' WHEN ev.city != '' AND ev.state != '' THEN ev.city || ', ' || ev.state WHEN ev.location_name != '' THEN ev.location_name ELSE '' END AS location_display, (SELECT ei.begin FROM event_instances ei WHERE ei.event_id = ev.event_id AND ei.begin >= datetime('now') ORDER BY ei.begin LIMIT 1) AS event_begin, CASE WHEN ev.regions IS NOT NULL THEN AsGeoJSON(ev.regions) WHEN ev.point IS NOT NULL THEN AsGeoJSON(ev.point) ELSE NULL END AS geo_json FROM entities e JOIN events ev ON e.target = ev.event_id WHERE e.kind = 'Event' AND e.publish = 1",
+        "SELECT e.slug, 'Event' AS entity_type, ev.name AS title, ev.description, ev.image, \
+         '' AS goal, '' AS task, '' AS status, \
+         CASE WHEN ev.entirely_online = 1 THEN 'Online' \
+              WHEN ev.city != '' AND ev.state != '' THEN ev.city || ', ' || ev.state \
+              WHEN ev.location_name != '' THEN ev.location_name \
+              ELSE '' END AS location_display, \
+         (SELECT ei.begin FROM event_instances ei WHERE ei.event_id = ev.event_id \
+          AND ei.begin >= datetime('now') ORDER BY ei.begin LIMIT 1) AS event_begin, \
+         CASE WHEN ev.regions IS NOT NULL THEN AsGeoJSON(ev.regions) \
+              WHEN ev.point IS NOT NULL THEN AsGeoJSON(ev.point) \
+              ELSE NULL END AS geo_json, \
+         COALESCE(MAX(0.0, julianday((SELECT ei2.begin FROM event_instances ei2 \
+          WHERE ei2.event_id = ev.event_id AND ei2.begin >= datetime('now') \
+          ORDER BY ei2.begin LIMIT 1)) - julianday('now')), 0.0) * 10.0 * 1.0 AS comparison_value \
+         FROM entities e JOIN events ev ON e.target = ev.event_id \
+         WHERE e.kind = 'Event' AND e.publish = 1",
     );
     apply_event_filters(&mut qb, fq);
 
-    qb.push(") ORDER BY event_begin IS NULL, event_begin, title LIMIT ");
+    qb.push(") ORDER BY comparison_value LIMIT ");
     qb.push_bind(limit);
     qb.push(" OFFSET ");
     qb.push_bind(offset);
@@ -490,6 +536,7 @@ async fn search_all(fq: &FinderQuery, page: u32) -> Result<FinderSearchResult, E
             String,         // location_display
             Option<String>, // event_begin
             Option<String>, // geo_json
+            f64,            // comparison_value
         )>()
         .fetch_all(db())
         .await?;
@@ -542,21 +589,23 @@ async fn search_text_only(fq: &FinderQuery, page: u32) -> Result<FinderSearchRes
 
     // Project subquery
     qb.push(
-        r#"SELECT f.slug, 'Project' AS entity_type, f.title, p.description, p.image,
-           p.goal, p.task, p.status,
-           CASE
-             WHEN p.entirely_online = 1 THEN 'Online'
-             WHEN p.city != '' AND p.state != '' THEN p.city || ', ' || p.state
-             WHEN p.location_name != '' THEN p.location_name
-             ELSE ''
-           END AS location_display,
-           NULL AS event_begin,
-           rank AS sort_rank,
-           CASE WHEN p.regions IS NOT NULL THEN AsGeoJSON(p.regions) WHEN p.point IS NOT NULL THEN AsGeoJSON(p.point) ELSE NULL END AS geo_json
-           FROM entities_fts f
-           JOIN entities e ON f.slug = e.slug
-           JOIN projects p ON e.target = p.project_id
-           WHERE e.kind = 'Project' AND entities_fts MATCH "#,
+        "SELECT f.slug, 'Project' AS entity_type, f.title, p.description, p.image, \
+         p.goal, p.task, p.status, \
+         CASE WHEN p.entirely_online = 1 THEN 'Online' \
+              WHEN p.city != '' AND p.state != '' THEN p.city || ', ' || p.state \
+              WHEN p.location_name != '' THEN p.location_name \
+              ELSE '' END AS location_display, \
+         NULL AS event_begin, \
+         CASE WHEN p.regions IS NOT NULL THEN AsGeoJSON(p.regions) \
+              WHEN p.point IS NOT NULL THEN AsGeoJSON(p.point) \
+              ELSE NULL END AS geo_json, \
+         CASE WHEN p.entirely_online = 1 THEN 200.0 \
+              WHEN p.regions IS NOT NULL THEN COALESCE(NULLIF(SQRT(ST_Area(ST_MakeValid(p.regions), 1) / 1000000.0), 0.0), 22583.0) \
+              ELSE 0.0 END * 1.0 AS comparison_value \
+         FROM entities_fts f \
+         JOIN entities e ON f.slug = e.slug \
+         JOIN projects p ON e.target = p.project_id \
+         WHERE e.kind = 'Project' AND entities_fts MATCH ",
     );
     qb.push_bind(search_term.clone());
     qb.push(" AND e.publish = 1");
@@ -566,27 +615,30 @@ async fn search_text_only(fq: &FinderQuery, page: u32) -> Result<FinderSearchRes
 
     // Event subquery
     qb.push(
-        r#"SELECT f.slug, 'Event' AS entity_type, f.title, ev.description, ev.image,
-           '' AS goal, '' AS task, '' AS status,
-           CASE
-             WHEN ev.entirely_online = 1 THEN 'Online'
-             WHEN ev.city != '' AND ev.state != '' THEN ev.city || ', ' || ev.state
-             WHEN ev.location_name != '' THEN ev.location_name
-             ELSE ''
-           END AS location_display,
-           (SELECT ei.begin FROM event_instances ei WHERE ei.event_id = ev.event_id AND ei.begin >= datetime('now') ORDER BY ei.begin LIMIT 1) AS event_begin,
-           rank AS sort_rank,
-           CASE WHEN ev.regions IS NOT NULL THEN AsGeoJSON(ev.regions) WHEN ev.point IS NOT NULL THEN AsGeoJSON(ev.point) ELSE NULL END AS geo_json
-           FROM entities_fts f
-           JOIN entities e ON f.slug = e.slug
-           JOIN events ev ON e.target = ev.event_id
-           WHERE e.kind = 'Event' AND entities_fts MATCH "#,
+        "SELECT f.slug, 'Event' AS entity_type, f.title, ev.description, ev.image, \
+         '' AS goal, '' AS task, '' AS status, \
+         CASE WHEN ev.entirely_online = 1 THEN 'Online' \
+              WHEN ev.city != '' AND ev.state != '' THEN ev.city || ', ' || ev.state \
+              WHEN ev.location_name != '' THEN ev.location_name \
+              ELSE '' END AS location_display, \
+         (SELECT ei.begin FROM event_instances ei WHERE ei.event_id = ev.event_id \
+          AND ei.begin >= datetime('now') ORDER BY ei.begin LIMIT 1) AS event_begin, \
+         CASE WHEN ev.regions IS NOT NULL THEN AsGeoJSON(ev.regions) \
+              WHEN ev.point IS NOT NULL THEN AsGeoJSON(ev.point) \
+              ELSE NULL END AS geo_json, \
+         COALESCE(MAX(0.0, julianday((SELECT ei2.begin FROM event_instances ei2 \
+          WHERE ei2.event_id = ev.event_id AND ei2.begin >= datetime('now') \
+          ORDER BY ei2.begin LIMIT 1)) - julianday('now')), 0.0) * 10.0 * 1.0 AS comparison_value \
+         FROM entities_fts f \
+         JOIN entities e ON f.slug = e.slug \
+         JOIN events ev ON e.target = ev.event_id \
+         WHERE e.kind = 'Event' AND entities_fts MATCH ",
     );
     qb.push_bind(search_term.clone());
     qb.push(" AND e.publish = 1");
     apply_event_filters(&mut qb, fq);
 
-    qb.push(") ORDER BY sort_rank LIMIT ");
+    qb.push(") ORDER BY comparison_value LIMIT ");
     qb.push_bind(limit);
     qb.push(" OFFSET ");
     qb.push_bind(offset);
@@ -603,8 +655,8 @@ async fn search_text_only(fq: &FinderQuery, page: u32) -> Result<FinderSearchRes
             String,         // status
             String,         // location_display
             Option<String>, // event_begin
-            f64,            // sort_rank
             Option<String>, // geo_json
+            f64,            // comparison_value
         )>()
         .fetch_all(db())
         .await?;
@@ -627,7 +679,7 @@ async fn search_text_only(fq: &FinderQuery, page: u32) -> Result<FinderSearchRes
                 event_date_day: day,
                 event_date_year: year,
                 distance_km: None,
-                geo_json: row.11,
+                geo_json: row.10,
             }
         })
         .collect();
@@ -663,19 +715,49 @@ async fn search_with_location(
 
     // Project subquery
     qb.push(
-        "SELECT f.slug, 'Project' AS entity_type, f.title, p.description, p.image, p.goal, p.task, p.status, CASE WHEN p.entirely_online = 1 THEN 'Online' WHEN p.city != '' AND p.state != '' THEN p.city || ', ' || p.state WHEN p.location_name != '' THEN p.location_name ELSE '' END AS location_display, NULL AS event_begin, ST_Distance(p.point, MakePoint(",
+        "SELECT f.slug, 'Project' AS entity_type, f.title, p.description, p.image, \
+         p.goal, p.task, p.status, \
+         CASE WHEN p.entirely_online = 1 THEN 'Online' \
+              WHEN p.city != '' AND p.state != '' THEN p.city || ', ' || p.state \
+              WHEN p.location_name != '' THEN p.location_name \
+              ELSE '' END AS location_display, \
+         NULL AS event_begin, \
+         CASE WHEN p.entirely_online = 1 THEN NULL \
+              WHEN p.regions IS NOT NULL THEN ST_Distance(ST_MakeValid(p.regions), MakePoint(",
+    );
+    qb.push_bind(lng);
+    qb.push(", ");
+    qb.push_bind(lat);
+    qb.push(", 4326), 1) / 1000.0 WHEN p.point IS NOT NULL THEN ST_Distance(p.point, MakePoint(");
+    qb.push_bind(lng);
+    qb.push(", ");
+    qb.push_bind(lat);
+    qb.push(
+        ", 4326), 1) / 1000.0 \
+         ELSE NULL END AS distance_km, \
+         CASE WHEN p.regions IS NOT NULL THEN AsGeoJSON(p.regions) \
+              WHEN p.point IS NOT NULL THEN AsGeoJSON(p.point) \
+              ELSE NULL END AS geo_json, \
+         CASE WHEN p.entirely_online = 1 THEN 200.0 \
+              WHEN p.regions IS NOT NULL THEN COALESCE(ST_Distance(ST_MakeValid(p.regions), MakePoint(",
     );
     qb.push_bind(lng);
     qb.push(", ");
     qb.push_bind(lat);
     qb.push(
-        ", 4326), 1) AS distance, CASE WHEN p.regions IS NOT NULL AND ST_Contains(p.regions, MakePoint(",
+        ", 4326), 1) / 1000.0, 0) + COALESCE(NULLIF(SQRT(ST_Area(ST_MakeValid(p.regions), 1) / 1000000.0), 0.0), 22583.0) \
+              WHEN p.point IS NOT NULL THEN COALESCE(ST_Distance(p.point, MakePoint(",
     );
     qb.push_bind(lng);
     qb.push(", ");
     qb.push_bind(lat);
     qb.push(
-        ", 4326)) THEN ST_Area(p.regions, 1) ELSE NULL END AS region_area, CASE WHEN p.regions IS NOT NULL THEN AsGeoJSON(p.regions) WHEN p.point IS NOT NULL THEN AsGeoJSON(p.point) ELSE NULL END AS geo_json FROM entities_fts f JOIN entities e ON f.slug = e.slug JOIN projects p ON e.target = p.project_id WHERE e.kind = 'Project' AND entities_fts MATCH ",
+        ", 4326), 1) / 1000.0, 22583.0) \
+              ELSE 0.0 END * 1.0 AS comparison_value \
+         FROM entities_fts f \
+         JOIN entities e ON f.slug = e.slug \
+         JOIN projects p ON e.target = p.project_id \
+         WHERE e.kind = 'Project' AND entities_fts MATCH ",
     );
     qb.push_bind(search_term.clone());
     qb.push(" AND e.publish = 1");
@@ -686,29 +768,60 @@ async fn search_with_location(
 
     // Event subquery
     qb.push(
-        "SELECT f.slug, 'Event' AS entity_type, f.title, ev.description, ev.image, '' AS goal, '' AS task, '' AS status, CASE WHEN ev.entirely_online = 1 THEN 'Online' WHEN ev.city != '' AND ev.state != '' THEN ev.city || ', ' || ev.state WHEN ev.location_name != '' THEN ev.location_name ELSE '' END AS location_display, (SELECT ei.begin FROM event_instances ei WHERE ei.event_id = ev.event_id AND ei.begin >= datetime('now') ORDER BY ei.begin LIMIT 1) AS event_begin, ST_Distance(ev.point, MakePoint(",
+        "SELECT f.slug, 'Event' AS entity_type, f.title, ev.description, ev.image, \
+         '' AS goal, '' AS task, '' AS status, \
+         CASE WHEN ev.entirely_online = 1 THEN 'Online' \
+              WHEN ev.city != '' AND ev.state != '' THEN ev.city || ', ' || ev.state \
+              WHEN ev.location_name != '' THEN ev.location_name \
+              ELSE '' END AS location_display, \
+         (SELECT ei.begin FROM event_instances ei WHERE ei.event_id = ev.event_id \
+          AND ei.begin >= datetime('now') ORDER BY ei.begin LIMIT 1) AS event_begin, \
+         CASE WHEN ev.entirely_online = 1 THEN NULL \
+              WHEN ev.regions IS NOT NULL THEN ST_Distance(ST_MakeValid(ev.regions), MakePoint(",
+    );
+    qb.push_bind(lng);
+    qb.push(", ");
+    qb.push_bind(lat);
+    qb.push(", 4326), 1) / 1000.0 WHEN ev.point IS NOT NULL THEN ST_Distance(ev.point, MakePoint(");
+    qb.push_bind(lng);
+    qb.push(", ");
+    qb.push_bind(lat);
+    qb.push(
+        ", 4326), 1) / 1000.0 \
+         ELSE NULL END AS distance_km, \
+         CASE WHEN ev.regions IS NOT NULL THEN AsGeoJSON(ev.regions) \
+              WHEN ev.point IS NOT NULL THEN AsGeoJSON(ev.point) \
+              ELSE NULL END AS geo_json, \
+         COALESCE(MAX(0.0, julianday((SELECT ei2.begin FROM event_instances ei2 \
+          WHERE ei2.event_id = ev.event_id AND ei2.begin >= datetime('now') \
+          ORDER BY ei2.begin LIMIT 1)) - julianday('now')), 0.0) * 10.0 \
+         + CASE WHEN ev.entirely_online = 1 THEN 0.0 \
+                WHEN ev.regions IS NOT NULL THEN COALESCE(ST_Distance(ST_MakeValid(ev.regions), MakePoint(",
     );
     qb.push_bind(lng);
     qb.push(", ");
     qb.push_bind(lat);
     qb.push(
-        ", 4326), 1) AS distance, CASE WHEN ev.regions IS NOT NULL AND ST_Contains(ev.regions, MakePoint(",
+        ", 4326), 1) / 1000.0, 0) \
+                WHEN ev.point IS NOT NULL THEN COALESCE(ST_Distance(ev.point, MakePoint(",
     );
     qb.push_bind(lng);
     qb.push(", ");
     qb.push_bind(lat);
     qb.push(
-        ", 4326)) THEN ST_Area(ev.regions, 1) ELSE NULL END AS region_area, CASE WHEN ev.regions IS NOT NULL THEN AsGeoJSON(ev.regions) WHEN ev.point IS NOT NULL THEN AsGeoJSON(ev.point) ELSE NULL END AS geo_json FROM entities_fts f JOIN entities e ON f.slug = e.slug JOIN events ev ON e.target = ev.event_id WHERE e.kind = 'Event' AND entities_fts MATCH ",
+        ", 4326), 1) / 1000.0, 22583.0) \
+                ELSE 0.0 END * 1.0 AS comparison_value \
+         FROM entities_fts f \
+         JOIN entities e ON f.slug = e.slug \
+         JOIN events ev ON e.target = ev.event_id \
+         WHERE e.kind = 'Event' AND entities_fts MATCH ",
     );
     qb.push_bind(search_term.clone());
     qb.push(" AND e.publish = 1");
     apply_event_filters(&mut qb, fq);
     qb.push(" GROUP BY f.slug");
 
-    // Sort by region containment (smaller area first), then distance
-    qb.push(
-        ") ORDER BY CASE WHEN region_area IS NOT NULL THEN 0 ELSE 1 END, region_area, distance LIMIT ",
-    );
+    qb.push(") ORDER BY comparison_value LIMIT ");
     qb.push_bind(limit);
     qb.push(" OFFSET ");
     qb.push_bind(offset);
@@ -725,9 +838,9 @@ async fn search_with_location(
             String,         // status
             String,         // location_display
             Option<String>, // event_begin
-            Option<f64>,    // distance
-            Option<f64>,    // region_area
+            Option<f64>,    // distance_km
             Option<String>, // geo_json
+            f64,            // comparison_value
         )>()
         .fetch_all(db())
         .await?;
@@ -749,8 +862,8 @@ async fn search_with_location(
                 event_date_month: month,
                 event_date_day: day,
                 event_date_year: year,
-                distance_km: row.10.map(|d| d / 1000.0),
-                geo_json: row.12,
+                distance_km: row.10,
+                geo_json: row.11,
             }
         })
         .collect();
@@ -800,19 +913,48 @@ async fn search_location_only(
 
     // Project subquery
     qb.push(
-        "SELECT e.slug, 'Project' AS entity_type, p.name AS title, p.description, p.image, p.goal, p.task, p.status, CASE WHEN p.entirely_online = 1 THEN 'Online' WHEN p.city != '' AND p.state != '' THEN p.city || ', ' || p.state WHEN p.location_name != '' THEN p.location_name ELSE '' END AS location_display, NULL AS event_begin, ST_Distance(p.point, MakePoint(",
+        "SELECT e.slug, 'Project' AS entity_type, p.name AS title, p.description, p.image, \
+         p.goal, p.task, p.status, \
+         CASE WHEN p.entirely_online = 1 THEN 'Online' \
+              WHEN p.city != '' AND p.state != '' THEN p.city || ', ' || p.state \
+              WHEN p.location_name != '' THEN p.location_name \
+              ELSE '' END AS location_display, \
+         NULL AS event_begin, \
+         CASE WHEN p.entirely_online = 1 THEN NULL \
+              WHEN p.regions IS NOT NULL THEN ST_Distance(ST_MakeValid(p.regions), MakePoint(",
+    );
+    qb.push_bind(lng);
+    qb.push(", ");
+    qb.push_bind(lat);
+    qb.push(", 4326), 1) / 1000.0 WHEN p.point IS NOT NULL THEN ST_Distance(p.point, MakePoint(");
+    qb.push_bind(lng);
+    qb.push(", ");
+    qb.push_bind(lat);
+    qb.push(
+        ", 4326), 1) / 1000.0 \
+         ELSE NULL END AS distance_km, \
+         CASE WHEN p.regions IS NOT NULL THEN AsGeoJSON(p.regions) \
+              WHEN p.point IS NOT NULL THEN AsGeoJSON(p.point) \
+              ELSE NULL END AS geo_json, \
+         CASE WHEN p.entirely_online = 1 THEN 200.0 \
+              WHEN p.regions IS NOT NULL THEN COALESCE(ST_Distance(ST_MakeValid(p.regions), MakePoint(",
     );
     qb.push_bind(lng);
     qb.push(", ");
     qb.push_bind(lat);
     qb.push(
-        ", 4326), 1) AS distance, CASE WHEN p.regions IS NOT NULL AND ST_Contains(p.regions, MakePoint(",
+        ", 4326), 1) / 1000.0, 0) + COALESCE(NULLIF(SQRT(ST_Area(ST_MakeValid(p.regions), 1) / 1000000.0), 0.0), 22583.0) \
+              WHEN p.point IS NOT NULL THEN COALESCE(ST_Distance(p.point, MakePoint(",
     );
     qb.push_bind(lng);
     qb.push(", ");
     qb.push_bind(lat);
     qb.push(
-        ", 4326)) THEN ST_Area(p.regions, 1) ELSE NULL END AS region_area, CASE WHEN p.regions IS NOT NULL THEN AsGeoJSON(p.regions) WHEN p.point IS NOT NULL THEN AsGeoJSON(p.point) ELSE NULL END AS geo_json FROM entities e JOIN projects p ON e.target = p.project_id WHERE e.kind = 'Project' AND e.publish = 1 AND (p.point IS NOT NULL OR p.regions IS NOT NULL OR p.entirely_online = 1)",
+        ", 4326), 1) / 1000.0, 22583.0) \
+              ELSE 0.0 END * 1.0 AS comparison_value \
+         FROM entities e JOIN projects p ON e.target = p.project_id \
+         WHERE e.kind = 'Project' AND e.publish = 1 \
+         AND (p.point IS NOT NULL OR p.regions IS NOT NULL OR p.entirely_online = 1)",
     );
     apply_project_filters(&mut qb, fq);
 
@@ -820,25 +962,56 @@ async fn search_location_only(
 
     // Event subquery
     qb.push(
-        "SELECT e.slug, 'Event' AS entity_type, ev.name AS title, ev.description, ev.image, '' AS goal, '' AS task, '' AS status, CASE WHEN ev.entirely_online = 1 THEN 'Online' WHEN ev.city != '' AND ev.state != '' THEN ev.city || ', ' || ev.state WHEN ev.location_name != '' THEN ev.location_name ELSE '' END AS location_display, (SELECT ei.begin FROM event_instances ei WHERE ei.event_id = ev.event_id AND ei.begin >= datetime('now') ORDER BY ei.begin LIMIT 1) AS event_begin, ST_Distance(ev.point, MakePoint(",
+        "SELECT e.slug, 'Event' AS entity_type, ev.name AS title, ev.description, ev.image, \
+         '' AS goal, '' AS task, '' AS status, \
+         CASE WHEN ev.entirely_online = 1 THEN 'Online' \
+              WHEN ev.city != '' AND ev.state != '' THEN ev.city || ', ' || ev.state \
+              WHEN ev.location_name != '' THEN ev.location_name \
+              ELSE '' END AS location_display, \
+         (SELECT ei.begin FROM event_instances ei WHERE ei.event_id = ev.event_id \
+          AND ei.begin >= datetime('now') ORDER BY ei.begin LIMIT 1) AS event_begin, \
+         CASE WHEN ev.entirely_online = 1 THEN NULL \
+              WHEN ev.regions IS NOT NULL THEN ST_Distance(ST_MakeValid(ev.regions), MakePoint(",
+    );
+    qb.push_bind(lng);
+    qb.push(", ");
+    qb.push_bind(lat);
+    qb.push(", 4326), 1) / 1000.0 WHEN ev.point IS NOT NULL THEN ST_Distance(ev.point, MakePoint(");
+    qb.push_bind(lng);
+    qb.push(", ");
+    qb.push_bind(lat);
+    qb.push(
+        ", 4326), 1) / 1000.0 \
+         ELSE NULL END AS distance_km, \
+         CASE WHEN ev.regions IS NOT NULL THEN AsGeoJSON(ev.regions) \
+              WHEN ev.point IS NOT NULL THEN AsGeoJSON(ev.point) \
+              ELSE NULL END AS geo_json, \
+         COALESCE(MAX(0.0, julianday((SELECT ei2.begin FROM event_instances ei2 \
+          WHERE ei2.event_id = ev.event_id AND ei2.begin >= datetime('now') \
+          ORDER BY ei2.begin LIMIT 1)) - julianday('now')), 0.0) * 10.0 \
+         + CASE WHEN ev.entirely_online = 1 THEN 0.0 \
+                WHEN ev.regions IS NOT NULL THEN COALESCE(ST_Distance(ST_MakeValid(ev.regions), MakePoint(",
     );
     qb.push_bind(lng);
     qb.push(", ");
     qb.push_bind(lat);
     qb.push(
-        ", 4326), 1) AS distance, CASE WHEN ev.regions IS NOT NULL AND ST_Contains(ev.regions, MakePoint(",
+        ", 4326), 1) / 1000.0, 0) \
+                WHEN ev.point IS NOT NULL THEN COALESCE(ST_Distance(ev.point, MakePoint(",
     );
     qb.push_bind(lng);
     qb.push(", ");
     qb.push_bind(lat);
     qb.push(
-        ", 4326)) THEN ST_Area(ev.regions, 1) ELSE NULL END AS region_area, CASE WHEN ev.regions IS NOT NULL THEN AsGeoJSON(ev.regions) WHEN ev.point IS NOT NULL THEN AsGeoJSON(ev.point) ELSE NULL END AS geo_json FROM entities e JOIN events ev ON e.target = ev.event_id WHERE e.kind = 'Event' AND e.publish = 1 AND (ev.point IS NOT NULL OR ev.regions IS NOT NULL OR ev.entirely_online = 1)",
+        ", 4326), 1) / 1000.0, 22583.0) \
+                ELSE 0.0 END * 1.0 AS comparison_value \
+         FROM entities e JOIN events ev ON e.target = ev.event_id \
+         WHERE e.kind = 'Event' AND e.publish = 1 \
+         AND (ev.point IS NOT NULL OR ev.regions IS NOT NULL OR ev.entirely_online = 1)",
     );
     apply_event_filters(&mut qb, fq);
 
-    qb.push(
-        ") ORDER BY CASE WHEN region_area IS NOT NULL THEN 0 ELSE 1 END, region_area, distance LIMIT ",
-    );
+    qb.push(") ORDER BY comparison_value LIMIT ");
     qb.push_bind(limit);
     qb.push(" OFFSET ");
     qb.push_bind(offset);
@@ -855,9 +1028,9 @@ async fn search_location_only(
             String,         // status
             String,         // location_display
             Option<String>, // event_begin
-            Option<f64>,    // distance
-            Option<f64>,    // region_area
+            Option<f64>,    // distance_km
             Option<String>, // geo_json
+            f64,            // comparison_value
         )>()
         .fetch_all(db())
         .await?;
@@ -879,8 +1052,8 @@ async fn search_location_only(
                 event_date_month: month,
                 event_date_day: day,
                 event_date_year: year,
-                distance_km: row.10.map(|d| d / 1000.0),
-                geo_json: row.12,
+                distance_km: row.10,
+                geo_json: row.11,
             }
         })
         .collect();
@@ -893,6 +1066,8 @@ pub async fn handle_finder(
     _session: &Session,
     QsQuery(query): QsQuery<FinderQuery>,
     Authenticated(user_info): Authenticated,
+    device: Device,
+    interaction: Interaction,
 ) -> Result<Response, poem::Error> {
     let q = query.q.as_deref().unwrap_or("").trim().to_string();
     let lat = query.lat;
@@ -914,33 +1089,101 @@ pub async fn handle_finder(
         if has_query {
             search_with_location(&query, lat_val, lng_val, page)
                 .await
-                .unwrap_or(FinderSearchResult {
-                    results: Vec::new(),
-                    total: 0,
+                .unwrap_or_else(|e| {
+                    tracing::error!("Finder search_with_location error: {}", e);
+                    FinderSearchResult {
+                        results: Vec::new(),
+                        total: 0,
+                    }
                 })
         } else {
             search_location_only(&query, lat_val, lng_val, page)
                 .await
-                .unwrap_or(FinderSearchResult {
-                    results: Vec::new(),
-                    total: 0,
+                .unwrap_or_else(|e| {
+                    tracing::error!("Finder search_location_only error: {}", e);
+                    FinderSearchResult {
+                        results: Vec::new(),
+                        total: 0,
+                    }
                 })
         }
     } else if has_query {
-        search_text_only(&query, page)
-            .await
-            .unwrap_or(FinderSearchResult {
+        search_text_only(&query, page).await.unwrap_or_else(|e| {
+            tracing::error!("Finder search_text_only error: {}", e);
+            FinderSearchResult {
                 results: Vec::new(),
                 total: 0,
-            })
+            }
+        })
     } else {
-        search_all(&query, page)
-            .await
-            .unwrap_or(FinderSearchResult {
+        search_all(&query, page).await.unwrap_or_else(|e| {
+            tracing::error!("Finder search_all error: {}", e);
+            FinderSearchResult {
                 results: Vec::new(),
                 total: 0,
-            })
+            }
+        })
     };
+
+    // Log search event
+    {
+        use common::message::log::SearchEvent;
+        use common::service::send;
+        use common::timestring::TimeString;
+
+        let search_type = match (has_query, has_location) {
+            (true, true) => "text_location",
+            (false, true) => "location_only",
+            (true, false) => "text_only",
+            (false, false) => "browse_all",
+        };
+
+        let event = SearchEvent {
+            when: TimeString::now().to_string(),
+            device_id: device.as_ref().to_string(),
+            interaction_id: interaction.as_ref().to_string(),
+            user_id: user_info.as_ref().map(|u| u.user_id.to_string()),
+            query_text: if q.is_empty() { None } else { Some(q.clone()) },
+            lat: query.lat,
+            lng: query.lng,
+            location_name: if query.location_name.as_deref().unwrap_or("").is_empty() {
+                None
+            } else {
+                query.location_name.clone()
+            },
+            location_type: query.location_type.clone(),
+            topics: if query.topic.is_empty() {
+                None
+            } else {
+                serde_json::to_string(&query.topic).ok()
+            },
+            audiences: if query.audience.is_empty() {
+                None
+            } else {
+                serde_json::to_string(&query.audience).ok()
+            },
+            activities: if query.activity.is_empty() {
+                None
+            } else {
+                serde_json::to_string(&query.activity).ok()
+            },
+            misc_filters: if query.misc_filter.is_empty() {
+                None
+            } else {
+                serde_json::to_string(&query.misc_filter).ok()
+            },
+            show_completed: query.show_completed.is_some(),
+            page: page as i32,
+            result_count: search_result.total as i32,
+            search_type: search_type.to_string(),
+        };
+
+        tokio::spawn(async move {
+            if let Err(e) = send("log.search_event", event).await {
+                tracing::warn!("Failed to log search event: {}", e);
+            }
+        });
+    }
 
     let total_pages = if search_result.total == 0 {
         0

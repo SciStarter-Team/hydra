@@ -351,6 +351,44 @@ pub async fn handle_email_event(req: &async_nats::service::Request) -> Result<()
     Ok(())
 }
 
+pub async fn handle_search_event(req: &async_nats::service::Request) -> Result<()> {
+    use common::message::log::SearchEvent;
+    use log_service::database::tables::SearchEventRow;
+
+    let event: SearchEvent = decode_structured_message(req.message.clone())?;
+
+    let row = SearchEventRow {
+        when: event.when,
+        device_id: event.device_id,
+        interaction_id: event.interaction_id,
+        user_id: event.user_id,
+        query_text: event.query_text,
+        lat: event.lat,
+        lng: event.lng,
+        location_name: event.location_name,
+        location_type: event.location_type,
+        topics: event.topics,
+        audiences: event.audiences,
+        activities: event.activities,
+        misc_filters: event.misc_filters,
+        show_completed: event.show_completed,
+        page: event.page,
+        result_count: event.result_count,
+        search_type: event.search_type,
+    };
+
+    {
+        let database = DATABASE
+            .read()
+            .as_ref()
+            .expect("Database not initialized")
+            .clone();
+        database.search_events.insert(row).await?
+    };
+
+    Ok(())
+}
+
 pub async fn handle_affiliate_participation(
     req: &async_nats::service::Request,
 ) -> Result<AffiliateParticipantsResponse, anyhow::Error> {

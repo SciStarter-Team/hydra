@@ -217,6 +217,29 @@ pub struct ProjectCount {
     pub count: i32,
 }
 
+// Search Analytics
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchEvent {
+    pub when: String,
+    pub device_id: String,
+    pub interaction_id: String,
+    pub user_id: Option<String>,
+    pub query_text: Option<String>,
+    pub lat: Option<f64>,
+    pub lng: Option<f64>,
+    pub location_name: Option<String>,
+    pub location_type: Option<String>,
+    pub topics: Option<String>,
+    pub audiences: Option<String>,
+    pub activities: Option<String>,
+    pub misc_filters: Option<String>,
+    pub show_completed: bool,
+    pub page: i32,
+    pub result_count: i32,
+    pub search_type: String,
+}
+
 // External Links - Get or create ULIDs for URLs
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExternalLinksRequest {

@@ -131,7 +131,7 @@
                 <tr><td class="font-bold uppercase text-sm tracking-wide text-right align-top">Task</td><td class="self-tooltip text-sm pl-2 line-clamp-1 leading-[1.4]"><%= result.task %></td></tr>
                 <% } %>
                 <% if !result.location_display.is_empty() { %>
-                <tr><td class="font-bold uppercase text-sm tracking-wide text-right align-top">Where</td><td class="text-sm pl-2 line-clamp-1"><%= result.location_display %><% if let Some(km) = result.distance_km { %> (<%= format!("{:.0}", km) %> km)<% } %></td></tr>
+                <tr><td class="font-bold uppercase text-sm tracking-wide text-right align-top">Where</td><td class="text-sm pl-2 line-clamp-1"><%= result.location_display %><% if let Some(mi) = result.distance_mi() { %> (<%= format!("{:.0}", mi) %> mi)<% } %></td></tr>
                 <% } else if let Some(ref geo) = result.geo_json { %>
                 <tr><td class="font-bold uppercase text-sm tracking-wide text-right align-top">Where</td><td class="text-sm pl-2"><a href="#" class="text-primary-action underline" hx-on:click="event.preventDefault(); showFinderMap('<%= result.slug %>', <%= geo %>)">See map</a></td></tr>
                 <% } %>
@@ -156,7 +156,7 @@
               </a>
               <h2><a href="/<%= result.slug %>"><%= result.title %></a></h2>
               <% if !result.location_display.is_empty() { %>
-              <p><%= result.location_display %><% if let Some(km) = result.distance_km { %> (<%= format!("{:.0}", km) %> km)<% } %></p>
+              <p><%= result.location_display %><% if let Some(mi) = result.distance_mi() { %> (<%= format!("{:.0}", mi) %> mi)<% } %></p>
               <% } else if let Some(ref geo) = result.geo_json { %>
               <p><a href="#" class="text-primary-action underline" hx-on:click="event.preventDefault(); showFinderMap('<%= result.slug %>', <%= geo %>)">See map</a></p>
               <% } %>

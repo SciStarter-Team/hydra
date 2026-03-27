@@ -296,3 +296,57 @@ inventory::submit! {
         schema: ExchangeEventRow::schema,
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchEventRow {
+    pub when: String,
+    pub device_id: String,
+    pub interaction_id: String,
+    pub user_id: Option<String>,
+    pub query_text: Option<String>,
+    pub lat: Option<f64>,
+    pub lng: Option<f64>,
+    pub location_name: Option<String>,
+    pub location_type: Option<String>,
+    pub topics: Option<String>,
+    pub audiences: Option<String>,
+    pub activities: Option<String>,
+    pub misc_filters: Option<String>,
+    pub show_completed: bool,
+    pub page: i32,
+    pub result_count: i32,
+    pub search_type: String,
+}
+
+impl TableRow for SearchEventRow {
+    const TABLE_NAME: &'static str = "search_events";
+
+    fn schema() -> Schema {
+        Schema::new(vec![
+            Field::new("when", DataType::Utf8, false),
+            Field::new("device_id", DataType::Utf8, false),
+            Field::new("interaction_id", DataType::Utf8, false),
+            Field::new("user_id", DataType::Utf8, true),
+            Field::new("query_text", DataType::Utf8, true),
+            Field::new("lat", DataType::Float64, true),
+            Field::new("lng", DataType::Float64, true),
+            Field::new("location_name", DataType::Utf8, true),
+            Field::new("location_type", DataType::Utf8, true),
+            Field::new("topics", DataType::Utf8, true),
+            Field::new("audiences", DataType::Utf8, true),
+            Field::new("activities", DataType::Utf8, true),
+            Field::new("misc_filters", DataType::Utf8, true),
+            Field::new("show_completed", DataType::Boolean, false),
+            Field::new("page", DataType::Int32, false),
+            Field::new("result_count", DataType::Int32, false),
+            Field::new("search_type", DataType::Utf8, false),
+        ])
+    }
+}
+
+inventory::submit! {
+    TableRegistration {
+        name: SearchEventRow::TABLE_NAME,
+        schema: SearchEventRow::schema,
+    }
+}

@@ -22,8 +22,8 @@ use handlers::{
     handle_contributors, handle_email_event, handle_external_link_clickthrough,
     handle_external_links, handle_go_url_stats, handle_health_check, handle_join, handle_page_view,
     handle_participation_analytics, handle_project_participation,
-    handle_project_participation_record, handle_recent_activity, handle_top_performers_analytics,
-    handle_user_emails_update, handle_user_tags_update,
+    handle_project_participation_record, handle_recent_activity, handle_search_event,
+    handle_top_performers_analytics, handle_user_emails_update, handle_user_tags_update,
 };
 use log_service::{Database, run_compactor_service};
 use parking_lot::RwLock;
@@ -180,6 +180,11 @@ async fn main() -> Result<()> {
         log_group,
         "exchange_event",
         exchange::record_exchange_event
+    ));
+    toplevel.spawn(recv_handler!(
+        log_group,
+        "search_event",
+        handle_search_event
     ));
     toplevel.spawn(handler!(
         log_group,
