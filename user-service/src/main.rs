@@ -1787,6 +1787,144 @@ async fn apply_simple_tutorial_state(
     Ok(())
 }
 
+async fn claim_codes_synchronize() {
+    if cfg!(debug_assertions) {
+        return;
+    }
+
+    #[derive(serde::Deserialize)]
+    struct ClaimCodeDataImport {
+        id: i32,
+        code: String,
+        category: String,
+        claimed: bool,
+        claimed_by: Option<String>,
+        claimed_at: Option<String>,
+    }
+
+    loop {
+        let last_id: i32 = misc::get("claim-code-sync-last-id")
+            .await
+            .expect("Retrieving sync last_id failed")
+            .unwrap_or(0);
+        let claimed_since: String = misc::get("claim-code-sync-claimed-since")
+            .await
+            .expect("Retrieving sync claimed_since failed")
+            .unwrap_or_else(|| String::from("1900-01-01T00:00:00Z"));
+
+        println!(
+            "Syncing claim codes with last_id {} and claimed_since {}",
+            last_id, claimed_since
+        );
+
+        let client = reqwest::Client::new();
+
+        let claim_codes: Vec<ClaimCodeDataImport> = match client
+            .get("https://scistarter.org/staff/sync/claim_codes")
+            .bearer_auth(env!("SYNC_TOKEN"))
+            .query(&[
+                ("last_id", &last_id.to_string()),
+                ("claimed_since", &claimed_since),
+            ])
+            .send()
+            .await
+        {
+            Ok(response) => match response.error_for_status() {
+                Ok(resp) => {
+                    let response_text = match resp.text().await {
+                        Ok(text) => text,
+                        Err(e) => {
+                            eprintln!("Failed to read claim_codes response body: {}", e);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    };
+
+                    match serde_json::from_str(&response_text) {
+                        Ok(codes) => codes,
+                        Err(e) => {
+                            eprintln!("JSON parsing error for claim_codes: {}", e);
+                            eprintln!("Response body: {}", response_text);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("HTTP error for claim_codes: {}", e);
+                    sleep(Duration::from_secs(60)).await;
+                    continue;
+                }
+            },
+            Err(e) => {
+                eprintln!("Request error for claim_codes: {}", e);
+                sleep(Duration::from_secs(60)).await;
+                continue;
+            }
+        };
+
+        let db = db();
+        let mut new_last_id = last_id;
+        let mut new_claimed_since = claimed_since.clone();
+
+        let got_codes = claim_codes.len();
+
+        for code in claim_codes {
+            if code.id > new_last_id {
+                new_last_id = code.id;
+            }
+
+            if let Some(ref ca) = code.claimed_at {
+                if *ca > new_claimed_since {
+                    new_claimed_since = ca.clone();
+                }
+            }
+
+            let claimed = code.claimed as i32;
+
+            if let Err(e) = sqlx::query!(
+                r#"INSERT OR REPLACE INTO claim_codes
+                   (id, code, category, claimed, claimed_by, claimed_at)
+                   VALUES (?, ?, ?, ?, ?, ?)"#,
+                code.id,
+                code.code,
+                code.category,
+                claimed,
+                code.claimed_by,
+                code.claimed_at,
+            )
+            .execute(db)
+            .await
+            {
+                eprintln!("Failed to insert claim code {}: {}", code.id, e);
+                continue;
+            }
+
+            println!(
+                "Synced claim code {} (category: {})",
+                code.id, code.category
+            );
+        }
+
+        misc::set("claim-code-sync-last-id", new_last_id)
+            .await
+            .expect("Saving sync last_id failed");
+        misc::set("claim-code-sync-claimed-since", new_claimed_since)
+            .await
+            .expect("Saving sync claimed_since failed");
+
+        if got_codes == 0 {
+            println!("No new claim codes to sync");
+        }
+
+        if got_codes == 500 {
+            sleep(Duration::from_secs(60)).await;
+        } else {
+            sleep(Duration::from_secs(60 * 60)).await;
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() {
     common::shared::init("user").await;
@@ -1809,6 +1947,8 @@ async fn main() {
     let _certificates_sync_task = spawn(certificates_synchronize());
 
     let _workflow_states_sync_task = spawn(workflow_states_synchronize());
+
+    let _claim_codes_sync_task = spawn(claim_codes_synchronize());
 
     // WebAuthn session cleanup task
     let webauthn_cleanup_task = spawn(async {
