@@ -1,4 +1,5 @@
 pub mod admin_layout;
+pub mod detail_page;
 pub mod footer;
 pub mod forum;
 pub mod head;

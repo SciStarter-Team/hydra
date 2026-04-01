@@ -523,8 +523,64 @@ impl Entity {
                 }
             }
             EntityKind::Form => todo!(),
-            EntityKind::Project => todo!(),
-            EntityKind::Event => todo!(),
+            EntityKind::Project => {
+                let target_id = self.target.as_ulid().ok_or_else(|| {
+                    poem::Error::from_string(
+                        "Project entity has no ULID target",
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                    )
+                })?;
+
+                let detail = crate::component::detail_page::DetailPage {
+                    slug: self.slug.clone(),
+                    kind: crate::component::detail_page::DetailPageKind::Project,
+                    target_id,
+                };
+
+                let content = detail.prepare(user_info.clone()).await?;
+                let title = content.name.clone();
+
+                let layout = StandardLayout::new(format!("/{}", &self.slug), content)
+                    .prepare(user_info.clone())
+                    .await?;
+
+                crate::component::detail_page::DetailPageWrapper {
+                    head: Head::default().with_maplibre().prepare(None).await?,
+                    layout,
+                    title,
+                }
+                .into_response(None)
+                .await?
+            }
+            EntityKind::Event => {
+                let target_id = self.target.as_ulid().ok_or_else(|| {
+                    poem::Error::from_string(
+                        "Event entity has no ULID target",
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                    )
+                })?;
+
+                let detail = crate::component::detail_page::DetailPage {
+                    slug: self.slug.clone(),
+                    kind: crate::component::detail_page::DetailPageKind::Event,
+                    target_id,
+                };
+
+                let content = detail.prepare(user_info.clone()).await?;
+                let title = content.name.clone();
+
+                let layout = StandardLayout::new(format!("/{}", &self.slug), content)
+                    .prepare(user_info.clone())
+                    .await?;
+
+                crate::component::detail_page::DetailPageWrapper {
+                    head: Head::default().with_maplibre().prepare(None).await?,
+                    layout,
+                    title,
+                }
+                .into_response(None)
+                .await?
+            }
             EntityKind::WordPress => {
                 let page_url = self.target.as_str().ok_or_else(|| {
                     poem::Error::from_string(

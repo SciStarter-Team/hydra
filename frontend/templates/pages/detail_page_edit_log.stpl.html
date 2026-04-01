@@ -1,0 +1,23 @@
+<div class="text-xs text-gray-500 space-y-1">
+  <% if self.entries.is_empty() { %>
+  <p>No edits recorded.</p>
+  <% } else { %>
+  <% for entry in &self.entries { %>
+  <div class="flex gap-2">
+    <% if entry.is_creation { %>
+    <% if !entry.user_handle.is_empty() { %>
+    <span class="font-medium"><%= &entry.user_handle %></span>
+    <span>created</span>
+    <% } else { %>
+    <span class="font-medium">Created</span>
+    <% } %>
+    <% } else { %>
+    <span class="font-medium"><%= &entry.user_handle %></span>
+    <span>edited</span>
+    <span class="font-medium"><%= &entry.field %></span>
+    <% } %>
+    <span class="text-gray-400"><%= &entry.when %></span>
+  </div>
+  <% } %>
+  <% } %>
+</div>

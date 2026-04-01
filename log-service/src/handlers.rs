@@ -5,9 +5,11 @@ use common::{
         ActsToDateRequest, ActsToDateResponse, AffiliateParticipantsRequest,
         AffiliateParticipantsResponse, AnalyticsQuery, AnalyticsResponse,
         ArticulateCompletionRecord, ArticulateCompletionRequest, ArticulateCompletionResponse,
-        ExternalLinkClickthroughResponse, ExternalLinksResponse, GoUrlStatsRequest,
-        GoUrlStatsResponse, ProjectParticipationRecord, ProjectParticipationRequest,
-        ProjectParticipationResponse, RecentActivityRequest, RecentActivityResponse,
+        EditLogEntry, EditLogRequest, EditLogResponse, ExternalLinkClickthroughResponse,
+        ExternalLinksResponse, GoUrlStatsRequest, GoUrlStatsResponse, LastEditedRequest,
+        LastEditedResponse, ProjectMemberCountRequest, ProjectMemberCountResponse,
+        ProjectParticipationRecord, ProjectParticipationRequest, ProjectParticipationResponse,
+        RecentActivityRequest, RecentActivityResponse,
     },
     service::{TriggerEvent, decode_structured_message, trigger_email},
 };
@@ -975,4 +977,137 @@ pub async fn handle_acts_to_date(
         number: total,
         date_reached: None,
     })
+}
+
+pub async fn handle_project_member_count(
+    req: &async_nats::service::Request,
+) -> Result<ProjectMemberCountResponse> {
+    let request: ProjectMemberCountRequest = decode_structured_message(req.message.clone())?;
+
+    let count = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) as "count!: i64" FROM project_participations_cache WHERE project_id = ?"#,
+        request.project_id
+    )
+    .fetch_one(common::shared::db())
+    .await?;
+
+    Ok(ProjectMemberCountResponse { count })
+}
+
+pub async fn handle_last_edited(req: &async_nats::service::Request) -> Result<LastEditedResponse> {
+    use datafusion::arrow::array::{Array, StringArray};
+
+    let request: LastEditedRequest = decode_structured_message(req.message.clone())?;
+
+    let database = DATABASE
+        .read()
+        .as_ref()
+        .expect("Database not initialized")
+        .clone();
+
+    let ctx = database.context();
+
+    let df = ctx
+        .table("activity_log_realtime")
+        .await?
+        .filter(
+            col("action")
+                .eq(lit("project-edit"))
+                .or(col("action").eq(lit("event-edit"))),
+        )?
+        .filter(col("target").eq(lit(&request.target_id)))?
+        .select(vec![col("when")])?
+        .sort(vec![col("when").sort(false, true)])?
+        .limit(0, Some(1))?;
+
+    let batches = df.collect().await?;
+
+    let when = batches
+        .first()
+        .filter(|b| b.num_rows() > 0)
+        .and_then(|b| {
+            b.column(0)
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .and_then(|a| {
+                    if a.is_null(0) {
+                        None
+                    } else {
+                        Some(a.value(0).to_string())
+                    }
+                })
+        })
+        .unwrap_or_default();
+
+    Ok(LastEditedResponse { when })
+}
+
+pub async fn handle_edit_log(req: &async_nats::service::Request) -> Result<EditLogResponse> {
+    use datafusion::arrow::array::{Array, StringArray};
+
+    let request: EditLogRequest = decode_structured_message(req.message.clone())?;
+
+    let database = DATABASE
+        .read()
+        .as_ref()
+        .expect("Database not initialized")
+        .clone();
+
+    let ctx = database.context();
+
+    let df = ctx
+        .table("activity_log_realtime")
+        .await?
+        .filter(
+            col("action")
+                .eq(lit("project-edit"))
+                .or(col("action").eq(lit("event-edit"))),
+        )?
+        .filter(col("target").eq(lit(&request.target_id)))?
+        .select(vec![col("when"), col("user_id"), col("extra")])?
+        .sort(vec![col("when").sort(false, true)])?
+        .limit(0, Some(request.limit.max(1) as usize))?;
+
+    let batches = df.collect().await?;
+
+    let mut entries = Vec::new();
+    for batch in &batches {
+        let when_col = batch
+            .column(0)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        let user_col = batch
+            .column(1)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        let extra_col = batch
+            .column(2)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+
+        for i in 0..batch.num_rows() {
+            entries.push(EditLogEntry {
+                when: if when_col.is_null(i) {
+                    String::new()
+                } else {
+                    when_col.value(i).to_string()
+                },
+                user_id: if user_col.is_null(i) {
+                    String::new()
+                } else {
+                    user_col.value(i).to_string()
+                },
+                field: if extra_col.is_null(i) {
+                    String::new()
+                } else {
+                    extra_col.value(i).to_string()
+                },
+            });
+        }
+    }
+
+    Ok(EditLogResponse { entries })
 }

@@ -21,6 +21,7 @@ pub mod form;
 pub mod geocode;
 pub mod gourl;
 pub mod health;
+pub mod lazy_cache;
 pub mod lru_cache;
 pub mod mcp;
 pub mod middleware;
@@ -271,6 +272,39 @@ fn user_facing() -> impl Endpoint {
             get(csm::csm_autocomplete_countries),
         )
         .at("/-entity-password/*slug", post(entity_password_verify))
+        .at(
+            "/-detail/:id/like",
+            post(component::detail_page::toggle_like),
+        )
+        .at(
+            "/-detail/:id/save",
+            post(component::detail_page::save_project),
+        )
+        .at(
+            "/-detail/:id/share",
+            get(component::detail_page::share_modal),
+        )
+        .at("/-detail/:id/map", get(component::detail_page::map_modal))
+        .at(
+            "/-detail/:id/review",
+            post(component::detail_page::submit_review),
+        )
+        .at(
+            "/-detail/:id/lists",
+            get(component::detail_page::lists_modal),
+        )
+        .at(
+            "/-detail/:id/add-to-list",
+            post(component::detail_page::add_to_list),
+        )
+        .at(
+            "/-detail/:id/join",
+            post(component::detail_page::record_join),
+        )
+        .at(
+            "/-detail/:id/edit-log",
+            get(component::detail_page::edit_log),
+        )
         .at("/*slug", get(entity_page))
         .with(middleware::analytics::AnalyticsMiddleware)
 }

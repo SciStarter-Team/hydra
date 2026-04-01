@@ -344,3 +344,46 @@ pub struct ActsToDateResponse {
     pub number: i64,
     pub date_reached: Option<String>,
 }
+
+/// Request the number of unique participants for a project.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectMemberCountRequest {
+    pub project_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectMemberCountResponse {
+    pub count: i64,
+}
+
+/// Request the last-edited timestamp for a project or event.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LastEditedRequest {
+    pub target_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LastEditedResponse {
+    /// ISO 8601 timestamp of the most recent edit, or empty if never edited.
+    pub when: String,
+}
+
+/// Request the recent edit log for a project or event (staff view).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EditLogRequest {
+    pub target_id: String,
+    pub limit: i64,
+}
+
+/// A single entry in the edit log.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EditLogEntry {
+    pub when: String,
+    pub user_id: String,
+    pub field: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EditLogResponse {
+    pub entries: Vec<EditLogEntry>,
+}

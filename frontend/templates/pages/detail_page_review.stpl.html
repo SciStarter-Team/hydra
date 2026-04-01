@@ -1,0 +1,15 @@
+<div class="flex mb-6" <% if self.oob { %>hx-swap-oob="afterbegin:#reviews-list"<% } %>>
+  <% if !self.review.user_image.is_empty() { %>
+  <div class="mr-4 shrink-0">
+    <img class="w-12 h-12 rounded-full object-cover" src="https://orrery-media.s3.amazonaws.com/<%= &self.review.user_image %>" alt="profile image">
+  </div>
+  <% } %>
+  <div>
+    <div class="text-sm mb-1"><%- &self.review.text %></div>
+    <div class="text-xs text-gray-500">
+      <a href="/profile?for=<%= &self.review.user_id %>" class="text-primary-action hover:underline"><%= if self.review.user_handle.is_empty() { format!("({})", &self.review.user_id) } else { self.review.user_handle.clone() } %></a>
+      <span class="mx-1">&middot;</span>
+      <span><%= self.review.when.format_display() %></span>
+    </div>
+  </div>
+</div>

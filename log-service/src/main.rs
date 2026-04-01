@@ -19,11 +19,12 @@ use handlers::{
     handle_activity_log, handle_acts_of_science_create, handle_acts_to_date,
     handle_affiliate_participation, handle_articulate_completion,
     handle_articulate_completion_record, handle_clickthrough, handle_clickthrough_analytics,
-    handle_contributors, handle_email_event, handle_external_link_clickthrough,
-    handle_external_links, handle_go_url_stats, handle_health_check, handle_join, handle_page_view,
-    handle_participation_analytics, handle_project_participation,
-    handle_project_participation_record, handle_recent_activity, handle_search_event,
-    handle_top_performers_analytics, handle_user_emails_update, handle_user_tags_update,
+    handle_contributors, handle_edit_log, handle_email_event, handle_external_link_clickthrough,
+    handle_external_links, handle_go_url_stats, handle_health_check, handle_join,
+    handle_last_edited, handle_page_view, handle_participation_analytics,
+    handle_project_member_count, handle_project_participation, handle_project_participation_record,
+    handle_recent_activity, handle_search_event, handle_top_performers_analytics,
+    handle_user_emails_update, handle_user_tags_update,
 };
 use log_service::{Database, run_compactor_service};
 use parking_lot::RwLock;
@@ -236,6 +237,13 @@ async fn main() -> Result<()> {
         "project_participation_record",
         handle_project_participation_record
     ));
+    toplevel.spawn(handler!(
+        log_group,
+        "project_member_count",
+        handle_project_member_count
+    ));
+    toplevel.spawn(handler!(log_group, "last_edited", handle_last_edited));
+    toplevel.spawn(handler!(log_group, "edit_log", handle_edit_log));
 
     // Stats endpoints
     let stats_group = svc.group("log.stats");
