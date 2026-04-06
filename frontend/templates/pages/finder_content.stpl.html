@@ -272,6 +272,31 @@
         if (!params.state.query) { clearLocationFields(); }
       },
       plugins: [
+        {
+          getSources: function(params) {
+            var q = (params.query || '').trim();
+            if (q.length < 3 || q.length > 10 || !/\d/.test(q) || !/^[a-zA-Z0-9 \-]+$/.test(q)) return [];
+            return [{
+              sourceId: 'zipcode',
+              getItems: function() {
+                return fetch('/-zipcode/' + encodeURIComponent(q))
+                  .then(function(r) { return r.json(); })
+                  .then(function(data) { return data.results || []; })
+                  .catch(function() { return []; });
+              },
+              templates: {
+                header: function(params) { return params.html`<div class="aa-SourceHeader">Postal Code</div>`; },
+                item: function(params) { return params.html`<div class="aa-ItemContent">${params.item.formatted}</div>`; }
+              },
+              onSelect: function(params) {
+                document.getElementById('geosearch-lat').value = params.item.latitude;
+                document.getElementById('geosearch-lng').value = params.item.longitude;
+                document.getElementById('geosearch-name').value = params.item.formatted;
+                params.setQuery(params.item.formatted);
+              }
+            }];
+          }
+        },
         opencage.OpenCageGeoSearchPlugin(
           { key: '<%= self.geosearch_key %>' },
           {

@@ -772,6 +772,10 @@ pub async fn handle_external_link_clickthrough(
     Ok(ExternalLinkClickthroughResponse { url })
 }
 
+fn is_user_id(s: &str) -> bool {
+    s.chars().all(|c| c.is_ascii_digit()) || Ulid::from_string(s).is_ok()
+}
+
 pub async fn handle_contributors(
     req: &async_nats::service::Request,
 ) -> Result<common::message::log::ContributorsResponse, anyhow::Error> {
@@ -814,8 +818,9 @@ pub async fn handle_contributors(
     let db = common::shared::db();
 
     // Build the query dynamically based on mode
+    // Use GROUP BY to deduplicate on (name, act, project, date)
     let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new(
-        "SELECT name, act, project, organization, entity_slug, DATE(created_at) as date FROM acts_of_science WHERE accepted = 1 AND source != ",
+        "SELECT name, act, project, MAX(organization) as organization, MAX(entity_slug) as entity_slug, DATE(created_at) as date FROM acts_of_science WHERE accepted = 1 AND display = 1 AND source != ",
     );
     qb.push_bind(incidental);
     qb.push(" AND created_at >= ");
@@ -827,22 +832,22 @@ pub async fn handle_contributors(
         "name" => {
             qb.push(" AND UPPER(SUBSTR(name, 1, 1)) = ");
             qb.push_bind(letter.clone());
-            qb.push(" ORDER BY name, date DESC, created_at DESC");
+            qb.push(" GROUP BY name, act, project, date ORDER BY name, date DESC");
         }
         "project" => {
-            qb.push(" AND project != '' AND project IS NOT NULL ORDER BY project, date DESC, created_at DESC");
+            qb.push(" AND project != '' AND project IS NOT NULL GROUP BY name, act, project, date ORDER BY project, date DESC");
         }
         "org" => {
-            qb.push(" AND organization != '' AND organization IS NOT NULL ORDER BY organization, date DESC, created_at DESC");
+            qb.push(" AND organization != '' AND organization IS NOT NULL GROUP BY name, act, project, date ORDER BY MAX(organization), date DESC");
         }
         "date" | _ => {
-            qb.push(" ORDER BY date DESC, source, created_at DESC");
+            qb.push(" GROUP BY name, act, project, date ORDER BY date DESC");
         }
     }
 
-    // Count query
+    // Count query — count distinct (name, act, project, date) tuples
     let mut count_qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new(
-        "SELECT COUNT(*) FROM acts_of_science WHERE accepted = 1 AND source != ",
+        "SELECT COUNT(*) FROM (SELECT DISTINCT name, act, project, DATE(created_at) as date FROM acts_of_science WHERE accepted = 1 AND display = 1 AND source != ",
     );
     count_qb.push_bind(incidental);
     count_qb.push(" AND created_at >= ");
@@ -863,6 +868,7 @@ pub async fn handle_contributors(
         }
         _ => {}
     }
+    count_qb.push(")");
 
     let total: i64 = count_qb.build_query_scalar().fetch_one(db).await?;
 
@@ -889,7 +895,13 @@ pub async fn handle_contributors(
     let contributors: Vec<ContributorEntry> = rows
         .into_iter()
         .map(|r| ContributorEntry {
-            name: r.0,
+            name: r.0.map(|n| {
+                if is_user_id(&n) {
+                    "anon".to_string()
+                } else {
+                    n
+                }
+            }),
             act: r.1,
             project: r.2,
             organization: r.3,

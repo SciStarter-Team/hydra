@@ -1,0 +1,45 @@
+<div id="field-<%= &self.field_type %>" class="p-3 border border-blue-300 rounded-sm bg-blue-50 mb-2">
+  <form hx-put="/-detail/<%= &self.target_id %>/field/<%= &self.field_type %>"
+        hx-target="#field-<%= &self.field_type %>"
+        hx-swap="outerHTML">
+    <label class="block text-xs font-semibold mb-1"><%= &self.label %></label>
+    <% match &self.input_kind { crate::component::detail_page_edit::FieldInputKind::Text => { %>
+    <input type="text" name="value" value="<%= &self.current_value %>" class="input input-sm w-full">
+    <% } crate::component::detail_page_edit::FieldInputKind::Url => { %>
+    <input type="url" name="value" value="<%= &self.current_value %>" class="input input-sm w-full" placeholder="https://...">
+    <% } crate::component::detail_page_edit::FieldInputKind::Textarea => { %>
+    <textarea name="value" rows="4" class="input input-sm w-full"><%= &self.current_value %></textarea>
+    <% } crate::component::detail_page_edit::FieldInputKind::RichText => { %>
+    <textarea name="value" rows="6" class="input input-sm w-full"><%= &self.current_value %></textarea>
+    <% } crate::component::detail_page_edit::FieldInputKind::Boolean => { %>
+    <label class="flex items-center gap-2 cursor-pointer">
+      <input type="hidden" name="value" value="false">
+      <input type="checkbox" name="value" value="true" <% if self.current_value == "true" { %>checked<% } %> class="checkbox checkbox-sm"
+             hx-on:change="this.previousElementSibling.disabled = this.checked">
+      <span class="text-sm">Enabled</span>
+    </label>
+    <% } crate::component::detail_page_edit::FieldInputKind::Select(options) => { %>
+    <select name="value" class="select select-sm w-full">
+      <% for (val, label) in options.iter() { %>
+      <option value="<%= val %>" <% if self.current_value == *val { %>selected<% } %>><%= label %></option>
+      <% } %>
+    </select>
+    <% } crate::component::detail_page_edit::FieldInputKind::MultiCheckbox(options) => { let selected: Vec<&str> = self.current_value.split(',').map(|s| s.trim()).collect(); %>
+    <div class="flex flex-col gap-1">
+      <% for (val, label) in options.iter() { %>
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" name="value[]" value="<%= val %>" <% if selected.contains(val) { %>checked<% } %> class="checkbox checkbox-sm">
+        <span class="text-sm"><%= label %></span>
+      </label>
+      <% } %>
+    </div>
+    <% } } %>
+    <div class="flex gap-2 mt-2">
+      <button type="submit" class="btn btn-primary btn-xs">Save</button>
+      <button type="button" class="btn btn-secondary btn-xs"
+              hx-get="/-detail/<%= &self.target_id %>/field/<%= &self.field_type %>/display"
+              hx-target="#field-<%= &self.field_type %>"
+              hx-swap="outerHTML">Cancel</button>
+    </div>
+  </form>
+</div>

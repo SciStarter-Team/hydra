@@ -27,7 +27,7 @@ use std::collections::HashMap;
 use ulid::Ulid;
 
 use crate::component::Component;
-use crate::event::{EventInstance, EventStatus, EventType};
+use crate::event::{EventStatus, EventType};
 use crate::lazy_cache::{LazyCached, get_cached};
 use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
@@ -274,6 +274,13 @@ pub struct DetailPageContent {
     // Reviews
     pub reviews: Vec<ReviewForDisplay>,
     pub review_count: i64,
+
+    // Editing permissions
+    pub can_edit: bool,
+    pub is_staff_editor: bool,
+
+    // Additional editable fields (populated only when can_edit)
+    pub additional_fields: Vec<super::detail_page_edit::AdditionalField>,
 }
 
 // ---------------------------------------------------------------------------
@@ -393,7 +400,9 @@ impl DetailPage {
         let id_str2 = id_str.clone();
         let id_str3 = id_str.clone();
         let id_str4 = id_str.clone();
+        let id_str5 = id_str.clone();
         let user_info_clone = user_info.clone();
+        let user_info_clone2 = user_info.clone();
 
         let (
             tags,
@@ -404,6 +413,7 @@ impl DetailPage {
             review_count,
             member_count,
             last_edited_str,
+            edit_permission,
         ) = tokio::try_join!(
             // Tags
             async {
@@ -490,9 +500,42 @@ impl DetailPage {
                 .await?;
                 Ok::<_, Error>(cached)
             },
+            // Edit permission check
+            async {
+                if let Some(ref user) = user_info_clone2 {
+                    if user.is_staff || user.is_superuser {
+                        Ok::<_, Error>((true, true))
+                    } else {
+                        let user_str = user.user_id.to_string();
+                        let exists = sqlx::query_scalar!(
+                            r#"SELECT 1 as "v!: i32" FROM project_page_editors WHERE project_id = ? AND user_id = ?"#,
+                            id_str5,
+                            user_str
+                        )
+                        .fetch_optional(db())
+                        .await?
+                        .is_some();
+                        Ok((exists, false))
+                    }
+                } else {
+                    Ok((false, false))
+                }
+            },
         )?;
 
         let (user_has_liked, saved, joined) = user_engagement;
+        let (can_edit, is_staff_editor) = edit_permission;
+
+        let additional_fields = if can_edit {
+            super::detail_page_edit::load_additional_fields(
+                &self.target_id.to_string(),
+                DetailPageKind::Project,
+            )
+            .await
+            .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
 
         let status: DetailPageStatus = row.status.into();
         let last_updated = if last_edited_str.is_empty() {
@@ -564,6 +607,9 @@ impl DetailPage {
             user_info,
             reviews,
             review_count,
+            can_edit,
+            is_staff_editor,
+            additional_fields,
         })
     }
 
@@ -606,8 +652,10 @@ impl DetailPage {
 
         let id_str2 = id_str.clone();
         let id_str3 = id_str.clone();
+        let id_str4 = id_str.clone();
+        let user_info_clone = user_info.clone();
 
-        let (tags, instances, like_count, user_has_liked) = tokio::try_join!(
+        let (tags, instances, like_count, user_has_liked, edit_permission) = tokio::try_join!(
             // Tags
             async {
                 sqlx::query_scalar!(
@@ -650,7 +698,41 @@ impl DetailPage {
                     Ok(false)
                 }
             },
+            // Edit permission check
+            async {
+                if let Some(ref user) = user_info_clone {
+                    if user.is_staff || user.is_superuser {
+                        Ok::<_, Error>((true, true))
+                    } else {
+                        let user_str = user.user_id.to_string();
+                        let exists = sqlx::query_scalar!(
+                            r#"SELECT 1 as "v!: i32" FROM event_page_editors WHERE event_id = ? AND user_id = ?"#,
+                            id_str4,
+                            user_str
+                        )
+                        .fetch_optional(db())
+                        .await?
+                        .is_some();
+                        Ok((exists, false))
+                    }
+                } else {
+                    Ok((false, false))
+                }
+            },
         )?;
+
+        let (can_edit, is_staff_editor) = edit_permission;
+
+        let additional_fields = if can_edit {
+            super::detail_page_edit::load_additional_fields(
+                &self.target_id.to_string(),
+                DetailPageKind::Event,
+            )
+            .await
+            .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
 
         let status: DetailPageStatus = row.status.into();
         let event_type_display = Some(row.event_type.to_string());
@@ -704,6 +786,9 @@ impl DetailPage {
             user_info,
             reviews: Vec::new(),
             review_count: 0,
+            can_edit,
+            is_staff_editor,
+            additional_fields,
         })
     }
 }
@@ -1050,27 +1135,16 @@ pub async fn lists_modal(
             poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
         })?;
 
-    // Look up entity slug for this target
-    let slug = sqlx::query_scalar!("SELECT slug FROM entities WHERE target = ?", id)
-        .fetch_optional(db())
-        .await
-        .map_err(|e| {
-            poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-        })?
-        .unwrap_or_default();
-
     #[derive(TemplateOnce)]
     #[template(path = "pages/detail_page_lists_modal.stpl.html")]
     struct ListsModal {
         lists: Vec<crate::entity_list::EntityList>,
         target_id: String,
-        entity_slug: String,
     }
 
     let html = ListsModal {
         lists,
         target_id: id,
-        entity_slug: slug,
     }
     .render_once()
     .map_err(|e| {

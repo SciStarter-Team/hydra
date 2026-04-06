@@ -72,11 +72,17 @@
 
   <!-- Pagination -->
   <% if self.pages > 1 { %>
-  <div style="margin-top:1rem;display:flex;gap:6px;justify-content:center;flex-wrap:wrap">
+  <div style="margin-top:1rem;display:flex;gap:6px;justify-content:center;flex-wrap:wrap;align-items:center">
     <% if self.page > 1 { %>
     <button style="padding:4px 12px;border:1px solid #1a3a5c;cursor:pointer;background:#fff;color:#1a3a5c"
             hx-get="/-csm/wall-of-fame?<%= wall_of_fame_qs(&self.mode, self.page - 1, &self.letter, self.phase_override) %>"
             hx-target="#wall-of-fame" hx-swap="outerHTML">&laquo; Prev</button>
+    <% } %>
+    <% if self.page > 4 { %>
+    <button style="padding:4px 10px;border:1px solid #1a3a5c;cursor:pointer;min-width:34px;background:#fff;color:#1a3a5c"
+            hx-get="/-csm/wall-of-fame?<%= wall_of_fame_qs(&self.mode, 1, &self.letter, self.phase_override) %>"
+            hx-target="#wall-of-fame" hx-swap="outerHTML">1</button>
+    <% if self.page > 5 { %><span style="padding:4px 2px;color:#666">&hellip;</span><% } %>
     <% } %>
     <%
     let start_page = std::cmp::max(1, self.page - 3);
@@ -93,11 +99,18 @@
             hx-target="#wall-of-fame" hx-swap="outerHTML"><%= p %></button>
     <% } %>
     <% } %>
+    <% if end_page < self.pages { %>
+    <% if end_page < self.pages - 1 { %><span style="padding:4px 2px;color:#666">&hellip;</span><% } %>
+    <button style="padding:4px 10px;border:1px solid #1a3a5c;cursor:pointer;min-width:34px;background:#fff;color:#1a3a5c"
+            hx-get="/-csm/wall-of-fame?<%= wall_of_fame_qs(&self.mode, self.pages, &self.letter, self.phase_override) %>"
+            hx-target="#wall-of-fame" hx-swap="outerHTML"><%= self.pages %></button>
+    <% } %>
     <% if self.page < self.pages { %>
     <button style="padding:4px 12px;border:1px solid #1a3a5c;cursor:pointer;background:#fff;color:#1a3a5c"
             hx-get="/-csm/wall-of-fame?<%= wall_of_fame_qs(&self.mode, self.page + 1, &self.letter, self.phase_override) %>"
             hx-target="#wall-of-fame" hx-swap="outerHTML">Next &raquo;</button>
     <% } %>
   </div>
+  <div style="text-align:center;margin-top:0.25rem;font-size:0.85em;color:#666">Page <%= self.page %> of <%= self.pages %></div>
   <% } %>
 </div>

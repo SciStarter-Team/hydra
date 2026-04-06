@@ -44,6 +44,7 @@ pub mod ui;
 pub mod upload;
 pub mod wiki;
 pub mod wordpress;
+pub mod zipcode;
 
 use anyhow::Error;
 use async_nats::service::ServiceExt;
@@ -61,7 +62,7 @@ use poem::{
     get, handler,
     listener::TcpListener,
     middleware::{ForceHttps, NormalizePath, SetHeader, TrailingSlash},
-    post,
+    post, put,
     session::{CookieConfig, ServerSession},
     web::{Form, Path, Redirect, cookie::SameSite},
 };
@@ -271,6 +272,7 @@ fn user_facing() -> impl Endpoint {
             "/-csm/autocomplete/countries",
             get(csm::csm_autocomplete_countries),
         )
+        .at("/-zipcode/:code", get(zipcode::zipcode_lookup))
         .at("/-entity-password/*slug", post(entity_password_verify))
         .at(
             "/-detail/:id/like",
@@ -304,6 +306,25 @@ fn user_facing() -> impl Endpoint {
         .at(
             "/-detail/:id/edit-log",
             get(component::detail_page::edit_log),
+        )
+        .at(
+            "/-detail/:id/field/:field_type",
+            get(component::detail_page_edit::get_edit_form)
+                .put(component::detail_page_edit::save_field),
+        )
+        .at(
+            "/-detail/:id/field/:field_type/display",
+            get(component::detail_page_edit::get_display),
+        )
+        .at(
+            "/-detail/:id/instances",
+            get(component::detail_page_edit::get_instances_display)
+                .post(component::detail_page_edit::add_instance),
+        )
+        .at(
+            "/-detail/:id/instances/:index",
+            put(component::detail_page_edit::update_instance)
+                .delete(component::detail_page_edit::delete_instance),
         )
         .at("/*slug", get(entity_page))
         .with(middleware::analytics::AnalyticsMiddleware)
