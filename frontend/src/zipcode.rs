@@ -98,7 +98,7 @@ async fn fetch_from_api(
     let response: ZipcodeStackResponse = reqwest::get(&url).await?.json().await?;
 
     // The results field is an object keyed by postal code, each containing an array
-    let results = if let Some(obj) = response.results.as_object() {
+    let mut results: Vec<ZipcodeResult> = if let Some(obj) = response.results.as_object() {
         obj.values()
             .flat_map(|v| {
                 serde_json::from_value::<Vec<ZipcodeStackResult>>(v.clone()).unwrap_or_default()
@@ -108,6 +108,9 @@ async fn fetch_from_api(
     } else {
         Vec::new()
     };
+
+    // Sort US results first since the primary audience is US-based
+    results.sort_by_key(|r| if r.formatted.ends_with(", US") { 0 } else { 1 });
 
     Ok(results)
 }

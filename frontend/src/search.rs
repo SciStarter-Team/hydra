@@ -795,7 +795,7 @@ async fn search_with_location(
          COALESCE(MAX(0.0, julianday((SELECT ei2.begin FROM event_instances ei2 \
           WHERE ei2.event_id = ev.event_id AND ei2.begin >= datetime('now') \
           ORDER BY ei2.begin LIMIT 1)) - julianday('now')), 0.0) * 10.0 \
-         + CASE WHEN ev.entirely_online = 1 THEN 0.0 \
+         + CASE WHEN ev.entirely_online = 1 THEN 100.0 \
                 WHEN ev.regions IS NOT NULL THEN COALESCE(ST_Distance(ST_MakeValid(ev.regions), MakePoint(",
     );
     qb.push_bind(lng);
@@ -814,7 +814,7 @@ async fn search_with_location(
          FROM entities_fts f \
          JOIN entities e ON f.slug = e.slug \
          JOIN events ev ON e.target = ev.event_id \
-         WHERE e.kind = 'Event' AND entities_fts MATCH ",
+         WHERE e.kind = 'Event' AND entities_fts MATCH",
     );
     qb.push_bind(search_term.clone());
     qb.push(" AND e.publish = 1");
@@ -989,7 +989,7 @@ async fn search_location_only(
          COALESCE(MAX(0.0, julianday((SELECT ei2.begin FROM event_instances ei2 \
           WHERE ei2.event_id = ev.event_id AND ei2.begin >= datetime('now') \
           ORDER BY ei2.begin LIMIT 1)) - julianday('now')), 0.0) * 10.0 \
-         + CASE WHEN ev.entirely_online = 1 THEN 0.0 \
+         + CASE WHEN ev.entirely_online = 1 THEN 100.0 \
                 WHEN ev.regions IS NOT NULL THEN COALESCE(ST_Distance(ST_MakeValid(ev.regions), MakePoint(",
     );
     qb.push_bind(lng);
