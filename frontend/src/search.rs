@@ -487,9 +487,7 @@ async fn search_all(fq: &FinderQuery, page: u32) -> Result<FinderSearchResult, E
          CASE WHEN p.regions IS NOT NULL THEN AsGeoJSON(p.regions) \
               WHEN p.point IS NOT NULL THEN AsGeoJSON(p.point) \
               ELSE NULL END AS geo_json, \
-         CASE WHEN p.entirely_online = 1 THEN 200.0 \
-              WHEN p.regions IS NOT NULL THEN COALESCE(NULLIF(SQRT(ST_Area(ST_MakeValid(p.regions), 1) / 1000000.0), 0.0), 22583.0) \
-              ELSE 0.0 END * 1.0 AS comparison_value \
+         0.0 AS comparison_value \
          FROM entities e JOIN projects p ON e.target = p.project_id \
          WHERE e.kind = 'Project' AND e.publish = 1",
     );
@@ -599,13 +597,11 @@ async fn search_text_only(fq: &FinderQuery, page: u32) -> Result<FinderSearchRes
          CASE WHEN p.regions IS NOT NULL THEN AsGeoJSON(p.regions) \
               WHEN p.point IS NOT NULL THEN AsGeoJSON(p.point) \
               ELSE NULL END AS geo_json, \
-         CASE WHEN p.entirely_online = 1 THEN 200.0 \
-              WHEN p.regions IS NOT NULL THEN COALESCE(NULLIF(SQRT(ST_Area(ST_MakeValid(p.regions), 1) / 1000000.0), 0.0), 22583.0) \
-              ELSE 0.0 END * 1.0 AS comparison_value \
+         0.0 AS comparison_value \
          FROM entities_fts f \
          JOIN entities e ON f.slug = e.slug \
          JOIN projects p ON e.target = p.project_id \
-         WHERE e.kind = 'Project' AND entities_fts MATCH ",
+         WHERE e.kind = 'Project' AND entities_fts MATCH",
     );
     qb.push_bind(search_term.clone());
     qb.push(" AND e.publish = 1");
