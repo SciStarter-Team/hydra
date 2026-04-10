@@ -45,7 +45,7 @@
                     <!-- Updated -->
                     <div class="lg:col-span-3">
                         <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Updated</div>
-                        <div class="text-sm text-gray-500"><%= email.updated_at.format_display() %></div>
+                        <div class="text-sm text-gray-500"><%- local_time(&email.updated_at, TimeFormat::DateTime) %></div>
                     </div>
 
                     <!-- Actions -->

@@ -8,6 +8,7 @@ use sailfish::TemplateOnce;
 use ulid::Ulid;
 
 use crate::event::field::{EventField, EventFieldValue};
+use crate::local_time::{TimeFormat, local_time};
 use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
 use crate::project::field::{ProjectField, ProjectFieldValue};
@@ -1771,10 +1772,7 @@ async fn load_instances(
         .filter_map(|r| {
             let begin = TimeString::try_from(r.begin).ok()?;
             let end = TimeString::try_from(r.end).ok()?;
-            Some(super::detail_page::EventInstanceDisplay {
-                begin: begin.format_display(),
-                end: end.format_display(),
-            })
+            Some(super::detail_page::EventInstanceDisplay { begin, end })
         })
         .collect())
 }

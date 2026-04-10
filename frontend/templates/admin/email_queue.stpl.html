@@ -67,7 +67,7 @@
                         <!-- Created -->
                         <div class="xl:col-span-3">
                             <div class="xl:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Created</div>
-                            <div class="text-sm text-gray-500"><%= sending.created_at.format_display() %></div>
+                            <div class="text-sm text-gray-500"><%- local_time(&sending.created_at, TimeFormat::DateTime) %></div>
                         </div>
 
                         <!-- Queued -->

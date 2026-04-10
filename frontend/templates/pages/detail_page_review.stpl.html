@@ -9,7 +9,7 @@
     <div class="text-xs text-gray-500">
       <a href="/profile?for=<%= &self.review.user_id %>" class="text-primary-action hover:underline"><%= if self.review.user_handle.is_empty() { format!("({})", &self.review.user_id) } else { self.review.user_handle.clone() } %></a>
       <span class="mx-1">&middot;</span>
-      <span><%= self.review.when.format_display() %></span>
+      <span><%- local_time(&self.review.when, TimeFormat::DateTime) %></span>
     </div>
   </div>
 </div>

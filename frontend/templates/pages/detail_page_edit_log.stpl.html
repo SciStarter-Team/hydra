@@ -16,7 +16,9 @@
     <span>edited</span>
     <span class="font-medium"><%= &entry.field %></span>
     <% } %>
-    <span class="text-gray-400"><%= &entry.when %></span>
+    <% if let Some(when) = &entry.when { %>
+    <span class="text-gray-400"><%- local_time(when, TimeFormat::DateTime) %></span>
+    <% } %>
   </div>
   <% } %>
   <% } %>

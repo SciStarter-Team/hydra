@@ -52,7 +52,7 @@
                     <!-- Timestamp -->
                     <div class="lg:col-span-1">
                         <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Timestamp</div>
-                        <div class="text-sm text-gray-600"><%= entry.timestamp %></div>
+                        <div class="text-sm text-gray-600"><%- local_time(&entry.timestamp, TimeFormat::DateTime) %></div>
                     </div>
 
                     <!-- Has File -->

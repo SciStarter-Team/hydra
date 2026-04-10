@@ -1,6 +1,7 @@
 use crate::{
     component::{Component, Head, StandardLayout},
     form::QsQuery,
+    local_time::{TimeFormat, local_time},
     middleware::{
         analytics::{Device, Interaction},
         authorization::Authenticated,
@@ -145,9 +146,7 @@ pub struct FinderResult {
     pub distance_km: Option<f64>,
     pub goal: String,
     pub task: String,
-    pub event_date_month: String,
-    pub event_date_day: String,
-    pub event_date_year: String,
+    pub event_begin: Option<String>,
     pub is_completed: bool,
     pub geo_json: Option<String>,
 }
@@ -155,6 +154,10 @@ pub struct FinderResult {
 impl FinderResult {
     pub fn distance_mi(&self) -> Option<f64> {
         self.distance_km.map(|km| km * 0.621371)
+    }
+
+    pub fn event_date_html(&self, format: TimeFormat) -> String {
+        local_time(self.event_begin.as_deref().unwrap_or(""), format)
     }
 }
 
@@ -391,35 +394,6 @@ fn make_snippet(desc: &str) -> String {
     }
 }
 
-fn parse_event_date(begin: &Option<String>) -> (String, String, String) {
-    if let Some(s) = begin {
-        if s.len() >= 10 {
-            let parts: Vec<&str> = s[..10].split('-').collect();
-            if parts.len() == 3 {
-                let month_num: u32 = parts[1].parse().unwrap_or(0);
-                let month = match month_num {
-                    1 => "JAN",
-                    2 => "FEB",
-                    3 => "MAR",
-                    4 => "APR",
-                    5 => "MAY",
-                    6 => "JUN",
-                    7 => "JUL",
-                    8 => "AUG",
-                    9 => "SEP",
-                    10 => "OCT",
-                    11 => "NOV",
-                    12 => "DEC",
-                    _ => "",
-                };
-                let day = parts[2].trim_start_matches('0');
-                return (month.to_string(), day.to_string(), parts[0].to_string());
-            }
-        }
-    }
-    (String::new(), String::new(), String::new())
-}
-
 struct FinderSearchResult {
     results: Vec<FinderResult>,
     total: u32,
@@ -542,7 +516,6 @@ async fn search_all(fq: &FinderQuery, page: u32) -> Result<FinderSearchResult, E
     let results = rows
         .into_iter()
         .map(|row| {
-            let (month, day, year) = parse_event_date(&row.9);
             FinderResult {
                 slug: row.0,
                 entity_type: row.1,
@@ -553,9 +526,7 @@ async fn search_all(fq: &FinderQuery, page: u32) -> Result<FinderSearchResult, E
                 task: row.6,
                 is_completed: row.7 == "Complete",
                 location_display: row.8,
-                event_date_month: month,
-                event_date_day: day,
-                event_date_year: year,
+                event_begin: row.9,
                 distance_km: None,
                 geo_json: row.10,
             }
@@ -660,7 +631,6 @@ async fn search_text_only(fq: &FinderQuery, page: u32) -> Result<FinderSearchRes
     let results = rows
         .into_iter()
         .map(|row| {
-            let (month, day, year) = parse_event_date(&row.9);
             FinderResult {
                 slug: row.0,
                 entity_type: row.1,
@@ -671,9 +641,7 @@ async fn search_text_only(fq: &FinderQuery, page: u32) -> Result<FinderSearchRes
                 task: row.6,
                 is_completed: row.7 == "Complete",
                 location_display: row.8,
-                event_date_month: month,
-                event_date_day: day,
-                event_date_year: year,
+                event_begin: row.9,
                 distance_km: None,
                 geo_json: row.10,
             }
@@ -844,7 +812,6 @@ async fn search_with_location(
     let results = rows
         .into_iter()
         .map(|row| {
-            let (month, day, year) = parse_event_date(&row.9);
             FinderResult {
                 slug: row.0,
                 entity_type: row.1,
@@ -855,9 +822,7 @@ async fn search_with_location(
                 task: row.6,
                 is_completed: row.7 == "Complete",
                 location_display: row.8,
-                event_date_month: month,
-                event_date_day: day,
-                event_date_year: year,
+                event_begin: row.9,
                 distance_km: row.10,
                 geo_json: row.11,
             }
@@ -1034,7 +999,6 @@ async fn search_location_only(
     let results = rows
         .into_iter()
         .map(|row| {
-            let (month, day, year) = parse_event_date(&row.9);
             FinderResult {
                 slug: row.0,
                 entity_type: row.1,
@@ -1045,9 +1009,7 @@ async fn search_location_only(
                 task: row.6,
                 is_completed: row.7 == "Complete",
                 location_display: row.8,
-                event_date_month: month,
-                event_date_day: day,
-                event_date_year: year,
+                event_begin: row.9,
                 distance_km: row.10,
                 geo_json: row.11,
             }

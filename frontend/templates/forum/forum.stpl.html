@@ -179,7 +179,7 @@
                     <span class="font-medium text-gray-700"><%= topic.author_handle %></span>
                   <% } %>
                   <span class="text-gray-400">•</span>
-                  <span><%= topic.created_at.format_display() %></span>
+                  <span><%- local_time(&topic.created_at, TimeFormat::DateTime) %></span>
                   <span class="text-gray-400">•</span>
                   <span class="font-medium"><%= topic.post_count %> posts</span>
                   <% if let Some(category) = &topic.category { %>

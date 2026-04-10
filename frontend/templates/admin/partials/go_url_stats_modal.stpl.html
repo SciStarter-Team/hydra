@@ -110,7 +110,7 @@
                                 <div class="flex items-center justify-between py-2 border-b border-gray-100 last:border-b-0">
                                     <div class="flex items-center">
                                         <wa-icon name="eye" class="w-4 h-4 text-gray-400 mr-2"></wa-icon>
-                                        <span class="text-sm text-gray-600"><%= view.timestamp %></span>
+                                        <span class="text-sm text-gray-600"><%- local_time(&view.timestamp, TimeFormat::DateTime) %></span>
                                     </div>
                                     <% if let Some(ref ip) = view.ip_address { %>
                                     <span class="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded"><%= ip %></span>

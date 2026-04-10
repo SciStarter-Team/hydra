@@ -22,23 +22,6 @@ include = "css/style.css"
 handler = {Command = ["tailwindcss", "--minify", "--input", "$infile", "--output", "$outfile"]}
 skip_unchanged = false
 
-# This rule skips minifying webawesome js files. That's fine since
-# they're small anyway, but once shenzi is able to minify them without
-# hitting a panic in minify_js this rule can be removed.
-[[rules]]
-include = "webawesome/**/*.js"
-handler = "Copy"
-
-# Same as webawesome
-[[rules]]
-include = "richtext.js"
-handler = "Copy"
-
-# Exchange JS files cause minify_js to panic
-[[rules]]
-include = "exchange/js/*.js"
-handler = "Copy"
-
 [[rules]]
 include = "**/*.min.js"
 handler = "Copy"

@@ -88,7 +88,7 @@
                 </div>
               </div>
 
-              <button type="submit" class="btn btn-primary btn-icon md:gap-0! !border-primary-action justify-center w-full mt-4">
+              <button type="submit" id="finder-submit" class="btn btn-primary btn-icon md:gap-0! !border-primary-action justify-center w-full mt-4">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="fill-primary-action w-[15px] md:mr-3"><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352a144 144 0 1 0 0-288 144 144 0 1 0 0 288z"/></svg>
                 Search
               </button>
@@ -142,9 +142,9 @@
           <!-- Event card -->
           <div class="event-finder">
             <div class="ef-date">
-              <span><%= result.event_date_month %></span>
-              <span><%= result.event_date_day %></span>
-              <span><%= result.event_date_year %></span>
+              <span><%- result.event_date_html(TimeFormat::Month) %></span>
+              <span><%- result.event_date_html(TimeFormat::Day) %></span>
+              <span><%- result.event_date_html(TimeFormat::Year) %></span>
             </div>
             <div class="ef-info">
               <a href="/<%= result.slug %>" class="block">
@@ -256,6 +256,8 @@
 <!-- Geosearch widget setup -->
 <script>
   document.addEventListener('DOMContentLoaded', function() {
+    var locationJustSelected = <% if !self.location_name.is_empty() { %>true<% } else { %>false<% } %>;
+    function getSubmitBtn() { return document.getElementById('finder-submit'); }
     function clearLocationFields() {
       document.getElementById('geosearch-lat').value = '';
       document.getElementById('geosearch-lng').value = '';
@@ -267,9 +269,20 @@
       <% if !self.location_name.is_empty() { %>
       initialState: { query: '<%= self.location_name %>' },
       <% } %>
-      onReset: function() { clearLocationFields(); },
+      onReset: function() {
+        clearLocationFields();
+        var btn = getSubmitBtn(); if (btn) btn.disabled = false;
+      },
       onStateChange: function(params) {
-        if (!params.state.query) { clearLocationFields(); }
+        if (!params.state.query) {
+          clearLocationFields();
+          var btn = getSubmitBtn(); if (btn) btn.disabled = false;
+        } else if (locationJustSelected) {
+          locationJustSelected = false;
+        } else {
+          clearLocationFields();
+          var btn = getSubmitBtn(); if (btn) btn.disabled = true;
+        }
       },
       plugins: [
         {
@@ -289,10 +302,12 @@
                 item: function(params) { return params.html`<div class="aa-ItemContent">${params.item.formatted}</div>`; }
               },
               onSelect: function(params) {
+                locationJustSelected = true;
                 document.getElementById('geosearch-lat').value = params.item.latitude;
                 document.getElementById('geosearch-lng').value = params.item.longitude;
                 document.getElementById('geosearch-name').value = params.item.formatted;
                 params.setQuery(params.item.formatted);
+                var btn = getSubmitBtn(); if (btn) btn.disabled = false;
               }
             }];
           }
@@ -301,9 +316,11 @@
           { key: '<%= self.geosearch_key %>' },
           {
             onSelect: function(params) {
+              locationJustSelected = true;
               document.getElementById('geosearch-lat').value = params.item.geometry.lat;
               document.getElementById('geosearch-lng').value = params.item.geometry.lng;
               document.getElementById('geosearch-name').value = params.item.formatted;
+              var btn = getSubmitBtn(); if (btn) btn.disabled = false;
             }
           }
         )

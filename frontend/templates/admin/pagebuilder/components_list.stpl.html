@@ -80,7 +80,7 @@
                             <% } %>
                         </div>
                         <div class="ml-4 flex-shrink-0 text-sm text-gray-500">
-                            Updated <%= component.updated.format_display() %>
+                            Updated <%- local_time(&component.updated, TimeFormat::DateTime) %>
                         </div>
                     </div>
                 </a>

@@ -8,6 +8,7 @@ use sailfish::TemplateOnce;
 use std::sync::Arc;
 
 use crate::component::{AdminLayout, Component, admin_layout::AdminLayoutPrepared};
+use crate::local_time::{TimeFormat, local_time};
 use crate::middleware::authorization::Authenticated;
 use common::message::user::BasicInfo;
 

@@ -22,6 +22,7 @@ pub mod geocode;
 pub mod gourl;
 pub mod health;
 pub mod lazy_cache;
+pub mod local_time;
 pub mod lru_cache;
 pub mod mcp;
 pub mod middleware;

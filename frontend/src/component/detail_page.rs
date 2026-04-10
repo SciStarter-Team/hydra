@@ -29,6 +29,7 @@ use ulid::Ulid;
 use crate::component::Component;
 use crate::event::{EventStatus, EventType};
 use crate::lazy_cache::{LazyCached, get_cached};
+use crate::local_time::{TimeFormat, local_time};
 use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
 use crate::project::ProjectStatus;
@@ -117,8 +118,8 @@ impl From<EventStatus> for DetailPageStatus {
 
 #[derive(Debug, Clone)]
 pub struct EventInstanceDisplay {
-    pub begin: String,
-    pub end: String,
+    pub begin: TimeString,
+    pub end: TimeString,
 }
 
 /// Review enriched with user display information for template rendering.
@@ -261,7 +262,7 @@ pub struct DetailPageContent {
     pub tags: Vec<String>,
 
     // Metadata
-    pub last_updated: String,
+    pub last_updated: Option<TimeString>,
     pub member_count: i64,
 
     // Event-specific
@@ -539,14 +540,9 @@ impl DetailPage {
 
         let status: DetailPageStatus = row.status.into();
         let last_updated = if last_edited_str.is_empty() {
-            // Fall back to created date if never edited
-            TimeString::try_from(row.created)
-                .map(|ts| ts.format_display())
-                .unwrap_or_default()
+            TimeString::try_from(row.created).ok()
         } else {
-            TimeString::try_from(last_edited_str)
-                .map(|ts| ts.format_display())
-                .unwrap_or_default()
+            TimeString::try_from(last_edited_str).ok()
         };
 
         Ok(DetailPageContent {
@@ -680,10 +676,7 @@ impl DetailPage {
                         .filter_map(|r| {
                             let begin = TimeString::try_from(r.begin).ok()?;
                             let end = TimeString::try_from(r.end).ok()?;
-                            Some(EventInstanceDisplay {
-                                begin: begin.format_display(),
-                                end: end.format_display(),
-                            })
+                            Some(EventInstanceDisplay { begin, end })
                         })
                         .collect::<Vec<_>>(),
                 )
@@ -779,7 +772,7 @@ impl DetailPage {
             facebook_page: String::new(),
             instagram_page: String::new(),
             tags,
-            last_updated: String::new(),
+            last_updated: None,
             member_count: 0,
             event_type: event_type_display,
             instances,
@@ -1315,11 +1308,8 @@ pub async fn edit_log(
                 .get(&e.user_id)
                 .cloned()
                 .unwrap_or_else(|| e.user_id.clone());
-            let when_display = TimeString::try_from(e.when)
-                .map(|ts| ts.format_display())
-                .unwrap_or_default();
             EditLogEntryDisplay {
-                when: when_display,
+                when: TimeString::try_from(e.when).ok(),
                 user_handle,
                 field: e.field,
                 is_creation: false,
@@ -1351,9 +1341,7 @@ pub async fn edit_log(
 
         if let Some(row) = row {
             if let Some(created_str) = row.created {
-                let when_display = TimeString::try_from(created_str)
-                    .map(|ts| ts.format_display())
-                    .unwrap_or_default();
+                let when_display = TimeString::try_from(created_str).ok();
 
                 // Look up creator name if we have a creator ID
                 let creator_handle = if let Some(ref creator_id) = row.creator_id {
@@ -1400,7 +1388,7 @@ pub async fn edit_log(
 }
 
 struct EditLogEntryDisplay {
-    when: String,
+    when: Option<TimeString>,
     user_handle: String,
     field: String,
     is_creation: bool,

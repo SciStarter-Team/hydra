@@ -18,10 +18,10 @@
         <span class="font-medium text-gray-700"><%= self.topic.author_handle %></span>
       <% } %>
       <span class="text-gray-400">•</span>
-      <span><%= self.topic.created_at.format_display() %></span>
+      <span><%- local_time(&self.topic.created_at, TimeFormat::DateTime) %></span>
       <% if let Some(updated) = &self.topic.updated_at { %>
         <span class="text-gray-400">•</span>
-        <span>Updated: <%= updated.format_display() %></span>
+        <span>Updated: <%- local_time(updated, TimeFormat::DateTime) %></span>
       <% } %>
       <span class="text-gray-400">•</span>
       <span class="font-medium"><%= self.topic.post_count %> posts</span>

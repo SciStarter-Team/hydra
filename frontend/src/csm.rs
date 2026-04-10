@@ -13,6 +13,7 @@ use serde::Deserialize;
 use std::sync::Arc;
 
 use crate::component::{Component, Head, StandardLayout};
+use crate::local_time::{TimeFormat, local_time};
 use crate::middleware::authorization::Authenticated;
 
 // Shared fragment templates
@@ -687,36 +688,6 @@ struct CsmEvent {
 }
 
 impl CsmEvent {
-    fn month_abbrev(&self) -> &str {
-        if self.begin.len() >= 7 {
-            match &self.begin[5..7] {
-                "01" => "JAN",
-                "02" => "FEB",
-                "03" => "MAR",
-                "04" => "APR",
-                "05" => "MAY",
-                "06" => "JUN",
-                "07" => "JUL",
-                "08" => "AUG",
-                "09" => "SEP",
-                "10" => "OCT",
-                "11" => "NOV",
-                "12" => "DEC",
-                _ => "",
-            }
-        } else {
-            ""
-        }
-    }
-
-    fn day(&self) -> &str {
-        if self.begin.len() >= 10 {
-            self.begin[8..10].trim_start_matches('0')
-        } else {
-            ""
-        }
-    }
-
     fn location_display(&self) -> String {
         if self.entirely_online {
             return "Online".to_string();

@@ -2423,7 +2423,7 @@
         </div>
         <div>
           <span class="font-medium text-gray-700">Created:</span>
-          <span class="ml-2 text-gray-600"><%= self.project.created_date %></span>
+          <span class="ml-2 text-gray-600"><%- local_time(&self.project.created_date, TimeFormat::DateTime) %></span>
         </div>
       </div>
     </div>

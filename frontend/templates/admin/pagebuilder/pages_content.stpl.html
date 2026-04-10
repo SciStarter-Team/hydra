@@ -17,7 +17,7 @@
                     <% } %>
                 </div>
                 <div class="ml-4 flex-shrink-0 text-sm text-gray-500">
-                    Updated <%= page.updated.format_display() %>
+                    Updated <%- local_time(&page.updated, TimeFormat::DateTime) %>
                 </div>
             </div>
         </a>

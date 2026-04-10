@@ -5,6 +5,7 @@
 
 use super::types::lookup_user_email;
 use crate::component::{AdminLayout, Component, admin_layout::AdminLayoutPrepared};
+use crate::local_time::{TimeFormat, local_time};
 use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
 use common::message::user::BasicInfo;
@@ -31,7 +32,8 @@ pub struct AdminEvent {
     pub id: String,
     pub title: String,
     pub instances: u32, // Number of scheduled instances
-    pub event_date: String,
+    pub is_ongoing: bool,
+    pub next_instance: Option<TimeString>,
     pub location: String,
     pub event_type: String,
 }
@@ -95,16 +97,6 @@ impl AdminEventFull {
             country: event.country,
             origin: event.origin,
         })
-    }
-}
-
-fn humanize_event_date(datetime_str: Option<String>) -> String {
-    match datetime_str {
-        Some(date_str) => match TimeString::try_from(date_str) {
-            Ok(time_string) => time_string.format_display(),
-            Err(_) => "Invalid date".to_string(),
-        },
-        None => "No upcoming instances".to_string(),
     }
 }
 
@@ -193,18 +185,17 @@ async fn fetch_events_page(
                 row.location_name
             };
 
-            // Check if event is currently ongoing
-            let event_date = if row.is_currently_ongoing != 0 {
-                "Currently ongoing".to_string()
-            } else {
-                humanize_event_date(row.next_instance_begin)
-            };
+            let is_ongoing = row.is_currently_ongoing != 0;
+            let next_instance = row
+                .next_instance_begin
+                .and_then(|s| TimeString::try_from(s).ok());
 
             AdminEvent {
                 id: row.event_id,
                 title: row.name,
                 instances: row.instance_count as u32,
-                event_date,
+                is_ongoing,
+                next_instance,
                 location,
                 event_type: row.event_type,
             }

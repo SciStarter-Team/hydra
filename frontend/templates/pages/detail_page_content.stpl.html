@@ -637,8 +637,8 @@
       <%/* Last Updated + Report */%>
       <% if self.kind.is_project() { %>
       <div class="mt-8 mb-8">
-        <% if !self.last_updated.is_empty() { %>
-        <small class="block mb-1">Last Updated: <%= &self.last_updated %></small>
+        <% if let Some(last_updated) = &self.last_updated { %>
+        <small class="block mb-1">Last Updated: <%- local_time(last_updated, TimeFormat::DateTime) %></small>
         <% } %>
 
         <% if self.user_info.as_ref().map(|u| u.is_staff || u.is_superuser).unwrap_or(false) { %>

@@ -72,15 +72,15 @@
             <div class="featured-event">
               <div class="flex">
                 <div class="featured-event__datetime">
-                  <div class="featured-event__month"><%= event.month_abbrev() %></div>
-                  <div class="featured-event__date"><%= event.day() %></div>
+                  <div class="featured-event__month"><%- local_time(&event.begin, TimeFormat::Month) %></div>
+                  <div class="featured-event__date"><%- local_time(&event.begin, TimeFormat::Day) %></div>
                 </div>
                 <div class="featured-event__info">
                   <% if event.signature { %>
                   <div class="csm-signature"><span>Signature Event</span></div>
                   <% } %>
                   <h3><a href="/<%= event.slug %>"><%= event.name %></a></h3>
-                  <span class="featured-event-time" data-begin="<%= event.begin %>" data-end="<%= event.end %>"></span>
+                  <span class="featured-event-time"><%- local_time(&event.begin, TimeFormat::Time) %> – <%- local_time(&event.end, TimeFormat::Time) %></span>
                   <a class="featured-event-location" href="/<%= event.slug %>"><%= event.location_display() %></a>
                 </div>
               </div>

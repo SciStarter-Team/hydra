@@ -50,7 +50,7 @@
 
                 <!-- Earned Date -->
                 <div class="flex items-center mt-2 lg:mt-0">
-                    <span class="text-sm text-gray-500"><%= holder.when.format_display() %></span>
+                    <span class="text-sm text-gray-500"><%- local_time(&holder.when, TimeFormat::DateTime) %></span>
                 </div>
 
                 <!-- Actions -->

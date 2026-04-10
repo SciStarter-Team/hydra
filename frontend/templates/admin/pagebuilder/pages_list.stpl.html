@@ -57,7 +57,7 @@
                     </a>
                     <div class="ml-4 flex-shrink-0 flex items-center gap-4">
                         <span class="text-sm text-gray-500">
-                            Updated <%= page.updated.format_display() %>
+                            Updated <%- local_time(&page.updated, TimeFormat::DateTime) %>
                         </span>
                         <button type="button"
                                 hx-delete="/-admin/component-pages/<%= page.page_id|disp %>"

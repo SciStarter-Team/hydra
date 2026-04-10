@@ -10,10 +10,10 @@
           <% } %>
         </span>
         <span class="text-gray-400">•</span>
-        <span><%= self.post.post.created_at.format_display() %></span>
+        <span><%- local_time(&self.post.post.created_at, TimeFormat::DateTime) %></span>
         <% if let Some(updated) = &self.post.post.updated_at { %>
           <span class="text-gray-400">•</span>
-          <span class="text-xs">Updated: <%= updated.format_display() %></span>
+          <span class="text-xs">Updated: <%- local_time(updated, TimeFormat::DateTime) %></span>
         <% } %>
       </div>
     </div>
