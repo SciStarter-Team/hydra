@@ -487,6 +487,7 @@
           <div class="acts-container text-center">
             <img src="https://static.scistarter.org/backport/img/csm/wall-of-fame-complex.svg" alt="Wall of Fame" style="max-width:800px;display:block;margin:0 auto 1rem"/>
             <p>Below you'll find all the participants in 2,500,000 Acts of Science.</p>
+            <p style="font-size:0.85em;color:#666">If you don't see your name within 24 hours, it may be because you do not have a username on your SciStarter Profile. Add your username <a href="/dashboard/profile">here</a>.</p>
             <div id="wall-of-fame"></div>
           </div>
         </div>
@@ -561,6 +562,7 @@
           <div class="acts-container text-center">
             <img src="https://static.scistarter.org/backport/img/csm/wall-of-fame-complex.svg" alt="Wall of Fame" style="max-width:800px;display:block;margin:0 auto 1rem"/>
             <p>Below you'll find all the participants in 2,500,000 Acts of Science.</p>
+            <p style="font-size:0.85em;color:#666">If you don't see your name within 24 hours, it may be because you do not have a username on your SciStarter Profile. Add your username <a href="/dashboard/profile">here</a>.</p>
             <div id="wall-of-fame"></div>
           </div>
         </div>
@@ -900,7 +902,7 @@ if (document.getElementById('curator-feed-default-feed-layout')) {
       html += '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch">';
       html += '<table style="width:100%;border-collapse:collapse;text-align:left;margin-top:1rem;min-width:600px">';
       html += '<thead style="background:#1a3a5c;color:#fff"><tr>';
-      html += '<th style="padding:8px">Date</th><th style="padding:8px">Act</th><th style="padding:8px">Name</th><th style="padding:8px">Project</th><th style="padding:8px">Organization</th>';
+      html += '<th style="padding:8px">Date</th><th style="padding:8px">Act</th><th style="padding:8px">Name</th><th style="padding:8px">Project</th><th style="padding:8px">Organization</th><th style="padding:8px">Contributions</th>';
       html += '</tr></thead><tbody>';
       for (var j = 0; j < state.contributors.length; j++) {
         var e = state.contributors[j];
@@ -912,6 +914,7 @@ if (document.getElementById('curator-feed-default-feed-layout')) {
         html += '<td style="padding:8px">' + (e.name || '') + '</td>';
         html += '<td style="padding:8px">' + proj + '</td>';
         html += '<td style="padding:8px">' + (e.organization || '') + '</td>';
+        html += '<td style="padding:8px">' + (e.contributions || 0) + '</td>';
         html += '</tr>';
       }
       html += '</tbody></table></div>';

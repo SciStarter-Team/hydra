@@ -482,6 +482,35 @@ pub fn detect_format(content: &str) -> ContentFormat {
     ContentFormat::Markdown
 }
 
+/// Render content of any supported format (Delta JSON, HTML, or Markdown) to HTML.
+///
+/// Returns `(html, normalized_delta)` where `normalized_delta` is `Some` when
+/// the input was converted from a non-Delta format. The caller should persist
+/// the normalized Delta back to the database so future renders skip conversion
+/// and the rich text editor can work with it directly.
+pub fn content_to_html(content: &str) -> Result<(String, Option<String>), anyhow::Error> {
+    let trimmed = content.trim();
+    let format = detect_format(trimmed);
+
+    match format {
+        ContentFormat::Empty => Ok((String::new(), None)),
+        ContentFormat::Delta => {
+            let html = delta_to_html(trimmed)?;
+            Ok((html, None))
+        }
+        ContentFormat::Html => {
+            let delta_json = html_to_delta(trimmed)?;
+            let html = delta_to_html(&delta_json)?;
+            Ok((html, Some(delta_json)))
+        }
+        ContentFormat::Markdown => {
+            let delta_json = markdown_to_delta(trimmed)?;
+            let html = delta_to_html(&delta_json)?;
+            Ok((html, Some(delta_json)))
+        }
+    }
+}
+
 /// Convert legacy content (HTML, Markdown, or existing Delta JSON) to Delta format
 ///
 /// This function detects the format of the input and converts it to Quill Delta:

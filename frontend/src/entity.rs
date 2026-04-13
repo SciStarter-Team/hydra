@@ -539,13 +539,19 @@ impl Entity {
 
                 let content = detail.prepare(user_info.clone()).await?;
                 let title = content.name.clone();
+                let can_edit = content.can_edit;
 
                 let layout = StandardLayout::new(format!("/{}", &self.slug), content)
                     .prepare(user_info.clone())
                     .await?;
 
+                let mut head = Head::default().with_maplibre();
+                if can_edit {
+                    head = head.with_quill();
+                }
+
                 crate::component::detail_page::DetailPageWrapper {
-                    head: Head::default().with_maplibre().prepare(None).await?,
+                    head: head.prepare(None).await?,
                     layout,
                     title,
                 }
@@ -568,13 +574,19 @@ impl Entity {
 
                 let content = detail.prepare(user_info.clone()).await?;
                 let title = content.name.clone();
+                let can_edit = content.can_edit;
 
                 let layout = StandardLayout::new(format!("/{}", &self.slug), content)
                     .prepare(user_info.clone())
                     .await?;
 
+                let mut head = Head::default().with_maplibre();
+                if can_edit {
+                    head = head.with_quill();
+                }
+
                 crate::component::detail_page::DetailPageWrapper {
-                    head: Head::default().with_maplibre().prepare(None).await?,
+                    head: head.prepare(None).await?,
                     layout,
                     title,
                 }

@@ -1,7 +1,8 @@
-<div id="field-<%= &self.field_type %>" class="p-3 border border-blue-300 rounded-sm bg-blue-50 mb-2">
+<div id="field-<%= &self.field_type %>" class="p-3 border border-blue-300 rounded-sm bg-blue-50 mb-2<% if self.field_type == "image" { %> flex flex-col max-w-full md:w-[425px]<% } %>">
   <form hx-put="/-detail/<%= &self.target_id %>/field/<%= &self.field_type %>"
         hx-target="#field-<%= &self.field_type %>"
-        hx-swap="outerHTML">
+        hx-swap="outerHTML"
+>
     <label class="block text-xs font-semibold mb-1"><%= &self.label %></label>
     <% match &self.input_kind { crate::component::detail_page_edit::FieldInputKind::Text => { %>
     <input type="text" name="value" value="<%= &self.current_value %>" class="input input-sm w-full">
@@ -10,7 +11,24 @@
     <% } crate::component::detail_page_edit::FieldInputKind::Textarea => { %>
     <textarea name="value" rows="4" class="input input-sm w-full"><%= &self.current_value %></textarea>
     <% } crate::component::detail_page_edit::FieldInputKind::RichText => { %>
-    <textarea name="value" rows="6" class="input input-sm w-full"><%= &self.current_value %></textarea>
+    <ss-rich-text name="value" value='<%= &self.current_value %>'></ss-rich-text>
+    <% } crate::component::detail_page_edit::FieldInputKind::Image => { %>
+    <input type="hidden" name="value" value="<%= &self.current_value %>">
+    <% if !self.current_value.is_empty() { %>
+    <img class="ss-image-preview rounded-sm border border-linework mb-2 max-h-48" src="<%= &self.current_value %>" alt="">
+    <% } %>
+    <div class="ss-image-upload border-2 border-dashed border-gray-300 rounded-sm p-4 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-colors"
+         hx-on:click="this.querySelector('input[type=file]').click()"
+         hx-on:dragover="event.preventDefault(); this.classList.add('border-blue-400', 'bg-blue-50/50')"
+         hx-on:dragleave="this.classList.remove('border-blue-400', 'bg-blue-50/50')"
+         hx-on:drop="event.preventDefault(); this.classList.remove('border-blue-400', 'bg-blue-50/50'); var f = event.dataTransfer.files[0]; if (f) { var fd = new FormData(); fd.append('file', f); var el = this; fetch('/-upload/file', {method: 'POST', body: fd}).then(r => r.json()).then(d => { var form = el.closest('form'); form.querySelector('input[name=value]').value = d.file_path; var url_input = form.querySelector('input[name=value_url]'); if (url_input) url_input.value = d.file_path; var img = form.querySelector('.ss-image-preview'); if (!img) { img = document.createElement('img'); img.className = 'ss-image-preview rounded-sm border border-linework mb-2 max-h-48'; form.querySelector('.ss-image-upload').before(img); } img.src = d.file_path; }); }">
+      <input type="file" accept="image/*" class="hidden"
+             hx-on:change="var f = this.files[0]; if (f) { var fd = new FormData(); fd.append('file', f); var el = this.closest('.ss-image-upload'); fetch('/-upload/file', {method: 'POST', body: fd}).then(r => r.json()).then(d => { var form = el.closest('form'); form.querySelector('input[name=value]').value = d.file_path; var url_input = form.querySelector('input[name=value_url]'); if (url_input) url_input.value = d.file_path; var img = form.querySelector('.ss-image-preview'); if (!img) { img = document.createElement('img'); img.className = 'ss-image-preview rounded-sm border border-linework mb-2 max-h-48'; el.before(img); } img.src = d.file_path; }); }">
+      <p class="text-sm text-gray-500">Click or drag an image here to upload</p>
+      <p class="text-xs text-gray-400 mt-1">Or enter a URL below</p>
+    </div>
+    <input type="url" name="value_url" value="<%= &self.current_value %>" class="input input-sm w-full mt-2" placeholder="https://..."
+           hx-on:input="this.closest('form').querySelector('input[name=value]').value = this.value">
     <% } crate::component::detail_page_edit::FieldInputKind::Boolean => { %>
     <label class="flex items-center gap-2 cursor-pointer">
       <input type="hidden" name="value" value="false">
@@ -34,6 +52,15 @@
       <% } %>
     </div>
     <% } } %>
+    <% if let Some(ref sup) = self.supplemental { %>
+    <label class="block text-xs font-semibold mt-3 mb-1"><%= &sup.label %></label>
+    <% match &sup.input_kind { crate::component::detail_page_edit::FieldInputKind::Text => { %>
+    <input type="text" name="<%= &sup.name %>" value="<%= &sup.current_value %>" class="input input-sm w-full">
+    <% } crate::component::detail_page_edit::FieldInputKind::Textarea => { %>
+    <textarea name="<%= &sup.name %>" rows="2" class="input input-sm w-full"><%= &sup.current_value %></textarea>
+    <% } _ => { %>
+    <input type="text" name="<%= &sup.name %>" value="<%= &sup.current_value %>" class="input input-sm w-full">
+    <% } } } %>
     <div class="flex gap-2 mt-2">
       <button type="submit" class="btn btn-primary btn-xs">Save</button>
       <button type="button" class="btn btn-secondary btn-xs"

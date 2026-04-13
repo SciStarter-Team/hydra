@@ -10,6 +10,7 @@ use poem::web::{Form, Json, Query, RealIp};
 use poem::{Endpoint, Response, Route, get, handler};
 use sailfish::TemplateOnce;
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::component::{Component, Head, StandardLayout};
@@ -513,10 +514,55 @@ struct WallOfFameQuery {
     phase_override: Option<bool>,
 }
 
+pub struct GroupedContributor {
+    pub date: Option<String>,
+    pub act: Option<String>,
+    pub name: Option<String>,
+    pub project: Option<String>,
+    pub organization: Option<String>,
+    pub entity_slug: Option<String>,
+    pub contributions: i32,
+}
+
+fn group_contributors(entries: Vec<ContributorEntry>) -> Vec<GroupedContributor> {
+    let mut groups: HashMap<(Option<String>, Option<String>, Option<String>, Option<String>), GroupedContributor> = HashMap::new();
+
+    for entry in entries {
+        let is_anon = entry.name.as_deref().map_or(true, |n| {
+            n.trim().is_empty() || n.eq_ignore_ascii_case("anon")
+        });
+        if is_anon {
+            continue;
+        }
+
+        let key = (
+            entry.date.clone(),
+            entry.act.clone(),
+            entry.name.clone(),
+            entry.project.clone(),
+        );
+
+        groups
+            .entry(key)
+            .and_modify(|g| g.contributions += 1)
+            .or_insert(GroupedContributor {
+                date: entry.date,
+                act: entry.act,
+                name: entry.name,
+                project: entry.project,
+                organization: entry.organization,
+                entity_slug: entry.entity_slug,
+                contributions: 1,
+            });
+    }
+
+    groups.into_values().collect()
+}
+
 #[derive(TemplateOnce)]
 #[template(path = "pages/csm/wall_of_fame.stpl.html")]
 struct WallOfFameFragment {
-    contributors: Vec<ContributorEntry>,
+    contributors: Vec<GroupedContributor>,
     pages: i32,
     mode: String,
     page: i32,
@@ -618,6 +664,8 @@ pub async fn csm_wall_of_fame(
             common::service::request("log.acts.contributors", request).await?;
         (response.contributors, response.pages)
     };
+
+    let contributors = group_contributors(contributors);
 
     let html = WallOfFameFragment {
         contributors,

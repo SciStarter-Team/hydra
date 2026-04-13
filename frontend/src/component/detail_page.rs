@@ -35,6 +35,7 @@ use crate::peering::LoadStorePeered;
 use crate::project::ProjectStatus;
 use crate::rating::ProjectRating;
 use crate::review::ProjectReview;
+use common::quill::content_to_html;
 
 // ---------------------------------------------------------------------------
 // Enums
@@ -545,6 +546,38 @@ impl DetailPage {
             TimeString::try_from(last_edited_str).ok()
         };
 
+        let (description_html, description_delta) = content_to_html(&row.description)
+            .unwrap_or_else(|_| (row.description.clone(), None));
+        let (how_to_join_html, how_to_join_delta) = content_to_html(&row.how_to_join)
+            .unwrap_or_else(|_| (row.how_to_join.clone(), None));
+
+        // Save back normalized Delta so future renders skip conversion
+        if description_delta.is_some() || how_to_join_delta.is_some() {
+            let project_id = self.target_id;
+            tokio::spawn(async move {
+                if let Some(delta) = description_delta {
+                    let field = crate::project::field::ProjectField {
+                        project_id,
+                        field: crate::project::field::ProjectFieldValue::Description(delta),
+                        source: None,
+                    };
+                    if let Err(e) = field.store().await {
+                        tracing::warn!("Failed to save normalized description delta: {e}");
+                    }
+                }
+                if let Some(delta) = how_to_join_delta {
+                    let field = crate::project::field::ProjectField {
+                        project_id,
+                        field: crate::project::field::ProjectFieldValue::HowToJoin(delta),
+                        source: None,
+                    };
+                    if let Err(e) = field.store().await {
+                        tracing::warn!("Failed to save normalized how_to_join delta: {e}");
+                    }
+                }
+            });
+        }
+
         Ok(DetailPageContent {
             kind: DetailPageKind::Project,
             slug: self.slug,
@@ -561,8 +594,8 @@ impl DetailPage {
             joined,
             goal: row.goal,
             task: row.task,
-            description: row.description,
-            how_to_join: row.how_to_join,
+            description: description_html,
+            how_to_join: how_to_join_html,
             location_type: row.location_type,
             entirely_online: row.entirely_online,
             location_name: row.location_name,
@@ -730,6 +763,36 @@ impl DetailPage {
         let status: DetailPageStatus = row.status.into();
         let event_type_display = Some(row.event_type.to_string());
 
+        let (description_html, description_delta) = content_to_html(&row.description)
+            .unwrap_or_else(|_| (row.description.clone(), None));
+        let (how_to_join_html, how_to_join_delta) = content_to_html(&row.how_to_join)
+            .unwrap_or_else(|_| (row.how_to_join.clone(), None));
+
+        // Save back normalized Delta so future renders skip conversion
+        if description_delta.is_some() || how_to_join_delta.is_some() {
+            let event_id = self.target_id;
+            tokio::spawn(async move {
+                if let Some(delta) = description_delta {
+                    let field = crate::event::field::EventField {
+                        event_id,
+                        field: crate::event::field::EventFieldValue::Description(delta),
+                    };
+                    if let Err(e) = field.store().await {
+                        tracing::warn!("Failed to save normalized event description delta: {e}");
+                    }
+                }
+                if let Some(delta) = how_to_join_delta {
+                    let field = crate::event::field::EventField {
+                        event_id,
+                        field: crate::event::field::EventFieldValue::HowToJoin(delta),
+                    };
+                    if let Err(e) = field.store().await {
+                        tracing::warn!("Failed to save normalized event how_to_join delta: {e}");
+                    }
+                }
+            });
+        }
+
         Ok(DetailPageContent {
             kind: DetailPageKind::Event,
             slug: self.slug,
@@ -746,8 +809,8 @@ impl DetailPage {
             joined: false,
             goal: String::new(),
             task: String::new(),
-            description: row.description,
-            how_to_join: row.how_to_join,
+            description: description_html,
+            how_to_join: how_to_join_html,
             location_type: row.location_type,
             entirely_online: row.entirely_online,
             location_name: row.location_name,

@@ -52,6 +52,7 @@
       <th style="padding:8px">Name</th>
       <th style="padding:8px">Project</th>
       <th style="padding:8px">Organization</th>
+      <th style="padding:8px">Contributions</th>
     </tr></thead>
     <tbody>
       <% for (i, entry) in self.contributors.iter().enumerate() { %>
@@ -61,6 +62,7 @@
         <td style="padding:8px"><%= entry.name.as_deref().unwrap_or("") %></td>
         <td style="padding:8px"><% if let (Some(slug), Some(proj)) = (&entry.entity_slug, &entry.project) { %><a href="/<%= slug %>"><%= proj %></a><% } else { %><%= entry.project.as_deref().unwrap_or("") %><% } %></td>
         <td style="padding:8px"><%= entry.organization.as_deref().unwrap_or("") %></td>
+        <td style="padding:8px"><%= entry.contributions %></td>
       </tr>
       <% } %>
     </tbody>

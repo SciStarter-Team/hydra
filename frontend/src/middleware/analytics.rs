@@ -276,12 +276,17 @@ async fn rewrite_external_links(html: &str, slug: &str) -> Result<String, anyhow
 
     let response: ExternalLinksResponse = request("log.links.get_or_create", &req_data).await?;
 
-    // Build patterns and replacements for aho-corasick from HashMap entries
-    let (patterns, replacements): (Vec<&String>, Vec<String>) = response
-        .links
-        .iter()
-        .map(|(url, ulid)| (url, format!("/-link/{}", ulid)))
-        .unzip();
+    // Build patterns and replacements for aho-corasick, constrained to href
+    // attributes so that URL text content is not rewritten
+    let mut patterns = Vec::new();
+    let mut replacements = Vec::new();
+    for (url, ulid) in &response.links {
+        let tracked = format!("/-link/{}", ulid);
+        for quote in ['"', '\''] {
+            patterns.push(format!("href={quote}{url}{quote}"));
+            replacements.push(format!("href={quote}{tracked}{quote}"));
+        }
+    }
 
     // Use aho-corasick for efficient parallel replacement
     let ac = AhoCorasick::new(&patterns)?;

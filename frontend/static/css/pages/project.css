@@ -1,0 +1,8 @@
+/* Edit-mode toggle: hide edit-only elements when not in edit mode */
+.page-content:not(.edit-mode) .edit-only {
+  display: none !important;
+}
+
+.page-content:not(.edit-mode) .min-h-6 {
+  min-height: 0 !important;
+}

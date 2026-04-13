@@ -2,6 +2,11 @@
 fn main() {
     // trigger recompilation when a new migration is added
     println!("cargo:rerun-if-changed=migrations");
-    // also rebuild if the static files change, since they're incorporated into the binary
-    println!("cargo:rerun-if-changed=dist");
+
+    // Rebuild when any file in dist/ changes, since they're embedded into the binary.
+    // rerun-if-changed on a directory alone only fires on add/remove, not file modifications.
+    for entry in walkdir::WalkDir::new("dist") {
+        let entry = entry.expect("walkdir error in build.rs");
+        println!("cargo:rerun-if-changed={}", entry.path().display());
+    }
 }

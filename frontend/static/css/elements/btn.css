@@ -91,15 +91,15 @@
 }
 
 .btn-icon .icon-active {
-    @apply hidden;
+    display: none;
 }
 
 .btn-icon:hover .icon-active, .btn-icon.active .icon-active {
-    @apply block;
+    display: block;
 }
 
-.btn-icon:hover .icon-inactive, .btn-icon:active .icon-inactive {
-    @apply hidden;
+.btn-icon:hover .icon-inactive, .btn-icon:active .icon-inactive, .btn-icon.active .icon-inactive {
+    display: none;
 }
 
 

@@ -20,12 +20,13 @@ use super::detail_page::DetailPageKind;
 // Field metadata
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum FieldInputKind {
     Text,
     Textarea,
     RichText,
     Url,
+    Image,
     Boolean,
     Select(&'static [(&'static str, &'static str)]),
     MultiCheckbox(&'static [(&'static str, &'static str)]),
@@ -59,8 +60,8 @@ pub fn field_meta(field_type: &str, kind: DetailPageKind) -> Option<FieldMeta> {
             input_kind: FieldInputKind::Text,
         }),
         ("image", _) => Some(FieldMeta {
-            label: "Image URL",
-            input_kind: FieldInputKind::Url,
+            label: "Image",
+            input_kind: FieldInputKind::Image,
         }),
         ("image_credit", _) => Some(FieldMeta {
             label: "Image Credit",
@@ -1035,6 +1036,15 @@ async fn save_event_field(
 // Templates
 // ---------------------------------------------------------------------------
 
+/// An optional extra field shown alongside the main field in the edit form.
+#[derive(Debug, Clone)]
+pub struct SupplementalField {
+    pub name: String,
+    pub label: String,
+    pub input_kind: FieldInputKind,
+    pub current_value: String,
+}
+
 #[derive(TemplateOnce)]
 #[template(path = "pages/detail_page_field_edit.stpl.html")]
 struct FieldEditForm {
@@ -1043,6 +1053,7 @@ struct FieldEditForm {
     label: String,
     input_kind: FieldInputKind,
     current_value: String,
+    supplemental: Option<SupplementalField>,
 }
 
 #[derive(TemplateOnce)]
@@ -1053,6 +1064,7 @@ pub struct FieldDisplay {
     pub label: String,
     pub can_edit: bool,
     pub content_html: String,
+    pub empty: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -1063,6 +1075,8 @@ pub struct FieldDisplay {
 struct FieldForm {
     #[serde(deserialize_with = "crate::form::deserialize_string_or_vec")]
     value: Vec<String>,
+    #[serde(default)]
+    image_credit: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1107,12 +1121,36 @@ pub async fn get_edit_form(
             poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
         })?;
 
+    // For rich text fields, normalize the value to Delta JSON for the Quill editor
+    let current_value = if meta.input_kind == FieldInputKind::RichText {
+        common::quill::to_delta(&current_value, None).unwrap_or(current_value)
+    } else {
+        current_value
+    };
+
+    // Build supplemental field if applicable
+    let supplemental = match field_type.as_str() {
+        "image" => {
+            let credit = read_field_value(&id, "image_credit", kind)
+                .await
+                .unwrap_or_default();
+            Some(SupplementalField {
+                name: "image_credit".to_string(),
+                label: "Image Credit".to_string(),
+                input_kind: FieldInputKind::Text,
+                current_value: credit,
+            })
+        }
+        _ => None,
+    };
+
     let html = FieldEditForm {
         target_id: id,
         field_type,
         label: meta.label.to_string(),
         input_kind: meta.input_kind,
         current_value,
+        supplemental,
     }
     .render_once()
     .map_err(|e| {
@@ -1176,6 +1214,22 @@ pub async fn save_field(
         poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
     })?;
 
+    // Save supplemental fields
+    if let Some(credit) = &form.image_credit {
+        let credit_values = vec![credit.clone()];
+        match kind {
+            DetailPageKind::Project => {
+                save_project_field(target_ulid, "image_credit", &credit_values, source).await
+            }
+            DetailPageKind::Event => {
+                save_event_field(target_ulid, "image_credit", &credit_values).await
+            }
+        }
+        .map_err(|e| {
+            poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+        })?;
+    }
+
     // Log activity
     let action = match kind {
         DetailPageKind::Project => "project-edit",
@@ -1190,7 +1244,8 @@ pub async fn save_field(
             poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
         })?;
 
-    let display_html = format_display_value(&field_type, &current_value, kind);
+    let empty = current_value.is_empty();
+    let display_html = format_display_value(&field_type, &current_value, &id, kind).await;
 
     let html = FieldDisplay {
         target_id: id,
@@ -1198,6 +1253,7 @@ pub async fn save_field(
         label: meta.label.to_string(),
         can_edit: true,
         content_html: display_html,
+        empty,
     }
     .render_once()
     .map_err(|e| {
@@ -1236,7 +1292,8 @@ pub async fn get_display(
             poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
         })?;
 
-    let display_html = format_display_value(&field_type, &current_value, kind);
+    let empty = current_value.is_empty();
+    let display_html = format_display_value(&field_type, &current_value, &id, kind).await;
 
     let html = FieldDisplay {
         target_id: id,
@@ -1244,6 +1301,7 @@ pub async fn get_display(
         label: meta.label.to_string(),
         can_edit,
         content_html: display_html,
+        empty,
     }
     .render_once()
     .map_err(|e| {
@@ -1277,10 +1335,36 @@ fn not_set() -> &'static str {
 }
 
 /// Format a field value for display as HTML
-fn format_display_value(field_type: &str, value: &str, kind: DetailPageKind) -> String {
+async fn format_image_display(target_id: &str, value: &str, kind: DetailPageKind) -> String {
+    if value.is_empty() {
+        return r#"<div class="rounded-sm border border-linework bg-gray-100 h-48 flex items-center justify-center text-gray-400 italic">(no image)</div>"#.to_string();
+    }
+    let credit = read_field_value(target_id, "image_credit", kind)
+        .await
+        .unwrap_or_default();
+    let mut html = format!(
+        r#"<img class="rounded-sm border border-linework" src="{}" alt="">"#,
+        html_escape(value)
+    );
+    if !credit.is_empty() {
+        html.push_str(&format!(
+            r#"<span class="block text-center text-xs text-[#ccc]">{}</span>"#,
+            html_escape(&credit)
+        ));
+    }
+    html
+}
+
+async fn format_display_value(
+    field_type: &str,
+    value: &str,
+    target_id: &str,
+    kind: DetailPageKind,
+) -> String {
     let empty = value.is_empty();
 
     match field_type {
+        "image" => return format_image_display(target_id, value, kind).await,
         // Ribbon-box fields (top-level styled blocks)
         "goal" if kind == DetailPageKind::Project => {
             if empty {
@@ -1296,8 +1380,26 @@ fn format_display_value(field_type: &str, value: &str, kind: DetailPageKind) -> 
                 ribbon_box("Task", html_escape(value))
             }
         }
-        "description" => ribbon_box("Description", if empty { not_set() } else { value }),
-        "how_to_join" => ribbon_box("How to Get Started", if empty { not_set() } else { value }),
+        "description" => {
+            if empty {
+                ribbon_box("Description", not_set())
+            } else {
+                let html = common::quill::content_to_html(value)
+                    .map(|(h, _)| h)
+                    .unwrap_or_else(|_| value.to_string());
+                ribbon_box("Description", &html)
+            }
+        }
+        "how_to_join" => {
+            if empty {
+                ribbon_box("How to Get Started", not_set())
+            } else {
+                let html = common::quill::content_to_html(value)
+                    .map(|(h, _)| h)
+                    .unwrap_or_else(|_| value.to_string());
+                ribbon_box("How to Get Started", &html)
+            }
+        }
 
         // Location fields — simple inline display
         "location_name" => {
@@ -1389,11 +1491,11 @@ fn format_display_value(field_type: &str, value: &str, kind: DetailPageKind) -> 
 
         // Boolean fields
         "entirely_online" | "on_demand" | "in_person" | "indoors" | "outdoors" => {
-            if value == "true" {
-                "Yes".to_string()
-            } else {
-                "No".to_string()
-            }
+            let label = field_meta(field_type, kind)
+                .map(|m| m.label)
+                .unwrap_or(field_type);
+            let yes_no = if value == "true" { "Yes" } else { "No" };
+            format!(r#"<span class="text-sm">{label}: {yes_no}</span>"#)
         }
 
         // Default: escaped text

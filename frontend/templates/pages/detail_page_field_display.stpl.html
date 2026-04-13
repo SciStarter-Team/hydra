@@ -1,6 +1,6 @@
-<div id="field-<%= &self.field_type %>" class="relative">
+<div id="field-<%= &self.field_type %>" class="relative<% if self.field_type == "image" { %> flex flex-col max-w-full md:w-[425px]<% } %><% if self.empty && self.can_edit { %> edit-only<% } %>">
   <% if self.can_edit { %>
-  <button class="absolute top-0 right-0 p-1 opacity-40 hover:opacity-100 cursor-pointer z-10"
+  <button class="edit-only absolute top-0 right-0 p-1 opacity-40 hover:opacity-100 cursor-pointer z-10"
           title="Edit <%= &self.label %>"
           hx-get="/-detail/<%= &self.target_id %>/field/<%= &self.field_type %>"
           hx-target="#field-<%= &self.field_type %>"

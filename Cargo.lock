@@ -3251,6 +3251,7 @@ dependencies = [
  "url",
  "urlencoding",
  "uuid",
+ "walkdir",
  "webauthn-rs",
 ]
 
