@@ -1,0 +1,34 @@
+<div class="bg-white rounded-lg shadow border border-gray-200 p-4">
+    <div class="flex items-center justify-between mb-3">
+        <h3 class="text-sm font-semibold text-gray-900">Import Component Library</h3>
+        <button type="button"
+                hx-on:click="document.getElementById('pb-import-panel').innerHTML = ''"
+                class="text-gray-400 hover:text-gray-600">
+            <wa-icon name="xmark" class="w-4 h-4"></wa-icon>
+        </button>
+    </div>
+    <p class="text-sm text-gray-500 mb-3">
+        Upload a zip archive of component JSON files. Components with ids matching existing components will overwrite them.
+    </p>
+    <form hx-post="/-admin/engine-room/components/import"
+          hx-encoding="multipart/form-data"
+          hx-target="#pb-import-panel"
+          hx-swap="innerHTML">
+        <div class="flex items-end gap-3">
+            <div class="flex-1">
+                <label for="pb-import-file" class="block text-sm font-medium text-gray-700">Library zip file</label>
+                <input type="file"
+                       id="pb-import-file"
+                       name="file"
+                       accept=".zip,application/zip"
+                       required
+                       class="mt-1 block w-full text-sm text-gray-700 file:mr-3 file:py-2 file:px-3 file:rounded file:border-0 file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+            </div>
+            <button type="submit"
+                    class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                <wa-icon name="upload" class="w-4 h-4 mr-2"></wa-icon>
+                Import
+            </button>
+        </div>
+    </form>
+</div>

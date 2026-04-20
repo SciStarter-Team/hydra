@@ -7,6 +7,7 @@
 
 pub mod cache;
 mod component;
+pub mod library;
 mod page;
 pub mod source;
 

@@ -24,6 +24,7 @@ pub enum Badge {
     SciStarterAmbassador,
     OneMillionActsOfScience2025,
     OneMillionActsOfScience2026,
+    CitizenScienceForK12Educators,
 }
 
 impl Badge {
@@ -42,6 +43,7 @@ impl Badge {
             Badge::SciStarterAmbassador => "9csPkdhzQLSZuk-OWREaKg",
             Badge::OneMillionActsOfScience2025 => "U431wPFaTaKwUQO0WhQJRg",
             Badge::OneMillionActsOfScience2026 => "01KEYVHY8RXNGXVACTR9TY02AD",
+            Badge::CitizenScienceForK12Educators => "01KPAY9A4VN929P02MECQ1W90N",
         }
     }
 
@@ -62,6 +64,7 @@ impl Badge {
             Badge::SciStarterAmbassador => "SciStarter Ambassador",
             Badge::OneMillionActsOfScience2025 => "One Million Acts of Science 2025",
             Badge::OneMillionActsOfScience2026 => "2.50 Million Acts of Science 2026",
+            Badge::CitizenScienceForK12Educators => "Citizen Science for K-12 Educators",
         }
     }
 
@@ -138,6 +141,13 @@ impl Badge {
                     "/-static/img/badges/badge-acts-2026.png"
                 )
             }
+            Badge::CitizenScienceForK12Educators => {
+                concat!(
+                    "https://",
+                    env!("DOMAIN"),
+                    "/-static/img/badges/badge-k12.png"
+                )
+            }
         }
     }
 
@@ -156,6 +166,7 @@ impl Badge {
             Badge::SciStarterAmbassador => "img/badges/badge-ambassador.png",
             Badge::OneMillionActsOfScience2025 => "img/badges/badge-1ma-2025.png",
             Badge::OneMillionActsOfScience2026 => "img/badges/badge-acts-2026.png",
+            Badge::CitizenScienceForK12Educators => "img/badges/badge-k12.png",
         }
     }
 
@@ -180,6 +191,7 @@ impl Badge {
             Badge::SciStarterAmbassador => Some("https://scistarter.org/training-ambassador"),
             Badge::OneMillionActsOfScience2025 => None,
             Badge::OneMillionActsOfScience2026 => None,
+            Badge::CitizenScienceForK12Educators => Some("https://scistarter.org/training"),
         }
     }
 
@@ -216,6 +228,9 @@ impl Badge {
             Badge::OneMillionActsOfScience2026 => {
                 "The “2.50 Million Acts of Science” badge celebrates the people who made it happen: volunteers whose curiosity and commitment helped advance scientific knowledge worldwide during Citizen Science Month (April 2026). By contributing to SciStarter Affiliate projects or self-reporting Acts on CitizenScienceMonth.org, participants joined a global effort to reach 2.50 Million Acts of Science. This badge is awarded to participants with SciStarter accounts, recognizing their impact as part of a powerful, people-driven science movement."
             }
+            Badge::CitizenScienceForK12Educators => {
+                "The Citizen Science for K-12 Educators badge is awarded to individuals who have translated their curiosity into impact by demonstrating foundational citizen science skills and learning how to bring citizen science into their own K-12 classrooms."
+            }
         }
     }
 
@@ -236,6 +251,7 @@ impl Badge {
             Badge::SciStarterAmbassador => "https://scistarter.org/training-ambassador",
             Badge::OneMillionActsOfScience2025 => "https://scistarter.org/citizensciencemonth",
             Badge::OneMillionActsOfScience2026 => "https://scistarter.org/citizensciencemonth",
+            Badge::CitizenScienceForK12Educators => "https://scistarter.org/training",
         }
     }
 
@@ -254,6 +270,7 @@ impl Badge {
             Badge::SciStarterAmbassador => include_str!("ambassador.md"),
             Badge::OneMillionActsOfScience2025 => include_str!("one_million_2025.md"),
             Badge::OneMillionActsOfScience2026 => include_str!("acts_2026.md"),
+            Badge::CitizenScienceForK12Educators => include_str!("k12_educators.md"),
         }
     }
 
@@ -272,6 +289,7 @@ impl Badge {
             Badge::SciStarterAmbassador => &AMBASSADOR_ALIGNMENTS,
             Badge::OneMillionActsOfScience2025 => &ONE_MILLION_2025_ALIGNMENTS,
             Badge::OneMillionActsOfScience2026 => &ONE_MILLION_2025_ALIGNMENTS,
+            Badge::CitizenScienceForK12Educators => &K12_EDUCATORS_ALIGNMENTS,
         }
     }
 
@@ -296,6 +314,14 @@ impl Badge {
             Badge::SciStarterAmbassador => &["ambassador", "community", "leadership"],
             Badge::OneMillionActsOfScience2025 => &["one million acts", "2025", "participation"],
             Badge::OneMillionActsOfScience2026 => &["one million acts", "2026", "participation"],
+            Badge::CitizenScienceForK12Educators => &[
+                "citizen science",
+                "K-12 education",
+                "professional development",
+                "experiential learning",
+                "curriculum design",
+                "teaching",
+            ],
         }
     }
 
@@ -314,6 +340,7 @@ impl Badge {
             "9csPkdhzQLSZuk-OWREaKg" => Some(Badge::SciStarterAmbassador),
             "U431wPFaTaKwUQO0WhQJRg" => Some(Badge::OneMillionActsOfScience2025),
             "01KEYVHY8RXNGXVACTR9TY02AD" => Some(Badge::OneMillionActsOfScience2026),
+            "01KPAY9A4VN929P02MECQ1W90N" => Some(Badge::CitizenScienceForK12Educators),
             _ => None,
         }
     }
@@ -909,7 +936,66 @@ static ONE_MILLION_2025_ALIGNMENTS: [Alignment; 9] = [
     },
 ];
 
-static ALL_BADGES: [Badge; 10] = [
+static K12_EDUCATORS_ALIGNMENTS: [Alignment; 8] = [
+    Alignment {
+        name: "Instructional Design",
+        url: "https://lightcast.io/open-skills/skills/KS1256C6DBYG39V53J4V/instructional-design",
+        description: None,
+        framework: Some("LIGHTCAST"),
+        code: Some("KS1256C6DBYG39V53J4V"),
+    },
+    Alignment {
+        name: "Curriculum Development",
+        url: "https://lightcast.io/open-skills/skills/KS122LF6587VF0NZFZJW/curriculum-development",
+        description: None,
+        framework: Some("LIGHTCAST"),
+        code: Some("KS122LF6587VF0NZFZJW"),
+    },
+    Alignment {
+        name: "Curriculum Mapping",
+        url: "https://lightcast.io/open-skills/skills/KS122LF709JLK7D9PL8J/curriculum-mapping",
+        description: None,
+        framework: Some("LIGHTCAST"),
+        code: Some("KS122LF709JLK7D9PL8J"),
+    },
+    Alignment {
+        name: "Teaching",
+        url: "https://lightcast.io/open-skills/skills/KS120PQ6XD1JWMFQVJNW/teaching",
+        description: None,
+        framework: Some("LIGHTCAST"),
+        code: Some("KS120PQ6XD1JWMFQVJNW"),
+    },
+    Alignment {
+        name: "Lesson Planning",
+        url: "https://lightcast.io/open-skills/skills/KS125SS6Z01PYP99SN5G/lesson-planning",
+        description: None,
+        framework: Some("LIGHTCAST"),
+        code: Some("KS125SS6Z01PYP99SN5G"),
+    },
+    Alignment {
+        name: "K-12 Education",
+        url: "https://lightcast.io/open-skills/skills/BGS4866E4D4C7E1F272F/k-12-education",
+        description: None,
+        framework: Some("LIGHTCAST"),
+        code: Some("BGS4866E4D4C7E1F272F"),
+    },
+    Alignment {
+        name: "Interdisciplinary Teaching",
+        url: "https://lightcast.io/open-skills/skills/KS125856JH9VGVNY0TBP/interdisciplinary-teaching",
+        description: None,
+        framework: Some("LIGHTCAST"),
+        code: Some("KS125856JH9VGVNY0TBP"),
+    },
+    Alignment {
+        name: "Experiential Learning",
+        url: "https://lightcast.io/open-skills/skills/KS123R966Z5R6D81XZK4/experiential-learning",
+        description: None,
+        framework: Some("LIGHTCAST"),
+        code: Some("KS123R966Z5R6D81XZK4"),
+    },
+];
+
+static ALL_BADGES: [Badge; 11] = [
     Badge::FoundationsOfCitizenScience,
     Badge::LibrariesAsHubsForCitizenScience,
     Badge::BuildingDataLiteracyThroughCommunityAndCitizenScience,
@@ -920,6 +1006,7 @@ static ALL_BADGES: [Badge; 10] = [
     Badge::SciStarterAmbassador,
     Badge::OneMillionActsOfScience2025,
     Badge::OneMillionActsOfScience2026,
+    Badge::CitizenScienceForK12Educators,
 ];
 
 #[cfg(test)]

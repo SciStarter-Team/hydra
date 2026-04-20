@@ -1,5 +1,5 @@
 <div class="space-y-6">
-    <!-- Header with create button -->
+    <!-- Header with actions -->
     <div class="flex items-center justify-between">
         <div>
             <h2 class="text-lg font-semibold text-gray-900">Page Components</h2>
@@ -7,12 +7,31 @@
                 Reusable template components with slots for page building
             </p>
         </div>
-        <a href="/-admin/engine-room/components/new"
-           class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-            <wa-icon name="plus" class="w-4 h-4 mr-2"></wa-icon>
-            New Component
-        </a>
+        <div class="flex items-center gap-2">
+            <button type="submit"
+                    form="pb-export-form"
+                    class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                <wa-icon name="download" class="w-4 h-4 mr-2"></wa-icon>
+                Export Selected
+            </button>
+            <button type="button"
+                    hx-get="/-admin/engine-room/components/import"
+                    hx-target="#pb-import-panel"
+                    hx-swap="innerHTML"
+                    class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                <wa-icon name="upload" class="w-4 h-4 mr-2"></wa-icon>
+                Import Library
+            </button>
+            <a href="/-admin/engine-room/components/new"
+               class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                <wa-icon name="plus" class="w-4 h-4 mr-2"></wa-icon>
+                New Component
+            </a>
+        </div>
     </div>
+
+    <!-- Import panel (populated by HTMX when Import Library is clicked) -->
+    <div id="pb-import-panel"></div>
 
     <!-- Filters -->
     <div class="bg-white rounded-lg shadow border border-gray-200 p-4">
@@ -47,46 +66,54 @@
         </div>
     </div>
 
-    <!-- Components list -->
-    <div id="components-content" class="bg-white rounded-lg shadow border border-gray-200">
-        <% if self.components.is_empty() { %>
-        <div class="p-8 text-center">
-            <wa-icon name="puzzle-piece" class="mx-auto h-12 w-12 text-gray-400"></wa-icon>
-            <h3 class="mt-2 text-sm font-medium text-gray-900">No components</h3>
-            <p class="mt-1 text-sm text-gray-500">Get started by creating a new component.</p>
-            <div class="mt-6">
-                <a href="/-admin/engine-room/components/new"
-                   class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
-                    <wa-icon name="plus" class="w-4 h-4 mr-2"></wa-icon>
-                    New Component
-                </a>
+    <!-- Components list wrapped in export form so checkboxes submit together -->
+    <form id="pb-export-form" method="post" action="/-admin/engine-room/components/export">
+        <div id="components-content" class="bg-white rounded-lg shadow border border-gray-200">
+            <% if self.components.is_empty() { %>
+            <div class="p-8 text-center">
+                <wa-icon name="puzzle-piece" class="mx-auto h-12 w-12 text-gray-400"></wa-icon>
+                <h3 class="mt-2 text-sm font-medium text-gray-900">No components</h3>
+                <p class="mt-1 text-sm text-gray-500">Get started by creating a new component.</p>
+                <div class="mt-6">
+                    <a href="/-admin/engine-room/components/new"
+                       class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                        <wa-icon name="plus" class="w-4 h-4 mr-2"></wa-icon>
+                        New Component
+                    </a>
+                </div>
             </div>
-        </div>
-        <% } else { %>
-        <ul class="divide-y divide-gray-200">
-            <% for component in &self.components { %>
-            <li class="hover:bg-gray-50">
-                <a href="/-admin/engine-room/components/<%= component.component_id|disp %>" class="block px-6 py-4">
-                    <div class="flex items-center justify-between">
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-center gap-3">
-                                <h3 class="text-sm font-medium text-indigo-600 truncate"><%= &component.name %></h3>
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                    <%= &component.category %>
-                                </span>
+            <% } else { %>
+            <ul class="divide-y divide-gray-200">
+                <% for component in &self.components { %>
+                <li class="hover:bg-gray-50 flex items-center">
+                    <label class="pl-6 py-4 cursor-pointer">
+                        <input type="checkbox"
+                               name="ids[]"
+                               value="<%= component.component_id|disp %>"
+                               class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                    </label>
+                    <a href="/-admin/engine-room/components/<%= component.component_id|disp %>" class="flex-1 block px-4 py-4">
+                        <div class="flex items-center justify-between">
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-3">
+                                    <h3 class="text-sm font-medium text-indigo-600 truncate"><%= &component.name %></h3>
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                        <%= &component.category %>
+                                    </span>
+                                </div>
+                                <% if !component.description.is_empty() { %>
+                                <p class="mt-1 text-sm text-gray-500 truncate"><%= &component.description %></p>
+                                <% } %>
                             </div>
-                            <% if !component.description.is_empty() { %>
-                            <p class="mt-1 text-sm text-gray-500 truncate"><%= &component.description %></p>
-                            <% } %>
+                            <div class="ml-4 flex-shrink-0 text-sm text-gray-500">
+                                Updated <%- local_time(&component.updated, TimeFormat::DateTime) %>
+                            </div>
                         </div>
-                        <div class="ml-4 flex-shrink-0 text-sm text-gray-500">
-                            Updated <%- local_time(&component.updated, TimeFormat::DateTime) %>
-                        </div>
-                    </div>
-                </a>
-            </li>
+                    </a>
+                </li>
+                <% } %>
+            </ul>
             <% } %>
-        </ul>
-        <% } %>
-    </div>
+        </div>
+    </form>
 </div>

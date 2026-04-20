@@ -7,8 +7,14 @@
 <% } else { %>
 <ul class="divide-y divide-gray-200">
     <% for component in &self.components { %>
-    <li class="hover:bg-gray-50">
-        <a href="/-admin/engine-room/components/<%= component.component_id|disp %>" class="block px-6 py-4">
+    <li class="hover:bg-gray-50 flex items-center">
+        <label class="pl-6 py-4 cursor-pointer">
+            <input type="checkbox"
+                   name="ids[]"
+                   value="<%= component.component_id|disp %>"
+                   class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+        </label>
+        <a href="/-admin/engine-room/components/<%= component.component_id|disp %>" class="flex-1 block px-4 py-4">
             <div class="flex items-center justify-between">
                 <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-3">

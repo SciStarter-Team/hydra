@@ -347,6 +347,105 @@ async fn pb_components_update(
         .body(""))
 }
 
+#[derive(serde::Deserialize)]
+struct PbExportForm {
+    #[serde(default)]
+    ids: Vec<String>,
+}
+
+#[handler]
+async fn pb_components_export(
+    Authenticated(user_info): Authenticated,
+    crate::form::QsForm(form): crate::form::QsForm<PbExportForm>,
+) -> Result<poem::Response, anyhow::Error> {
+    use crate::peering::LoadStorePeered;
+
+    let _user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    if form.ids.is_empty() {
+        return Ok(poem::Response::builder()
+            .status(poem::http::StatusCode::BAD_REQUEST)
+            .content_type("text/plain")
+            .body("No components selected for export"));
+    }
+
+    let mut components = Vec::with_capacity(form.ids.len());
+    for id_str in &form.ids {
+        let id: ulid::Ulid = id_str.parse()?;
+        components.push(crate::pagebuilder::PageBuilderComponent::load(id).await?);
+    }
+
+    let zip_bytes = crate::pagebuilder::library::export_to_zip(&components)?;
+
+    let date = jiff::Timestamp::now()
+        .strftime("%Y%m%d-%H%M%S")
+        .to_string();
+    let filename = format!("components-{date}.zip");
+
+    Ok(poem::Response::builder()
+        .content_type("application/zip")
+        .header(
+            "Content-Disposition",
+            format!("attachment; filename=\"{filename}\""),
+        )
+        .body(zip_bytes))
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/pagebuilder/import_form.stpl.html")]
+struct PbImportForm;
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/pagebuilder/import_result.stpl.html")]
+struct PbImportResult {
+    imported: Vec<String>,
+    failed: Vec<(String, String)>,
+}
+
+#[handler]
+async fn pb_components_import_form(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let _user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(PbImportForm.render_once()?))
+}
+
+#[handler]
+async fn pb_components_import(
+    Authenticated(user_info): Authenticated,
+    mut multipart: poem::web::Multipart,
+) -> Result<poem::Response, anyhow::Error> {
+    use tokio::io::AsyncReadExt;
+
+    let _user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    let mut file_data: Option<Vec<u8>> = None;
+
+    while let Some(field) = multipart.next_field().await? {
+        if field.name() == Some("file") {
+            let mut data = Vec::new();
+            let mut reader = field.into_async_read();
+            reader.read_to_end(&mut data).await?;
+            file_data = Some(data);
+        }
+    }
+
+    let bytes = file_data.ok_or_else(|| anyhow::anyhow!("No file uploaded"))?;
+    let report = crate::pagebuilder::library::import_from_zip(bytes).await?;
+
+    let result = PbImportResult {
+        imported: report.imported,
+        failed: report.failed,
+    };
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(result.render_once()?))
+}
+
 #[handler]
 async fn pb_components_delete(
     Authenticated(user_info): Authenticated,
@@ -1223,6 +1322,11 @@ pub fn engine_room_routes() -> Route {
         .at("/sync-page-managers", post(engine_room_sync_page_managers))
         .at("/components", get(pb_components_list))
         .at("/components/search", get(pb_components_search))
+        .at("/components/export", post(pb_components_export))
+        .at(
+            "/components/import",
+            get(pb_components_import_form).post(pb_components_import),
+        )
         .at(
             "/components/new",
             get(pb_components_new).post(pb_components_create),

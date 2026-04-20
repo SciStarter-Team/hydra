@@ -1,0 +1,39 @@
+<div class="bg-white rounded-lg shadow border border-gray-200 p-4">
+    <div class="flex items-center justify-between mb-3">
+        <h3 class="text-sm font-semibold text-gray-900">Import Results</h3>
+        <button type="button"
+                hx-on:click="document.getElementById('pb-import-panel').innerHTML = ''; htmx.ajax('GET', '/-admin/engine-room/components/search', '#components-content')"
+                class="text-gray-400 hover:text-gray-600">
+            <wa-icon name="xmark" class="w-4 h-4"></wa-icon>
+        </button>
+    </div>
+    <% if self.failed.is_empty() && self.imported.is_empty() { %>
+    <p class="text-sm text-amber-700">
+        No component files were found in the archive.
+    </p>
+    <% } %>
+    <% if !self.imported.is_empty() { %>
+    <div class="mb-3 p-3 rounded border border-green-200 bg-green-50">
+        <p class="text-sm font-medium text-green-800">
+            Imported <%= self.imported.len() %> component<% if self.imported.len() != 1 { %>s<% } %>
+        </p>
+        <ul class="mt-2 text-sm text-green-700 list-disc list-inside">
+            <% for name in &self.imported { %>
+            <li><%= name %></li>
+            <% } %>
+        </ul>
+    </div>
+    <% } %>
+    <% if !self.failed.is_empty() { %>
+    <div class="p-3 rounded border border-red-200 bg-red-50">
+        <p class="text-sm font-medium text-red-800">
+            <%= self.failed.len() %> file<% if self.failed.len() != 1 { %>s<% } %> failed
+        </p>
+        <ul class="mt-2 text-sm text-red-700 list-disc list-inside">
+            <% for (filename, error) in &self.failed { %>
+            <li><span class="font-mono"><%= filename %></span>: <%= error %></li>
+            <% } %>
+        </ul>
+    </div>
+    <% } %>
+</div>
