@@ -818,11 +818,12 @@ pub async fn handle_contributors(
     let db = common::shared::db();
 
     // Sampled acts are dropped at an 85% rate, so roughly 15% of sampled
-    // rows survive into the grouping step. The score is derived from
-    // created_at so the same row gives the same verdict across the count
-    // and fetch queries, keeping pagination consistent.
+    // rows survive into the grouping step. The score is a Knuth-constant
+    // multiplicative hash of the epoch seconds, which avalanches adjacent
+    // seconds into different buckets while staying deterministic per row
+    // so the count and fetch queries agree and pagination is stable.
     const SAMPLING_FILTER: &str =
-        " AND (sampled = 0 OR (CAST(strftime('%s', created_at) AS INTEGER) % 100) < 15)";
+        " AND (sampled = 0 OR (CAST(strftime('%s', created_at) AS INTEGER) * 2654435761 % 100) < 15)";
 
     // Build the query dynamically based on mode
     // Use GROUP BY to deduplicate on (name, act, project, date)
