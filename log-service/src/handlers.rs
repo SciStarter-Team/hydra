@@ -817,35 +817,44 @@ pub async fn handle_contributors(
 
     let db = common::shared::db();
 
+    // Sampled acts are dropped at an 85% rate, so roughly 15% of sampled
+    // rows survive into the grouping step. The score is derived from
+    // created_at so the same row gives the same verdict across the count
+    // and fetch queries, keeping pagination consistent.
+    const SAMPLING_FILTER: &str =
+        " AND (sampled = 0 OR (CAST(strftime('%s', created_at) AS INTEGER) % 100) < 15)";
+
     // Build the query dynamically based on mode
     // Use GROUP BY to deduplicate on (name, act, project, date)
     let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new(
-        "SELECT name, act, project, MAX(organization) as organization, MAX(entity_slug) as entity_slug, DATE(created_at) as date FROM acts_of_science WHERE accepted = 1 AND display = 1 AND source != ",
+        "SELECT name, act, project, MAX(organization) as organization, MAX(entity_slug) as entity_slug, DATE(created_at) as date, MAX(featured) as featured FROM acts_of_science WHERE accepted = 1 AND display = 1 AND source != ",
     );
     qb.push_bind(incidental);
     qb.push(" AND created_at >= ");
     qb.push_bind(begin.clone());
     qb.push(" AND created_at < ");
     qb.push_bind(end.clone());
+    qb.push(SAMPLING_FILTER);
 
     match mode.as_str() {
         "name" => {
             qb.push(" AND UPPER(SUBSTR(name, 1, 1)) = ");
             qb.push_bind(letter.clone());
-            qb.push(" GROUP BY name, act, project, date ORDER BY name, date DESC");
+            qb.push(" GROUP BY name, act, project, date ORDER BY featured DESC, name, date DESC");
         }
         "project" => {
-            qb.push(" AND project != '' AND project IS NOT NULL GROUP BY name, act, project, date ORDER BY project, date DESC");
+            qb.push(" AND project != '' AND project IS NOT NULL GROUP BY name, act, project, date ORDER BY featured DESC, project, date DESC");
         }
         "org" => {
-            qb.push(" AND organization != '' AND organization IS NOT NULL GROUP BY name, act, project, date ORDER BY MAX(organization), date DESC");
+            qb.push(" AND organization != '' AND organization IS NOT NULL GROUP BY name, act, project, date ORDER BY featured DESC, MAX(organization), date DESC");
         }
         "date" | _ => {
-            qb.push(" GROUP BY name, act, project, date ORDER BY date DESC");
+            qb.push(" GROUP BY name, act, project, date ORDER BY featured DESC, date DESC");
         }
     }
 
-    // Count query — count distinct (name, act, project, date) tuples
+    // Count query — count distinct (name, act, project, date) tuples that
+    // survive the sampling filter
     let mut count_qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new(
         "SELECT COUNT(*) FROM (SELECT DISTINCT name, act, project, DATE(created_at) as date FROM acts_of_science WHERE accepted = 1 AND display = 1 AND source != ",
     );
@@ -854,6 +863,7 @@ pub async fn handle_contributors(
     count_qb.push_bind(begin);
     count_qb.push(" AND created_at < ");
     count_qb.push_bind(end);
+    count_qb.push(SAMPLING_FILTER);
 
     match mode.as_str() {
         "name" => {
@@ -888,6 +898,7 @@ pub async fn handle_contributors(
             Option<String>,
             Option<String>,
             Option<String>,
+            Option<i64>,
         )>()
         .fetch_all(db)
         .await?;
@@ -907,6 +918,7 @@ pub async fn handle_contributors(
             organization: r.3,
             entity_slug: r.4,
             date: r.5,
+            featured: r.6.unwrap_or(0) != 0,
         })
         .collect();
 

@@ -280,7 +280,7 @@ pub struct ContributorsRequest {
     pub letter: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ContributorEntry {
     pub name: Option<String>,
     pub act: Option<String>,
@@ -289,6 +289,8 @@ pub struct ContributorEntry {
     #[serde(rename = "entity__slug")]
     pub entity_slug: Option<String>,
     pub date: Option<String>,
+    #[serde(default)]
+    pub featured: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

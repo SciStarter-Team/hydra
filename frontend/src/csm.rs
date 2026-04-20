@@ -522,6 +522,7 @@ pub struct GroupedContributor {
     pub organization: Option<String>,
     pub entity_slug: Option<String>,
     pub contributions: i32,
+    pub featured: bool,
 }
 
 fn group_contributors(entries: Vec<ContributorEntry>) -> Vec<GroupedContributor> {
@@ -544,7 +545,10 @@ fn group_contributors(entries: Vec<ContributorEntry>) -> Vec<GroupedContributor>
 
         groups
             .entry(key)
-            .and_modify(|g| g.contributions += 1)
+            .and_modify(|g| {
+                g.contributions += 1;
+                g.featured = g.featured || entry.featured;
+            })
             .or_insert(GroupedContributor {
                 date: entry.date,
                 act: entry.act,
@@ -553,10 +557,13 @@ fn group_contributors(entries: Vec<ContributorEntry>) -> Vec<GroupedContributor>
                 organization: entry.organization,
                 entity_slug: entry.entity_slug,
                 contributions: 1,
+                featured: entry.featured,
             });
     }
 
-    groups.into_values().collect()
+    let mut contributors: Vec<GroupedContributor> = groups.into_values().collect();
+    contributors.sort_by_key(|g| !g.featured);
+    contributors
 }
 
 #[derive(TemplateOnce)]
@@ -579,6 +586,7 @@ fn fake_contributors() -> Vec<ContributorEntry> {
             project: Some("BioBlitz".into()),
             organization: Some("National Geographic".into()),
             entity_slug: None,
+            featured: false,
         },
         ContributorEntry {
             date: Some("Apr 15".into()),
@@ -587,6 +595,7 @@ fn fake_contributors() -> Vec<ContributorEntry> {
             project: Some("CoCoRaHS".into()),
             organization: Some("Colorado State University".into()),
             entity_slug: None,
+            featured: false,
         },
         ContributorEntry {
             date: Some("Apr 13".into()),
@@ -595,6 +604,7 @@ fn fake_contributors() -> Vec<ContributorEntry> {
             project: Some("eBird".into()),
             organization: Some("Cornell Lab of Ornithology".into()),
             entity_slug: None,
+            featured: false,
         },
         ContributorEntry {
             date: Some("Apr 11".into()),
@@ -603,6 +613,7 @@ fn fake_contributors() -> Vec<ContributorEntry> {
             project: Some("Foundations of Citizen Science".into()),
             organization: Some("SciStarter".into()),
             entity_slug: None,
+            featured: false,
         },
         ContributorEntry {
             date: Some("Apr 9".into()),
@@ -611,6 +622,7 @@ fn fake_contributors() -> Vec<ContributorEntry> {
             project: Some("Zooniverse".into()),
             organization: Some("University of Oxford".into()),
             entity_slug: None,
+            featured: false,
         },
         ContributorEntry {
             date: Some("Apr 7".into()),
@@ -619,6 +631,7 @@ fn fake_contributors() -> Vec<ContributorEntry> {
             project: Some("iNaturalist".into()),
             organization: Some("California Academy of Sciences".into()),
             entity_slug: None,
+            featured: false,
         },
         ContributorEntry {
             date: Some("Apr 5".into()),
@@ -627,6 +640,7 @@ fn fake_contributors() -> Vec<ContributorEntry> {
             project: Some("City Nature Challenge".into()),
             organization: Some("Natural History Museum".into()),
             entity_slug: None,
+            featured: false,
         },
         ContributorEntry {
             date: Some("Apr 3".into()),
@@ -635,6 +649,7 @@ fn fake_contributors() -> Vec<ContributorEntry> {
             project: Some("Globe Observer".into()),
             organization: Some("NASA".into()),
             entity_slug: None,
+            featured: false,
         },
     ]
 }

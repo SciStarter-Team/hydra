@@ -648,6 +648,8 @@ pub struct ActsOfScienceData {
     pub source: i16,
     pub accepted: bool,
     pub display: Option<bool>,
+    pub featured: Option<bool>,
+    pub sampled: Option<bool>,
     pub entity_processed: bool,
     pub user_ulid: Option<String>,
     pub entity_ulid: Option<String>,
@@ -775,13 +777,15 @@ async fn insert_act_of_science(act: &ActsOfScienceData) -> Result<()> {
     let entity_slug = act.entity_ulid.as_deref();
 
     let display = act.display.unwrap_or(true) as i32;
+    let featured = act.featured.unwrap_or(false) as i32;
+    let sampled = act.sampled.unwrap_or(false) as i32;
 
     sqlx::query!(
         r#"INSERT OR IGNORE INTO acts_of_science
            (act_id, user_id, created_at, email, country, newsletter, name,
             contributions, act, organization, num_others, others, project,
-            notes, source, entity_slug, accepted, display)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+            notes, source, entity_slug, accepted, display, featured, sampled)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         act_id,
         act.user_ulid,
         act.when,
@@ -800,6 +804,8 @@ async fn insert_act_of_science(act: &ActsOfScienceData) -> Result<()> {
         entity_slug,
         accepted,
         display,
+        featured,
+        sampled,
     )
     .execute(common::shared::db())
     .await?;
