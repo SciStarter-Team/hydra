@@ -1,0 +1,9 @@
+{
+  "component_id": "01KPNBC09ZDAX5VXQ1RQ8E60PN",
+  "name": "Three Column Feature Grid",
+  "description": "Responsive three-column grid for promoting three parallel pieces of content.",
+  "source": "{$ param gap_class label=\"Gap Class\" default=\"gap-8\" description=\"Tailwind gap utility between columns.\" $}\n\n<div class=\"grid grid-cols-1 md:grid-cols-3 {$= gap_class $} mb-8\">\n  <div>\n    {$ slot col_1 $}\n      <p class=\"ss-text\">Column 1.</p>\n    {$ /slot $}\n  </div>\n  <div>\n    {$ slot col_2 $}\n      <p class=\"ss-text\">Column 2.</p>\n    {$ /slot $}\n  </div>\n  <div>\n    {$ slot col_3 $}\n      <p class=\"ss-text\">Column 3.</p>\n    {$ /slot $}\n  </div>\n</div>\n",
+  "category": "layout",
+  "created": "2026-04-20T00:00:00Z",
+  "updated": "2026-04-20T00:00:00Z"
+}

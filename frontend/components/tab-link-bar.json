@@ -1,0 +1,9 @@
+{
+  "component_id": "01KPNBC1GXGSQ0Y20M6BVHA9XA",
+  "name": "Tab Link Bar (Anchor Tabs)",
+  "description": "Horizontal tab-style link row that jumps to in-page anchors. Up to four items; blanks are hidden.",
+  "source": "{$ param tab_1_label label=\"Tab 1 Label\" default=\"Overview\" description=\"First link label.\" $}\n{$ param tab_1_anchor label=\"Tab 1 Anchor\" default=\"#overview\" description=\"First link target (e.g. #overview).\" $}\n{$ param tab_2_label label=\"Tab 2 Label\" default=\"Participate\" description=\"Second link label (blank to hide).\" $}\n{$ param tab_2_anchor label=\"Tab 2 Anchor\" default=\"#participate\" description=\"Second link target.\" $}\n{$ param tab_3_label label=\"Tab 3 Label\" default=\"\" description=\"Third link label (blank to hide).\" $}\n{$ param tab_3_anchor label=\"Tab 3 Anchor\" default=\"#\" description=\"Third link target.\" $}\n{$ param tab_4_label label=\"Tab 4 Label\" default=\"\" description=\"Fourth link label (blank to hide).\" $}\n{$ param tab_4_anchor label=\"Tab 4 Anchor\" default=\"#\" description=\"Fourth link target.\" $}\n\n<nav class=\"tabs tabs-bar-wrapper mb-8\" aria-label=\"Section nav\">\n  <div class=\"tabs tabs-bar border-b border-gray-200\" role=\"tablist\">\n    {$ if tab_1_label $}<a class=\"tab px-4 py-2\" href=\"{$= tab_1_anchor $}\">{$= tab_1_label $}</a>{$ /if $}\n    {$ if tab_2_label $}<a class=\"tab px-4 py-2\" href=\"{$= tab_2_anchor $}\">{$= tab_2_label $}</a>{$ /if $}\n    {$ if tab_3_label $}<a class=\"tab px-4 py-2\" href=\"{$= tab_3_anchor $}\">{$= tab_3_label $}</a>{$ /if $}\n    {$ if tab_4_label $}<a class=\"tab px-4 py-2\" href=\"{$= tab_4_anchor $}\">{$= tab_4_label $}</a>{$ /if $}\n  </div>\n</nav>\n",
+  "category": "navigation",
+  "created": "2026-04-20T00:00:00Z",
+  "updated": "2026-04-20T00:00:00Z"
+}

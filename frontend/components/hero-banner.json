@@ -1,0 +1,9 @@
+{
+  "component_id": "01KPNBC0E315DWC35EEBMWNRCK",
+  "name": "Hero Banner",
+  "description": "Large page header with side image, eyebrow label, title, body copy slot, and primary CTA button.",
+  "source": "{$ param eyebrow label=\"Eyebrow Text\" default=\"\" description=\"Small label above the title (optional).\" $}\n{$ param title label=\"Title\" default=\"Headline goes here\" description=\"Main heading.\" $}\n{$ param image_url label=\"Image URL\" default=\"https://picsum.photos/400/400\" description=\"Hero image URL.\" type=\"fileurl\" $}\n{$ param image_alt label=\"Image Alt Text\" default=\"\" description=\"Accessibility description of the image.\" $}\n{$ param cta_label label=\"CTA Label\" default=\"Learn More\" description=\"Button label (leave blank to hide).\" $}\n{$ param cta_href label=\"CTA URL\" default=\"#\" description=\"Destination URL.\" $}\n\n<div class=\"flex flex-col sm:flex-row justify-center items-center max-w-[960px] mx-auto mb-8 backport\">\n  <img src=\"{$= image_url $}\" alt=\"{$= image_alt $}\" class=\"self-center max-w-[200px] mr-4 mb-4 sm:mb-0\" />\n  <div class=\"text-center sm:text-left\">\n    {$ if eyebrow $}<span class=\"ss-xxs text-orange uppercase font-bold\">{$= eyebrow $}</span>{$ /if $}\n    <h1 class=\"ss-large mb-4\">{$= title $}</h1>\n    {$ slot body $}\n      <p>Introductory body copy.</p>\n    {$ /slot $}\n    {$ if cta_label $}<a href=\"{$= cta_href $}\" class=\"btn btn-primary\">{$= cta_label $}</a>{$ /if $}\n  </div>\n</div>\n",
+  "category": "hero",
+  "created": "2026-04-20T00:00:00Z",
+  "updated": "2026-04-20T00:00:00Z"
+}

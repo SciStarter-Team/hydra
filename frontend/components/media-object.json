@@ -1,0 +1,9 @@
+{
+  "component_id": "01KPNBC0P92SYBSF5ZK2TD8HEH",
+  "name": "Media Object (Image + Text)",
+  "description": "Side-by-side image and text block with optional CTA. Flip puts image on the right; variants control background.",
+  "source": "{$ param image_url label=\"Image URL\" default=\"https://picsum.photos/800/400\" description=\"Image URL.\" type=\"fileurl\" $}\n{$ param image_alt label=\"Image Alt\" default=\"\" description=\"Accessibility description of the image.\" $}\n{$ param title label=\"Title\" default=\"Headline\" description=\"Main heading for the block.\" $}\n{$ param subtitle label=\"Subtitle\" default=\"\" description=\"Optional secondary heading.\" $}\n{$ param variant label=\"Variant\" default=\"borderless\" description=\"borderless, light, or dark.\" $}\n{$ param flip label=\"Flip\" default=\"\" description=\"Any value reverses image and text order.\" $}\n{$ param cta_label label=\"CTA Label\" default=\"\" description=\"Optional button label.\" $}\n{$ param cta_href label=\"CTA URL\" default=\"#\" description=\"Button destination URL.\" $}\n\n<div class=\"ss-mo ss-mo-{$= variant $} mb-8{$ if flip $} md:flex-row-reverse{$ /if $}\">\n  <div class=\"ss-mo-img\">\n    <img src=\"{$= image_url $}\" alt=\"{$= image_alt $}\" />\n  </div>\n  <div class=\"ss-mo-content\">\n    <h3>{$= title $}</h3>\n    {$ if subtitle $}<h4>{$= subtitle $}</h4>{$ /if $}\n    {$ slot body $}\n      <p>Body copy for the media object.</p>\n    {$ /slot $}\n    {$ if cta_label $}<a href=\"{$= cta_href $}\" class=\"btn btn-primary\">{$= cta_label $}</a>{$ /if $}\n  </div>\n</div>\n",
+  "category": "content",
+  "created": "2026-04-20T00:00:00Z",
+  "updated": "2026-04-20T00:00:00Z"
+}

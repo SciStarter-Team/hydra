@@ -1,0 +1,9 @@
+{
+  "component_id": "01KPNBC1CW5MNQ1FPNKXGQYF4T",
+  "name": "Account Signup Box",
+  "description": "Compact colored panel with eyebrow, title, and two signup buttons - ideal for audience-specific account invitations.",
+  "source": "{$ param eyebrow label=\"Eyebrow\" default=\"First things first!\" description=\"Small text above the title.\" $}\n{$ param title label=\"Title\" default=\"Create a Free SciStarter Account\" description=\"Main heading.\" $}\n{$ param primary_label label=\"Primary Label\" default=\"Sign Up\" description=\"Primary button text.\" $}\n{$ param primary_href label=\"Primary URL\" default=\"/signup\" description=\"Primary destination.\" $}\n{$ param secondary_label label=\"Secondary Label\" default=\"\" description=\"Optional second button text.\" $}\n{$ param secondary_href label=\"Secondary URL\" default=\"/signup\" description=\"Optional second button destination.\" $}\n{$ param bg_class label=\"Background Classes\" default=\"bg-girlscout-alpha\" description=\"Tailwind background color class.\" $}\n{$ param btn_class label=\"Button Classes\" default=\"bg-girlscout hover:bg-girlscout-hover text-white\" description=\"Tailwind classes applied to the buttons.\" $}\n\n<div class=\"{$= bg_class $} flex flex-col p-4 items-center rounded-lg mb-8\">\n  {$ if eyebrow $}<h3 class=\"font-bold ss-xsmall text-center\">{$= eyebrow $}</h3>{$ /if $}\n  <h2 class=\"font-bold ss-normal mb-4 text-center\">{$= title $}</h2>\n  <a href=\"{$= primary_href $}\" class=\"btn uppercase font-bold w-auto min-w-[165px] text-center mb-4 {$= btn_class $}\">{$= primary_label $}</a>\n  {$ if secondary_label $}<a href=\"{$= secondary_href $}\" class=\"btn uppercase font-bold w-auto min-w-[165px] text-center {$= btn_class $}\">{$= secondary_label $}</a>{$ /if $}\n</div>\n",
+  "category": "cta",
+  "created": "2026-04-20T00:00:00Z",
+  "updated": "2026-04-20T00:00:00Z"
+}

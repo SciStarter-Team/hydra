@@ -1,0 +1,9 @@
+{
+  "component_id": "01KPNBC0G47ADGX4TQXMPZQDEZ",
+  "name": "Campaign Banner",
+  "description": "Full-width colored strip for campaigns: eyebrow, bold title, subtitle, and a call-to-action button.",
+  "source": "{$ param eyebrow label=\"Eyebrow Text\" default=\"\" description=\"Small text above the title.\" $}\n{$ param title label=\"Title\" default=\"Campaign Title\" description=\"Main banner heading.\" $}\n{$ param subtitle label=\"Subtitle\" default=\"\" description=\"Supporting text below the title.\" $}\n{$ param cta_label label=\"CTA Label\" default=\"\" description=\"Optional button label.\" $}\n{$ param cta_href label=\"CTA URL\" default=\"#\" description=\"Button destination URL.\" $}\n{$ param bg_class label=\"Background Classes\" default=\"bg-primary-dark text-white\" description=\"Tailwind background and text color classes.\" $}\n\n<section class=\"{$= bg_class $} py-8 px-4 text-center mb-8\">\n  <div class=\"max-w-[1100px] mx-auto\">\n    {$ if eyebrow $}<span class=\"ss-xxs uppercase font-bold block mb-2\">{$= eyebrow $}</span>{$ /if $}\n    <h2 class=\"ss-large mb-2\">{$= title $}</h2>\n    {$ if subtitle $}<p class=\"ss-small mb-4\">{$= subtitle $}</p>{$ /if $}\n    {$ if cta_label $}<a href=\"{$= cta_href $}\" class=\"btn btn-primary\">{$= cta_label $}</a>{$ /if $}\n  </div>\n</section>\n",
+  "category": "hero",
+  "created": "2026-04-20T00:00:00Z",
+  "updated": "2026-04-20T00:00:00Z"
+}

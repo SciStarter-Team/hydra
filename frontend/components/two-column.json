@@ -1,0 +1,9 @@
+{
+  "component_id": "01KPNBC07XMVZ7QXPD3QMJBJ7N",
+  "name": "Two Column (Sidebar + Main)",
+  "description": "Responsive two-column layout with a narrow sticky sidebar on the left and a wider main content column.",
+  "source": "{$ param sidebar_width label=\"Sidebar Width (px)\" default=\"250\" description=\"Width of the sidebar column in pixels at large breakpoint.\" $}\n\n<div class=\"flex flex-col lg:flex-row mt-8 backport\">\n  <div class=\"order-2 lg:order-1 mb-8 lg:pr-8 lg:border-r lg:mr-8 border-light-gray\" style=\"flex: 0 0 {$= sidebar_width $}px; max-width: {$= sidebar_width $}px;\">\n    <div class=\"lg:sticky top-0\">\n      {$ slot sidebar $}\n        <p class=\"ss-xsmall\">Sidebar content.</p>\n      {$ /slot $}\n    </div>\n  </div>\n  <div class=\"order-1 lg:order-2 mb-8 max-w-full w-[1100px] mx-auto flex-1\">\n    {$ slot main $}\n      <p class=\"ss-text\">Main content.</p>\n    {$ /slot $}\n  </div>\n</div>\n",
+  "category": "layout",
+  "created": "2026-04-20T00:00:00Z",
+  "updated": "2026-04-20T00:00:00Z"
+}

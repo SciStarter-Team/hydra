@@ -1,0 +1,9 @@
+{
+  "component_id": "01KPNBC0J5B81RGAWCQJYQWNSM",
+  "name": "Page Header (Centered)",
+  "description": "Centered page title with optional subtitle and introductory rich-text slot.",
+  "source": "{$ param title label=\"Title\" default=\"Page Title\" description=\"Main page heading.\" $}\n{$ param subtitle label=\"Subtitle\" default=\"\" description=\"Short tagline under the title.\" $}\n\n<header class=\"text-center mb-8 max-w-[960px] mx-auto\">\n  <h1 class=\"ss-large mb-2\">{$= title $}</h1>\n  {$ if subtitle $}<p class=\"ss-small text-neutral-dark mb-4\">{$= subtitle $}</p>{$ /if $}\n  {$ slot intro $}\n    <p class=\"ss-text\">Intro paragraph.</p>\n  {$ /slot $}\n</header>\n",
+  "category": "hero",
+  "created": "2026-04-20T00:00:00Z",
+  "updated": "2026-04-20T00:00:00Z"
+}

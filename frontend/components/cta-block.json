@@ -1,0 +1,9 @@
+{
+  "component_id": "01KPNBC1AVQVGNQDS1GX9ETM5G",
+  "name": "CTA Block",
+  "description": "Centered call-to-action with title, supporting copy, and up to two buttons.",
+  "source": "{$ param title label=\"Title\" default=\"Ready to get started?\" description=\"Main CTA heading.\" $}\n{$ param primary_label label=\"Primary Label\" default=\"Get Started\" description=\"Primary button text.\" $}\n{$ param primary_href label=\"Primary URL\" default=\"#\" description=\"Primary button URL.\" $}\n{$ param secondary_label label=\"Secondary Label\" default=\"\" description=\"Optional secondary button text.\" $}\n{$ param secondary_href label=\"Secondary URL\" default=\"#\" description=\"Optional secondary button URL.\" $}\n{$ param bg_class label=\"Background Classes\" default=\"\" description=\"Tailwind background and text color classes (optional).\" $}\n\n<div class=\"ss-cta ss-org-account {$= bg_class $} p-8 mb-8 text-center\">\n  <div class=\"ss-org-account__content max-w-[960px] mx-auto\">\n    <h2>{$= title $}</h2>\n    {$ slot body $}\n      <p>Explain why someone should click.</p>\n    {$ /slot $}\n    <div class=\"ss-org-account__btns\">\n      <a href=\"{$= primary_href $}\" class=\"btn btn-primary\">{$= primary_label $}</a>\n      {$ if secondary_label $}<a href=\"{$= secondary_href $}\" class=\"btn btn-primary\">{$= secondary_label $}</a>{$ /if $}\n    </div>\n  </div>\n</div>\n",
+  "category": "cta",
+  "created": "2026-04-20T00:00:00Z",
+  "updated": "2026-04-20T00:00:00Z"
+}

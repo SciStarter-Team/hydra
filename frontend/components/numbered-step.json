@@ -1,0 +1,9 @@
+{
+  "component_id": "01KPNBC0YDT67PHPWMBF7608SQ",
+  "name": "Numbered Step",
+  "description": "Single step tile for step-by-step guides. Drop multiple into a Card Grid or Three Column layout to build a full flow.",
+  "source": "{$ param number label=\"Step Number\" default=\"1\" description=\"Number shown in the badge.\" $}\n{$ param title label=\"Title\" default=\"Step Title\" description=\"Step heading.\" $}\n\n<div class=\"ss-step flex flex-col items-start p-4 border border-linework rounded-md bg-white mb-4\">\n  <div class=\"flex items-center mb-3\">\n    <span class=\"inline-flex items-center justify-center w-10 h-10 rounded-full bg-primary text-white font-bold mr-3\">{$= number $}</span>\n    <h3 class=\"text-lg mb-0 text-primary-dark\">{$= title $}</h3>\n  </div>\n  {$ slot body $}\n    <p class=\"ss-small text-neutral-dark\">Step description.</p>\n  {$ /slot $}\n</div>\n",
+  "category": "content",
+  "created": "2026-04-20T00:00:00Z",
+  "updated": "2026-04-20T00:00:00Z"
+}

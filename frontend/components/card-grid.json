@@ -1,0 +1,9 @@
+{
+  "component_id": "01KPNBC0C2VGDMW4MBR0393DW6",
+  "name": "Card Grid",
+  "description": "Responsive grid that holds any number of cards dropped into its single slot; works well with Project / Event / Resource cards.",
+  "source": "{$ param columns_md label=\"Desktop Columns\" default=\"3\" description=\"Number of columns at md+ breakpoint (2, 3, or 4).\" $}\n{$ param gap_class label=\"Gap Class\" default=\"gap-6\" description=\"Tailwind gap utility.\" $}\n\n<div class=\"grid grid-cols-1 sm:grid-cols-2 md:grid-cols-{$= columns_md $} {$= gap_class $} mb-8\">\n  {$ slot cards $}\n    <!-- Drop Project Card, Event Card, Resource Card, etc. here -->\n  {$ /slot $}\n</div>\n",
+  "category": "collection",
+  "created": "2026-04-20T00:00:00Z",
+  "updated": "2026-04-20T00:00:00Z"
+}

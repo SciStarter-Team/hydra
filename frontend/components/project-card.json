@@ -1,0 +1,9 @@
+{
+  "component_id": "01KPNBC10F0SA6MAZ4436X6APW",
+  "name": "Project Card",
+  "description": "Horizontal project card with image, title, description, metadata tags, and learn-more CTA.",
+  "source": "{$ param image_url label=\"Image URL\" default=\"https://picsum.photos/800/400\" description=\"Card image.\" type=\"fileurl\" $}\n{$ param image_alt label=\"Image Alt\" default=\"\" description=\"Accessibility description.\" $}\n{$ param title label=\"Project Title\" default=\"Project Name\" description=\"Title shown in the card.\" $}\n{$ param href label=\"Project URL\" default=\"#\" description=\"Where the title and button link to.\" $}\n{$ param time_tag label=\"Time Tag\" default=\"\" description=\"E.g. '15 min' (leave blank to hide).\" $}\n{$ param location_tag label=\"Location Tag\" default=\"\" description=\"E.g. 'Outdoors' (leave blank to hide).\" $}\n{$ param cta_label label=\"CTA Label\" default=\"Learn More\" description=\"Button label.\" $}\n\n<div class=\"ss-pc mb-4\">\n  <div class=\"ss-pc-img\">\n    <img src=\"{$= image_url $}\" alt=\"{$= image_alt $}\" />\n  </div>\n  <div class=\"ss-pc-content\">\n    <h3><a href=\"{$= href $}\">{$= title $}</a></h3>\n    {$ slot description $}\n      <p>Short project description.</p>\n    {$ /slot $}\n    {$ if time_tag $}<div class=\"ss-pc-tag-wrap\">\n      <div class=\"ss-pc-tag\"><span>{$= time_tag $}</span></div>\n      {$ if location_tag $}<div class=\"ss-pc-tag\"><span>{$= location_tag $}</span></div>{$ /if $}\n    </div>{$ /if $}\n    <a href=\"{$= href $}\" class=\"btn btn-primary\">{$= cta_label $}</a>\n  </div>\n</div>\n",
+  "category": "card",
+  "created": "2026-04-20T00:00:00Z",
+  "updated": "2026-04-20T00:00:00Z"
+}

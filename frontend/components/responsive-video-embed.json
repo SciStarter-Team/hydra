@@ -1,0 +1,9 @@
+{
+  "component_id": "01KPNBC1N1NVQYCQ53R4XAAGC4",
+  "name": "Responsive Video Embed",
+  "description": "16:9 iframe wrapper for embedding YouTube, Vimeo, or other video players responsively.",
+  "source": "{$ param embed_url label=\"Embed URL\" default=\"https://www.youtube.com/embed/\" description=\"iframe src URL for the video embed.\" type=\"fileurl\" $}\n{$ param title label=\"Title\" default=\"Video player\" description=\"Accessible iframe title.\" $}\n\n<div class=\"aspect-[16/9] w-full mb-8 max-w-[960px] mx-auto\">\n  <iframe class=\"w-full h-full\" src=\"{$= embed_url $}\" title=\"{$= title $}\" frameborder=\"0\" allow=\"accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share\" referrerpolicy=\"strict-origin-when-cross-origin\" allowfullscreen></iframe>\n</div>\n",
+  "category": "media",
+  "created": "2026-04-20T00:00:00Z",
+  "updated": "2026-04-20T00:00:00Z"
+}

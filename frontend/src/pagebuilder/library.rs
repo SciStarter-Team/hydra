@@ -111,6 +111,7 @@ fn slugify(input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert2::check;
 
     #[test]
     fn slugify_basic() {
@@ -118,5 +119,28 @@ mod tests {
         assert_eq!(slugify("  Odd / Name!! "), "odd-name");
         assert_eq!(slugify("***"), "component");
         assert_eq!(slugify("MixedCase_123"), "mixedcase-123");
+    }
+
+    #[test]
+    fn foundation_library_files_valid() {
+        use crate::builder::render::CompiledTemplate;
+        use std::fs;
+        use std::path::PathBuf;
+
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("components");
+
+        for entry in fs::read_dir(&dir).expect("components dir") {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) != Some("json") {
+                continue;
+            }
+            let text = fs::read_to_string(&path).expect("read json");
+            let comp = serde_json::from_str::<PageBuilderComponent>(&text);
+            check!(let Ok(_) = &comp, "parse {}", path.display());
+            if let Ok(comp) = comp {
+                check!(let Ok(_) = CompiledTemplate::compile(&comp.source), "compile {}", path.display());
+            }
+        }
     }
 }

@@ -1,0 +1,9 @@
+{
+  "component_id": "01KPNBC1EX2BH0YAJZBENDX44E",
+  "name": "Sidebar Nav",
+  "description": "Vertical navigation grouped under up to three optional section headings, with a link slot per section.",
+  "source": "{$ param section_1_title label=\"Section 1 Title\" default=\"Menu\" description=\"First section heading.\" $}\n{$ param section_2_title label=\"Section 2 Title\" default=\"\" description=\"Second section heading (blank to hide).\" $}\n{$ param section_3_title label=\"Section 3 Title\" default=\"\" description=\"Third section heading (blank to hide).\" $}\n\n<nav class=\"ss-sidebar-nav mb-8\" aria-label=\"Sidebar\">\n  {$ if section_1_title $}<div class=\"mb-6\">\n    <h3 class=\"ss-xsmall uppercase font-bold text-primary mb-2\">{$= section_1_title $}</h3>\n    <ul class=\"space-y-1 list-none\">\n      {$ slot section_1_links $}\n        <li><a href=\"#\">Example link</a></li>\n      {$ /slot $}\n    </ul>\n  </div>{$ /if $}\n  {$ if section_2_title $}<div class=\"mb-6\">\n    <h3 class=\"ss-xsmall uppercase font-bold text-primary mb-2\">{$= section_2_title $}</h3>\n    <ul class=\"space-y-1 list-none\">\n      {$ slot section_2_links $}\n        <li><a href=\"#\">Example link</a></li>\n      {$ /slot $}\n    </ul>\n  </div>{$ /if $}\n  {$ if section_3_title $}<div class=\"mb-6\">\n    <h3 class=\"ss-xsmall uppercase font-bold text-primary mb-2\">{$= section_3_title $}</h3>\n    <ul class=\"space-y-1 list-none\">\n      {$ slot section_3_links $}\n        <li><a href=\"#\">Example link</a></li>\n      {$ /slot $}\n    </ul>\n  </div>{$ /if $}\n</nav>\n",
+  "category": "navigation",
+  "created": "2026-04-20T00:00:00Z",
+  "updated": "2026-04-20T00:00:00Z"
+}

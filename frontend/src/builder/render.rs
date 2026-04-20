@@ -1985,7 +1985,10 @@ mod tests {
             item == Item::Slot {
                 name: "hero",
                 component: None,
-                params: vec![("title", "Welcome"), ("subtitle", "Hello")],
+                params: vec![
+                    ("title", "Welcome".to_string()),
+                    ("subtitle", "Hello".to_string())
+                ],
             }
         );
     }
@@ -1999,7 +2002,7 @@ mod tests {
             item == Item::Slot {
                 name: "content",
                 component: Some("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
-                params: vec![("color", "blue")],
+                params: vec![("color", "blue".to_string())],
             }
         );
     }

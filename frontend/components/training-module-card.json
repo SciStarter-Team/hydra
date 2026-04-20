@@ -1,0 +1,9 @@
+{
+  "component_id": "01KPNBC18RFAJATZSH51JEWNNN",
+  "name": "Training Module Card",
+  "description": "Image-forward card for self-guided trainings with title, description, and learn-more CTA.",
+  "source": "{$ param image_url label=\"Image URL\" default=\"https://picsum.photos/800/400\" description=\"Module image.\" type=\"fileurl\" $}\n{$ param image_alt label=\"Image Alt\" default=\"\" description=\"Accessibility description.\" $}\n{$ param title label=\"Module Title\" default=\"Training Module\" description=\"Card heading.\" $}\n{$ param href label=\"Module URL\" default=\"#\" description=\"Where the title and CTA link.\" $}\n{$ param cta_label label=\"CTA Label\" default=\"Learn More\" description=\"Button text.\" $}\n\n<div class=\"ss-project-card mb-4\">\n  <a href=\"{$= href $}\" class=\"w-full flex flex-col sm:flex-row bg-white shadow-md mx-auto mb-4 border border-primary-light rounded-md overflow-hidden no-underline\">\n    <img src=\"{$= image_url $}\" alt=\"{$= image_alt $}\" class=\"w-full sm:w-[300px] self-start sm:max-w-[33%]\" />\n    <div class=\"flex flex-col p-4 justify-center gap-4 w-full\">\n      <div>\n        <h3 class=\"text-lg mb-2! text-primary-dark\">{$= title $}</h3>\n        {$ slot description $}\n          <p class=\"text-sm mb-4! text-neutral-dark\">Description of the training module.</p>\n        {$ /slot $}\n        <span class=\"btn btn-primary mt-4\">{$= cta_label $}</span>\n      </div>\n    </div>\n  </a>\n</div>\n",
+  "category": "card",
+  "created": "2026-04-20T00:00:00Z",
+  "updated": "2026-04-20T00:00:00Z"
+}

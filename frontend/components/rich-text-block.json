@@ -1,0 +1,9 @@
+{
+  "component_id": "01KPNBC0M7C41F48FF32SXG9M2",
+  "name": "Rich Text Block",
+  "description": "Free-form rich-text region rendered inside the standard ss-text prose container.",
+  "source": "{$ param body label=\"Body\" default=\"<p>Write your content here.</p>\" description=\"Rich HTML body content.\" type=\"richtext\" $}\n\n<div class=\"ss-text max-w-[960px] mx-auto mb-8\">\n  {$- body $}\n</div>\n",
+  "category": "content",
+  "created": "2026-04-20T00:00:00Z",
+  "updated": "2026-04-20T00:00:00Z"
+}

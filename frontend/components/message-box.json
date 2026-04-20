@@ -1,0 +1,9 @@
+{
+  "component_id": "01KPNBC0WD9MRCA2JKX8WT2D6F",
+  "name": "Message Box",
+  "description": "Highlighted note/tip/warning callout with a title and a rich-text body slot.",
+  "source": "{$ param title label=\"Title\" default=\"Note\" description=\"Heading shown at the top of the box.\" $}\n{$ param variant label=\"Variant\" default=\"info\" description=\"info, tip, or warn.\" $}\n\n<div class=\"ss-message border p-4 mb-8 border-line-blue bg-bg-blue ss-message-{$= variant $}\">\n  <h3 class=\"ss-small\">{$= title $}</h3>\n  {$ slot body $}\n    <p class=\"ss-small\">Message body.</p>\n  {$ /slot $}\n</div>\n",
+  "category": "content",
+  "created": "2026-04-20T00:00:00Z",
+  "updated": "2026-04-20T00:00:00Z"
+}

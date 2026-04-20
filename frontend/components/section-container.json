@@ -1,0 +1,9 @@
+{
+  "component_id": "01KPNBC05WKC9CSJWBE9VV2TK1",
+  "name": "Section Container",
+  "description": "Bounded-width section wrapper with configurable vertical padding and optional background tint.",
+  "source": "{$ param max_width label=\"Max Width (px)\" default=\"1100\" description=\"Maximum content width in pixels.\" $}\n{$ param padding_y label=\"Vertical Padding Class\" default=\"py-8\" description=\"Tailwind vertical-padding utility (e.g. py-4, py-8, py-16).\" $}\n{$ param bg_class label=\"Background Class\" default=\"\" description=\"Optional tailwind background class (e.g. bg-bg-cool, bg-primary-dark text-white).\" $}\n\n<section class=\"ss-container mx-auto {$= padding_y $} {$= bg_class $}\" style=\"max-width: {$= max_width $}px;\">\n  {$ slot content $}\n    <p class=\"ss-text\">Drop components here.</p>\n  {$ /slot $}\n</section>\n",
+  "category": "layout",
+  "created": "2026-04-20T00:00:00Z",
+  "updated": "2026-04-20T00:00:00Z"
+}
