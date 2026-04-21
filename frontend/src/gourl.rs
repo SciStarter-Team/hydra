@@ -140,6 +140,7 @@ pub struct ProgramQuery {
 
 #[handler]
 pub async fn handle_go_url(
+    req: &poem::Request,
     Authenticated(user_info): Authenticated,
     RealIp(ip_address): RealIp,
     device: Device,
@@ -153,6 +154,13 @@ pub async fn handle_go_url(
     } else {
         info!("Anonymous user accessing go URL: {}", slug);
     }
+
+    let query_string = req.uri().query().unwrap_or("");
+    let from_path = if query_string.is_empty() {
+        format!("/go/{}", slug)
+    } else {
+        format!("/go/{}?{}", slug, query_string)
+    };
 
     // Look up the GoUrl entry
     match GoUrl::load(slug.clone()).await {
@@ -181,7 +189,7 @@ pub async fn handle_go_url(
                                 device, // device_id
                                 interaction, // interaction_id
                                 user_info.as_ref().map(|u| u.user_id), // user_id
-                                format!("/go/{}", slug), // from_path
+                                from_path.clone(), // from_path
                                 format!("file:{}", file_id), // to_url
                                 "golink", // link_type
                                 program_id, // program_id
@@ -235,7 +243,7 @@ pub async fn handle_go_url(
                         device, // device_id
                         interaction, // interaction_id
                         user_info.as_ref().map(|u| u.user_id), // user_id
-                        format!("/go/{}", slug), // from_path
+                        from_path.clone(), // from_path
                         target_url.clone(), // to_url
                         "golink", // link_type
                         program_id, // program_id from query
