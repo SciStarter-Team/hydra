@@ -997,10 +997,41 @@ pub async fn handle_acts_to_date(
     .fetch_one(common::shared::db())
     .await?;
 
+    const CSM_GOAL: i64 = 2_500_000;
+
+    let date_reached: Option<String> = sqlx::query_scalar!(
+        r#"WITH daily AS (
+               SELECT date(created_at) AS day,
+                      SUM(contributions) AS daily_total
+               FROM acts_of_science
+               WHERE accepted = 1
+                 AND source != ?
+                 AND created_at >= ?
+                 AND created_at < ?
+               GROUP BY date(created_at)
+           ),
+           cumulative AS (
+               SELECT day,
+                      SUM(daily_total) OVER (ORDER BY day) AS running_total
+               FROM daily
+           )
+           SELECT day AS "day!: String"
+           FROM cumulative
+           WHERE running_total >= ?
+           ORDER BY day
+           LIMIT 1"#,
+        incidental,
+        begin,
+        end,
+        CSM_GOAL,
+    )
+    .fetch_optional(common::shared::db())
+    .await?;
+
     Ok(ActsToDateResponse {
         date: today.to_string(),
         number: total,
-        date_reached: None,
+        date_reached,
     })
 }
 

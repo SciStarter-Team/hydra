@@ -775,7 +775,7 @@ if (window.csmPhase === 'april') {
       // Check if goal was reached early (or forced via ?phase=april-reached)
       if (date_reached || window.csmPhaseOverride === 'april-reached') {
         var reachedDate = date_reached ? parseDateOnly(date_reached) : new Date();
-        if (window.csmPhaseOverride === 'april-reached' || (reachedDate && reachedDate < targetDate)) {
+        if (window.csmPhaseOverride === 'april-reached' || (reachedDate && reachedDate <= targetDate)) {
           var formattedReached = reachedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) + '!';
           tt_counter.classList.add('reached');
           var overEl = document.getElementById('test-tube-over');
