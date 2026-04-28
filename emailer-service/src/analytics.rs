@@ -58,6 +58,13 @@ struct SendingRow {
     messages_bounced: i64,
     unsubscribes: i64,
     complaints: i64,
+    skipped_unsubscribed: i64,
+    skipped_bounced: i64,
+    skipped_complained: i64,
+    skipped_unverified: i64,
+    skipped_opted_out: i64,
+    skipped_invalid: i64,
+    send_failed: i64,
 }
 
 /// List sendings with pagination
@@ -90,7 +97,10 @@ pub async fn handle_list_sendings(req: &Request) -> Result<ListSendingsResponse,
             SendingRow,
             r#"SELECT sending_id, created_at, subject, total_queued,
                       messages_sent, messages_skipped, messages_opened,
-                      messages_bounced, unsubscribes, complaints
+                      messages_bounced, unsubscribes, complaints,
+                      skipped_unsubscribed, skipped_bounced, skipped_complained,
+                      skipped_unverified, skipped_opted_out, skipped_invalid,
+                      send_failed
                FROM sendings
                WHERE total_queued >= ?
                ORDER BY created_at DESC
@@ -106,7 +116,10 @@ pub async fn handle_list_sendings(req: &Request) -> Result<ListSendingsResponse,
             SendingRow,
             r#"SELECT sending_id, created_at, subject, total_queued,
                       messages_sent, messages_skipped, messages_opened,
-                      messages_bounced, unsubscribes, complaints
+                      messages_bounced, unsubscribes, complaints,
+                      skipped_unsubscribed, skipped_bounced, skipped_complained,
+                      skipped_unverified, skipped_opted_out, skipped_invalid,
+                      send_failed
                FROM sendings
                ORDER BY created_at DESC
                LIMIT ? OFFSET ?"#,
@@ -136,6 +149,13 @@ pub async fn handle_list_sendings(req: &Request) -> Result<ListSendingsResponse,
             messages_bounced: row.messages_bounced as u32,
             unsubscribes: row.unsubscribes as u32,
             complaints: row.complaints as u32,
+            skipped_unsubscribed: row.skipped_unsubscribed as u32,
+            skipped_bounced: row.skipped_bounced as u32,
+            skipped_complained: row.skipped_complained as u32,
+            skipped_unverified: row.skipped_unverified as u32,
+            skipped_opted_out: row.skipped_opted_out as u32,
+            skipped_invalid: row.skipped_invalid as u32,
+            send_failed: row.send_failed as u32,
         });
     }
 
@@ -151,7 +171,10 @@ pub async fn handle_get_sending(req: &Request) -> Result<GetSendingResponse, Err
     let row = sqlx::query!(
         r#"SELECT sending_id, created_at, subject, total_queued,
                   messages_sent, messages_skipped, messages_opened,
-                  messages_bounced, unsubscribes, complaints
+                  messages_bounced, unsubscribes, complaints,
+                  skipped_unsubscribed, skipped_bounced, skipped_complained,
+                  skipped_unverified, skipped_opted_out, skipped_invalid,
+                  send_failed
            FROM sendings
            WHERE sending_id = ?"#,
         sending_id_str
@@ -180,6 +203,13 @@ pub async fn handle_get_sending(req: &Request) -> Result<GetSendingResponse, Err
         messages_bounced: row.messages_bounced as u32,
         unsubscribes: row.unsubscribes as u32,
         complaints: row.complaints as u32,
+        skipped_unsubscribed: row.skipped_unsubscribed as u32,
+        skipped_bounced: row.skipped_bounced as u32,
+        skipped_complained: row.skipped_complained as u32,
+        skipped_unverified: row.skipped_unverified as u32,
+        skipped_opted_out: row.skipped_opted_out as u32,
+        skipped_invalid: row.skipped_invalid as u32,
+        send_failed: row.send_failed as u32,
     };
 
     Ok(GetSendingResponse { metrics })

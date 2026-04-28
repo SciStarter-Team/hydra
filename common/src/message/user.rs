@@ -881,6 +881,7 @@ pub struct UserEmailInfo {
     pub last_name: String,
     pub primary_email: String,
     pub verified: bool,
+    pub accept_emails: bool,
 }
 
 // User lookup by email address

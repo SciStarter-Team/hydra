@@ -1068,7 +1068,8 @@ pub async fn user_email_info(req: &Request) -> Result<UserEmailInfo, Error> {
             "first_name",
             "last_name",
             "primary_email",
-            "verified"
+            "verified",
+            "accept_emails"
         FROM "users"
         WHERE "user_id" = ?
         "#,
@@ -1091,6 +1092,7 @@ pub async fn user_email_info(req: &Request) -> Result<UserEmailInfo, Error> {
                 last_name: row.last_name,
                 primary_email: row.primary_email,
                 verified: row.verified,
+                accept_emails: row.accept_emails != 0,
             })
         }
         None => Err(anyhow::anyhow!("User not found").into()),

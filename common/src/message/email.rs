@@ -114,6 +114,13 @@ pub struct SendingMetrics {
     pub messages_bounced: u32,
     pub unsubscribes: u32,
     pub complaints: u32,
+    pub skipped_unsubscribed: u32,
+    pub skipped_bounced: u32,
+    pub skipped_complained: u32,
+    pub skipped_unverified: u32,
+    pub skipped_opted_out: u32,
+    pub skipped_invalid: u32,
+    pub send_failed: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -17,6 +17,29 @@ use crate::{
     template::merge_template,
 };
 
+/// Why a send was skipped. Each variant corresponds to a per-reason counter
+/// column on the `sendings` table; `messages_skipped` tracks the grand total.
+#[derive(Debug, Clone, Copy)]
+enum SkipReason {
+    Unsubscribed,
+    Bounced,
+    Complained,
+    Unverified,
+    OptedOut,
+    Invalid,
+    Failed,
+}
+
+/// Reject addresses whose domain has no TLD component (e.g. `user@clever`,
+/// `user@broward`). Flanker-style parsers accept single-label hostnames as
+/// technically valid, but they can never be delivered.
+fn is_valid_email_format(email: &str) -> bool {
+    match email.split_once('@') {
+        Some((local, domain)) => !local.is_empty() && domain.contains('.'),
+        None => false,
+    }
+}
+
 /// Background task to process the email queue
 pub async fn run_queue_processor(ses_client: SesClient) {
     loop {
@@ -95,7 +118,8 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
 
     // Process the email, handling errors with retry logic
     let result = async {
-        // Resolve email address
+        // Resolve email address. For user_id targets, enforce the user's
+        // verified and accept_emails flags before doing anything else.
         let (email_address, user_id_opt) = match item.target_type.as_str() {
             "email" => {
                 tracing::debug!(email = %item.target_value, "Target is email address");
@@ -119,6 +143,38 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
                     );
                     e
                 })?;
+
+                let queue_id = item
+                    .queue_id
+                    .as_deref()
+                    .ok_or_else(|| anyhow::anyhow!("queue_id is NULL"))?;
+
+                if !user_info.verified {
+                    tracing::info!(
+                        user_id = %user_id,
+                        email = %user_info.primary_email,
+                        sending_id = %item.sending_id,
+                        "User is not verified, skipping"
+                    );
+                    record_skip(queue_id, &item.sending_id, &user_info.primary_email, "unverified").await?;
+                    delete_from_queue(queue_id).await?;
+                    update_sending_skipped(&item.sending_id, SkipReason::Unverified).await?;
+                    return Ok(true);
+                }
+
+                if !user_info.accept_emails {
+                    tracing::info!(
+                        user_id = %user_id,
+                        email = %user_info.primary_email,
+                        sending_id = %item.sending_id,
+                        "User has opted out of emails, skipping"
+                    );
+                    record_skip(queue_id, &item.sending_id, &user_info.primary_email, "opted_out").await?;
+                    delete_from_queue(queue_id).await?;
+                    update_sending_skipped(&item.sending_id, SkipReason::OptedOut).await?;
+                    return Ok(true);
+                }
+
                 tracing::debug!(
                     user_id = %user_id,
                     email = %user_info.primary_email,
@@ -129,28 +185,52 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
             _ => anyhow::bail!("Invalid target_type: {}", item.target_type),
         };
 
-        // Check do_not_send table
-        let is_blocked = sqlx::query!(
-            r#"SELECT email_address FROM do_not_send WHERE email_address = ?"#,
+        // Reject syntactically-valid-but-undeliverable addresses (no TLD, etc.)
+        // before bothering SES with them.
+        if !is_valid_email_format(&email_address) {
+            tracing::warn!(
+                email = %email_address,
+                sending_id = %item.sending_id,
+                "Email address has no deliverable domain, skipping"
+            );
+            let queue_id = item
+                .queue_id
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("queue_id is NULL"))?;
+            record_skip(queue_id, &item.sending_id, &email_address, "invalid").await?;
+            delete_from_queue(queue_id).await?;
+            update_sending_skipped(&item.sending_id, SkipReason::Invalid).await?;
+            return Ok(true);
+        }
+
+        // Check do_not_send table and break out the skip by suppression reason.
+        let blocked = sqlx::query!(
+            r#"SELECT reason FROM do_not_send WHERE email_address = ?"#,
             email_address
         )
         .fetch_optional(db())
         .await?;
 
-        if is_blocked.is_some() {
-            // Email is blocked, skip sending
+        if let Some(row) = blocked {
+            let skip_reason = match row.reason.as_str() {
+                "unsubscribe" => SkipReason::Unsubscribed,
+                "bounce" => SkipReason::Bounced,
+                "complaint" => SkipReason::Complained,
+                _ => SkipReason::Unsubscribed,
+            };
             tracing::warn!(
                 email = %email_address,
                 sending_id = %item.sending_id,
+                reason = %row.reason,
                 "Email address is on do-not-send list, skipping"
             );
             let queue_id = item
                 .queue_id
                 .as_deref()
                 .ok_or_else(|| anyhow::anyhow!("queue_id is NULL"))?;
-            record_skip(queue_id, &item.sending_id, &email_address, "blocked").await?;
+            record_skip(queue_id, &item.sending_id, &email_address, &row.reason).await?;
             delete_from_queue(queue_id).await?;
-            update_sending_skipped(&item.sending_id).await?;
+            update_sending_skipped(&item.sending_id, skip_reason).await?;
             return Ok(true);
         }
 
@@ -318,7 +398,7 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
                 )
                 .await?;
                 delete_from_queue(queue_id).await?;
-                update_sending_skipped(&item.sending_id).await?;
+                update_sending_skipped(&item.sending_id, SkipReason::Failed).await?;
             } else {
                 // Reset to pending with incremented retry count
                 if let Err(reset_err) = sqlx::query!(
@@ -408,13 +488,86 @@ async fn update_sending_sent(sending_id: &str) -> Result<(), Error> {
     Ok(())
 }
 
-async fn update_sending_skipped(sending_id: &str) -> Result<(), Error> {
-    sqlx::query!(
-        r#"UPDATE sendings SET messages_skipped = messages_skipped + 1 WHERE sending_id = ?"#,
-        sending_id
-    )
-    .execute(db())
-    .await?;
+async fn update_sending_skipped(sending_id: &str, reason: SkipReason) -> Result<(), Error> {
+    match reason {
+        SkipReason::Unsubscribed => {
+            sqlx::query!(
+                r#"UPDATE sendings
+                   SET messages_skipped = messages_skipped + 1,
+                       skipped_unsubscribed = skipped_unsubscribed + 1
+                   WHERE sending_id = ?"#,
+                sending_id
+            )
+            .execute(db())
+            .await?;
+        }
+        SkipReason::Bounced => {
+            sqlx::query!(
+                r#"UPDATE sendings
+                   SET messages_skipped = messages_skipped + 1,
+                       skipped_bounced = skipped_bounced + 1
+                   WHERE sending_id = ?"#,
+                sending_id
+            )
+            .execute(db())
+            .await?;
+        }
+        SkipReason::Complained => {
+            sqlx::query!(
+                r#"UPDATE sendings
+                   SET messages_skipped = messages_skipped + 1,
+                       skipped_complained = skipped_complained + 1
+                   WHERE sending_id = ?"#,
+                sending_id
+            )
+            .execute(db())
+            .await?;
+        }
+        SkipReason::Unverified => {
+            sqlx::query!(
+                r#"UPDATE sendings
+                   SET messages_skipped = messages_skipped + 1,
+                       skipped_unverified = skipped_unverified + 1
+                   WHERE sending_id = ?"#,
+                sending_id
+            )
+            .execute(db())
+            .await?;
+        }
+        SkipReason::OptedOut => {
+            sqlx::query!(
+                r#"UPDATE sendings
+                   SET messages_skipped = messages_skipped + 1,
+                       skipped_opted_out = skipped_opted_out + 1
+                   WHERE sending_id = ?"#,
+                sending_id
+            )
+            .execute(db())
+            .await?;
+        }
+        SkipReason::Invalid => {
+            sqlx::query!(
+                r#"UPDATE sendings
+                   SET messages_skipped = messages_skipped + 1,
+                       skipped_invalid = skipped_invalid + 1
+                   WHERE sending_id = ?"#,
+                sending_id
+            )
+            .execute(db())
+            .await?;
+        }
+        SkipReason::Failed => {
+            sqlx::query!(
+                r#"UPDATE sendings
+                   SET messages_skipped = messages_skipped + 1,
+                       send_failed = send_failed + 1
+                   WHERE sending_id = ?"#,
+                sending_id
+            )
+            .execute(db())
+            .await?;
+        }
+    }
     Ok(())
 }
 

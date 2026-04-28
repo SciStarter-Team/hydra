@@ -45,11 +45,12 @@
             </div>
         <% } else { %>
             <!-- Header Row - Hidden on mobile, visible on larger screens -->
-            <div class="hidden xl:grid xl:grid-cols-20 bg-gray-50 px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
+            <div class="hidden xl:grid xl:grid-cols-22 bg-gray-50 px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
                 <div class="col-span-6">Subject</div>
                 <div class="col-span-3">Created</div>
                 <div class="col-span-2 text-right">Queued</div>
                 <div class="col-span-2 text-right">Sent</div>
+                <div class="col-span-2 text-right">Skipped</div>
                 <div class="col-span-2 text-right">Opened</div>
                 <div class="col-span-2 text-right">Bounced</div>
                 <div class="col-span-3 text-right">Complaints</div>
@@ -57,7 +58,7 @@
 
             <div class="divide-y divide-gray-200">
                 <% for sending in &self.sendings { %>
-                    <div class="flex flex-col xl:grid xl:grid-cols-20 gap-3 xl:gap-4 xl:items-center px-6 py-4 hover:bg-gray-50 transition-colors">
+                    <div class="flex flex-col xl:grid xl:grid-cols-22 gap-3 xl:gap-4 xl:items-start px-6 py-4 hover:bg-gray-50 transition-colors">
                         <!-- Subject -->
                         <div class="xl:col-span-6">
                             <div class="xl:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Subject</div>
@@ -80,6 +81,23 @@
                         <div class="xl:col-span-2">
                             <div class="xl:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Sent</div>
                             <div class="text-sm text-gray-700 xl:text-right"><%= sending.messages_sent %></div>
+                        </div>
+
+                        <!-- Skipped (total + breakdown) -->
+                        <div class="xl:col-span-2">
+                            <div class="xl:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Skipped</div>
+                            <div class="text-sm text-gray-700 xl:text-right"><%= sending.messages_skipped %></div>
+                            <% if sending.messages_skipped > 0 { %>
+                                <ul class="mt-1 text-xs text-gray-500 xl:text-right space-y-0.5">
+                                    <% if sending.skipped_unsubscribed > 0 { %><li>unsubscribed: <%= sending.skipped_unsubscribed %></li><% } %>
+                                    <% if sending.skipped_bounced > 0 { %><li>previously bounced: <%= sending.skipped_bounced %></li><% } %>
+                                    <% if sending.skipped_complained > 0 { %><li>previously complained: <%= sending.skipped_complained %></li><% } %>
+                                    <% if sending.skipped_unverified > 0 { %><li>unverified: <%= sending.skipped_unverified %></li><% } %>
+                                    <% if sending.skipped_opted_out > 0 { %><li>opted out: <%= sending.skipped_opted_out %></li><% } %>
+                                    <% if sending.skipped_invalid > 0 { %><li>invalid address: <%= sending.skipped_invalid %></li><% } %>
+                                    <% if sending.send_failed > 0 { %><li>delivery failed: <%= sending.send_failed %></li><% } %>
+                                </ul>
+                            <% } %>
                         </div>
 
                         <!-- Opened -->
