@@ -10,7 +10,9 @@ use log_service::database::{
     Database, get_sync_last_id, set_sync_last_id, tables::ParticipationRow,
 };
 
-const ZOONIVERSE_ORIGIN: i16 = 10; // Distinct origin for Zooniverse-sourced participation
+const ZOONIVERSE_ORIGIN: i16 = 10;
+const PAGE_SIZE: u32 = 200;
+const REQUEST_DELAY: Duration = Duration::from_millis(500);
 
 #[derive(Debug, Deserialize)]
 struct OAuthTokenResponse {
@@ -56,7 +58,12 @@ async fn get_zooniverse_token(client: &reqwest::Client) -> Result<String> {
     Ok(resp.access_token)
 }
 
-/// Synchronize Zooniverse project and user mappings from orrery
+/// Synchronize Zooniverse project mappings from orrery.
+///
+/// Project rows are append-only on the orrery side, so we track an `id`
+/// watermark and pull forward. The local copy of `last_classification_id`
+/// is owned by hydra after initial setup, so we only insert it for new
+/// projects and never overwrite an existing value.
 pub async fn zooniverse_sync_projects(
     database: Arc<Database>,
     cancellation_token: CancellationToken,
@@ -76,7 +83,7 @@ pub async fn zooniverse_sync_projects(
 
         let last_id = get_sync_last_id(&database, "zooniverse-project-sync-last-id")
             .await
-            .unwrap_or_else(|_| 0);
+            .unwrap_or(0);
 
         let client = reqwest::Client::new();
         let sync_token = env!("SYNC_TOKEN");
@@ -119,22 +126,24 @@ pub async fn zooniverse_sync_projects(
             if project.id > max_id {
                 max_id = project.id;
             }
-            let zoo_id = project.zooniverse_id;
-            let last_class = project.last_classification_id;
+            // INSERT OR IGNORE so we never roll the local last_classification_id
+            // backwards if hydra has already advanced it past orrery's value.
             sqlx::query!(
-                "INSERT OR REPLACE INTO zooniverse_projects (zooniverse_id, entity_id, last_classification_id) VALUES (?, ?, ?)",
-                zoo_id,
+                "INSERT OR IGNORE INTO zooniverse_projects (zooniverse_id, entity_id, last_classification_id) VALUES (?, ?, ?)",
+                project.zooniverse_id,
                 project.entity_ulid,
-                last_class,
+                project.last_classification_id,
             )
             .execute(common::shared::db())
             .await
             .ok();
         }
 
-        set_sync_last_id(&database, "zooniverse-project-sync-last-id", max_id)
-            .await
-            .ok();
+        if max_id > last_id {
+            set_sync_last_id(&database, "zooniverse-project-sync-last-id", max_id)
+                .await
+                .ok();
+        }
 
         let sleep_duration = if projects.len() >= 500 {
             Duration::from_secs(60)
@@ -149,7 +158,16 @@ pub async fn zooniverse_sync_projects(
     }
 }
 
-/// Synchronize Zooniverse user mappings from orrery
+/// Synchronize Zooniverse user mappings from orrery (full replace).
+///
+/// One Zooniverse account can be claimed by multiple SciStarter users; the
+/// orrery endpoint emits an array of matching user ULIDs per Zooniverse
+/// account. We store one row per (zooniverse_id, user_id) pair so the
+/// classification importer can fan participation out to all of them.
+///
+/// The download streams into `zooniverse_users_staging` and only replaces
+/// the live table once the full download succeeds. A failure mid-download
+/// leaves the previous live mapping intact.
 pub async fn zooniverse_sync_users(
     _database: Arc<Database>,
     cancellation_token: CancellationToken,
@@ -159,7 +177,7 @@ pub async fn zooniverse_sync_users(
         id: i32,
         zooniverse_id: i64,
         zooniverse_username: String,
-        user_ulid: Option<String>,
+        user_ulids: Vec<String>,
     }
 
     loop {
@@ -170,8 +188,17 @@ pub async fn zooniverse_sync_users(
         let client = reqwest::Client::new();
         let sync_token = env!("SYNC_TOKEN");
 
-        // Full-replace: paginate through all records starting from id 0
+        if let Err(e) = sqlx::query!("DELETE FROM zooniverse_users_staging")
+            .execute(common::shared::db())
+            .await
+        {
+            eprintln!("Error clearing zooniverse_users_staging: {}", e);
+            sleep(Duration::from_secs(60)).await;
+            continue;
+        }
+
         let mut last_id: i32 = 0;
+        let mut download_ok = true;
 
         loop {
             if cancellation_token.is_cancelled() {
@@ -193,16 +220,19 @@ pub async fn zooniverse_sync_users(
                         Ok(data) => data,
                         Err(e) => {
                             eprintln!("JSON parsing error for zooniverse users: {}", e);
+                            download_ok = false;
                             break;
                         }
                     },
                     Err(e) => {
                         eprintln!("HTTP error syncing zooniverse users: {}", e);
+                        download_ok = false;
                         break;
                     }
                 },
                 Err(e) => {
                     eprintln!("Request error syncing zooniverse users: {}", e);
+                    download_ok = false;
                     break;
                 }
             };
@@ -211,28 +241,85 @@ pub async fn zooniverse_sync_users(
                 break;
             }
 
+            let batch_done = users.len() < 500;
+
+            let staged = async {
+                let mut tx = common::shared::db().begin().await?;
+                for user in &users {
+                    if user.user_ulids.is_empty() {
+                        // No SciStarter user has claimed this Zooniverse
+                        // account yet; record the username mapping with a
+                        // null user_id so we can still resolve the username
+                        // when one is added later.
+                        sqlx::query!(
+                            "INSERT OR IGNORE INTO zooniverse_users_staging \
+                                (zooniverse_id, zooniverse_username, user_id) \
+                             VALUES (?, ?, NULL)",
+                            user.zooniverse_id,
+                            user.zooniverse_username,
+                        )
+                        .execute(&mut *tx)
+                        .await?;
+                    } else {
+                        for user_ulid in &user.user_ulids {
+                            sqlx::query!(
+                                "INSERT OR IGNORE INTO zooniverse_users_staging \
+                                    (zooniverse_id, zooniverse_username, user_id) \
+                                 VALUES (?, ?, ?)",
+                                user.zooniverse_id,
+                                user.zooniverse_username,
+                                user_ulid,
+                            )
+                            .execute(&mut *tx)
+                            .await?;
+                        }
+                    }
+                }
+                tx.commit().await?;
+                Ok::<_, sqlx::Error>(())
+            }
+            .await;
+
+            if let Err(e) = staged {
+                eprintln!("Error staging zooniverse_users batch: {}", e);
+                download_ok = false;
+                break;
+            }
+
             for user in &users {
                 if user.id > last_id {
                     last_id = user.id;
                 }
-                let zoo_id = user.zooniverse_id;
-                sqlx::query!(
-                    "INSERT OR REPLACE INTO zooniverse_users (zooniverse_id, zooniverse_username, user_id) VALUES (?, ?, ?)",
-                    zoo_id,
-                    user.zooniverse_username,
-                    user.user_ulid,
-                )
-                .execute(common::shared::db())
-                .await
-                .ok();
             }
 
-            if users.len() < 500 {
+            if batch_done {
                 break;
             }
         }
 
-        // Only sync once per day since this is a full-replace
+        if download_ok {
+            let swap = async {
+                let mut tx = common::shared::db().begin().await?;
+                sqlx::query!("DELETE FROM zooniverse_users")
+                    .execute(&mut *tx)
+                    .await?;
+                sqlx::query!(
+                    "INSERT INTO zooniverse_users (zooniverse_id, zooniverse_username, user_id) \
+                     SELECT zooniverse_id, zooniverse_username, user_id FROM zooniverse_users_staging"
+                )
+                .execute(&mut *tx)
+                .await?;
+                tx.commit().await?;
+                Ok::<_, sqlx::Error>(())
+            }
+            .await;
+
+            if let Err(e) = swap {
+                eprintln!("Error swapping zooniverse_users from staging: {}", e);
+            }
+        }
+
+        // Full-replace once a day.
         tokio::select! {
             _ = sleep(Duration::from_secs(24 * 60 * 60)) => {}
             _ = cancellation_token.cancelled() => { return; }
@@ -240,7 +327,12 @@ pub async fn zooniverse_sync_users(
     }
 }
 
-/// Poll Zooniverse API for new classifications and write participation records to WAL
+/// Poll Zooniverse for new classifications and write participation rows.
+///
+/// Pagination is `last_id`-only: each page advances the watermark, which we
+/// persist before fetching the next page. A crash caps re-imports at the
+/// in-flight page rather than the entire project history. Each classification
+/// is fanned out to every SciStarter user that claims the Zooniverse account.
 pub async fn zooniverse_synchronize(
     database: Arc<Database>,
     cancellation_token: CancellationToken,
@@ -248,13 +340,6 @@ pub async fn zooniverse_synchronize(
     loop {
         if cancellation_token.is_cancelled() {
             return;
-        }
-
-        // Load all tracked projects
-        struct ProjectRow {
-            zooniverse_id: i64,
-            entity_id: String,
-            last_classification_id: i64,
         }
 
         let projects = match sqlx::query_as!(
@@ -289,133 +374,198 @@ pub async fn zooniverse_synchronize(
             }
         };
 
-        'projects: for project in projects {
+        for project in projects {
             if cancellation_token.is_cancelled() {
                 return;
             }
 
-            let mut max_id = project.last_classification_id;
-            let mut page: u32 = 1;
-
-            loop {
-                let resp = match client
-                    .get("https://panoptes.zooniverse.org/api/classifications/project")
-                    .bearer_auth(&token)
-                    .header("Accept", "application/vnd.api+json; version=1")
-                    .query(&[
-                        ("project_id", &project.zooniverse_id.to_string()),
-                        ("page_size", &"200".to_string()),
-                        ("last_id", &project.last_classification_id.to_string()),
-                        ("page", &page.to_string()),
-                        ("sort", &"-created_at".to_string()),
-                    ])
-                    .send()
-                    .await
-                {
-                    Ok(r) => r,
-                    Err(e) => {
-                        eprintln!(
-                            "Zooniverse API error for project {}: {}",
-                            project.zooniverse_id, e
-                        );
-                        continue 'projects;
-                    }
-                };
-
-                if resp.status() == 429 {
-                    eprintln!("Zooniverse rate limit hit, backing off");
-                    sleep(Duration::from_secs(60)).await;
-                    continue 'projects;
-                }
-
-                let classifications: ClassificationsResponse = match resp.error_for_status() {
-                    Ok(r) => match r.json().await {
-                        Ok(c) => c,
-                        Err(e) => {
-                            eprintln!("Zooniverse JSON parse error: {}", e);
-                            continue 'projects;
-                        }
-                    },
-                    Err(e) => {
-                        eprintln!("Zooniverse HTTP error: {}", e);
-                        continue 'projects;
-                    }
-                };
-
-                if classifications.classifications.is_empty() {
-                    break;
-                }
-
-                let mut found_new = false;
-
-                for classification in &classifications.classifications {
-                    let class_id: i64 = classification.id.parse().unwrap_or(0);
-                    if class_id > max_id {
-                        max_id = class_id;
-                    }
-                    if class_id > project.last_classification_id {
-                        found_new = true;
-                    }
-
-                    // Resolve zooniverse user to hydra user_id
-                    let user_id = if let Some(zoo_user_id) = &classification.links.user {
-                        let zoo_uid: i64 = zoo_user_id.parse().unwrap_or(0);
-                        sqlx::query_scalar!(
-                            "SELECT user_id FROM zooniverse_users WHERE zooniverse_id = ?",
-                            zoo_uid,
-                        )
-                        .fetch_optional(common::shared::db())
-                        .await
-                        .ok()
-                        .flatten()
-                        .flatten()
-                    } else {
-                        None
-                    };
-
-                    let row = ParticipationRow {
-                        origin: ZOONIVERSE_ORIGIN,
-                        when: classification.created_at.clone(),
-                        duration: 1.0,
-                        where_point: None,
-                        magnitude: 1,
-                        authenticated: true,
-                        extra: String::new(),
-                        fidelity: 0.5,
-                        entity_id: project.entity_id.clone(),
-                        user_id,
-                        task_name: None,
-                    };
-
-                    if let Err(e) = database.participation.insert(row).await {
-                        eprintln!("Error inserting zooniverse participation: {}", e);
-                    }
-                }
-
-                if !found_new || classifications.classifications.len() < 200 {
-                    break;
-                }
-
-                page += 1;
-            }
-
-            // Update last_classification_id
-            if max_id > project.last_classification_id {
-                sqlx::query!(
-                    "UPDATE zooniverse_projects SET last_classification_id = ? WHERE zooniverse_id = ?",
-                    max_id,
-                    project.zooniverse_id,
-                )
-                .execute(common::shared::db())
-                .await
-                .ok();
-            }
+            sync_project(&database, &client, &token, project, &cancellation_token).await;
         }
 
-        // Poll every 15 minutes
         tokio::select! {
             _ = sleep(Duration::from_secs(15 * 60)) => {}
             _ = cancellation_token.cancelled() => { return; }
         }
     }
 }
+
+struct ProjectRow {
+    zooniverse_id: i64,
+    entity_id: String,
+    last_classification_id: i64,
+}
+
+async fn sync_project(
+    database: &Database,
+    client: &reqwest::Client,
+    token: &str,
+    project: ProjectRow,
+    cancellation_token: &CancellationToken,
+) {
+    let ProjectRow {
+        zooniverse_id,
+        entity_id,
+        mut last_classification_id,
+    } = project;
+
+    loop {
+        if cancellation_token.is_cancelled() {
+            return;
+        }
+
+        sleep(REQUEST_DELAY).await;
+
+        let resp = match client
+            .get("https://panoptes.zooniverse.org/api/classifications/project")
+            .bearer_auth(token)
+            .header("Accept", "application/vnd.api+json; version=1")
+            .query(&[
+                ("project_id", &zooniverse_id.to_string()),
+                ("page_size", &PAGE_SIZE.to_string()),
+                ("last_id", &last_classification_id.to_string()),
+            ])
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("Zooniverse API error for project {}: {}", zooniverse_id, e);
+                return;
+            }
+        };
+
+        if resp.status() == 429 {
+            eprintln!("Zooniverse rate limit hit, backing off");
+            sleep(Duration::from_secs(60)).await;
+            continue;
+        }
+
+        let classifications: ClassificationsResponse = match resp.error_for_status() {
+            Ok(r) => match r.json().await {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("Zooniverse JSON parse error: {}", e);
+                    return;
+                }
+            },
+            Err(e) => {
+                eprintln!("Zooniverse HTTP error: {}", e);
+                return;
+            }
+        };
+
+        if classifications.classifications.is_empty() {
+            return;
+        }
+
+        let mut page_max_id = last_classification_id;
+
+        for classification in &classifications.classifications {
+            let class_id = match classification.id.parse::<i64>() {
+                Ok(id) => id,
+                Err(_) => {
+                    eprintln!(
+                        "Skipping classification with unparseable id: {:?}",
+                        classification.id
+                    );
+                    continue;
+                }
+            };
+
+            if class_id > page_max_id {
+                page_max_id = class_id;
+            }
+
+            let zoo_user_id = match classification.links.user.as_ref() {
+                Some(s) => match s.parse::<i64>() {
+                    Ok(id) => id,
+                    Err(_) => {
+                        eprintln!("Skipping classification {} with unparseable user id", class_id);
+                        continue;
+                    }
+                },
+                None => {
+                    // Anonymous classification — no SciStarter user to credit.
+                    continue;
+                }
+            };
+
+            let user_ids: Vec<Option<String>> = match sqlx::query_scalar!(
+                "SELECT user_id FROM zooniverse_users WHERE zooniverse_id = ?",
+                zoo_user_id,
+            )
+            .fetch_all(common::shared::db())
+            .await
+            {
+                Ok(rows) => rows,
+                Err(e) => {
+                    eprintln!("Error looking up zooniverse user {}: {}", zoo_user_id, e);
+                    continue;
+                }
+            };
+
+            // Filter to mappings that resolve to a SciStarter user. If the
+            // Zooniverse user has no claimed SciStarter account, skip — a
+            // classification with no user to credit is not useful here.
+            let scistarter_users: Vec<String> = user_ids.into_iter().flatten().collect();
+            if scistarter_users.is_empty() {
+                continue;
+            }
+
+            for user_id in scistarter_users {
+                let row = ParticipationRow {
+                    origin: ZOONIVERSE_ORIGIN,
+                    when: classification.created_at.clone(),
+                    duration: 1.0,
+                    where_point: None,
+                    magnitude: 1,
+                    authenticated: true,
+                    extra: String::new(),
+                    fidelity: 0.5,
+                    entity_id: entity_id.clone(),
+                    user_id: Some(user_id),
+                    task_name: None,
+                };
+
+                if let Err(e) = database.participation.insert(row).await {
+                    eprintln!("Error inserting zooniverse participation: {}", e);
+                }
+            }
+        }
+
+        // Persist progress after every page so a crash limits re-import to
+        // the in-flight page rather than the whole project history.
+        if page_max_id > last_classification_id {
+            if let Err(e) = sqlx::query!(
+                "UPDATE zooniverse_projects SET last_classification_id = ? \
+                 WHERE zooniverse_id = ? AND last_classification_id < ?",
+                page_max_id,
+                zooniverse_id,
+                page_max_id,
+            )
+            .execute(common::shared::db())
+            .await
+            {
+                eprintln!(
+                    "Error updating last_classification_id for {}: {}",
+                    zooniverse_id, e
+                );
+            }
+            last_classification_id = page_max_id;
+        } else {
+            // The API returned classifications but none of them had a
+            // parseable id. Bail out rather than spin forever on the
+            // same page.
+            eprintln!(
+                "No id progress on project {}; aborting this run",
+                zooniverse_id
+            );
+            return;
+        }
+
+        if classifications.classifications.len() < PAGE_SIZE as usize {
+            return;
+        }
+    }
+}
+
