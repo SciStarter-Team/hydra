@@ -1,0 +1,145 @@
+<div class="ss-container !pt-8 !pb-8 mx-auto">
+    <h1>Welcome, @<%= self.first_name %></h1>
+    <p class="text-sm mb-6 opacity-80">
+        Your activity, the things you manage, and the lists you keep.
+    </p>
+
+    <section class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div class="ss-card !p-4">
+            <div class="text-3xl font-bold"><%= self.total_contributions %></div>
+            <div class="text-xs opacity-70">Contributions</div>
+        </div>
+        <div class="ss-card !p-4">
+            <div class="text-3xl font-bold"><%= self.owned_count %></div>
+            <div class="text-xs opacity-70">Things you manage</div>
+        </div>
+        <div class="ss-card !p-4">
+            <div class="text-3xl font-bold"><%= self.joined_count %></div>
+            <div class="text-xs opacity-70">Projects joined</div>
+        </div>
+        <div class="ss-card !p-4">
+            <div class="text-3xl font-bold"><%= self.bookmarked_count %></div>
+            <div class="text-xs opacity-70">Bookmarks</div>
+        </div>
+    </section>
+
+    <% if !self.owned.is_empty() { %>
+    <section class="mb-8">
+        <div class="flex items-baseline justify-between mb-3">
+            <h2 class="font-semibold text-lg mb-0">Things you manage</h2>
+            <a href="/dashboard/owned" class="text-sm text-primary-action hover:underline">See all</a>
+        </div>
+        <ul class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <% for entity in self.owned.iter().take(6) { %>
+            <li class="ss-card overflow-hidden flex flex-col">
+                <% if let Some(image) = &entity.image { %>
+                <img src="<%= image %>" alt="" class="w-full h-32 object-cover" />
+                <% } %>
+                <div class="p-4 flex-1 flex flex-col">
+                    <span class="text-xs uppercase opacity-60 mb-1"><%= entity.kind_label() %></span>
+                    <a href="<%= entity.link %>" class="font-semibold hover:text-primary"><%= entity.name %></a>
+                    <% if !entity.status.is_empty() { %>
+                    <span class="text-xs text-gray-500 mt-1"><%= entity.status %></span>
+                    <% } %>
+                </div>
+            </li>
+            <% } %>
+        </ul>
+    </section>
+    <% } %>
+
+    <% if !self.joined.is_empty() { %>
+    <section class="mb-8">
+        <div class="flex items-baseline justify-between mb-3">
+            <h2 class="font-semibold text-lg mb-0">Projects you've joined</h2>
+        </div>
+        <ul class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <% for entity in self.joined.iter().take(6) { %>
+            <li class="ss-card overflow-hidden flex flex-col">
+                <% if let Some(image) = &entity.image { %>
+                <img src="<%= image %>" alt="" class="w-full h-32 object-cover" />
+                <% } %>
+                <div class="p-4 flex-1 flex flex-col">
+                    <a href="<%= entity.link %>" class="font-semibold hover:text-primary"><%= entity.name %></a>
+                </div>
+            </li>
+            <% } %>
+        </ul>
+    </section>
+    <% } %>
+
+    <% if !self.bookmarked.is_empty() { %>
+    <section class="mb-8">
+        <div class="flex items-baseline justify-between mb-3">
+            <h2 class="font-semibold text-lg mb-0">Recent bookmarks</h2>
+            <a href="/dashboard/bookmarks" class="text-sm text-primary-action hover:underline">See all</a>
+        </div>
+        <ul class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <% for entity in self.bookmarked.iter().take(6) { %>
+            <li class="ss-card overflow-hidden flex flex-col">
+                <% if let Some(image) = &entity.image { %>
+                <img src="<%= image %>" alt="" class="w-full h-32 object-cover" />
+                <% } %>
+                <div class="p-4 flex-1 flex flex-col">
+                    <a href="<%= entity.link %>" class="font-semibold hover:text-primary"><%= entity.name %></a>
+                </div>
+            </li>
+            <% } %>
+        </ul>
+    </section>
+    <% } %>
+
+    <% if !self.visited.is_empty() { %>
+    <section class="mb-8">
+        <div class="flex items-baseline justify-between mb-3">
+            <h2 class="font-semibold text-lg mb-0">Recently visited</h2>
+        </div>
+        <ul class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <% for entity in &self.visited { %>
+            <li class="ss-card overflow-hidden flex flex-col">
+                <% if let Some(image) = &entity.image { %>
+                <img src="<%= image %>" alt="" class="w-full h-24 object-cover" />
+                <% } %>
+                <div class="p-4 flex-1 flex flex-col">
+                    <span class="text-xs uppercase opacity-60 mb-1"><%= entity.kind_label() %></span>
+                    <a href="<%= entity.link %>" class="font-semibold text-sm hover:text-primary"><%= entity.name %></a>
+                </div>
+            </li>
+            <% } %>
+        </ul>
+    </section>
+    <% } %>
+
+    <section class="mb-8">
+        <div class="flex items-baseline justify-between mb-3">
+            <h2 class="font-semibold text-lg mb-0">Link tokens</h2>
+        </div>
+        <% if self.link_tokens.is_empty() { %>
+        <p class="ss-card !p-4 text-sm opacity-70 mb-0">
+            Link tokens let external apps record contributions on your behalf.
+            You haven't created any yet.
+        </p>
+        <% } else { %>
+        <ul class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <% for token in &self.link_tokens { %>
+            <li class="ss-card !p-4 flex items-center justify-between">
+                <div>
+                    <div class="font-semibold text-sm"><%= token.label %></div>
+                    <div class="text-xs opacity-60">Created <%= token.created %><% if let Some(expires) = &token.expires { %> · expires <%= expires %><% } %></div>
+                </div>
+            </li>
+            <% } %>
+        </ul>
+        <% } %>
+    </section>
+
+    <% if self.total_contributions == 0 && self.owned_count == 0 && self.joined_count == 0 && self.bookmarked_count == 0 { %>
+    <section class="ss-card !p-8 text-center">
+        <p class="mb-2 font-semibold">Nothing here yet.</p>
+        <p class="text-sm opacity-80 mb-0">
+            Visit <a class="text-primary-action hover:underline" href="/finder">the finder</a>
+            to discover projects and events to participate in or bookmark.
+        </p>
+    </section>
+    <% } %>
+</div>

@@ -24,7 +24,8 @@ use handlers::{
     handle_last_edited, handle_page_view, handle_participation_analytics,
     handle_project_member_count, handle_project_participation, handle_project_participation_record,
     handle_recent_activity, handle_search_event, handle_top_performers_analytics,
-    handle_user_emails_update, handle_user_tags_update,
+    handle_user_emails_update, handle_user_participation, handle_user_recent_visits,
+    handle_user_tags_update,
 };
 use log_service::{Database, run_compactor_service};
 use parking_lot::RwLock;
@@ -244,6 +245,16 @@ async fn main() -> Result<()> {
     ));
     toplevel.spawn(handler!(log_group, "last_edited", handle_last_edited));
     toplevel.spawn(handler!(log_group, "edit_log", handle_edit_log));
+    toplevel.spawn(handler!(
+        log_group,
+        "user_participation",
+        handle_user_participation
+    ));
+    toplevel.spawn(handler!(
+        log_group,
+        "user_recent_visits",
+        handle_user_recent_visits
+    ));
 
     // Stats endpoints
     let stats_group = svc.group("log.stats");

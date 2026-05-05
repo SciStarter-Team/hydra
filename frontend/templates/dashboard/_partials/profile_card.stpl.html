@@ -1,0 +1,101 @@
+<div class="ss-card !p-6">
+    <% if !self.visible { %>
+        <div class="flex items-center gap-4">
+            <% if let Some(image) = &self.image { %>
+                <img src="<%= image %>" alt="" class="w-20 h-20 rounded-full object-cover" />
+            <% } %>
+            <div>
+                <h2 class="font-semibold text-xl"><%= self.handle %></h2>
+                <p class="text-sm text-gray-600">This profile is private.</p>
+            </div>
+        </div>
+    <% } else { %>
+        <div class="flex items-start gap-4 mb-6">
+            <% if let Some(image) = &self.image { %>
+                <img src="<%= image %>" alt="" class="w-20 h-20 rounded-full object-cover" />
+            <% } %>
+            <div class="flex-1">
+                <h2 class="font-semibold text-xl">
+                    <% if !self.first_name.is_empty() || !self.last_name.is_empty() { %>
+                        <%= self.first_name %> <%= self.last_name %>
+                    <% } else { %>
+                        <%= self.handle %>
+                    <% } %>
+                </h2>
+                <p class="text-sm text-gray-600">@<%= self.handle %></p>
+                <p class="text-xs text-gray-500 mt-1">Joined <%= self.date_joined %></p>
+            </div>
+            <div class="flex flex-col gap-2">
+                <% if self.is_self { %>
+                    <a href="/dashboard/settings?tab=general" class="btn btn-primary">Edit profile</a>
+                <% } else if let Some(user_id) = self.target_user_id { %>
+                    <button type="button"
+                            class="btn btn-primary"
+                            hx-get="/dashboard/messages/compose?to=<%= user_id |disp %>"
+                            hx-target="#message-compose"
+                            hx-swap="innerHTML">
+                        Send a message
+                    </button>
+                <% } %>
+            </div>
+        </div>
+
+        <% if self.scientist || self.educator || self.ambassador.is_some() { %>
+            <div class="flex flex-wrap gap-2 mb-4">
+                <% if self.scientist { %>
+                    <span class="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded">Scientist</span>
+                <% } %>
+                <% if self.educator { %>
+                    <span class="px-2 py-1 text-xs bg-purple-100 text-purple-800 rounded">Educator</span>
+                <% } %>
+                <% if let Some(ambassador) = &self.ambassador { %>
+                    <% if !ambassador.is_empty() { %>
+                        <span class="px-2 py-1 text-xs bg-green-100 text-green-800 rounded">Ambassador: <%= ambassador %></span>
+                    <% } %>
+                <% } %>
+            </div>
+        <% } %>
+
+        <% if let Some(bio) = &self.bio { %>
+            <% if !bio.is_empty() { %>
+                <div class="mb-4">
+                    <h3 class="text-sm font-semibold mb-1">About</h3>
+                    <p class="text-sm whitespace-pre-line"><%= bio %></p>
+                </div>
+            <% } %>
+        <% } %>
+
+        <div class="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+            <% if let Some(home_page) = &self.home_page { %>
+                <% if !home_page.is_empty() { %>
+                    <a href="<%= home_page %>" class="text-primary hover:underline" rel="noopener nofollow">Website</a>
+                <% } %>
+            <% } %>
+            <% if let Some(facebook_url) = &self.facebook_url { %>
+                <% if !facebook_url.is_empty() { %>
+                    <a href="<%= facebook_url %>" class="text-primary hover:underline" rel="noopener nofollow">Facebook</a>
+                <% } %>
+            <% } %>
+            <% if let Some(twitter_profile) = &self.twitter_profile { %>
+                <% if !twitter_profile.is_empty() { %>
+                    <span class="text-gray-700">Twitter: <%= twitter_profile %></span>
+                <% } %>
+            <% } %>
+            <% if let Some(inat_username) = &self.inat_username { %>
+                <% if !inat_username.is_empty() { %>
+                    <a href="https://www.inaturalist.org/people/<%= inat_username %>" class="text-primary hover:underline" rel="noopener nofollow">iNaturalist: <%= inat_username %></a>
+                <% } %>
+            <% } %>
+            <% if let Some(zooniverse_username) = &self.zooniverse_username { %>
+                <% if !zooniverse_username.is_empty() { %>
+                    <a href="https://www.zooniverse.org/users/<%= zooniverse_username %>" class="text-primary hover:underline" rel="noopener nofollow">Zooniverse: <%= zooniverse_username %></a>
+                <% } %>
+            <% } %>
+            <% if let Some(orcid) = &self.orcid { %>
+                <% if !orcid.is_empty() { %>
+                    <a href="https://orcid.org/<%= orcid %>" class="text-primary hover:underline" rel="noopener nofollow">ORCID: <%= orcid %></a>
+                <% } %>
+            <% } %>
+        </div>
+    <% } %>
+</div>

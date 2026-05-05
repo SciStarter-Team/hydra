@@ -1,0 +1,81 @@
+<div class="ss-container !pt-8 !pb-8 mx-auto">
+    <h1>My Profile</h1>
+
+    <p class="text-sm text-gray-600 mb-6">
+        This is your private profile view. Your public profile is at
+        <a href="/profile/<%= self.profile.user_id |disp %>" class="text-primary hover:underline">
+            /profile/<%= self.profile.user_id |disp %>
+        </a>.
+    </p>
+
+    <%+ self.card %>
+
+    <div class="ss-card !p-6 mt-6">
+        <h2 class="font-semibold mb-2">Private information</h2>
+        <p class="text-sm text-gray-600 mb-4">Only visible to you. Edit on the
+            <a href="/dashboard/settings?tab=general" class="text-primary hover:underline">Settings</a> page.</p>
+
+        <dl class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+            <div>
+                <dt class="text-gray-500">Signup email</dt>
+                <dd><%= self.profile.primary_email %></dd>
+            </div>
+            <% if let Some(birthday) = &self.profile.birthday { %>
+                <% if !birthday.is_empty() { %>
+                    <div>
+                        <dt class="text-gray-500">Birthday</dt>
+                        <dd><%= birthday %></dd>
+                    </div>
+                <% } %>
+            <% } %>
+            <% if let Some(zipcode) = &self.profile.zipcode { %>
+                <% if !zipcode.is_empty() { %>
+                    <div>
+                        <dt class="text-gray-500">Zip / Postal code</dt>
+                        <dd><%= zipcode %></dd>
+                    </div>
+                <% } %>
+            <% } %>
+            <% if let Some(country) = &self.profile.country { %>
+                <% if !country.is_empty() { %>
+                    <div>
+                        <dt class="text-gray-500">Country</dt>
+                        <dd><%= country %></dd>
+                    </div>
+                <% } %>
+            <% } %>
+            <% if let Some(gender) = &self.profile.gender { %>
+                <% if !gender.is_empty() { %>
+                    <div>
+                        <dt class="text-gray-500">Gender</dt>
+                        <dd><%= gender %></dd>
+                    </div>
+                <% } %>
+            <% } %>
+            <% if let Some(ethnicity) = &self.profile.ethnicity { %>
+                <% if !ethnicity.is_empty() { %>
+                    <div>
+                        <dt class="text-gray-500">Race / Ethnicity</dt>
+                        <dd><%= ethnicity %></dd>
+                    </div>
+                <% } %>
+            <% } %>
+            <% if let Some(degree) = &self.profile.degree { %>
+                <% if !degree.is_empty() { %>
+                    <div>
+                        <dt class="text-gray-500">Highest education</dt>
+                        <dd><%= degree %></dd>
+                    </div>
+                <% } %>
+            <% } %>
+            <% if let Some(income) = &self.profile.income { %>
+                <% if !income.is_empty() { %>
+                    <div>
+                        <dt class="text-gray-500">Yearly household income</dt>
+                        <dd><%= income %></dd>
+                    </div>
+                <% } %>
+            <% } %>
+        </dl>
+    </div>
+</div>

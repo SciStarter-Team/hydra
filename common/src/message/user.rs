@@ -1433,3 +1433,21 @@ pub struct InatUpdateLastSync {
     pub user_id: Ulid,
     pub inat_last_update: String,
 }
+
+// ============================================================================
+// Legacy user-id lookup
+// ============================================================================
+
+/// Look up a hydra user_id by orrery's User-level legacy id. Distinct
+/// from `user.profile.lookup` which deals with Profile-level legacy
+/// ids (`legacy_v*_profile_id`). This handler only inspects
+/// `legacy_v3_id` and `legacy_v2_id`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserLegacyIdLookupRequest {
+    pub legacy_id: i32,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserLegacyIdLookupResponse {
+    pub user_id: Option<Ulid>,
+}

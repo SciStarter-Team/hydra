@@ -1,0 +1,44 @@
+<div class="ss-container !pt-8 !pb-8 mx-auto">
+    <p class="text-sm">
+        <a href="/dashboard/messages" class="text-primary-action hover:underline">&larr; Back to inbox</a>
+    </p>
+    <h1 class="mt-2"><%= self.subject %></h1>
+    <p class="text-sm text-gray-600 mb-6">
+        with <a href="/profile/<%= self.other_user_id |disp %>" class="text-primary-action hover:underline">@<%= self.other_user_handle %></a>
+    </p>
+
+    <div class="space-y-4 mb-6">
+        <% for post in &self.posts { %>
+        <div class="ss-card !p-4 <% if post.is_self { %>border-l-4 border-primary<% } %>">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-semibold">
+                    <% if post.is_self { %>
+                    You
+                    <% } else { %>
+                    <a href="/profile/<%= post.author_id |disp %>" class="text-primary-action hover:underline">@<%= post.author_handle %></a>
+                    <% } %>
+                </span>
+                <span class="text-xs text-gray-500"><%= post.created_at %></span>
+            </div>
+            <% for paragraph in &post.paragraphs { %>
+            <p class="text-sm mb-2"><%= paragraph %></p>
+            <% } %>
+        </div>
+        <% } %>
+    </div>
+
+    <form method="post" action="/dashboard/messages/<%= self.topic_id |disp %>/reply" class="ss-card !p-4 grid grid-cols-1 gap-3 mb-3">
+        <label class="block">
+            <span class="block text-sm mb-1 font-semibold">Reply</span>
+            <textarea name="body" rows="4" required class="w-full border rounded px-3 py-2"></textarea>
+        </label>
+        <div class="flex justify-end">
+            <button type="submit" class="btn btn-primary">Send reply</button>
+        </div>
+    </form>
+
+    <form method="post" action="/dashboard/messages/<%= self.topic_id |disp %>/discard" class="flex justify-end"
+          hx-on:submit="if (!confirm('Discard this conversation?')) event.preventDefault()">
+        <button type="submit" class="btn btn-secondary text-xs">Discard conversation</button>
+    </form>
+</div>

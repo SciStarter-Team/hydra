@@ -347,6 +347,49 @@ pub struct ActsToDateResponse {
     pub date_reached: Option<String>,
 }
 
+/// Request a per-user contribution overview (total count plus a small
+/// list of recent contributions). Used by the dashboard overview page.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserParticipationRequest {
+    pub user_id: Ulid,
+    /// Maximum number of recent contributions to return.
+    pub recent_limit: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserParticipationEntry {
+    pub entity_id: String,
+    pub when: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserParticipationResponse {
+    pub total: i64,
+    pub recent: Vec<UserParticipationEntry>,
+}
+
+/// Request the user's recent page-view paths over the last `days`
+/// days. The caller is responsible for resolving paths against its
+/// local entity catalog (entities are routed at `/<slug>`, but other
+/// paths share the same shape, so log-service cannot classify them).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserRecentVisitsRequest {
+    pub user_id: Ulid,
+    pub days: i64,
+    pub limit: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserRecentVisit {
+    pub path: String,
+    pub when: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserRecentVisitsResponse {
+    pub visits: Vec<UserRecentVisit>,
+}
+
 /// Request the number of unique participants for a project.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectMemberCountRequest {

@@ -13,6 +13,7 @@ use tokio::{spawn, task::JoinSet, time::sleep};
 use ulid::Ulid;
 
 pub mod address_sets;
+pub mod ambassador;
 pub mod auth;
 pub mod bookmarks;
 pub mod certificates;
@@ -20,7 +21,11 @@ pub mod communities;
 pub mod geocode;
 pub mod health;
 pub mod inat;
+pub mod legacy_id;
+pub mod link_tokens;
+pub mod places;
 pub mod permissions;
+pub mod profile;
 pub mod project_joins;
 pub mod recipient_search;
 pub mod sessions;
@@ -2087,6 +2092,7 @@ async fn main() {
     let bookmarks = service.group("user.bookmarks");
     toplevel.spawn(handler!(bookmarks, "create", bookmarks::create_bookmark));
     toplevel.spawn(handler!(bookmarks, "check", bookmarks::check_bookmark));
+    toplevel.spawn(handler!(bookmarks, "list_by_user", bookmarks::list_by_user));
 
     // Project join endpoints
     let joins = service.group("user.joins");
@@ -2096,6 +2102,11 @@ async fn main() {
         joins,
         "list_by_user",
         project_joins::list_user_joins
+    ));
+    toplevel.spawn(handler!(
+        joins,
+        "list_by_user_id",
+        project_joins::list_by_user_id
     ));
 
     let permissions = service.group("user.permissions");
@@ -2155,6 +2166,36 @@ async fn main() {
         "ai_opted_out",
         user_matching::ai_opted_out
     ));
+    toplevel.spawn(handler!(profile, "get", profile::get));
+    toplevel.spawn(handler!(profile, "save", profile::save));
+    toplevel.spawn(handler!(profile, "public_get", profile::public_get));
+
+    // Ambassador application
+    let ambassador_group = service.group("user.ambassador");
+    toplevel.spawn(handler!(ambassador_group, "get", ambassador::get));
+    toplevel.spawn(handler!(ambassador_group, "update", ambassador::update));
+
+    // Legacy user-id lookup (User-level legacy ids only — distinct from
+    // user.profile.lookup which handles Profile-level legacy ids).
+    let legacy_id_group = service.group("user.legacy_id");
+    toplevel.spawn(handler!(legacy_id_group, "lookup", legacy_id::lookup));
+
+    // User-saved point-of-interest places
+    let places_group = service.group("user.places");
+    toplevel.spawn(handler!(places_group, "list_by_user", places::list_by_user));
+    toplevel.spawn(handler!(places_group, "add", places::add));
+    toplevel.spawn(handler!(places_group, "delete", places::delete));
+
+    // User-issued API link tokens
+    let link_tokens_group = service.group("user.link_tokens");
+    toplevel.spawn(handler!(
+        link_tokens_group,
+        "list_by_user",
+        link_tokens::list_by_user
+    ));
+    toplevel.spawn(handler!(link_tokens_group, "add", link_tokens::add));
+    toplevel.spawn(handler!(link_tokens_group, "delete", link_tokens::delete));
+
 
     // Workflow progress tracking
     let workflow_group = service.group("user.workflow");

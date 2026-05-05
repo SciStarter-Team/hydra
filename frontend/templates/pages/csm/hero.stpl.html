@@ -63,26 +63,39 @@
   <p class="mb-0 uppercase text-primary-dark text-sm">Official partner of</p>
   <img src="/-static/img/csm/America250_logo.svg" alt="America 250 logo" class="w-[60px] md:w-[60px] block" />
 </div>
-<% } CsmPhase::April | CsmPhase::AprilReached => { %>
+<% } CsmPhase::April | CsmPhase::AprilReached | CsmPhase::May => { %>
 <%
 let (fill_height, fill_top, counter_bottom, formatted_date, formatted_count, anim_duration, goal_reached, goal_reached_date) = self.tube_values();
+let is_may = self.phase == CsmPhase::May;
+let show_reached = goal_reached || is_may;
 %>
-<!-- HEADER - APRIL -->
+<!-- HEADER - APRIL / MAY -->
 <div class="mx-auto">
   <div class="acts-hero">
     <div id="stars"></div>
+    <% if !is_may { %>
     <div style="width: 100%;text-align: center;z-index: 99;position: relative; top: -5rem;"><a href="/citizensciencemonth/participate" class="active" style="padding: 5px 10px;"><span>Get Involved</span></a></div>
+    <% } %>
     <div class="acts-hero-content ss-container mx-auto">
       <div class="acts-hero-left">
         <div>
+          <% if !is_may { %>
           <h2 class="relative left-[6px]">Help Us Achieve</h2>
+          <% } %>
           <h1 class="sr-only">2.50 Million Acts of Science</h1>
           <img src="/-static/img/csm/Acts_only_number_standard.svg" alt="2.50 Million Acts of Science Logo" />
           <div class="flex-row gap-1 md:gap-4 items-center my-8 justify-center relative sm:left-[-20px] hidden sm:flex">
             <p class="mb-0 uppercase text-primary-dark text-sm">Official partner of</p>
             <img src="/-static/img/csm/America250_logo.svg" alt="America 250 logo" class="w-[60px] md:w-[60px] block" />
           </div>
+          <% if is_may { %>
+          <div class="flex flex-col md:flex-row justify-center gap-4 mb-8">
+            <a href="/login" class="btn btn-primary">Stay Involved All Year &raquo;</a>
+            <a href="https://blog.scistarter.org/citizen-science-month-2026-results" class="btn btn-primary">View Results</a>
+          </div>
+          <% } else { %>
           <a href="/citizensciencemonth/report" class="btn btn-primary report-btn">Report Your Acts Now</a>
+          <% } %>
         </div>
       </div>
       <div class="acts-hero-right">
@@ -129,11 +142,18 @@ let (fill_height, fill_top, counter_bottom, formatted_date, formatted_count, ani
               <div class="num tick10"><strong>2.50 M</strong></div>
             </div>
             <div id="test-tube-reflect"></div>
+            <% if is_may { %>
+            <div id="test-tube-counter" style="bottom:<%= counter_bottom %>px;opacity:1;animation:tubeCounterGrow <%= anim_duration %>s ease-out" class="reached">
+              <div class="tt-date">Final Count</div>
+              <div class="tt-count"><%= formatted_count %></div>
+            </div>
+            <% } else { %>
             <div id="test-tube-counter" style="bottom:<%= counter_bottom %>px;animation:tubeCounterGrow <%= anim_duration %>s ease-out<% if goal_reached { %>" class="reached<% } %>">
               <div class="tt-date"><%= formatted_date %></div>
               <div class="tt-count"><%= formatted_count %></div>
             </div>
-            <div id="test-tube-over"<% if goal_reached { %> style="display:block"<% } %>>
+            <% } %>
+            <div id="test-tube-over"<% if show_reached { %> style="display:block"<% } %>>
               <div class="tt-date">Goal Reached</div>
               <div class="tt-date"><%= goal_reached_date.as_deref().unwrap_or("") %></div>
               <div class="tt-count">2.50 Million</div>
@@ -142,85 +162,7 @@ let (fill_height, fill_top, counter_bottom, formatted_date, formatted_count, ani
         </div>
       </div>
     </div>
-    <div id="fireworks"<% if !goal_reached { %> class="hidden"<% } %>><lottie-player src="/-static/img/csm/fireworks.json" background="transparent" speed="1" loop autoplay></lottie-player></div>
-    <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
-  </div>
-</div>
-
-<!-- MOBILE ONLY 250 PARTNER-->
-<div class="flex-row gap-1 md:gap-4 items-center my-8 justify-center relative sm:left-[-20px] flex sm:hidden bg-primary-light py-4">
-  <p class="mb-0 uppercase text-primary-dark text-sm">Official partner of</p>
-  <img src="/-static/img/csm/America250_logo.svg" alt="America 250 logo" class="w-[60px] md:w-[60px] block" />
-</div>
-<% } CsmPhase::May => { %>
-<%
-let (fill_height, fill_top, _counter_bottom, _formatted_date, formatted_count, _anim_duration, _goal_reached, goal_reached_date) = self.tube_values();
-%>
-<!-- HEADER - MAY -->
-<div class="mx-auto">
-  <div class="acts-hero post-live">
-    <div class="post-live-logo max-w-[960px] mx-auto">
-      <img src="/-static/img/csm/Acts_horizontal_with-number-standard.svg" alt="2.50 Million Acts of Science Logo" />
-      <div class="flex-row gap-1 md:gap-4 items-center my-8 justify-center relative sm:left-[-20px] hidden sm:flex ml-auto">
-        <p class="mb-0 uppercase text-primary-dark text-sm">Official partner of</p>
-        <img src="/-static/img/csm/America250_logo.svg" alt="America 250 logo" class="w-[60px] md:w-[60px] block" />
-      </div>
-    </div>
-    <div class="acts-hero-content ss-container mx-auto">
-      <div class="acts-hero-left">
-        <div class="text-center">
-          <h2 class="relative left-[6px] text-center">We Did It!</h2>
-          <p>Well done everyone! Science is better, together. Find more projects and events all year-long on SciStarter.</p>
-          <div class="flex flex-col md:flex-row justify-center gap-4 mb-8">
-            <a href="/finder" class="btn btn-primary">Stay Involved All Year &raquo;</a>
-            <a href="https://pages.scistarter.org/" class="btn btn-primary">View Results</a>
-          </div>
-        </div>
-      </div>
-      <div class="acts-hero-right">
-        <div>
-          <div id="test-tube">
-            <img id="test-tube-base" src="/-static/img/csm/test-tube.svg" alt="test tube data visualization">
-            <div id="test-tube-fill" style="height: calc(<%= fill_height %>px)"></div>
-            <div id="test-tube-fill-top" style="bottom:calc(<%= fill_top %>px);"></div>
-            <div id="test-tube-scale">
-              <div class="tube-tick tick0"></div>
-              <div class="tube-tick tick1"></div>
-              <div class="tube-tick tick2"></div>
-              <div class="tube-tick tick3"></div>
-              <div class="tube-tick tick4"></div>
-              <div class="tube-tick tick5"></div>
-              <div class="tube-tick tick6"></div>
-              <div class="tube-tick tick7"></div>
-              <div class="tube-tick tick8"></div>
-              <div class="tube-tick tick9"></div>
-              <div class="tube-tick tick10"></div>
-              <div class="num tick1">0.25 M</div>
-              <div class="num tick2"><strong>0.50 M</strong></div>
-              <div class="num tick3">0.75 M</div>
-              <div class="num tick4"><strong>1.00 M</strong></div>
-              <div class="num tick5">1.25 M</div>
-              <div class="num tick6"><strong>1.50 M</strong></div>
-              <div class="num tick7">1.75 M</div>
-              <div class="num tick8"><strong>2.00 M</strong></div>
-              <div class="num tick9">2.25 M</div>
-              <div class="num tick10"><strong>2.50 M</strong></div>
-            </div>
-            <div id="test-tube-reflect"></div>
-            <div id="test-tube-counter" class="reached">
-              <div class="tt-date">Final Count</div>
-              <div class="tt-count"><%= formatted_count %></div>
-            </div>
-            <div id="test-tube-over">
-              <div class="tt-date">Goal Reached</div>
-              <div class="tt-date"><%= goal_reached_date.as_deref().unwrap_or("") %></div>
-              <div class="tt-count">2.50 Million</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div id="fireworks"><lottie-player src="/-static/img/csm/fireworks.json" background="transparent" speed="1" loop autoplay></lottie-player></div>
+    <div id="fireworks"<% if !show_reached { %> class="hidden"<% } %>><lottie-player src="/-static/img/csm/fireworks.json" background="transparent" speed="1" loop autoplay></lottie-player></div>
     <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
   </div>
 </div>

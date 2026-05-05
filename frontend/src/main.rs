@@ -9,6 +9,7 @@ pub mod communities;
 pub mod component;
 pub mod contact;
 pub mod csm;
+pub mod dashboard;
 pub mod dev;
 pub mod emailer;
 pub mod entity;
@@ -34,6 +35,8 @@ pub mod pagebuilder;
 pub mod pagecontent;
 pub mod pages;
 pub mod peering;
+pub mod profile;
+pub mod profile_card;
 pub mod project;
 pub mod rating;
 pub mod review;
@@ -260,6 +263,9 @@ fn user_facing() -> impl Endpoint {
         .at("/-news/:id/content", get(news::news_content))
         .nest("/communities", communities::routes())
         .nest("/dashboard/communities", communities::dashboard_routes())
+        .nest("/dashboard", dashboard::routes())
+        .at("/profile", get(profile::legacy_profile_redirect))
+        .at("/profile/:user_id", get(profile::public_profile_page))
         .nest("/citizensciencemonth", csm::routes())
         .at("/-csm/acts-to-date", get(csm::acts_to_date_api))
         .at("/-csm/picks", get(csm::csm_picks))

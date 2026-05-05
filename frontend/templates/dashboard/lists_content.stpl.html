@@ -1,0 +1,157 @@
+<% use crate::dashboard::lists::ListRole; %>
+<div class="ss-container !pt-8 !pb-8 mx-auto">
+    <h1>Lists</h1>
+    <p class="text-sm mb-6">
+        Curate collections of projects and events. Lists default to
+        public; mark a list private and use sharing to grant view-only
+        or editor access to specific people.
+    </p>
+
+    <details class="ss-card !p-6 mb-6">
+        <summary class="font-semibold cursor-pointer">Create a new list</summary>
+        <form method="post" action="/dashboard/lists" class="mt-4 grid grid-cols-1 gap-3">
+            <label class="block">
+                <span class="block text-sm mb-1">List name</span>
+                <input type="text" name="name" required class="w-full border rounded px-3 py-2" />
+            </label>
+            <label class="block">
+                <span class="block text-sm mb-1">Note</span>
+                <textarea name="note" rows="2" class="w-full border rounded px-3 py-2"></textarea>
+            </label>
+            <label class="flex items-center gap-2">
+                <input type="checkbox" name="private" value="true" />
+                <span>Private (only visible to you and people you share with)</span>
+            </label>
+            <div class="flex justify-end">
+                <button type="submit" class="btn btn-primary">Create</button>
+            </div>
+        </form>
+    </details>
+
+    <% if self.lists.is_empty() { %>
+    <p class="ss-card !p-6 text-center text-gray-600">
+        You don't have any lists yet.
+    </p>
+    <% } %>
+
+    <% for list in &self.lists { %>
+    <details class="ss-card !p-0 mb-4 overflow-hidden">
+        <summary class="px-6 py-4 cursor-pointer flex items-center justify-between">
+            <div>
+                <span class="font-semibold"><%= list.name %></span>
+                <% match list.role { ListRole::Owner => { %><span class="ml-2 text-xs text-gray-500">(owner)</span><% } ListRole::Editor => { %><span class="ml-2 text-xs text-gray-500">(editor)</span><% } ListRole::Viewer => { %><span class="ml-2 text-xs text-gray-500">(viewer)</span><% } } %>
+                <% if list.private { %><span class="ml-2 text-xs text-amber-600">private</span><% } else { %><span class="ml-2 text-xs text-emerald-600">public</span><% } %>
+            </div>
+            <span class="text-xs text-gray-500"><%= list.entries.len() %> items</span>
+        </summary>
+        <div class="px-6 pb-6 border-t border-gray-200">
+            <% if !list.note.is_empty() { %>
+            <p class="text-sm text-gray-600 my-3"><%= list.note %></p>
+            <% } %>
+
+            <% if list.entries.is_empty() { %>
+            <p class="text-sm text-gray-500 my-3">No entries yet.</p>
+            <% } else { %>
+            <ul class="divide-y divide-gray-200 mb-4">
+                <% for entry in &list.entries { %>
+                <li class="py-3">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="flex-1 min-w-0">
+                            <% if let Some(card) = &entry.card { %>
+                            <a href="<%= card.link %>" class="font-medium hover:text-primary"><%= card.name %></a>
+                            <% } else { %>
+                            <span class="text-gray-500 text-sm">unknown entity (<%= entry.entity_slug %>)</span>
+                            <% } %>
+                        </div>
+                        <% if list.role.can_edit() { %>
+                        <form method="post" action="/dashboard/lists/<%= list.list_id |disp %>/entries/<%= entry.entry_id |disp %>/remove"
+                              hx-on:submit="if (!confirm('Remove this entry?')) event.preventDefault()">
+                            <button type="submit" class="btn btn-secondary text-xs">Remove</button>
+                        </form>
+                        <% } %>
+                    </div>
+                    <% if list.role.can_edit() { %>
+                    <form method="post" action="/dashboard/lists/<%= list.list_id |disp %>/entries/<%= entry.entry_id |disp %>/note" class="mt-2 flex gap-2">
+                        <input type="text" name="note" value="<%= entry.note %>" placeholder="Notes..." class="flex-1 border rounded px-2 py-1 text-sm" />
+                        <button type="submit" class="btn btn-secondary text-xs">Save note</button>
+                    </form>
+                    <% } else if !entry.note.is_empty() { %>
+                    <p class="mt-2 text-sm text-gray-600"><%= entry.note %></p>
+                    <% } %>
+                </li>
+                <% } %>
+            </ul>
+            <% } %>
+
+            <% if list.role.can_edit() { %>
+            <details class="mt-4">
+                <summary class="text-sm cursor-pointer text-primary">Add an entry by slug</summary>
+                <form method="post" action="/dashboard/lists/<%= list.list_id |disp %>/entries" class="mt-2 flex flex-col gap-2">
+                    <input type="text" name="entity_slug" placeholder="Project or event slug" required class="border rounded px-2 py-1 text-sm" />
+                    <input type="text" name="note" placeholder="Optional note" class="border rounded px-2 py-1 text-sm" />
+                    <div class="flex justify-end">
+                        <button type="submit" class="btn btn-secondary text-xs">Add</button>
+                    </div>
+                </form>
+            </details>
+            <% } %>
+
+            <% if list.role.is_owner() { %>
+            <details class="mt-4">
+                <summary class="text-sm cursor-pointer text-primary">Edit list</summary>
+                <form method="post" action="/dashboard/lists/<%= list.list_id |disp %>/update" class="mt-2 grid grid-cols-1 gap-2">
+                    <input type="text" name="name" value="<%= list.name %>" required class="border rounded px-2 py-1 text-sm" />
+                    <textarea name="note" rows="2" class="border rounded px-2 py-1 text-sm"><%= list.note %></textarea>
+                    <label class="flex items-center gap-2 text-sm">
+                        <input type="checkbox" name="private" value="true"<% if list.private { %> checked<% } %> />
+                        <span>Private</span>
+                    </label>
+                    <div class="flex justify-end gap-2">
+                        <button type="submit" class="btn btn-secondary text-xs">Save</button>
+                    </div>
+                </form>
+            </details>
+
+            <details class="mt-4">
+                <summary class="text-sm cursor-pointer text-primary">
+                    Editors &amp; viewers (<%= list.viewers.len() %>)
+                </summary>
+                <% if !list.viewers.is_empty() { %>
+                <ul class="mt-2 divide-y divide-gray-200">
+                    <% for viewer in &list.viewers { %>
+                    <li class="py-2 flex items-center justify-between text-sm">
+                        <div>
+                            <span class="font-medium"><%= viewer.handle %></span>
+                            <span class="text-xs text-gray-500 ml-2">
+                                <% if viewer.can_edit { %>editor<% } else { %>viewer<% } %>
+                            </span>
+                        </div>
+                        <form method="post" action="/dashboard/lists/<%= list.list_id |disp %>/unshare">
+                            <input type="hidden" name="viewer_id" value="<%= viewer.user_id |disp %>" />
+                            <button type="submit" class="btn btn-secondary text-xs">Remove</button>
+                        </form>
+                    </li>
+                    <% } %>
+                </ul>
+                <% } %>
+                <form method="post" action="/dashboard/lists/<%= list.list_id |disp %>/share" class="mt-2 flex flex-col gap-2">
+                    <input type="text" name="viewer_id" placeholder="User ULID" required class="border rounded px-2 py-1 text-sm" />
+                    <label class="flex items-center gap-2 text-sm">
+                        <input type="checkbox" name="can_edit" value="true" />
+                        <span>Allow editing</span>
+                    </label>
+                    <div class="flex justify-end">
+                        <button type="submit" class="btn btn-secondary text-xs">Add</button>
+                    </div>
+                </form>
+            </details>
+
+            <form method="post" action="/dashboard/lists/<%= list.list_id |disp %>/delete" class="mt-4 flex justify-end"
+                  hx-on:submit="if (!confirm('Delete this list and all its entries?')) event.preventDefault()">
+                <button type="submit" class="btn btn-danger text-xs">Delete list</button>
+            </form>
+            <% } %>
+        </div>
+    </details>
+    <% } %>
+</div>

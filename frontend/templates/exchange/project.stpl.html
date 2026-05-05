@@ -52,15 +52,19 @@
               <div class="ss-project-thumb-wrap">
                 <%+ LikeButton { liked: self.project.liked, likes: self.project.likes, exchange_id: self.exchange.exchange_id(), project_id: self.project.id.clone(), user_id: self.user.id() } %>
 
-                <!--  add to lists - not sure how to handle, but there's a modal if not logged in -->
-                <!-- <div class="ss-list-button" style="margin-left: 1rem;"> -->
-                <!--   <span class="el-popover__reference-wrapper"> -->
-                <!--     <button type="button" class="el-button el-button--default el-popover__reference" aria-describedby="el-popover-6913" tabindex="0"  data-custom-open="modal-1"> -->
-                <!--       <span>Add to my lists</span> -->
-                <!--     </button> -->
-                <!--   </span> -->
-                <!-- </div> -->
-                <!-- end add to list -->
+                <div class="ss-list-button" style="margin-left: 1rem;">
+                  <% if self.user.id().is_some() { %>
+                  <button type="button" class="el-button el-button--default"
+                          hx-get="/-detail/<%= self.project.id %>/lists"
+                          hx-target="body" hx-swap="beforeend">
+                    <span>Add to my lists</span>
+                  </button>
+                  <% } else { %>
+                  <button type="button" class="el-button el-button--default" data-custom-open="modal-1">
+                    <span>Add to my lists</span>
+                  </button>
+                  <% } %>
+                </div>
               </div>
             </div>
             <div class="u-fl-l@bp2 u-width-1/3@bp2 u-mb image-holder">

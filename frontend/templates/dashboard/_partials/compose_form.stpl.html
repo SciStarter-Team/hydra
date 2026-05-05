@@ -1,0 +1,25 @@
+<form method="post" action="/dashboard/messages/send"
+      hx-post="/dashboard/messages/send"
+      hx-target="#message-compose"
+      hx-swap="innerHTML"
+      class="ss-card !p-4 grid grid-cols-1 gap-3">
+    <input type="hidden" name="to" value="<%= self.target_user_id |disp %>" />
+    <p class="text-sm">
+        Send a message to <span class="font-semibold">@<%= self.target_handle %></span>.
+    </p>
+    <label class="block">
+        <span class="block text-sm mb-1 font-semibold">Subject</span>
+        <input type="text" name="subject" required class="w-full border rounded px-3 py-2" />
+    </label>
+    <label class="block">
+        <span class="block text-sm mb-1 font-semibold">Message</span>
+        <textarea name="body" rows="5" required class="w-full border rounded px-3 py-2"></textarea>
+    </label>
+    <div class="flex justify-end gap-2">
+        <button type="button" class="btn btn-secondary"
+                hx-on:click="this.closest('#message-compose').innerHTML = ''">
+            Cancel
+        </button>
+        <button type="submit" class="btn btn-primary">Send</button>
+    </div>
+</form>

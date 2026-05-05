@@ -170,26 +170,24 @@
 </div>
 
 <!-- ============================================ -->
-<!-- HERO: MAY                                    -->
+<!-- HERO: MAY (April-style, post-campaign)       -->
 <!-- ============================================ -->
 <div data-csm-phase="may">
   <div class="mx-auto">
-    <div class="acts-hero post-live">
-      <div class="post-live-logo max-w-[960px] mx-auto">
-        <img src="https://static.scistarter.org/backport/img/csm/Acts_horizontal_with-number-standard.svg" alt="2.50 Million Acts of Science Logo" />
-        <div class="flex-row gap-1 md:gap-4 items-center my-8 justify-center relative sm:left-[-20px] hidden sm:flex ml-auto">
-          <p class="mb-0 uppercase text-primary-dark text-sm">Official partner of</p>
-          <img src="https://static.scistarter.org/backport/img/csm/America250_logo.svg" alt="America 250 logo" class="w-[60px] md:w-[60px] block" />
-        </div>
-      </div>
+    <div class="acts-hero">
+      <div id="stars"></div>
       <div class="acts-hero-content ss-container mx-auto">
         <div class="acts-hero-left">
-          <div class="text-center">
-            <h2 class="relative left-[6px] text-center">We Did It!</h2>
-            <p>Well done everyone! Science is better, together. Find more projects and events all year-long on SciStarter.</p>
+          <div>
+            <h1 class="sr-only">2.50 Million Acts of Science</h1>
+            <img src="https://static.scistarter.org/backport/img/csm/Acts_only_number_standard.svg" alt="2.50 Million Acts of Science Logo" />
+            <div class="flex-row gap-1 md:gap-4 items-center my-8 justify-center relative sm:left-[-20px] hidden sm:flex">
+              <p class="mb-0 uppercase text-primary-dark text-sm">Official partner of</p>
+              <img src="https://static.scistarter.org/backport/img/csm/America250_logo.svg" alt="America 250 logo" class="w-[60px] md:w-[60px] block" />
+            </div>
             <div class="flex flex-col md:flex-row justify-center gap-4 mb-8">
-              <a href="/finder" class="btn btn-primary">Stay Involved All Year &raquo;</a>
-              <a href="https://pages.scistarter.org/" class="btn btn-primary">View Results</a>
+              <a href="/login" class="btn btn-primary">Stay Involved All Year &raquo;</a>
+              <a href="https://blog.scistarter.org/citizen-science-month-2026-results" class="btn btn-primary">View Results</a>
             </div>
           </div>
         </div>
@@ -223,11 +221,11 @@
                 <div class="num tick10"><strong>2.50 M</strong></div>
               </div>
               <div id="test-tube-reflect"></div>
-              <div id="test-tube-counter" class="reached">
+              <div id="test-tube-counter" class="reached" style="bottom:calc(370px + 6px);">
                 <div class="tt-date">Final Count</div>
                 <div class="tt-count">2,542,543</div>
               </div>
-              <div id="test-tube-over">
+              <div id="test-tube-over" style="display:block">
                 <div class="tt-date">Goal Reached</div>
                 <div class="tt-date">April 28!</div>
                 <div class="tt-count">2.50 Million</div>
@@ -294,7 +292,7 @@
 <!-- ============================================ -->
 <div class="ss-container mx-auto mt-8">
 
-  <!-- TABS NAVIGATION (hidden in May) -->
+  <!-- TABS NAVIGATION: pre-april / april -->
   <nav class="tabs-wrapper sticky z-50" aria-label="Primary" id="csm-tabs" data-csm-phase="pre-april april">
     <div class="tabs tabs-bar" role="tablist" aria-label="Main tabs" id="tabRow">
       <a href="/citizensciencemonth" class="tab tab-icon active" id="overview">
@@ -325,6 +323,27 @@
           <path d="M9 6l6 6-6 6"></path>
         </svg>
       </button>
+    </div>
+  </nav>
+
+  <!-- TABS NAVIGATION: may -->
+  <nav class="tabs-wrapper sticky z-50" aria-label="Primary" id="csm-tabs" data-csm-phase="may">
+    <div class="tabs tabs-bar" role="tablist" aria-label="Main tabs" id="tabRowMay">
+      <a href="/citizensciencemonth" class="tab tab-icon active">
+        <svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 24 24">
+          <path d="M12,.5C5.7.5.5,5.7.5,12s5.2,11.5,11.5,11.5,11.5-5.2,11.5-11.5S18.3.5,12,.5ZM12,21.2c-5.1,0-9.2-4.1-9.2-9.2S6.9,2.8,12,2.8s9.2,4.1,9.2,9.2-4.1,9.2-9.2,9.2Z"/>
+          <path d="M9.7,9.7l-3.5,8.1,8.1-3.5,3.5-8.1-8.1,3.5ZM12,13.2c-.6,0-1.2-.5-1.2-1.2s.5-1.2,1.2-1.2,1.2.5,1.2,1.2-.5,1.2-1.2,1.2Z"/>
+        </svg>
+        <span>Overview</span>
+      </a>
+      <a href="/finder" class="tab tab-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12.75,12c1.32-1.02,2.12-2.59,2.12-4.27,0-2.98-2.43-5.41-5.41-5.41s-5.4,2.43-5.4,5.41c0,1.67.8,3.25,2.12,4.27C2.5,13.25,0,16.52,0,20.17v1.24c0,.48.38.86.86.86s.85-.38.85-.86v-1.24c0-3.88,3.48-7.03,7.76-7.03s7.77,3.15,7.77,7.03v1.24c0,.48.38.86.85.86s.86-.38.86-.86v-1.24c0-3.64-2.51-6.92-6.18-8.17ZM9.46,4.01c2.05,0,3.72,1.67,3.72,3.72s-1.67,3.71-3.72,3.71-3.71-1.66-3.71-3.71,1.67-3.72,3.71-3.72Z"/><path d="M24,18.42v.97c0,.47-.38.85-.85.85s-.85-.38-.85-.85v-.97c0-2.91-2.57-5.28-5.74-5.28-.47,0-.85-.39-.85-.86s.38-.85.85-.85c1.49,0,2.7-1.21,2.7-2.7s-1.21-2.7-2.7-2.7c-.47,0-.85-.38-.85-.85s.38-.85.85-.85c2.42,0,4.39,1.97,4.39,4.39,0,1.26-.53,2.44-1.47,3.27,2.72,1.09,4.51,3.6,4.51,6.4Z"/></svg>
+        <span>Participate</span>
+      </a>
+      <a href="https://pages.scistarter.org/partnerships/" class="tab tab-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2l2.39 4.84L20 7.66l-4 3.9.94 5.5L12 14.77l-4.94 2.59L8 11.56l-4-3.9 5.61-.82L12 2z"/></svg>
+        <span>Become a Sponsor</span>
+      </a>
     </div>
   </nav>
 
@@ -407,19 +426,19 @@
 
         <!-- OUTCOMES -->
         <div class="acts-highlights-wrapper" style="margin-bottom: 2rem">
-          <h3 class="text-center">Impact In 2025</h3>
+          <h3 class="text-center"><a href="https://blog.scistarter.org/citizen-science-month-2026-results">Impact In 2026</a></h3>
           <div class="acts-highlights">
             <div>
               <img src="https://static.scistarter.org/backport/img/csm/help.svg" alt="volunteer icon" />
-              <h3><span>Nearly</span><span>Half a Million Volunteers</span><span>contributed to One Million <em>Acts of Science</em></span></h3>
+              <h3><span>More than </span><span>400,000 Volunteers</span><span>contributed to 2.50 Million <em>Acts of Science</em></span></h3>
             </div>
             <div>
               <img src="https://static.scistarter.org/backport/img/csm/chemistry.svg" alt="science icon" />
-              <h3><span>Volunteers were involved in over</span><span>1000 projects &amp; events</span><span>benefitting scientific research</span></h3>
+              <h3><span>Volunteers were involved in over</span><span>550 projects &amp; events</span><span>benefitting scientific research</span></h3>
             </div>
             <div>
               <img src="https://static.scistarter.org/backport/img/csm/growth.svg" alt="test tube with fireworks icon" />
-              <h3><span>A total of </span><span>3.06 million Acts</span><span>were tallied at the end of the month</span></h3>
+              <h3><span>A total of </span><span>4.04 million Acts</span><span>were tallied at the end of the month</span></h3>
             </div>
           </div>
         </div>
@@ -504,19 +523,19 @@
 
         <!-- OUTCOMES -->
         <div class="acts-highlights-wrapper" style="margin-bottom: 2rem">
-          <h3 class="text-center">Impact In 2025</h3>
+          <h3 class="text-center"><a href="https://blog.scistarter.org/citizen-science-month-2026-results">Impact In 2026</a></h3>
           <div class="acts-highlights">
             <div>
               <img src="https://static.scistarter.org/backport/img/csm/help.svg" alt="volunteer icon" />
-              <h3><span>Nearly</span><span>Half a Million Volunteers</span><span>contributed to One Million <em>Acts of Science</em></span></h3>
+              <h3><span>More than </span><span>400,000 Volunteers</span><span>contributed to 2.50 Million <em>Acts of Science</em></span></h3>
             </div>
             <div>
               <img src="https://static.scistarter.org/backport/img/csm/chemistry.svg" alt="science icon" />
-              <h3><span>Volunteers were involved in over</span><span>1000 projects &amp; events</span><span>benefitting scientific research</span></h3>
+              <h3><span>Volunteers were involved in over</span><span>550 projects &amp; events</span><span>benefitting scientific research</span></h3>
             </div>
             <div>
               <img src="https://static.scistarter.org/backport/img/csm/growth.svg" alt="test tube with fireworks icon" />
-              <h3><span>A total of </span><span>3.06 million Acts</span><span>were tallied at the end of the month</span></h3>
+              <h3><span>A total of </span><span>4.04 million Acts</span><span>were tallied at the end of the month</span></h3>
             </div>
           </div>
         </div>
@@ -538,9 +557,27 @@
         <!-- INTRO TEXT -->
         <div class="w-full mx-auto text-center mb-16">
           <h2 class="text-primary-dark">Thank You for an Amazing Citizen Science Month!</h2>
-          <p class="intro">Together, we achieved incredible things during this year's Citizen Science Month. Science is better together!</p>
-          <p>Find more projects and events all year-long on SciStarter.</p>
+          <p class="intro">Your curiosity didn't stop in April. Find thousands of projects that need your help all year long on SciStarter.</p>
           <p><a class="underline" href="https://pages.scistarter.org/citizensciencemonth-about">Learn more about the goals, impact, and history of Citizen Science Month</a></p>
+        </div>
+
+        <!-- OUTCOMES -->
+        <div class="acts-highlights-wrapper" style="margin-bottom: 2rem">
+          <h3 class="text-center"><a href="https://blog.scistarter.org/citizen-science-month-2026-results">Impact In 2026</a></h3>
+          <div class="acts-highlights">
+            <div>
+              <img src="https://static.scistarter.org/backport/img/csm/help.svg" alt="volunteer icon" />
+              <h3><span>More than </span><span>400,000 Volunteers</span><span>contributed to 2.50 Million <em>Acts of Science</em></span></h3>
+            </div>
+            <div>
+              <img src="https://static.scistarter.org/backport/img/csm/chemistry.svg" alt="science icon" />
+              <h3><span>Volunteers were involved in over</span><span>550 projects &amp; events</span><span>benefitting scientific research</span></h3>
+            </div>
+            <div>
+              <img src="https://static.scistarter.org/backport/img/csm/growth.svg" alt="test tube with fireworks icon" />
+              <h3><span>A total of </span><span>4.04 million Acts</span><span>were tallied at the end of the month</span></h3>
+            </div>
+          </div>
         </div>
 
         <div class="ss-accordion2 w-full mx-auto border border-linework shadow mb-8 max-w-[1024px]">
@@ -575,6 +612,13 @@
 
             <div id="curator-feed-default-feed-layout" style="position:relative;z-index:0"><a href="https://curator.io" target="_blank" class="crt-logo crt-tag">Powered by Curator.io</a></div>
           </div>
+        </div>
+
+        <!-- FAQ LINK -->
+        <div class="text-center px-4 my-16">
+          <h3 class="text-center text-primary-dark font-header-lg mb-1">Curious about the story behind Citizen Science Month&mdash;its origins, impact, and the people who make it possible?</h3>
+          <p>Learn more and visit our Frequently Asked Questions page for answers and insights.</p>
+          <p><a class="btn btn-subdued" href="https://pages.scistarter.org/citizensciencemonth-about">Learn More</a></p>
         </div>
 
       </div><!-- /may content -->
@@ -618,7 +662,6 @@
 </div>
 
 </main>
-
 
 // ==================================================================
 // INLINE JAVASCRIPT
@@ -693,12 +736,6 @@ el.removeAttribute('data-csm-phase');
 } else {
 el.parentNode.removeChild(el);
 }
-}
-
-// In May the tabs nav is removed; restore the top border on the content area
-if (phase === 'may') {
-var contentDiv = document.querySelector('.border-linework.border-t-0');
-if (contentDiv) contentDiv.classList.remove('border-t-0');
 }
 
 // Social feed: always in april/may; in pre-april only from March 25 (or if overridden)
@@ -801,6 +838,25 @@ updateTestTubeCounter();
 // ── May: load lottie player for fireworks ────────────────────────────
 if (window.csmPhase === 'may' && !!SciStarter) {
 SciStarter.inject_script('https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js');
+}
+
+// ── May: fetch final count via API ───────────────────────────────────
+if (window.csmPhase === 'may') {
+(function() {
+fetch('/-csm/acts-to-date').then(function(res) {
+if (!res.ok) throw new Error('Bad response');
+return res.json();
+}).then(function(data) {
+var ttCounter = document.getElementById('test-tube-counter');
+var ttCount = ttCounter && ttCounter.querySelector('.tt-count');
+if (ttCount && typeof data.number === 'number') {
+ttCount.textContent = data.number.toLocaleString();
+ttCounter.style.opacity = 1;
+}
+}).catch(function(err) {
+console.warn('Acts API failed', err);
+});
+})();
 }
 
 // ── Tab chevron scroll ───────────────────────────────────────────────

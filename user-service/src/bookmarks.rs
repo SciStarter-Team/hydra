@@ -48,6 +48,22 @@ pub async fn create_bookmark(req: &Request) -> Result<BookmarkCreateResponse, Er
     })
 }
 
+pub async fn list_by_user(req: &Request) -> Result<Vec<String>, Error> {
+    let user_id: String = flexbuffers::from_slice(&req.message.payload)?;
+
+    let project_ids = sqlx::query_scalar!(
+        r#"SELECT "project_id"
+        FROM "bookmarks"
+        WHERE "user_id" = ? AND "active" = 1
+        ORDER BY "activity" DESC"#,
+        user_id
+    )
+    .fetch_all(db())
+    .await?;
+
+    Ok(project_ids)
+}
+
 pub async fn check_bookmark(req: &Request) -> Result<BookmarkCheckResponse, Error> {
     let message: BookmarkCheckRequest = decode_structured_message(req.message.clone())?;
 

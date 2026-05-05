@@ -1,3 +1,4 @@
+pub mod dashboard;
 pub mod email;
 pub mod forum;
 pub mod health;

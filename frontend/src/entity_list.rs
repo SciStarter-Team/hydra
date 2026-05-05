@@ -86,6 +86,33 @@ impl EntityList {
             .map(|row| row.try_into())
             .collect::<Result<Vec<_>, _>>()
     }
+
+    /// Lists where the user has a role: owner, delegate, or viewer.
+    /// Used for "your lists" on the dashboard. Public lists (private = 0)
+    /// are viewable by anyone regardless of role; this method does not
+    /// include them unless the user is also a role-holder.
+    pub async fn get_lists_for_user(user_id: Ulid) -> Result<Vec<EntityList>, Error> {
+        let user_id_str = user_id.to_string();
+        let items = sqlx::query_as!(
+            EntityListDB,
+            r#"SELECT list_id, created_at, private, owner_id, delegate_id, name, note, sidebar, slug, hide_identity_form, image
+               FROM entity_lists
+               WHERE owner_id = ?
+                  OR delegate_id = ?
+                  OR list_id IN (SELECT list_id FROM entity_list_viewers WHERE user_id = ?)
+               ORDER BY name ASC"#,
+            user_id_str,
+            user_id_str,
+            user_id_str,
+        )
+        .fetch_all(db())
+        .await?;
+
+        items
+            .into_iter()
+            .map(|row| row.try_into())
+            .collect::<Result<Vec<_>, _>>()
+    }
 }
 
 impl LoadStorePeered for EntityList {
@@ -258,6 +285,118 @@ impl LoadStorePeered for EntityListEntry {
         sqlx::query!(
             r#"DELETE FROM entity_list_entries WHERE entry_id = ?"#,
             entry_id_str
+        )
+        .execute(db())
+        .await?;
+        Ok(())
+    }
+}
+
+/// A user with view (or edit) access to a private list, in addition to
+/// the list's owner and `delegate_id`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct EntityListViewer {
+    pub list_id: Ulid,
+    pub user_id: Ulid,
+    pub can_edit: bool,
+    pub added_at: String,
+}
+
+struct EntityListViewerDB {
+    list_id: String,
+    user_id: String,
+    can_edit: i64,
+    added_at: String,
+}
+
+impl TryFrom<EntityListViewerDB> for EntityListViewer {
+    type Error = anyhow::Error;
+
+    fn try_from(value: EntityListViewerDB) -> Result<Self, Self::Error> {
+        Ok(EntityListViewer {
+            list_id: value.list_id.parse()?,
+            user_id: value.user_id.parse()?,
+            can_edit: value.can_edit != 0,
+            added_at: value.added_at,
+        })
+    }
+}
+
+impl EntityListViewer {
+    pub async fn get_for_list(list_id: Ulid) -> Result<Vec<EntityListViewer>, Error> {
+        let list_id_str = list_id.to_string();
+        let items = sqlx::query_as!(
+            EntityListViewerDB,
+            r#"SELECT list_id, user_id, can_edit, added_at
+               FROM entity_list_viewers
+               WHERE list_id = ?
+               ORDER BY added_at ASC"#,
+            list_id_str,
+        )
+        .fetch_all(db())
+        .await?;
+
+        items
+            .into_iter()
+            .map(|row| row.try_into())
+            .collect::<Result<Vec<_>, _>>()
+    }
+}
+
+impl LoadStorePeered for EntityListViewer {
+    type DatabaseKey = (Ulid, Ulid);
+
+    const GROUP: &str = "entity-list-viewer";
+
+    #[tracing::instrument]
+    async fn read_from_database(key: Self::DatabaseKey) -> Result<Self, Error> {
+        let (list_id, user_id) = key;
+        let list_id_str = list_id.to_string();
+        let user_id_str = user_id.to_string();
+        Ok(sqlx::query_as!(
+            EntityListViewerDB,
+            r#"SELECT list_id, user_id, can_edit, added_at
+               FROM entity_list_viewers
+               WHERE list_id = ? AND user_id = ?"#,
+            list_id_str,
+            user_id_str,
+        )
+        .fetch_one(db())
+        .await?
+        .try_into()?)
+    }
+
+    #[tracing::instrument]
+    async fn save_to_database(&self) -> Result<(), Error> {
+        let list_id_str = self.list_id.to_string();
+        let user_id_str = self.user_id.to_string();
+        let can_edit_i64 = if self.can_edit { 1i64 } else { 0i64 };
+
+        sqlx::query!(
+            r#"INSERT OR REPLACE INTO entity_list_viewers (
+                 list_id, user_id, can_edit, added_at
+               )
+               VALUES (?, ?, ?, ?)"#,
+            list_id_str,
+            user_id_str,
+            can_edit_i64,
+            self.added_at,
+        )
+        .execute(db())
+        .await?;
+
+        Ok(())
+    }
+
+    #[tracing::instrument]
+    async fn delete_from_database(key: Self::DatabaseKey) -> Result<(), Error> {
+        let (list_id, user_id) = key;
+        let list_id_str = list_id.to_string();
+        let user_id_str = user_id.to_string();
+        sqlx::query!(
+            r#"DELETE FROM entity_list_viewers WHERE list_id = ? AND user_id = ?"#,
+            list_id_str,
+            user_id_str,
         )
         .execute(db())
         .await?;

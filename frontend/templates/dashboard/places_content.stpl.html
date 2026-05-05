@@ -1,0 +1,86 @@
+<div class="ss-container !pt-8 !pb-8 mx-auto">
+    <h1>Places</h1>
+    <p class="text-sm mb-6">
+        Save the places you care about — your home town, a favourite
+        park, a field site you visit often. We use these to surface
+        nearby projects and events.
+    </p>
+
+    <% if self.places.is_empty() { %>
+    <p class="ss-card !p-6 mb-6 text-center text-gray-600">
+        You haven't saved any places yet.
+    </p>
+    <% } else { %>
+    <ul class="ss-card !p-6 mb-6 divide-y divide-gray-200">
+        <% for place in &self.places { %>
+        <li class="flex items-center justify-between py-3">
+            <div>
+                <div class="font-semibold"><%= place.name %></div>
+                <div class="text-xs text-gray-600">
+                    <%= format!("{:.4}", place.latitude) %>, <%= format!("{:.4}", place.longitude) %>
+                </div>
+            </div>
+            <form method="post" action="/dashboard/places/<%= place.id |disp %>/delete"
+                  hx-on:submit="if (!confirm('Remove this place?')) event.preventDefault()">
+                <button type="submit" class="btn btn-secondary text-sm">Remove</button>
+            </form>
+        </li>
+        <% } %>
+    </ul>
+    <% } %>
+
+    <form method="post" action="/dashboard/places" class="ss-card !p-6">
+        <h2 class="font-semibold mb-3">Add a place</h2>
+
+        <div id="places-geosearch" class="mb-4"></div>
+        <input type="hidden" name="name" id="places-name" />
+        <input type="hidden" name="latitude" id="places-latitude" />
+        <input type="hidden" name="longitude" id="places-longitude" />
+
+        <div class="flex justify-end">
+            <button type="submit" id="places-add-btn" class="btn btn-primary" disabled>
+                Add place
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    var btn = document.getElementById('places-add-btn');
+    var nameField = document.getElementById('places-name');
+    var latField = document.getElementById('places-latitude');
+    var lngField = document.getElementById('places-longitude');
+
+    function clearFields() {
+      nameField.value = '';
+      latField.value = '';
+      lngField.value = '';
+      btn.disabled = true;
+    }
+
+    opencage.algoliaAutocomplete({
+      container: '#places-geosearch',
+      placeholder: 'Search for a city, address, or landmark',
+      onReset: clearFields,
+      onStateChange: function (params) {
+        if (!params.state.query) {
+          clearFields();
+        }
+      },
+      plugins: [
+        opencage.OpenCageGeoSearchPlugin(
+          { key: '<%= self.geosearch_key %>' },
+          {
+            onSelect: function (params) {
+              latField.value = params.item.geometry.lat;
+              lngField.value = params.item.geometry.lng;
+              nameField.value = params.item.formatted;
+              btn.disabled = false;
+            }
+          }
+        )
+      ]
+    });
+  });
+</script>

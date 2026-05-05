@@ -9,7 +9,9 @@ use common::{
         ExternalLinksResponse, GoUrlStatsRequest, GoUrlStatsResponse, LastEditedRequest,
         LastEditedResponse, ProjectMemberCountRequest, ProjectMemberCountResponse,
         ProjectParticipationRecord, ProjectParticipationRequest, ProjectParticipationResponse,
-        RecentActivityRequest, RecentActivityResponse,
+        RecentActivityRequest, RecentActivityResponse, UserParticipationEntry,
+        UserParticipationRequest, UserParticipationResponse, UserRecentVisit,
+        UserRecentVisitsRequest, UserRecentVisitsResponse,
     },
     service::{TriggerEvent, decode_structured_message, trigger_email},
 };
@@ -822,8 +824,7 @@ pub async fn handle_contributors(
     // multiplicative hash of the epoch seconds, which avalanches adjacent
     // seconds into different buckets while staying deterministic per row
     // so the count and fetch queries agree and pagination is stable.
-    const SAMPLING_FILTER: &str =
-        " AND (sampled = 0 OR (CAST(strftime('%s', created_at) AS INTEGER) * 2654435761 % 100) < 15)";
+    const SAMPLING_FILTER: &str = " AND (sampled = 0 OR (CAST(strftime('%s', created_at) AS INTEGER) * 2654435761 % 100) < 15)";
 
     // Build the query dynamically based on mode
     // Use GROUP BY to deduplicate on (name, act, project, date)
@@ -980,9 +981,12 @@ pub async fn handle_acts_to_date(
     });
 
     let begin = format!("{}-04-01T00:00:00Z", year);
-    let end = format!("{}-05-04T00:00:00Z", year);
+    let end = format!("{}-05-07T00:00:00Z", year);
     let incidental = ActsOfScienceSource::Incidental as i16;
 
+    // IMPORTANT filtering on accepted state is important, with human
+    // acceptance. Do not change to automatic acceptance or ignore the
+    // state.
     let total: i64 = sqlx::query_scalar!(
         r#"SELECT COALESCE(SUM(contributions), 0) as "total!: i64"
            FROM acts_of_science
@@ -1028,8 +1032,11 @@ pub async fn handle_acts_to_date(
     .fetch_optional(common::shared::db())
     .await?;
 
+    let cutoff = jiff::civil::date(year as i16, 4, 30);
+    let response_date = if today > cutoff { cutoff } else { today };
+
     Ok(ActsToDateResponse {
-        date: today.to_string(),
+        date: response_date.to_string(),
         number: total,
         date_reached,
     })
@@ -1096,6 +1103,150 @@ pub async fn handle_last_edited(req: &async_nats::service::Request) -> Result<La
         .unwrap_or_default();
 
     Ok(LastEditedResponse { when })
+}
+
+pub async fn handle_user_participation(
+    req: &async_nats::service::Request,
+) -> Result<UserParticipationResponse> {
+    use datafusion::arrow::array::{Array, StringArray};
+
+    let request: UserParticipationRequest = decode_structured_message(req.message.clone())?;
+    let user_id_str = request.user_id.to_string();
+
+    let database = DATABASE
+        .read()
+        .as_ref()
+        .expect("Database not initialized")
+        .clone();
+
+    let ctx = database.context();
+
+    let total: i64 = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) as "count!: i64"
+           FROM project_participations_cache
+           WHERE user_id = ?"#,
+        user_id_str,
+    )
+    .fetch_one(common::shared::db())
+    .await?;
+
+    let recent_limit = request.recent_limit.max(0) as usize;
+    let mut recent = Vec::new();
+
+    if recent_limit > 0 {
+        let df = ctx
+            .table("participation_realtime")
+            .await?
+            .filter(col("user_id").eq(lit(&user_id_str)))?
+            .select(vec![col("entity_id"), col("when")])?
+            .sort(vec![col("when").sort(false, true)])?
+            .limit(0, Some(recent_limit))?;
+
+        let batches = df.collect().await?;
+
+        for batch in &batches {
+            let entity_col = batch
+                .column(0)
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .expect("entity_id column should be StringArray");
+            let when_col = batch
+                .column(1)
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .expect("when column should be StringArray");
+
+            for i in 0..batch.num_rows() {
+                if entity_col.is_null(i) || when_col.is_null(i) {
+                    continue;
+                }
+                recent.push(UserParticipationEntry {
+                    entity_id: entity_col.value(i).to_string(),
+                    when: when_col.value(i).to_string(),
+                });
+            }
+        }
+    }
+
+    Ok(UserParticipationResponse { total, recent })
+}
+
+pub async fn handle_user_recent_visits(
+    req: &async_nats::service::Request,
+) -> Result<UserRecentVisitsResponse> {
+    use datafusion::arrow::array::{Array, StringArray};
+
+    let request: UserRecentVisitsRequest = decode_structured_message(req.message.clone())?;
+    let user_id_str = request.user_id.to_string();
+    let limit = request.limit.max(0) as usize;
+
+    if limit == 0 {
+        return Ok(UserRecentVisitsResponse { visits: vec![] });
+    }
+
+    let cutoff = jiff::Zoned::now()
+        .checked_sub(jiff::Span::new().days(request.days.max(0)))
+        .map(|z| z.timestamp().to_string())
+        .unwrap_or_else(|_| String::new());
+
+    let database = DATABASE
+        .read()
+        .as_ref()
+        .expect("Database not initialized")
+        .clone();
+
+    let ctx = database.context();
+
+    // Pull a generous window of candidate page-views, then dedupe by
+    // path keeping only the most recent visit. Caller is responsible
+    // for filtering paths down to entity slugs.
+    let candidate_window = (limit * 8).max(64);
+
+    let df = ctx
+        .table("page_views_realtime")
+        .await?
+        .filter(col("user_id").eq(lit(&user_id_str)))?
+        .filter(col("when").gt_eq(lit(&cutoff)))?
+        .select(vec![col("path"), col("when")])?
+        .sort(vec![col("when").sort(false, true)])?
+        .limit(0, Some(candidate_window))?;
+
+    let batches = df.collect().await?;
+
+    let mut visits = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    for batch in &batches {
+        let path_col = batch
+            .column(0)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .expect("path column should be StringArray");
+        let when_col = batch
+            .column(1)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .expect("when column should be StringArray");
+
+        for i in 0..batch.num_rows() {
+            if path_col.is_null(i) || when_col.is_null(i) {
+                continue;
+            }
+            let path = path_col.value(i).to_string();
+            if !seen.insert(path.clone()) {
+                continue;
+            }
+            visits.push(UserRecentVisit {
+                path,
+                when: when_col.value(i).to_string(),
+            });
+            if visits.len() >= limit {
+                return Ok(UserRecentVisitsResponse { visits });
+            }
+        }
+    }
+
+    Ok(UserRecentVisitsResponse { visits })
 }
 
 pub async fn handle_edit_log(req: &async_nats::service::Request) -> Result<EditLogResponse> {

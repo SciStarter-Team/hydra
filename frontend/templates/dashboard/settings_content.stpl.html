@@ -1,0 +1,248 @@
+<% use crate::dashboard::settings::SettingsTab; %>
+<% use common::message::dashboard::AmbassadorAppStatus; %>
+<div class="ss-container !pt-8 !pb-8 mx-auto">
+    <h1>Account Settings</h1>
+
+    <% if self.saved { %>
+    <div class="ss-card !p-4 mb-4 bg-green-50 border border-green-200 text-green-800" role="status">
+        Saved.
+    </div>
+    <% } %>
+
+    <% if self.available_tabs.len() > 1 { %>
+    <nav class="flex gap-2 border-b border-gray-200 mb-6" aria-label="Settings tabs">
+        <% for tab in &self.available_tabs { %>
+            <% match tab { SettingsTab::General => { %>
+                <a href="/dashboard/settings?tab=general"
+                   class="px-4 py-2 -mb-px<% if self.active_tab == SettingsTab::General { %> border-b-2 border-primary text-primary font-semibold<% } else { %> text-gray-600 hover:text-primary<% } %>">
+                    General
+                </a>
+            <% } SettingsTab::Ambassador => { %>
+                <a href="/dashboard/settings?tab=ambassador"
+                   class="px-4 py-2 -mb-px<% if self.active_tab == SettingsTab::Ambassador { %> border-b-2 border-primary text-primary font-semibold<% } else { %> text-gray-600 hover:text-primary<% } %>">
+                    Ambassador
+                </a>
+            <% } } %>
+        <% } %>
+    </nav>
+    <% } %>
+
+    <% match self.active_tab { SettingsTab::General => { %>
+        <form method="post" action="/dashboard/settings/general" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+            <fieldset class="ss-card !p-6">
+                <legend class="font-semibold mb-2">Account Information</legend>
+
+                <label class="block mb-3">
+                    <span class="block text-sm mb-1">Display Name</span>
+                    <input type="text" name="handle" value="<%= self.profile.handle %>" class="w-full border rounded px-3 py-2" />
+                </label>
+
+                <label class="block mb-3">
+                    <span class="block text-sm mb-1">First Name</span>
+                    <input type="text" name="first_name" value="<%= self.profile.first_name %>" class="w-full border rounded px-3 py-2" />
+                </label>
+
+                <label class="block mb-3">
+                    <span class="block text-sm mb-1">Last Name</span>
+                    <input type="text" name="last_name" value="<%= self.profile.last_name %>" class="w-full border rounded px-3 py-2" />
+                </label>
+
+                <label class="block mb-3">
+                    <span class="block text-sm mb-1">Signup Email</span>
+                    <input type="text" value="<%= self.profile.primary_email %>" class="w-full border rounded px-3 py-2 bg-gray-100" disabled />
+                </label>
+            </fieldset>
+
+            <fieldset class="ss-card !p-6">
+                <legend class="font-semibold mb-2">Profile Bio</legend>
+                <textarea name="bio" rows="6" class="w-full border rounded px-3 py-2"><%= self.profile.bio.as_deref().unwrap_or("") %></textarea>
+            </fieldset>
+
+            <fieldset class="ss-card !p-6">
+                <legend class="font-semibold mb-2">Demographics</legend>
+                <p class="text-sm mb-4">We ask this for citizen science research and recommendation purposes.</p>
+
+                <label class="block mb-3">
+                    <span class="block text-sm mb-1">Zip / Postal Code</span>
+                    <input type="text" name="zipcode" value="<%= self.profile.zipcode.as_deref().unwrap_or("") %>" class="w-full border rounded px-3 py-2" />
+                </label>
+
+                <label class="block mb-3">
+                    <span class="block text-sm mb-1">Country</span>
+                    <input type="text" name="country" value="<%= self.profile.country.as_deref().unwrap_or("") %>" class="w-full border rounded px-3 py-2" />
+                </label>
+
+                <label class="block mb-3">
+                    <span class="block text-sm mb-1">Mailing Address</span>
+                    <input type="text" name="mailing_address" value="<%= self.profile.mailing_address.as_deref().unwrap_or("") %>" class="w-full border rounded px-3 py-2" />
+                </label>
+
+                <label class="block mb-3">
+                    <span class="block text-sm mb-1">Birthday</span>
+                    <input type="date" name="birthday" value="<%= self.profile.birthday.as_deref().unwrap_or("") %>" class="w-full border rounded px-3 py-2" />
+                </label>
+
+                <label class="block mb-3">
+                    <span class="block text-sm mb-1">Gender</span>
+                    <input type="text" name="gender" value="<%= self.profile.gender.as_deref().unwrap_or("") %>" class="w-full border rounded px-3 py-2" />
+                </label>
+
+                <label class="block mb-3">
+                    <span class="block text-sm mb-1">Race / Ethnicity</span>
+                    <input type="text" name="ethnicity" value="<%= self.profile.ethnicity.as_deref().unwrap_or("") %>" class="w-full border rounded px-3 py-2" />
+                </label>
+
+                <label class="block mb-3">
+                    <span class="block text-sm mb-1">Highest level of education</span>
+                    <input type="text" name="degree" value="<%= self.profile.degree.as_deref().unwrap_or("") %>" class="w-full border rounded px-3 py-2" />
+                </label>
+
+                <label class="block mb-3">
+                    <span class="block text-sm mb-1">Yearly household income</span>
+                    <input type="text" name="income" value="<%= self.profile.income.as_deref().unwrap_or("") %>" class="w-full border rounded px-3 py-2" />
+                </label>
+            </fieldset>
+
+            <fieldset class="ss-card !p-6">
+                <legend class="font-semibold mb-2">Privacy and Preferences</legend>
+
+                <label class="flex items-center gap-2 mb-3">
+                    <input type="checkbox" name="public" value="true"<% if self.profile.public { %> checked<% } %> />
+                    <span>Profile is public</span>
+                </label>
+
+                <label class="flex items-center gap-2 mb-3">
+                    <input type="checkbox" name="protected" value="true"<% if self.profile.protected { %> checked<% } %> />
+                    <span>Hide profile details from other users</span>
+                </label>
+
+                <label class="flex items-center gap-2 mb-3">
+                    <input type="checkbox" name="track_contributions" value="true"<% if self.profile.track_contributions { %> checked<% } %> />
+                    <span>Track contributions</span>
+                </label>
+
+                <label class="flex items-center gap-2 mb-3">
+                    <input type="checkbox" name="newsletter" value="true"<% if self.profile.newsletter { %> checked<% } %> />
+                    <span>Receive newsletter</span>
+                </label>
+
+                <label class="flex items-center gap-2 mb-3">
+                    <input type="checkbox" name="accept_messages" value="true"<% if self.profile.accept_messages { %> checked<% } %> />
+                    <span>Accept messages from all users and projects</span>
+                </label>
+
+                <label class="flex items-center gap-2 mb-3">
+                    <input type="checkbox" name="accept_emails" value="true"<% if self.profile.accept_emails { %> checked<% } %> />
+                    <span>Email me when I receive a message</span>
+                </label>
+
+                <label class="flex items-center gap-2 mb-3">
+                    <input type="checkbox" name="ai_opt_out" value="true"<% if self.profile.ai_opt_out { %> checked<% } %> />
+                    <span>Opt out of AI-powered recommendations</span>
+                </label>
+            </fieldset>
+
+            <fieldset class="ss-card !p-6">
+                <legend class="font-semibold mb-2">Social Links</legend>
+
+                <label class="block mb-3">
+                    <span class="block text-sm mb-1">Home Page</span>
+                    <input type="url" name="home_page" value="<%= self.profile.home_page.as_deref().unwrap_or("") %>" placeholder="https://example.com" class="w-full border rounded px-3 py-2" />
+                </label>
+
+                <label class="block mb-3">
+                    <span class="block text-sm mb-1">Facebook URL</span>
+                    <input type="url" name="facebook_url" value="<%= self.profile.facebook_url.as_deref().unwrap_or("") %>" placeholder="https://www.facebook.com/yourname" class="w-full border rounded px-3 py-2" />
+                </label>
+
+                <label class="block mb-3">
+                    <span class="block text-sm mb-1">Twitter handle</span>
+                    <input type="text" name="twitter_profile" value="<%= self.profile.twitter_profile.as_deref().unwrap_or("") %>" placeholder="@username" class="w-full border rounded px-3 py-2" />
+                </label>
+            </fieldset>
+
+            <fieldset class="ss-card !p-6">
+                <legend class="font-semibold mb-2">Affiliation Integration</legend>
+                <p class="text-sm mb-4">Capitalization matters. Contributions can take a day or more to appear.</p>
+
+                <label class="block mb-3">
+                    <span class="block text-sm mb-1">iNaturalist username</span>
+                    <input type="text" name="inat_username" value="<%= self.profile.inat_username.as_deref().unwrap_or("") %>" class="w-full border rounded px-3 py-2" />
+                </label>
+
+                <label class="block mb-3">
+                    <span class="block text-sm mb-1">Zooniverse username</span>
+                    <input type="text" name="zooniverse_username" value="<%= self.profile.zooniverse_username %>" class="w-full border rounded px-3 py-2" />
+                </label>
+
+                <label class="block mb-3">
+                    <span class="block text-sm mb-1">ORCID iD</span>
+                    <input type="text" name="orcid" value="<%= self.profile.orcid.as_deref().unwrap_or("") %>" placeholder="0000-0000-0000-0000" class="w-full border rounded px-3 py-2" />
+                </label>
+            </fieldset>
+
+            <div class="md:col-span-2 flex justify-end">
+                <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+        </form>
+    <% } SettingsTab::Ambassador => { %>
+        <% if let Some(ambassador) = &self.ambassador { %>
+        <form method="post" action="/dashboard/settings/ambassador" class="grid grid-cols-1 gap-6">
+            <div class="ss-card !p-6">
+                <h2 class="font-semibold mb-2">Ambassador Application</h2>
+                <p class="text-sm mb-4">
+                    Apply to become a SciStarter Ambassador. Tell us about yourself and what
+                    you'd like to do as an ambassador.
+                </p>
+
+                <p class="text-sm mb-4">
+                    Application status:
+                    <strong><% match ambassador.app_status { AmbassadorAppStatus::UnderReview => { %>Under review<% } AmbassadorAppStatus::Accepted => { %>Accepted<% } AmbassadorAppStatus::Rejected => { %>Rejected<% } AmbassadorAppStatus::Flagged => { %>Flagged<% } AmbassadorAppStatus::Ineligible => { %>Ineligible<% } AmbassadorAppStatus::Champion => { %>Champion<% } AmbassadorAppStatus::Withdrawn => { %>Withdrawn<% } } %></strong>
+                </p>
+            </div>
+
+            <fieldset class="ss-card !p-6">
+                <legend class="font-semibold mb-2">About You</legend>
+
+                <label class="block mb-3">
+                    <span class="block text-sm mb-1">Tell us about yourself</span>
+                    <textarea name="bio" rows="6" class="w-full border rounded px-3 py-2"><%= ambassador.bio %></textarea>
+                </label>
+            </fieldset>
+
+            <fieldset class="ss-card !p-6">
+                <legend class="font-semibold mb-2">Where You're Based</legend>
+
+                <label class="block mb-3">
+                    <span class="block text-sm mb-1">City</span>
+                    <input type="text" name="city" value="<%= ambassador.city %>" class="w-full border rounded px-3 py-2" />
+                </label>
+
+                <label class="block mb-3">
+                    <span class="block text-sm mb-1">State / Region</span>
+                    <input type="text" name="state" value="<%= ambassador.state %>" class="w-full border rounded px-3 py-2" />
+                </label>
+            </fieldset>
+
+            <fieldset class="ss-card !p-6">
+                <legend class="font-semibold mb-2">Contact &amp; Video</legend>
+
+                <label class="block mb-3">
+                    <span class="block text-sm mb-1">Contact email</span>
+                    <input type="email" name="contact_email" value="<%= ambassador.contact_email %>" class="w-full border rounded px-3 py-2" />
+                </label>
+
+                <label class="block mb-3">
+                    <span class="block text-sm mb-1">YouTube video URL (optional)</span>
+                    <input type="url" name="youtube_video_url" value="<%= ambassador.youtube_video_url %>" placeholder="https://www.youtube.com/watch?v=..." class="w-full border rounded px-3 py-2" />
+                </label>
+            </fieldset>
+
+            <div class="flex justify-end">
+                <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+        </form>
+        <% } %>
+    <% } } %>
+</div>

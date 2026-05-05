@@ -1,0 +1,39 @@
+<div class="ss-container !pt-8 !pb-8 mx-auto">
+    <h1>Messages</h1>
+    <p class="text-sm mb-6">
+        Direct conversations with other members. Replies arrive here.
+    </p>
+
+    <% if self.conversations.is_empty() { %>
+    <p class="ss-card !p-6 text-center text-gray-600">
+        Your inbox is empty.
+    </p>
+    <% } else { %>
+    <div class="ss-card !p-0 overflow-hidden">
+        <ul class="divide-y divide-gray-200">
+            <% for conv in &self.conversations { %>
+            <li class="<% if !conv.seen { %>bg-amber-50<% } %>">
+                <a href="/dashboard/messages/<%= conv.topic_id |disp %>" class="block px-6 py-4 hover:bg-gray-50">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2">
+                                <% if !conv.seen { %><span class="inline-block w-2 h-2 rounded-full bg-primary"></span><% } %>
+                                <span class="font-semibold text-primary-dark"><%= conv.subject %></span>
+                            </div>
+                            <div class="text-sm text-gray-600 mt-1">
+                                with @<%= conv.other_user_handle %>
+                                <span class="text-gray-400">·</span>
+                                <%= conv.post_count %> message<% if conv.post_count != 1 { %>s<% } %>
+                            </div>
+                            <p class="text-sm text-gray-500 mt-1 truncate"><%= conv.last_message_preview %></p>
+                        </div>
+                        <span class="text-xs text-gray-500 whitespace-nowrap"><%= conv.last_message_at %></span>
+                    </div>
+                </a>
+            </li>
+            <% } %>
+        </ul>
+    </div>
+    <p class="text-xs text-gray-500 mt-3"><%= self.conversations.len() %> of <%= self.total %> conversations.</p>
+    <% } %>
+</div>

@@ -66,6 +66,19 @@ pub async fn check_join(req: &Request) -> Result<ProjectJoinCheckResponse, Error
     })
 }
 
+pub async fn list_by_user_id(req: &Request) -> Result<Vec<String>, Error> {
+    let user_id: String = flexbuffers::from_slice(&req.message.payload)?;
+
+    let rows = sqlx::query_scalar!(
+        "SELECT project_id FROM project_joins WHERE user_id = ?",
+        user_id
+    )
+    .fetch_all(db())
+    .await?;
+
+    Ok(rows)
+}
+
 pub async fn list_user_joins(req: &Request) -> Result<UserJoinsListResponse, Error> {
     let message: UserJoinsListRequest = decode_structured_message(req.message.clone())?;
 
