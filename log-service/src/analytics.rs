@@ -233,11 +233,14 @@ pub async fn get_recent_activity(
     ])?;
 
     // Get clickthroughs and convert to activity format (includes WAL val union table)
+    // Fall back to from_path (which contains the go-link slug) when to_url is empty
     let clickthrough_df = ctx.table("clickthroughs_realtime").await?.select(vec![
         col("when"),
         lit("clickthrough").alias("action"),
         col("user_id"),
-        col("to_url").alias("target"),
+        when(col("to_url").eq(lit("")), col("from_path"))
+            .otherwise(col("to_url"))?
+            .alias("target"),
         col("program_id").alias("extra"),
     ])?;
 
@@ -372,11 +375,10 @@ async fn enhance_activities(
     activities: &mut [RecentActivityItem],
 ) -> Result<()> {
     for activity in activities {
-        // Replace ULID user_id with email if available
-        if let Some(user_id) = &activity.user_id {
-            if let Ok(email) = lookup_user_email_from_cache(user_id).await {
-                activity.user_id = Some(email);
-            }
+        // Replace ULID user_id with email if we can resolve one; otherwise drop
+        // it so display falls back to a generic "someone" rather than a raw ULID.
+        if let Some(user_id) = activity.user_id.as_deref() {
+            activity.user_id = lookup_user_email(user_id).await;
         }
 
         // Convert action to human-readable title
@@ -396,21 +398,13 @@ async fn enhance_activities(
     Ok(())
 }
 
-/// Look up user email from the log service cache
-async fn lookup_user_email_from_cache(user_id: &str) -> Result<String> {
-    use common::shared::db;
-
-    // Query the user_emails_cache table in the log service SQLite database
-    let result = sqlx::query!(
-        r#"SELECT "email" FROM "user_emails_cache" WHERE "user_id" = ? LIMIT 1"#,
-        user_id
-    )
-    .fetch_optional(db())
-    .await?;
-
-    Ok(result
-        .map(|row| row.email)
-        .unwrap_or_else(|| user_id.to_string()))
+/// Look up a user's email for display, populating the cache from user-service on miss.
+/// Returns None if the user has no known email.
+async fn lookup_user_email(user_id: &str) -> Option<String> {
+    crate::cache::get_user_emails(user_id)
+        .await
+        .ok()
+        .and_then(|emails| emails.into_iter().next())
 }
 
 /// Convert action names to human-readable titles
@@ -599,7 +593,10 @@ fn format_activity(
             format!(
                 "{} clicked through to {}",
                 user_id.as_deref().unwrap_or("someone"),
-                target.as_deref().unwrap_or("external site")
+                target
+                    .as_deref()
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or("external site")
             ),
             "external-link".to_string(),
         ),

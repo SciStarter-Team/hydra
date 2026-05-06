@@ -460,12 +460,25 @@ async fn main() -> Result<(), Error> {
         tokio::spawn(project::investigator::ProjectInvestigator::peering_task());
     let _entity_list_updates = tokio::spawn(entity_list::EntityList::peering_task());
     let _entity_list_entry_updates = tokio::spawn(entity_list::EntityListEntry::peering_task());
+    let _entity_list_viewer_updates =
+        tokio::spawn(entity_list::EntityListViewer::peering_task());
+    let _go_url_updates = tokio::spawn(gourl::GoUrl::peering_task());
+    let _project_rating_updates = tokio::spawn(rating::ProjectRating::peering_task());
+    let _project_review_updates = tokio::spawn(review::ProjectReview::peering_task());
+    let _schedule_updates = tokio::spawn(schedule::Schedule::peering_task());
+    let _entity_updates = tokio::spawn(entity::Entity::peering_task());
+    let _redirect_updates = tokio::spawn(misc::Redirect::peering_task());
+    let _html_updates = tokio::spawn(misc::Html::peering_task());
+    let _pagecontent_updates = tokio::spawn(pagecontent::PageContent::peering_task());
+    let _archive_entry_updates = tokio::spawn(admin::archive::ArchiveEntry::peering_task());
+    let _file_metadata_updates = tokio::spawn(upload::storage::FileMetadata::peering_task());
 
     let _synchronize_projects = tokio::spawn(sync::synchronize_projects());
     let _synchronize_events = tokio::spawn(sync::synchronize_events());
     let _synchronize_references = tokio::spawn(sync::synchronize_references());
     let _synchronize_investigators = tokio::spawn(sync::synchronize_investigators());
     let _synchronize_entity_lists = tokio::spawn(sync::synchronize_entity_lists());
+    let _synchronize_go_urls = tokio::spawn(sync::synchronize_go_urls());
     let _update_expired_statuses = tokio::spawn(sync::update_expired_statuses());
     let _periodic_maintenance = tokio::spawn(periodic_maintenance());
 
@@ -2059,6 +2072,133 @@ mod sync {
                 .expect("Saving sync bookmark failed");
 
             if got_lists == 500 {
+                sleep(Duration::from_secs(60)).await;
+            } else {
+                sleep(Duration::from_secs(60 * 60)).await;
+            }
+        }
+    }
+
+    #[derive(Debug, serde::Deserialize)]
+    struct GolinkRecordData {
+        id: i32,
+        when: String,
+        slug: String,
+        target: String,
+        file: String,
+        statemachine: String,
+        transition: String,
+        session_set_key: String,
+        session_set_value: String,
+    }
+
+    #[tracing::instrument]
+    pub async fn synchronize_go_urls() -> Result<(), anyhow::Error> {
+        use crate::gourl::GoUrl;
+        use crate::peering::LoadStorePeered;
+
+        loop {
+            let last_update = misc::get("go-url-sync-bookmark-update")
+                .await
+                .expect("Retrieving sync bookmark failed")
+                .unwrap_or_else(|| String::from("2000-01-01T00:00:00.0Z"));
+
+            let last_id: i32 = misc::get("go-url-sync-bookmark-id")
+                .await
+                .expect("Retrieving sync bookmark failed")
+                .unwrap_or(0);
+
+            let client = reqwest::Client::new();
+
+            tracing::info!(
+                "Retrieving go URLs since {} {}...",
+                &last_update,
+                last_id
+            );
+
+            let records: Vec<GolinkRecordData> = match client
+                .get("https://scistarter.org/staff/sync/golink_records")
+                .bearer_auth(env!("SYNC_TOKEN"))
+                .query(&[("since", &last_update), ("last_id", &last_id.to_string())])
+                .send()
+                .await
+            {
+                Ok(response) => match response.error_for_status() {
+                    Ok(resp) => match resp.text().await {
+                        Ok(text) => match serde_json::from_str(&text) {
+                            Ok(records) => records,
+                            Err(e) => {
+                                eprintln!("JSON parsing error: {}", e);
+                                eprintln!("Response body: {}", text);
+                                sleep(Duration::from_secs(60)).await;
+                                continue;
+                            }
+                        },
+                        Err(e) => {
+                            eprintln!("Failed to read response body: {}", e);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    },
+                    Err(e) => {
+                        eprintln!("HTTP error: {}", e);
+                        sleep(Duration::from_secs(60)).await;
+                        continue;
+                    }
+                },
+                Err(e) => {
+                    eprintln!("Request error: {}", e);
+                    sleep(Duration::from_secs(60)).await;
+                    continue;
+                }
+            };
+
+            let got_records = records.len();
+            tracing::info!("Synchronization received {} go URLs", got_records);
+
+            let mut bookmark = (last_update.clone(), last_id);
+
+            for data in records {
+                // Prefer target; fall back to file if target is empty. Skip
+                // entries with no usable destination — orrery has some legacy
+                // rows with neither populated.
+                let target_url = if !data.target.is_empty() {
+                    data.target
+                } else if !data.file.is_empty() {
+                    data.file
+                } else {
+                    tracing::warn!("Skipping go URL {} with no target or file", data.slug);
+                    continue;
+                };
+
+                let go_url = GoUrl {
+                    slug: data.slug.clone(),
+                    url_type: crate::gourl::GoUrlType::Redirect { target_url },
+                    statemachine: data.statemachine,
+                    transition: data.transition,
+                    session_set_key: data.session_set_key,
+                    session_set_value: data.session_set_value,
+                };
+                if let Err(err) = go_url.store().await {
+                    tracing::error!("Error saving go URL {}: {}", data.slug, err);
+                    continue;
+                }
+
+                let new_bookmark = (data.when, data.id);
+                if new_bookmark > bookmark {
+                    bookmark = new_bookmark;
+                }
+            }
+
+            misc::set("go-url-sync-bookmark-update", bookmark.0)
+                .await
+                .expect("Saving sync bookmark failed");
+
+            misc::set("go-url-sync-bookmark-id", bookmark.1)
+                .await
+                .expect("Saving sync bookmark failed");
+
+            if got_records == 500 {
                 sleep(Duration::from_secs(60)).await;
             } else {
                 sleep(Duration::from_secs(60 * 60)).await;

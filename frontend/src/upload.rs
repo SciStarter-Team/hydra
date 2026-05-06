@@ -131,13 +131,10 @@ async fn upload_tracked_file(
     match STORAGE.upload_file(metadata, data).await {
         Ok(_file_path) => {
             // Create the go URL
-            use crate::gourl::{GoUrl, GoUrlType};
+            use crate::gourl::GoUrl;
             use crate::peering::LoadStorePeered;
 
-            let go_url = GoUrl {
-                slug: slug.clone(),
-                url_type: GoUrlType::TrackedFile { file_id },
-            };
+            let go_url = GoUrl::new_file_url(slug.clone(), file_id);
 
             // Save the go URL to database
             match go_url.save_to_database().await {

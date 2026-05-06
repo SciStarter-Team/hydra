@@ -26,6 +26,10 @@ pub enum GoUrlType {
 pub struct GoUrl {
     pub slug: String,        // The friendly URL slug (e.g., "kittens-and-puppies")
     pub url_type: GoUrlType, // What this URL points to
+    pub statemachine: String,
+    pub transition: String,
+    pub session_set_key: String,
+    pub session_set_value: String,
 }
 
 impl LoadStorePeered for GoUrl {
@@ -40,10 +44,16 @@ impl LoadStorePeered for GoUrl {
             flexbuffers::to_vec(&self.url_type).context("Failed to encode GoUrlType")?;
 
         sqlx::query!(
-            r#"INSERT OR REPLACE INTO go_urls (slug, url_type)
-               VALUES (?, ?)"#,
+            r#"INSERT OR REPLACE INTO go_urls
+               (slug, url_type, statemachine, transition,
+                session_set_key, session_set_value)
+               VALUES (?, ?, ?, ?, ?, ?)"#,
             self.slug,
-            url_type_blob
+            url_type_blob,
+            self.statemachine,
+            self.transition,
+            self.session_set_key,
+            self.session_set_value,
         )
         .execute(db())
         .await
@@ -57,7 +67,8 @@ impl LoadStorePeered for GoUrl {
 
         // Use case-insensitive lookup
         let row = sqlx::query!(
-            r#"SELECT slug, url_type
+            r#"SELECT slug, url_type, statemachine, transition,
+                      session_set_key, session_set_value
                FROM go_urls
                WHERE LOWER(slug) = LOWER(?)"#,
             key
@@ -73,6 +84,10 @@ impl LoadStorePeered for GoUrl {
         Ok(GoUrl {
             slug: row.slug, // Return the original case from the database
             url_type,
+            statemachine: row.statemachine,
+            transition: row.transition,
+            session_set_key: row.session_set_key,
+            session_set_value: row.session_set_value,
         })
     }
 
@@ -93,6 +108,10 @@ impl GoUrl {
         Self {
             slug,
             url_type: GoUrlType::TrackedFile { file_id },
+            statemachine: String::new(),
+            transition: String::new(),
+            session_set_key: String::new(),
+            session_set_value: String::new(),
         }
     }
 
@@ -100,6 +119,10 @@ impl GoUrl {
         Self {
             slug,
             url_type: GoUrlType::Redirect { target_url },
+            statemachine: String::new(),
+            transition: String::new(),
+            session_set_key: String::new(),
+            session_set_value: String::new(),
         }
     }
 
