@@ -3,7 +3,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Error;
-use image::ImageFormat;
+use image::metadata::Orientation;
+use image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader};
 use object_store::ObjectStore;
 use object_store::aws::AmazonS3Builder;
 use object_store::path::Path as ObjectPath;
@@ -231,7 +232,14 @@ fn resize_image(
     params: &ThumbnailParams,
     output_format: ImageFormat,
 ) -> Result<Vec<u8>, Error> {
-    let img = image::load_from_memory(data)?;
+    let mut decoder = ImageReader::new(Cursor::new(data))
+        .with_guessed_format()?
+        .into_decoder()?;
+    let orientation = decoder
+        .orientation()
+        .unwrap_or(Orientation::NoTransforms);
+    let mut img = DynamicImage::from_decoder(decoder)?;
+    img.apply_orientation(orientation);
     let (orig_w, orig_h) = (img.width(), img.height());
 
     let (target_w, target_h) = match (params.w, params.h) {
