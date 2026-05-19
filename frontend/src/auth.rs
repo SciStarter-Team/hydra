@@ -17,7 +17,6 @@ use poem::{
     web::{Form, Json, Query, RealIp, Redirect},
 };
 use rand::{Rng, thread_rng};
-use std::sync::Arc;
 use std::time::Duration;
 use ulid::Ulid;
 
@@ -267,6 +266,7 @@ struct LoginPageParameters {
     system: Option<bool>,
     password: Option<bool>,
     unauthorized: Option<bool>,
+    turnstile: Option<bool>,
     next: Option<String>,
 }
 
@@ -283,8 +283,8 @@ struct LoginSignupContent {
     system: bool,
     password: bool,
     unauthorized: bool,
-    #[allow(dead_code)]
-    user_info: Option<Arc<BasicInfo>>,
+    turnstile_failed: bool,
+    turnstile_sitekey: String,
 }
 
 #[handler]
@@ -307,7 +307,8 @@ pub async fn login_signup_page(
             system: params.system.unwrap_or_default(),
             password: params.password.unwrap_or_default(),
             unauthorized: params.unauthorized.unwrap_or_default(),
-            user_info: user_info.clone(),
+            turnstile_failed: params.turnstile.unwrap_or_default(),
+            turnstile_sitekey: env!("TURNSTILE_SITEKEY").to_string(),
         },
     )
     .prepare(user_info.clone())
@@ -330,6 +331,35 @@ struct SignupForm {
     newsletter: Option<bool>,
     zipcode: String,
     use_passkey: Option<bool>,
+    #[serde(rename = "cf-turnstile-response")]
+    cf_turnstile_response: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct TurnstileVerifyResponse {
+    success: bool,
+}
+
+async fn verify_turnstile(token: &str, remote_ip: Option<std::net::IpAddr>) -> bool {
+    let mut params = vec![
+        ("secret", env!("TURNSTILE_SECRET").to_string()),
+        ("response", token.to_string()),
+    ];
+    if let Some(ip) = remote_ip {
+        params.push(("remoteip", ip.to_string()));
+    }
+    match reqwest::Client::new()
+        .post("https://challenges.cloudflare.com/turnstile/v0/siteverify")
+        .form(&params)
+        .send()
+        .await
+    {
+        Ok(resp) => match resp.json::<TurnstileVerifyResponse>().await {
+            Ok(body) => body.success,
+            Err(_) => false,
+        },
+        Err(_) => false,
+    }
 }
 
 #[handler]
@@ -342,6 +372,11 @@ pub async fn signup_action(
     let next: Option<String> = session.get("auth_next");
 
     let use_passkey = form.use_passkey.unwrap_or(false);
+
+    let token = form.cf_turnstile_response.as_deref().unwrap_or("");
+    if token.is_empty() || !verify_turnstile(token, client_ip).await {
+        return Redirect::see_other("/login?turnstile=true").into_response();
+    }
 
     // Validate password confirmation (only if not using passkey)
     if !use_passkey && form.password1 != form.password2 {

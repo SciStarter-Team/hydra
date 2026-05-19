@@ -437,3 +437,8 @@
     padding-right:0!important;
     background-color: transparent!important;
 }
+
+/* Hide reCAPTCHA badge loaded by Constant Contact; disclaimer is shown inline near the form */
+.grecaptcha-badge {
+    visibility: hidden !important;
+}

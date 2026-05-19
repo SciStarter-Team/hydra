@@ -9,16 +9,14 @@ use crate::{
 
 #[derive(sailfish::TemplateOnce)]
 #[template(path = "pages/index.stpl.html")]
-struct IndexPage {
+struct IndexPageLoggedIn {
     head: <Head as Component>::Prepared,
-    layout: <StandardLayout<IndexPageContent> as Component>::Prepared,
+    layout: <StandardLayout<IndexPageContentLoggedIn> as Component>::Prepared,
 }
 
 #[derive(sailfish::TemplateOnce)]
-#[template(path = "pages/index_content.stpl.html")]
-struct IndexPageContent {
-    #[allow(dead_code)]
-    user_info: Option<Arc<BasicInfo>>,
+#[template(path = "pages/index_content_logged_in.stpl.html")]
+struct IndexPageContentLoggedIn {
     featured_items: Vec<crate::schedule::FeaturedItem>,
     news_items: Vec<crate::news::RenderedNewsItem>,
     featured_communities: Vec<CommunityInfo>,
@@ -26,6 +24,20 @@ struct IndexPageContent {
     location_lng: String,
     location_display: String,
     geosearch_key: String,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "pages/index.stpl.html")]
+struct IndexPageLoggedOut {
+    head: <Head as Component>::Prepared,
+    layout: <StandardLayout<IndexPageContentLoggedOut> as Component>::Prepared,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "pages/index_content_logged_out.stpl.html")]
+struct IndexPageContentLoggedOut {
+    featured_items: Vec<crate::schedule::FeaturedItem>,
+    featured_communities: Vec<CommunityInfo>,
 }
 
 fn location_display_from_ip(location: &LocationInfo) -> String {
@@ -46,54 +58,7 @@ pub async fn index_page(
     RealIp(client_ip): RealIp,
     Authenticated(user_info): Authenticated,
 ) -> Result<Response, anyhow::Error> {
-    let location = if let Some(addr) = client_ip {
-        common::service::request("location.ip", addr.to_string())
-            .await
-            .unwrap_or_default()
-    } else {
-        LocationInfo::default()
-    };
-
-    let location_display = location_display_from_ip(&location);
-    let location_lat = location.latitude.clone();
-    let location_lng = location.longitude.clone();
-
-    let featured_items = crate::schedule::Schedule::get_current_featured_items()
-        .await
-        .unwrap_or_default();
-
-    let news_items = crate::news::NewsItem::get_rendered_active_items().await;
-
-    let featured_communities = crate::communities::list_communities(true, true)
-        .await
-        .unwrap_or_default();
-
-    let layout = StandardLayout::new(
-        "/",
-        IndexPageContent {
-            user_info: user_info.clone(),
-            featured_items,
-            news_items,
-            featured_communities,
-            location_lat,
-            location_lng,
-            location_display,
-            geosearch_key: env!("GEOSEARCH_KEY").to_string(),
-        },
-    )
-    .prepare(user_info.clone())
-    .await?;
-
-    IndexPage {
-        head: Head::default()
-            .with_slick()
-            .with_geosearch()
-            .prepare(None)
-            .await?,
-        layout,
-    }
-    .into_response(None)
-    .await
+    render_index_page(client_ip, user_info).await
 }
 
 // Temporarily needed until https://github.com/poem-web/poem/issues/1098 is fixed
@@ -102,52 +67,77 @@ pub async fn index_page_pseudo_handler(
     client_ip: Option<std::net::IpAddr>,
     user_info: Option<Arc<BasicInfo>>,
 ) -> Result<Response, anyhow::Error> {
-    let location = if let Some(addr) = client_ip {
-        common::service::request("location.ip", addr.to_string())
-            .await
-            .unwrap_or_default()
-    } else {
-        LocationInfo::default()
-    };
+    render_index_page(client_ip, user_info).await
+}
 
-    let location_display = location_display_from_ip(&location);
-    let location_lat = location.latitude.clone();
-    let location_lng = location.longitude.clone();
-
+async fn render_index_page(
+    client_ip: Option<std::net::IpAddr>,
+    user_info: Option<Arc<BasicInfo>>,
+) -> Result<Response, anyhow::Error> {
     let featured_items = crate::schedule::Schedule::get_current_featured_items()
         .await
         .unwrap_or_default();
-
-    let news_items = crate::news::NewsItem::get_rendered_active_items().await;
 
     let featured_communities = crate::communities::list_communities(true, true)
         .await
         .unwrap_or_default();
 
-    let layout = StandardLayout::new(
-        "/",
-        IndexPageContent {
-            user_info: user_info.clone(),
-            featured_items,
-            news_items,
-            featured_communities,
-            location_lat,
-            location_lng,
-            location_display,
-            geosearch_key: env!("GEOSEARCH_KEY").to_string(),
-        },
-    )
-    .prepare(user_info.clone())
-    .await?;
+    if user_info.is_some() {
+        let location = if let Some(addr) = client_ip {
+            common::service::request("location.ip", addr.to_string())
+                .await
+                .unwrap_or_default()
+        } else {
+            LocationInfo::default()
+        };
 
-    IndexPage {
-        head: Head::default()
-            .with_slick()
-            .with_geosearch()
-            .prepare(None)
-            .await?,
-        layout,
+        let location_display = location_display_from_ip(&location);
+        let location_lat = location.latitude.clone();
+        let location_lng = location.longitude.clone();
+
+        let news_items = crate::news::NewsItem::get_rendered_active_items().await;
+
+        let layout = StandardLayout::new(
+            "/",
+            IndexPageContentLoggedIn {
+                featured_items,
+                news_items,
+                featured_communities,
+                location_lat,
+                location_lng,
+                location_display,
+                geosearch_key: env!("GEOSEARCH_KEY").to_string(),
+            },
+        )
+        .prepare(user_info.clone())
+        .await?;
+
+        IndexPageLoggedIn {
+            head: Head::default()
+                .with_slick()
+                .with_geosearch()
+                .prepare(None)
+                .await?,
+            layout,
+        }
+        .into_response(None)
+        .await
+    } else {
+        let layout = StandardLayout::new(
+            "/",
+            IndexPageContentLoggedOut {
+                featured_items,
+                featured_communities,
+            },
+        )
+        .prepare(user_info.clone())
+        .await?;
+
+        IndexPageLoggedOut {
+            head: Head::default().with_slick().prepare(None).await?,
+            layout,
+        }
+        .into_response(None)
+        .await
     }
-    .into_response(None)
-    .await
 }
