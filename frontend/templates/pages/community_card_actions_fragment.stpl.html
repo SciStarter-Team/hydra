@@ -1,4 +1,10 @@
+<% if self.community.exclusive { %>
 <% if self.is_member { %>
+<span id="community-actions-<%= self.community.slug %>" class="text-sm italic text-gray-600">Member</span>
+<% } else { %>
+<span id="community-actions-<%= self.community.slug %>"></span>
+<% } %>
+<% } else if self.is_member { %>
 <button class="btn btn-secondary btn-icon" id="community-actions-<%= self.community.slug %>"
         hx-post="/communities/<%= self.community.slug %>/leave?context=card"
         hx-target="#community-actions-<%= self.community.slug %>"

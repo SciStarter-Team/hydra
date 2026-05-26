@@ -4,7 +4,7 @@
         Direct conversations with other members. Replies arrive here.
     </p>
 
-    <% if self.conversations.is_empty() { %>
+    <% if self.conversations.is_empty() && !self.has_prev_page { %>
     <p class="ss-card !p-6 text-center text-gray-600">
         Your inbox is empty.
     </p>
@@ -13,7 +13,7 @@
         <ul class="divide-y divide-gray-200">
             <% for conv in &self.conversations { %>
             <li class="<% if !conv.seen { %>bg-amber-50<% } %>">
-                <a href="/dashboard/messages/<%= conv.topic_id |disp %>" class="block px-6 py-4 hover:bg-gray-50">
+                <a href="/dashboard/messages/<%= conv.topic_id |disp %><% if self.page > 0 { %>?from=<%= self.page %><% } %>" class="block px-6 py-4 hover:bg-gray-50">
                     <div class="flex items-start justify-between gap-3">
                         <div class="flex-1 min-w-0">
                             <div class="flex items-center gap-2">
@@ -27,13 +27,30 @@
                             </div>
                             <p class="text-sm text-gray-500 mt-1 truncate"><%= conv.last_message_preview %></p>
                         </div>
-                        <span class="text-xs text-gray-500 whitespace-nowrap"><%= conv.last_message_at %></span>
+                        <span class="text-xs text-gray-500 whitespace-nowrap"><%- local_time(&conv.last_message_at, TimeFormat::DateTime) %></span>
                     </div>
                 </a>
             </li>
             <% } %>
         </ul>
     </div>
-    <p class="text-xs text-gray-500 mt-3"><%= self.conversations.len() %> of <%= self.total %> conversations.</p>
+
+    <% if self.has_prev_page || self.has_next_page { %>
+    <nav class="mt-4 flex items-center justify-center gap-3 text-sm" aria-label="Inbox pagination">
+        <% if self.has_prev_page { %>
+            <a href="/dashboard/messages<% if self.page > 1 { %>?page=<%= self.page - 1 %><% } %>"
+               class="px-3 py-1 border border-linework rounded-md text-primary hover:bg-gray-50">
+                ← Newer
+            </a>
+        <% } %>
+        <span class="text-primary">Page <%= self.page + 1 %></span>
+        <% if self.has_next_page { %>
+            <a href="/dashboard/messages?page=<%= self.page + 1 %>"
+               class="px-3 py-1 border border-linework rounded-md text-primary hover:bg-gray-50">
+                Older →
+            </a>
+        <% } %>
+    </nav>
+    <% } %>
     <% } %>
 </div>

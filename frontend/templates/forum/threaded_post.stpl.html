@@ -1,83 +1,85 @@
-<div id="post-<%= self.post.post.post_id|disp %>" class="threaded-post bg-white border border-gray-200 rounded-lg shadow-xs" style="margin-left: <%= self.post.depth * 24 %>px;">
-  <div class="p-4">
-    <div class="mb-3">
-      <div class="flex flex-wrap items-center gap-2 text-sm text-gray-600">
-        <span class="font-medium text-gray-900">
-          <% if self.post.post.author_is_public { %>
-            <a href="/-forum/user/<%= self.post.post.author_id|disp %>/profile" class="text-blue-600 hover:text-blue-800"><%= self.post.post.author_handle %></a>
-          <% } else { %>
-            <%= self.post.post.author_handle %>
-          <% } %>
-        </span>
-        <span class="text-gray-400">•</span>
+<div id="post-<%= self.post.post.post_id|disp %>" class="threaded-post" style="margin-left: <%= self.post.depth * 20 %>px;">
+  <div class="flex gap-3">
+    <div class="shrink-0 w-7 h-7 rounded-full bg-primary-dark/80 text-white flex items-center justify-center text-sm font-semibold uppercase">
+      <%= self.post.post.author_handle.chars().next().map(|c| c.to_string()).unwrap_or_else(|| "?".to_string()) %>
+    </div>
+    <div class="grow min-w-0">
+      <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-primary mb-1">
+        <% if self.post.post.author_is_public { %>
+          <a href="/-forum/user/<%= self.post.post.author_id|disp %>/profile" class="font-medium text-primary-dark hover:underline"><%= self.post.post.author_handle %></a>
+        <% } else { %>
+          <span class="font-medium text-primary-dark"><%= self.post.post.author_handle %></span>
+        <% } %>
+        <span class="text-gray-300">·</span>
         <span><%- local_time(&self.post.post.created_at, TimeFormat::DateTime) %></span>
         <% if let Some(updated) = &self.post.post.updated_at { %>
-          <span class="text-gray-400">•</span>
-          <span class="text-xs">Updated: <%- local_time(updated, TimeFormat::DateTime) %></span>
+          <span class="text-gray-300">·</span>
+          <span>edited <%- local_time(updated, TimeFormat::ShortDate) %></span>
+        <% } %>
+      </div>
+
+      <div class="text-primary leading-relaxed space-y-2">
+        <% for para in self.post.post.paragraphs() { %>
+          <p><%= para %></p>
+        <% } %>
+      </div>
+
+      <div class="mt-2 flex items-center gap-3 text-xs">
+        <% if self.can_reply { %>
+          <button type="button"
+                  class="text-primary hover:text-primary-dark hover:underline reply-btn"
+                  hx-on:click="let form = htmx.find('#reply-form-<%= self.post.post.post_id|disp %>'); form.style.display='block'; this.style.display='none'; htmx.find(form, 'textarea[name=content]').focus()">
+            Reply
+          </button>
+
+          <div id="reply-form-<%= self.post.post.post_id|disp %>" class="hidden w-full mt-2" style="display: none;">
+            <form hx-post="/-forum/post/new"
+                  hx-target="#topic-<%= self.topic_id|disp %>"
+                  hx-swap="outerHTML"
+                  class="space-y-2">
+              <input type="hidden" name="topic_id" value="<%= self.topic_id|disp %>">
+              <input type="hidden" name="parent_post_id" value="<%= self.post.post.post_id|disp %>">
+              <textarea name="content" rows="2" required
+                        placeholder="Write a reply…"
+                        class="bg-white w-full px-3 py-2 border border-linework rounded-md text-sm focus:outline-hidden focus:ring-2 focus:ring-primary-dark/40"></textarea>
+              <div class="flex gap-2">
+                <button type="submit" class="btn btn-primary px-3 py-1 text-sm">
+                  Reply
+                  <span class="htmx-indicator ml-1">…</span>
+                </button>
+                <button type="button" class="px-3 py-1 text-sm text-primary hover:underline"
+                        hx-on:click="let container = htmx.closest(this, '.threaded-post'); let form = htmx.find(container, '#reply-form-<%= self.post.post.post_id|disp %>'); form.style.display='none'; htmx.find(container, '.reply-btn').style.display='inline'">
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        <% } %>
+
+        <% if self.can_moderate { %>
+          <%+ ModerationActions {
+              target_type: "post",
+              target_id: &self.post.post.post_id.to_string(),
+              topic_id: &self.topic_id.to_string(),
+              is_pinned: false,
+              is_locked: false,
+              is_flagged: self.post.post.is_flagged,
+          } %>
         <% } %>
       </div>
     </div>
-    
-    <div class="text-gray-700 leading-relaxed mb-4">
-      <% for para in self.post.post.paragraphs() { %>
-        <p><%= para %></p>
-      <% } %>
-    </div>
-  
-    <div class="flex items-center gap-2 border-t border-gray-100 pt-3">
-      <% if self.can_reply { %>
-        <button class="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors reply-btn" 
-                hx-on:click="let form = htmx.find('#reply-form-<%= self.post.post.post_id|disp %>'); form.style.display='block'; this.style.display='none'; htmx.find(form, 'textarea[name=content]').focus()">
-          Reply
-        </button>
-        
-        <div id="reply-form-<%= self.post.post.post_id|disp %>" class="mt-3 p-3 bg-gray-50 border border-gray-200 rounded-md" style="display: none;">
-          <form hx-post="/-forum/post/new" hx-target="#topic-<%= self.topic_id|disp %>" hx-swap="outerHTML" class="space-y-3">
-            <input type="hidden" name="topic_id" value="<%= self.topic_id|disp %>">
-            <input type="hidden" name="parent_post_id" value="<%= self.post.post.post_id|disp %>">
-            
-            <div>
-              <label for="content" class="block text-sm font-medium text-gray-700 mb-1">Your reply:</label>
-              <textarea name="content" rows="2" required 
-                        class="bg-white w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent"></textarea>
-            </div>
-            
-            <div class="flex gap-2">
-              <button type="submit" class="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors">
-                Post Reply
-                <span class="htmx-indicator ml-1">...</span>
-              </button>
-              <button type="button" class="px-3 py-1 text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md transition-colors" 
-                      hx-on:click="let container = htmx.closest(this, '.threaded-post'); let form = htmx.find(container, '#reply-form-<%= self.post.post.post_id|disp %>'); form.style.display='none'; htmx.find(container, '.reply-btn').style.display='inline'">
-                Cancel
-              </button>
-            </div>
-          </form>
-        </div>
-      <% } %>
-    
-      <% if self.can_moderate { %>
-        <%+ ModerationActions { 
-            target_type: "post",
-            target_id: &self.post.post.post_id.to_string(),
-            topic_id: &self.topic_id.to_string(),
-            is_pinned: false,
-            is_locked: false,
-            is_flagged: self.post.post.is_flagged,
-        } %>
-      <% } %>
-    </div>
   </div>
 
-  <!-- Render replies recursively -->
-  <% for reply in &self.post.replies { %>
-    <div class="mt-4">
-      <%+ ThreadedPostDisplay { 
-          post: reply,
-          topic_id: self.topic_id,
-          can_reply: self.can_reply,
-          can_moderate: self.can_moderate,
-      } %>
+  <% if !self.post.replies.is_empty() { %>
+    <div class="mt-3 space-y-3">
+      <% for reply in &self.post.replies { %>
+        <%+ ThreadedPostDisplay {
+            post: reply,
+            topic_id: self.topic_id,
+            can_reply: self.can_reply,
+            can_moderate: self.can_moderate,
+        } %>
+      <% } %>
     </div>
   <% } %>
 </div>

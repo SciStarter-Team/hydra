@@ -23,8 +23,8 @@ pub mod health;
 pub mod inat;
 pub mod legacy_id;
 pub mod link_tokens;
-pub mod places;
 pub mod permissions;
+pub mod places;
 pub mod profile;
 pub mod project_joins;
 pub mod recipient_search;
@@ -2082,6 +2082,7 @@ async fn main() {
         "check",
         communities::check_membership
     ));
+    toplevel.spawn(handler!(communities, "members", communities::members));
     toplevel.spawn(handler!(
         communities,
         "user_list",
@@ -2195,7 +2196,6 @@ async fn main() {
     ));
     toplevel.spawn(handler!(link_tokens_group, "add", link_tokens::add));
     toplevel.spawn(handler!(link_tokens_group, "delete", link_tokens::delete));
-
 
     // Workflow progress tracking
     let workflow_group = service.group("user.workflow");

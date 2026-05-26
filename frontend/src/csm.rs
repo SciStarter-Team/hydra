@@ -526,7 +526,15 @@ pub struct GroupedContributor {
 }
 
 fn group_contributors(entries: Vec<ContributorEntry>) -> Vec<GroupedContributor> {
-    let mut groups: HashMap<(Option<String>, Option<String>, Option<String>, Option<String>), GroupedContributor> = HashMap::new();
+    let mut groups: HashMap<
+        (
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        ),
+        GroupedContributor,
+    > = HashMap::new();
 
     for entry in entries {
         let is_anon = entry.name.as_deref().map_or(true, |n| {

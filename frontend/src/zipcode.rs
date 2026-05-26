@@ -1,6 +1,6 @@
 use crate::lru_cache::LruCache;
 use poem::web::{Json, Path, Query};
-use poem::{handler, IntoResponse, Response};
+use poem::{IntoResponse, Response, handler};
 use serde::{Deserialize, Serialize};
 use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
@@ -132,10 +132,7 @@ pub async fn zipcode_lookup(
     // Fetch from API
     match fetch_from_api(code, country).await {
         Ok(results) => {
-            ZIPCODE_CACHE
-                .lock()
-                .unwrap()
-                .insert(key, results.clone());
+            ZIPCODE_CACHE.lock().unwrap().insert(key, results.clone());
             Json(serde_json::json!({ "results": results })).into_response()
         }
         Err(e) => {

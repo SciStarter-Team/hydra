@@ -1,6 +1,6 @@
 <div class="ss-container !pt-8 !pb-8 mx-auto">
     <p class="text-sm">
-        <a href="/dashboard/messages" class="text-primary-action hover:underline">&larr; Back to inbox</a>
+        <a href="/dashboard/messages<% if self.from_page > 0 { %>?page=<%= self.from_page %><% } %>" class="text-primary-action hover:underline">&larr; Back to inbox</a>
     </p>
     <h1 class="mt-2"><%= self.subject %></h1>
     <p class="text-sm text-gray-600 mb-6">
@@ -18,7 +18,7 @@
                     <a href="/profile/<%= post.author_id |disp %>" class="text-primary-action hover:underline">@<%= post.author_handle %></a>
                     <% } %>
                 </span>
-                <span class="text-xs text-gray-500"><%= post.created_at %></span>
+                <span class="text-xs text-gray-500"><%- local_time(&post.created_at, TimeFormat::DateTime) %></span>
             </div>
             <% for paragraph in &post.paragraphs { %>
             <p class="text-sm mb-2"><%= paragraph %></p>

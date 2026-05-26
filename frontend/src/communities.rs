@@ -1,3 +1,4 @@
+use common::message::forum::{ForumInfo, GetCommunityForum};
 use common::message::user::BasicInfo;
 use common::message::user::{
     CommunityGetRequest, CommunityInfo, CommunityJoinRequest, CommunityLeaveRequest,
@@ -7,12 +8,12 @@ use common::message::user::{
 };
 use poem::session::Session;
 use poem::web::{Path, Query, RealIp};
-use poem::{Endpoint, Response, Route, get, handler, post};
+use poem::{Endpoint, IntoResponse, Response, Route, get, handler, post};
 use sailfish::TemplateOnce;
 use std::sync::Arc;
 use ulid::Ulid;
 
-use crate::component::{Component, Head, StandardLayout};
+use crate::component::{Component, Forum, Head, StandardLayout};
 use crate::middleware::authorization::Authenticated;
 
 // Helper functions wrapping NATS calls
@@ -141,6 +142,29 @@ struct CommunityDetailContent {
     is_member: bool,
 }
 
+async fn ensure_community_forum(
+    community: &CommunityInfo,
+    user_id: Option<Ulid>,
+) -> Result<ForumInfo, anyhow::Error> {
+    let forum: ForumInfo = common::service::request(
+        "forum.management.get_for_community",
+        GetCommunityForum {
+            community_id: community.community_id,
+            community_slug: community.slug.clone(),
+            community_name: community.name.clone(),
+            user_id,
+        },
+    )
+    .await?;
+    Ok(forum)
+}
+
+/// If `forum_slug` corresponds to a community forum, returns the community's
+/// slug. Otherwise returns None.
+pub fn community_slug_from_forum_slug(forum_slug: &str) -> Option<&str> {
+    forum_slug.strip_prefix("community-")
+}
+
 #[handler]
 async fn detail_page(
     Path(slug): Path<String>,
@@ -178,6 +202,22 @@ async fn detail_page(
     }
     .into_response(None)
     .await
+}
+
+#[handler]
+async fn community_forum_fragment(
+    Path(slug): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> Result<Response, anyhow::Error> {
+    let community = get_community(&slug).await?;
+    let forum_info =
+        ensure_community_forum(&community, user_info.as_ref().map(|u| u.user_id)).await?;
+
+    let prepared = Forum::new(forum_info.slug)
+        .prepare(user_info.clone())
+        .await?;
+
+    Ok(poem::web::Html(prepared.render_once()?).into_response())
 }
 
 // ============================================================================
@@ -228,6 +268,13 @@ fn render_join_leave_response(
     Ok(Response::builder().content_type("text/html").body(html))
 }
 
+fn forbidden_response() -> Response {
+    Response::builder()
+        .status(poem::http::StatusCode::FORBIDDEN)
+        .content_type("text/plain")
+        .body("This community is exclusive; membership is managed by administrators.")
+}
+
 #[handler]
 async fn join_community(
     Path(slug): Path<String>,
@@ -237,6 +284,10 @@ async fn join_community(
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Login required"))?;
 
     let community = get_community(&slug).await?;
+
+    if community.exclusive {
+        return Ok(forbidden_response());
+    }
 
     common::service::request::<CommunitySuccessResponse>(
         "user.communities.join",
@@ -262,6 +313,10 @@ async fn leave_community(
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Login required"))?;
 
     let community = get_community(&slug).await?;
+
+    if community.exclusive {
+        return Ok(forbidden_response());
+    }
 
     common::service::request::<CommunitySuccessResponse>(
         "user.communities.leave",
@@ -330,6 +385,7 @@ pub fn routes() -> impl Endpoint {
     Route::new()
         .at("/", get(landing_page))
         .at("/:slug", get(detail_page))
+        .at("/:slug/forum", get(community_forum_fragment))
         .at("/:slug/join", post(join_community))
         .at("/:slug/leave", post(leave_community))
 }

@@ -380,6 +380,67 @@ pub async fn get_personal_forum(req: &Request) -> Result<ForumInfo> {
     get_forum_internal(user_id, Some(user_id)).await
 }
 
+pub async fn get_community_forum(req: &Request) -> Result<ForumInfo> {
+    let message: GetCommunityForum = flexbuffers::from_slice(&req.message.payload)?;
+    let community_id = message.community_id;
+    let community_id_str = community_id.to_string();
+
+    let db = db();
+
+    // Personal forums use forum_id == user_id; community forums use forum_id == community_id.
+    let existing = sqlx::query!(
+        r#"SELECT "forum_id" FROM "forums" WHERE "forum_id" = ?"#,
+        community_id_str
+    )
+    .fetch_optional(db)
+    .await?;
+
+    if existing.is_some() {
+        return get_forum_internal(community_id, message.user_id).await;
+    }
+
+    let now = TimeString::now();
+    let now_str = now.to_string();
+
+    let slug = format!("community-{}", message.community_slug);
+    let name = format!("{} Discussions", message.community_name);
+    let description = Some(format!(
+        "Community discussion space for {}",
+        message.community_name
+    ));
+
+    sqlx::query!(
+        r#"INSERT INTO "forums" ("forum_id", "slug", "name", "description", "created_at", "display_order", "is_active")
+           VALUES (?, ?, ?, ?, ?, ?, ?)"#,
+        community_id_str,
+        slug,
+        name,
+        description,
+        now_str,
+        500000, // Between general (0) and personal (1000000)
+        1
+    )
+    .execute(db)
+    .await?;
+
+    log_activity(
+        Some(now),
+        "community_forum_created",
+        message.user_id,
+        Some(community_id),
+        Some(
+            serde_json::json!({
+                "slug": slug,
+                "name": name
+            })
+            .to_string(),
+        ),
+    )
+    .await?;
+
+    get_forum_internal(community_id, message.user_id).await
+}
+
 async fn copy_general_forum_categories_to_new_forum(
     new_forum_id: Ulid,
     _user_id: Ulid,

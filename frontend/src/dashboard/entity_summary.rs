@@ -70,13 +70,17 @@ async fn lookup_one_by_slug(
         None => return Ok(None),
     };
 
-    fetch_summary(tx, &entity_row.target, slug, &entity_row.kind, entity_row.created).await
+    fetch_summary(
+        tx,
+        &entity_row.target,
+        slug,
+        &entity_row.kind,
+        entity_row.created,
+    )
+    .await
 }
 
-async fn lookup_one(
-    tx: &mut Immediate,
-    target: &str,
-) -> Result<Option<EntitySummary>, Error> {
+async fn lookup_one(tx: &mut Immediate, target: &str) -> Result<Option<EntitySummary>, Error> {
     let entity_row = sqlx::query!(
         r#"SELECT "slug", "kind", "created"
         FROM "entities"
@@ -92,7 +96,14 @@ async fn lookup_one(
         None => return Ok(None),
     };
 
-    fetch_summary(tx, target, &entity_row.slug, &entity_row.kind, entity_row.created).await
+    fetch_summary(
+        tx,
+        target,
+        &entity_row.slug,
+        &entity_row.kind,
+        entity_row.created,
+    )
+    .await
 }
 
 async fn fetch_summary(

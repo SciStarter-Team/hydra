@@ -4,7 +4,8 @@ use common::{
     message::user::{
         CommunityCreateRequest, CommunityDeleteRequest, CommunityGetRequest, CommunityInfo,
         CommunityJoinRequest, CommunityLeaveRequest, CommunityListRequest, CommunityListResponse,
-        CommunityMemberCheckRequest, CommunityMemberCheckResponse, CommunitySuccessResponse,
+        CommunityMemberCheckRequest, CommunityMemberCheckResponse, CommunityMembersRequest,
+        CommunityMembersResponse, CommunityMembership, CommunitySuccessResponse,
         CommunityUpdateRequest, UserCommunitiesRequest, UserCommunitiesResponse,
     },
     service::{TriggerEvent, decode_structured_message, log_activity, trigger_email},
@@ -26,6 +27,7 @@ struct CommunityRow {
     external_url: String,
     active: bool,
     featured: bool,
+    exclusive: bool,
     sort_order: i32,
     member_count: i64,
 }
@@ -52,6 +54,7 @@ impl CommunityRow {
             external_url: self.external_url,
             active: self.active,
             featured: self.featured,
+            exclusive: self.exclusive,
             sort_order: self.sort_order,
             member_count: self.member_count,
         })
@@ -68,6 +71,7 @@ pub async fn list(req: &Request) -> Result<CommunityListResponse, Error> {
             SELECT c.community_id, c.name, c.slug, c.subtitle, c.intro, c.description,
                    c.image_url, c.partner_tag, c.topics, c.external_url,
                    c.active AS "active: bool", c.featured AS "featured: bool",
+                   c.exclusive AS "exclusive: bool",
                    c.sort_order AS "sort_order: i32",
                    (SELECT COUNT(*) FROM community_memberships m WHERE m.community_id = c.community_id) AS "member_count!: i64"
             FROM communities c
@@ -84,6 +88,7 @@ pub async fn list(req: &Request) -> Result<CommunityListResponse, Error> {
             SELECT c.community_id, c.name, c.slug, c.subtitle, c.intro, c.description,
                    c.image_url, c.partner_tag, c.topics, c.external_url,
                    c.active AS "active: bool", c.featured AS "featured: bool",
+                   c.exclusive AS "exclusive: bool",
                    c.sort_order AS "sort_order: i32",
                    (SELECT COUNT(*) FROM community_memberships m WHERE m.community_id = c.community_id) AS "member_count!: i64"
             FROM communities c
@@ -100,6 +105,7 @@ pub async fn list(req: &Request) -> Result<CommunityListResponse, Error> {
             SELECT c.community_id, c.name, c.slug, c.subtitle, c.intro, c.description,
                    c.image_url, c.partner_tag, c.topics, c.external_url,
                    c.active AS "active: bool", c.featured AS "featured: bool",
+                   c.exclusive AS "exclusive: bool",
                    c.sort_order AS "sort_order: i32",
                    (SELECT COUNT(*) FROM community_memberships m WHERE m.community_id = c.community_id) AS "member_count!: i64"
             FROM communities c
@@ -127,6 +133,7 @@ pub async fn get(req: &Request) -> Result<CommunityInfo, Error> {
         SELECT c.community_id, c.name, c.slug, c.subtitle, c.intro, c.description,
                c.image_url, c.partner_tag, c.topics, c.external_url,
                c.active AS "active: bool", c.featured AS "featured: bool",
+               c.exclusive AS "exclusive: bool",
                c.sort_order AS "sort_order: i32",
                (SELECT COUNT(*) FROM community_memberships m WHERE m.community_id = c.community_id) AS "member_count!: i64"
         FROM communities c
@@ -150,8 +157,8 @@ pub async fn create(req: &Request) -> Result<CommunitySuccessResponse, Error> {
         r#"
         INSERT INTO communities (community_id, name, slug, subtitle, intro, description,
                                  image_url, partner_tag, topics, external_url,
-                                 active, featured, sort_order)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                 active, featured, exclusive, sort_order)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         "#,
         community_id,
         message.name,
@@ -165,6 +172,7 @@ pub async fn create(req: &Request) -> Result<CommunitySuccessResponse, Error> {
         message.external_url,
         message.active,
         message.featured,
+        message.exclusive,
         message.sort_order,
     )
     .execute(db())
@@ -187,7 +195,7 @@ pub async fn update(req: &Request) -> Result<CommunitySuccessResponse, Error> {
         UPDATE communities
         SET name = ?, slug = ?, subtitle = ?, intro = ?, description = ?,
             image_url = ?, partner_tag = ?, topics = ?, external_url = ?,
-            active = ?, featured = ?, sort_order = ?
+            active = ?, featured = ?, exclusive = ?, sort_order = ?
         WHERE community_id = ?
         "#,
         message.name,
@@ -201,6 +209,7 @@ pub async fn update(req: &Request) -> Result<CommunitySuccessResponse, Error> {
         message.external_url,
         message.active,
         message.featured,
+        message.exclusive,
         message.sort_order,
         community_id,
     )
@@ -366,6 +375,60 @@ pub async fn check_membership(req: &Request) -> Result<CommunityMemberCheckRespo
     })
 }
 
+pub async fn members(req: &Request) -> Result<CommunityMembersResponse, Error> {
+    let message: CommunityMembersRequest = decode_structured_message(req.message.clone())?;
+
+    let community_id = message.community_id.to_string();
+    let page = message.page.unwrap_or(1);
+    let limit = message.limit.unwrap_or(25);
+    let offset = (page - 1) * limit;
+
+    let rows = sqlx::query!(
+        r#"
+        SELECT u.user_id, u.handle, u.first_name, u.last_name, u.primary_email,
+               cm.joined_at
+        FROM community_memberships cm
+        INNER JOIN users u ON u.user_id = cm.user_id
+        WHERE cm.community_id = ?
+        ORDER BY cm.joined_at DESC
+        LIMIT ? OFFSET ?
+        "#,
+        community_id,
+        limit,
+        offset,
+    )
+    .fetch_all(db())
+    .await?;
+
+    let total_count = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) AS "count!: i64" FROM community_memberships WHERE community_id = ?"#,
+        community_id,
+    )
+    .fetch_one(db())
+    .await? as u64;
+
+    let members = rows
+        .into_iter()
+        .map(|r| {
+            Ok::<_, Error>(CommunityMembership {
+                user_id: r.user_id.as_ulid()?,
+                handle: r.handle,
+                first_name: r.first_name,
+                last_name: r.last_name,
+                primary_email: r.primary_email,
+                joined_at: r.joined_at,
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(CommunityMembersResponse {
+        members,
+        total_count,
+        page,
+        limit,
+    })
+}
+
 pub async fn user_communities(req: &Request) -> Result<UserCommunitiesResponse, Error> {
     let message: UserCommunitiesRequest = decode_structured_message(req.message.clone())?;
 
@@ -377,6 +440,7 @@ pub async fn user_communities(req: &Request) -> Result<UserCommunitiesResponse, 
         SELECT c.community_id, c.name, c.slug, c.subtitle, c.intro, c.description,
                c.image_url, c.partner_tag, c.topics, c.external_url,
                c.active AS "active: bool", c.featured AS "featured: bool",
+               c.exclusive AS "exclusive: bool",
                c.sort_order AS "sort_order: i32",
                (SELECT COUNT(*) FROM community_memberships m WHERE m.community_id = c.community_id) AS "member_count!: i64"
         FROM communities c

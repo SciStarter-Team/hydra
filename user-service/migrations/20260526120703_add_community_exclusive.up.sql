@@ -1,0 +1,1 @@
+ALTER TABLE communities ADD COLUMN exclusive INTEGER NOT NULL DEFAULT 0;

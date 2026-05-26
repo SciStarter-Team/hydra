@@ -189,17 +189,33 @@ pub async fn list_posts(req: &Request) -> Result<Vec<PostInfo>> {
             .as_ulid()?;
         let topic_id = row.topic_id.as_ulid()?;
 
-        // Get user info from user-service
-        let author_info: BasicInfo =
-            request("user.basic_info.by_user_id", row.author_id.clone()).await?;
+        // Get user info from user-service. If the author is missing (deleted
+        // account, orphaned spam from before the gating fixes) keep the row
+        // and show a placeholder handle instead of 500'ing the whole list.
+        let author_info: Option<BasicInfo> =
+            request("user.basic_info.by_user_id", row.author_id.clone())
+                .await
+                .ok();
+        let author_id = author_info
+            .as_ref()
+            .map(|info| info.user_id)
+            .unwrap_or_else(|| row.author_id.as_ulid().unwrap_or_default());
+        let author_handle = author_info
+            .as_ref()
+            .map(|info| info.display_handle().to_string())
+            .unwrap_or_else(|| "Unknown".to_string());
+        let author_is_public = author_info
+            .as_ref()
+            .map(|info| !info.is_private())
+            .unwrap_or(false);
 
         posts.push(PostInfo {
             post_id,
             topic_id,
             content: row.content,
-            author_id: author_info.user_id,
-            author_handle: author_info.display_handle().to_string(),
-            author_is_public: !author_info.is_private(),
+            author_id,
+            author_handle,
+            author_is_public,
             created_at: TimeString::try_from(row.created_at)?,
             updated_at: row
                 .updated_at

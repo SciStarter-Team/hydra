@@ -1,8 +1,8 @@
 use anyhow::{Error, anyhow};
 use common::message::forum::{
-    ConversationSummary, DiscardMessage, InboxQuery, InboxResponse, MarkMessageRead, PostInfo,
-    PostListQuery, ReplyToMessage, ReplyToMessageResponse, SendMessage, SendMessageResponse,
-    TopicInfo,
+    ConversationSummary, DiscardMessage, ForumInfo, GetForumById, InboxQuery, InboxResponse,
+    MarkMessageRead, PostInfo, PostListQuery, ReplyToMessage, ReplyToMessageResponse, SendMessage,
+    SendMessageResponse, TopicInfo, is_personal_forum_slug,
 };
 use common::message::user::BasicInfo;
 use common::service::{request, send as nats_send};
@@ -17,23 +17,36 @@ use serde::Deserialize;
 use ulid::Ulid;
 
 use crate::component::{Component, Head, StandardLayout};
+use crate::local_time::{TimeFormat, local_time};
 use crate::middleware::authorization::Authenticated;
+
+#[derive(Debug, Deserialize)]
+pub struct InboxPageQuery {
+    #[serde(default)]
+    pub page: Option<i64>,
+}
+
+const INBOX_PAGE_SIZE: i64 = 25;
 
 #[handler]
 pub async fn page(
     _session: &Session,
     RealIp(_client_ip): RealIp,
     Authenticated(user_info): Authenticated,
+    Query(q): Query<InboxPageQuery>,
 ) -> Result<Response, Error> {
     let user_info = user_info.ok_or_else(|| anyhow!("Login required"))?;
+
+    let page = q.page.unwrap_or(0).max(0);
+    let offset = page * INBOX_PAGE_SIZE;
 
     let inbox: InboxResponse = request(
         "forum.messaging.inbox",
         InboxQuery {
             user_id: user_info.user_id,
             include_discarded: false,
-            limit: Some(100),
-            offset: Some(0),
+            limit: Some(INBOX_PAGE_SIZE),
+            offset: Some(offset),
         },
     )
     .await?;
@@ -46,7 +59,9 @@ pub async fn page(
 
     let content = InboxContent {
         conversations,
-        total: inbox.total,
+        page,
+        has_prev_page: page > 0,
+        has_next_page: inbox.has_next_page,
     };
 
     let layout = StandardLayout::new("/dashboard/messages", content)
@@ -72,10 +87,9 @@ pub async fn compose(
     Query(q): Query<ComposeQuery>,
 ) -> Result<Response, Error> {
     let _ = user_info.ok_or_else(|| anyhow!("Login required"))?;
-    let target_id: Ulid = q
-        .to
-        .parse()
-        .map_err(|err| anyhow!("Invalid recipient: {}", err))?;
+    let target_id: Ulid =
+        q.to.parse()
+            .map_err(|err| anyhow!("Invalid recipient: {}", err))?;
 
     let target: BasicInfo = request("user.basic_info.by_user_id", target_id.to_string()).await?;
 
@@ -132,10 +146,17 @@ pub async fn send(
         )))
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ThreadQuery {
+    #[serde(default)]
+    pub from: Option<i64>,
+}
+
 #[handler]
 pub async fn thread(
     Authenticated(user_info): Authenticated,
     Path(topic_id): Path<String>,
+    Query(q): Query<ThreadQuery>,
 ) -> Result<Response, Error> {
     let user_info = user_info.ok_or_else(|| anyhow!("Login required"))?;
     let topic_ulid: Ulid = topic_id
@@ -143,6 +164,22 @@ pub async fn thread(
         .map_err(|err| anyhow!("Invalid topic id: {}", err))?;
 
     let topic: TopicInfo = request("forum.topics.get", topic_id.clone()).await?;
+
+    // Reject topics that aren't in a personal forum: this view assumes
+    // forum_id is the recipient's user_id (used below to identify the
+    // "other" participant). A community-forum topic that the user happens
+    // to have authored would otherwise be reachable here.
+    let forum: ForumInfo = request(
+        "forum.management.get_by_id",
+        GetForumById {
+            forum_id: topic.forum_id,
+            user_id: Some(user_info.user_id),
+        },
+    )
+    .await?;
+    if !is_personal_forum_slug(&forum.slug) {
+        return Err(anyhow!("Not a direct message"));
+    }
 
     if topic.author_id != user_info.user_id && topic.forum_id != user_info.user_id {
         return Err(anyhow!("You are not a participant in this conversation"));
@@ -173,11 +210,7 @@ pub async fn thread(
             is_self: p.author_id == user_info.user_id,
             author_id: p.author_id,
             author_handle: p.author_handle,
-            paragraphs: p
-                .content
-                .split("\n\n")
-                .map(|s| s.to_string())
-                .collect(),
+            paragraphs: p.content.split("\n\n").map(|s| s.to_string()).collect(),
             created_at: p.created_at.to_string(),
         })
         .collect();
@@ -187,15 +220,19 @@ pub async fn thread(
     } else {
         topic.author_id
     };
-    let other_user: BasicInfo =
-        request("user.basic_info.by_user_id", other_user_id.to_string()).await?;
+    let other_user_handle =
+        request::<BasicInfo>("user.basic_info.by_user_id", other_user_id.to_string())
+            .await
+            .map(|info| info.handle)
+            .unwrap_or_else(|_| "Unknown".to_string());
 
     let content = ThreadContent {
         topic_id: topic_ulid,
         subject: topic.title,
         other_user_id,
-        other_user_handle: other_user.handle,
+        other_user_handle,
         posts: post_models,
+        from_page: q.from.unwrap_or(0).max(0),
     };
 
     let layout = StandardLayout::new("/dashboard/messages", content)
@@ -310,7 +347,9 @@ struct InboxPage {
 #[template(path = "dashboard/messages_content.stpl.html")]
 struct InboxContent {
     conversations: Vec<ConversationModel>,
-    total: i64,
+    page: i64,
+    has_prev_page: bool,
+    has_next_page: bool,
 }
 
 #[derive(TemplateOnce)]
@@ -328,6 +367,9 @@ struct ThreadContent {
     other_user_id: Ulid,
     other_user_handle: String,
     posts: Vec<PostModel>,
+    /// The inbox page the user was on when they clicked into this thread,
+    /// so the back link returns them there. 0 means "first page".
+    from_page: i64,
 }
 
 #[derive(TemplateOnce)]

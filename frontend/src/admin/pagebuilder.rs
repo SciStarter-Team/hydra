@@ -377,9 +377,7 @@ async fn pb_components_export(
 
     let zip_bytes = crate::pagebuilder::library::export_to_zip(&components)?;
 
-    let date = jiff::Timestamp::now()
-        .strftime("%Y%m%d-%H%M%S")
-        .to_string();
+    let date = jiff::Timestamp::now().strftime("%Y%m%d-%H%M%S").to_string();
     let filename = format!("components-{date}.zip");
 
     Ok(poem::Response::builder()

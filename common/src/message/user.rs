@@ -1250,6 +1250,7 @@ pub struct CommunityInfo {
     pub external_url: String,
     pub active: bool,
     pub featured: bool,
+    pub exclusive: bool,
     pub sort_order: i32,
     pub member_count: i64,
 }
@@ -1283,6 +1284,7 @@ pub struct CommunityCreateRequest {
     pub external_url: String,
     pub active: bool,
     pub featured: bool,
+    pub exclusive: bool,
     pub sort_order: i32,
 }
 
@@ -1300,6 +1302,7 @@ pub struct CommunityUpdateRequest {
     pub external_url: String,
     pub active: bool,
     pub featured: bool,
+    pub exclusive: bool,
     pub sort_order: i32,
 }
 
@@ -1345,6 +1348,43 @@ pub struct UserCommunitiesResponse {
 pub struct CommunitySuccessResponse {
     pub success: bool,
     pub message: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CommunityMembership {
+    pub user_id: Ulid,
+    pub handle: String,
+    pub first_name: String,
+    pub last_name: String,
+    pub primary_email: String,
+    pub joined_at: String,
+}
+
+impl CommunityMembership {
+    pub fn display_name(&self) -> String {
+        if self.first_name.is_empty() && self.last_name.is_empty() {
+            self.handle.clone()
+        } else {
+            format!("{} {}", self.first_name, self.last_name)
+                .trim()
+                .to_string()
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CommunityMembersRequest {
+    pub community_id: Ulid,
+    pub page: Option<u32>,
+    pub limit: Option<u32>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CommunityMembersResponse {
+    pub members: Vec<CommunityMembership>,
+    pub total_count: u64,
+    pub page: u32,
+    pub limit: u32,
 }
 
 // ============================================================================

@@ -1,15 +1,18 @@
 use crate::component::{AdminLayout, Component};
 use crate::middleware::authorization::Authenticated;
 use common::message::user::{
-    CommunityCreateRequest, CommunityDeleteRequest, CommunityInfo, CommunityListRequest,
-    CommunityListResponse, CommunitySuccessResponse, CommunityUpdateRequest,
+    CommunityCreateRequest, CommunityDeleteRequest, CommunityInfo, CommunityJoinRequest,
+    CommunityLeaveRequest, CommunityListRequest, CommunityListResponse, CommunityMembersRequest,
+    CommunityMembersResponse, CommunityMembership, CommunitySuccessResponse,
+    CommunityUpdateRequest, UserDetails, UserDetailsListResponse, UserDetailsSearchRequest,
 };
 use poem::{
-    Endpoint, Route, get, handler,
+    Endpoint, Route, get, handler, post,
     web::{Form, Path, Query},
 };
 use sailfish::TemplateOnce;
 use serde::Deserialize;
+use ulid::Ulid;
 
 // Templates
 #[derive(TemplateOnce)]
@@ -38,6 +41,33 @@ struct EditCommunityContent {
     error_message: Option<String>,
 }
 
+#[derive(TemplateOnce)]
+#[template(path = "admin/community_members_content.stpl.html")]
+struct CommunityMembersContent {
+    community: CommunityInfo,
+    members_list: CommunityMembersList,
+}
+
+#[derive(TemplateOnce, Clone)]
+#[template(path = "admin/community_members_list.stpl.html")]
+struct CommunityMembersList {
+    community_slug: String,
+    members: Vec<CommunityMembership>,
+    page: u32,
+    total_count: u64,
+    total_pages: u32,
+}
+
+#[derive(TemplateOnce)]
+#[template(path = "admin/community_members_search.stpl.html")]
+struct CommunityMembersSearch {
+    community_slug: String,
+    users: Vec<UserDetails>,
+    search: String,
+}
+
+const MEMBERS_PAGE_SIZE: u32 = 25;
+
 // Query and form types
 #[derive(Deserialize)]
 struct CommunitySearchQuery {
@@ -57,6 +87,7 @@ struct CreateCommunityForm {
     external_url: Option<String>,
     featured: Option<String>,
     active: Option<String>,
+    exclusive: Option<String>,
     sort_order: Option<i32>,
 }
 
@@ -73,10 +104,53 @@ struct UpdateCommunityForm {
     external_url: Option<String>,
     featured: Option<String>,
     active: Option<String>,
+    exclusive: Option<String>,
     sort_order: Option<i32>,
 }
 
+#[derive(Deserialize)]
+struct MembersListQuery {
+    page: Option<u32>,
+}
+
+#[derive(Deserialize)]
+struct MemberSearchQuery {
+    #[serde(default)]
+    search: String,
+}
+
 // Helper functions
+async fn fetch_members(
+    community_id: Ulid,
+    page: u32,
+) -> Result<CommunityMembersResponse, anyhow::Error> {
+    let response: CommunityMembersResponse = common::service::request(
+        "user.communities.members",
+        CommunityMembersRequest {
+            community_id,
+            page: Some(page),
+            limit: Some(MEMBERS_PAGE_SIZE),
+        },
+    )
+    .await?;
+    Ok(response)
+}
+
+fn build_members_list(
+    community_slug: &str,
+    response: CommunityMembersResponse,
+) -> CommunityMembersList {
+    let limit = response.limit.max(1) as u64;
+    let total_pages = response.total_count.div_ceil(limit) as u32;
+    CommunityMembersList {
+        community_slug: community_slug.to_string(),
+        members: response.members,
+        page: response.page,
+        total_count: response.total_count,
+        total_pages: total_pages.max(1),
+    }
+}
+
 async fn communities_search_impl(query: &CommunitySearchQuery) -> Result<String, anyhow::Error> {
     let response: CommunityListResponse = common::service::request(
         "user.communities.list",
@@ -188,6 +262,7 @@ async fn communities_create(
             external_url: form.external_url.unwrap_or_default(),
             active: form.active.is_some(),
             featured: form.featured.is_some(),
+            exclusive: form.exclusive.is_some(),
             sort_order: form.sort_order.unwrap_or(0),
         },
     )
@@ -295,6 +370,7 @@ async fn communities_update(
             external_url: form.external_url.unwrap_or_default(),
             active: form.active.is_some(),
             featured: form.featured.is_some(),
+            exclusive: form.exclusive.is_some(),
             sort_order: form.sort_order.unwrap_or(0),
         },
     )
@@ -389,12 +465,218 @@ async fn communities_delete(
         .body(html))
 }
 
+// ============================================================================
+// Member Management
+// ============================================================================
+
+async fn render_members_list(
+    community_slug: &str,
+    community_id: Ulid,
+    page: u32,
+) -> Result<String, anyhow::Error> {
+    let response = fetch_members(community_id, page).await?;
+    let list = build_members_list(community_slug, response);
+    Ok(list.render_once()?)
+}
+
+#[handler]
+async fn community_members_page(
+    Path(slug): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
+
+    let community: CommunityInfo = common::service::request(
+        "user.communities.get",
+        common::message::user::CommunityGetRequest { slug: slug.clone() },
+    )
+    .await?;
+
+    let response = fetch_members(community.community_id, 1).await?;
+    let members_list = build_members_list(&community.slug, response);
+
+    let content = CommunityMembersContent {
+        community: community.clone(),
+        members_list,
+    };
+
+    let prepared = AdminLayout::new("Community Members", content)
+        .with_breadcrumb("Communities", Some("/-admin/communities"))
+        .with_breadcrumb(
+            &community.name,
+            Some(&format!("/-admin/communities/{}", community.slug)),
+        )
+        .with_breadcrumb("Members", None)
+        .with_sidebar_active("communities")
+        .prepare(Some(user_info))
+        .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(prepared.render_once()?))
+}
+
+#[handler]
+async fn community_members_list_fragment(
+    Path(slug): Path<String>,
+    Query(query): Query<MembersListQuery>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let community: CommunityInfo = common::service::request(
+        "user.communities.get",
+        common::message::user::CommunityGetRequest { slug: slug.clone() },
+    )
+    .await?;
+
+    let html = render_members_list(
+        &community.slug,
+        community.community_id,
+        query.page.unwrap_or(1),
+    )
+    .await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(html))
+}
+
+#[handler]
+async fn community_members_search(
+    Path(slug): Path<String>,
+    Query(query): Query<MemberSearchQuery>,
+    Authenticated(_user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let community: CommunityInfo = common::service::request(
+        "user.communities.get",
+        common::message::user::CommunityGetRequest { slug: slug.clone() },
+    )
+    .await?;
+
+    let search = query.search.trim().to_string();
+
+    let users = if search.is_empty() {
+        Vec::new()
+    } else {
+        let response: UserDetailsListResponse = common::service::request(
+            "user.admin.user_search",
+            UserDetailsSearchRequest {
+                search: Some(search.clone()),
+                role: None,
+                email_status: None,
+                page: Some(1),
+                limit: Some(20),
+            },
+        )
+        .await?;
+        response.users
+    };
+
+    let template = CommunityMembersSearch {
+        community_slug: community.slug,
+        users,
+        search,
+    };
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(template.render_once()?))
+}
+
+#[handler]
+async fn community_member_add(
+    Path((slug, user_id_str)): Path<(String, String)>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let community: CommunityInfo = common::service::request(
+        "user.communities.get",
+        common::message::user::CommunityGetRequest { slug: slug.clone() },
+    )
+    .await?;
+
+    let user_id: Ulid = user_id_str.parse()?;
+
+    common::service::request::<CommunitySuccessResponse>(
+        "user.communities.join",
+        CommunityJoinRequest {
+            community_id: community.community_id,
+            user_id,
+        },
+    )
+    .await?;
+
+    if let Some(admin) = &user_info {
+        common::service::log_activity(
+            None,
+            "community-admin-add-member",
+            admin.user_id,
+            community.community_id,
+            Some(format!("member={}", user_id)),
+        )
+        .await
+        .ok();
+    }
+
+    let html = render_members_list(&community.slug, community.community_id, 1).await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(html))
+}
+
+#[handler]
+async fn community_member_remove(
+    Path((slug, user_id_str)): Path<(String, String)>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let community: CommunityInfo = common::service::request(
+        "user.communities.get",
+        common::message::user::CommunityGetRequest { slug: slug.clone() },
+    )
+    .await?;
+
+    let user_id: Ulid = user_id_str.parse()?;
+
+    common::service::request::<CommunitySuccessResponse>(
+        "user.communities.leave",
+        CommunityLeaveRequest {
+            community_id: community.community_id,
+            user_id,
+        },
+    )
+    .await?;
+
+    if let Some(admin) = &user_info {
+        common::service::log_activity(
+            None,
+            "community-admin-remove-member",
+            admin.user_id,
+            community.community_id,
+            Some(format!("member={}", user_id)),
+        )
+        .await
+        .ok();
+    }
+
+    let html = render_members_list(&community.slug, community.community_id, 1).await?;
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(html))
+}
+
 // Routes export
 pub fn routes() -> impl Endpoint {
     Route::new()
         .at("/", get(communities_list).post(communities_create))
         .at("/search", get(communities_search))
         .at("/new", get(communities_new))
+        .at("/:id/members", get(community_members_page))
+        .at("/:id/members/list", get(community_members_list_fragment))
+        .at("/:id/members/search", get(community_members_search))
+        .at(
+            "/:id/members/:user_id",
+            post(community_member_add).delete(community_member_remove),
+        )
         .at(
             "/:id",
             get(communities_edit)

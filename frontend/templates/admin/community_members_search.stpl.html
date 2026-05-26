@@ -1,0 +1,28 @@
+<% if self.users.is_empty() { %>
+    <p class="text-sm text-gray-500 italic"><% if self.search.is_empty() { %>Type to search for users.<% } else { %>No users match "<%= self.search %>".<% } %></p>
+<% } else { %>
+    <ul class="divide-y divide-gray-200 border border-gray-200 rounded-md">
+        <% for user in &self.users { %>
+            <li class="flex items-center justify-between px-4 py-2">
+                <div class="min-w-0">
+                    <p class="text-sm font-medium text-gray-900 truncate"><%= user.display_name() %></p>
+                    <p class="text-xs text-gray-500 truncate">
+                        <%= user.primary_email %>
+                        <% if !user.handle.is_empty() { %>
+                            &middot; @<%= user.handle %>
+                        <% } %>
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    class="ml-4 inline-flex items-center px-3 py-1 border border-indigo-300 text-xs font-medium rounded-md text-indigo-700 bg-white hover:bg-indigo-50"
+                    hx-post="/-admin/communities/<%= self.community_slug %>/members/<%= user.user_id |disp %>"
+                    hx-target="#members-list"
+                    hx-swap="innerHTML"
+                >
+                    Add
+                </button>
+            </li>
+        <% } %>
+    </ul>
+<% } %>

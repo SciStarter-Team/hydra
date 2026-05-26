@@ -106,9 +106,16 @@ pub async fn basic_info_by_username(req: &Request) -> Result<Option<BasicInfo>, 
     }
 }
 
-pub async fn basic_info_by_user_id(req: &Request) -> Result<Option<BasicInfo>, Error> {
+pub async fn basic_info_by_user_id(req: &Request) -> Result<BasicInfo, Error> {
     let user_id: String = flexbuffers::from_slice(&req.message.payload)?;
 
+    // Return Err on not-found rather than Ok(None). All callers in the
+    // workspace decode the response as BasicInfo; with Option<BasicInfo>
+    // the `None` case wire-encodes as a unit value that the caller-side
+    // serde rejects with "invalid type: unit value, expected struct
+    // BasicInfo" — a confusing error that propagates through wrapping
+    // services as a 500. An explicit Err lets `.await?` callers fail
+    // cleanly and `.await.ok()` callers degrade to None.
     let result = sqlx::query_as!(
         BasicInfoDb,
         r#"select
@@ -124,17 +131,17 @@ pub async fn basic_info_by_user_id(req: &Request) -> Result<Option<BasicInfo>, E
         user_id,
     )
     .fetch_optional(db())
-    .await?;
+    .await?
+    .ok_or_else(|| anyhow::anyhow!("User not found"))?;
 
-    match result {
-        Some(db_info) => Ok(Some(db_info.try_into()?)),
-        None => Ok(None),
-    }
+    Ok(result.try_into()?)
 }
 
 pub async fn search_by_handle(req: &Request) -> Result<Vec<BasicInfo>, Error> {
     let search_term: String = flexbuffers::from_slice(&req.message.payload)?;
 
+    // Cap results so a short prefix can't be used to bulk-extract the
+    // public user base by iterating handles.
     let results = sqlx::query_as!(
         BasicInfoDb,
         r#"select
@@ -149,7 +156,8 @@ pub async fn search_by_handle(req: &Request) -> Result<Vec<BasicInfo>, Error> {
         where "handle" LIKE ? || '%'
           AND "public" = 1
           AND "protected" = 0
-        order by "handle""#,
+        order by "handle"
+        limit 20"#,
         search_term,
     )
     .fetch_all(db())
@@ -813,6 +821,34 @@ pub async fn user_details_list(req: &Request) -> Result<UserDetailsListResponse,
     })
 }
 
+/// Search intent derived from the raw search string.
+enum UserSearchMode {
+    /// No search term supplied — match all rows.
+    All,
+    /// Search supplied, but no token is long enough for the trigram index
+    /// (trigram requires ≥ 3 chars per token). Match nothing.
+    NoMatch,
+    /// FTS5 MATCH query built from the search term.
+    Fts(String),
+}
+
+fn user_search_mode(raw: &str) -> UserSearchMode {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return UserSearchMode::All;
+    }
+    let tokens: Vec<String> = trimmed
+        .split_whitespace()
+        .filter(|w| w.chars().count() >= 3)
+        .map(|w| format!("\"{}\"", w.replace('"', "\"\"")))
+        .collect();
+    if tokens.is_empty() {
+        UserSearchMode::NoMatch
+    } else {
+        UserSearchMode::Fts(tokens.join(" "))
+    }
+}
+
 pub async fn user_details_search(req: &Request) -> Result<UserDetailsListResponse, Error> {
     let request: UserDetailsSearchRequest = decode_structured_message(req.message.clone())?;
 
@@ -820,8 +856,8 @@ pub async fn user_details_search(req: &Request) -> Result<UserDetailsListRespons
     let limit = request.limit.unwrap_or(25);
     let offset = (page - 1) * limit;
 
-    let search_pattern = request.search.as_deref().unwrap_or("");
-    let search_like = format!("%{}%", search_pattern);
+    let search_raw = request.search.as_deref().unwrap_or("");
+    let mode = user_search_mode(search_raw);
 
     let (role_staff_filter, role_page_manager_filter) = match request.role.as_deref() {
         Some("staff") => (Some(true), None),
@@ -836,35 +872,46 @@ pub async fn user_details_search(req: &Request) -> Result<UserDetailsListRespons
         _ => None,
     };
 
+    if matches!(mode, UserSearchMode::NoMatch) {
+        return Ok(UserDetailsListResponse {
+            users: Vec::new(),
+            total_count: 0,
+            page,
+            limit,
+        });
+    }
+
+    let fts_query = match &mode {
+        UserSearchMode::Fts(q) => Some(q.as_str()),
+        _ => None,
+    };
+
     let users_result = sqlx::query!(
         r#"
         SELECT
-            "user_id",
-            "handle",
-            "first_name",
-            "last_name",
-            "primary_email",
-            "is_active" as "is_active: bool",
-            "is_staff" as "is_staff: bool",
-            "is_superuser" as "is_superuser: bool",
-            "is_page_manager" as "is_page_manager: bool",
-            "verified" as "verified: bool",
-            "date_joined",
-            "orcid"
-        FROM "users"
+            u."user_id",
+            u."handle",
+            u."first_name",
+            u."last_name",
+            u."primary_email",
+            u."is_active" as "is_active: bool",
+            u."is_staff" as "is_staff: bool",
+            u."is_superuser" as "is_superuser: bool",
+            u."is_page_manager" as "is_page_manager: bool",
+            u."verified" as "verified: bool",
+            u."date_joined",
+            u."orcid"
+        FROM "users" u
         WHERE
-            (? = '' OR "first_name" LIKE ? OR "last_name" LIKE ? OR "handle" LIKE ? OR "primary_email" LIKE ?)
-            AND (? IS NULL OR "is_staff" = ?)
-            AND (? IS NULL OR "is_page_manager" = ?)
-            AND (? IS NULL OR "verified" = ?)
-        ORDER BY "date_joined" DESC
+            (? IS NULL OR u.rowid IN (SELECT rowid FROM users_fts WHERE users_fts MATCH ?))
+            AND (? IS NULL OR u."is_staff" = ?)
+            AND (? IS NULL OR u."is_page_manager" = ?)
+            AND (? IS NULL OR u."verified" = ?)
+        ORDER BY u."date_joined" DESC
         LIMIT ? OFFSET ?
         "#,
-        search_pattern,
-        search_like,
-        search_like,
-        search_like,
-        search_like,
+        fts_query,
+        fts_query,
         role_staff_filter,
         role_staff_filter,
         role_page_manager_filter,
@@ -879,18 +926,15 @@ pub async fn user_details_search(req: &Request) -> Result<UserDetailsListRespons
 
     let total_count_result = sqlx::query!(
         r#"
-        SELECT COUNT(*) as count FROM "users"
+        SELECT COUNT(*) as count FROM "users" u
         WHERE
-            (? = '' OR "first_name" LIKE ? OR "last_name" LIKE ? OR "handle" LIKE ? OR "primary_email" LIKE ?)
-            AND (? IS NULL OR "is_staff" = ?)
-            AND (? IS NULL OR "is_page_manager" = ?)
-            AND (? IS NULL OR "verified" = ?)
+            (? IS NULL OR u.rowid IN (SELECT rowid FROM users_fts WHERE users_fts MATCH ?))
+            AND (? IS NULL OR u."is_staff" = ?)
+            AND (? IS NULL OR u."is_page_manager" = ?)
+            AND (? IS NULL OR u."verified" = ?)
         "#,
-        search_pattern,
-        search_like,
-        search_like,
-        search_like,
-        search_like,
+        fts_query,
+        fts_query,
         role_staff_filter,
         role_staff_filter,
         role_page_manager_filter,

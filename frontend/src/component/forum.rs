@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use anyhow::Result;
 use common::{
@@ -6,7 +6,7 @@ use common::{
     service::{request, request_with_retry},
 };
 use poem::{
-    IntoResponse, Response, get, handler, post,
+    EndpointExt, IntoResponse, Response, get, handler, post,
     web::{Form, Html, Path, Query},
 };
 use sailfish::TemplateOnce;
@@ -16,14 +16,32 @@ use ulid::Ulid;
 use crate::{
     component::Component,
     local_time::{TimeFormat, local_time},
-    middleware::authorization::Authenticated,
+    middleware::{
+        authorization::Authenticated,
+        rate_limit::{RateLimitConfig, RateLimitMiddleware},
+    },
 };
 
 pub fn forum_routes() -> impl poem::Endpoint {
+    // Per-IP write limits. Generous for legitimate use but tight enough to
+    // make slug-bypass / mass-posting attacks impractical even if a future
+    // gap reopens them.
+    let topic_limit = RateLimitConfig::new(5, Duration::from_secs(300))
+        .with_error_message("Too many new topics. Please wait a few minutes before posting again.");
+    let post_limit = RateLimitConfig::new(20, Duration::from_secs(300))
+        .with_error_message("Too many replies. Please wait a few minutes before posting again.");
+
     poem::Route::new()
-        .at("/topic/new", post(create_topic_action))
+        .at(
+            "/topic/new",
+            post(create_topic_action).with(RateLimitMiddleware::new(topic_limit)),
+        )
         .at("/topic/:topic_id/page", get(topic_page_htmx))
-        .at("/post/new", post(create_post_action))
+        .at("/topic/:topic_id/card", get(topic_card_htmx))
+        .at(
+            "/post/new",
+            post(create_post_action).with(RateLimitMiddleware::new(post_limit)),
+        )
         .at("/user/:user_id/contact", get(user_personal_forum)) // Placeholder, user forums will be accessed via the profile page, which will not be part of the forum system
         .at("/user/:user_id/profile", get(user_profile_page)) // Placeholder, proper profile pages will not be part of the forum system
         .at("/:slug/page", get(forum_page_htmx))
@@ -97,7 +115,7 @@ impl Component for Forum {
         };
         let forum: ForumInfo = request("forum.management.get_by_slug", get_forum_request).await?;
 
-        // Parallelize topics and categories queries since they both depend on forum_id
+        // Parallelize topics, categories, and membership lookup
         let offset = self.page * self.per_page;
         let topic_query = TopicListQuery {
             forum_id: Some(forum.forum_id),
@@ -114,15 +132,34 @@ impl Component for Forum {
             active_only: Some(true),
         };
 
-        let (topics_result, categories_result) = tokio::join!(
+        let community_slug =
+            crate::communities::community_slug_from_forum_slug(&forum.slug).map(|s| s.to_string());
+
+        let membership_fut =
+            resolve_community_membership(community_slug.as_deref(), user_info.as_ref());
+
+        let (topics_result, categories_result, membership) = tokio::join!(
             request::<Vec<TopicInfo>>("forum.topics.list", topic_query),
-            request::<Vec<ForumCategoryInfo>>("forum.categories.list", categories_query)
+            request::<Vec<ForumCategoryInfo>>("forum.categories.list", categories_query),
+            membership_fut,
         );
 
         let topics = topics_result?;
         let categories = categories_result.unwrap_or_else(|_| vec![]);
 
-        let can_create_topic = user_info.is_some();
+        let is_personal_forum = common::message::forum::is_personal_forum_slug(&forum.slug);
+        let can_create_topic = if is_personal_forum {
+            // Personal forums are DM inboxes; new topics there come from
+            // forum.messaging.send, not the generic composer.
+            false
+        } else {
+            match (user_info.is_some(), &membership) {
+                (false, _) => false,
+                (true, CommunityMembership::None) => true,
+                (true, CommunityMembership::Member) => true,
+                (true, CommunityMembership::NotMember) => false,
+            }
+        };
         let can_manage_forum = forum.can_manage;
         let can_manage_moderators = user_info.as_ref().map_or(false, |user| user.is_staff);
         let has_next_page = topics.len() as i64 == self.per_page;
@@ -137,11 +174,47 @@ impl Component for Forum {
             can_create_topic,
             can_manage_forum,
             can_manage_moderators,
+            community_slug,
             page: self.page,
             per_page: self.per_page,
             has_next_page,
             has_prev_page,
         })
+    }
+}
+
+/// Membership status of the viewing user relative to the forum's gating
+/// community (if any).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommunityMembership {
+    /// Forum is not community-gated, or there is no logged-in user to evaluate.
+    None,
+    /// Forum is community-gated and the user belongs to it.
+    Member,
+    /// Forum is community-gated and the user does not belong to it.
+    NotMember,
+}
+
+async fn resolve_community_membership(
+    community_slug: Option<&str>,
+    user_info: Option<&Arc<BasicInfo>>,
+) -> CommunityMembership {
+    let Some(community_slug) = community_slug else {
+        return CommunityMembership::None;
+    };
+    let Some(user) = user_info else {
+        return CommunityMembership::NotMember;
+    };
+    let Ok(community) = crate::communities::get_community(community_slug).await else {
+        return CommunityMembership::NotMember;
+    };
+    if crate::communities::check_membership(community.community_id, user.user_id)
+        .await
+        .unwrap_or(false)
+    {
+        CommunityMembership::Member
+    } else {
+        CommunityMembership::NotMember
     }
 }
 
@@ -156,6 +229,7 @@ pub struct ForumPrepared {
     pub can_create_topic: bool,
     pub can_manage_forum: bool,
     pub can_manage_moderators: bool,
+    pub community_slug: Option<String>,
     pub page: i64,
     pub per_page: i64,
     pub has_next_page: bool,
@@ -201,23 +275,36 @@ impl Component for TopicDetail {
             offset: Some(offset),
         };
 
-        let posts: Vec<PostInfo> = request("forum.posts.list", post_query).await?;
-        let can_reply = user_info.is_some();
+        let forum_request = GetForumById {
+            forum_id: self.topic.forum_id,
+            user_id: user_info.as_ref().map(|u| u.user_id),
+        };
+
+        let (posts_result, forum_result) = tokio::join!(
+            request::<Vec<PostInfo>>("forum.posts.list", post_query),
+            request::<ForumInfo>("forum.management.get_by_id", forum_request),
+        );
+
+        let posts = posts_result?;
         let has_next_page = posts.len() as i64 == self.per_page;
         let has_prev_page = self.page > 0;
 
-        // Check if user can moderate this topic by checking forum management permission
-        let can_moderate = if let Some(ref user) = user_info {
-            // Get the forum info to check permissions
-            let forum_request = GetForumById {
-                forum_id: self.topic.forum_id,
-                user_id: Some(user.user_id),
-            };
-            let forum_info: Result<ForumInfo, _> =
-                request("forum.management.get_by_id", forum_request).await;
-            forum_info.map_or(false, |forum| forum.can_manage)
-        } else {
-            false
+        let (community_slug, can_moderate) = match forum_result {
+            Ok(forum) => (
+                crate::communities::community_slug_from_forum_slug(&forum.slug)
+                    .map(|s| s.to_string()),
+                forum.can_manage,
+            ),
+            Err(_) => (None, false),
+        };
+
+        let membership =
+            resolve_community_membership(community_slug.as_deref(), user_info.as_ref()).await;
+
+        let can_reply = match (user_info.is_some(), membership) {
+            (false, _) => false,
+            (true, CommunityMembership::NotMember) => false,
+            (true, _) => true,
         };
 
         let threaded_posts = ThreadedPost::build_thread(posts);
@@ -228,6 +315,7 @@ impl Component for TopicDetail {
             user_info,
             can_reply,
             can_moderate,
+            community_slug,
             page: self.page,
             per_page: self.per_page,
             has_next_page,
@@ -297,6 +385,7 @@ pub struct TopicDetailPrepared {
     pub user_info: Option<Arc<BasicInfo>>,
     pub can_reply: bool,
     pub can_moderate: bool,
+    pub community_slug: Option<String>,
     pub page: i64,
     pub per_page: i64,
     pub has_next_page: bool,
@@ -311,6 +400,12 @@ pub struct ThreadedPostDisplay<'a> {
     pub topic_id: Ulid,
     pub can_reply: bool,
     pub can_moderate: bool,
+}
+
+#[derive(TemplateOnce)]
+#[template(path = "forum/topic_card.stpl.html")]
+pub struct TopicCard<'a> {
+    pub topic: &'a TopicInfo,
 }
 
 #[derive(TemplateOnce)]
@@ -463,6 +558,14 @@ async fn forum_page_htmx(
 
 #[handler]
 #[tracing::instrument]
+async fn topic_card_htmx(Path(topic_id): Path<String>) -> Result<Response> {
+    let topic: TopicInfo = request("forum.topics.get", topic_id).await?;
+    let card = TopicCard { topic: &topic };
+    Ok(Html(card.render_once()?).into_response())
+}
+
+#[handler]
+#[tracing::instrument]
 async fn topic_page_htmx(
     Path(topic_id): Path<String>,
     Query(query): Query<PaginationQuery>,
@@ -487,6 +590,35 @@ async fn create_topic_action(
     Authenticated(user_info): Authenticated,
 ) -> Result<Response> {
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Must be logged in"))?;
+
+    // Personal forums are the DM inbox backing store; the only legitimate
+    // write path is forum.messaging.send via /dashboard/messages/send.
+    if common::message::forum::is_personal_forum_slug(&form.slug) {
+        let error_message = ErrorMessage {
+            title: "Not allowed",
+            message: "Personal forums can only be written to via direct messages.",
+            button_text: None,
+            button_action: None,
+        };
+        return Ok(Html(error_message.render_once()?).into_response());
+    }
+
+    // For community forums, require membership
+    if let Some(community_slug) = crate::communities::community_slug_from_forum_slug(&form.slug) {
+        let community = crate::communities::get_community(community_slug).await?;
+        if !crate::communities::check_membership(community.community_id, user_info.user_id)
+            .await
+            .unwrap_or(false)
+        {
+            let error_message = ErrorMessage {
+                title: "Join required",
+                message: "Join this community to post a discussion.",
+                button_text: None,
+                button_action: None,
+            };
+            return Ok(Html(error_message.render_once()?).into_response());
+        }
+    }
 
     // Get forum by slug to get forum_id
     let get_forum_request = GetForumBySlug {
@@ -543,6 +675,34 @@ async fn create_post_action(
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Must be logged in"))?;
 
     let topic_id = form.topic_id.parse::<Ulid>()?;
+
+    // For community forums, require membership
+    let topic_for_gate: TopicInfo = request("forum.topics.get", topic_id.to_string()).await?;
+    let forum_info: ForumInfo = request(
+        "forum.management.get_by_id",
+        GetForumById {
+            forum_id: topic_for_gate.forum_id,
+            user_id: Some(user_info.user_id),
+        },
+    )
+    .await?;
+    if let Some(community_slug) =
+        crate::communities::community_slug_from_forum_slug(&forum_info.slug)
+    {
+        let community = crate::communities::get_community(community_slug).await?;
+        if !crate::communities::check_membership(community.community_id, user_info.user_id)
+            .await
+            .unwrap_or(false)
+        {
+            let error_message = ErrorMessage {
+                title: "Join required",
+                message: "Join this community to reply.",
+                button_text: None,
+                button_action: None,
+            };
+            return Ok(Html(error_message.render_once()?).into_response());
+        }
+    }
 
     let parent_post_id = if let Some(pid) = form.parent_post_id {
         Some(pid.parse::<Ulid>()?)
@@ -946,12 +1106,25 @@ async fn suggest_similar_topics_action(
 #[handler]
 #[tracing::instrument]
 async fn search_users_action(
-    Path(_slug): Path<String>,
+    Path(slug): Path<String>,
     Query(query): Query<UserSearchQuery>,
     Authenticated(user_info): Authenticated,
 ) -> Result<Response> {
-    // Only allow authenticated users to search for users
-    if user_info.is_none() {
+    // Restrict to forum moderators: this search powers the moderator-add UI
+    // in forum.stpl.html. Without a per-forum gate any logged-in user could
+    // enumerate the public user base by iterating short handle prefixes.
+    let Some(user) = user_info else {
+        return Ok(Html("".to_string()).into_response());
+    };
+    let forum: ForumInfo = request(
+        "forum.management.get_by_slug",
+        GetForumBySlug {
+            slug: slug.clone(),
+            user_id: Some(user.user_id),
+        },
+    )
+    .await?;
+    if !forum.can_manage {
         return Ok(Html("".to_string()).into_response());
     }
 

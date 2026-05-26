@@ -515,21 +515,19 @@ async fn search_all(fq: &FinderQuery, page: u32) -> Result<FinderSearchResult, E
 
     let results = rows
         .into_iter()
-        .map(|row| {
-            FinderResult {
-                slug: row.0,
-                entity_type: row.1,
-                title: row.2,
-                description_snippet: make_snippet(&row.3),
-                image: row.4,
-                goal: row.5,
-                task: row.6,
-                is_completed: row.7 == "Complete",
-                location_display: row.8,
-                event_begin: row.9,
-                distance_km: None,
-                geo_json: row.10,
-            }
+        .map(|row| FinderResult {
+            slug: row.0,
+            entity_type: row.1,
+            title: row.2,
+            description_snippet: make_snippet(&row.3),
+            image: row.4,
+            goal: row.5,
+            task: row.6,
+            is_completed: row.7 == "Complete",
+            location_display: row.8,
+            event_begin: row.9,
+            distance_km: None,
+            geo_json: row.10,
         })
         .collect();
 
@@ -630,21 +628,19 @@ async fn search_text_only(fq: &FinderQuery, page: u32) -> Result<FinderSearchRes
 
     let results = rows
         .into_iter()
-        .map(|row| {
-            FinderResult {
-                slug: row.0,
-                entity_type: row.1,
-                title: row.2.unwrap_or_default(),
-                description_snippet: make_snippet(&row.3),
-                image: row.4,
-                goal: row.5,
-                task: row.6,
-                is_completed: row.7 == "Complete",
-                location_display: row.8,
-                event_begin: row.9,
-                distance_km: None,
-                geo_json: row.10,
-            }
+        .map(|row| FinderResult {
+            slug: row.0,
+            entity_type: row.1,
+            title: row.2.unwrap_or_default(),
+            description_snippet: make_snippet(&row.3),
+            image: row.4,
+            goal: row.5,
+            task: row.6,
+            is_completed: row.7 == "Complete",
+            location_display: row.8,
+            event_begin: row.9,
+            distance_km: None,
+            geo_json: row.10,
         })
         .collect();
 
@@ -811,21 +807,19 @@ async fn search_with_location(
 
     let results = rows
         .into_iter()
-        .map(|row| {
-            FinderResult {
-                slug: row.0,
-                entity_type: row.1,
-                title: row.2.unwrap_or_default(),
-                description_snippet: make_snippet(&row.3),
-                image: row.4,
-                goal: row.5,
-                task: row.6,
-                is_completed: row.7 == "Complete",
-                location_display: row.8,
-                event_begin: row.9,
-                distance_km: row.10,
-                geo_json: row.11,
-            }
+        .map(|row| FinderResult {
+            slug: row.0,
+            entity_type: row.1,
+            title: row.2.unwrap_or_default(),
+            description_snippet: make_snippet(&row.3),
+            image: row.4,
+            goal: row.5,
+            task: row.6,
+            is_completed: row.7 == "Complete",
+            location_display: row.8,
+            event_begin: row.9,
+            distance_km: row.10,
+            geo_json: row.11,
         })
         .collect();
 
@@ -998,21 +992,19 @@ async fn search_location_only(
 
     let results = rows
         .into_iter()
-        .map(|row| {
-            FinderResult {
-                slug: row.0,
-                entity_type: row.1,
-                title: row.2,
-                description_snippet: make_snippet(&row.3),
-                image: row.4,
-                goal: row.5,
-                task: row.6,
-                is_completed: row.7 == "Complete",
-                location_display: row.8,
-                event_begin: row.9,
-                distance_km: row.10,
-                geo_json: row.11,
-            }
+        .map(|row| FinderResult {
+            slug: row.0,
+            entity_type: row.1,
+            title: row.2,
+            description_snippet: make_snippet(&row.3),
+            image: row.4,
+            goal: row.5,
+            task: row.6,
+            is_completed: row.7 == "Complete",
+            location_display: row.8,
+            event_begin: row.9,
+            distance_km: row.10,
+            geo_json: row.11,
         })
         .collect();
 

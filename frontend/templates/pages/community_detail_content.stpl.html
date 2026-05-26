@@ -32,7 +32,11 @@
             <div class="community-count flex items-baseline md:gap-2 flex-col md:flex-row">
                 <span class="font-header-lg text-xl mb-0"><%= self.community.member_count %></span><span class="leading-[1] block md:inline"> members</span>
             </div>
-            <% if self.user_info.is_some() { %>
+            <% if self.community.exclusive { %>
+                <% if self.is_member { %>
+                    <span class="self-center italic">Member</span>
+                <% } %>
+            <% } else if self.user_info.is_some() { %>
                 <% if self.is_member { %>
                     <button class="btn btn-primary self-center" hx-post="/communities/<%= self.community.slug %>/leave" hx-target="#community-bar" hx-swap="outerHTML">Leave Community</button>
                 <% } else { %>
@@ -116,7 +120,11 @@
                     <p class="text-gray-500">Resources coming soon.</p>
                 </div>
                 <div class="tab-panel py-8" id="panel-5" role="tabpanel" aria-hidden="true">
-                    <p class="text-gray-500">Discussion forum coming soon.</p>
+                    <div hx-get="/communities/<%= self.community.slug %>/forum"
+                         hx-trigger="click once from:#tab-5"
+                         hx-swap="innerHTML">
+                        <p class="text-gray-500 text-center py-8">Loading discussions…</p>
+                    </div>
                 </div>
             </div>
 

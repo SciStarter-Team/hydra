@@ -113,6 +113,11 @@ async fn main() {
         "get_personal",
         forums::get_personal_forum
     ));
+    toplevel.spawn(handler!(
+        forum_mgmt,
+        "get_for_community",
+        forums::get_community_forum
+    ));
 
     // Forum category management endpoints
     let categories = service.group("forum.categories");

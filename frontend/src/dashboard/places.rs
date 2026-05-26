@@ -24,8 +24,7 @@ pub async fn page(
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Login required"))?;
 
     let places: Vec<UserPlace> =
-        common::service::request("user.places.list_by_user", user_info.user_id.to_string())
-            .await?;
+        common::service::request("user.places.list_by_user", user_info.user_id.to_string()).await?;
 
     render_places(user_info, places).await
 }

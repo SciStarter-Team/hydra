@@ -85,7 +85,7 @@
             <!-- Description will be filled by JavaScript based on action -->
         </div>
         
-        <form hx-post="/-forum/moderate" hx-target="#topic-<%= self.topic_id|disp %>" class="space-y-3">
+        <form hx-post="/-forum/moderate" hx-target="#topic-<%= self.topic_id|disp %>" hx-swap="outerHTML" class="space-y-3">
             <input type="hidden" name="target_type" value="<%= self.target_type %>">
             <input type="hidden" name="target_id" value="<%= self.target_id|disp %>">
             <input type="hidden" name="action" id="moderation-action-<%= self.target_id|disp %>">

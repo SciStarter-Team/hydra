@@ -2,12 +2,20 @@
 <div class="bg-white rounded-lg shadow border border-gray-200">
     <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
         <h3 class="text-lg font-medium text-gray-900">Edit Community</h3>
-        <a
-            href="/-admin/communities"
-            class="text-sm text-gray-600 hover:text-gray-900"
-        >
-            Back to Communities
-        </a>
+        <div class="flex items-center gap-4">
+            <a
+                href="/-admin/communities/<%= self.item.slug %>/members"
+                class="text-sm text-indigo-600 hover:text-indigo-900"
+            >
+                Manage Members (<%= self.item.member_count %>)
+            </a>
+            <a
+                href="/-admin/communities"
+                class="text-sm text-gray-600 hover:text-gray-900"
+            >
+                Back to Communities
+            </a>
+        </div>
     </div>
 
     <div class="p-6">
@@ -215,6 +223,20 @@
                             class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
                         >
                         <span class="ml-2 text-sm text-gray-700">Active</span>
+                    </label>
+                </div>
+
+                <!-- Exclusive -->
+                <div>
+                    <label class="flex items-center">
+                        <input
+                            type="checkbox"
+                            name="exclusive"
+                            value="1"
+                            <% if self.item.exclusive { %>checked<% } %>
+                            class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                        >
+                        <span class="ml-2 text-sm text-gray-700">Exclusive (members can only be added by admins)</span>
                     </label>
                 </div>
             </div>

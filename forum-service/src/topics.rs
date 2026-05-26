@@ -55,6 +55,23 @@ pub async fn create_topic(req: &Request) -> Result<TopicInfo> {
     // The suggest_similar_topics function is still available for UI to show suggestions
     let db = db();
 
+    // Personal forums must only be written via forum.messaging.*; reject here as
+    // defense-in-depth in case a future caller forgets the frontend-side check.
+    let forum_id_lookup = message.forum_id.to_string();
+    let forum_row = sqlx::query!(
+        r#"SELECT "slug" FROM "forums" WHERE "forum_id" = ?"#,
+        forum_id_lookup
+    )
+    .fetch_optional(db)
+    .await?;
+    if let Some(row) = forum_row {
+        if common::message::forum::is_personal_forum_slug(&row.slug) {
+            return Err(anyhow::anyhow!(
+                "Personal forums can only be written to via direct messages"
+            ));
+        }
+    }
+
     // Check content for bad words
     let filter_result: ContentFilterResult = crate::content_filter::check_content_internal(
         &format!("{}\n{}", message.title, message.content),
@@ -157,9 +174,24 @@ async fn get_topic_internal(topic_id: Ulid) -> Result<TopicInfo> {
     .fetch_all(db)
     .await?;
 
-    // Get user info from user-service
-    let author_info: BasicInfo =
-        request("user.basic_info.by_user_id", row.author_id.clone()).await?;
+    // Get user info from user-service; tolerate missing author so an
+    // orphaned topic doesn't 500 every caller that fetches it.
+    let author_info: Option<BasicInfo> =
+        request("user.basic_info.by_user_id", row.author_id.clone())
+            .await
+            .ok();
+    let author_id = author_info
+        .as_ref()
+        .map(|info| info.user_id)
+        .unwrap_or_else(|| row.author_id.as_ulid().unwrap_or_default());
+    let author_handle = author_info
+        .as_ref()
+        .map(|info| info.display_handle().to_string())
+        .unwrap_or_else(|| "Unknown".to_string());
+    let author_is_public = author_info
+        .as_ref()
+        .map(|info| !info.is_private())
+        .unwrap_or(false);
 
     Ok(TopicInfo {
         topic_id,
@@ -169,9 +201,9 @@ async fn get_topic_internal(topic_id: Ulid) -> Result<TopicInfo> {
             .as_ulid()?,
         title: row.title,
         content: row.content,
-        author_id: author_info.user_id,
-        author_handle: author_info.display_handle().to_string(),
-        author_is_public: !author_info.is_private(),
+        author_id,
+        author_handle,
+        author_is_public,
         created_at: TimeString::try_from(row.created_at)?,
         updated_at: row
             .updated_at
@@ -200,6 +232,13 @@ pub async fn list_topics(req: &Request) -> Result<Vec<TopicInfo>> {
                   is_pinned, is_locked, is_deleted, is_flagged
            FROM topics WHERE is_deleted = 0"#,
     );
+
+    // Restrict to a specific forum when one is requested
+    let forum_id_str = query.forum_id.map(|id| id.to_string());
+    if let Some(forum_id) = &forum_id_str {
+        query_builder.push(" AND forum_id = ");
+        query_builder.push_bind(forum_id);
+    }
 
     // Add category filter if specified
     if let Some(category) = &query.category {
@@ -267,12 +306,27 @@ pub async fn list_topics(req: &Request) -> Result<Vec<TopicInfo>> {
         .fetch_one(db)
         .await?;
 
-        let author_id: String = row.get("author_id");
-        let author_id = author_id.as_ulid()?;
+        let author_id_str: String = row.get("author_id");
+        let author_id = author_id_str.as_ulid()?;
 
-        // Get user info from user-service
-        let author_info: BasicInfo =
-            request("user.basic_info.by_user_id", author_id.to_string()).await?;
+        // Get user info from user-service; tolerate missing authors so an
+        // orphaned topic doesn't 500 the whole list.
+        let author_info: Option<BasicInfo> =
+            request("user.basic_info.by_user_id", author_id.to_string())
+                .await
+                .ok();
+        let resolved_author_id = author_info
+            .as_ref()
+            .map(|info| info.user_id)
+            .unwrap_or(author_id);
+        let author_handle = author_info
+            .as_ref()
+            .map(|info| info.display_handle().to_string())
+            .unwrap_or_else(|| "Unknown".to_string());
+        let author_is_public = author_info
+            .as_ref()
+            .map(|info| !info.is_private())
+            .unwrap_or(false);
 
         let forum_id: String = row.get("forum_id");
         let forum_id = forum_id.as_ulid()?;
@@ -282,9 +336,9 @@ pub async fn list_topics(req: &Request) -> Result<Vec<TopicInfo>> {
             forum_id,
             title: row.get("title"),
             content: row.get("content"),
-            author_id: author_info.user_id,
-            author_handle: author_info.display_handle().to_string(),
-            author_is_public: !author_info.is_private(),
+            author_id: resolved_author_id,
+            author_handle,
+            author_is_public,
             created_at: TimeString::try_from(row.get::<String, _>("created_at"))?,
             updated_at: row
                 .get::<Option<String>, _>("updated_at")

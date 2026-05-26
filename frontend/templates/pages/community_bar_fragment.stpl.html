@@ -3,7 +3,11 @@
         <span class="font-semibold"><%= self.community.member_count %> Members</span>
     </div>
     <div>
-        <% if self.is_logged_in { %>
+        <% if self.community.exclusive { %>
+            <% if self.is_member { %>
+                <span class="italic">Member</span>
+            <% } %>
+        <% } else if self.is_logged_in { %>
             <% if self.is_member { %>
                 <button class="btn btn-accent1" hx-post="/communities/<%= self.community.slug %>/leave" hx-target="#community-bar" hx-swap="outerHTML">Leave Community</button>
             <% } else { %>

@@ -187,7 +187,7 @@ async fn upload_tracked_file(
             }
         }
         Err(e) => {
-            error!("Failed to upload tracked file: {}", e);
+            error!("Failed to upload tracked file: {:#}", e);
             Err(poem::Error::from_string(
                 "Upload failed",
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -255,7 +255,7 @@ async fn upload_untracked_file(
                             ));
                     }
                     Err(e) => {
-                        error!("Failed to upload untracked file: {}", e);
+                        error!("Failed to upload untracked file: {:#}", e);
                         return Err(poem::Error::from_string(
                             "Upload failed",
                             StatusCode::INTERNAL_SERVER_ERROR,

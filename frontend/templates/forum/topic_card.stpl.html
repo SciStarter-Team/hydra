@@ -1,0 +1,44 @@
+<div id="topic-<%= self.topic.topic_id|disp %>" class="block px-3 py-4 hover:bg-gray-50 cursor-pointer transition-colors"
+     hx-get="/-forum/topic/<%= self.topic.topic_id|disp %>/page?page=0"
+     hx-trigger="click"
+     hx-target="#topic-card-<%= self.topic.topic_id|disp %>"
+     hx-swap="innerHTML">
+  <div class="flex items-start gap-3">
+    <div class="shrink-0 w-9 h-9 rounded-full bg-primary-dark text-white flex items-center justify-center font-semibold uppercase">
+      <%= self.topic.author_handle.chars().next().map(|c| c.to_string()).unwrap_or_else(|| "?".to_string()) %>
+    </div>
+    <div class="grow min-w-0">
+      <div class="flex items-center gap-2 flex-wrap">
+        <% if self.topic.is_pinned { %>
+          <span class="text-xs text-primary-dark font-semibold uppercase tracking-wide">Pinned</span>
+        <% } %>
+        <% if self.topic.is_locked { %>
+          <span class="text-xs text-primary font-semibold uppercase tracking-wide">Locked</span>
+        <% } %>
+        <h3 class="text-base font-semibold text-primary-dark truncate"><%= self.topic.title %></h3>
+      </div>
+      <p class="text-sm text-primary line-clamp-2 mt-0.5">
+        <%= self.topic.content.chars().take(180).collect::<String>() %><% if self.topic.content.chars().count() > 180 { %>…<% } %>
+      </p>
+      <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-primary">
+        <% if self.topic.author_is_public { %>
+          <a href="/-forum/user/<%= self.topic.author_id|disp %>/profile" class="font-medium hover:underline text-primary-dark" hx-on:click="event.stopPropagation()"><%= self.topic.author_handle %></a>
+        <% } else { %>
+          <span class="font-medium text-primary-dark"><%= self.topic.author_handle %></span>
+        <% } %>
+        <span class="text-gray-300">·</span>
+        <span><%- local_time(&self.topic.created_at, TimeFormat::ShortDate) %></span>
+        <span class="text-gray-300">·</span>
+        <span><%= self.topic.post_count %> <%= if self.topic.post_count == 1 { "reply" } else { "replies" } %></span>
+        <% if let Some(category) = &self.topic.category { %>
+          <% if !category.trim().is_empty() { %>
+            <span class="text-gray-300">·</span>
+            <span class="px-2 py-0.5 bg-primary-dark/10 text-primary-dark rounded-full">
+              <%= if category.len() > 20 { format!("{}…", &category[..17]) } else { category.clone() } %>
+            </span>
+          <% } %>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</div>

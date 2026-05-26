@@ -1,79 +1,88 @@
-<div id="topic-<%= self.topic.topic_id|disp %>" class="max-w-4xl mx-auto bg-white shadow-xs rounded-lg">
-  <div class="p-6 border-b border-gray-200">
-    <h4 class="text-2xl font-bold text-gray-900 mb-3 flex items-center gap-2">
+<div id="topic-<%= self.topic.topic_id|disp %>" class="ss-forum-topic-expanded bg-white border border-linework rounded-lg my-3">
+  <div class="px-4 py-3 border-b border-linework flex items-center justify-between">
+    <button type="button"
+            class="text-sm text-primary hover:text-primary-dark hover:underline flex items-center gap-1"
+            hx-get="/-forum/topic/<%= self.topic.topic_id|disp %>/card"
+            hx-target="#topic-card-<%= self.topic.topic_id|disp %>"
+            hx-swap="innerHTML">
+      ← Back to discussions
+    </button>
+    <div class="flex items-center gap-2">
       <% if self.topic.is_pinned { %>
-        <span class="text-yellow-600" title="Pinned">📌</span>
+        <span class="text-xs text-primary-dark font-semibold uppercase tracking-wide">Pinned</span>
       <% } %>
       <% if self.topic.is_locked { %>
-        <span class="text-gray-600" title="Locked">🔒</span>
+        <span class="text-xs text-primary font-semibold uppercase tracking-wide">Locked</span>
       <% } %>
-      <span class="flex-1"><%= self.topic.title %></span>
-    </h4>
-    
-    <div class="flex flex-wrap items-center gap-2 text-sm text-gray-600 mb-4">
-      <span>By</span>
+    </div>
+  </div>
+
+  <article class="px-4 py-4">
+    <h3 class="text-xl font-bold text-primary-dark mb-2"><%= self.topic.title %></h3>
+
+    <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-primary mb-3">
       <% if self.topic.author_is_public { %>
-        <a href="/-forum/user/<%= self.topic.author_id|disp %>/profile" class="text-blue-600 hover:text-blue-800 font-medium"><%= self.topic.author_handle %></a>
+        <a href="/-forum/user/<%= self.topic.author_id|disp %>/profile" class="font-medium text-primary-dark hover:underline"><%= self.topic.author_handle %></a>
       <% } else { %>
-        <span class="font-medium text-gray-700"><%= self.topic.author_handle %></span>
+        <span class="font-medium text-primary-dark"><%= self.topic.author_handle %></span>
       <% } %>
-      <span class="text-gray-400">•</span>
+      <span class="text-gray-300">·</span>
       <span><%- local_time(&self.topic.created_at, TimeFormat::DateTime) %></span>
       <% if let Some(updated) = &self.topic.updated_at { %>
-        <span class="text-gray-400">•</span>
-        <span>Updated: <%- local_time(updated, TimeFormat::DateTime) %></span>
+        <span class="text-gray-300">·</span>
+        <span>edited <%- local_time(updated, TimeFormat::ShortDate) %></span>
       <% } %>
-      <span class="text-gray-400">•</span>
-      <span class="font-medium"><%= self.topic.post_count %> posts</span>
-      
       <% if let Some(category) = &self.topic.category { %>
         <% if !category.trim().is_empty() { %>
-          <span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
-            <%= if category.is_empty() { category.clone() } else if category.len() > 20 { format!("{}...", &category[..17]) } else { category.clone() } %>
+          <span class="text-gray-300">·</span>
+          <span class="px-2 py-0.5 bg-primary-dark/10 text-primary-dark rounded-full">
+            <%= if category.len() > 20 { format!("{}…", &category[..17]) } else { category.clone() } %>
           </span>
         <% } %>
       <% } %>
     </div>
-    
+
     <% if !self.topic.tags.is_empty() { %>
-      <div class="flex flex-wrap gap-1 mb-4">
+      <div class="flex flex-wrap gap-1 mb-3">
         <% for tag in &self.topic.tags { %>
-          <span class="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
-            <%= if tag.len() > 15 { format!("{}...", &tag[..12]) } else { tag.clone() } %>
+          <span class="px-2 py-0.5 bg-gray-100 text-primary text-xs rounded-full">
+            #<%= if tag.len() > 15 { format!("{}…", &tag[..12]) } else { tag.clone() } %>
           </span>
         <% } %>
       </div>
     <% } %>
 
-    <div class="text-gray-700 leading-relaxed">
+    <div class="text-primary leading-relaxed space-y-2">
       <% for para in self.topic.paragraphs() { %>
         <p><%= para %></p>
       <% } %>
     </div>
-  </div>
-  
-  <% if self.can_moderate { %>
-    <%+ ModerationActions { 
-        target_type: "topic",
-        target_id: &self.topic.topic_id.to_string(),
-        topic_id: &self.topic.topic_id.to_string(),
-        is_pinned: self.topic.is_pinned,
-        is_locked: self.topic.is_locked,
-        is_flagged: self.topic.is_flagged,
-    } %>
-  <% } %>
 
-  <div class="p-6">
-    <h5 class="text-xl font-semibold text-gray-900 mb-4">Replies (<%= self.topic.post_count %>)</h5>
-    
-    <% if self.threaded_posts.is_empty() { %>
-      <div class="text-center py-8 bg-gray-50 rounded-lg">
-        <p class="text-gray-600">No replies yet.</p>
+    <% if self.can_moderate { %>
+      <div class="mt-3 pt-3 border-t border-linework">
+        <%+ ModerationActions {
+            target_type: "topic",
+            target_id: &self.topic.topic_id.to_string(),
+            topic_id: &self.topic.topic_id.to_string(),
+            is_pinned: self.topic.is_pinned,
+            is_locked: self.topic.is_locked,
+            is_flagged: self.topic.is_flagged,
+        } %>
       </div>
+    <% } %>
+  </article>
+
+  <section class="px-4 py-4 border-t border-linework">
+    <h4 class="text-sm font-semibold text-primary-dark mb-3">
+      <%= self.topic.post_count %> <%= if self.topic.post_count == 1 { "reply" } else { "replies" } %>
+    </h4>
+
+    <% if self.threaded_posts.is_empty() { %>
+      <p class="text-sm text-primary italic">No replies yet. Be the first to respond.</p>
     <% } else { %>
-      <div class="space-y-4">
+      <div class="space-y-3">
         <% for thread in &self.threaded_posts { %>
-          <%+ ThreadedPostDisplay { 
+          <%+ ThreadedPostDisplay {
               post: thread,
               topic_id: self.topic.topic_id,
               can_reply: self.can_reply && !self.topic.is_locked,
@@ -83,53 +92,55 @@
       </div>
     <% } %>
 
-    <!-- Post pagination -->
-    <div class="mt-8 flex items-center justify-center gap-4">
-      <% if self.has_prev_page { %>
-        <button hx-get="/-forum/topic/<%= self.topic.topic_id|disp %>/page?page=<%= self.page - 1 %>&per_page=<%= self.per_page %>" 
-                hx-target="#topic-<%= self.topic.topic_id|disp %>"
-                class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors">
-          ← Previous
-        </button>
-      <% } %>
-      
-      <% if self.page > 0 || self.has_next_page { %>
-        <span class="px-4 py-2 bg-blue-100 text-blue-800 rounded-md font-medium">
-          Page <%= self.page + 1 %>
-        </span>
-      <% } %>
-      
-      <% if self.has_next_page { %>
-        <button hx-get="/-forum/topic/<%= self.topic.topic_id|disp %>/page?page=<%= self.page + 1 %>&per_page=<%= self.per_page %>" 
-                hx-target="#topic-<%= self.topic.topic_id|disp %>"
-                class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors">
-          Next →
-        </button>
-      <% } %>
-    </div>
-
-    <% if self.can_reply && !self.topic.is_locked { %>
-      <div class="reply-form-topic mt-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-        <h6 class="text-lg font-medium text-blue-900 mb-3">Reply to this topic</h6>
-        <form hx-post="/-forum/post/new" hx-target="#topic-<%= self.topic.topic_id|disp %>" hx-swap="outerHTML" class="space-y-3">
-          <input type="hidden" name="topic_id" value="<%= self.topic.topic_id|disp %>">
-          
-          <div>
-            <label for="content" class="block text-sm font-medium text-gray-700 mb-1">Your reply:</label>
-            <textarea name="content" rows="3" required 
-                      class="bg-white w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent"></textarea>
-          </div>
-          
-          <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors">
-            Post Reply
-            <span class="htmx-indicator ml-2">...</span>
+    <% if self.has_prev_page || self.has_next_page { %>
+      <div class="mt-4 flex items-center justify-center gap-3 text-sm">
+        <% if self.has_prev_page { %>
+          <button hx-get="/-forum/topic/<%= self.topic.topic_id|disp %>/page?page=<%= self.page - 1 %>&per_page=<%= self.per_page %>"
+                  hx-target="#topic-<%= self.topic.topic_id|disp %>"
+                  hx-swap="outerHTML"
+                  class="px-3 py-1 border border-linework rounded-md text-primary hover:bg-gray-50">
+            ← Newer
           </button>
-        </form>
-      </div>
-    <% } else if self.topic.is_locked { %>
-      <div class="mt-8 p-4 bg-gray-100 border border-gray-300 rounded-lg text-center">
-        <p class="text-gray-600 italic">This topic is locked and no longer accepts new replies.</p>
+        <% } %>
+        <span class="text-primary">Page <%= self.page + 1 %></span>
+        <% if self.has_next_page { %>
+          <button hx-get="/-forum/topic/<%= self.topic.topic_id|disp %>/page?page=<%= self.page + 1 %>&per_page=<%= self.per_page %>"
+                  hx-target="#topic-<%= self.topic.topic_id|disp %>"
+                  hx-swap="outerHTML"
+                  class="px-3 py-1 border border-linework rounded-md text-primary hover:bg-gray-50">
+            Older →
+          </button>
+        <% } %>
       </div>
     <% } %>
-  </div>
+
+    <% if self.can_reply && !self.topic.is_locked { %>
+      <form id="reply-form-topic"
+            hx-post="/-forum/post/new"
+            hx-target="#topic-<%= self.topic.topic_id|disp %>"
+            hx-swap="outerHTML"
+            class="mt-5 pt-4 border-t border-linework space-y-2">
+        <input type="hidden" name="topic_id" value="<%= self.topic.topic_id|disp %>">
+        <textarea name="content" rows="3" required
+                  placeholder="Write a reply…"
+                  class="bg-white w-full px-3 py-2 border border-linework rounded-md focus:outline-hidden focus:ring-2 focus:ring-primary-dark/40"></textarea>
+        <div class="flex items-center gap-2">
+          <button type="submit" class="btn btn-primary px-4 py-2 text-sm">
+            Reply
+            <span class="htmx-indicator ml-1">…</span>
+          </button>
+        </div>
+      </form>
+    <% } else if self.topic.is_locked { %>
+      <p class="mt-4 text-sm text-primary italic text-center">This topic is locked and no longer accepts new replies.</p>
+    <% } else if self.user_info.is_none() { %>
+      <p class="mt-4 text-sm text-primary text-center">
+        <a href="/login" class="text-primary-dark font-medium hover:underline">Log in</a> to reply.
+      </p>
+    <% } else if let Some(community_slug) = &self.community_slug { %>
+      <p class="mt-4 text-sm text-primary text-center">
+        <a href="/communities/<%= community_slug %>" class="text-primary-dark font-medium hover:underline">Join this community</a> to reply.
+      </p>
+    <% } %>
+  </section>
 </div>

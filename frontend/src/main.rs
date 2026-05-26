@@ -460,8 +460,7 @@ async fn main() -> Result<(), Error> {
         tokio::spawn(project::investigator::ProjectInvestigator::peering_task());
     let _entity_list_updates = tokio::spawn(entity_list::EntityList::peering_task());
     let _entity_list_entry_updates = tokio::spawn(entity_list::EntityListEntry::peering_task());
-    let _entity_list_viewer_updates =
-        tokio::spawn(entity_list::EntityListViewer::peering_task());
+    let _entity_list_viewer_updates = tokio::spawn(entity_list::EntityListViewer::peering_task());
     let _go_url_updates = tokio::spawn(gourl::GoUrl::peering_task());
     let _project_rating_updates = tokio::spawn(rating::ProjectRating::peering_task());
     let _project_review_updates = tokio::spawn(review::ProjectReview::peering_task());
@@ -2110,11 +2109,7 @@ mod sync {
 
             let client = reqwest::Client::new();
 
-            tracing::info!(
-                "Retrieving go URLs since {} {}...",
-                &last_update,
-                last_id
-            );
+            tracing::info!("Retrieving go URLs since {} {}...", &last_update, last_id);
 
             let records: Vec<GolinkRecordData> = match client
                 .get("https://scistarter.org/staff/sync/golink_records")

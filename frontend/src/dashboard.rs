@@ -9,9 +9,20 @@ pub mod places;
 pub mod profile;
 pub mod settings;
 
-use poem::{Endpoint, Route, get, post};
+use std::time::Duration;
+
+use poem::{Endpoint, EndpointExt, Route, get, post};
+
+use crate::middleware::rate_limit::{RateLimitConfig, RateLimitMiddleware};
 
 pub fn routes() -> impl Endpoint {
+    // Per-IP write limits for direct messaging — the legitimate way to put a
+    // topic in someone else's inbox. Conservative to deter mass DM spam.
+    let send_limit = RateLimitConfig::new(10, Duration::from_secs(300))
+        .with_error_message("Too many messages. Please wait a few minutes before sending again.");
+    let reply_limit = RateLimitConfig::new(20, Duration::from_secs(300))
+        .with_error_message("Too many replies. Please wait a few minutes before replying again.");
+
     Route::new()
         .at("/", get(main::page))
         .at("/owned", get(owned::page))
@@ -32,9 +43,15 @@ pub fn routes() -> impl Endpoint {
         .at("/bookmarks", get(bookmarks::page))
         .at("/messages", get(messages::page))
         .at("/messages/compose", get(messages::compose))
-        .at("/messages/send", post(messages::send))
+        .at(
+            "/messages/send",
+            post(messages::send).with(RateLimitMiddleware::new(send_limit)),
+        )
         .at("/messages/:topic_id", get(messages::thread))
-        .at("/messages/:topic_id/reply", post(messages::reply))
+        .at(
+            "/messages/:topic_id/reply",
+            post(messages::reply).with(RateLimitMiddleware::new(reply_limit)),
+        )
         .at("/messages/:topic_id/discard", post(messages::discard))
         .at("/profile", get(profile::page))
         .at("/interests", get(interests::page).post(interests::save))

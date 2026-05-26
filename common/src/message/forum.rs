@@ -240,6 +240,22 @@ pub struct GetForumCategories {
     pub active_only: Option<bool>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct GetCommunityForum {
+    pub community_id: Ulid,
+    pub community_slug: String,
+    pub community_name: String,
+    pub user_id: Option<Ulid>,
+}
+
+/// Personal forums (the DM inbox backing store) carry the `user-{user_id}`
+/// slug convention. They must only be written to via `forum.messaging.*`
+/// endpoints, never the generic topic-creation flow — otherwise any
+/// authenticated user could spam any inbox by forging the slug field.
+pub fn is_personal_forum_slug(slug: &str) -> bool {
+    slug.starts_with("user-")
+}
+
 // ============================================================================
 // Messaging (personal forum-based)
 // ============================================================================
@@ -282,7 +298,10 @@ pub struct InboxQuery {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct InboxResponse {
     pub conversations: Vec<ConversationSummary>,
-    pub total: i64,
+    /// True if there is at least one more conversation past this page,
+    /// detected by peek-ahead. Reliable even when orphan filtering trims
+    /// the visible page below `limit`.
+    pub has_next_page: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

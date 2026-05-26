@@ -2,9 +2,7 @@ use std::sync::Arc;
 
 use anyhow::Error;
 use common::message::dashboard::PublicProfile;
-use common::message::user::{
-    BasicInfo, UserLegacyIdLookupRequest, UserLegacyIdLookupResponse,
-};
+use common::message::user::{BasicInfo, UserLegacyIdLookupRequest, UserLegacyIdLookupResponse};
 use poem::{
     IntoResponse, Response, handler,
     session::Session,
@@ -62,11 +60,11 @@ pub async fn legacy_profile_redirect(
         }
 
         if let Ok(legacy_id) = for_id.parse::<i32>() {
-            let response: UserLegacyIdLookupResponse =
-                common::service::request("user.legacy_id.lookup", UserLegacyIdLookupRequest {
-                    legacy_id,
-                })
-                .await?;
+            let response: UserLegacyIdLookupResponse = common::service::request(
+                "user.legacy_id.lookup",
+                UserLegacyIdLookupRequest { legacy_id },
+            )
+            .await?;
             if let Some(user_id) = response.user_id {
                 return Ok(Redirect::see_other(format!("/profile/{}", user_id)).into_response());
             }

@@ -124,7 +124,8 @@ async fn render_overview(
     let joined_count = joined.len() as i64;
     let bookmarked_count = bookmarked.len() as i64;
 
-    let owned_cards: Vec<EntityCardModel> = owned.iter().map(EntityCardModel::from_summary).collect();
+    let owned_cards: Vec<EntityCardModel> =
+        owned.iter().map(EntityCardModel::from_summary).collect();
     let joined_cards: Vec<EntityCardModel> =
         joined.iter().map(EntityCardModel::from_summary).collect();
     let bookmarked_cards: Vec<EntityCardModel> = bookmarked

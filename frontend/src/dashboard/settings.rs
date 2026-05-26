@@ -32,17 +32,11 @@ pub async fn page(
 ) -> Result<Response, Error> {
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Login required"))?;
 
-    let profile: UserProfile = common::service::request(
-        "user.profile.get",
-        user_info.user_id.to_string(),
-    )
-    .await?;
+    let profile: UserProfile =
+        common::service::request("user.profile.get", user_info.user_id.to_string()).await?;
 
-    let ambassador: Option<AmbassadorApplication> = common::service::request(
-        "user.ambassador.get",
-        user_info.user_id.to_string(),
-    )
-    .await?;
+    let ambassador: Option<AmbassadorApplication> =
+        common::service::request("user.ambassador.get", user_info.user_id.to_string()).await?;
 
     let mut available_tabs = vec![SettingsTab::General];
     if ambassador.is_some() {
@@ -60,7 +54,15 @@ pub async fn page(
     };
     let saved = matches!(query.saved.as_deref(), Some("1"));
 
-    render_settings(user_info, profile, ambassador, available_tabs, active_tab, saved).await
+    render_settings(
+        user_info,
+        profile,
+        ambassador,
+        available_tabs,
+        active_tab,
+        saved,
+    )
+    .await
 }
 
 #[derive(Debug, Deserialize)]

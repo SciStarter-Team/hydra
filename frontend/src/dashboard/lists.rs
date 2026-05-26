@@ -193,12 +193,10 @@ pub async fn add_entry(
 
     let slug = form.entity_slug.trim();
     if !slug.is_empty() {
-        let exists = sqlx::query_scalar!(
-            r#"SELECT slug FROM entities WHERE slug = ? LIMIT 1"#,
-            slug
-        )
-        .fetch_optional(db())
-        .await?;
+        let exists =
+            sqlx::query_scalar!(r#"SELECT slug FROM entities WHERE slug = ? LIMIT 1"#, slug)
+                .fetch_optional(db())
+                .await?;
 
         if exists.is_some() {
             let entry = EntityListEntry {
@@ -346,10 +344,7 @@ async fn role_for(list_id: &Ulid, user_id: Ulid) -> Result<ListRole, Error> {
     Ok(ListRole::for_user(&list, user_id, viewer.as_ref()))
 }
 
-async fn render_lists(
-    user_info: Arc<BasicInfo>,
-    lists: Vec<ListModel>,
-) -> Result<Response, Error> {
+async fn render_lists(user_info: Arc<BasicInfo>, lists: Vec<ListModel>) -> Result<Response, Error> {
     let content = ListsContent { lists };
 
     let layout = StandardLayout::new("/dashboard/lists", content)
@@ -422,8 +417,7 @@ async fn lookup_handle(user_id: Ulid) -> String {
 
     let result: Result<PublicProfile, _> =
         common::service::request("user.profile.public_get", user_id.to_string()).await;
-    match result
-    {
+    match result {
         Ok(profile) if !profile.handle.is_empty() => profile.handle,
         _ => user_id.to_string(),
     }

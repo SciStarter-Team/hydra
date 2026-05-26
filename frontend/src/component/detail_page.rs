@@ -546,10 +546,10 @@ impl DetailPage {
             TimeString::try_from(last_edited_str).ok()
         };
 
-        let (description_html, description_delta) = content_to_html(&row.description)
-            .unwrap_or_else(|_| (row.description.clone(), None));
-        let (how_to_join_html, how_to_join_delta) = content_to_html(&row.how_to_join)
-            .unwrap_or_else(|_| (row.how_to_join.clone(), None));
+        let (description_html, description_delta) =
+            content_to_html(&row.description).unwrap_or_else(|_| (row.description.clone(), None));
+        let (how_to_join_html, how_to_join_delta) =
+            content_to_html(&row.how_to_join).unwrap_or_else(|_| (row.how_to_join.clone(), None));
 
         // Save back normalized Delta so future renders skip conversion
         if description_delta.is_some() || how_to_join_delta.is_some() {
@@ -763,10 +763,10 @@ impl DetailPage {
         let status: DetailPageStatus = row.status.into();
         let event_type_display = Some(row.event_type.to_string());
 
-        let (description_html, description_delta) = content_to_html(&row.description)
-            .unwrap_or_else(|_| (row.description.clone(), None));
-        let (how_to_join_html, how_to_join_delta) = content_to_html(&row.how_to_join)
-            .unwrap_or_else(|_| (row.how_to_join.clone(), None));
+        let (description_html, description_delta) =
+            content_to_html(&row.description).unwrap_or_else(|_| (row.description.clone(), None));
+        let (how_to_join_html, how_to_join_delta) =
+            content_to_html(&row.how_to_join).unwrap_or_else(|_| (row.how_to_join.clone(), None));
 
         // Save back normalized Delta so future renders skip conversion
         if description_delta.is_some() || how_to_join_delta.is_some() {
