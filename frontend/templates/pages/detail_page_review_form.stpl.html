@@ -1,4 +1,8 @@
 <form hx-post="/-detail/<%= &self.target_id %>/review" hx-swap="none" class="mb-8">
   <textarea name="text" rows="3" placeholder="Write your review..." class="w-full border border-linework rounded-sm p-3 text-sm mb-2" required></textarea>
+  <label class="flex items-center gap-2 text-sm mb-2">
+    <input type="checkbox" name="private" value="true">
+    Keep this review private
+  </label>
   <button type="submit" class="btn btn-primary btn-thin">Submit Review</button>
 </form>

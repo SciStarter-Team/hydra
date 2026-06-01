@@ -5,8 +5,9 @@ use anyhow::Error;
 use common::{
     message::{
         log::{
-            LastEditedRequest, LastEditedResponse, ProjectMemberCountRequest,
-            ProjectMemberCountResponse,
+            LastEditedRequest, LastEditedResponse, ProjectLikesRequest, ProjectLikesResponse,
+            ProjectMemberCountRequest, ProjectMemberCountResponse, ProjectReviewsRequest,
+            ProjectReviewsResponse, RatingSetRequest, ReviewEntry, ReviewSetRequest,
         },
         user::{
             BasicInfo, BookmarkCheckRequest, BookmarkCheckResponse, BookmarkCreateRequest,
@@ -33,8 +34,6 @@ use crate::local_time::{TimeFormat, local_time};
 use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
 use crate::project::ProjectStatus;
-use crate::rating::ProjectRating;
-use crate::review::ProjectReview;
 use common::quill::content_to_html;
 
 // ---------------------------------------------------------------------------
@@ -189,6 +188,103 @@ impl LazyCached for LastEdited {
     }
 }
 
+/// How long the frontend holds a cached per-project like count / review list
+/// before a background refresh. The log-service stays authoritative; this just
+/// reduces read traffic so the frontends scale horizontally.
+const ENGAGEMENT_CACHE_MAX_AGE: Duration = Duration::from_secs(600);
+
+/// Per-project like count, cached on each frontend instance.
+#[derive(Clone)]
+struct LikeCount {
+    target_id: Ulid,
+}
+
+impl LazyCached for LikeCount {
+    fn cache_key(&self) -> String {
+        format!("like_count:{}", self.target_id)
+    }
+
+    fn max_age(&self) -> Duration {
+        ENGAGEMENT_CACHE_MAX_AGE
+    }
+
+    async fn fetch_fresh(&self) -> Result<String, Error> {
+        let resp: ProjectLikesResponse = request(
+            "log.project_likes",
+            ProjectLikesRequest {
+                project_id: self.target_id.to_string(),
+                user_id: None,
+            },
+        )
+        .await?;
+        Ok(resp.count.to_string())
+    }
+}
+
+/// The cached like count for a target (project or event).
+pub(crate) async fn cached_like_count(target_id: Ulid) -> Result<i64, Error> {
+    Ok(get_cached(&LikeCount { target_id })
+        .await?
+        .parse()
+        .unwrap_or(0))
+}
+
+/// Whether a specific user has liked a target. Always fetched live (per-user
+/// state is not shared-cacheable), so only costs a request for logged-in users.
+pub(crate) async fn user_has_liked(target_id: Ulid, user_id: Ulid) -> Result<bool, Error> {
+    let resp: ProjectLikesResponse = request(
+        "log.project_likes",
+        ProjectLikesRequest {
+            project_id: target_id.to_string(),
+            user_id: Some(user_id.to_string()),
+        },
+    )
+    .await?;
+    Ok(resp.liked)
+}
+
+/// Per-project public reviews (list + count), cached on each frontend instance.
+/// We cache the largest list any caller needs and let callers take a prefix.
+#[derive(Clone)]
+struct ReviewsCache {
+    target_id: Ulid,
+}
+
+impl LazyCached for ReviewsCache {
+    fn cache_key(&self) -> String {
+        format!("project_reviews:{}", self.target_id)
+    }
+
+    fn max_age(&self) -> Duration {
+        ENGAGEMENT_CACHE_MAX_AGE
+    }
+
+    async fn fetch_fresh(&self) -> Result<String, Error> {
+        let resp: ProjectReviewsResponse = request(
+            "log.project_reviews",
+            ProjectReviewsRequest {
+                project_id: self.target_id.to_string(),
+                limit: 10,
+            },
+        )
+        .await?;
+        Ok(serde_json::to_string(&resp)?)
+    }
+}
+
+/// The cached public reviews (list + total public count) for a target.
+pub(crate) async fn cached_project_reviews(
+    target_id: Ulid,
+) -> Result<ProjectReviewsResponse, Error> {
+    let json = get_cached(&ReviewsCache { target_id }).await?;
+    Ok(
+        serde_json::from_str(&json).unwrap_or(ProjectReviewsResponse {
+            reviews: Vec::new(),
+            count: 0,
+        }),
+    )
+}
+
 // ---------------------------------------------------------------------------
 // Unprepared component
 // ---------------------------------------------------------------------------
@@ -283,6 +379,30 @@ pub struct DetailPageContent {
 
     // Additional editable fields (populated only when can_edit)
     pub additional_fields: Vec<super::detail_page_edit::AdditionalField>,
+
+    // Pre-rendered per-field display partials, keyed by field_type. The full page
+    // renders each editable field through the same partial as an inline save, so
+    // a saved field always matches a full page render.
+    pub editable_fields: HashMap<String, super::detail_page_edit::FieldDisplay>,
+}
+
+impl DetailPageContent {
+    /// The display partial for an editable field, for inclusion via `<%+ %>`.
+    pub fn field(&self, field_type: &str) -> super::detail_page_edit::FieldDisplay {
+        self.editable_fields
+            .get(field_type)
+            .cloned()
+            .unwrap_or_else(|| {
+                super::detail_page_edit::FieldDisplay::build(
+                    self.target_id.clone(),
+                    field_type,
+                    String::new(),
+                    self.can_edit,
+                    String::new(),
+                    true,
+                )
+            })
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -409,10 +529,9 @@ impl DetailPage {
         let (
             tags,
             audiences,
-            like_count,
-            user_engagement,
-            reviews,
-            review_count,
+            likes,
+            engagement,
+            reviews_and_count,
             member_count,
             last_edited_str,
             edit_permission,
@@ -437,13 +556,20 @@ impl DetailPage {
                 .await
                 .map_err(Error::from)
             },
-            // Like count
-            ProjectRating::count_for_project(project_id),
-            // User-specific engagement (liked, saved, joined)
+            // Likes: count is cached per-project; per-user liked is fetched live.
+            async {
+                let count = cached_like_count(project_id).await?;
+                let liked = if let Some(ref user) = user_info_clone {
+                    user_has_liked(project_id, user.user_id).await?
+                } else {
+                    false
+                };
+                Ok::<_, Error>((count, liked))
+            },
+            // User-specific engagement (saved, joined)
             async {
                 if let Some(ref user) = user_info_clone {
-                    let (liked, saved, joined) = tokio::try_join!(
-                        ProjectRating::has_rated(project_id, user.user_id),
+                    let (saved, joined) = tokio::try_join!(
                         async {
                             let resp: BookmarkCheckResponse = request(
                                 "user.bookmarks.check",
@@ -467,25 +593,16 @@ impl DetailPage {
                             Ok::<_, Error>(resp.has_joined)
                         },
                     )?;
-                    Ok((liked, saved, joined))
+                    Ok((saved, joined))
                 } else {
-                    Ok((false, false, false))
+                    Ok((false, false))
                 }
             },
-            // Reviews
+            // Reviews: cached per-project (public list + total public count).
             async {
-                let reviews = ProjectReview::list_for_project(project_id, Some(10)).await?;
-                enrich_reviews(reviews).await
-            },
-            // Review count
-            async {
-                sqlx::query_scalar!(
-                    r#"SELECT COUNT(*) as "count!: i64" FROM project_reviews WHERE project_id = ?"#,
-                    id_str
-                )
-                .fetch_one(db())
-                .await
-                .map_err(Error::from)
+                let resp = cached_project_reviews(project_id).await?;
+                let reviews = enrich_reviews(resp.reviews).await?;
+                Ok::<_, Error>((reviews, resp.count))
             },
             // Member count (lazy cached)
             async {
@@ -525,7 +642,9 @@ impl DetailPage {
             },
         )?;
 
-        let (user_has_liked, saved, joined) = user_engagement;
+        let (saved, joined) = engagement;
+        let (reviews, review_count) = reviews_and_count;
+        let (like_count, user_has_liked) = likes;
         let (can_edit, is_staff_editor) = edit_permission;
 
         let additional_fields = if can_edit {
@@ -538,6 +657,52 @@ impl DetailPage {
         } else {
             Vec::new()
         };
+
+        // Render editable fields from the row we already loaded — no extra queries.
+        let field_values: HashMap<&'static str, String> = HashMap::from([
+            ("presenter", row.presenter.clone()),
+            ("name", row.name.clone()),
+            ("url", row.url.clone()),
+            ("goal", row.goal.clone()),
+            ("task", row.task.clone()),
+            ("description", row.description.clone()),
+            (
+                "entirely_online",
+                (if row.entirely_online { "true" } else { "false" }).to_string(),
+            ),
+            ("location_name", row.location_name.clone()),
+            ("location_description", row.location_description.clone()),
+            ("address", row.address.clone()),
+            ("city", row.city.clone()),
+            ("state", row.state.clone()),
+            ("zip", row.zip.clone()),
+            ("country", row.country.clone()),
+            ("how_to_join", row.how_to_join.clone()),
+            ("video_url", row.video_url.clone()),
+            (
+                "total_expense",
+                row.total_expense.map(|v| v.to_string()).unwrap_or_default(),
+            ),
+            ("time_per_participation", row.time_per_participation.clone()),
+            ("audiences", audiences.join(", ")),
+            ("participation_schedule", row.participation_schedule.clone()),
+            ("mobile_app_url_android", row.mobile_app_url_android.clone()),
+            ("mobile_app_url_ios", row.mobile_app_url_ios.clone()),
+            ("mobile_app_url", row.mobile_app_url.clone()),
+            ("training_materials", row.training_materials.clone()),
+            ("classroom_materials", row.classroom_materials.clone()),
+            ("facebook_page", row.facebook_page.clone()),
+            ("twitter_name", row.twitter_name.clone()),
+            ("instagram_page", row.instagram_page.clone()),
+            ("tags", tags.join(", ")),
+        ]);
+        let editable_fields = super::detail_page_edit::render_fields(
+            &id_str,
+            DetailPageKind::Project,
+            can_edit,
+            &field_values,
+        )
+        .await;
 
         let status: DetailPageStatus = row.status.into();
         let last_updated = if last_edited_str.is_empty() {
@@ -580,6 +745,7 @@ impl DetailPage {
 
         Ok(DetailPageContent {
             kind: DetailPageKind::Project,
+            editable_fields,
             slug: self.slug,
             target_id: self.target_id.to_string(),
             name: row.name,
@@ -682,9 +848,11 @@ impl DetailPage {
         let id_str2 = id_str.clone();
         let id_str3 = id_str.clone();
         let id_str4 = id_str.clone();
+        let event_id = self.target_id;
         let user_info_clone = user_info.clone();
+        let user_info_likes = user_info.clone();
 
-        let (tags, instances, like_count, user_has_liked, edit_permission) = tokio::try_join!(
+        let (tags, instances, likes, edit_permission) = tokio::try_join!(
             // Tags
             async {
                 sqlx::query_scalar!(
@@ -714,15 +882,15 @@ impl DetailPage {
                         .collect::<Vec<_>>(),
                 )
             },
-            // Like count
-            ProjectRating::count_for_project(self.target_id),
-            // User liked
+            // Likes: count is cached per-project; per-user liked is fetched live.
             async {
-                if let Some(ref user) = user_info {
-                    ProjectRating::has_rated(self.target_id, user.user_id).await
+                let count = cached_like_count(event_id).await?;
+                let liked = if let Some(ref user) = user_info_likes {
+                    user_has_liked(event_id, user.user_id).await?
                 } else {
-                    Ok(false)
-                }
+                    false
+                };
+                Ok::<_, Error>((count, liked))
             },
             // Edit permission check
             async {
@@ -747,6 +915,7 @@ impl DetailPage {
             },
         )?;
 
+        let (like_count, user_has_liked) = likes;
         let (can_edit, is_staff_editor) = edit_permission;
 
         let additional_fields = if can_edit {
@@ -759,6 +928,35 @@ impl DetailPage {
         } else {
             Vec::new()
         };
+
+        // Render editable fields from the row we already loaded — no extra queries.
+        let field_values: HashMap<&'static str, String> = HashMap::from([
+            ("presenter", row.presenter.clone()),
+            ("name", row.name.clone()),
+            ("event_type", row.event_type.to_string()),
+            ("url", row.url.clone()),
+            ("description", row.description.clone()),
+            (
+                "entirely_online",
+                (if row.entirely_online { "true" } else { "false" }).to_string(),
+            ),
+            ("location_name", row.location_name.clone()),
+            ("location_description", row.location_description.clone()),
+            ("address", row.address.clone()),
+            ("city", row.city.clone()),
+            ("state", row.state.clone()),
+            ("zip", row.zip.clone()),
+            ("country", row.country.clone()),
+            ("how_to_join", row.how_to_join.clone()),
+            ("tags", tags.join(", ")),
+        ]);
+        let editable_fields = super::detail_page_edit::render_fields(
+            &id_str,
+            DetailPageKind::Event,
+            can_edit,
+            &field_values,
+        )
+        .await;
 
         let status: DetailPageStatus = row.status.into();
         let event_type_display = Some(row.event_type.to_string());
@@ -795,6 +993,7 @@ impl DetailPage {
 
         Ok(DetailPageContent {
             kind: DetailPageKind::Event,
+            editable_fields,
             slug: self.slug,
             target_id: self.target_id.to_string(),
             name: row.name,
@@ -853,8 +1052,11 @@ impl DetailPage {
 // Review enrichment helper
 // ---------------------------------------------------------------------------
 
-async fn enrich_reviews(reviews: Vec<ProjectReview>) -> Result<Vec<ReviewForDisplay>, Error> {
-    let user_ids: Vec<Ulid> = reviews.iter().map(|r| r.user_id).collect();
+async fn enrich_reviews(reviews: Vec<ReviewEntry>) -> Result<Vec<ReviewForDisplay>, Error> {
+    let user_ids: Vec<Ulid> = reviews
+        .iter()
+        .filter_map(|r| Ulid::from_string(&r.user_id).ok())
+        .collect();
 
     let user_info_map = if !user_ids.is_empty() {
         let response: UserDisplayInfoBatchResponse = request(
@@ -866,7 +1068,7 @@ async fn enrich_reviews(reviews: Vec<ProjectReview>) -> Result<Vec<ReviewForDisp
         response
             .users
             .into_iter()
-            .map(|u| (u.user_id, (u.handle, u.image)))
+            .map(|u| (u.user_id.to_string(), (u.handle, u.image)))
             .collect::<HashMap<_, _>>()
     } else {
         HashMap::new()
@@ -881,11 +1083,11 @@ async fn enrich_reviews(reviews: Vec<ProjectReview>) -> Result<Vec<ReviewForDisp
                 .unwrap_or_else(|| (format!("({})", review.user_id), String::new()));
 
             ReviewForDisplay {
-                user_id: review.user_id.to_string(),
+                user_id: review.user_id,
                 user_handle,
                 user_image,
                 text: review.text,
-                when: review.reviewed_at,
+                when: TimeString::try_from(review.when).unwrap_or_else(|_| TimeString::now()),
             }
         })
         .collect())
@@ -907,47 +1109,34 @@ pub async fn toggle_like(
             poem::http::StatusCode::UNAUTHORIZED,
         )
     })?;
-    let target_id = Ulid::from_string(&id).map_err(|e| {
-        poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST)
+    let user_id = user.user_id.to_string();
+
+    // Determine the current like state, then flip it. The log-service is the
+    // single source of truth for likes (orrery-synced history + new hydra likes).
+    let current: ProjectLikesResponse = request(
+        "log.project_likes",
+        ProjectLikesRequest {
+            project_id: id.clone(),
+            user_id: Some(user_id.clone()),
+        },
+    )
+    .await
+    .map_err(|e| {
+        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
     })?;
 
-    let already_liked = ProjectRating::has_rated(target_id, user.user_id)
-        .await
-        .map_err(|e| {
-            poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-        })?;
-
-    if already_liked {
-        // Remove rating
-        let id_str = target_id.to_string();
-        let user_str = user.user_id.to_string();
-        sqlx::query!(
-            "DELETE FROM project_ratings WHERE project_id = ? AND user_id = ?",
-            id_str,
-            user_str
-        )
-        .execute(db())
-        .await
-        .map_err(|e| {
-            poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-        })?;
-    } else {
-        ProjectRating::new(target_id, user.user_id)
-            .store()
-            .await
-            .map_err(|e| {
-                poem::Error::from_string(
-                    e.to_string(),
-                    poem::http::StatusCode::INTERNAL_SERVER_ERROR,
-                )
-            })?;
-    }
-
-    let new_count = ProjectRating::count_for_project(target_id)
-        .await
-        .map_err(|e| {
-            poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-        })?;
+    let updated: ProjectLikesResponse = request(
+        "log.rating_set",
+        RatingSetRequest {
+            project_id: id.clone(),
+            user_id,
+            liked: !current.liked,
+        },
+    )
+    .await
+    .map_err(|e| {
+        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
 
     #[derive(TemplateOnce)]
     #[template(path = "pages/detail_page_like_button.stpl.html")]
@@ -958,8 +1147,8 @@ pub async fn toggle_like(
     }
 
     let html = LikeButton {
-        like_count: new_count,
-        user_has_liked: !already_liked,
+        like_count: updated.count,
+        user_has_liked: updated.liked,
         target_id: id,
     }
     .render_once()
@@ -1114,14 +1303,26 @@ pub async fn submit_review(
             poem::http::StatusCode::UNAUTHORIZED,
         )
     })?;
-    let target_id = Ulid::from_string(&id).map_err(|e| {
-        poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST)
-    })?;
-
-    let review = ProjectReview::new(target_id, user.user_id, form.text.clone());
-    review.store().await.map_err(|e| {
+    // Store the review in the log-service (single source of truth for reviews,
+    // unifying orrery-synced history with new hydra reviews).
+    let stored: ReviewEntry = request(
+        "log.review_set",
+        ReviewSetRequest {
+            project_id: id.clone(),
+            user_id: user.user_id.to_string(),
+            text: form.text.clone(),
+            private: form.private,
+        },
+    )
+    .await
+    .map_err(|e| {
         poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
     })?;
+
+    // A private review is hidden from the public list, so don't echo a card back.
+    if form.private {
+        return Ok(Html(String::new()).into_response());
+    }
 
     // Get user display info
     let response: UserDisplayInfoBatchResponse = request(
@@ -1144,18 +1345,18 @@ pub async fn submit_review(
 
     #[derive(TemplateOnce)]
     #[template(path = "pages/detail_page_review.stpl.html")]
-    struct ReviewEntry {
+    struct ReviewCard {
         review: ReviewForDisplay,
         oob: bool,
     }
 
-    let html = ReviewEntry {
+    let html = ReviewCard {
         review: ReviewForDisplay {
             user_id: user.user_id.to_string(),
             user_handle: handle,
             user_image: image,
-            text: form.text,
-            when: TimeString::now(),
+            text: stored.text,
+            when: TimeString::try_from(stored.when).unwrap_or_else(|_| TimeString::now()),
         },
         oob: true,
     }
@@ -1170,6 +1371,9 @@ pub async fn submit_review(
 #[derive(serde::Deserialize)]
 pub struct ReviewForm {
     pub text: String,
+    /// Checkbox; absent when unchecked, so default to public.
+    #[serde(default)]
+    pub private: bool,
 }
 
 /// Lists modal - show user's lists to add entity to

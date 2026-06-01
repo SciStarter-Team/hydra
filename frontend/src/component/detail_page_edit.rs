@@ -1056,7 +1056,7 @@ struct FieldEditForm {
     supplemental: Option<SupplementalField>,
 }
 
-#[derive(TemplateOnce)]
+#[derive(TemplateOnce, Clone)]
 #[template(path = "pages/detail_page_field_display.stpl.html")]
 pub struct FieldDisplay {
     pub target_id: String,
@@ -1065,6 +1065,147 @@ pub struct FieldDisplay {
     pub can_edit: bool,
     pub content_html: String,
     pub empty: bool,
+    /// Extra classes on the `#field-X` wrapper beyond `relative` (e.g. inline layout).
+    pub wrapper_extra: &'static str,
+    /// Whether the edit button flows inline (for inline/icon fields) rather than
+    /// being absolutely positioned in the corner.
+    pub inline_button: bool,
+}
+
+impl FieldDisplay {
+    pub fn build(
+        target_id: String,
+        field_type: &str,
+        label: String,
+        can_edit: bool,
+        content_html: String,
+        empty: bool,
+    ) -> Self {
+        FieldDisplay {
+            wrapper_extra: field_wrapper_extra(field_type),
+            inline_button: field_inline_button(field_type),
+            target_id,
+            field_type: field_type.to_string(),
+            label,
+            can_edit,
+            content_html,
+            empty,
+        }
+    }
+}
+
+/// Extra wrapper classes per field, matching the original full-page layout.
+fn field_wrapper_extra(field_type: &str) -> &'static str {
+    match field_type {
+        "city" | "state" | "zip" => "inline",
+        "event_type" => "inline-block mb-2",
+        "url" | "tags" => "mb-4",
+        "image" => "flex flex-col max-w-full md:w-[425px]",
+        _ => "",
+    }
+}
+
+/// Fields whose edit button flows inline rather than being corner-positioned.
+fn field_inline_button(field_type: &str) -> bool {
+    matches!(
+        field_type,
+        "city"
+            | "state"
+            | "zip"
+            | "mobile_app_url"
+            | "mobile_app_url_ios"
+            | "mobile_app_url_android"
+            | "facebook_page"
+            | "twitter_name"
+            | "instagram_page"
+    )
+}
+
+/// The editable fields shown on a detail page, in render order, per kind.
+pub fn editable_field_list(kind: DetailPageKind) -> &'static [&'static str] {
+    match kind {
+        DetailPageKind::Project => &[
+            "presenter",
+            "name",
+            "url",
+            "goal",
+            "task",
+            "description",
+            "entirely_online",
+            "location_name",
+            "location_description",
+            "address",
+            "city",
+            "state",
+            "zip",
+            "country",
+            "how_to_join",
+            "video_url",
+            "total_expense",
+            "time_per_participation",
+            "audiences",
+            "participation_schedule",
+            "mobile_app_url_android",
+            "mobile_app_url_ios",
+            "mobile_app_url",
+            "training_materials",
+            "classroom_materials",
+            "facebook_page",
+            "twitter_name",
+            "instagram_page",
+            "tags",
+        ],
+        DetailPageKind::Event => &[
+            "presenter",
+            "name",
+            "event_type",
+            "url",
+            "description",
+            "entirely_online",
+            "location_name",
+            "location_description",
+            "address",
+            "city",
+            "state",
+            "zip",
+            "country",
+            "how_to_join",
+            "tags",
+        ],
+    }
+}
+
+/// Render every editable field's display partial from values already loaded by
+/// the page (no extra queries — the page's main row SELECT already has them).
+/// Both the full page and inline saves render through `format_display_value`, so
+/// a saved field always matches a full page render.
+pub async fn render_fields(
+    target_id: &str,
+    kind: DetailPageKind,
+    can_edit: bool,
+    values: &std::collections::HashMap<&'static str, String>,
+) -> std::collections::HashMap<String, FieldDisplay> {
+    let mut out = std::collections::HashMap::new();
+    for &field_type in editable_field_list(kind) {
+        let value = values.get(field_type).map(String::as_str).unwrap_or("");
+        let content_html = format_display_value(field_type, value, target_id, kind, can_edit).await;
+        let label = field_meta(field_type, kind)
+            .map(|m| m.label)
+            .unwrap_or("")
+            .to_string();
+        out.insert(
+            field_type.to_string(),
+            FieldDisplay::build(
+                target_id.to_string(),
+                field_type,
+                label,
+                can_edit,
+                content_html,
+                value.is_empty(),
+            ),
+        );
+    }
+    out
 }
 
 // ---------------------------------------------------------------------------
@@ -1245,16 +1386,16 @@ pub async fn save_field(
         })?;
 
     let empty = current_value.is_empty();
-    let display_html = format_display_value(&field_type, &current_value, &id, kind).await;
+    let display_html = format_display_value(&field_type, &current_value, &id, kind, true).await;
 
-    let html = FieldDisplay {
-        target_id: id,
-        field_type,
-        label: meta.label.to_string(),
-        can_edit: true,
-        content_html: display_html,
+    let html = FieldDisplay::build(
+        id,
+        &field_type,
+        meta.label.to_string(),
+        true,
+        display_html,
         empty,
-    }
+    )
     .render_once()
     .map_err(|e| {
         poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
@@ -1293,16 +1434,16 @@ pub async fn get_display(
         })?;
 
     let empty = current_value.is_empty();
-    let display_html = format_display_value(&field_type, &current_value, &id, kind).await;
+    let display_html = format_display_value(&field_type, &current_value, &id, kind, can_edit).await;
 
-    let html = FieldDisplay {
-        target_id: id,
-        field_type,
-        label: meta.label.to_string(),
+    let html = FieldDisplay::build(
+        id,
+        &field_type,
+        meta.label.to_string(),
         can_edit,
-        content_html: display_html,
+        display_html,
         empty,
-    }
+    )
     .render_once()
     .map_err(|e| {
         poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
@@ -1355,30 +1496,78 @@ async fn format_image_display(target_id: &str, value: &str, kind: DetailPageKind
     html
 }
 
+/// Placeholder shown to editors when an optional field is empty.
+fn edit_placeholder(text: &str) -> String {
+    format!(r#"<span class="edit-only text-gray-400 italic text-sm">{text}</span>"#)
+}
+
+// SVG glyphs reused from the full-page detail template, kept as constants so the
+// inline-edit partial and the page render byte-identical markup.
+const SVG_LINK: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512" class="fill-primary-action w-4"><path d="M579.8 267.7c56.5-56.5 56.5-148 0-204.5c-50-50-128.8-56.5-186.3-15.4l-1.6 1.1c-14.4 10.3-17.7 30.3-7.4 44.6s30.3 17.7 44.6 7.4l1.6-1.1c32.1-22.9 76-19.3 103.8 8.6c31.5 31.5 31.5 82.5 0 114L422.3 334.8c-31.5 31.5-82.5 31.5-114 0c-27.9-27.9-31.5-71.8-8.6-103.8l1.1-1.6c10.3-14.4 6.9-34.4-7.4-44.6s-34.4-6.9-44.6 7.4l-1.1 1.6C206.5 251.2 213 330 263 380c56.5 56.5 148 56.5 204.5 0L579.8 267.7zM60.2 244.3c-56.5 56.5-56.5 148 0 204.5c50 50 128.8 56.5 186.3 15.4l1.6-1.1c14.4-10.3 17.7-30.3 7.4-44.6s-30.3-17.7-44.6-7.4l-1.6 1.1c-32.1 22.9-76 19.3-103.8-8.6C74 372 74 321 105.5 289.5L217.7 177.2c31.5-31.5 82.5-31.5 114 0c27.9 27.9 31.5 71.8 8.6 103.9l-1.1 1.6c-10.3 14.4-6.9 34.4 7.4 44.6s34.4 6.9 44.6-7.4l1.1-1.6C433.5 260.8 427 182 377 132c-56.5-56.5-148-56.5-204.5 0L60.2 244.3z"/></svg>"##;
+const SVG_ANDROID: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 299.679 299.679" class="fill-primary-action h-8"><path d="M181.122 299.679c10.02 0 18.758-8.738 18.758-18.758v-43.808h12.525c7.516 0 12.525-5.011 12.525-12.525V99.466H74.749v125.123c0 7.515 5.01 12.525 12.525 12.525H99.8v43.808c0 10.02 8.736 18.758 18.758 18.758 10.019 0 18.756-8.738 18.756-18.758v-43.808h25.051v43.808c-.001 10.019 8.737 18.757 18.757 18.757z"/></svg>"##;
+const SVG_IOS: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" class="h-8 fill-primary-action"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>"##;
+const SVG_FACEBOOK: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="fill-primary-action h-8"><path d="M64 32C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64h98.2V334.2H109.4V256h52.8V222.3c0-87.1 39.4-127.5 125-127.5c16.2 0 44.2 3.2 55.7 6.4V172c-6-.6-16.5-1-29.6-1c-42 0-58.2 15.9-58.2 57.2V256h83.6l-14.4 78.2H255V480H384c35.3 0 64-28.7 64-64V96c0-35.3-28.7-64-64-64H64z"/></svg>"##;
+const SVG_TWITTER: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action h-8"><path d="M64 32C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V96c0-35.3-28.7-64-64-64H64zm297.1 84L257.3 234.6 379.4 396H283.8L209 298.1 123.3 396H75.8l111-126.9L69.7 116h98l67.7 89.5L313.6 116h47.5zM323.3 367.6L153.4 142.9H125.1L296.9 367.6h26.3z"/></svg>"##;
+const SVG_INSTAGRAM: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action h-8"><path d="M194.4 211.7a53.3 53.3 0 1 0 59.3 88.7 53.3 53.3 0 1 0 -59.3-88.7zm142.3-68.4c-5.2-5.2-11.5-9.3-18.4-12c-18.1-7.1-57.6-6.8-83.1-6.5c-4.1 0-7.9 .1-11.2 .1c-3.3 0-7.2 0-11.4-.1c-25.5-.3-64.8-.7-82.9 6.5c-6.9 2.7-13.1 6.8-18.4 12s-9.3 11.5-12 18.4c-7.1 18.1-6.7 57.7-6.5 83.2c0 4.1 .1 7.9 .1 11.1s0 7-.1 11.1c-.2 25.5-.6 65.1 6.5 83.2c2.7 6.9 6.8 13.1 12 18.4s11.5 9.3 18.4 12c18.1 7.1 57.6 6.8 83.1 6.5c4.1 0 7.9-.1 11.2-.1c3.3 0 7.2 0 11.4 .1c25.5 .3 64.8 .7 82.9-6.5c6.9-2.7 13.1-6.8 18.4-12s9.3-11.5 12-18.4c7.2-18 6.8-57.4 6.5-83c0-4.2-.1-8.1-.1-11.4s0-7.1 .1-11.4c.3-25.5 .7-64.9-6.5-83l0 0c-2.7-6.9-6.8-13.1-12-18.4zM448 96c0-35.3-28.7-64-64-64H64C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V96zM357 389c-18.7 18.7-41.4 24.6-67 25.9c-26.4 1.5-105.6 1.5-132 0c-25.6-1.3-48.3-7.2-67-25.9s-24.6-41.4-25.8-67c-1.5-26.4-1.5-105.6 0-132c1.3-25.6 7.1-48.3 25.8-67s41.5-24.6 67-25.8c26.4-1.5 105.6-1.5 132 0c25.6 1.3 48.3 7.1 67 25.8s24.6 41.4 25.8 67c1.5 26.3 1.5 105.4 0 131.9c-1.3 25.6-7.1 48.3-25.8 67z"/></svg>"##;
+
+/// Render the inner content HTML for a field — everything inside the `#field-X`
+/// wrapper, excluding the wrapper div and edit button. This is the single source
+/// of truth for field display: both the full page (via `DetailPageContent::field`)
+/// and the inline-edit partial (`save_field`/`get_display`) render through it, so
+/// a saved value always matches a full page render.
 async fn format_display_value(
     field_type: &str,
     value: &str,
     target_id: &str,
     kind: DetailPageKind,
+    can_edit: bool,
 ) -> String {
     let empty = value.is_empty();
+    let esc = || html_escape(value);
 
     match field_type {
-        "image" => return format_image_display(target_id, value, kind).await,
-        // Ribbon-box fields (top-level styled blocks)
-        "goal" if kind == DetailPageKind::Project => {
+        "image" => format_image_display(target_id, value, kind).await,
+
+        // Hero
+        "presenter" => {
             if empty {
-                ribbon_box("Goal", not_set())
+                r#"<h2 class="font-condensed uppercase text-gray-400 text-sm tracking-wider m-0 italic">(no presenter)</h2>"#.to_string()
             } else {
-                ribbon_box("Goal", html_escape(value))
+                format!(
+                    r#"<h2 class="font-condensed uppercase text-accent1 text-sm tracking-wider m-0">{}</h2>"#,
+                    esc()
+                )
             }
         }
-        "task" if kind == DetailPageKind::Project => {
+        "name" => format!(
+            r#"<h1 class="text-primary-dark text-xl font-semibold leading-tight">{}</h1>"#,
+            esc()
+        ),
+        "event_type" => {
             if empty {
-                ribbon_box("Task", not_set())
+                String::new()
             } else {
-                ribbon_box("Task", html_escape(value))
+                format!(r#"<span class="btn btn-xs btn-secondary">{}</span>"#, esc())
             }
+        }
+        "url" => {
+            if empty {
+                r#"<span class="text-gray-400 italic">(no URL)</span>"#.to_string()
+            } else {
+                format!(
+                    r#"<a href="{0}" class="text-primary-action flex gap-2" target="_blank" rel="noopener">{1}<span class="underline">{0}</span></a>"#,
+                    esc(),
+                    SVG_LINK
+                )
+            }
+        }
+
+        // Ribbon-box fields (top-level styled blocks)
+        "goal" if kind == DetailPageKind::Project => {
+            ribbon_box("Goal", if empty { not_set().to_string() } else { esc() })
+        }
+        "task" if kind == DetailPageKind::Project => {
+            ribbon_box("Task", if empty { not_set().to_string() } else { esc() })
         }
         "description" => {
             if empty {
@@ -1401,39 +1590,64 @@ async fn format_display_value(
             }
         }
 
-        // Location fields — simple inline display
+        // "Where" box interior — booleans/location/address
+        "entirely_online" => {
+            if value == "true" {
+                r#"<span class="text-sm">Entirely Online: Yes</span>"#.to_string()
+            } else if can_edit {
+                r#"<span class="text-sm"><span class="edit-only text-gray-400 italic">Entirely Online: No</span></span>"#.to_string()
+            } else {
+                r#"<span class="text-sm"></span>"#.to_string()
+            }
+        }
         "location_name" => {
+            if !empty {
+                format!(r#"<p class="mb-1 font-semibold">{}</p>"#, esc())
+            } else if can_edit {
+                edit_placeholder("Location name")
+            } else {
+                String::new()
+            }
+        }
+        "location_description" => {
+            if !empty {
+                format!(r#"<p class="mb-1">{}</p>"#, esc())
+            } else if can_edit {
+                edit_placeholder("Location description")
+            } else {
+                String::new()
+            }
+        }
+        "address" => {
+            if !empty {
+                format!(r#"<p class="mb-1">{}</p>"#, esc())
+            } else if can_edit {
+                edit_placeholder("Address")
+            } else {
+                String::new()
+            }
+        }
+        "city" | "state" | "zip" => esc(),
+        "country" => {
+            if empty {
+                String::new()
+            } else {
+                format!(r#"<p class="mb-2">{}</p>"#, esc())
+            }
+        }
+
+        // More Info accordion interior fields (sub-boxes)
+        "video_url" => ribbon_subbox(
+            "Video",
             if empty {
                 not_set().to_string()
             } else {
                 format!(
-                    r#"<p class="mb-1 font-semibold">{}</p>"#,
-                    html_escape(value)
+                    r#"<a href="{}" class="text-primary-action hover:underline" target="_blank" rel="noopener">Check out the how-to video</a>"#,
+                    esc()
                 )
-            }
-        }
-        "location_description" | "address" => {
-            if empty {
-                not_set().to_string()
-            } else {
-                format!(r#"<p class="mb-1">{}</p>"#, html_escape(value))
-            }
-        }
-
-        // More Info accordion interior fields
-        "video_url" => {
-            if empty {
-                ribbon_subbox("Video", not_set())
-            } else {
-                ribbon_subbox(
-                    "Video",
-                    &format!(
-                        r#"<a href="{}" class="text-primary-action hover:underline" target="_blank" rel="noopener">Check out the how-to video</a>"#,
-                        html_escape(value)
-                    ),
-                )
-            }
-        }
+            },
+        ),
         "total_expense" => {
             let content = if empty {
                 not_set().to_string()
@@ -1444,58 +1658,138 @@ async fn format_display_value(
                     format!("${:.2}", v)
                 }
             } else {
-                html_escape(value)
+                esc()
             };
-            ribbon_subbox("Total Expense", &content)
+            ribbon_subbox("Total Expense", content)
         }
-        "time_per_participation" => {
-            if empty {
-                ribbon_subbox("Spend the Time", not_set())
+        "time_per_participation" => ribbon_subbox(
+            "Spend the Time",
+            if empty { not_set().to_string() } else { esc() },
+        ),
+        "audiences" => {
+            let content = if empty {
+                not_set().to_string()
             } else {
-                ribbon_subbox("Spend the Time", html_escape(value))
-            }
+                value
+                    .split(", ")
+                    .map(html_escape)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            };
+            ribbon_subbox("Ideal Age Group(s)", content)
         }
-        "participation_schedule" => {
+        "participation_schedule" => ribbon_subbox(
+            "Ideal Frequency",
+            if empty { not_set().to_string() } else { esc() },
+        ),
+        "training_materials" => ribbon_subbox(
+            "Training Materials",
             if empty {
-                ribbon_subbox("Ideal Frequency", not_set())
+                not_set().to_string()
             } else {
-                ribbon_subbox("Ideal Frequency", html_escape(value))
-            }
-        }
-        "training_materials" => {
+                format!(
+                    r#"<a href="{0}" class="text-primary-action hover:underline" target="_blank" rel="noopener">{0}</a>"#,
+                    esc()
+                )
+            },
+        ),
+        "classroom_materials" => ribbon_subbox(
+            "Classroom Materials",
             if empty {
-                ribbon_subbox("Training Materials", not_set())
+                not_set().to_string()
             } else {
-                ribbon_subbox(
-                    "Training Materials",
-                    &format!(
-                        r#"<a href="{0}" class="text-primary-action hover:underline" target="_blank" rel="noopener">{0}</a>"#,
-                        html_escape(value)
-                    ),
+                format!(
+                    r#"<a href="{0}" class="text-primary-action hover:underline" target="_blank" rel="noopener">{0}</a>"#,
+                    esc()
+                )
+            },
+        ),
+
+        // App links (inside the "Apps" sub-box) — just the icon link
+        "mobile_app_url_android" => {
+            if empty {
+                String::new()
+            } else {
+                format!(
+                    r#"<a href="{}" class="text-primary-action" target="_blank" rel="noopener">{}</a>"#,
+                    esc(),
+                    SVG_ANDROID
                 )
             }
         }
-        "classroom_materials" => {
+        "mobile_app_url_ios" => {
             if empty {
-                ribbon_subbox("Classroom Materials", not_set())
+                String::new()
             } else {
-                ribbon_subbox(
-                    "Classroom Materials",
-                    &format!(
-                        r#"<a href="{0}" class="text-primary-action hover:underline" target="_blank" rel="noopener">{0}</a>"#,
-                        html_escape(value)
-                    ),
+                format!(
+                    r#"<a href="{}" class="text-primary-action" target="_blank" rel="noopener">{}</a>"#,
+                    esc(),
+                    SVG_IOS
+                )
+            }
+        }
+        "mobile_app_url" => {
+            if empty {
+                String::new()
+            } else {
+                format!(
+                    r#"<a href="{}" class="text-primary-action hover:underline" target="_blank" rel="noopener">Mobile App</a>"#,
+                    esc()
                 )
             }
         }
 
-        // Boolean fields
-        "entirely_online" | "on_demand" | "in_person" | "indoors" | "outdoors" => {
-            let label = field_meta(field_type, kind)
-                .map(|m| m.label)
-                .unwrap_or(field_type);
-            let yes_no = if value == "true" { "Yes" } else { "No" };
-            format!(r#"<span class="text-sm">{label}: {yes_no}</span>"#)
+        // Social links (inside the "Social Media" sub-box) — just the icon link
+        "facebook_page" => {
+            if empty {
+                String::new()
+            } else {
+                format!(
+                    r#"<a href="https://facebook.com/{}" target="_blank" rel="noopener">{}</a>"#,
+                    esc(),
+                    SVG_FACEBOOK
+                )
+            }
+        }
+        "twitter_name" => {
+            if empty {
+                String::new()
+            } else {
+                format!(
+                    r#"<a href="https://twitter.com/{}" target="_blank" rel="noopener">{}</a>"#,
+                    esc(),
+                    SVG_TWITTER
+                )
+            }
+        }
+        "instagram_page" => {
+            if empty {
+                String::new()
+            } else {
+                format!(
+                    r#"<a href="https://instagram.com/{}" target="_blank" rel="noopener">{}</a>"#,
+                    esc(),
+                    SVG_INSTAGRAM
+                )
+            }
+        }
+
+        // Tags — chips linking to search
+        "tags" => {
+            if empty {
+                r#"<span class="text-gray-400 italic">(no tags)</span>"#.to_string()
+            } else {
+                let chips = value
+                    .split(", ")
+                    .map(|t| {
+                        format!(
+                            r#"<a href="/-search?phrase[]={0}" class="btn btn-xs btn-secondary">{0}</a>"#,
+                            html_escape(t)
+                        )
+                    })
+                    .collect::<String>();
+                format!(r#"<div class="flex flex-wrap gap-2">{chips}</div>"#)
+            }
         }
 
         // Default: escaped text
@@ -1503,7 +1797,7 @@ async fn format_display_value(
             if empty {
                 not_set().to_string()
             } else {
-                html_escape(value)
+                esc()
             }
         }
     }

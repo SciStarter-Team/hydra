@@ -38,69 +38,14 @@
       <% } %>
       <div>
         <% if !self.presenter.is_empty() || self.can_edit { %>
-        <div id="field-presenter" class="relative<% if self.presenter.is_empty() { %> edit-only<% } %>">
-          <% if self.can_edit { %>
-          <button class="edit-only absolute top-0 right-0 p-1 opacity-40 hover:opacity-100 cursor-pointer z-10"
-                  title="Edit Presenter"
-                  hx-get="/-detail/<%= &self.target_id %>/field/presenter"
-                  hx-target="#field-presenter"
-                  hx-swap="outerHTML">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-3.5 h-3.5 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-          </button>
-          <% } %>
-          <% if !self.presenter.is_empty() { %>
-          <h2 class="font-condensed uppercase text-accent1 text-sm tracking-wider m-0"><%= &self.presenter %></h2>
-          <% } else { %>
-          <h2 class="font-condensed uppercase text-gray-400 text-sm tracking-wider m-0 italic">(no presenter)</h2>
-          <% } %>
-        </div>
+        <%+ self.field("presenter") %>
         <% } %>
-        <div id="field-name" class="relative">
-          <% if self.can_edit { %>
-          <button class="edit-only absolute top-0 right-0 p-1 opacity-40 hover:opacity-100 cursor-pointer z-10"
-                  title="Edit Name"
-                  hx-get="/-detail/<%= &self.target_id %>/field/name"
-                  hx-target="#field-name"
-                  hx-swap="outerHTML">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-3.5 h-3.5 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-          </button>
-          <% } %>
-          <h1 class="text-primary-dark text-xl font-semibold leading-tight"><%= &self.name %></h1>
-        </div>
-        <% if let Some(ref et) = self.event_type { %>
-        <div id="field-event_type" class="relative inline-block mb-2">
-          <% if self.can_edit { %>
-          <button class="edit-only absolute -top-1 -right-4 p-0.5 opacity-40 hover:opacity-100 cursor-pointer z-10"
-                  title="Edit Event Type"
-                  hx-get="/-detail/<%= &self.target_id %>/field/event_type"
-                  hx-target="#field-event_type"
-                  hx-swap="outerHTML">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-3 h-3 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-          </button>
-          <% } %>
-          <span class="btn btn-xs btn-secondary"><%= et %></span>
-        </div>
+        <%+ self.field("name") %>
+        <% if self.event_type.is_some() { %>
+        <%+ self.field("event_type") %>
         <% } %>
         <% if !self.url.is_empty() || self.can_edit { %>
-        <div id="field-url" class="relative mb-4<% if self.url.is_empty() { %> edit-only<% } %>">
-          <% if self.can_edit { %>
-          <button class="edit-only absolute top-0 right-0 p-1 opacity-40 hover:opacity-100 cursor-pointer z-10"
-                  title="Edit URL"
-                  hx-get="/-detail/<%= &self.target_id %>/field/url"
-                  hx-target="#field-url"
-                  hx-swap="outerHTML">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-3.5 h-3.5 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-          </button>
-          <% } %>
-          <% if !self.url.is_empty() { %>
-          <a href="<%= &self.url %>" class="text-primary-action flex gap-2" target="_blank" rel="noopener">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512" class="fill-primary-action w-4"><path d="M579.8 267.7c56.5-56.5 56.5-148 0-204.5c-50-50-128.8-56.5-186.3-15.4l-1.6 1.1c-14.4 10.3-17.7 30.3-7.4 44.6s30.3 17.7 44.6 7.4l1.6-1.1c32.1-22.9 76-19.3 103.8 8.6c31.5 31.5 31.5 82.5 0 114L422.3 334.8c-31.5 31.5-82.5 31.5-114 0c-27.9-27.9-31.5-71.8-8.6-103.8l1.1-1.6c10.3-14.4 6.9-34.4-7.4-44.6s-34.4-6.9-44.6 7.4l-1.1 1.6C206.5 251.2 213 330 263 380c56.5 56.5 148 56.5 204.5 0L579.8 267.7zM60.2 244.3c-56.5 56.5-56.5 148 0 204.5c50 50 128.8 56.5 186.3 15.4l1.6-1.1c14.4-10.3 17.7-30.3 7.4-44.6s-30.3-17.7-44.6-7.4l-1.6 1.1c-32.1 22.9-76 19.3-103.8-8.6C74 372 74 321 105.5 289.5L217.7 177.2c31.5-31.5 82.5-31.5 114 0c27.9 27.9 31.5 71.8 8.6 103.9l-1.1 1.6c-10.3 14.4-6.9 34.4 7.4 44.6s34.4 6.9 44.6-7.4l1.1-1.6C433.5 260.8 427 182 377 132c-56.5-56.5-148-56.5-204.5 0L60.2 244.3z"/></svg>
-            <span class="underline"><%= &self.url %></span>
-          </a>
-          <% } else { %>
-          <span class="text-gray-400 italic">(no URL)</span>
-          <% } %>
-        </div>
+        <%+ self.field("url") %>
         <% } %>
 
         <div class="mb-4">
@@ -161,63 +106,15 @@
     <div class="max-w-[1000px] mx-auto my-8">
 
       <% if self.kind.is_project() && (!self.goal.is_empty() || self.can_edit) { %>
-      <div id="field-goal" class="relative<% if self.goal.is_empty() { %> edit-only<% } %>">
-        <% if self.can_edit { %>
-        <button class="edit-only absolute top-1 right-1 p-1 opacity-40 hover:opacity-100 cursor-pointer z-10"
-                title="Edit Goal"
-                hx-get="/-detail/<%= &self.target_id %>/field/goal"
-                hx-target="#field-goal"
-                hx-swap="outerHTML">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-3.5 h-3.5 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-        </button>
-        <% } %>
-        <div class="border border-linework rounded-sm bg-primary-light mb-4">
-          <dl>
-            <dt class="ribbon-project bg-primary-dark text-white">Goal</dt>
-            <dd class="p-4"><% if self.goal.is_empty() { %><span class="text-gray-400 italic">(not set)</span><% } else { %><%= &self.goal %><% } %></dd>
-          </dl>
-        </div>
-      </div>
+      <%+ self.field("goal") %>
       <% } %>
 
       <% if self.kind.is_project() && (!self.task.is_empty() || self.can_edit) { %>
-      <div id="field-task" class="relative<% if self.task.is_empty() { %> edit-only<% } %>">
-        <% if self.can_edit { %>
-        <button class="edit-only absolute top-1 right-1 p-1 opacity-40 hover:opacity-100 cursor-pointer z-10"
-                title="Edit Task"
-                hx-get="/-detail/<%= &self.target_id %>/field/task"
-                hx-target="#field-task"
-                hx-swap="outerHTML">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-3.5 h-3.5 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-        </button>
-        <% } %>
-        <div class="border border-linework rounded-sm bg-primary-light mb-4">
-          <dl>
-            <dt class="ribbon-project bg-primary-dark text-white">Task</dt>
-            <dd class="p-4"><% if self.task.is_empty() { %><span class="text-gray-400 italic">(not set)</span><% } else { %><%= &self.task %><% } %></dd>
-          </dl>
-        </div>
-      </div>
+      <%+ self.field("task") %>
       <% } %>
 
       <% if !self.description.is_empty() || self.can_edit { %>
-      <div id="field-description" class="relative<% if self.description.is_empty() { %> edit-only<% } %>">
-        <% if self.can_edit { %>
-        <button class="edit-only absolute top-1 right-1 p-1 opacity-40 hover:opacity-100 cursor-pointer z-10"
-                title="Edit Description"
-                hx-get="/-detail/<%= &self.target_id %>/field/description"
-                hx-target="#field-description"
-                hx-swap="outerHTML">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-3.5 h-3.5 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-        </button>
-        <% } %>
-        <div class="border border-linework rounded-sm bg-primary-light mb-4">
-          <dl>
-            <dt class="ribbon-project bg-primary-dark text-white">Description</dt>
-            <dd class="p-4"><% if self.description.is_empty() { %><span class="text-gray-400 italic">(not set)</span><% } else { %><%- &self.description %><% } %></dd>
-          </dl>
-        </div>
-      </div>
+      <%+ self.field("description") %>
       <% } %>
 
       <% if !self.location_name.is_empty() || !self.location_description.is_empty() || !self.address.is_empty() || self.entirely_online || self.can_edit { %>
@@ -225,103 +122,15 @@
         <dl>
           <dt class="ribbon-project bg-primary-dark text-white">Where</dt>
           <dd class="p-4">
-            <div id="field-entirely_online" class="relative<% if self.can_edit || self.entirely_online { %> mb-2<% } %><% if self.can_edit && !self.entirely_online { %> min-h-6<% } %>">
-              <% if self.can_edit { %>
-              <button class="edit-only absolute top-0 right-0 p-0.5 opacity-40 hover:opacity-100 cursor-pointer z-10"
-                      title="Edit Entirely Online"
-                      hx-get="/-detail/<%= &self.target_id %>/field/entirely_online"
-                      hx-target="#field-entirely_online"
-                      hx-swap="outerHTML">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-3 h-3 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-              </button>
-              <% } %>
-              <span class="text-sm"><% if self.entirely_online { %>Entirely Online: Yes<% } else if self.can_edit { %><span class="edit-only text-gray-400 italic">Entirely Online: No</span><% } %></span>
-            </div>
+            <%+ self.field("entirely_online") %>
             <% if !self.entirely_online || self.can_edit { %>
-            <div id="field-location_name" class="relative<% if self.can_edit && self.location_name.is_empty() { %> min-h-6<% } %>">
-              <% if self.can_edit { %>
-              <button class="edit-only absolute top-0 right-0 p-0.5 opacity-40 hover:opacity-100 cursor-pointer z-10"
-                      title="Edit Location Name"
-                      hx-get="/-detail/<%= &self.target_id %>/field/location_name"
-                      hx-target="#field-location_name"
-                      hx-swap="outerHTML">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-3 h-3 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-              </button>
-              <% } %>
-              <% if !self.location_name.is_empty() { %><p class="mb-1 font-semibold"><%= &self.location_name %></p><% } else if self.can_edit { %><span class="edit-only text-gray-400 italic text-sm">Location name</span><% } %>
-            </div>
-            <div id="field-location_description" class="relative<% if self.can_edit && self.location_description.is_empty() { %> min-h-6<% } %>">
-              <% if self.can_edit { %>
-              <button class="edit-only absolute top-0 right-0 p-0.5 opacity-40 hover:opacity-100 cursor-pointer z-10"
-                      title="Edit Location Description"
-                      hx-get="/-detail/<%= &self.target_id %>/field/location_description"
-                      hx-target="#field-location_description"
-                      hx-swap="outerHTML">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-3 h-3 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-              </button>
-              <% } %>
-              <% if !self.location_description.is_empty() { %><p class="mb-1"><%= &self.location_description %></p><% } else if self.can_edit { %><span class="edit-only text-gray-400 italic text-sm">Location description</span><% } %>
-            </div>
-            <div id="field-address" class="relative<% if self.can_edit && self.address.is_empty() { %> min-h-6<% } %>">
-              <% if self.can_edit { %>
-              <button class="edit-only absolute top-0 right-0 p-0.5 opacity-40 hover:opacity-100 cursor-pointer z-10"
-                      title="Edit Address"
-                      hx-get="/-detail/<%= &self.target_id %>/field/address"
-                      hx-target="#field-address"
-                      hx-swap="outerHTML">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-3 h-3 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-              </button>
-              <% } %>
-              <% if !self.address.is_empty() { %><p class="mb-1"><%= &self.address %></p><% } else if self.can_edit { %><span class="edit-only text-gray-400 italic text-sm">Address</span><% } %>
-            </div>
-            <div id="field-city" class="relative inline">
-              <% if self.can_edit { %>
-              <button class="edit-only p-0.5 opacity-40 hover:opacity-100 cursor-pointer align-middle"
-                      title="Edit City"
-                      hx-get="/-detail/<%= &self.target_id %>/field/city"
-                      hx-target="#field-city"
-                      hx-swap="outerHTML">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-2.5 h-2.5 fill-gray-500 inline"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-              </button>
-              <% } %>
-              <%= &self.city %><% if !self.city.is_empty() && !self.state.is_empty() { %>, <% } %>
-            </div>
-            <div id="field-state" class="relative inline">
-              <% if self.can_edit { %>
-              <button class="edit-only p-0.5 opacity-40 hover:opacity-100 cursor-pointer align-middle"
-                      title="Edit State"
-                      hx-get="/-detail/<%= &self.target_id %>/field/state"
-                      hx-target="#field-state"
-                      hx-swap="outerHTML">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-2.5 h-2.5 fill-gray-500 inline"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-              </button>
-              <% } %>
-              <%= &self.state %>
-            </div>
-            <div id="field-zip" class="relative inline">
-              <% if self.can_edit { %>
-              <button class="edit-only p-0.5 opacity-40 hover:opacity-100 cursor-pointer align-middle"
-                      title="Edit Zip"
-                      hx-get="/-detail/<%= &self.target_id %>/field/zip"
-                      hx-target="#field-zip"
-                      hx-swap="outerHTML">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-2.5 h-2.5 fill-gray-500 inline"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-              </button>
-              <% } %>
-              <%= &self.zip %>
-            </div>
-            <div id="field-country" class="relative">
-              <% if self.can_edit { %>
-              <button class="edit-only absolute top-0 right-0 p-0.5 opacity-40 hover:opacity-100 cursor-pointer z-10"
-                      title="Edit Country"
-                      hx-get="/-detail/<%= &self.target_id %>/field/country"
-                      hx-target="#field-country"
-                      hx-swap="outerHTML">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-3 h-3 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-              </button>
-              <% } %>
-              <% if !self.country.is_empty() { %><p class="mb-2"><%= &self.country %></p><% } %>
-            </div>
+            <%+ self.field("location_name") %>
+            <%+ self.field("location_description") %>
+            <%+ self.field("address") %>
+            <%+ self.field("city") %>
+            <%+ self.field("state") %>
+            <%+ self.field("zip") %>
+            <%+ self.field("country") %>
             <% } %>
             <% if self.has_point { %>
             <button class="btn btn-primary btn-thin btn-icon" hx-get="/-detail/<%= &self.target_id %>/map" hx-target="body" hx-swap="beforeend">
@@ -335,23 +144,7 @@
       <% } %>
 
       <% if !self.how_to_join.is_empty() || self.can_edit { %>
-      <div id="field-how_to_join" class="relative<% if self.how_to_join.is_empty() { %> edit-only<% } %>">
-        <% if self.can_edit { %>
-        <button class="edit-only absolute top-1 right-1 p-1 opacity-40 hover:opacity-100 cursor-pointer z-10"
-                title="Edit How to Get Started"
-                hx-get="/-detail/<%= &self.target_id %>/field/how_to_join"
-                hx-target="#field-how_to_join"
-                hx-swap="outerHTML">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-3.5 h-3.5 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-        </button>
-        <% } %>
-        <div class="border border-linework rounded-sm bg-primary-light mb-4">
-          <dl>
-            <dt class="ribbon-project bg-primary-dark text-white">How to Get Started</dt>
-            <dd class="p-4"><% if self.how_to_join.is_empty() { %><span class="text-gray-400 italic">(not set)</span><% } else { %><%- &self.how_to_join %><% } %></dd>
-          </dl>
-        </div>
-      </div>
+      <%+ self.field("how_to_join") %>
       <% } %>
 
       <%/* Event instances */%>
@@ -378,93 +171,23 @@
 
         <div class="accordion__panel">
           <% if !self.video_url.is_empty() || self.can_edit { %>
-          <div id="field-video_url" class="relative<% if self.video_url.is_empty() { %> edit-only<% } %>">
-            <% if self.can_edit { %>
-            <button class="edit-only absolute top-1 right-1 p-1 opacity-40 hover:opacity-100 cursor-pointer z-10"
-                    title="Edit Video URL"
-                    hx-get="/-detail/<%= &self.target_id %>/field/video_url"
-                    hx-target="#field-video_url"
-                    hx-swap="outerHTML">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-3 h-3 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-            </button>
-            <% } %>
-            <dl class="border-t border-linework bg-primary-light pb-4">
-              <dt class="ribbon-project ribbon-subproject bg-primary-dark text-white">Video</dt>
-              <dd class="p-4"><% if self.video_url.is_empty() { %><span class="text-gray-400 italic">(not set)</span><% } else { %><a href="<%= &self.video_url %>" class="text-primary-action hover:underline" target="_blank" rel="noopener">Check out the how-to video</a><% } %></dd>
-            </dl>
-          </div>
+          <%+ self.field("video_url") %>
           <% } %>
 
           <% if !self.total_expense.is_empty() || self.can_edit { %>
-          <div id="field-total_expense" class="relative<% if self.total_expense.is_empty() { %> edit-only<% } %>">
-            <% if self.can_edit { %>
-            <button class="edit-only absolute top-1 right-1 p-1 opacity-40 hover:opacity-100 cursor-pointer z-10"
-                    title="Edit Total Expense"
-                    hx-get="/-detail/<%= &self.target_id %>/field/total_expense"
-                    hx-target="#field-total_expense"
-                    hx-swap="outerHTML">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-3 h-3 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-            </button>
-            <% } %>
-            <dl class="border-t border-linework bg-primary-light pb-4">
-              <dt class="ribbon-project ribbon-subproject bg-primary-dark text-white">Total Expense</dt>
-              <dd class="p-4"><% if self.total_expense.is_empty() { %><span class="text-gray-400 italic">(not set)</span><% } else { %><%= &self.total_expense %><% } %></dd>
-            </dl>
-          </div>
+          <%+ self.field("total_expense") %>
           <% } %>
 
           <% if !self.time_per_participation.is_empty() || self.can_edit { %>
-          <div id="field-time_per_participation" class="relative<% if self.time_per_participation.is_empty() { %> edit-only<% } %>">
-            <% if self.can_edit { %>
-            <button class="edit-only absolute top-1 right-1 p-1 opacity-40 hover:opacity-100 cursor-pointer z-10"
-                    title="Edit Time Per Participation"
-                    hx-get="/-detail/<%= &self.target_id %>/field/time_per_participation"
-                    hx-target="#field-time_per_participation"
-                    hx-swap="outerHTML">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-3 h-3 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-            </button>
-            <% } %>
-            <dl class="border-t border-linework bg-primary-light pb-4">
-              <dt class="ribbon-project ribbon-subproject bg-primary-dark text-white">Spend the Time</dt>
-              <dd class="p-4"><% if self.time_per_participation.is_empty() { %><span class="text-gray-400 italic">(not set)</span><% } else { %><%= &self.time_per_participation %><% } %></dd>
-            </dl>
-          </div>
+          <%+ self.field("time_per_participation") %>
           <% } %>
 
           <% if !self.audiences.is_empty() || self.can_edit { %>
-          <div id="field-audiences" class="relative<% if self.audiences.is_empty() { %> edit-only<% } %>">
-            <% if self.can_edit { %>
-            <button class="edit-only absolute top-1 right-1 p-1 opacity-40 hover:opacity-100 cursor-pointer z-10"
-                    title="Edit Audiences"
-                    hx-get="/-detail/<%= &self.target_id %>/field/audiences"
-                    hx-target="#field-audiences"
-                    hx-swap="outerHTML">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-3 h-3 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-            </button>
-            <% } %>
-            <dl class="border-t border-linework bg-primary-light pb-4">
-              <dt class="ribbon-project ribbon-subproject bg-primary-dark text-white">Ideal Age Group(s)</dt>
-              <dd class="p-4"><% if self.audiences.is_empty() { %><span class="text-gray-400 italic">(not set)</span><% } else { %><% for (i, aud) in self.audiences.iter().enumerate() { %><% if i > 0 { %>, <% } %><%= aud %><% } %><% } %></dd>
-            </dl>
-          </div>
+          <%+ self.field("audiences") %>
           <% } %>
 
           <% if !self.participation_schedule.is_empty() || self.can_edit { %>
-          <div id="field-participation_schedule" class="relative<% if self.participation_schedule.is_empty() { %> edit-only<% } %>">
-            <% if self.can_edit { %>
-            <button class="edit-only absolute top-1 right-1 p-1 opacity-40 hover:opacity-100 cursor-pointer z-10"
-                    title="Edit Participation Schedule"
-                    hx-get="/-detail/<%= &self.target_id %>/field/participation_schedule"
-                    hx-target="#field-participation_schedule"
-                    hx-swap="outerHTML">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-3 h-3 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-            </button>
-            <% } %>
-            <dl class="border-t border-linework bg-primary-light pb-4">
-              <dt class="ribbon-project ribbon-subproject bg-primary-dark text-white">Ideal Frequency</dt>
-              <dd class="p-4"><% if self.participation_schedule.is_empty() { %><span class="text-gray-400 italic">(not set)</span><% } else { %><%= &self.participation_schedule %><% } %></dd>
-            </dl>
-          </div>
+          <%+ self.field("participation_schedule") %>
           <% } %>
 
           <% if !self.mobile_app_url.is_empty() || !self.mobile_app_url_ios.is_empty() || !self.mobile_app_url_android.is_empty() || self.can_edit { %>
@@ -472,91 +195,20 @@
             <dt class="ribbon-project ribbon-subproject bg-primary-dark text-white">Apps</dt>
             <dd class="p-4">
               <div class="flex gap-2 flex-wrap items-center">
-                <div id="field-mobile_app_url_android" class="relative">
-                  <% if self.can_edit { %>
-                  <button class="edit-only p-0.5 opacity-40 hover:opacity-100 cursor-pointer"
-                          title="Edit Android App URL"
-                          hx-get="/-detail/<%= &self.target_id %>/field/mobile_app_url_android"
-                          hx-target="#field-mobile_app_url_android"
-                          hx-swap="outerHTML">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-2.5 h-2.5 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-                  </button>
-                  <% } %>
-                  <% if !self.mobile_app_url_android.is_empty() { %>
-                  <a href="<%= &self.mobile_app_url_android %>" class="text-primary-action" target="_blank" rel="noopener">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 299.679 299.679" class="fill-primary-action h-8"><path d="M181.122 299.679c10.02 0 18.758-8.738 18.758-18.758v-43.808h12.525c7.516 0 12.525-5.011 12.525-12.525V99.466H74.749v125.123c0 7.515 5.01 12.525 12.525 12.525H99.8v43.808c0 10.02 8.736 18.758 18.758 18.758 10.019 0 18.756-8.738 18.756-18.758v-43.808h25.051v43.808c-.001 10.019 8.737 18.757 18.757 18.757z"/></svg>
-                  </a>
-                  <% } %>
-                </div>
-                <div id="field-mobile_app_url_ios" class="relative">
-                  <% if self.can_edit { %>
-                  <button class="edit-only p-0.5 opacity-40 hover:opacity-100 cursor-pointer"
-                          title="Edit iOS App URL"
-                          hx-get="/-detail/<%= &self.target_id %>/field/mobile_app_url_ios"
-                          hx-target="#field-mobile_app_url_ios"
-                          hx-swap="outerHTML">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-2.5 h-2.5 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-                  </button>
-                  <% } %>
-                  <% if !self.mobile_app_url_ios.is_empty() { %>
-                  <a href="<%= &self.mobile_app_url_ios %>" class="text-primary-action" target="_blank" rel="noopener">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" class="h-8 fill-primary-action"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
-                  </a>
-                  <% } %>
-                </div>
-                <div id="field-mobile_app_url" class="relative">
-                  <% if self.can_edit { %>
-                  <button class="edit-only p-0.5 opacity-40 hover:opacity-100 cursor-pointer"
-                          title="Edit Mobile App URL"
-                          hx-get="/-detail/<%= &self.target_id %>/field/mobile_app_url"
-                          hx-target="#field-mobile_app_url"
-                          hx-swap="outerHTML">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-2.5 h-2.5 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-                  </button>
-                  <% } %>
-                  <% if !self.mobile_app_url.is_empty() && self.mobile_app_url_ios.is_empty() && self.mobile_app_url_android.is_empty() { %>
-                  <a href="<%= &self.mobile_app_url %>" class="text-primary-action hover:underline" target="_blank" rel="noopener">Mobile App</a>
-                  <% } %>
-                </div>
+                <%+ self.field("mobile_app_url_android") %>
+                <%+ self.field("mobile_app_url_ios") %>
+                <%+ self.field("mobile_app_url") %>
               </div>
             </dd>
           </dl>
           <% } %>
 
           <% if !self.training_materials.is_empty() || self.can_edit { %>
-          <div id="field-training_materials" class="relative<% if self.training_materials.is_empty() { %> edit-only<% } %>">
-            <% if self.can_edit { %>
-            <button class="edit-only absolute top-1 right-1 p-1 opacity-40 hover:opacity-100 cursor-pointer z-10"
-                    title="Edit Training Materials"
-                    hx-get="/-detail/<%= &self.target_id %>/field/training_materials"
-                    hx-target="#field-training_materials"
-                    hx-swap="outerHTML">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-3 h-3 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-            </button>
-            <% } %>
-            <dl class="border-t border-linework bg-primary-light pb-4">
-              <dt class="ribbon-project ribbon-subproject bg-primary-dark text-white">Training Materials</dt>
-              <dd class="p-4"><% if self.training_materials.is_empty() { %><span class="text-gray-400 italic">(not set)</span><% } else { %><a href="<%= &self.training_materials %>" class="text-primary-action hover:underline" target="_blank" rel="noopener"><%= &self.training_materials %></a><% } %></dd>
-            </dl>
-          </div>
+          <%+ self.field("training_materials") %>
           <% } %>
 
           <% if !self.classroom_materials.is_empty() || self.can_edit { %>
-          <div id="field-classroom_materials" class="relative<% if self.classroom_materials.is_empty() { %> edit-only<% } %>">
-            <% if self.can_edit { %>
-            <button class="edit-only absolute top-1 right-1 p-1 opacity-40 hover:opacity-100 cursor-pointer z-10"
-                    title="Edit Classroom Materials"
-                    hx-get="/-detail/<%= &self.target_id %>/field/classroom_materials"
-                    hx-target="#field-classroom_materials"
-                    hx-swap="outerHTML">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-3 h-3 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-            </button>
-            <% } %>
-            <dl class="border-t border-linework bg-primary-light pb-4">
-              <dt class="ribbon-project ribbon-subproject bg-primary-dark text-white">Classroom Materials</dt>
-              <dd class="p-4"><% if self.classroom_materials.is_empty() { %><span class="text-gray-400 italic">(not set)</span><% } else { %><a href="<%= &self.classroom_materials %>" class="text-primary-action hover:underline" target="_blank" rel="noopener"><%= &self.classroom_materials %></a><% } %></dd>
-            </dl>
-          </div>
+          <%+ self.field("classroom_materials") %>
           <% } %>
 
           <% if !self.twitter_name.is_empty() || !self.facebook_page.is_empty() || !self.instagram_page.is_empty() || self.can_edit { %>
@@ -564,48 +216,9 @@
             <dt class="ribbon-project ribbon-subproject bg-primary-dark text-white">Social Media</dt>
             <dd class="p-4">
               <div class="flex items-start gap-4">
-                <div id="field-facebook_page" class="relative">
-                  <% if self.can_edit { %>
-                  <button class="edit-only p-0.5 opacity-40 hover:opacity-100 cursor-pointer"
-                          title="Edit Facebook Page"
-                          hx-get="/-detail/<%= &self.target_id %>/field/facebook_page"
-                          hx-target="#field-facebook_page"
-                          hx-swap="outerHTML">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-2.5 h-2.5 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-                  </button>
-                  <% } %>
-                  <% if !self.facebook_page.is_empty() { %>
-                  <a href="https://facebook.com/<%= &self.facebook_page %>" target="_blank" rel="noopener"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action h-8"><path d="M64 32C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64h98.2V334.2H109.4V256h52.8V222.3c0-87.1 39.4-127.5 125-127.5c16.2 0 44.2 3.2 55.7 6.4V172c-6-.6-16.5-1-29.6-1c-42 0-58.2 15.9-58.2 57.2V256h83.6l-14.4 78.2H255V480H384c35.3 0 64-28.7 64-64V96c0-35.3-28.7-64-64-64H64z"/></svg></a>
-                  <% } %>
-                </div>
-                <div id="field-twitter_name" class="relative">
-                  <% if self.can_edit { %>
-                  <button class="edit-only p-0.5 opacity-40 hover:opacity-100 cursor-pointer"
-                          title="Edit Twitter/X Handle"
-                          hx-get="/-detail/<%= &self.target_id %>/field/twitter_name"
-                          hx-target="#field-twitter_name"
-                          hx-swap="outerHTML">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-2.5 h-2.5 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-                  </button>
-                  <% } %>
-                  <% if !self.twitter_name.is_empty() { %>
-                  <a href="https://twitter.com/<%= &self.twitter_name %>" target="_blank" rel="noopener"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action h-8"><path d="M64 32C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V96c0-35.3-28.7-64-64-64H64zm297.1 84L257.3 234.6 379.4 396H283.8L209 298.1 123.3 396H75.8l111-126.9L69.7 116h98l67.7 89.5L313.6 116h47.5zM323.3 367.6L153.4 142.9H125.1L296.9 367.6h26.3z"/></svg></a>
-                  <% } %>
-                </div>
-                <div id="field-instagram_page" class="relative">
-                  <% if self.can_edit { %>
-                  <button class="edit-only p-0.5 opacity-40 hover:opacity-100 cursor-pointer"
-                          title="Edit Instagram Page"
-                          hx-get="/-detail/<%= &self.target_id %>/field/instagram_page"
-                          hx-target="#field-instagram_page"
-                          hx-swap="outerHTML">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-2.5 h-2.5 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-                  </button>
-                  <% } %>
-                  <% if !self.instagram_page.is_empty() { %>
-                  <a href="https://instagram.com/<%= &self.instagram_page %>" target="_blank" rel="noopener"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action h-8"><path d="M194.4 211.7a53.3 53.3 0 1 0 59.3 88.7 53.3 53.3 0 1 0 -59.3-88.7zm142.3-68.4c-5.2-5.2-11.5-9.3-18.4-12c-18.1-7.1-57.6-6.8-83.1-6.5c-4.1 0-7.9 .1-11.2 .1c-3.3 0-7.2 0-11.4-.1c-25.5-.3-64.8-.7-82.9 6.5c-6.9 2.7-13.1 6.8-18.4 12s-9.3 11.5-12 18.4c-7.1 18.1-6.7 57.7-6.5 83.2c0 4.1 .1 7.9 .1 11.1s0 7-.1 11.1c-.2 25.5-.6 65.1 6.5 83.2c2.7 6.9 6.8 13.1 12 18.4s11.5 9.3 18.4 12c18.1 7.1 57.6 6.8 83.1 6.5c4.1 0 7.9-.1 11.2-.1c3.3 0 7.2 0 11.4 .1c25.5 .3 64.8 .7 82.9-6.5c6.9-2.7 13.1-6.8 18.4-12s9.3-11.5 12-18.4c7.2-18 6.8-57.4 6.5-83c0-4.2-.1-8.1-.1-11.4s0-7.1 .1-11.4c.3-25.5 .7-64.9-6.5-83l0 0c-2.7-6.9-6.8-13.1-12-18.4zM448 96c0-35.3-28.7-64-64-64H64C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V96zM357 389c-18.7 18.7-41.4 24.6-67 25.9c-26.4 1.5-105.6 1.5-132 0c-25.6-1.3-48.3-7.2-67-25.9s-24.6-41.4-25.8-67c-1.5-26.4-1.5-105.6 0-132c1.3-25.6 7.1-48.3 25.8-67s41.5-24.6 67-25.8c26.4-1.5 105.6-1.5 132 0c25.6 1.3 48.3 7.1 67 25.8s24.6 41.4 25.8 67c1.5 26.3 1.5 105.4 0 131.9c-1.3 25.6-7.1 48.3-25.8 67z"/></svg></a>
-                  <% } %>
-                </div>
+                <%+ self.field("facebook_page") %>
+                <%+ self.field("twitter_name") %>
+                <%+ self.field("instagram_page") %>
               </div>
             </dd>
           </dl>
@@ -617,26 +230,7 @@
 
       <%/* Tags */%>
       <% if !self.tags.is_empty() || self.can_edit { %>
-      <div id="field-tags" class="relative mb-4<% if self.tags.is_empty() { %> edit-only<% } %>">
-        <% if self.can_edit { %>
-        <button class="edit-only absolute top-0 right-0 p-1 opacity-40 hover:opacity-100 cursor-pointer z-10"
-                title="Edit Tags"
-                hx-get="/-detail/<%= &self.target_id %>/field/tags"
-                hx-target="#field-tags"
-                hx-swap="outerHTML">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-3.5 h-3.5 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
-        </button>
-        <% } %>
-        <% if self.tags.is_empty() { %>
-        <span class="text-gray-400 italic">(no tags)</span>
-        <% } else { %>
-        <div class="flex flex-wrap gap-2">
-          <% for tag in &self.tags { %>
-          <a href="/-search?phrase[]=<%= tag %>" class="btn btn-xs btn-secondary"><%= tag %></a>
-          <% } %>
-        </div>
-        <% } %>
-      </div>
+      <%+ self.field("tags") %>
       <% } %>
 
       <%/* Additional Fields accordion (editors only) */%>

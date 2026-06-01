@@ -21,17 +21,17 @@ use handlers::{
     handle_articulate_completion_record, handle_clickthrough, handle_clickthrough_analytics,
     handle_contributors, handle_edit_log, handle_email_event, handle_external_link_clickthrough,
     handle_external_links, handle_go_url_stats, handle_health_check, handle_join,
-    handle_last_edited, handle_page_view, handle_participation_analytics,
+    handle_last_edited, handle_page_view, handle_participation_analytics, handle_project_likes,
     handle_project_member_count, handle_project_participation, handle_project_participation_record,
-    handle_recent_activity, handle_search_event, handle_top_performers_analytics,
-    handle_user_emails_update, handle_user_participation, handle_user_recent_visits,
-    handle_user_tags_update,
+    handle_project_reviews, handle_rating_set, handle_recent_activity, handle_review_set,
+    handle_search_event, handle_top_performers_analytics, handle_user_emails_update,
+    handle_user_participation, handle_user_recent_visits, handle_user_tags_update,
 };
 use log_service::{Database, run_compactor_service};
 use parking_lot::RwLock;
 use sync::{
     acts_of_science_synchronize, bookmark_synchronize, golink_synchronize, join_synchronize,
-    participation_synchronize,
+    participation_synchronize, rating_synchronize, review_synchronize,
 };
 
 // Global database instance for handler access - using RwLock<Option<>> so we can take ownership for shutdown
@@ -62,6 +62,8 @@ async fn main() -> Result<()> {
     let participation_cancel = CancellationToken::new();
     let bookmark_cancel = CancellationToken::new();
     let join_cancel = CancellationToken::new();
+    let rating_cancel = CancellationToken::new();
+    let review_cancel = CancellationToken::new();
     let golink_cancel = CancellationToken::new();
     let acts_cancel = CancellationToken::new();
     let zoo_projects_cancel = CancellationToken::new();
@@ -101,6 +103,22 @@ async fn main() -> Result<()> {
     let join_database = Arc::clone(&database);
     background_tasks.spawn(async move {
         join_synchronize(join_database, join_cancel_clone).await;
+        Ok::<(), anyhow::Error>(())
+    });
+
+    // Spawn rating ("likes") sync task
+    let rating_cancel_clone = rating_cancel.clone();
+    let rating_database = Arc::clone(&database);
+    background_tasks.spawn(async move {
+        rating_synchronize(rating_database, rating_cancel_clone).await;
+        Ok::<(), anyhow::Error>(())
+    });
+
+    // Spawn review sync task
+    let review_cancel_clone = review_cancel.clone();
+    let review_database = Arc::clone(&database);
+    background_tasks.spawn(async move {
+        review_synchronize(review_database, review_cancel_clone).await;
         Ok::<(), anyhow::Error>(())
     });
 
@@ -243,6 +261,14 @@ async fn main() -> Result<()> {
         "project_member_count",
         handle_project_member_count
     ));
+    toplevel.spawn(handler!(log_group, "project_likes", handle_project_likes));
+    toplevel.spawn(handler!(log_group, "rating_set", handle_rating_set));
+    toplevel.spawn(handler!(
+        log_group,
+        "project_reviews",
+        handle_project_reviews
+    ));
+    toplevel.spawn(handler!(log_group, "review_set", handle_review_set));
     toplevel.spawn(handler!(log_group, "last_edited", handle_last_edited));
     toplevel.spawn(handler!(log_group, "edit_log", handle_edit_log));
     toplevel.spawn(handler!(
@@ -319,9 +345,15 @@ async fn main() -> Result<()> {
     println!("  - log.cache.user_tags_update");
     println!("  - log.cache.user_emails_update");
     println!("  - log.health.check");
+    println!("  - log.project_likes");
+    println!("  - log.rating_set");
+    println!("  - log.project_reviews");
+    println!("  - log.review_set");
     println!("  - participation sync running in background");
     println!("  - bookmark sync running in background");
     println!("  - join sync running in background");
+    println!("  - rating sync running in background");
+    println!("  - review sync running in background");
     println!("  - golink sync running in background");
     println!("  - acts of science sync running in background");
     println!("  - zooniverse project sync running in background");
@@ -393,6 +425,8 @@ async fn main() -> Result<()> {
     participation_cancel.cancel();
     bookmark_cancel.cancel();
     join_cancel.cancel();
+    rating_cancel.cancel();
+    review_cancel.cancel();
     golink_cancel.cancel();
     acts_cancel.cancel();
     zoo_projects_cancel.cancel();

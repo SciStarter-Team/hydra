@@ -64,6 +64,26 @@ pub struct GolinkData {
     pub user_ulid: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RatingData {
+    pub id: i32,
+    pub when: String, // ISO 8601 timestamp string
+    pub entity_ulid: String,
+    pub user_ulid: Option<String>, // None for anonymous orrery ratings
+    pub amount: i16,               // > 0 is a like; mirrors orrery rate_review_rating
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReviewData {
+    pub id: i32,
+    pub when: String, // ISO 8601 timestamp string
+    pub entity_ulid: String,
+    pub user_ulid: String,
+    pub text: String,
+    pub private: bool,
+    pub checked: bool,
+}
+
 // Participation sync functions
 pub async fn participation_synchronize(
     database: Arc<Database>,
@@ -418,6 +438,216 @@ pub async fn join_synchronize(database: Arc<Database>, cancellation_token: Cance
     }
 }
 
+pub async fn rating_synchronize(database: Arc<Database>, cancellation_token: CancellationToken) {
+    loop {
+        // Check for cancellation at start of loop
+        if cancellation_token.is_cancelled() {
+            println!("Rating sync cancelled, exiting gracefully");
+            return;
+        }
+        let last = get_sync_bookmark(&database, "rating-sync-bookmark")
+            .await
+            .unwrap_or_else(|_| String::from("1900-01-01T00:00:00Z"));
+        let last_id = get_sync_last_id(&database, "rating-sync-last-id")
+            .await
+            .unwrap_or(0);
+
+        println!("Syncing ratings since {} with last_id {}", last, last_id);
+
+        let sync_token = env!("SYNC_TOKEN");
+        let client = reqwest::Client::new();
+
+        let ratings: Vec<RatingData> = match client
+            .get("https://scistarter.org/staff/sync/ratings")
+            .bearer_auth(sync_token)
+            .query(&[("since", &last), ("last_id", &last_id.to_string())])
+            .send()
+            .await
+        {
+            Ok(response) => match response.error_for_status() {
+                Ok(resp) => {
+                    let response_text = match resp.text().await {
+                        Ok(text) => text,
+                        Err(e) => {
+                            eprintln!("Failed to read response body: {}", e);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    };
+
+                    match serde_json::from_str(&response_text) {
+                        Ok(events) => events,
+                        Err(e) => {
+                            eprintln!("JSON parsing error: {}", e);
+                            eprintln!("Response body: {}", response_text);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("HTTP error: {}", e);
+                    sleep(Duration::from_secs(60)).await;
+                    continue;
+                }
+            },
+            Err(e) => {
+                eprintln!("Request error: {}", e);
+                sleep(Duration::from_secs(60)).await;
+                continue;
+            }
+        };
+
+        let got_ratings = ratings.len();
+
+        if got_ratings == 0 {
+            println!("No new ratings to sync");
+        } else {
+            let mut bookmark = last.clone();
+            let mut bookmark_id = last_id;
+
+            for rating in ratings {
+                if let Err(e) = insert_rating(&rating).await {
+                    eprintln!("Failed to insert rating: {}", e);
+                    continue;
+                }
+
+                if rating.when > bookmark || (rating.when == bookmark && rating.id > bookmark_id) {
+                    bookmark = rating.when.clone();
+                    bookmark_id = rating.id;
+                }
+            }
+
+            set_sync_bookmark(&database, "rating-sync-bookmark", &bookmark)
+                .await
+                .expect("Failed to save sync bookmark");
+            set_sync_last_id(&database, "rating-sync-last-id", bookmark_id)
+                .await
+                .expect("Failed to save sync last_id");
+        }
+
+        let sleep_duration = if got_ratings == 500 {
+            Duration::from_secs(60)
+        } else {
+            Duration::from_secs(60 * 60)
+        };
+
+        // Use cancellation-aware sleep
+        tokio::select! {
+            _ = sleep(sleep_duration) => {}
+            _ = cancellation_token.cancelled() => {
+                println!("Rating sync cancelled during sleep, exiting gracefully");
+                return;
+            }
+        }
+    }
+}
+
+pub async fn review_synchronize(database: Arc<Database>, cancellation_token: CancellationToken) {
+    loop {
+        // Check for cancellation at start of loop
+        if cancellation_token.is_cancelled() {
+            println!("Review sync cancelled, exiting gracefully");
+            return;
+        }
+        let last = get_sync_bookmark(&database, "review-sync-bookmark")
+            .await
+            .unwrap_or_else(|_| String::from("1900-01-01T00:00:00Z"));
+        let last_id = get_sync_last_id(&database, "review-sync-last-id")
+            .await
+            .unwrap_or(0);
+
+        println!("Syncing reviews since {} with last_id {}", last, last_id);
+
+        let sync_token = env!("SYNC_TOKEN");
+        let client = reqwest::Client::new();
+
+        let reviews: Vec<ReviewData> = match client
+            .get("https://scistarter.org/staff/sync/reviews")
+            .bearer_auth(sync_token)
+            .query(&[("since", &last), ("last_id", &last_id.to_string())])
+            .send()
+            .await
+        {
+            Ok(response) => match response.error_for_status() {
+                Ok(resp) => {
+                    let response_text = match resp.text().await {
+                        Ok(text) => text,
+                        Err(e) => {
+                            eprintln!("Failed to read response body: {}", e);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    };
+
+                    match serde_json::from_str(&response_text) {
+                        Ok(events) => events,
+                        Err(e) => {
+                            eprintln!("JSON parsing error: {}", e);
+                            eprintln!("Response body: {}", response_text);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("HTTP error: {}", e);
+                    sleep(Duration::from_secs(60)).await;
+                    continue;
+                }
+            },
+            Err(e) => {
+                eprintln!("Request error: {}", e);
+                sleep(Duration::from_secs(60)).await;
+                continue;
+            }
+        };
+
+        let got_reviews = reviews.len();
+
+        if got_reviews == 0 {
+            println!("No new reviews to sync");
+        } else {
+            let mut bookmark = last.clone();
+            let mut bookmark_id = last_id;
+
+            for review in reviews {
+                if let Err(e) = insert_review(&review).await {
+                    eprintln!("Failed to insert review: {}", e);
+                    continue;
+                }
+
+                if review.when > bookmark || (review.when == bookmark && review.id > bookmark_id) {
+                    bookmark = review.when.clone();
+                    bookmark_id = review.id;
+                }
+            }
+
+            set_sync_bookmark(&database, "review-sync-bookmark", &bookmark)
+                .await
+                .expect("Failed to save sync bookmark");
+            set_sync_last_id(&database, "review-sync-last-id", bookmark_id)
+                .await
+                .expect("Failed to save sync last_id");
+        }
+
+        let sleep_duration = if got_reviews == 500 {
+            Duration::from_secs(60)
+        } else {
+            Duration::from_secs(60 * 60)
+        };
+
+        // Use cancellation-aware sleep
+        tokio::select! {
+            _ = sleep(sleep_duration) => {}
+            _ = cancellation_token.cancelled() => {
+                println!("Review sync cancelled during sleep, exiting gracefully");
+                return;
+            }
+        }
+    }
+}
+
 pub async fn golink_synchronize(database: Arc<Database>, cancellation_token: CancellationToken) {
     loop {
         // Check for cancellation at start of loop
@@ -584,6 +814,54 @@ async fn insert_bookmark(database: &Database, bookmark: &BookmarkData) -> Result
     };
 
     database.bookmark.insert(row).await?;
+    Ok(())
+}
+
+async fn insert_rating(rating: &RatingData) -> Result<()> {
+    // Anonymous orrery ratings have no user; give each a distinct synthetic id so
+    // they count once (via amount > 0) and never match an authenticated user's like.
+    let user_id = rating
+        .user_ulid
+        .clone()
+        .unwrap_or_else(|| format!("anon:{}", rating.id));
+    let amount = rating.amount as i64;
+
+    sqlx::query!(
+        r#"INSERT INTO project_ratings_cache (project_id, user_id, amount, "when")
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT (project_id, user_id)
+           DO UPDATE SET amount = excluded.amount, "when" = excluded."when""#,
+        rating.entity_ulid,
+        user_id,
+        amount,
+        rating.when,
+    )
+    .execute(common::shared::db())
+    .await?;
+
+    Ok(())
+}
+
+async fn insert_review(review: &ReviewData) -> Result<()> {
+    let private: i64 = if review.private { 1 } else { 0 };
+    let checked: i64 = if review.checked { 1 } else { 0 };
+
+    sqlx::query!(
+        r#"INSERT INTO project_reviews_cache (project_id, user_id, text, private, checked, "when")
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT (project_id, user_id)
+           DO UPDATE SET text = excluded.text, private = excluded.private,
+               checked = excluded.checked, "when" = excluded."when""#,
+        review.entity_ulid,
+        review.user_ulid,
+        review.text,
+        private,
+        checked,
+        review.when,
+    )
+    .execute(common::shared::db())
+    .await?;
+
     Ok(())
 }
 

@@ -401,6 +401,57 @@ pub struct ProjectMemberCountResponse {
     pub count: i64,
 }
 
+/// Request a project's like count, and optionally whether a given user has liked it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectLikesRequest {
+    pub project_id: String,
+    pub user_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectLikesResponse {
+    pub count: i64,
+    pub liked: bool,
+}
+
+/// Set a user's like state on a project. Returns the updated count and state.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RatingSetRequest {
+    pub project_id: String,
+    pub user_id: String,
+    pub liked: bool,
+}
+
+/// A single public review for display.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReviewEntry {
+    pub user_id: String,
+    pub text: String,
+    pub when: String,
+}
+
+/// Request a project's public reviews (most recent first) and total public count.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectReviewsRequest {
+    pub project_id: String,
+    pub limit: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectReviewsResponse {
+    pub reviews: Vec<ReviewEntry>,
+    pub count: i64,
+}
+
+/// Create or update a user's review of a project. Returns the stored entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReviewSetRequest {
+    pub project_id: String,
+    pub user_id: String,
+    pub text: String,
+    pub private: bool,
+}
+
 /// Request the last-edited timestamp for a project or event.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LastEditedRequest {

@@ -7,11 +7,13 @@ use common::{
         ArticulateCompletionRecord, ArticulateCompletionRequest, ArticulateCompletionResponse,
         EditLogEntry, EditLogRequest, EditLogResponse, ExternalLinkClickthroughResponse,
         ExternalLinksResponse, GoUrlStatsRequest, GoUrlStatsResponse, LastEditedRequest,
-        LastEditedResponse, ProjectMemberCountRequest, ProjectMemberCountResponse,
-        ProjectParticipationRecord, ProjectParticipationRequest, ProjectParticipationResponse,
-        RecentActivityRequest, RecentActivityResponse, UserParticipationEntry,
-        UserParticipationRequest, UserParticipationResponse, UserRecentVisit,
-        UserRecentVisitsRequest, UserRecentVisitsResponse,
+        LastEditedResponse, ProjectLikesRequest, ProjectLikesResponse, ProjectMemberCountRequest,
+        ProjectMemberCountResponse, ProjectParticipationRecord, ProjectParticipationRequest,
+        ProjectParticipationResponse, ProjectReviewsRequest, ProjectReviewsResponse,
+        RatingSetRequest, RecentActivityRequest, RecentActivityResponse, ReviewEntry,
+        ReviewSetRequest, UserParticipationEntry, UserParticipationRequest,
+        UserParticipationResponse, UserRecentVisit, UserRecentVisitsRequest,
+        UserRecentVisitsResponse,
     },
     service::{TriggerEvent, decode_structured_message, trigger_email},
 };
@@ -1055,6 +1057,122 @@ pub async fn handle_project_member_count(
     .await?;
 
     Ok(ProjectMemberCountResponse { count })
+}
+
+/// Compute a project's like count and, for an optional user, whether they liked it.
+async fn project_likes(project_id: &str, user_id: Option<&str>) -> Result<ProjectLikesResponse> {
+    let count = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) as "count!: i64"
+           FROM project_ratings_cache
+           WHERE project_id = ? AND amount > 0"#,
+        project_id
+    )
+    .fetch_one(common::shared::db())
+    .await?;
+
+    let liked = if let Some(user_id) = user_id {
+        sqlx::query_scalar!(
+            r#"SELECT EXISTS(
+                 SELECT 1 FROM project_ratings_cache
+                 WHERE project_id = ? AND user_id = ? AND amount > 0
+               ) as "liked!: bool""#,
+            project_id,
+            user_id
+        )
+        .fetch_one(common::shared::db())
+        .await?
+    } else {
+        false
+    };
+
+    Ok(ProjectLikesResponse { count, liked })
+}
+
+pub async fn handle_project_likes(
+    req: &async_nats::service::Request,
+) -> Result<ProjectLikesResponse> {
+    let request: ProjectLikesRequest = decode_structured_message(req.message.clone())?;
+    project_likes(&request.project_id, request.user_id.as_deref()).await
+}
+
+pub async fn handle_rating_set(req: &async_nats::service::Request) -> Result<ProjectLikesResponse> {
+    let request: RatingSetRequest = decode_structured_message(req.message.clone())?;
+
+    let amount: i64 = if request.liked { 1 } else { 0 };
+    let when = common::timestring::TimeString::now().to_string();
+
+    sqlx::query!(
+        r#"INSERT INTO project_ratings_cache (project_id, user_id, amount, "when")
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT (project_id, user_id)
+           DO UPDATE SET amount = excluded.amount, "when" = excluded."when""#,
+        request.project_id,
+        request.user_id,
+        amount,
+        when
+    )
+    .execute(common::shared::db())
+    .await?;
+
+    project_likes(&request.project_id, Some(&request.user_id)).await
+}
+
+pub async fn handle_project_reviews(
+    req: &async_nats::service::Request,
+) -> Result<ProjectReviewsResponse> {
+    let request: ProjectReviewsRequest = decode_structured_message(req.message.clone())?;
+
+    let reviews = sqlx::query_as!(
+        ReviewEntry,
+        r#"SELECT user_id, text, "when"
+           FROM project_reviews_cache
+           WHERE project_id = ? AND private = 0
+           ORDER BY "when" DESC
+           LIMIT ?"#,
+        request.project_id,
+        request.limit
+    )
+    .fetch_all(common::shared::db())
+    .await?;
+
+    let count = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) as "count!: i64"
+           FROM project_reviews_cache
+           WHERE project_id = ? AND private = 0"#,
+        request.project_id
+    )
+    .fetch_one(common::shared::db())
+    .await?;
+
+    Ok(ProjectReviewsResponse { reviews, count })
+}
+
+pub async fn handle_review_set(req: &async_nats::service::Request) -> Result<ReviewEntry> {
+    let request: ReviewSetRequest = decode_structured_message(req.message.clone())?;
+
+    let private: i64 = if request.private { 1 } else { 0 };
+    let when = common::timestring::TimeString::now().to_string();
+
+    // Preserve orrery's `checked` flag on edit (it defaults to 0 for new reviews).
+    sqlx::query!(
+        r#"INSERT INTO project_reviews_cache (project_id, user_id, text, private, "when")
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT (project_id, user_id)
+           DO UPDATE SET text = excluded.text, private = excluded.private, "when" = excluded."when""#,
+        request.project_id,
+        request.user_id,
+        request.text,
+        private,
+        when
+    )
+    .execute(common::shared::db())
+    .await?;
+
+    Ok(ReviewEntry {
+        user_id: request.user_id,
+        text: request.text,
+        when,
+    })
 }
 
 pub async fn handle_last_edited(req: &async_nats::service::Request) -> Result<LastEditedResponse> {

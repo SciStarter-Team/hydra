@@ -1,7 +1,7 @@
 use anyhow::Error;
 use common::{
     message::{
-        log::ExchangeEvent,
+        log::{ExchangeEvent, ProjectLikesResponse, RatingSetRequest},
         user::{PermissionCheckRequest, PermissionCheckResponse},
     },
     service::{request, send},
@@ -21,7 +21,6 @@ use crate::local_time::{TimeFormat, local_time};
 use crate::middleware::analytics::{Device, Interaction};
 use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
-use crate::review::ProjectReview;
 
 use super::{Exchange, ExchangeInfo, SearchParams, TemplateExchange, TemplateUser};
 
@@ -526,9 +525,10 @@ async fn load_exchange_project_detail(
         .map(|r| (r.audience.clone(), r.audience))
         .collect();
 
-    // Get vote count
+    // Like count is cached per-project on this frontend instance; the log-service
+    // stays authoritative and unifies orrery-synced history with new hydra likes.
     let project_ulid = Ulid::from_string(project_id)?;
-    let likes = crate::rating::ProjectRating::count_for_project(project_ulid).await?;
+    let likes = crate::component::detail_page::cached_like_count(project_ulid).await?;
 
     // Get user-specific data
     let (user_is_authorized, liked, saved, joined) = if let Some(user) = user_info {
@@ -544,8 +544,9 @@ async fn load_exchange_project_detail(
         .await?
         .has_permission;
 
-        // Check if user has liked this project
-        let liked = crate::rating::ProjectRating::has_rated(project_ulid, user.user_id).await?;
+        // Whether this user has liked the project (live per-user lookup)
+        let liked =
+            crate::component::detail_page::user_has_liked(project_ulid, user.user_id).await?;
 
         // Check if user has saved (bookmarked) this project
         use common::message::user::{BookmarkCheckRequest, BookmarkCheckResponse};
@@ -576,12 +577,17 @@ async fn load_exchange_project_detail(
         (false, false, false, false)
     };
 
-    // Load reviews (limited to 5 most recent)
-    let project_ulid = Ulid::from_string(project_id)?;
-    let project_reviews = ProjectReview::list_for_project(project_ulid, Some(5)).await?;
+    // Public reviews are cached per-project on this frontend instance; show the
+    // 5 most recent.
+    let reviews_response =
+        crate::component::detail_page::cached_project_reviews(project_ulid).await?;
+    let project_reviews: Vec<_> = reviews_response.reviews.into_iter().take(5).collect();
 
     // Fetch user display info for all reviewers in batch
-    let user_ids: Vec<Ulid> = project_reviews.iter().map(|r| r.user_id).collect();
+    let user_ids: Vec<Ulid> = project_reviews
+        .iter()
+        .filter_map(|r| Ulid::from_string(&r.user_id).ok())
+        .collect();
     let user_info_map = if !user_ids.is_empty() {
         use common::message::user::{UserDisplayInfoBatchRequest, UserDisplayInfoBatchResponse};
         use std::collections::HashMap;
@@ -595,7 +601,7 @@ async fn load_exchange_project_detail(
         response
             .users
             .into_iter()
-            .map(|u| (u.user_id, (u.handle, u.image)))
+            .map(|u| (u.user_id.to_string(), (u.handle, u.image)))
             .collect::<HashMap<_, _>>()
     } else {
         std::collections::HashMap::new()
@@ -611,11 +617,11 @@ async fn load_exchange_project_detail(
                 .unwrap_or_else(|| (format!("({})", review.user_id), String::new()));
 
             ReviewForDisplay {
-                user_id: review.user_id.to_string(),
+                user_id: review.user_id,
                 user_handle,
                 user_image,
                 text: review.text,
-                when: review.reviewed_at,
+                when: TimeString::try_from(review.when).unwrap_or_else(|_| TimeString::now()),
             }
         })
         .collect();
@@ -2286,9 +2292,6 @@ pub async fn vote_project(
     device: Device,
     interaction: Interaction,
 ) -> Result<poem::Response, Error> {
-    use crate::peering::LoadStorePeered;
-    use crate::rating::ProjectRating;
-
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
     let exchange = ExchangeInfo::load_by_id(exchange_id).await?;
 
@@ -2309,11 +2312,16 @@ pub async fn vote_project(
         .ok_or_else(|| anyhow::anyhow!("Project not found"))?
         .project_id;
 
-    let project_id = Ulid::from_string(&project_id_str)?;
-
-    // Create and store the rating using LoadStorePeered
-    let rating = ProjectRating::new(project_id, user_info.user_id);
-    rating.store().await?;
+    // Record the like in the log-service (single source of truth for likes)
+    let _: ProjectLikesResponse = request(
+        "log.rating_set",
+        RatingSetRequest {
+            project_id: project_id_str,
+            user_id: user_info.user_id.to_string(),
+            liked: true,
+        },
+    )
+    .await?;
 
     // Track vote action
     record_event(

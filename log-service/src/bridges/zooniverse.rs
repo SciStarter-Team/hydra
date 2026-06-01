@@ -480,7 +480,10 @@ async fn sync_project(
                 Some(s) => match s.parse::<i64>() {
                     Ok(id) => id,
                     Err(_) => {
-                        eprintln!("Skipping classification {} with unparseable user id", class_id);
+                        eprintln!(
+                            "Skipping classification {} with unparseable user id",
+                            class_id
+                        );
                         continue;
                     }
                 },
@@ -568,4 +571,3 @@ async fn sync_project(
         }
     }
 }
-

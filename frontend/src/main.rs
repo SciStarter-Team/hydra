@@ -38,8 +38,6 @@ pub mod peering;
 pub mod profile;
 pub mod profile_card;
 pub mod project;
-pub mod rating;
-pub mod review;
 pub mod schedule;
 pub mod search;
 pub mod session;
@@ -462,8 +460,6 @@ async fn main() -> Result<(), Error> {
     let _entity_list_entry_updates = tokio::spawn(entity_list::EntityListEntry::peering_task());
     let _entity_list_viewer_updates = tokio::spawn(entity_list::EntityListViewer::peering_task());
     let _go_url_updates = tokio::spawn(gourl::GoUrl::peering_task());
-    let _project_rating_updates = tokio::spawn(rating::ProjectRating::peering_task());
-    let _project_review_updates = tokio::spawn(review::ProjectReview::peering_task());
     let _schedule_updates = tokio::spawn(schedule::Schedule::peering_task());
     let _entity_updates = tokio::spawn(entity::Entity::peering_task());
     let _redirect_updates = tokio::spawn(misc::Redirect::peering_task());
