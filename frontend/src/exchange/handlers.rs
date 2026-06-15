@@ -87,7 +87,7 @@ async fn get_filter_options() -> Result<FilterOptions, Error> {
 
 /// Build base query with common WHERE clause (with or without FTS)
 fn build_base_where_clause<'a>(
-    query_builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
+    query_builder: &mut sqlx::QueryBuilder<sqlx::Sqlite>,
     exchange_id: i64,
     params: &'a SearchParams,
     for_count: bool,
@@ -183,7 +183,7 @@ fn build_base_where_clause<'a>(
 
 /// Apply common search filters to a query builder
 fn apply_search_filters<'a>(
-    query_builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
+    query_builder: &mut sqlx::QueryBuilder<sqlx::Sqlite>,
     _exchange_id: i64,
     params: &'a SearchParams,
 ) {

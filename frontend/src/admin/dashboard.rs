@@ -396,12 +396,12 @@ impl Component for DashboardPage {
             Err(_) => "N/A".to_string(),
         };
 
-        let project_count = sqlx::query!(r#"SELECT COUNT(*) as count FROM projects p LEFT JOIN entities ent ON ent.target = p.project_id AND ent.kind = 'Project' WHERE ent.publish = 1 AND p.flagged = false AND p.duplicate = false AND p.is_test = false"#)
+        let project_count = sqlx::query!(r#"SELECT COUNT(*) as "count!" FROM projects p LEFT JOIN entities ent ON ent.target = p.project_id AND ent.kind = 'Project' WHERE ent.publish = 1 AND p.flagged = false AND p.duplicate = false AND p.is_test = false"#)
             .fetch_one(db())
             .await?
             .count;
 
-        let upcoming_events_count = sqlx::query!(r#"SELECT COUNT(DISTINCT e.event_id) as count FROM events e JOIN event_instances ei ON e.event_id = ei.event_id LEFT JOIN entities ent ON ent.target = e.event_id AND ent.kind = 'Event' WHERE ent.publish = 1 AND e.flagged = false AND ei.begin > datetime('now')"#)
+        let upcoming_events_count = sqlx::query!(r#"SELECT COUNT(DISTINCT e.event_id) as "count!" FROM events e JOIN event_instances ei ON e.event_id = ei.event_id LEFT JOIN entities ent ON ent.target = e.event_id AND ent.kind = 'Event' WHERE ent.publish = 1 AND e.flagged = false AND ei.begin > datetime('now')"#)
             .fetch_one(db())
             .await?
             .count;

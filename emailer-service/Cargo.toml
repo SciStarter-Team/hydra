@@ -21,7 +21,7 @@ jiff = "0.2.15"
 sailfish = "0.10.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
-sqlx = { path = "/home/djarb/source/others/sqlx", features = ["sqlite", "runtime-tokio", "macros", "migrate"] }
+sqlx = { version = "0.9", features = ["sqlite", "sqlite-load-extension", "runtime-tokio", "macros", "migrate"] }
 tokio = { version = "1.47.1", features = ["full"] }
 tracing = "0.1.41"
 tracing-subscriber = "0.3.20"

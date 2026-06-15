@@ -1768,20 +1768,22 @@ async fn apply_simple_tutorial_state(
     state: &str,
     ts: &str,
 ) -> Result<(), anyhow::Error> {
-    // Can't use sqlx::query! with dynamic table names, use query_scalar
-    sqlx::query(&format!(
+    // `table` cannot be a bind parameter (it is a SQL identifier), so it is
+    // interpolated directly. SAFETY: every caller passes a hardcoded table name,
+    // never untrusted input, so this is not an injection vector.
+    sqlx::query(sqlx::AssertSqlSafe(format!(
         "INSERT OR IGNORE INTO {} (user_id) VALUES (?)",
         table
-    ))
+    )))
     .bind(user_id)
     .execute(db)
     .await?;
 
     if state == "tutorial" {
-        sqlx::query(&format!(
+        sqlx::query(sqlx::AssertSqlSafe(format!(
             "UPDATE {} SET tutorial_completed_at = COALESCE(tutorial_completed_at, ?), badge_granted_at = COALESCE(badge_granted_at, ?) WHERE user_id = ?",
             table
-        ))
+        )))
         .bind(ts)
         .bind(ts)
         .bind(user_id)

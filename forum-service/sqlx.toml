@@ -1,2 +1,2 @@
-[common.drivers.sqlite]
-load-extensions = ["mod_spatialite"]
+[drivers.sqlite]
+unsafe-load-extensions = ["mod_spatialite"]

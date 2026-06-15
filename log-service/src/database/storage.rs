@@ -18,7 +18,7 @@ use datafusion::physical_plan::ExecutionPlan;
 use datafusion::prelude::SessionConfig;
 use object_store::local::LocalFileSystem;
 use serde::{Deserialize, Serialize};
-use sqlx::Row;
+use sqlx::{QueryBuilder, Row, Sqlite};
 use std::any::Any;
 use std::collections::HashMap;
 use std::path::Path;
@@ -112,6 +112,24 @@ impl TableProvider for SqliteTableProvider {
     }
 }
 
+/// A literal value bound into a query as a parameter rather than interpolated
+/// into the SQL text.
+enum FilterValue {
+    Text(String),
+    Int(i64),
+    Float(f64),
+}
+
+/// A single pushed-down filter expressed as a raw SQL fragment plus an optional
+/// bound value.
+///
+/// `sql` contains only identifiers and operators, which cannot be parameterized;
+/// any literal value travels in `value` so it is bound rather than interpolated.
+struct SqlCondition {
+    sql: String,
+    value: Option<FilterValue>,
+}
+
 impl SqliteTableProvider {
     fn can_pushdown_filter(&self, filter: &Expr) -> bool {
         use datafusion::logical_expr::Expr;
@@ -151,27 +169,48 @@ impl SqliteTableProvider {
         matches!(expr, Expr::Literal(_, _))
     }
 
-    fn build_where_clause(&self, filters: &[Expr]) -> DataFusionResult<String> {
-        if filters.is_empty() {
-            return Ok(String::new());
-        }
-
-        let mut conditions = Vec::new();
+    fn push_where_clause(
+        &self,
+        builder: &mut QueryBuilder<Sqlite>,
+        filters: &[Expr],
+    ) -> DataFusionResult<()> {
+        let mut first = true;
 
         for filter in filters {
-            if let Some(condition) = self.filter_to_sql(filter)? {
-                conditions.push(condition);
+            let Some(condition) = self.filter_to_condition(filter)? else {
+                continue;
+            };
+
+            builder.push(if first { " WHERE " } else { " AND " });
+            first = false;
+
+            builder.push(condition.sql);
+            match condition.value {
+                Some(FilterValue::Text(s)) => {
+                    builder.push_bind(s);
+                }
+                Some(FilterValue::Int(i)) => {
+                    builder.push_bind(i);
+                }
+                Some(FilterValue::Float(f)) => {
+                    builder.push_bind(f);
+                }
+                None => {}
             }
         }
 
-        if conditions.is_empty() {
-            Ok(String::new())
-        } else {
-            Ok(format!(" WHERE {}", conditions.join(" AND ")))
-        }
+        Ok(())
     }
 
-    fn filter_to_sql(&self, filter: &Expr) -> DataFusionResult<Option<String>> {
+    /// Translate a single pushed-down filter into a SQL fragment plus an optional
+    /// bound value.
+    ///
+    /// Column names and operators are emitted as raw SQL because SQL identifiers
+    /// cannot be parameterized; they originate from the DataFusion query plan and
+    /// this table's own schema, not from untrusted input. Literal values are
+    /// always returned as bound parameters so they are never interpolated into
+    /// the query text.
+    fn filter_to_condition(&self, filter: &Expr) -> DataFusionResult<Option<SqlCondition>> {
         use datafusion::common::ScalarValue;
         use datafusion::logical_expr::{Expr, Operator};
 
@@ -186,18 +225,16 @@ impl SqliteTableProvider {
                     match binary_expr.op {
                         Operator::ILikeMatch | Operator::NotILikeMatch => {
                             if let ScalarValue::Utf8(Some(s)) = literal {
-                                let escaped_value =
-                                    format!("'{}'", s.to_uppercase().replace('\'', "''"));
                                 let not_prefix =
                                     if matches!(binary_expr.op, Operator::NotILikeMatch) {
                                         "NOT "
                                     } else {
                                         ""
                                     };
-                                Ok(Some(format!(
-                                    "{}UPPER({}) LIKE {}",
-                                    not_prefix, column_name, escaped_value
-                                )))
+                                Ok(Some(SqlCondition {
+                                    sql: format!("{}UPPER({}) LIKE ", not_prefix, column_name),
+                                    value: Some(FilterValue::Text(s.to_uppercase())),
+                                }))
                             } else {
                                 Ok(None)
                             }
@@ -215,24 +252,21 @@ impl SqliteTableProvider {
                                 _ => return Ok(None),
                             };
 
-                            let value_str = match literal {
-                                ScalarValue::Utf8(Some(s)) => {
-                                    format!("'{}'", s.replace('\'', "''"))
-                                } // SQL escape
-                                ScalarValue::Int32(Some(i)) => i.to_string(),
-                                ScalarValue::Int64(Some(i)) => i.to_string(),
-                                ScalarValue::Float64(Some(f)) => f.to_string(),
+                            let value = match literal {
+                                ScalarValue::Utf8(Some(s)) => FilterValue::Text(s.clone()),
+                                ScalarValue::Int32(Some(i)) => FilterValue::Int(*i as i64),
+                                ScalarValue::Int64(Some(i)) => FilterValue::Int(*i),
+                                ScalarValue::Float64(Some(f)) => FilterValue::Float(*f),
                                 ScalarValue::Boolean(Some(b)) => {
-                                    if *b {
-                                        "1".to_string()
-                                    } else {
-                                        "0".to_string()
-                                    }
+                                    FilterValue::Int(if *b { 1 } else { 0 })
                                 }
                                 _ => return Ok(None),
                             };
 
-                            Ok(Some(format!("{} {} {}", column_name, op_str, value_str)))
+                            Ok(Some(SqlCondition {
+                                sql: format!("{} {} ", column_name, op_str),
+                                value: Some(value),
+                            }))
                         }
                     }
                 } else {
@@ -241,14 +275,20 @@ impl SqliteTableProvider {
             }
             Expr::IsNull(expr) => {
                 if let Expr::Column(col) = &**expr {
-                    Ok(Some(format!("{} IS NULL", col.name)))
+                    Ok(Some(SqlCondition {
+                        sql: format!("{} IS NULL", col.name),
+                        value: None,
+                    }))
                 } else {
                     Ok(None)
                 }
             }
             Expr::IsNotNull(expr) => {
                 if let Expr::Column(col) = &**expr {
-                    Ok(Some(format!("{} IS NOT NULL", col.name)))
+                    Ok(Some(SqlCondition {
+                        sql: format!("{} IS NOT NULL", col.name),
+                        value: None,
+                    }))
                 } else {
                     Ok(None)
                 }
@@ -262,34 +302,38 @@ impl SqliteTableProvider {
         filters: &[Expr],
         limit: Option<usize>,
     ) -> DataFusionResult<RecordBatch> {
-        let where_clause = self.build_where_clause(filters)?;
-
         // Build dynamic SELECT query based on schema
-        let column_names: Vec<String> = self
+        let columns_str = self
             .schema
             .fields()
             .iter()
             .map(|f| f.name().clone())
-            .collect();
-        let columns_str = column_names.join(", ");
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let mut builder = QueryBuilder::new("SELECT ");
+        builder.push(columns_str);
+        builder.push(" FROM ");
+        builder.push(&self.table_name);
+
+        self.push_where_clause(&mut builder, filters)?;
 
         // Add LIMIT clause if provided to reduce memory usage
-        let limit_clause = match limit {
-            Some(n) => format!(" LIMIT {}", n),
-            None => String::new(),
-        };
+        if let Some(n) = limit {
+            builder.push(" LIMIT ");
+            builder.push_bind(n as i64);
+        }
 
-        let sql = format!(
-            "SELECT {} FROM {}{}{}",
-            columns_str, self.table_name, where_clause, limit_clause
-        );
-
-        self.execute_sqlite_query(&sql).await
+        self.execute_sqlite_query(builder).await
     }
 
-    async fn execute_sqlite_query(&self, sql: &str) -> DataFusionResult<RecordBatch> {
+    async fn execute_sqlite_query(
+        &self,
+        mut builder: QueryBuilder<Sqlite>,
+    ) -> DataFusionResult<RecordBatch> {
         let db = common::shared::db();
-        let rows = sqlx::query(&sql)
+        let rows = builder
+            .build()
             .fetch_all(db)
             .await
             .map_err(|e| DataFusionError::External(Box::new(e)))?;

@@ -93,19 +93,28 @@ pub async fn search_entities(query: &str) -> Result<Vec<SearchResult>, Error> {
     // Use FTS5 MATCH with prefix search
     let search_term = format!("{}*", query);
 
-    let rows = sqlx::query!(
-        r#"SELECT f.slug as "slug: String",
-                  f.entity_type as "entity_type: String",
-                  f.title as "title: String"
+    // This selects columns directly from an FTS5 virtual table. The compile-time
+    // `query!` macro cannot describe FTS5 virtual-table columns under sqlx 0.9
+    // (the describe path recurses without terminating), so use the runtime
+    // `query_as` API with an explicit row type instead.
+    #[derive(sqlx::FromRow)]
+    struct EntityFtsRow {
+        slug: Option<String>,
+        entity_type: Option<String>,
+        title: Option<String>,
+    }
+
+    let rows = sqlx::query_as::<_, EntityFtsRow>(
+        r#"SELECT f.slug, f.entity_type, f.title
            FROM entities_fts f
            JOIN entities e ON f.slug = e.slug
-           WHERE entities_fts MATCH ?1
+           WHERE entities_fts MATCH ?
              AND e.publish = 1
            GROUP BY f.slug
            ORDER BY rank
            LIMIT 20"#,
-        search_term
     )
+    .bind(search_term)
     .fetch_all(db())
     .await?;
 
@@ -293,7 +302,7 @@ async fn load_filter_options() -> Result<(Vec<String>, Vec<String>, Vec<String>)
 
 /// Apply project-specific filters to a QueryBuilder
 fn apply_project_filters<'a>(
-    qb: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
+    qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>,
     query: &'a FinderQuery,
 ) {
     // Filter out bad geographic data: (0,0) points and swapped lat/lng
@@ -371,7 +380,7 @@ fn apply_project_filters<'a>(
 }
 
 /// Apply event-specific filters to a QueryBuilder
-fn apply_event_filters<'a>(qb: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>, query: &'a FinderQuery) {
+fn apply_event_filters<'a>(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, query: &'a FinderQuery) {
     // Filter out bad geographic data: (0,0) points and swapped lat/lng
     qb.push(" AND NOT (ev.point IS NOT NULL AND ST_X(ev.point) = 0 AND ST_Y(ev.point) = 0)");
     qb.push(" AND NOT (ev.point IS NOT NULL AND ABS(ST_Y(ev.point)) > 90)");
@@ -426,7 +435,7 @@ struct FinderSearchResult {
 fn build_project_count_text<'a>(
     search_term: &'a str,
     fq: &'a FinderQuery,
-) -> sqlx::QueryBuilder<'a, sqlx::Sqlite> {
+) -> sqlx::QueryBuilder<sqlx::Sqlite> {
     let mut qb = sqlx::QueryBuilder::new(
         "SELECT COUNT(*) FROM entities_fts f JOIN entities e ON f.slug = e.slug JOIN projects p ON e.target = p.project_id WHERE e.kind = 'Project' AND entities_fts MATCH ",
     );
@@ -440,7 +449,7 @@ fn build_project_count_text<'a>(
 fn build_event_count_text<'a>(
     search_term: &'a str,
     fq: &'a FinderQuery,
-) -> sqlx::QueryBuilder<'a, sqlx::Sqlite> {
+) -> sqlx::QueryBuilder<sqlx::Sqlite> {
     let mut qb = sqlx::QueryBuilder::new(
         "SELECT COUNT(*) FROM entities_fts f JOIN entities e ON f.slug = e.slug JOIN events ev ON e.target = ev.event_id WHERE e.kind = 'Event' AND entities_fts MATCH ",
     );
@@ -850,7 +859,7 @@ async fn search_with_location(
 }
 
 /// Count projects matching location-only + filters
-fn build_project_count_location<'a>(fq: &'a FinderQuery) -> sqlx::QueryBuilder<'a, sqlx::Sqlite> {
+fn build_project_count_location<'a>(fq: &'a FinderQuery) -> sqlx::QueryBuilder<sqlx::Sqlite> {
     let mut qb = sqlx::QueryBuilder::new(
         "SELECT COUNT(*) FROM entities e JOIN projects p ON e.target = p.project_id WHERE e.kind = 'Project' AND e.publish = 1 AND (p.point IS NOT NULL OR p.regions IS NOT NULL OR p.entirely_online = 1)",
     );
@@ -859,7 +868,7 @@ fn build_project_count_location<'a>(fq: &'a FinderQuery) -> sqlx::QueryBuilder<'
 }
 
 /// Count events matching location-only + filters
-fn build_event_count_location<'a>(fq: &'a FinderQuery) -> sqlx::QueryBuilder<'a, sqlx::Sqlite> {
+fn build_event_count_location<'a>(fq: &'a FinderQuery) -> sqlx::QueryBuilder<sqlx::Sqlite> {
     let mut qb = sqlx::QueryBuilder::new(
         "SELECT COUNT(*) FROM entities e JOIN events ev ON e.target = ev.event_id WHERE e.kind = 'Event' AND e.publish = 1 AND (ev.point IS NOT NULL OR ev.regions IS NOT NULL OR ev.entirely_online = 1)",
     );

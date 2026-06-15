@@ -151,16 +151,12 @@ async fn check_foundations_badge(user_id: &str) -> Result<bool, anyhow::Error> {
     }
 
     // Check: hour1 + at least 2 of the 3 projects
-    let project_count = [
-        row.has_squirrel.unwrap_or(false),
-        row.has_stall.unwrap_or(false),
-        row.has_debris.unwrap_or(false),
-    ]
-    .iter()
-    .filter(|&&x| x)
-    .count();
+    let project_count = [row.has_squirrel, row.has_stall, row.has_debris]
+        .iter()
+        .filter(|&&x| x)
+        .count();
 
-    if row.has_hour1.unwrap_or(false) && project_count >= 2 {
+    if row.has_hour1 && project_count >= 2 {
         let now = jiff::Zoned::now().to_string();
         sqlx::query!(
             "UPDATE foundations_progress SET badge_granted_at = ? WHERE user_id = ?",
@@ -266,7 +262,7 @@ async fn check_libraries_hubs_badge(user_id: &str) -> Result<bool, anyhow::Error
         return Ok(false);
     }
 
-    if row.has_hour2.unwrap_or(false) && row.has_supplemental.unwrap_or(false) {
+    if row.has_hour2 && row.has_supplemental {
         let now = jiff::Zoned::now().to_string();
         sqlx::query!(
             "UPDATE libraries_hubs_progress SET badge_granted_at = ? WHERE user_id = ?",

@@ -771,7 +771,7 @@ impl DetailPage {
             state: row.state,
             zip: row.zip,
             country: row.country,
-            has_point: row.has_point.unwrap_or(false),
+            has_point: row.has_point,
             total_expense: row
                 .total_expense
                 .map(|v| {
@@ -1019,7 +1019,7 @@ impl DetailPage {
             state: row.state,
             zip: row.zip,
             country: row.country,
-            has_point: row.has_point.unwrap_or(false),
+            has_point: row.has_point,
             total_expense: String::new(),
             time_per_participation: String::new(),
             audiences: Vec::new(),

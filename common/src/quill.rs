@@ -1079,7 +1079,7 @@ mod tests {
     #[test]
     fn test_html_to_delta_simple() {
         let html = "<p>Simple paragraph</p>";
-        let result = html_to_delta(html, None).unwrap();
+        let result = html_to_delta(html).unwrap();
         let parsed: Delta = serde_json::from_str(&result).unwrap();
 
         // Should have 2 ops: text + newline
@@ -1103,7 +1103,7 @@ mod tests {
     #[test]
     fn test_html_to_delta_with_formatting() {
         let html = "<p>This is <strong>bold</strong> and <em>italic</em> text</p>";
-        let result = html_to_delta(html, None).unwrap();
+        let result = html_to_delta(html).unwrap();
         let parsed: Delta = serde_json::from_str(&result).unwrap();
 
         // Should have: "This is ", "bold" (bold), " and ", "italic" (italic), " text", "\n"
@@ -1137,7 +1137,7 @@ mod tests {
     #[test]
     fn test_html_to_delta_heading() {
         let html = "<h2>Second Level Heading</h2>";
-        let result = html_to_delta(html, None).unwrap();
+        let result = html_to_delta(html).unwrap();
         let parsed: Delta = serde_json::from_str(&result).unwrap();
 
         // Should have 2 ops: text + newline with header attribute
@@ -1164,7 +1164,7 @@ mod tests {
     #[test]
     fn test_html_to_delta_list() {
         let html = "<ul><li>First item</li><li>Second item</li></ul>";
-        let result = html_to_delta(html, None).unwrap();
+        let result = html_to_delta(html).unwrap();
         let parsed: Delta = serde_json::from_str(&result).unwrap();
 
         // Should have 4 ops: "First item", "\n" (list), "Second item", "\n" (list)
@@ -1200,7 +1200,7 @@ mod tests {
     #[test]
     fn test_markdown_to_delta_heading() {
         let markdown = "# Heading 1";
-        let result = markdown_to_delta(markdown, None).unwrap();
+        let result = markdown_to_delta(markdown).unwrap();
         let parsed: Delta = serde_json::from_str(&result).unwrap();
 
         // Should have 2 ops: text + newline with header attribute
@@ -1227,7 +1227,7 @@ mod tests {
     #[test]
     fn test_markdown_to_delta_list() {
         let markdown = "- Item 1\n- Item 2";
-        let result = markdown_to_delta(markdown, None).unwrap();
+        let result = markdown_to_delta(markdown).unwrap();
         let parsed: Delta = serde_json::from_str(&result).unwrap();
 
         // Should have 4 ops: "Item 1", "\n" (list), "Item 2", "\n" (list)
@@ -1256,7 +1256,7 @@ mod tests {
     #[test]
     fn test_markdown_to_delta_bold_and_italic() {
         let markdown = "This is **bold** and *italic* text";
-        let result = markdown_to_delta(markdown, None).unwrap();
+        let result = markdown_to_delta(markdown).unwrap();
         let parsed: Delta = serde_json::from_str(&result).unwrap();
 
         // Should have: "This is ", "bold" (bold), " and ", "italic" (italic), " text", "\n"

@@ -1,5 +1,5 @@
 use futures::stream::BoxStream;
-use sqlx::{Database, Error as SqlxError, Executor, Sqlite, SqlitePool, pool::PoolConnection};
+use sqlx::{Database, Error as SqlxError, Executor, Sqlite, SqlitePool, SqlStr, pool::PoolConnection};
 use std::future::Future;
 use std::pin::Pin;
 
@@ -252,13 +252,13 @@ impl<'c> Executor<'c> for &'c mut Immediate {
         conn.fetch_optional(query)
     }
 
-    fn prepare_with<'e, 'q: 'e>(
+    fn prepare_with<'e>(
         self,
-        sql: &'q str,
+        sql: SqlStr,
         parameters: &'e [<Self::Database as Database>::TypeInfo],
     ) -> Pin<
         Box<
-            dyn Future<Output = Result<<Self::Database as Database>::Statement<'q>, SqlxError>>
+            dyn Future<Output = Result<<Self::Database as Database>::Statement, SqlxError>>
                 + Send
                 + 'e,
         >,
@@ -270,9 +270,9 @@ impl<'c> Executor<'c> for &'c mut Immediate {
         conn.prepare_with(sql, parameters)
     }
 
-    fn describe<'e, 'q: 'e>(
+    fn describe<'e>(
         self,
-        sql: &'q str,
+        sql: SqlStr,
     ) -> Pin<Box<dyn Future<Output = Result<sqlx::Describe<Self::Database>, SqlxError>> + Send + 'e>>
     where
         'c: 'e,

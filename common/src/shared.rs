@@ -76,18 +76,22 @@ mod database {
             .max_lifetime(Duration::from_secs(MAX_CONNECTION_LIFETIME))
             .idle_timeout(Duration::from_secs(MAX_CONNECTION_IDLE_TIME))
             .connect_with(
-                SqliteConnectOptions::new()
-                    .filename(std::path::Path::join(
-                        STORAGE_PATH.as_ref(),
-                        format!("{}.sqlite", db_name.as_ref()),
-                    ))
-                    .create_if_missing(true)
-                    .busy_timeout(std::time::Duration::from_secs(300))
-                    .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
-                    .synchronous(sqlx::sqlite::SqliteSynchronous::Normal)
-                    .foreign_keys(true)
-                    .optimize_on_close(true, Some(1000))
-                    .extension("mod_spatialite"),
+                // SAFETY: mod_spatialite is a trusted extension shipped with the
+                // deployment; loading it is required for spatial query support.
+                unsafe {
+                    SqliteConnectOptions::new()
+                        .filename(std::path::Path::join(
+                            STORAGE_PATH.as_ref(),
+                            format!("{}.sqlite", db_name.as_ref()),
+                        ))
+                        .create_if_missing(true)
+                        .busy_timeout(std::time::Duration::from_secs(300))
+                        .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
+                        .synchronous(sqlx::sqlite::SqliteSynchronous::Normal)
+                        .foreign_keys(true)
+                        .optimize_on_close(true, Some(1000))
+                        .extension("mod_spatialite")
+                },
             )
             .await
             .expect("Unable to connect to SQLite");
@@ -122,18 +126,22 @@ mod database {
         create: bool,
     ) -> Result<SqlitePool, sqlx::Error> {
         Ok(SqlitePool::connect_with(
-            SqliteConnectOptions::new()
-                .filename(std::path::Path::join(
-                    STORAGE_PATH.as_ref(),
-                    format!("{}.sqlite", db_name.as_ref()),
-                ))
-                .create_if_missing(create)
-                .busy_timeout(std::time::Duration::from_secs(300))
-                .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
-                .synchronous(sqlx::sqlite::SqliteSynchronous::Normal)
-                .foreign_keys(true)
-                .optimize_on_close(true, Some(1000))
-                .extension("mod_spatialite"),
+            // SAFETY: mod_spatialite is a trusted extension shipped with the
+            // deployment; loading it is required for spatial query support.
+            unsafe {
+                SqliteConnectOptions::new()
+                    .filename(std::path::Path::join(
+                        STORAGE_PATH.as_ref(),
+                        format!("{}.sqlite", db_name.as_ref()),
+                    ))
+                    .create_if_missing(create)
+                    .busy_timeout(std::time::Duration::from_secs(300))
+                    .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
+                    .synchronous(sqlx::sqlite::SqliteSynchronous::Normal)
+                    .foreign_keys(true)
+                    .optimize_on_close(true, Some(1000))
+                    .extension("mod_spatialite")
+            },
         )
         .await?)
     }

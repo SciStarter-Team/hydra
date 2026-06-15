@@ -729,7 +729,7 @@ pub async fn resolve_entity_slug_name(slug: &str) -> Result<Option<String>, Erro
     .await?;
 
     Ok(row.and_then(|r| {
-        let name = r.entity_name?;
+        let name = r.entity_name;
         if name.is_empty() { None } else { Some(name) }
     }))
 }
