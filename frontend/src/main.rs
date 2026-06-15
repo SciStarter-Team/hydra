@@ -113,8 +113,33 @@ async fn entity_page(
     if &slug == "" {
         Ok(index_page_pseudo_handler(client_ip, user_info).await?)
     } else {
-        Entity::response_for_slug(slug, user_info, session).await
+        Entity::response_for_slug(slug, "/", user_info, session).await
     }
+}
+
+/// Serve a project at its canonical `/projects/<slug>` path. Entities
+/// of other kinds (or projects reached under the wrong prefix) are
+/// permanently redirected to their canonical path by
+/// `response_for_slug`.
+#[handler]
+#[tracing::instrument]
+async fn project_page(
+    Authenticated(user_info): Authenticated,
+    session: &poem::session::Session,
+    Path(slug): Path<String>,
+) -> poem::Result<poem::Response> {
+    Entity::response_for_slug(slug, "/projects/", user_info, session).await
+}
+
+/// Serve an event at its canonical `/events/<slug>` path.
+#[handler]
+#[tracing::instrument]
+async fn event_page(
+    Authenticated(user_info): Authenticated,
+    session: &poem::session::Session,
+    Path(slug): Path<String>,
+) -> poem::Result<poem::Response> {
+    Entity::response_for_slug(slug, "/events/", user_info, session).await
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -141,7 +166,7 @@ async fn entity_password_verify(
         if form.password == correct_password {
             // Password correct - grant access in session and redirect to entity
             entity::grant_password_authorization(session, &slug);
-            return Ok(Redirect::see_other(format!("/{}", slug)).into_response());
+            return Ok(Redirect::see_other(entity.canonical_path()).into_response());
         }
     }
 
@@ -331,6 +356,8 @@ fn user_facing() -> impl Endpoint {
             put(component::detail_page_edit::update_instance)
                 .delete(component::detail_page_edit::delete_instance),
         )
+        .at("/projects/*slug", get(project_page))
+        .at("/events/*slug", get(event_page))
         .at("/*slug", get(entity_page))
         .with(middleware::analytics::AnalyticsMiddleware)
 }

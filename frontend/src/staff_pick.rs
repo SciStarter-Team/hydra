@@ -58,7 +58,7 @@ impl TryFrom<StaffPickDB> for StaffPick {
 
 impl StaffPick {
     pub fn url(&self) -> String {
-        format!("/{}", self.project_slug)
+        format!("/projects/{}", self.project_slug)
     }
 
     pub fn is_active(&self) -> bool {

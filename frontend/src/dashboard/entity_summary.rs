@@ -166,9 +166,14 @@ async fn fetch_summary(
     }
 }
 
-/// Build the public-facing link for an entity summary. Entity pages
-/// live at `/<slug>` (the catch-all `/*slug` route resolves them via
-/// the `entities` table); the kind is metadata, not part of the URL.
+/// Build the public-facing link for an entity summary. Projects and
+/// events live under `/projects/<slug>` and `/events/<slug>`; the
+/// top-level `/<slug>` path still resolves them via a permanent
+/// redirect, but linking to the canonical path avoids the extra hop.
 pub fn entity_link(summary: &EntitySummary) -> String {
-    format!("/{}", summary.slug)
+    let prefix = match summary.kind {
+        EntitySummaryKind::Project => "/projects/",
+        EntitySummaryKind::Event => "/events/",
+    };
+    format!("{}{}", prefix, summary.slug)
 }

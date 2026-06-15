@@ -60,7 +60,7 @@
         <td style="padding:8px"><%= entry.date.as_deref().unwrap_or("") %></td>
         <td style="padding:8px"><%= entry.act.as_deref().unwrap_or("") %></td>
         <td style="padding:8px"><%= entry.name.as_deref().unwrap_or("") %></td>
-        <td style="padding:8px"><% if let (Some(slug), Some(proj)) = (&entry.entity_slug, &entry.project) { %><a href="/<%= slug %>"><%= proj %></a><% } else { %><%= entry.project.as_deref().unwrap_or("") %><% } %></td>
+        <td style="padding:8px"><% if let (Some(slug), Some(proj)) = (&entry.entity_slug, &entry.project) { %><a href="/projects/<%= slug %>"><%= proj %></a><% } else { %><%= entry.project.as_deref().unwrap_or("") %><% } %></td>
         <td style="padding:8px"><%= entry.organization.as_deref().unwrap_or("") %></td>
         <td style="padding:8px"><%= entry.contributions %></td>
       </tr>

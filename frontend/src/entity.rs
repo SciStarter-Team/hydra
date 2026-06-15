@@ -95,6 +95,19 @@ pub enum EntityKind {
     Placeholder,
 }
 
+impl EntityKind {
+    /// The URL path prefix under which entities of this kind are
+    /// served. Projects and events live under `/projects/` and
+    /// `/events/`; every other kind is served at the top level.
+    pub fn path_prefix(&self) -> &'static str {
+        match self {
+            EntityKind::Project => "/projects/",
+            EntityKind::Event => "/events/",
+            _ => "/",
+        }
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, strum::AsRefStr)]
 pub enum EntityTarget {
     Nil,
@@ -436,7 +449,7 @@ impl Entity {
                         content: Literal::new(content.as_utf8()?),
                     };
 
-                    let layout = StandardLayout::new(format!("/{}", &self.slug), content_wrapper)
+                    let layout = StandardLayout::new(self.canonical_path(), content_wrapper)
                         .prepare(user_info.clone())
                         .await?;
 
@@ -460,7 +473,7 @@ impl Entity {
                         content: Literal::new(&html),
                     };
 
-                    let layout = StandardLayout::new(format!("/{}", &self.slug), content_wrapper)
+                    let layout = StandardLayout::new(self.canonical_path(), content_wrapper)
                         .prepare(user_info.clone())
                         .await?;
 
@@ -508,7 +521,7 @@ impl Entity {
                         content: Literal::new(&html),
                     };
 
-                    let layout = StandardLayout::new(format!("/{}", &self.slug), content_wrapper)
+                    let layout = StandardLayout::new(self.canonical_path(), content_wrapper)
                         .prepare(user_info.clone())
                         .await?;
 
@@ -541,7 +554,7 @@ impl Entity {
                 let title = content.name.clone();
                 let can_edit = content.can_edit;
 
-                let layout = StandardLayout::new(format!("/{}", &self.slug), content)
+                let layout = StandardLayout::new(self.canonical_path(), content)
                     .prepare(user_info.clone())
                     .await?;
 
@@ -576,7 +589,7 @@ impl Entity {
                 let title = content.name.clone();
                 let can_edit = content.can_edit;
 
-                let layout = StandardLayout::new(format!("/{}", &self.slug), content)
+                let layout = StandardLayout::new(self.canonical_path(), content)
                     .prepare(user_info.clone())
                     .await?;
 
@@ -608,7 +621,7 @@ impl Entity {
                 let prepared_content = wordpress_content.prepare(user_info.clone()).await?;
                 let title = prepared_content.title.clone();
 
-                let layout = StandardLayout::new(format!("/{}", &self.slug), prepared_content)
+                let layout = StandardLayout::new(self.canonical_path(), prepared_content)
                     .prepare(user_info.clone())
                     .await?;
 
@@ -621,7 +634,7 @@ impl Entity {
                 .await?
             }
             EntityKind::Placeholder => {
-                StandardLayout::new(format!("/{}", &self.slug), Placeholder)
+                StandardLayout::new(self.canonical_path(), Placeholder)
                     .into_response(user_info)
                     .await?
             }
@@ -640,7 +653,7 @@ impl Entity {
             error,
         };
 
-        let layout = StandardLayout::new(format!("/{}", &self.slug), prompt)
+        let layout = StandardLayout::new(self.canonical_path(), prompt)
             .prepare(user_info)
             .await?;
 
@@ -655,6 +668,7 @@ impl Entity {
     #[tracing::instrument(skip(slug, session))]
     pub async fn response_for_slug(
         slug: impl AsRef<str>,
+        prefix: &str,
         user_info: Option<Arc<BasicInfo>>,
         session: &poem::session::Session,
     ) -> poem::Result<poem::Response> {
@@ -662,7 +676,17 @@ impl Entity {
         // mentioned in peering.rs forcing us to use String instead of
         // &str as the key type.
         match Entity::load(slug.as_ref().to_string()).await {
-            Ok(ent) => ent.response(user_info, session).await,
+            Ok(ent) => {
+                // If the entity was requested under a prefix that
+                // isn't its canonical one (e.g. a project reached at
+                // the top level, or a page reached under /projects/),
+                // permanently redirect to the canonical path.
+                if prefix != ent.kind().path_prefix() {
+                    Ok(Redirect::moved_permanent(ent.canonical_path()).into_response())
+                } else {
+                    ent.response(user_info, session).await
+                }
+            }
             Err(err) => match err.downcast_ref::<sqlx::Error>() {
                 Some(sqlx_err) => match sqlx_err {
                     sqlx::Error::RowNotFound => Ok(StatusCode::NOT_FOUND.into()),
@@ -676,6 +700,13 @@ impl Entity {
     #[tracing::instrument]
     pub fn slug(&self) -> &str {
         &self.slug
+    }
+
+    /// The canonical public path for this entity. Projects and events
+    /// live under `/projects/<slug>` and `/events/<slug>`; all other
+    /// kinds are served at `/<slug>`.
+    pub fn canonical_path(&self) -> String {
+        format!("{}{}", self.kind.path_prefix(), self.slug)
     }
 
     pub fn kind(&self) -> &EntityKind {

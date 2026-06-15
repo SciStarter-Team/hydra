@@ -114,7 +114,7 @@
           <!-- Project card -->
           <div class="project-finder">
             <% if result.is_completed { %><span class="pf-complete ribbon-project">Completed</span><% } %>
-            <a href="/<%= result.slug %>" class="block">
+            <a href="<%= result.link() %>" class="block">
               <% if !result.image.is_empty() { %>
               <img src="<%= result.image %>" alt="<%= result.title %>" class="mx-auto" />
               <% } else { %>
@@ -122,7 +122,7 @@
               <% } %>
             </a>
             <div class="p-4 pt-2">
-              <h1><a href="/<%= result.slug %>"><%= result.title %></a></h1>
+              <h1><a href="<%= result.link() %>"><%= result.title %></a></h1>
               <table>
                 <% if !result.goal.is_empty() { %>
                 <tr><td class="font-bold uppercase text-sm tracking-wide text-right align-top">Goal</td><td class="self-tooltip text-sm pl-2 line-clamp-1 leading-[1.4]"><%= result.goal %></td></tr>
@@ -147,14 +147,14 @@
               <span><%- result.event_date_html(TimeFormat::Year) %></span>
             </div>
             <div class="ef-info">
-              <a href="/<%= result.slug %>" class="block">
+              <a href="<%= result.link() %>" class="block">
                 <% if !result.image.is_empty() { %>
                 <img src="<%= result.image %>" alt="<%= result.title %>" class="w-full rounded-sm mb-2" />
                 <% } else { %>
                 <img src="/-static/img/logo/logo-rgb-coral-blue.svg" alt="SciStarter" class="w-full p-4 mb-2" />
                 <% } %>
               </a>
-              <h2><a href="/<%= result.slug %>"><%= result.title %></a></h2>
+              <h2><a href="<%= result.link() %>"><%= result.title %></a></h2>
               <% if !result.location_display.is_empty() { %>
               <p><%= result.location_display %><% if let Some(mi) = result.distance_mi() { %> (<%= format!("{:.0}", mi) %> mi)<% } %></p>
               <% } else if let Some(ref geo) = result.geo_json { %>

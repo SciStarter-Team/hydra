@@ -149,8 +149,8 @@
     <% for item in self.featured_items.iter() { %>
     <div class="ss-feature-project-card slide-content max-w-sm">
       <div class="ss-fpc-header">
-        <a href="<% if let Some(url) = &item.custom_url { %><%= url %><% } else { %>/<%= item.entity_slug %><% } %>" class="ss-fpc-img-a"><img src="<%= item.image %>" alt="<%= item.name %>" /></a>
-        <h3 class="text-lg mb-0"><a href="<% if let Some(url) = &item.custom_url { %><%= url %><% } else { %>/<%= item.entity_slug %><% } %>"><%= item.name %></a></h3>
+        <a href="<%= item.link() %>" class="ss-fpc-img-a"><img src="<%= item.image %>" alt="<%= item.name %>" /></a>
+        <h3 class="text-lg mb-0"><a href="<%= item.link() %>"><%= item.name %></a></h3>
       </div>
       <div class="ss-fpc-body">
         <% if !item.presenter.is_empty() { %><span class="text-xs font-bold"><%= item.presenter %></span><% } %>

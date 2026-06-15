@@ -21,6 +21,24 @@ pub struct SearchResult {
     pub title: String,
 }
 
+impl SearchResult {
+    /// Canonical link for this result based on its entity type.
+    pub fn link(&self) -> String {
+        format!("{}{}", path_prefix_for(&self.entity_type), self.slug)
+    }
+}
+
+/// Map an entity-type label to its URL path prefix. Accepts both the
+/// stored kind name (`Project`/`Event`) and the autocomplete display
+/// label, so it works for every search result type.
+fn path_prefix_for(entity_type: &str) -> &'static str {
+    match entity_type {
+        "Project" => "/projects/",
+        "Event" => "/events/",
+        _ => "/",
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct SearchQuery {
     pub q: Option<String>,
@@ -152,6 +170,11 @@ pub struct FinderResult {
 }
 
 impl FinderResult {
+    /// Canonical link for this result based on its entity type.
+    pub fn link(&self) -> String {
+        format!("{}{}", path_prefix_for(&self.entity_type), self.slug)
+    }
+
     pub fn distance_mi(&self) -> Option<f64> {
         self.distance_km.map(|km| km * 0.621371)
     }

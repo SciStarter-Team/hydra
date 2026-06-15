@@ -25,6 +25,18 @@ pub struct FeaturedItem {
     pub topics: Vec<String>,
 }
 
+impl FeaturedItem {
+    /// The link target for the card: the schedule's custom URL if set,
+    /// otherwise the entity's canonical path (`/projects/<slug>`,
+    /// `/events/<slug>`, or `/<slug>`).
+    pub fn link(&self) -> String {
+        match &self.custom_url {
+            Some(url) => url.clone(),
+            None => format!("{}{}", self.entity_kind.path_prefix(), self.entity_slug),
+        }
+    }
+}
+
 #[derive(
     Debug,
     Copy,

@@ -79,9 +79,9 @@
                   <% if event.signature { %>
                   <div class="csm-signature"><span>Signature Event</span></div>
                   <% } %>
-                  <h3><a href="/<%= event.slug %>"><%= event.name %></a></h3>
+                  <h3><a href="/events/<%= event.slug %>"><%= event.name %></a></h3>
                   <span class="featured-event-time"><%- local_time(&event.begin, TimeFormat::Time) %> – <%- local_time(&event.end, TimeFormat::Time) %></span>
-                  <a class="featured-event-location" href="/<%= event.slug %>"><%= event.location_display() %></a>
+                  <a class="featured-event-location" href="/events/<%= event.slug %>"><%= event.location_display() %></a>
                 </div>
               </div>
             </div>
