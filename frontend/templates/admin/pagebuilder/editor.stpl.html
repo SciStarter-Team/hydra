@@ -812,8 +812,11 @@
     }
 
     document.addEventListener('click', (e) => {
-        // Badge link buttons have their own onclick handlers
+        // Badge link buttons have their own hx-on:click handlers. Cancel the
+        // default action so a slot whose content is wrapped in an <a> (e.g. a
+        // banner image link) doesn't navigate when its breadcrumb is clicked.
         if (e.target.closest('.pb-badge-link')) {
+            e.preventDefault();
             e.stopPropagation();
             return;
         }
