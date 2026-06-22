@@ -42,8 +42,8 @@ use crate::builder::render::{CompiledTemplate, render};
 use crate::entity::{Entity, EntityKind, EntityTarget};
 use crate::mcp_token::McpToken;
 use crate::pagebuilder::source::{
-    ComposeMode, MovePosition, compose_component_into_slot, extract_slots, move_slot, remove_slot,
-    replace_component,
+    clear_slot, compose_component_into_slot, extract_slots, move_slot_content, replace_component,
+    resize_container,
 };
 use crate::pagebuilder::{PageBuilderComponent, PageBuilderPage};
 use crate::pagecontent::{PageContent, PageContentKind};
@@ -144,8 +144,9 @@ async fn handle_tools_call(id: Option<Value>, params: Option<Value>) -> JsonRpcR
         "patch_content" => tool_patch_content(arguments).await,
         "insert_component" => tool_insert_component(arguments).await,
         "replace_component" => tool_replace_component(arguments).await,
-        "move_slot" => tool_move_slot(arguments).await,
-        "remove_slot" => tool_remove_slot(arguments).await,
+        "resize_container" => tool_resize_container(arguments).await,
+        "move_content" => tool_move_content(arguments).await,
+        "clear_slot" => tool_clear_slot(arguments).await,
         "render_preview" => tool_render_preview(arguments).await,
         "list_entities" => tool_list_entities(arguments).await,
         "get_entity" => tool_get_entity(arguments).await,
@@ -543,6 +544,39 @@ fn require_pagebuilder_type(content_type: ContentType) -> Result<(), Error> {
     }
 }
 
+/// Render a component into a (single-occupancy) slot, replacing whatever
+/// occupied it. The shared `place` helper for `insert_component`.
+async fn place_in_slot(
+    content_type: ContentType,
+    id: Ulid,
+    slot_path: &str,
+    component: &PageBuilderComponent,
+    params: &[(String, String)],
+) -> Result<(), Error> {
+    match content_type {
+        ContentType::ComponentPage => {
+            let mut page = PageBuilderPage::load(id).await?;
+            let new_source =
+                compose_component_into_slot(&page.source, slot_path, component, params, db())
+                    .await?;
+            validate_template_source(&new_source)?;
+            page.set_source(&new_source);
+            page.store().await?;
+        }
+        ContentType::Component => {
+            let mut target = PageBuilderComponent::load(id).await?;
+            let new_source =
+                compose_component_into_slot(&target.source, slot_path, component, params, db())
+                    .await?;
+            validate_template_source(&new_source)?;
+            target.set_source(&new_source);
+            target.store().await?;
+        }
+        _ => unreachable!("guarded by require_pagebuilder_type"),
+    }
+    Ok(())
+}
+
 async fn tool_insert_component(args: Value) -> Result<String, Error> {
     let content_type = ContentType::parse(&args)?;
     require_pagebuilder_type(content_type)?;
@@ -550,68 +584,17 @@ async fn tool_insert_component(args: Value) -> Result<String, Error> {
     let id = parse_ulid(&args, "id")?;
     let slot_path = required_str(&args, "slot_path")?.to_string();
     let component_id = parse_ulid(&args, "component_id")?;
-    let child_name = optional_str(&args, "name");
     let params = object_to_pairs(&args, "params")?;
-    let slot_contents = object_to_pairs(&args, "slots")?;
-    let mode = match optional_str(&args, "mode") {
-        None | Some("append") => ComposeMode::Append,
-        Some("replace") => ComposeMode::Replace,
-        Some(other) => bail!("Unknown mode '{other}'. Expected 'append' or 'replace'"),
-    };
 
     let component = PageBuilderComponent::load(component_id).await?;
-
-    let child_slot = match content_type {
-        ContentType::ComponentPage => {
-            let mut page = PageBuilderPage::load(id).await?;
-            let (new_source, child) = compose_component_into_slot(
-                &page.source,
-                &slot_path,
-                &component,
-                child_name,
-                &params,
-                &slot_contents,
-                mode,
-                db(),
-            )
-            .await?;
-            validate_template_source(&new_source)?;
-            page.set_source(&new_source);
-            page.store().await?;
-            child
-        }
-        ContentType::Component => {
-            let mut target = PageBuilderComponent::load(id).await?;
-            let (new_source, child) = compose_component_into_slot(
-                &target.source,
-                &slot_path,
-                &component,
-                child_name,
-                &params,
-                &slot_contents,
-                mode,
-                db(),
-            )
-            .await?;
-            validate_template_source(&new_source)?;
-            target.set_source(&new_source);
-            target.store().await?;
-            child
-        }
-        _ => unreachable!("guarded by require_pagebuilder_type"),
-    };
-
-    let resulting_path = match mode {
-        ComposeMode::Append => format!("{slot_path}.{child_slot}"),
-        ComposeMode::Replace => slot_path,
-    };
+    place_in_slot(content_type, id, &slot_path, &component, &params).await?;
 
     Ok(serde_json::to_string_pretty(&json!({
-        "status": "inserted",
+        "status": "placed",
         "content_type": content_type.label(),
         "id": id.to_string(),
         "component_id": component_id.to_string(),
-        "slot_path": resulting_path,
+        "slot_path": slot_path,
     }))?)
 }
 
@@ -622,7 +605,6 @@ async fn tool_replace_component(args: Value) -> Result<String, Error> {
     let slot_path = required_str(&args, "slot_path")?.to_string();
     let component_id = parse_ulid(&args, "component_id")?;
     let params = object_to_pairs(&args, "params")?;
-    let slot_contents = object_to_pairs(&args, "slots")?;
     let slot_map = object_to_pairs(&args, "slot_map")?;
 
     let component = PageBuilderComponent::load(component_id).await?;
@@ -635,7 +617,6 @@ async fn tool_replace_component(args: Value) -> Result<String, Error> {
                 &slot_path,
                 &component,
                 &params,
-                &slot_contents,
                 &slot_map,
                 db(),
             )
@@ -651,7 +632,6 @@ async fn tool_replace_component(args: Value) -> Result<String, Error> {
                 &slot_path,
                 &component,
                 &params,
-                &slot_contents,
                 &slot_map,
                 db(),
             )
@@ -672,64 +652,96 @@ async fn tool_replace_component(args: Value) -> Result<String, Error> {
     }))?)
 }
 
-async fn tool_move_slot(args: Value) -> Result<String, Error> {
+/// Load a page/component, apply a synchronous source transformation,
+/// compile-validate, and store. Shared by the slot-editing tools.
+async fn apply_source_edit<F>(content_type: ContentType, id: Ulid, edit: F) -> Result<(), Error>
+where
+    F: FnOnce(&str) -> Result<String, Error>,
+{
+    match content_type {
+        ContentType::ComponentPage => {
+            let mut page = PageBuilderPage::load(id).await?;
+            let new_source = edit(&page.source)?;
+            validate_template_source(&new_source)?;
+            page.set_source(&new_source);
+            page.store().await?;
+        }
+        ContentType::Component => {
+            let mut component = PageBuilderComponent::load(id).await?;
+            let new_source = edit(&component.source)?;
+            validate_template_source(&new_source)?;
+            component.set_source(&new_source);
+            component.store().await?;
+        }
+        _ => unreachable!("guarded by require_pagebuilder_type"),
+    }
+    Ok(())
+}
+
+async fn tool_move_content(args: Value) -> Result<String, Error> {
     let content_type = ContentType::parse(&args)?;
     require_pagebuilder_type(content_type)?;
     let id = parse_ulid(&args, "id")?;
     let from = required_str(&args, "from")?.to_string();
     let to = required_str(&args, "to")?.to_string();
-    let position = match optional_str(&args, "position") {
-        None | Some("into") => MovePosition::Into,
-        Some("before") => MovePosition::Before,
-        Some("after") => MovePosition::After,
-        Some(other) => bail!("Unknown position '{other}'. Expected 'into', 'before', or 'after'"),
-    };
 
-    let new_path = match content_type {
-        ContentType::ComponentPage => {
-            let mut page = PageBuilderPage::load(id).await?;
-            let (new_source, new_path) = move_slot(&page.source, &from, &to, position)?;
-            validate_template_source(&new_source)?;
-            page.set_source(&new_source);
-            page.store().await?;
-            new_path
-        }
-        ContentType::Component => {
-            let mut component = PageBuilderComponent::load(id).await?;
-            let (new_source, new_path) = move_slot(&component.source, &from, &to, position)?;
-            validate_template_source(&new_source)?;
-            component.set_source(&new_source);
-            component.store().await?;
-            new_path
-        }
-        _ => unreachable!("guarded by require_pagebuilder_type"),
-    };
+    apply_source_edit(content_type, id, |source| {
+        move_slot_content(source, &from, &to)
+    })
+    .await?;
 
     Ok(serde_json::to_string_pretty(&json!({
         "status": "moved",
         "content_type": content_type.label(),
         "id": id.to_string(),
-        "slot_path": new_path,
+        "from": from,
+        "to": to,
     }))?)
 }
 
-async fn tool_remove_slot(args: Value) -> Result<String, Error> {
+async fn tool_clear_slot(args: Value) -> Result<String, Error> {
     let content_type = ContentType::parse(&args)?;
     require_pagebuilder_type(content_type)?;
     let id = parse_ulid(&args, "id")?;
     let slot_path = required_str(&args, "slot_path")?.to_string();
 
+    apply_source_edit(content_type, id, |source| clear_slot(source, &slot_path)).await?;
+
+    Ok(serde_json::to_string_pretty(&json!({
+        "status": "cleared",
+        "content_type": content_type.label(),
+        "id": id.to_string(),
+        "slot_path": slot_path,
+    }))?)
+}
+
+async fn tool_resize_container(args: Value) -> Result<String, Error> {
+    let content_type = ContentType::parse(&args)?;
+    require_pagebuilder_type(content_type)?;
+    let id = parse_ulid(&args, "id")?;
+    let slot_path = required_str(&args, "slot_path")?.to_string();
+    let count = match args.get("count") {
+        Some(Value::Number(n)) => n
+            .as_u64()
+            .ok_or_else(|| anyhow!("count must be a non-negative integer"))?
+            as usize,
+        Some(Value::String(s)) => s
+            .parse::<usize>()
+            .map_err(|_| anyhow!("count must be a non-negative integer"))?,
+        _ => bail!("Missing required parameter: count (a non-negative integer)"),
+    };
+
     match content_type {
         ContentType::ComponentPage => {
             let mut page = PageBuilderPage::load(id).await?;
-            let new_source = remove_slot(&page.source, &slot_path)?;
+            let new_source = resize_container(&page.source, &slot_path, count, db()).await?;
             validate_template_source(&new_source)?;
             page.set_source(&new_source);
             page.store().await?;
         }
         ContentType::Component => {
             let mut component = PageBuilderComponent::load(id).await?;
-            let new_source = remove_slot(&component.source, &slot_path)?;
+            let new_source = resize_container(&component.source, &slot_path, count, db()).await?;
             validate_template_source(&new_source)?;
             component.set_source(&new_source);
             component.store().await?;
@@ -738,10 +750,11 @@ async fn tool_remove_slot(args: Value) -> Result<String, Error> {
     }
 
     Ok(serde_json::to_string_pretty(&json!({
-        "status": "removed",
+        "status": "resized",
         "content_type": content_type.label(),
         "id": id.to_string(),
         "slot_path": slot_path,
+        "count": count,
     }))?)
 }
 
@@ -1081,25 +1094,22 @@ fn get_tools() -> Value {
         },
         {
             "name": "insert_component",
-            "description": "Compose a component into a slot of a component_page or component, returning the resulting slot path. The component's source is inlined so its inner slots stay editable for further composition. 'params' sets the component's scalar parameters; 'slots' fills the component's named inner slots with HTML/source content (use get_content on the component to see its parameters and inner slots). mode 'append' (default) adds the component as a new child slot inside the target slot — use it to stack several components inside one container slot; 'replace' makes the target slot itself become the component.",
+            "description": "Place a component into a single slot of a component_page or component, replacing whatever occupied it (slots hold one component each). 'params' sets the component's scalar parameters. To put prose/content in a region, place a Rich Text (or similar) component into that slot. For a list of N items, place a count-container (e.g. Multiple Slots with count=N), then place one component into each generated slot. Use get_content to see the available slots.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "content_type": { "type": "string", "enum": ["component_page", "component"], "description": "The kind of target that contains the slot" },
                     "id": { "type": "string", "description": "ULID of the target component_page or component" },
-                    "slot_path": { "type": "string", "description": "Path of the existing slot to insert into, as reported by get_content's 'slots' (e.g. 'content' or 'content.cards')" },
-                    "component_id": { "type": "string", "description": "ULID of the component to insert" },
-                    "name": { "type": "string", "description": "Base name for the new child slot in append mode; defaults to a slug of the component name" },
-                    "params": { "type": "object", "description": "Scalar parameter values for the component, e.g. {\"title\": \"...\", \"image_url\": \"...\"}", "additionalProperties": { "type": "string" } },
-                    "slots": { "type": "object", "description": "Content for the component's named inner slots, e.g. {\"description\": \"<p>...</p>\"}", "additionalProperties": { "type": "string" } },
-                    "mode": { "type": "string", "enum": ["append", "replace"], "description": "append (default) adds a new child slot; replace makes the target slot become the component" }
+                    "slot_path": { "type": "string", "description": "Path of the slot to place into, as reported by get_content's 'slots'" },
+                    "component_id": { "type": "string", "description": "ULID of the component to place" },
+                    "params": { "type": "object", "description": "Scalar parameter values for the component, e.g. {\"title\": \"...\", \"image_url\": \"...\"}", "additionalProperties": { "type": "string" } }
                 },
                 "required": ["content_type", "id", "slot_path", "component_id"]
             }
         },
         {
             "name": "replace_component",
-            "description": "Swap the component occupying a slot for a different one, keeping its children. 'slot_map' maps the old component's child-bearing slot names to the new component's — e.g. {\"sidebar\": \"col_1\", \"main\": \"col_2\"} for Two Column → Three Column. If omitted, a single child-bearing slot is auto-mapped when unambiguous; otherwise you're asked for the map so nothing is dropped. 'params'/'slots' configure the new component. With no children to keep, this is a plain replace.",
+            "description": "Swap the component occupying a slot for a different one, carrying the component placed in each of its slots across per 'slot_map' (old slot name → new slot name) — e.g. {\"sidebar\": \"col_1\", \"main\": \"col_2\"} for Two Column → Three Column. If omitted, a single occupied slot is auto-mapped when unambiguous; otherwise you're asked for the map so nothing is dropped. 'params' configure the new component. With nothing to keep, this is a plain replace.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -1108,36 +1118,48 @@ fn get_tools() -> Value {
                     "slot_path": { "type": "string", "description": "Path of the slot whose component is being replaced (from get_content's 'slots')" },
                     "component_id": { "type": "string", "description": "ULID of the new component to swap in" },
                     "params": { "type": "object", "description": "Scalar parameter values for the new component", "additionalProperties": { "type": "string" } },
-                    "slots": { "type": "object", "description": "Content for the new component's named inner content slots", "additionalProperties": { "type": "string" } },
-                    "slot_map": { "type": "object", "description": "Map of old child-bearing slot name → new child-bearing slot name, e.g. {\"sidebar\": \"col_1\", \"main\": \"col_2\"}", "additionalProperties": { "type": "string" } }
+                    "slot_map": { "type": "object", "description": "Map of old slot name → new slot name, e.g. {\"sidebar\": \"col_1\", \"main\": \"col_2\"}", "additionalProperties": { "type": "string" } }
                 },
                 "required": ["content_type", "id", "slot_path", "component_id"]
             }
         },
         {
-            "name": "move_slot",
-            "description": "Relocate a placed component (an entire slot block, with its content) to a new position — for reordering or reparenting. position 'into' (default) appends it as the last child of the 'to' slot; 'before'/'after' place it adjacent to the 'to' slot. Returns the moved slot's new path. Errors if 'to' is the same slot as 'from' or inside it.",
+            "name": "resize_container",
+            "description": "Change the 'count' of a count-parameterized container (e.g. Multiple Slots) at a slot, regenerating its slots while preserving the components already placed in them. Growing adds empty slots; shrinking errors if it would drop an occupied slot (clear those first).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "content_type": { "type": "string", "enum": ["component_page", "component"], "description": "The kind of target that contains the container" },
+                    "id": { "type": "string", "description": "ULID of the target component_page or component" },
+                    "slot_path": { "type": "string", "description": "Path of the container slot to resize (from get_content's 'slots')" },
+                    "count": { "type": "integer", "description": "New number of slots the container should generate" }
+                },
+                "required": ["content_type", "id", "slot_path", "count"]
+            }
+        },
+        {
+            "name": "move_content",
+            "description": "Move the component placed in one slot into another slot (reorder or reparent), leaving the source slot empty and overwriting the target. Both slots must exist.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "content_type": { "type": "string", "enum": ["component_page", "component"], "description": "The kind of target that contains the slots" },
                     "id": { "type": "string", "description": "ULID of the target component_page or component" },
-                    "from": { "type": "string", "description": "Slot path of the component to move (from get_content's 'slots')" },
-                    "to": { "type": "string", "description": "Anchor slot path: a container to move into, or a sibling to position relative to" },
-                    "position": { "type": "string", "enum": ["into", "before", "after"], "description": "into (default) appends inside 'to'; before/after place adjacent to 'to'" }
+                    "from": { "type": "string", "description": "Slot path to move the component from (from get_content's 'slots')" },
+                    "to": { "type": "string", "description": "Slot path to move it into (its existing content is overwritten)" }
                 },
                 "required": ["content_type", "id", "from", "to"]
             }
         },
         {
-            "name": "remove_slot",
-            "description": "Delete an entire slot block — a placed component instance and its content — from a component_page or component. To empty a container, remove its child slots; removing a slot that holds children deletes them too.",
+            "name": "clear_slot",
+            "description": "Empty a slot — remove the component placed in it, leaving the slot itself in place. Use this to delete a placed component without removing its slot (the slot stays available, e.g. as a count-container's generated slot).",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "content_type": { "type": "string", "enum": ["component_page", "component"], "description": "The kind of target that contains the slot" },
                     "id": { "type": "string", "description": "ULID of the target component_page or component" },
-                    "slot_path": { "type": "string", "description": "Path of the slot to delete (from get_content's 'slots')" }
+                    "slot_path": { "type": "string", "description": "Path of the slot to empty (from get_content's 'slots')" }
                 },
                 "required": ["content_type", "id", "slot_path"]
             }
