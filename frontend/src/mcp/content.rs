@@ -41,7 +41,10 @@ use crate::builder::context::{Context, ContextMode};
 use crate::builder::render::{CompiledTemplate, render};
 use crate::entity::{Entity, EntityKind, EntityTarget};
 use crate::mcp_token::McpToken;
-use crate::pagebuilder::source::{ComposeMode, compose_component_into_slot, extract_slots};
+use crate::pagebuilder::source::{
+    ComposeMode, MovePosition, compose_component_into_slot, extract_slots, move_slot, remove_slot,
+    replace_component,
+};
 use crate::pagebuilder::{PageBuilderComponent, PageBuilderPage};
 use crate::pagecontent::{PageContent, PageContentKind};
 use crate::peering::LoadStorePeered;
@@ -138,7 +141,11 @@ async fn handle_tools_call(id: Option<Value>, params: Option<Value>) -> JsonRpcR
         "get_content" => tool_get_content(arguments).await,
         "create_content" => tool_create_content(arguments).await,
         "update_content" => tool_update_content(arguments).await,
+        "patch_content" => tool_patch_content(arguments).await,
         "insert_component" => tool_insert_component(arguments).await,
+        "replace_component" => tool_replace_component(arguments).await,
+        "move_slot" => tool_move_slot(arguments).await,
+        "remove_slot" => tool_remove_slot(arguments).await,
         "render_preview" => tool_render_preview(arguments).await,
         "list_entities" => tool_list_entities(arguments).await,
         "get_entity" => tool_get_entity(arguments).await,
@@ -418,6 +425,110 @@ async fn tool_update_content(args: Value) -> Result<String, Error> {
     }))?)
 }
 
+async fn tool_patch_content(args: Value) -> Result<String, Error> {
+    let content_type = ContentType::parse(&args)?;
+    let id = parse_ulid(&args, "id")?;
+    let old_string = required_str(&args, "old_string")?;
+    let new_string = required_str(&args, "new_string")?;
+    let replace_all = args
+        .get("replace_all")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+
+    // Load, patch, validate, and persist the body/source in one pass per type.
+    let (patched, replacements, start) = match content_type {
+        ContentType::RawHtmlPage | ContentType::SimplePage => {
+            let kind = content_type.pagecontent_kind().unwrap();
+            let mut content = PageContent::load((kind, id)).await?;
+            let result = patch_text(content.as_utf8()?, old_string, new_string, replace_all)?;
+            content.clear();
+            content.extend_from_slice(result.0.as_bytes());
+            content.store().await?;
+            result
+        }
+        ContentType::ComponentPage => {
+            let mut page = PageBuilderPage::load(id).await?;
+            let result = patch_text(&page.source, old_string, new_string, replace_all)?;
+            validate_template_source(&result.0)?;
+            page.set_source(&result.0);
+            page.store().await?;
+            result
+        }
+        ContentType::Component => {
+            let mut component = PageBuilderComponent::load(id).await?;
+            let result = patch_text(&component.source, old_string, new_string, replace_all)?;
+            validate_template_source(&result.0)?;
+            component.set_source(&result.0);
+            component.store().await?;
+            result
+        }
+    };
+
+    Ok(serde_json::to_string_pretty(&json!({
+        "status": "patched",
+        "content_type": content_type.label(),
+        "id": id.to_string(),
+        "replacements": replacements,
+        "preview": change_preview(&patched, start, new_string.len()),
+    }))?)
+}
+
+/// Perform an exact-match find-and-replace, returning the patched text,
+/// the number of replacements made, and the byte offset of the first
+/// change (for a context preview). Errors if `old` is absent, or present
+/// more than once when `replace_all` is false, so a caller never edits
+/// the wrong spot.
+fn patch_text(
+    current: &str,
+    old: &str,
+    new: &str,
+    replace_all: bool,
+) -> Result<(String, usize, usize), Error> {
+    if old.is_empty() {
+        bail!("old_string must not be empty");
+    }
+
+    let count = current.matches(old).count();
+    if count == 0 {
+        bail!("old_string was not found in the content");
+    }
+    if count > 1 && !replace_all {
+        bail!(
+            "old_string is not unique ({count} occurrences). Add surrounding context to target one occurrence, or set replace_all to change every occurrence."
+        );
+    }
+
+    let start = current.find(old).expect("at least one occurrence exists");
+    let patched = if replace_all {
+        current.replace(old, new)
+    } else {
+        current.replacen(old, new, 1)
+    };
+    let replacements = if replace_all { count } else { 1 };
+
+    Ok((patched, replacements, start))
+}
+
+/// Build a short, char-boundary-safe snippet of `patched` around the
+/// change at `start` (length `new_len`), so a caller can confirm what was
+/// edited.
+fn change_preview(patched: &str, start: usize, new_len: usize) -> String {
+    const PAD: usize = 50;
+
+    let mut from = start.saturating_sub(PAD);
+    while from > 0 && !patched.is_char_boundary(from) {
+        from -= 1;
+    }
+    let mut to = (start + new_len + PAD).min(patched.len());
+    while to < patched.len() && !patched.is_char_boundary(to) {
+        to += 1;
+    }
+
+    let prefix = if from > 0 { "…" } else { "" };
+    let suffix = if to < patched.len() { "…" } else { "" };
+    format!("{}{}{}", prefix, &patched[from..to], suffix)
+}
+
 // ==================== Page composition tools ====================
 
 /// The two content types backed by page-builder source, which is what
@@ -501,6 +612,136 @@ async fn tool_insert_component(args: Value) -> Result<String, Error> {
         "id": id.to_string(),
         "component_id": component_id.to_string(),
         "slot_path": resulting_path,
+    }))?)
+}
+
+async fn tool_replace_component(args: Value) -> Result<String, Error> {
+    let content_type = ContentType::parse(&args)?;
+    require_pagebuilder_type(content_type)?;
+    let id = parse_ulid(&args, "id")?;
+    let slot_path = required_str(&args, "slot_path")?.to_string();
+    let component_id = parse_ulid(&args, "component_id")?;
+    let params = object_to_pairs(&args, "params")?;
+    let slot_contents = object_to_pairs(&args, "slots")?;
+    let slot_map = object_to_pairs(&args, "slot_map")?;
+
+    let component = PageBuilderComponent::load(component_id).await?;
+
+    match content_type {
+        ContentType::ComponentPage => {
+            let mut page = PageBuilderPage::load(id).await?;
+            let new_source = replace_component(
+                &page.source,
+                &slot_path,
+                &component,
+                &params,
+                &slot_contents,
+                &slot_map,
+                db(),
+            )
+            .await?;
+            validate_template_source(&new_source)?;
+            page.set_source(&new_source);
+            page.store().await?;
+        }
+        ContentType::Component => {
+            let mut target = PageBuilderComponent::load(id).await?;
+            let new_source = replace_component(
+                &target.source,
+                &slot_path,
+                &component,
+                &params,
+                &slot_contents,
+                &slot_map,
+                db(),
+            )
+            .await?;
+            validate_template_source(&new_source)?;
+            target.set_source(&new_source);
+            target.store().await?;
+        }
+        _ => unreachable!("guarded by require_pagebuilder_type"),
+    }
+
+    Ok(serde_json::to_string_pretty(&json!({
+        "status": "replaced",
+        "content_type": content_type.label(),
+        "id": id.to_string(),
+        "slot_path": slot_path,
+        "component_id": component_id.to_string(),
+    }))?)
+}
+
+async fn tool_move_slot(args: Value) -> Result<String, Error> {
+    let content_type = ContentType::parse(&args)?;
+    require_pagebuilder_type(content_type)?;
+    let id = parse_ulid(&args, "id")?;
+    let from = required_str(&args, "from")?.to_string();
+    let to = required_str(&args, "to")?.to_string();
+    let position = match optional_str(&args, "position") {
+        None | Some("into") => MovePosition::Into,
+        Some("before") => MovePosition::Before,
+        Some("after") => MovePosition::After,
+        Some(other) => bail!("Unknown position '{other}'. Expected 'into', 'before', or 'after'"),
+    };
+
+    let new_path = match content_type {
+        ContentType::ComponentPage => {
+            let mut page = PageBuilderPage::load(id).await?;
+            let (new_source, new_path) = move_slot(&page.source, &from, &to, position)?;
+            validate_template_source(&new_source)?;
+            page.set_source(&new_source);
+            page.store().await?;
+            new_path
+        }
+        ContentType::Component => {
+            let mut component = PageBuilderComponent::load(id).await?;
+            let (new_source, new_path) = move_slot(&component.source, &from, &to, position)?;
+            validate_template_source(&new_source)?;
+            component.set_source(&new_source);
+            component.store().await?;
+            new_path
+        }
+        _ => unreachable!("guarded by require_pagebuilder_type"),
+    };
+
+    Ok(serde_json::to_string_pretty(&json!({
+        "status": "moved",
+        "content_type": content_type.label(),
+        "id": id.to_string(),
+        "slot_path": new_path,
+    }))?)
+}
+
+async fn tool_remove_slot(args: Value) -> Result<String, Error> {
+    let content_type = ContentType::parse(&args)?;
+    require_pagebuilder_type(content_type)?;
+    let id = parse_ulid(&args, "id")?;
+    let slot_path = required_str(&args, "slot_path")?.to_string();
+
+    match content_type {
+        ContentType::ComponentPage => {
+            let mut page = PageBuilderPage::load(id).await?;
+            let new_source = remove_slot(&page.source, &slot_path)?;
+            validate_template_source(&new_source)?;
+            page.set_source(&new_source);
+            page.store().await?;
+        }
+        ContentType::Component => {
+            let mut component = PageBuilderComponent::load(id).await?;
+            let new_source = remove_slot(&component.source, &slot_path)?;
+            validate_template_source(&new_source)?;
+            component.set_source(&new_source);
+            component.store().await?;
+        }
+        _ => unreachable!("guarded by require_pagebuilder_type"),
+    }
+
+    Ok(serde_json::to_string_pretty(&json!({
+        "status": "removed",
+        "content_type": content_type.label(),
+        "id": id.to_string(),
+        "slot_path": slot_path,
     }))?)
 }
 
@@ -824,6 +1065,21 @@ fn get_tools() -> Value {
             }
         },
         {
+            "name": "patch_content",
+            "description": "Find-and-replace text within a content item's stored body/source, for targeted wording or markup edits without rewriting the whole item. 'old_string' must occur exactly once unless 'replace_all' is true. Patches the source for component_page/component (including baked component output; re-validated after), the HTML for raw_html_page, and the Quill Delta JSON for simple_page (match the exact text run as stored — fetch it with get_content first). Returns the number of replacements and a preview of the change site.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "content_type": content_type_schema(),
+                    "id": { "type": "string", "description": "The ULID of the content item" },
+                    "old_string": { "type": "string", "description": "Exact text to find. Must occur exactly once unless replace_all is set; include surrounding context to disambiguate." },
+                    "new_string": { "type": "string", "description": "Replacement text" },
+                    "replace_all": { "type": "boolean", "description": "Replace every occurrence instead of requiring a unique match (default false)" }
+                },
+                "required": ["content_type", "id", "old_string", "new_string"]
+            }
+        },
+        {
             "name": "insert_component",
             "description": "Compose a component into a slot of a component_page or component, returning the resulting slot path. The component's source is inlined so its inner slots stay editable for further composition. 'params' sets the component's scalar parameters; 'slots' fills the component's named inner slots with HTML/source content (use get_content on the component to see its parameters and inner slots). mode 'append' (default) adds the component as a new child slot inside the target slot — use it to stack several components inside one container slot; 'replace' makes the target slot itself become the component.",
             "inputSchema": {
@@ -839,6 +1095,51 @@ fn get_tools() -> Value {
                     "mode": { "type": "string", "enum": ["append", "replace"], "description": "append (default) adds a new child slot; replace makes the target slot become the component" }
                 },
                 "required": ["content_type", "id", "slot_path", "component_id"]
+            }
+        },
+        {
+            "name": "replace_component",
+            "description": "Swap the component occupying a slot for a different one, keeping its children. 'slot_map' maps the old component's child-bearing slot names to the new component's — e.g. {\"sidebar\": \"col_1\", \"main\": \"col_2\"} for Two Column → Three Column. If omitted, a single child-bearing slot is auto-mapped when unambiguous; otherwise you're asked for the map so nothing is dropped. 'params'/'slots' configure the new component. With no children to keep, this is a plain replace.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "content_type": { "type": "string", "enum": ["component_page", "component"], "description": "The kind of target that contains the slot" },
+                    "id": { "type": "string", "description": "ULID of the target component_page or component" },
+                    "slot_path": { "type": "string", "description": "Path of the slot whose component is being replaced (from get_content's 'slots')" },
+                    "component_id": { "type": "string", "description": "ULID of the new component to swap in" },
+                    "params": { "type": "object", "description": "Scalar parameter values for the new component", "additionalProperties": { "type": "string" } },
+                    "slots": { "type": "object", "description": "Content for the new component's named inner content slots", "additionalProperties": { "type": "string" } },
+                    "slot_map": { "type": "object", "description": "Map of old child-bearing slot name → new child-bearing slot name, e.g. {\"sidebar\": \"col_1\", \"main\": \"col_2\"}", "additionalProperties": { "type": "string" } }
+                },
+                "required": ["content_type", "id", "slot_path", "component_id"]
+            }
+        },
+        {
+            "name": "move_slot",
+            "description": "Relocate a placed component (an entire slot block, with its content) to a new position — for reordering or reparenting. position 'into' (default) appends it as the last child of the 'to' slot; 'before'/'after' place it adjacent to the 'to' slot. Returns the moved slot's new path. Errors if 'to' is the same slot as 'from' or inside it.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "content_type": { "type": "string", "enum": ["component_page", "component"], "description": "The kind of target that contains the slots" },
+                    "id": { "type": "string", "description": "ULID of the target component_page or component" },
+                    "from": { "type": "string", "description": "Slot path of the component to move (from get_content's 'slots')" },
+                    "to": { "type": "string", "description": "Anchor slot path: a container to move into, or a sibling to position relative to" },
+                    "position": { "type": "string", "enum": ["into", "before", "after"], "description": "into (default) appends inside 'to'; before/after place adjacent to 'to'" }
+                },
+                "required": ["content_type", "id", "from", "to"]
+            }
+        },
+        {
+            "name": "remove_slot",
+            "description": "Delete an entire slot block — a placed component instance and its content — from a component_page or component. To empty a container, remove its child slots; removing a slot that holds children deletes them too.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "content_type": { "type": "string", "enum": ["component_page", "component"], "description": "The kind of target that contains the slot" },
+                    "id": { "type": "string", "description": "ULID of the target component_page or component" },
+                    "slot_path": { "type": "string", "description": "Path of the slot to delete (from get_content's 'slots')" }
+                },
+                "required": ["content_type", "id", "slot_path"]
             }
         },
         {

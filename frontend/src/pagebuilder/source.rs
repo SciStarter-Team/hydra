@@ -3,7 +3,7 @@
 //! These functions manipulate the template source of pages to insert, remove,
 //! and update components in slots.
 
-use anyhow::{Error, anyhow};
+use anyhow::{Error, anyhow, bail};
 use ulid::Ulid;
 
 use crate::builder::{
@@ -490,6 +490,254 @@ pub fn move_slot_content(
     }
 
     Ok(result)
+}
+
+/// Where a moved slot block is placed relative to the `to` anchor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MovePosition {
+    /// Append the moved block as the last child inside the `to` slot.
+    Into,
+    /// Place the moved block immediately before the `to` slot.
+    Before,
+    /// Place the moved block immediately after the `to` slot.
+    After,
+}
+
+/// Relocate an entire slot block — its `{$ slot ... $}` tag, component
+/// metadata, content, and matching `{$ /slot $}` — to a new position,
+/// returning the new source and the moved slot's new path.
+///
+/// `Into` appends it as the last child of `to`; `Before`/`After` place it
+/// adjacent to `to` (for reordering). Errors if `to` is the same slot as
+/// `from` or one of its descendants.
+pub fn move_slot(
+    page_source: &str,
+    from_path: &str,
+    to_path: &str,
+    position: MovePosition,
+) -> Result<(String, String), Error> {
+    if from_path == to_path {
+        bail!("cannot move a slot relative to itself");
+    }
+    if to_path.starts_with(&format!("{from_path}.")) {
+        bail!("cannot move a slot into its own descendant ('{to_path}' is inside '{from_path}')");
+    }
+
+    let slots = extract_slots(page_source)?;
+    let from = slots
+        .iter()
+        .find(|s| s.path == from_path)
+        .ok_or_else(|| slot_not_found(from_path, &slots))?;
+    let block = page_source[from.start..from.end].to_string();
+    let moved_name = from.name.clone();
+
+    // Remove the block from its current location.
+    let mut removed = String::with_capacity(page_source.len());
+    removed.push_str(&page_source[..from.start]);
+    removed.push_str(&page_source[from.end..]);
+
+    // Locate the anchor in the modified source and splice the block in.
+    let slots = extract_slots(&removed)?;
+    let to = slots
+        .iter()
+        .find(|s| s.path == to_path)
+        .ok_or_else(|| slot_not_found(to_path, &slots))?;
+    let at = match position {
+        MovePosition::Into => to.body_end,
+        MovePosition::Before => to.start,
+        MovePosition::After => to.end,
+    };
+
+    let mut result = String::with_capacity(removed.len() + block.len() + 2);
+    result.push_str(&removed[..at]);
+    result.push('\n');
+    result.push_str(&block);
+    result.push('\n');
+    result.push_str(&removed[at..]);
+
+    // Report the moved slot's new path (slot names are unique).
+    let new_path = extract_slots(&result)?
+        .into_iter()
+        .find(|s| s.name == moved_name)
+        .map(|s| s.path)
+        .unwrap_or(moved_name);
+
+    Ok((result, new_path))
+}
+
+/// Remove an entire slot block (its tag, content, and closing tag) from
+/// the source — e.g. to delete a placed component instance.
+pub fn remove_slot(page_source: &str, slot_path: &str) -> Result<String, Error> {
+    let slots = extract_slots(page_source)?;
+    let slot = slots
+        .iter()
+        .find(|s| s.path == slot_path)
+        .ok_or_else(|| slot_not_found(slot_path, &slots))?;
+
+    let mut result = String::with_capacity(page_source.len());
+    result.push_str(&page_source[..slot.start]);
+    result.push_str(&page_source[slot.end..]);
+    Ok(result)
+}
+
+/// Build a helpful "slot not found" error listing the available paths.
+fn slot_not_found(path: &str, slots: &[SlotInfo]) -> Error {
+    let available: Vec<&str> = slots.iter().map(|s| s.path.as_str()).collect();
+    anyhow!(
+        "Slot '{}' not found. Available slots: {}",
+        path,
+        if available.is_empty() {
+            "(none)".to_string()
+        } else {
+            available.join(", ")
+        }
+    )
+}
+
+/// The direct child slots of `parent_path` (one path segment deeper).
+fn direct_children<'a>(slots: &'a [SlotInfo], parent_path: &str) -> Vec<&'a SlotInfo> {
+    let prefix = format!("{parent_path}.");
+    slots
+        .iter()
+        .filter(|s| {
+            s.path
+                .strip_prefix(&prefix)
+                .is_some_and(|rest| !rest.contains('.'))
+        })
+        .collect()
+}
+
+/// Swap the component occupying `slot_path` for `component`, transplanting
+/// the existing children across per `slot_map` (old child-bearing slot
+/// name → new child-bearing slot name), e.g. `{sidebar→col_1, main→col_2}`
+/// for Two Column → Three Column.
+///
+/// With an empty `slot_map`, a single child-bearing slot is auto-mapped to
+/// the new component's single child-bearing slot when unambiguous;
+/// otherwise an error asks for an explicit map, so children are never
+/// silently dropped. `params`/`slot_contents` configure the new component.
+#[allow(clippy::too_many_arguments)]
+pub async fn replace_component(
+    page_source: &str,
+    slot_path: &str,
+    component: &PageBuilderComponent,
+    params: &[(String, String)],
+    slot_contents: &[(String, String)],
+    slot_map: &[(String, String)],
+    db: &'static sqlx::SqlitePool,
+) -> Result<String, Error> {
+    let slots = extract_slots(page_source)?;
+    if !slots.iter().any(|s| s.path == slot_path) {
+        return Err(slot_not_found(slot_path, &slots));
+    }
+
+    // Capture the children of each child-bearing slot of the component
+    // currently at `slot_path`, keyed by that slot's name.
+    let mut captured: Vec<(String, String)> = Vec::new();
+    for inner in direct_children(&slots, slot_path) {
+        let children = direct_children(&slots, &inner.path);
+        if children.is_empty() {
+            continue;
+        }
+        let mut blocks = String::new();
+        for child in children {
+            blocks.push('\n');
+            blocks.push_str(&page_source[child.start..child.end]);
+            blocks.push('\n');
+        }
+        captured.push((inner.name.clone(), blocks));
+    }
+
+    // Render the new component into the slot (this clears the old content).
+    let (replaced, _name) = compose_component_into_slot(
+        page_source,
+        slot_path,
+        component,
+        None,
+        params,
+        slot_contents,
+        ComposeMode::Replace,
+        db,
+    )
+    .await?;
+
+    if captured.is_empty() {
+        return Ok(replaced);
+    }
+
+    // Resolve where each captured group lands on the new component.
+    let new_slots = extract_slots(&replaced)?;
+    let new_names: Vec<String> = direct_children(&new_slots, slot_path)
+        .iter()
+        .map(|s| s.name.clone())
+        .collect();
+
+    let mapping: Vec<(String, String)> = if slot_map.is_empty() {
+        if captured.len() == 1 && new_names.len() == 1 {
+            vec![(captured[0].0.clone(), new_names[0].clone())]
+        } else {
+            bail!(
+                "ambiguous transplant: content is in slot(s) [{}] and the new component has slot(s) [{}]. Provide slot_map to choose where each goes.",
+                captured
+                    .iter()
+                    .map(|(n, _)| n.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                if new_names.is_empty() {
+                    "none".to_string()
+                } else {
+                    new_names.join(", ")
+                }
+            );
+        }
+    } else {
+        for (old_name, _) in &captured {
+            if !slot_map.iter().any(|(o, _)| o == old_name) {
+                bail!(
+                    "slot '{}' has content but is not in slot_map; its children would be lost. Map it to a slot on the new component.",
+                    old_name
+                );
+            }
+        }
+        slot_map.to_vec()
+    };
+
+    // Splice each captured group into its mapped slot on the new component.
+    let mut current = replaced;
+    for (old_name, new_name) in &mapping {
+        let Some((_, blocks)) = captured.iter().find(|(o, _)| o == old_name) else {
+            continue; // an old slot with no children to move
+        };
+        if !new_names.iter().any(|n| n == new_name) {
+            bail!(
+                "the new component has no slot '{}'; available: {}",
+                new_name,
+                if new_names.is_empty() {
+                    "none".to_string()
+                } else {
+                    new_names.join(", ")
+                }
+            );
+        }
+        let target_path = format!("{slot_path}.{new_name}");
+        let body_end = extract_slots(&current)?
+            .iter()
+            .find(|s| s.path == target_path)
+            .map(|s| s.body_end)
+            .ok_or_else(|| {
+                anyhow!(
+                    "internal error: slot '{}' missing after replace",
+                    target_path
+                )
+            })?;
+        let mut next = String::with_capacity(current.len() + blocks.len());
+        next.push_str(&current[..body_end]);
+        next.push_str(blocks);
+        next.push_str(&current[body_end..]);
+        current = next;
+    }
+
+    Ok(current)
 }
 
 /// Extract the source of a slot (component info + body) for staging
