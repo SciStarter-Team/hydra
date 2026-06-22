@@ -4,7 +4,7 @@ use anyhow::Error;
 use common::{insensitivestring::InsensitiveString, shared::db, timestring::TimeString};
 use ulid::Ulid;
 
-use crate::{contact::Contact, peering::LoadStorePeered};
+use crate::{contact::Contact, participant_file::ParticipantFile, peering::LoadStorePeered};
 
 use super::{
     ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus, field_source::FieldSource,
@@ -268,7 +268,7 @@ pub enum ProjectFieldValue {
     ParticipationDegree(ProjectParticipationDegree),
     ParticipantInstructions(String),
     ParticipantInstructionsEmail(String),
-    ParticipantFiles(Box<[String]>),
+    ParticipantFiles(Box<[ParticipantFile]>),
     UsFederallyFunded(bool),
     Presenter(String),
     Goal(String),
@@ -374,7 +374,6 @@ impl TryFrom<&str> for ProjectFieldType {
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s {
-            "participant_files" => Ok(ProjectFieldType::ParticipantFiles),
             "topics" => Ok(ProjectFieldType::Topics),
             "fields_of_science" => Ok(ProjectFieldType::FieldsOfScience),
             "practices" => Ok(ProjectFieldType::Practices),
@@ -407,7 +406,6 @@ impl TryFrom<&ProjectField> for Vec<String> {
 
     fn try_from(project_field: &ProjectField) -> Result<Self, Self::Error> {
         match &project_field.field {
-            ProjectFieldValue::ParticipantFiles(arr) => Ok(arr.to_vec()),
             ProjectFieldValue::Topics(arr) => Ok(arr.to_vec()),
             ProjectFieldValue::FieldsOfScience(arr) => Ok(arr.to_vec()),
             ProjectFieldValue::Practices(arr) => Ok(arr.to_vec()),
@@ -462,7 +460,6 @@ impl ProjectField {
         let boxed_items: Box<[String]> = items.into_boxed_slice();
 
         let field_value = match field_type {
-            ProjectFieldType::ParticipantFiles => ProjectFieldValue::ParticipantFiles(boxed_items),
             ProjectFieldType::Topics => ProjectFieldValue::Topics(boxed_items),
             ProjectFieldType::FieldsOfScience => ProjectFieldValue::FieldsOfScience(boxed_items),
             ProjectFieldType::Practices => ProjectFieldValue::Practices(boxed_items),
@@ -4346,16 +4343,22 @@ impl ProjectField {
     async fn read_participant_files(project_id: Ulid) -> Result<Self, Error> {
         let project_id_str = project_id.to_string();
         let rows = sqlx::query!(
-            "SELECT url FROM project_participant_files WHERE project_id = ? ORDER BY url",
+            "SELECT name, url FROM project_participant_files WHERE project_id = ? ORDER BY name, url",
             project_id_str
         )
         .fetch_all(db())
         .await?;
 
-        let urls: Vec<String> = rows.into_iter().map(|row| row.url).collect();
+        let files: Vec<ParticipantFile> = rows
+            .into_iter()
+            .map(|row| ParticipantFile {
+                name: row.name,
+                url: row.url,
+            })
+            .collect();
         Ok(ProjectField {
             project_id,
-            field: ProjectFieldValue::ParticipantFiles(urls.into_boxed_slice()),
+            field: ProjectFieldValue::ParticipantFiles(files.into_boxed_slice()),
             source: None,
         })
     }
@@ -4624,7 +4627,7 @@ impl ProjectField {
     }
 
     // Array field save methods
-    async fn save_participant_files(&self, files: &[String]) -> Result<(), Error> {
+    async fn save_participant_files(&self, files: &[ParticipantFile]) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
 
         // Delete existing entries
@@ -4638,9 +4641,10 @@ impl ProjectField {
         // Insert new entries
         for file in files {
             sqlx::query!(
-                "INSERT INTO project_participant_files (project_id, url) VALUES (?, ?)",
+                "INSERT INTO project_participant_files (project_id, name, url) VALUES (?, ?, ?)",
                 project_id_str,
-                file
+                file.name,
+                file.url
             )
             .execute(db())
             .await?;

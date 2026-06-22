@@ -9,6 +9,7 @@ use ulid::Ulid;
 
 use crate::{
     contact::{Contact, ContactRole},
+    participant_file::ParticipantFile,
     peering::LoadStorePeered,
 };
 
@@ -87,7 +88,7 @@ pub struct ProjectAll {
     pub participation_degree: ProjectParticipationDegree,
     pub participant_instructions: String,
     pub participant_instructions_email: String,
-    pub participant_files: Box<[String]>,
+    pub participant_files: Box<[ParticipantFile]>,
     pub us_federally_funded: bool,
     pub presenter: String,
     pub goal: String,
@@ -996,14 +997,17 @@ impl LoadStorePeered for ProjectAll {
             sqlx::query!(
                 r#"insert into project_participant_files (
               "project_id",
+              "name",
               "url"
             )
             values (
               ?,
+              ?,
               ?
             )"#,
                 project_id,
-                val,
+                val.name,
+                val.url,
             )
             .execute(&mut tx)
             .await?;
@@ -1560,13 +1564,16 @@ impl LoadStorePeered for ProjectAll {
 
         // Read participant files
         let participant_files = sqlx::query!(
-            "SELECT url FROM project_participant_files WHERE project_id = ?",
+            "SELECT name, url FROM project_participant_files WHERE project_id = ?",
             project_id_str
         )
         .fetch_all(db())
         .await?
         .into_iter()
-        .map(|row| row.url)
+        .map(|row| ParticipantFile {
+            name: row.name,
+            url: row.url,
+        })
         .collect::<Vec<_>>()
         .into_boxed_slice();
 

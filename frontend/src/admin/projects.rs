@@ -1,6 +1,7 @@
 use crate::component::{AdminLayout, Component, admin_layout::AdminLayoutPrepared};
 use crate::contact::Contact;
 use crate::entity::{Entity, EntityKind, EntityTarget};
+use crate::participant_file::ParticipantFile;
 use crate::local_time::{TimeFormat, local_time};
 use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
@@ -60,6 +61,14 @@ pub fn routes() -> Route {
         .at(
             "/:id/contacts/items/:contact_id",
             put(projects_update_contact).delete(projects_remove_contact),
+        )
+        .at(
+            "/:id/participant_files/items",
+            get(projects_get_participant_files).post(projects_add_participant_file),
+        )
+        .at(
+            "/:id/participant_files/items/:index",
+            put(projects_update_participant_file).delete(projects_remove_participant_file),
         )
 }
 
@@ -197,7 +206,7 @@ pub struct AdminProjectFull {
     pub participation_degree: String,
     pub participant_instructions: String,
     pub participant_instructions_email: String,
-    pub participant_files: Vec<String>,
+    pub participant_files: Vec<ParticipantFile>,
     pub us_federally_funded: bool,
     pub connect_opaque_url: String,
     pub connect_opaque_url1: String,
@@ -1169,6 +1178,69 @@ impl ContactForm {
     }
 }
 
+// Participant file widget structures. Each resource is a name -> URL pair;
+// rows are identified by their position (index) in the list, since they
+// carry no stable id.
+#[derive(Debug)]
+struct ParticipantFileItem {
+    index: usize,
+    file: ParticipantFile,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/partials/participant_file_items.stpl.html")]
+struct ParticipantFileItems {
+    project_id: Ulid,
+    files: Vec<ParticipantFileItem>,
+}
+
+impl ParticipantFileItems {
+    fn new(project_id: Ulid, files: Vec<ParticipantFile>) -> Self {
+        let files = files
+            .into_iter()
+            .enumerate()
+            .map(|(index, file)| ParticipantFileItem { index, file })
+            .collect();
+
+        Self { project_id, files }
+    }
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/partials/participant_file_widget.stpl.html")]
+pub struct ParticipantFileWidget {
+    pub project_id: Ulid,
+    // None renders the "add new" form; Some renders an editable existing row
+    // at `index`.
+    pub file: Option<ParticipantFile>,
+    pub index: usize,
+}
+
+impl ParticipantFileWidget {
+    pub fn new_editable(project_id: Ulid, file: Option<ParticipantFile>, index: usize) -> Self {
+        Self {
+            project_id,
+            file,
+            index,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct ParticipantFileForm {
+    name: String,
+    url: String,
+}
+
+impl ParticipantFileForm {
+    fn to_participant_file(&self) -> ParticipantFile {
+        ParticipantFile {
+            name: self.name.trim().to_string(),
+            url: self.url.trim().to_string(),
+        }
+    }
+}
+
 async fn projects_search_internal(
     query: ProjectSearchQuery,
 ) -> Result<ProjectsPagePrepared, anyhow::Error> {
@@ -2114,7 +2186,7 @@ async fn projects_update_field(
                 crate::project::field::ProjectFieldValue::ParticipantInstructionsEmail(form_value)
             }
             crate::project::field::ProjectFieldType::ParticipantFiles => {
-                let files: Vec<String> = if form_value.is_empty() {
+                let files: Vec<ParticipantFile> = if form_value.is_empty() {
                     vec![]
                 } else {
                     serde_json::from_str(&form_value).map_err(|e| {
@@ -3596,4 +3668,159 @@ async fn projects_remove_contact(
             .render_once()
             .map_err(|_| poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR))?,
     ))
+}
+
+async fn load_participant_files(project_ulid: Ulid) -> Result<Vec<ParticipantFile>, poem::Error> {
+    let project_field = ProjectField::load((project_ulid, ProjectFieldType::ParticipantFiles))
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to load participant_files field: {:?}", e);
+            poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+        })?;
+
+    Ok(match project_field.field {
+        ProjectFieldValue::ParticipantFiles(files) => files.into_vec(),
+        _ => Vec::new(),
+    })
+}
+
+async fn store_participant_files(
+    project_ulid: Ulid,
+    files: Vec<ParticipantFile>,
+) -> Result<(), poem::Error> {
+    let new_project_field = ProjectField::new(
+        project_ulid,
+        ProjectFieldValue::ParticipantFiles(files.into_boxed_slice()),
+    );
+    new_project_field
+        .store()
+        .await
+        .map_err(|_| poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR))
+}
+
+fn render_participant_file_items(
+    project_ulid: Ulid,
+    files: Vec<ParticipantFile>,
+) -> Result<poem::Response, poem::Error> {
+    let items = ParticipantFileItems::new(project_ulid, files);
+    Ok(poem::Response::builder().content_type("text/html").body(
+        items
+            .render_once()
+            .map_err(|_| poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR))?,
+    ))
+}
+
+#[handler]
+async fn projects_get_participant_files(
+    Path(project_id): Path<String>,
+) -> Result<poem::Response, poem::Error> {
+    let project_ulid: Ulid = project_id
+        .parse()
+        .map_err(|_| poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST))?;
+
+    let files = load_participant_files(project_ulid).await?;
+    render_participant_file_items(project_ulid, files)
+}
+
+#[handler]
+async fn projects_add_participant_file(
+    Path(project_id): Path<String>,
+    poem::web::Form(form): poem::web::Form<ParticipantFileForm>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, poem::Error> {
+    let project_ulid: Ulid = project_id
+        .parse()
+        .map_err(|_| poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST))?;
+
+    let mut files = load_participant_files(project_ulid).await?;
+
+    let new_file = form.to_participant_file();
+    if !new_file.url.is_empty() {
+        files.push(new_file);
+    }
+
+    store_participant_files(project_ulid, files.clone()).await?;
+
+    if let Some(user_info) = &user_info {
+        let _ = common::service::log_activity(
+            None,
+            "project-edit",
+            user_info.user_id,
+            project_ulid,
+            "add=participant_files".to_string(),
+        )
+        .await;
+    }
+
+    render_participant_file_items(project_ulid, files)
+}
+
+#[handler]
+async fn projects_update_participant_file(
+    Path((project_id, index)): Path<(String, String)>,
+    poem::web::Form(form): poem::web::Form<ParticipantFileForm>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, poem::Error> {
+    let project_ulid: Ulid = project_id
+        .parse()
+        .map_err(|_| poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST))?;
+    let index: usize = index
+        .parse()
+        .map_err(|_| poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST))?;
+
+    let mut files = load_participant_files(project_ulid).await?;
+
+    if index >= files.len() {
+        return Err(poem::Error::from_status(poem::http::StatusCode::NOT_FOUND));
+    }
+    files[index] = form.to_participant_file();
+
+    store_participant_files(project_ulid, files.clone()).await?;
+
+    if let Some(user_info) = &user_info {
+        let _ = common::service::log_activity(
+            None,
+            "project-edit",
+            user_info.user_id,
+            project_ulid,
+            format!("participant_files[{}]", index),
+        )
+        .await;
+    }
+
+    render_participant_file_items(project_ulid, files)
+}
+
+#[handler]
+async fn projects_remove_participant_file(
+    Path((project_id, index)): Path<(String, String)>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, poem::Error> {
+    let project_ulid: Ulid = project_id
+        .parse()
+        .map_err(|_| poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST))?;
+    let index: usize = index
+        .parse()
+        .map_err(|_| poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST))?;
+
+    let mut files = load_participant_files(project_ulid).await?;
+
+    if index < files.len() {
+        files.remove(index);
+    }
+
+    store_participant_files(project_ulid, files.clone()).await?;
+
+    if let Some(user_info) = &user_info {
+        let _ = common::service::log_activity(
+            None,
+            "project-edit",
+            user_info.user_id,
+            project_ulid,
+            format!("remove=participant_files[{}]", index),
+        )
+        .await;
+    }
+
+    render_participant_file_items(project_ulid, files)
 }

@@ -161,7 +161,7 @@
 
       <%/* More Info accordion (project only) */%>
       <% if self.kind.is_project() { %>
-      <% let has_more_info = self.can_edit || !self.video_url.is_empty() || !self.total_expense.is_empty() || !self.time_per_participation.is_empty() || !self.audiences.is_empty() || !self.participation_schedule.is_empty() || !self.mobile_app_url.is_empty() || !self.mobile_app_url_ios.is_empty() || !self.mobile_app_url_android.is_empty() || !self.training_materials.is_empty() || !self.classroom_materials.is_empty() || !self.twitter_name.is_empty() || !self.facebook_page.is_empty() || !self.instagram_page.is_empty(); %>
+      <% let has_more_info = self.can_edit || !self.video_url.is_empty() || !self.total_expense.is_empty() || !self.time_per_participation.is_empty() || !self.audiences.is_empty() || !self.participation_schedule.is_empty() || !self.mobile_app_url.is_empty() || !self.mobile_app_url_ios.is_empty() || !self.mobile_app_url_android.is_empty() || !self.training_materials.is_empty() || !self.classroom_materials.is_empty() || !self.participant_files.is_empty() || !self.twitter_name.is_empty() || !self.facebook_page.is_empty() || !self.instagram_page.is_empty(); %>
       <% if has_more_info { %>
       <details class="ss-accordion-accessible border border-linework rounded-sm bg-primary-light mb-8">
         <summary class="accordion__summary !flex justify-between text-lg p-4 m-0 text-primary-dark">
@@ -209,6 +209,10 @@
 
           <% if !self.classroom_materials.is_empty() || self.can_edit { %>
           <%+ self.field("classroom_materials") %>
+          <% } %>
+
+          <% if !self.participant_files.is_empty() || self.can_edit { %>
+          <%+ crate::component::detail_page_edit::ParticipantFilesDisplay { target_id: self.target_id.clone(), files: self.participant_files.clone(), can_edit: self.can_edit } %>
           <% } %>
 
           <% if !self.twitter_name.is_empty() || !self.facebook_page.is_empty() || !self.instagram_page.is_empty() || self.can_edit { %>

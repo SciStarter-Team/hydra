@@ -10,8 +10,9 @@ use ulid::Ulid;
 use crate::event::field::{EventField, EventFieldValue};
 use crate::local_time::{TimeFormat, local_time};
 use crate::middleware::authorization::Authenticated;
+use crate::participant_file::ParticipantFile;
 use crate::peering::LoadStorePeered;
-use crate::project::field::{ProjectField, ProjectFieldValue};
+use crate::project::field::{ProjectField, ProjectFieldType, ProjectFieldValue};
 use crate::project::field_source::FieldSource;
 
 use super::detail_page::DetailPageKind;
@@ -2171,6 +2172,206 @@ async fn load_instances(
             Some(super::detail_page::EventInstanceDisplay { begin, end })
         })
         .collect())
+}
+
+// ---------------------------------------------------------------------------
+// Participant files (Additional Resources): inline name -> URL list editor,
+// gated by the same can_edit permission as the other detail-page fields.
+// Rows are identified by their position (index) in the list.
+// ---------------------------------------------------------------------------
+
+#[derive(TemplateOnce)]
+#[template(path = "pages/detail_page_participant_files.stpl.html")]
+pub struct ParticipantFilesDisplay {
+    pub target_id: String,
+    pub files: Vec<ParticipantFile>,
+    pub can_edit: bool,
+}
+
+#[derive(serde::Deserialize)]
+struct ParticipantFileForm {
+    name: String,
+    url: String,
+}
+
+/// Require that the request comes from a user who may edit this project,
+/// returning a 401/403 otherwise.
+async fn require_project_editor(
+    id: &str,
+    user_info: &Option<std::sync::Arc<BasicInfo>>,
+) -> poem::Result<()> {
+    let user = user_info.as_ref().ok_or_else(|| {
+        poem::Error::from_string(
+            "Authentication required",
+            poem::http::StatusCode::UNAUTHORIZED,
+        )
+    })?;
+
+    let (can_edit, _) = check_edit_permission(id, user, DetailPageKind::Project)
+        .await
+        .map_err(|e| {
+            poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+        })?;
+
+    if !can_edit {
+        return Err(poem::Error::from_string(
+            "Forbidden",
+            poem::http::StatusCode::FORBIDDEN,
+        ));
+    }
+
+    Ok(())
+}
+
+async fn load_participant_files(id: &str) -> poem::Result<Vec<ParticipantFile>> {
+    let ulid = Ulid::from_string(id)
+        .map_err(|e| poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST))?;
+
+    let field = ProjectField::load((ulid, ProjectFieldType::ParticipantFiles))
+        .await
+        .map_err(|e| {
+            poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+        })?;
+
+    Ok(match field.field {
+        ProjectFieldValue::ParticipantFiles(files) => files.into_vec(),
+        _ => Vec::new(),
+    })
+}
+
+/// Persist the list and return the freshly rendered editor fragment. Called
+/// only from edit handlers, so `can_edit` is necessarily true.
+async fn store_and_render_participant_files(
+    id: &str,
+    files: Vec<ParticipantFile>,
+) -> poem::Result<poem::Response> {
+    let ulid = Ulid::from_string(id)
+        .map_err(|e| poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST))?;
+
+    ProjectField::new(
+        ulid,
+        ProjectFieldValue::ParticipantFiles(files.clone().into_boxed_slice()),
+    )
+    .store()
+    .await
+    .map_err(|e| {
+        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+
+    let html = ParticipantFilesDisplay {
+        target_id: id.to_string(),
+        files,
+        can_edit: true,
+    }
+    .render_once()
+    .map_err(|e| {
+        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+
+    Ok(Html(html).into_response())
+}
+
+fn log_project_edit(user_info: &Option<std::sync::Arc<BasicInfo>>, id: &str, detail: String) {
+    if let (Some(user), Ok(ulid)) = (user_info.as_ref(), Ulid::from_string(id)) {
+        let user_id = user.user_id;
+        tokio::spawn(async move {
+            let _ = log_activity(None, "project-edit", user_id, ulid, detail).await;
+        });
+    }
+}
+
+/// GET /-detail/:id/participant-files — full Additional Resources fragment.
+#[handler]
+pub async fn get_participant_files_display(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> poem::Result<poem::Response> {
+    let can_edit = if let Some(ref user) = user_info {
+        check_edit_permission(&id, user, DetailPageKind::Project)
+            .await
+            .map(|(c, _)| c)
+            .unwrap_or(false)
+    } else {
+        false
+    };
+
+    let files = load_participant_files(&id).await?;
+
+    let html = ParticipantFilesDisplay {
+        target_id: id,
+        files,
+        can_edit,
+    }
+    .render_once()
+    .map_err(|e| {
+        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+
+    Ok(Html(html).into_response())
+}
+
+/// POST /-detail/:id/participant-files — add a resource.
+#[handler]
+pub async fn add_participant_file(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+    poem::web::Form(form): poem::web::Form<ParticipantFileForm>,
+) -> poem::Result<poem::Response> {
+    require_project_editor(&id, &user_info).await?;
+
+    let mut files = load_participant_files(&id).await?;
+    let new_file = ParticipantFile {
+        name: form.name.trim().to_string(),
+        url: form.url.trim().to_string(),
+    };
+    if !new_file.url.is_empty() {
+        files.push(new_file);
+    }
+
+    log_project_edit(&user_info, &id, "add=participant_files".to_string());
+    store_and_render_participant_files(&id, files).await
+}
+
+/// PUT /-detail/:id/participant-files/:index — edit a resource in place.
+#[handler]
+pub async fn update_participant_file(
+    Path((id, index)): Path<(String, usize)>,
+    Authenticated(user_info): Authenticated,
+    poem::web::Form(form): poem::web::Form<ParticipantFileForm>,
+) -> poem::Result<poem::Response> {
+    require_project_editor(&id, &user_info).await?;
+
+    let mut files = load_participant_files(&id).await?;
+    if index >= files.len() {
+        return Err(poem::Error::from_string(
+            "Resource not found",
+            poem::http::StatusCode::NOT_FOUND,
+        ));
+    }
+    files[index] = ParticipantFile {
+        name: form.name.trim().to_string(),
+        url: form.url.trim().to_string(),
+    };
+
+    log_project_edit(&user_info, &id, format!("participant_files[{}]", index));
+    store_and_render_participant_files(&id, files).await
+}
+
+/// DELETE /-detail/:id/participant-files/:index — remove a resource.
+#[handler]
+pub async fn delete_participant_file(
+    Path((id, index)): Path<(String, usize)>,
+    Authenticated(user_info): Authenticated,
+) -> poem::Result<poem::Response> {
+    require_project_editor(&id, &user_info).await?;
+
+    let mut files = load_participant_files(&id).await?;
+    if index < files.len() {
+        files.remove(index);
+    }
+
+    log_project_edit(&user_info, &id, format!("remove=participant_files[{}]", index));
+    store_and_render_participant_files(&id, files).await
 }
 
 // ---------------------------------------------------------------------------

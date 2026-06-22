@@ -28,7 +28,7 @@ pub use analytics::{AnalyticsRecentActivityTable, TopPerformersBox};
 pub use badges::RecipientBadge;
 pub use email::{RecipientPickerPartial, TriggerList, TriggerRow};
 pub use files::{GoUrlRow, GoUrlWithFileInfo, UploadSuccessResponse, get_go_urls_with_file_info};
-pub use projects::{ContactWidget, TagsDisplay};
+pub use projects::{ContactWidget, ParticipantFileWidget, TagsDisplay};
 
 use crate::middleware::authorization::{Authenticated, StaffOnly};
 use poem::{

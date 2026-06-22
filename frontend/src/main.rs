@@ -35,6 +35,7 @@ pub mod page_manager;
 pub mod pagebuilder;
 pub mod pagecontent;
 pub mod pages;
+pub mod participant_file;
 pub mod peering;
 pub mod profile;
 pub mod profile_card;
@@ -356,6 +357,16 @@ fn user_facing() -> impl Endpoint {
             "/-detail/:id/instances/:index",
             put(component::detail_page_edit::update_instance)
                 .delete(component::detail_page_edit::delete_instance),
+        )
+        .at(
+            "/-detail/:id/participant-files",
+            get(component::detail_page_edit::get_participant_files_display)
+                .post(component::detail_page_edit::add_participant_file),
+        )
+        .at(
+            "/-detail/:id/participant-files/:index",
+            put(component::detail_page_edit::update_participant_file)
+                .delete(component::detail_page_edit::delete_participant_file),
         )
         .at("/projects/*slug", get(project_page))
         .at("/events/*slug", get(event_page))
@@ -979,12 +990,24 @@ mod sync {
                 };
                 proj.participant_instructions = data.participant_instructions;
                 proj.participant_instructions_email = data.participant_instructions_email;
-                proj.participant_files = data
-                    .participant_files
-                    .split("||")
-                    .filter_map(|s| s.trim_matches('|').trim().to_string().empty_as_none())
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice();
+                proj.participant_files = {
+                    let raw = data.participant_files.trim();
+                    if raw.starts_with('[') {
+                        // Current format: JSON array of {name, url} objects.
+                        serde_json::from_str::<Vec<crate::participant_file::ParticipantFile>>(raw)
+                            .unwrap_or_default()
+                    } else {
+                        // Legacy/resilience: a "||"-joined list of bare URLs.
+                        raw.split("||")
+                            .filter_map(|s| s.trim_matches('|').trim().to_string().empty_as_none())
+                            .map(|url| crate::participant_file::ParticipantFile {
+                                name: String::new(),
+                                url,
+                            })
+                            .collect::<Vec<_>>()
+                    }
+                    .into_boxed_slice()
+                };
                 proj.us_federally_funded = data.us_federally_funded;
                 proj.presenter = data.presenter;
                 proj.goal = data.goal;

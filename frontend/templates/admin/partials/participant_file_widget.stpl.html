@@ -1,0 +1,48 @@
+<div class="border border-gray-200 rounded-lg p-4 bg-white">
+    <% if let Some(file) = &self.file { %>
+        <!-- Existing resource form -->
+        <form class="space-y-3" hx-put="/-admin/projects/<%= self.project_id|disp %>/participant_files/items/<%= self.index|disp %>" hx-target="#participant-file-items-<%= self.project_id|disp %>" hx-swap="outerHTML">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Name</label>
+                    <input type="text" name="name" value="<%= file.name %>" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">URL *</label>
+                    <input type="url" name="url" required value="<%= file.url %>" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white">
+                </div>
+            </div>
+            <div class="flex space-x-2">
+                <button type="submit" class="px-3 py-2 text-sm bg-blue-500 text-white rounded hover:bg-blue-600">
+                    Save Resource
+                </button>
+                <button type="button" class="px-3 py-2 text-sm bg-red-500 text-white rounded hover:bg-red-600"
+                        hx-delete="/-admin/projects/<%= self.project_id|disp %>/participant_files/items/<%= self.index|disp %>"
+                        hx-target="#participant-file-items-<%= self.project_id|disp %>"
+                        hx-swap="outerHTML"
+                        hx-confirm="Are you sure you want to remove this resource?">
+                    Remove
+                </button>
+            </div>
+        </form>
+    <% } else { %>
+        <!-- New resource form -->
+        <form class="space-y-3" hx-post="/-admin/projects/<%= self.project_id|disp %>/participant_files/items" hx-target="#participant-file-items-<%= self.project_id|disp %>" hx-swap="outerHTML">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Name</label>
+                    <input type="text" name="name" placeholder="e.g., identification guide" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">URL *</label>
+                    <input type="url" name="url" required placeholder="https://example.com/thing.pdf" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white">
+                </div>
+            </div>
+            <div>
+                <button type="submit" class="px-3 py-2 text-sm bg-green-500 text-white rounded hover:bg-green-600">
+                    Add Resource
+                </button>
+            </div>
+        </form>
+    <% } %>
+</div>

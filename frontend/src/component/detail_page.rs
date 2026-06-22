@@ -32,6 +32,7 @@ use crate::event::{EventStatus, EventType};
 use crate::lazy_cache::{LazyCached, get_cached};
 use crate::local_time::{TimeFormat, local_time};
 use crate::middleware::authorization::Authenticated;
+use crate::participant_file::ParticipantFile;
 use crate::peering::LoadStorePeered;
 use crate::project::ProjectStatus;
 use common::quill::content_to_html;
@@ -348,6 +349,7 @@ pub struct DetailPageContent {
     pub mobile_app_url_android: String,
     pub training_materials: String,
     pub classroom_materials: String,
+    pub participant_files: Vec<ParticipantFile>,
     pub video_url: String,
 
     // Social media
@@ -523,12 +525,14 @@ impl DetailPage {
         let id_str3 = id_str.clone();
         let id_str4 = id_str.clone();
         let id_str5 = id_str.clone();
+        let id_str6 = id_str.clone();
         let user_info_clone = user_info.clone();
         let user_info_clone2 = user_info.clone();
 
         let (
             tags,
             audiences,
+            participant_files,
             likes,
             engagement,
             reviews_and_count,
@@ -554,6 +558,24 @@ impl DetailPage {
                 )
                 .fetch_all(db())
                 .await
+                .map_err(Error::from)
+            },
+            // Participant files (additional resources): a list of name -> URL pairs.
+            async {
+                sqlx::query!(
+                    "SELECT name, url FROM project_participant_files WHERE project_id = ? ORDER BY name, url",
+                    id_str6
+                )
+                .fetch_all(db())
+                .await
+                .map(|rows| {
+                    rows.into_iter()
+                        .map(|row| ParticipantFile {
+                            name: row.name,
+                            url: row.url,
+                        })
+                        .collect::<Vec<_>>()
+                })
                 .map_err(Error::from)
             },
             // Likes: count is cached per-project; per-user liked is fetched live.
@@ -790,6 +812,7 @@ impl DetailPage {
             mobile_app_url_android: row.mobile_app_url_android,
             training_materials: row.training_materials,
             classroom_materials: row.classroom_materials,
+            participant_files,
             video_url: row.video_url,
             twitter_name: row.twitter_name,
             facebook_page: row.facebook_page,
@@ -1029,6 +1052,7 @@ impl DetailPage {
             mobile_app_url_android: String::new(),
             training_materials: String::new(),
             classroom_materials: String::new(),
+            participant_files: Vec::new(),
             video_url: String::new(),
             twitter_name: String::new(),
             facebook_page: String::new(),

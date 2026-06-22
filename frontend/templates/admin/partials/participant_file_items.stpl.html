@@ -1,0 +1,11 @@
+<div id="participant-file-items-<%= self.project_id|disp %>" class="space-y-4">
+    <% for file_item in &self.files { %>
+        <%+ crate::admin::ParticipantFileWidget::new_editable(self.project_id, Some(file_item.file.clone()), file_item.index) %>
+    <% } %>
+
+    <!-- Add new resource form -->
+    <div class="border border-gray-200 rounded-lg p-4 bg-blue-50">
+        <h5 class="text-sm font-medium text-gray-900 mb-3">Add New Resource</h5>
+        <%+ crate::admin::ParticipantFileWidget::new_editable(self.project_id, None, 0) %>
+    </div>
+</div>

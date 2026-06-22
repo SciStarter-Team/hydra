@@ -1,0 +1,59 @@
+<dl id="participant-files" class="border-t border-linework bg-primary-light pb-4">
+  <dt class="ribbon-project ribbon-subproject bg-primary-dark text-white">Additional Resources</dt>
+  <dd class="p-4">
+    <% if self.can_edit { %>
+      <ul class="space-y-2">
+        <% for (i, file) in self.files.iter().enumerate() { %>
+        <li>
+          <form class="flex gap-2 items-end flex-wrap"
+                hx-put="/-detail/<%= &self.target_id %>/participant-files/<%= i %>"
+                hx-target="#participant-files"
+                hx-swap="outerHTML">
+            <div>
+              <label class="block text-xs font-semibold mb-1">Name</label>
+              <input type="text" name="name" value="<%= file.name %>" class="input input-sm">
+            </div>
+            <div class="grow min-w-0">
+              <label class="block text-xs font-semibold mb-1">URL</label>
+              <input type="url" name="url" required value="<%= file.url %>" class="input input-sm w-full">
+            </div>
+            <button type="submit" class="btn btn-primary btn-xs">Save</button>
+            <button type="button" class="btn btn-secondary btn-xs"
+                    hx-delete="/-detail/<%= &self.target_id %>/participant-files/<%= i %>"
+                    hx-target="#participant-files"
+                    hx-swap="outerHTML"
+                    hx-confirm="Remove this resource?">Remove</button>
+          </form>
+        </li>
+        <% } %>
+      </ul>
+      <details class="edit-only mt-3">
+        <summary class="btn btn-secondary btn-xs cursor-pointer">Add resource</summary>
+        <form class="mt-2 p-3 border border-blue-300 rounded-sm bg-blue-50 flex gap-2 items-end flex-wrap"
+              hx-post="/-detail/<%= &self.target_id %>/participant-files"
+              hx-target="#participant-files"
+              hx-swap="outerHTML">
+          <div>
+            <label class="block text-xs font-semibold mb-1">Name</label>
+            <input type="text" name="name" placeholder="e.g., identification guide" class="input input-sm">
+          </div>
+          <div class="grow min-w-0">
+            <label class="block text-xs font-semibold mb-1">URL</label>
+            <input type="url" name="url" required placeholder="https://example.com/thing.pdf" class="input input-sm w-full">
+          </div>
+          <button type="submit" class="btn btn-primary btn-xs">Add</button>
+        </form>
+      </details>
+    <% } else { %>
+      <ul class="list-disc list-inside space-y-1">
+        <% for file in &self.files { %>
+        <li>
+          <a href="<%= file.url %>" target="_blank" rel="noopener noreferrer" class="text-primary-action underline break-words">
+            <% if file.name.is_empty() { %><%= file.url %><% } else { %><%= file.name %><% } %>
+          </a>
+        </li>
+        <% } %>
+      </ul>
+    <% } %>
+  </dd>
+</dl>
