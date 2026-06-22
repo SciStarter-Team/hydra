@@ -146,6 +146,28 @@ impl EntityTarget {
             EntityTarget::String(string) => string.clone(),
         }
     }
+
+    /// Parse a target string into the `EntityTarget` variant expected
+    /// for the given kind, returning an error if the string is not a
+    /// valid value for that kind. An empty/whitespace string (or a kind
+    /// that takes no target) yields `Nil`.
+    pub fn parse_for_kind(kind: EntityKind, target: Option<&str>) -> Result<EntityTarget, Error> {
+        match target {
+            Some(s) if !s.trim().is_empty() => match kind {
+                EntityKind::Redirect => Ok(EntityTarget::Url(s.parse::<Url>()?)),
+                EntityKind::WordPress => Ok(EntityTarget::String(s.to_string())),
+                EntityKind::RawHtml
+                | EntityKind::DressedHtml
+                | EntityKind::Wysiwyg
+                | EntityKind::PageBuilder
+                | EntityKind::Form
+                | EntityKind::Project
+                | EntityKind::Event => Ok(EntityTarget::Ulid(s.parse::<Ulid>()?)),
+                EntityKind::Placeholder => Ok(EntityTarget::Nil),
+            },
+            _ => Ok(EntityTarget::Nil),
+        }
+    }
 }
 
 impl Display for EntityTarget {

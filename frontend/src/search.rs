@@ -301,10 +301,7 @@ async fn load_filter_options() -> Result<(Vec<String>, Vec<String>, Vec<String>)
 }
 
 /// Apply project-specific filters to a QueryBuilder
-fn apply_project_filters<'a>(
-    qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>,
-    query: &'a FinderQuery,
-) {
+fn apply_project_filters<'a>(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, query: &'a FinderQuery) {
     // Filter out bad geographic data: (0,0) points and swapped lat/lng
     qb.push(" AND NOT (p.point IS NOT NULL AND ST_X(p.point) = 0 AND ST_Y(p.point) = 0)");
     qb.push(" AND NOT (p.point IS NOT NULL AND ABS(ST_Y(p.point)) > 90)");

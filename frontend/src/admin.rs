@@ -12,6 +12,7 @@ pub mod entities;
 pub mod events;
 pub mod files;
 pub mod integrations;
+pub mod mcp_tokens;
 pub mod news;
 pub mod pagebuilder;
 pub mod projects;
@@ -81,6 +82,8 @@ pub fn routes() -> impl Endpoint {
         // Page Builder
         .nest("/engine-room", pagebuilder::engine_room_routes())
         .nest("/component-pages", pagebuilder::pages_routes())
+        // MCP content-management tokens (shown under Engine Room in the sidebar)
+        .nest("/mcp-tokens", mcp_tokens::routes())
         // API endpoints for recipient search (used by badge granting)
         .at("/api/recipient-search", get(api_recipient_search))
         .at("/api/recipient-select", post(api_recipient_select))

@@ -2,6 +2,13 @@
 //!
 //! This module provides read-only access to SciStarter data for AI agents.
 //! It implements a minimal subset of MCP over HTTP using JSON-RPC 2.0.
+//!
+//! The handler in this file (`mcp_handler`, mounted at `/-mcp`) is
+//! public and read-only. The [`content`] submodule provides a separate,
+//! token-authenticated endpoint for viewing and editing site content. It
+//! reuses the JSON-RPC scaffolding defined here.
+
+pub mod content;
 
 use anyhow::Error;
 use common::shared::db;
@@ -67,17 +74,17 @@ pub struct JsonRpcError {
 }
 
 // Standard JSON-RPC error codes
-const INVALID_REQUEST: i32 = -32600;
-const METHOD_NOT_FOUND: i32 = -32601;
-const INVALID_PARAMS: i32 = -32602;
-const INTERNAL_ERROR: i32 = -32603;
+pub(crate) const INVALID_REQUEST: i32 = -32600;
+pub(crate) const METHOD_NOT_FOUND: i32 = -32601;
+pub(crate) const INVALID_PARAMS: i32 = -32602;
+pub(crate) const INTERNAL_ERROR: i32 = -32603;
 
 /// MCP protocol version we support
-const PROTOCOL_VERSION: &str = "2024-11-05";
+pub(crate) const PROTOCOL_VERSION: &str = "2024-11-05";
 
 /// Server information
 const SERVER_NAME: &str = "SciStarter MCP";
-const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
+pub(crate) const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Tool definitions for MCP
 fn get_tools() -> Value {
@@ -241,6 +248,13 @@ async fn handle_tools_call(id: Option<Value>, params: Option<Value>) -> JsonRpcR
         _ => Err(anyhow::anyhow!("Unknown tool: {}", name)),
     };
 
+    tool_result(id, result)
+}
+
+/// Wrap a tool's textual result into a JSON-RPC `tools/call` response,
+/// or an internal error response if the tool failed. Shared with the
+/// authenticated [`content`] endpoint.
+pub(crate) fn tool_result(id: Option<Value>, result: Result<String, Error>) -> JsonRpcResponse {
     match result {
         Ok(content) => JsonRpcResponse::success(
             id,

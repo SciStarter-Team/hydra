@@ -739,27 +739,7 @@ fn parse_target_for_kind(
     kind: &EntityKind,
     target_str: Option<&str>,
 ) -> Result<EntityTarget, anyhow::Error> {
-    match target_str {
-        Some(s) if !s.trim().is_empty() => match kind {
-            EntityKind::Redirect => {
-                let url = s.parse::<url::Url>()?;
-                Ok(EntityTarget::Url(url))
-            }
-            EntityKind::WordPress => Ok(EntityTarget::String(s.to_string())),
-            EntityKind::RawHtml
-            | EntityKind::DressedHtml
-            | EntityKind::Wysiwyg
-            | EntityKind::PageBuilder
-            | EntityKind::Form
-            | EntityKind::Project
-            | EntityKind::Event => {
-                let ulid = s.parse::<Ulid>()?;
-                Ok(EntityTarget::Ulid(ulid))
-            }
-            EntityKind::Placeholder => Ok(EntityTarget::Nil),
-        },
-        _ => Ok(EntityTarget::Nil),
-    }
+    EntityTarget::parse_for_kind(*kind, target_str)
 }
 
 async fn fetch_entities_content(

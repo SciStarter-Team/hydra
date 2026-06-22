@@ -26,6 +26,7 @@ pub mod lazy_cache;
 pub mod local_time;
 pub mod lru_cache;
 pub mod mcp;
+pub mod mcp_token;
 pub mod middleware;
 pub mod misc;
 pub mod news;
@@ -442,6 +443,7 @@ async fn main() -> Result<(), Error> {
             api::external_routes().with(api::middleware::api_cors()),
         )
         .at("/-mcp", post(mcp::mcp_handler))
+        .at("/-content-mcp", post(mcp::content::content_mcp_handler))
         .nest("/oauth2", oauth2::oauth2_routes())
         .nest("/.well-known", oauth2::well_known_routes())
         .nest_no_strip("/", dynamic())
@@ -492,6 +494,7 @@ async fn main() -> Result<(), Error> {
     let _redirect_updates = tokio::spawn(misc::Redirect::peering_task());
     let _html_updates = tokio::spawn(misc::Html::peering_task());
     let _pagecontent_updates = tokio::spawn(pagecontent::PageContent::peering_task());
+    let _mcp_token_updates = tokio::spawn(mcp_token::McpToken::peering_task());
     let _archive_entry_updates = tokio::spawn(admin::archive::ArchiveEntry::peering_task());
     let _file_metadata_updates = tokio::spawn(upload::storage::FileMetadata::peering_task());
 
