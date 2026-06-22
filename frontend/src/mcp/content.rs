@@ -37,8 +37,11 @@ use super::{
     INVALID_PARAMS, INVALID_REQUEST, JsonRpcRequest, JsonRpcResponse, METHOD_NOT_FOUND,
     PROTOCOL_VERSION, SERVER_VERSION, tool_result,
 };
+use crate::builder::context::{Context, ContextMode};
+use crate::builder::render::{CompiledTemplate, render};
 use crate::entity::{Entity, EntityKind, EntityTarget};
 use crate::mcp_token::McpToken;
+use crate::pagebuilder::source::{ComposeMode, compose_component_into_slot, extract_slots};
 use crate::pagebuilder::{PageBuilderComponent, PageBuilderPage};
 use crate::pagecontent::{PageContent, PageContentKind};
 use crate::peering::LoadStorePeered;
@@ -135,6 +138,8 @@ async fn handle_tools_call(id: Option<Value>, params: Option<Value>) -> JsonRpcR
         "get_content" => tool_get_content(arguments).await,
         "create_content" => tool_create_content(arguments).await,
         "update_content" => tool_update_content(arguments).await,
+        "insert_component" => tool_insert_component(arguments).await,
+        "render_preview" => tool_render_preview(arguments).await,
         "list_entities" => tool_list_entities(arguments).await,
         "get_entity" => tool_get_entity(arguments).await,
         "create_entity" => tool_create_entity(arguments).await,
@@ -274,6 +279,7 @@ async fn tool_get_content(args: Value) -> Result<String, Error> {
                 "description": page.description,
                 "body": page.source,
                 "body_format": content_type.body_format(),
+                "slots": slots_json(&page.source),
                 "created": page.created.to_string(),
                 "updated": page.updated.to_string(),
             })
@@ -288,6 +294,7 @@ async fn tool_get_content(args: Value) -> Result<String, Error> {
                 "category": component.category,
                 "body": component.source,
                 "body_format": content_type.body_format(),
+                "slots": slots_json(&component.source),
                 "created": component.created.to_string(),
                 "updated": component.updated.to_string(),
             })
@@ -409,6 +416,133 @@ async fn tool_update_content(args: Value) -> Result<String, Error> {
         "content_type": content_type.label(),
         "status": "updated",
     }))?)
+}
+
+// ==================== Page composition tools ====================
+
+/// The two content types backed by page-builder source, which is what
+/// the composition and preview tools operate on.
+fn require_pagebuilder_type(content_type: ContentType) -> Result<(), Error> {
+    match content_type {
+        ContentType::ComponentPage | ContentType::Component => Ok(()),
+        _ => bail!(
+            "This tool applies only to component_page and component, not {}",
+            content_type.label()
+        ),
+    }
+}
+
+async fn tool_insert_component(args: Value) -> Result<String, Error> {
+    let content_type = ContentType::parse(&args)?;
+    require_pagebuilder_type(content_type)?;
+
+    let id = parse_ulid(&args, "id")?;
+    let slot_path = required_str(&args, "slot_path")?.to_string();
+    let component_id = parse_ulid(&args, "component_id")?;
+    let child_name = optional_str(&args, "name");
+    let params = object_to_pairs(&args, "params")?;
+    let slot_contents = object_to_pairs(&args, "slots")?;
+    let mode = match optional_str(&args, "mode") {
+        None | Some("append") => ComposeMode::Append,
+        Some("replace") => ComposeMode::Replace,
+        Some(other) => bail!("Unknown mode '{other}'. Expected 'append' or 'replace'"),
+    };
+
+    let component = PageBuilderComponent::load(component_id).await?;
+
+    let child_slot = match content_type {
+        ContentType::ComponentPage => {
+            let mut page = PageBuilderPage::load(id).await?;
+            let (new_source, child) = compose_component_into_slot(
+                &page.source,
+                &slot_path,
+                &component,
+                child_name,
+                &params,
+                &slot_contents,
+                mode,
+                db(),
+            )
+            .await?;
+            validate_template_source(&new_source)?;
+            page.set_source(&new_source);
+            page.store().await?;
+            child
+        }
+        ContentType::Component => {
+            let mut target = PageBuilderComponent::load(id).await?;
+            let (new_source, child) = compose_component_into_slot(
+                &target.source,
+                &slot_path,
+                &component,
+                child_name,
+                &params,
+                &slot_contents,
+                mode,
+                db(),
+            )
+            .await?;
+            validate_template_source(&new_source)?;
+            target.set_source(&new_source);
+            target.store().await?;
+            child
+        }
+        _ => unreachable!("guarded by require_pagebuilder_type"),
+    };
+
+    let resulting_path = match mode {
+        ComposeMode::Append => format!("{slot_path}.{child_slot}"),
+        ComposeMode::Replace => slot_path,
+    };
+
+    Ok(serde_json::to_string_pretty(&json!({
+        "status": "inserted",
+        "content_type": content_type.label(),
+        "id": id.to_string(),
+        "component_id": component_id.to_string(),
+        "slot_path": resulting_path,
+    }))?)
+}
+
+async fn tool_render_preview(args: Value) -> Result<String, Error> {
+    let content_type = ContentType::parse(&args)?;
+    require_pagebuilder_type(content_type)?;
+    let id = parse_ulid(&args, "id")?;
+
+    // For a component, bind its declared parameter defaults so the
+    // preview shows representative content rather than empty values.
+    let (source, bind_defaults) = match content_type {
+        ContentType::ComponentPage => (PageBuilderPage::load(id).await?.source, false),
+        ContentType::Component => (PageBuilderComponent::load(id).await?.source, true),
+        _ => unreachable!("guarded by require_pagebuilder_type"),
+    };
+
+    let ctx = Context::new(db(), &None, ContextMode::Presenting)?;
+    if bind_defaults {
+        if let Ok(compiled) = CompiledTemplate::compile(&source) {
+            for param in compiled.extract_params() {
+                if let Some(default) = param.default {
+                    ctx.bind_string(&param.name, &default.to_string())?;
+                }
+            }
+        }
+    }
+
+    let html = render(&ctx, &source).await?;
+    Ok(truncate_on_char_boundary(html, 60_000))
+}
+
+/// Truncate a string to at most `max` bytes, ending on a UTF-8 char
+/// boundary, appending a note when truncation occurs.
+fn truncate_on_char_boundary(s: String, max: usize) -> String {
+    if s.len() <= max {
+        return s;
+    }
+    let mut end = max;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}\n\n…[truncated, {} bytes total]", &s[..end], s.len())
 }
 
 // ==================== Entity tools ====================
@@ -563,6 +697,51 @@ fn reject_field(args: &Value, key: &str, content_type: ContentType) -> Result<()
     Ok(())
 }
 
+/// Extract a JSON object argument as an ordered list of string pairs.
+/// Scalar JSON values (string/number/bool) are accepted and stringified;
+/// an absent or null key yields an empty list.
+fn object_to_pairs(args: &Value, key: &str) -> Result<Vec<(String, String)>, Error> {
+    match args.get(key) {
+        None | Some(Value::Null) => Ok(Vec::new()),
+        Some(Value::Object(map)) => map
+            .iter()
+            .map(|(k, v)| {
+                let value = match v {
+                    Value::String(s) => s.clone(),
+                    Value::Number(n) => n.to_string(),
+                    Value::Bool(b) => b.to_string(),
+                    Value::Null => String::new(),
+                    _ => {
+                        bail!("Value for '{k}' in '{key}' must be a string, number, or boolean")
+                    }
+                };
+                Ok((k.clone(), value))
+            })
+            .collect(),
+        Some(_) => bail!("'{key}' must be an object"),
+    }
+}
+
+/// Summarize a page-builder source's slots for the `get_content`
+/// response, so callers can discover insertion points.
+fn slots_json(source: &str) -> Value {
+    match extract_slots(source) {
+        Ok(slots) => Value::Array(
+            slots
+                .iter()
+                .map(|slot| {
+                    json!({
+                        "path": slot.path,
+                        "component_id": slot.component_id.map(|c| c.to_string()),
+                        "filled": !slot.is_empty,
+                    })
+                })
+                .collect(),
+        ),
+        Err(_) => Value::Array(Vec::new()),
+    }
+}
+
 fn parse_ulid(args: &Value, key: &str) -> Result<Ulid, Error> {
     let value = required_str(args, key)?;
     value
@@ -603,7 +782,7 @@ fn get_tools() -> Value {
         },
         {
             "name": "get_content",
-            "description": "Get a single content item by id, including its full body. For simple_page the body is Quill Delta JSON; for raw_html_page it is HTML; for component_page and component it is page-builder template source.",
+            "description": "Get a single content item by id, including its full body. For simple_page the body is Quill Delta JSON; for raw_html_page it is HTML; for component_page and component it is page-builder template source. For component_page and component the response also includes a 'slots' list (path, component_id, filled) describing insertion points for insert_component.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -640,6 +819,36 @@ fn get_tools() -> Value {
                     "body": { "type": "string", "description": "New body (see create_content for the expected format)" },
                     "description": { "type": "string", "description": "New description (component_page and component only)" },
                     "category": { "type": "string", "description": "New category (component only)" }
+                },
+                "required": ["content_type", "id"]
+            }
+        },
+        {
+            "name": "insert_component",
+            "description": "Compose a component into a slot of a component_page or component, returning the resulting slot path. The component's source is inlined so its inner slots stay editable for further composition. 'params' sets the component's scalar parameters; 'slots' fills the component's named inner slots with HTML/source content (use get_content on the component to see its parameters and inner slots). mode 'append' (default) adds the component as a new child slot inside the target slot — use it to stack several components inside one container slot; 'replace' makes the target slot itself become the component.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "content_type": { "type": "string", "enum": ["component_page", "component"], "description": "The kind of target that contains the slot" },
+                    "id": { "type": "string", "description": "ULID of the target component_page or component" },
+                    "slot_path": { "type": "string", "description": "Path of the existing slot to insert into, as reported by get_content's 'slots' (e.g. 'content' or 'content.cards')" },
+                    "component_id": { "type": "string", "description": "ULID of the component to insert" },
+                    "name": { "type": "string", "description": "Base name for the new child slot in append mode; defaults to a slug of the component name" },
+                    "params": { "type": "object", "description": "Scalar parameter values for the component, e.g. {\"title\": \"...\", \"image_url\": \"...\"}", "additionalProperties": { "type": "string" } },
+                    "slots": { "type": "object", "description": "Content for the component's named inner slots, e.g. {\"description\": \"<p>...</p>\"}", "additionalProperties": { "type": "string" } },
+                    "mode": { "type": "string", "enum": ["append", "replace"], "description": "append (default) adds a new child slot; replace makes the target slot become the component" }
+                },
+                "required": ["content_type", "id", "slot_path", "component_id"]
+            }
+        },
+        {
+            "name": "render_preview",
+            "description": "Render a component_page or component to HTML in presenting mode so you can preview the output before publishing. For a component, its declared parameter defaults are applied. Returns the inner content HTML, without the surrounding site layout.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "content_type": { "type": "string", "enum": ["component_page", "component"], "description": "What to render" },
+                    "id": { "type": "string", "description": "ULID of the component_page or component" }
                 },
                 "required": ["content_type", "id"]
             }

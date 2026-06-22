@@ -104,13 +104,12 @@ pub fn extract_slots(source: &str) -> Result<Vec<SlotInfo>, Error> {
     Ok(slots)
 }
 
-/// Insert a component into a slot
+/// Insert a component into a slot, replacing the slot's content with the
+/// component rendered in place.
 ///
-/// This renders the component's source with the given params as context bindings,
-/// then replaces the slot's content with the rendered output while updating the
-/// slot tag metadata.
-///
-/// The `slot_path` should be the full hierarchical path (e.g., "main/t_3/t_0").
+/// Thin adapter over [`compose_component_into_slot`] for the common
+/// case (replace, no extra slot content). The `slot_path` should be the
+/// full hierarchical path (e.g., "main.t_3.t_0").
 pub async fn insert_component_into_slot(
     page_source: &str,
     slot_path: &str,
@@ -118,34 +117,179 @@ pub async fn insert_component_into_slot(
     params: &[(String, String)],
     db: &'static sqlx::SqlitePool,
 ) -> Result<String, Error> {
-    // Find the slot by path
-    let slots = extract_slots(page_source)?;
-    let slot = slots
-        .iter()
-        .find(|s| s.path == slot_path)
-        .ok_or_else(|| anyhow!("Slot '{}' not found", slot_path))?;
+    let (source, _name) = compose_component_into_slot(
+        page_source,
+        slot_path,
+        component,
+        None,
+        params,
+        &[],
+        ComposeMode::Replace,
+        db,
+    )
+    .await?;
+    Ok(source)
+}
 
-    // Create context with params as bindings
+/// Whether a composed component replaces a slot's content or is
+/// appended as a new child slot within it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComposeMode {
+    /// Append the component as a new child slot inside the target slot,
+    /// leaving any existing content in place. Use this to accumulate
+    /// several components inside one container slot.
+    Append,
+    /// Replace the target slot's entire content with the component.
+    Replace,
+}
+
+/// Fill named slots within a component's source, replacing each matching
+/// slot's body with the provided content. Returns the modified source.
+///
+/// Errors if a requested slot name does not exist in the component, so a
+/// caller catches typos rather than silently dropping content.
+pub fn fill_component_slots(
+    source: &str,
+    slot_contents: &[(String, String)],
+) -> Result<String, Error> {
+    let mut current = source.to_string();
+
+    for (name, content) in slot_contents {
+        let slots = extract_slots(&current)?;
+        let slot = slots.iter().find(|s| &s.name == name).ok_or_else(|| {
+            let available: Vec<&str> = slots.iter().map(|s| s.name.as_str()).collect();
+            anyhow!(
+                "Component has no slot named '{}'. Available slots: {}",
+                name,
+                if available.is_empty() {
+                    "(none)".to_string()
+                } else {
+                    available.join(", ")
+                }
+            )
+        })?;
+
+        let mut next = String::with_capacity(current.len() + content.len());
+        next.push_str(&current[..slot.body_start]);
+        next.push_str(content);
+        next.push_str(&current[slot.body_end..]);
+        current = next;
+    }
+
+    Ok(current)
+}
+
+/// Place a component into a slot, rendering it in place (the platform's
+/// render-on-placement model) and recording `component=` metadata and
+/// params on the slot tag.
+///
+/// Before rendering, any inner slots named in `slot_contents` are filled
+/// with the provided content, so leaf content (a card description, a
+/// callout body, etc.) can be set at placement time. Slots authored with
+/// the `{$^ slot $}` escape survive the render as real, still-empty page
+/// slots, so container components remain nestable afterward.
+///
+/// In [`ComposeMode::Append`] the component is added as a new child slot
+/// inside the target (leaving existing content); `child_name` provides
+/// its base name (deduplicated), defaulting to a slug of the component
+/// name. In [`ComposeMode::Replace`] the target slot's content is
+/// replaced. The chosen slot name is returned alongside the new source.
+#[allow(clippy::too_many_arguments)]
+pub async fn compose_component_into_slot(
+    page_source: &str,
+    slot_path: &str,
+    component: &PageBuilderComponent,
+    child_name: Option<&str>,
+    params: &[(String, String)],
+    slot_contents: &[(String, String)],
+    mode: ComposeMode,
+    db: &'static sqlx::SqlitePool,
+) -> Result<(String, String), Error> {
+    // Fill the requested inner slots, then render the component in place
+    // with its params bound. `{$^ slot $}` slots survive this render as
+    // real page slots for later composition.
+    let filled = fill_component_slots(&component.source, slot_contents)?;
     let ctx = Context::new(db, &None, ContextMode::Presenting)?;
     for (key, value) in params {
         ctx.bind_string(key, value)?;
     }
+    let body = render(&ctx, &filled).await?;
 
-    // Render the component source
-    let rendered = render(&ctx, &component.source).await?;
+    let slots = extract_slots(page_source)?;
+    let target = slots.iter().find(|s| s.path == slot_path).ok_or_else(|| {
+        let available: Vec<&str> = slots.iter().map(|s| s.path.as_str()).collect();
+        anyhow!(
+            "Slot '{}' not found. Available slots: {}",
+            slot_path,
+            if available.is_empty() {
+                "(none)".to_string()
+            } else {
+                available.join(", ")
+            }
+        )
+    })?;
 
-    // Build the new slot tag with metadata (use slot name, not full path)
-    let new_tag = build_slot_tag(&slot.name, Some(&component.component_id), params);
+    match mode {
+        ComposeMode::Replace => {
+            let new_tag = build_slot_tag(&target.name, Some(&component.component_id), params);
+            let mut result = String::with_capacity(page_source.len() + body.len());
+            result.push_str(&page_source[..target.start]);
+            result.push_str(&new_tag);
+            result.push_str(&body);
+            result.push_str("{$ /slot $}");
+            result.push_str(&page_source[target.end..]);
+            Ok((result, target.name.clone()))
+        }
+        ComposeMode::Append => {
+            let base = child_name
+                .map(slugify_slot_name)
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| slugify_slot_name(&component.name));
+            let name = unique_slot_name(&slots, &base);
 
-    // Reconstruct the source
-    let mut result = String::with_capacity(page_source.len() + rendered.len());
-    result.push_str(&page_source[..slot.start]);
-    result.push_str(&new_tag);
-    result.push_str(&rendered);
-    result.push_str("{$ /slot $}");
-    result.push_str(&page_source[slot.end..]);
+            let tag = build_slot_tag(&name, Some(&component.component_id), params);
+            let block = format!("\n{}{}{{$ /slot $}}\n", tag, body);
 
-    Ok(result)
+            let mut result = String::with_capacity(page_source.len() + block.len());
+            result.push_str(&page_source[..target.body_end]);
+            result.push_str(&block);
+            result.push_str(&page_source[target.body_end..]);
+            Ok((result, name))
+        }
+    }
+}
+
+/// Turn an arbitrary label into a valid slot name (lowercase
+/// alphanumerics and underscores).
+fn slugify_slot_name(label: &str) -> String {
+    let mut out = String::with_capacity(label.len());
+    for c in label.chars() {
+        if c.is_ascii_alphanumeric() {
+            out.push(c.to_ascii_lowercase());
+        } else if !out.ends_with('_') {
+            out.push('_');
+        }
+    }
+    out.trim_matches('_').to_string()
+}
+
+/// Pick a slot name based on `base` that does not collide with any
+/// existing slot name in the page.
+fn unique_slot_name(existing: &[SlotInfo], base: &str) -> String {
+    let base = if base.is_empty() { "item" } else { base };
+    let taken: std::collections::HashSet<&str> = existing.iter().map(|s| s.name.as_str()).collect();
+
+    if !taken.contains(base) {
+        return base.to_string();
+    }
+    let mut i = 2;
+    loop {
+        let candidate = format!("{}_{}", base, i);
+        if !taken.contains(candidate.as_str()) {
+            return candidate;
+        }
+        i += 1;
+    }
 }
 
 /// Remove a component from a slot, leaving it empty
