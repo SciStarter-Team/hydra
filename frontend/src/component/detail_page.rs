@@ -82,7 +82,7 @@ impl DetailPageStatus {
     pub fn alert_message(&self) -> &'static str {
         match self {
             Self::Active => "",
-            Self::Finished => "This project has finished.",
+            Self::Finished => "This project is complete.",
             Self::Hiatus => "This project is on hiatus.",
             Self::Pending => "This project is pending review.",
             Self::Hidden => "This project is not currently visible.",
