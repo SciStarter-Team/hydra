@@ -6,6 +6,7 @@
     <title>Exchange</title>
     <script src="/-static/htmx.js"></script>
     <script src="/-static/js/social_share.js" defer></script>
+    <script src="/-static/js/clickthrough.js" defer></script>
     <link href="/-static/exchange/css/styles.css" rel="stylesheet">
   </head>
   <body hx-headers='{"X-CSRFToken": "<%= self.csrftoken %>"}'>
@@ -546,19 +547,19 @@
               <div>
                 <% let ss_url = self.encode(&format!("https://scistarter.org/{}", &self.project.slug)).to_string(); %>
                 <% let ss_name = self.encode(&self.project.name).to_string(); %>
-                <a data-link="#share-facebook" href="https://www.facebook.com/sharer/sharer.php?u=<%= &ss_url %>" target="_blank">
+                <a data-link="#share-facebook" data-no-track href="https://www.facebook.com/sharer/sharer.php?u=<%= &ss_url %>" target="_blank">
                   <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" style="fill: currentcolor;">
                     <use xlink:href="/img/icons.svg#icon--facebook"></use>
                   </svg>
                   <span class="u-visuallyhidden">Share on Facebook</span>
                 </a>
-                <a data-link="#share-twitter" href="https://twitter.com/intent/tweet?text=<%= &ss_name %>&url=<%= &ss_url %>" target="_blank">
+                <a data-link="#share-twitter" data-no-track href="https://twitter.com/intent/tweet?text=<%= &ss_name %>&url=<%= &ss_url %>" target="_blank">
                   <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" style="fill: currentcolor;">
                     <use xlink:href="/img/icons.svg#icon--twitter"></use>
                   </svg>
                   <span class="u-visuallyhidden">Share on Twitter</span>
                 </a>
-                <a data-link="#share-instagram" href="https://www.instagram.com/" target="_blank" rel="noopener"
+                <a data-link="#share-instagram" data-no-track href="https://www.instagram.com/" target="_blank" rel="noopener"
                    data-share-url="https://scistarter.org/<%= self.project.slug %>"
                    data-share-image="<%= self.project.image %>"
                    data-share-caption="<%= self.project.name %>"
@@ -568,7 +569,7 @@
                   </svg>
                   <span class="u-visuallyhidden">Share on Instagram</span>
                 </a>
-                <a data-link="#share-linkedin" href="https://www.linkedin.com/sharing/share-offsite/?url=<%= &ss_url %>" target="_blank">
+                <a data-link="#share-linkedin" data-no-track href="https://www.linkedin.com/sharing/share-offsite/?url=<%= &ss_url %>" target="_blank">
                   <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" style="fill: currentcolor;">
                     <use xlink:href="/img/icons.svg#icon--linkedin"></use>
                   </svg>

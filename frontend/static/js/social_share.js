@@ -1,5 +1,23 @@
 // Shared social-sharing helpers used by the project/event detail share modal
 // and the embeddable exchange project widget.
+
+// Record a share-button click for analytics. A share is an action, not an
+// external-content clickthrough, so it posts to the dedicated share-click
+// endpoint (which logs to the `share_events` table) via sendBeacon, leaving the
+// default link navigation untouched. The element supplies:
+//   data-share-target   entity ULID
+//   data-share-platform facebook | twitter | instagram | linkedin
+window.ssRecordShare = function (el) {
+  const target = el && el.dataset ? el.dataset.shareTarget : null;
+  const platform = el && el.dataset ? el.dataset.sharePlatform : null;
+  if (target && platform && navigator.sendBeacon) {
+    try {
+      navigator.sendBeacon(
+        `/-detail/${encodeURIComponent(target)}/share-click/${encodeURIComponent(platform)}`
+      );
+    } catch (e) {}
+  }
+};
 //
 // Instagram has no web link-share endpoint (unlike Facebook/X/LinkedIn, which
 // take a URL in a query string). The web-viable path is the OS share sheet:
@@ -13,6 +31,8 @@
 //   data-share-image   absolute URL of the uploaded image (may be empty)
 //   data-share-caption suggested caption (entity name)
 window.ssShareToInstagram = async function (btn) {
+  window.ssRecordShare(btn);
+
   const url = btn.dataset.shareUrl;
   const caption = btn.dataset.shareCaption;
   const imageUrl = btn.dataset.shareImage;

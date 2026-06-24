@@ -7,7 +7,7 @@ use common::{
         log::{
             LastEditedRequest, LastEditedResponse, ProjectLikesRequest, ProjectLikesResponse,
             ProjectMemberCountRequest, ProjectMemberCountResponse, ProjectReviewsRequest,
-            ProjectReviewsResponse, RatingSetRequest, ReviewEntry, ReviewSetRequest,
+            ProjectReviewsResponse, RatingSetRequest, ReviewEntry, ReviewSetRequest, SharePlatform,
         },
         user::{
             BasicInfo, BookmarkCheckRequest, BookmarkCheckResponse, BookmarkCreateRequest,
@@ -15,7 +15,7 @@ use common::{
             UserDisplayInfoBatchRequest, UserDisplayInfoBatchResponse,
         },
     },
-    service::{request, send},
+    service::{log_share, request, send},
     shared::db,
     timestring::TimeString,
 };
@@ -31,6 +31,7 @@ use crate::component::Component;
 use crate::event::{EventStatus, EventType};
 use crate::lazy_cache::{LazyCached, get_cached};
 use crate::local_time::{TimeFormat, local_time};
+use crate::middleware::analytics::{Device, Interaction};
 use crate::middleware::authorization::Authenticated;
 use crate::participant_file::ParticipantFile;
 use crate::peering::LoadStorePeered;
@@ -1289,6 +1290,8 @@ pub async fn share_modal(Path(id): Path<String>) -> poem::Result<poem::Response>
     #[derive(TemplateOnce)]
     #[template(path = "pages/detail_page_share_modal.stpl.html")]
     struct ShareModal {
+        /// Entity ULID, used by share controls to report clicks for analytics.
+        target_id: String,
         name: String,
         share_url: String,
         /// Absolute URL of the uploaded image, shared to Instagram. Empty when none.
@@ -1302,6 +1305,7 @@ pub async fn share_modal(Path(id): Path<String>) -> poem::Result<poem::Response>
         facebook_url: format!("https://www.facebook.com/sharer/sharer.php?u={url_enc}"),
         twitter_url: format!("https://twitter.com/intent/tweet?url={url_enc}&text={name_enc}"),
         linkedin_url: format!("https://www.linkedin.com/sharing/share-offsite/?url={url_enc}"),
+        target_id: id,
         name: row.name,
         image: row.image,
         share_url,
@@ -1312,6 +1316,42 @@ pub async fn share_modal(Path(id): Path<String>) -> poem::Result<poem::Response>
     })?;
 
     Ok(Html(html).into_response())
+}
+
+/// Record a social-share button click (fire-and-forget analytics).
+///
+/// A share is an action, not an external-content clickthrough, so it is logged
+/// to the dedicated `share_events` table via [`log_share`] rather than going
+/// through the clickthrough pipeline. Called by a `navigator.sendBeacon` from
+/// the share controls, so the response body is irrelevant.
+#[handler]
+pub async fn record_share(
+    Authenticated(user_info): Authenticated,
+    device: Device,
+    interaction: Interaction,
+    Path((id, platform)): Path<(String, String)>,
+) -> poem::Result<poem::Response> {
+    use poem::http::StatusCode;
+
+    let (Ok(target_id), Ok(platform)) = (id.parse::<Ulid>(), platform.parse::<SharePlatform>())
+    else {
+        return Ok(StatusCode::BAD_REQUEST.into_response());
+    };
+
+    if let Err(e) = log_share(
+        None,
+        target_id,
+        platform,
+        user_info.as_ref().map(|u| u.user_id),
+        String::from(device),
+        String::from(interaction),
+    )
+    .await
+    {
+        tracing::warn!("Failed to log share event: {e}");
+    }
+
+    Ok(StatusCode::NO_CONTENT.into_response())
 }
 
 /// Map modal

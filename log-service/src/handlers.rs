@@ -156,6 +156,40 @@ pub async fn handle_clickthrough(req: &async_nats::service::Request) -> Result<(
     Ok(())
 }
 
+pub async fn handle_share(req: &async_nats::service::Request) -> Result<()> {
+    let (when, target_id, platform, user_id, device_id, interaction_id): (
+        String,
+        String,
+        String,
+        Option<String>,
+        String,
+        String,
+    ) = decode_structured_message(req.message.clone())?;
+
+    use log_service::database::tables::ShareEventRow;
+
+    let row = ShareEventRow {
+        when,
+        target_id,
+        platform,
+        user_id,
+        device_id,
+        interaction_id,
+    };
+
+    // Clone database reference and drop it immediately after use
+    {
+        let database = DATABASE
+            .read()
+            .as_ref()
+            .expect("Database not initialized")
+            .clone();
+        database.share_events.insert(row).await?
+    };
+
+    Ok(())
+}
+
 pub async fn handle_join(req: &async_nats::service::Request) -> Result<()> {
     let (when, entity_id, user_id, active, consented, contacted, notified, activity, reason): (
         String,

@@ -27,7 +27,7 @@ use std::sync::Arc;
 use crate::database::table::Table;
 use crate::database::tables::{
     ActivityLogRow, BookmarkRow, ClickthroughRow, EmailEventRow, ExchangeEventRow, JoinRow,
-    PageViewRow, ParticipationRow, SearchEventRow,
+    PageViewRow, ParticipationRow, SearchEventRow, ShareEventRow,
 };
 use std::path::PathBuf;
 use url::Url;
@@ -372,6 +372,7 @@ pub struct Database {
     pub email_events: Table<EmailEventRow>,
     pub exchange_events: Table<ExchangeEventRow>,
     pub search_events: Table<SearchEventRow>,
+    pub share_events: Table<ShareEventRow>,
 }
 
 impl Database {
@@ -423,6 +424,7 @@ impl Database {
             email_events: Table::new(&path).await?,
             exchange_events: Table::new(&path).await?,
             search_events: Table::new(&path).await?,
+            share_events: Table::new(&path).await?,
         };
 
         // Register all tables with DataFusion

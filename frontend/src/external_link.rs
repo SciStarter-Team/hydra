@@ -2,12 +2,13 @@ use crate::middleware::analytics::{Device, Interaction};
 use crate::middleware::authorization::Authenticated;
 use anyhow::Context;
 use common::message::log::{ExternalLinkClickthroughRequest, ExternalLinkClickthroughResponse};
-use common::service::request;
+use common::service::{log_clickthrough, request};
 use poem::{
     Body, IntoResponse, Response, handler,
     http::StatusCode,
-    web::{Path, RealIp},
+    web::{Json, Path, RealIp},
 };
+use serde::Deserialize;
 use std::net::IpAddr;
 use tracing::error;
 use ulid::Ulid;
@@ -57,4 +58,57 @@ pub async fn handle_external_link(
             StatusCode::NOT_FOUND,
         ))
     }
+}
+
+/// Body of an outbound-link click beacon.
+#[derive(Debug, Deserialize)]
+pub struct ClickthroughBeacon {
+    /// Absolute destination URL the user clicked.
+    pub to_url: String,
+    /// Path of the page the click originated from.
+    pub from_path: String,
+}
+
+/// Record an outbound external-link click reported by `static/js/clickthrough.js`.
+///
+/// This replaces the old server-side href rewriting. Links stay direct; a
+/// delegated `sendBeacon` handler posts here on external-link clicks. It records
+/// the same `clickthroughs` data the `/-link` redirect path produces — IP,
+/// geolocation, device, interaction and user are resolved server-side; only the
+/// destination URL and originating path come from the client (the URL is
+/// validated to be an absolute http(s) link).
+#[handler]
+pub async fn record_clickthrough(
+    Authenticated(user_info): Authenticated,
+    RealIp(ip_address): RealIp,
+    device: Device,
+    interaction: Interaction,
+    Json(beacon): Json<ClickthroughBeacon>,
+) -> Result<impl IntoResponse, poem::Error> {
+    if !(beacon.to_url.starts_with("http://") || beacon.to_url.starts_with("https://")) {
+        return Ok(StatusCode::BAD_REQUEST);
+    }
+
+    let ip_str = ip_address
+        .unwrap_or_else(|| IpAddr::from([0, 0, 0, 0]))
+        .to_string();
+
+    if let Err(e) = log_clickthrough(
+        None, // when - current time
+        ip_str,
+        String::from(device),
+        String::from(interaction),
+        user_info.as_ref().map(|u| u.user_id),
+        beacon.from_path,
+        beacon.to_url,
+        "external_link",
+        None, // program_id
+        None, // geolocation - resolved from IP
+    )
+    .await
+    {
+        error!("Failed to record clickthrough beacon: {}", e);
+    }
+
+    Ok(StatusCode::NO_CONTENT)
 }

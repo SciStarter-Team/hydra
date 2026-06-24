@@ -350,3 +350,35 @@ inventory::submit! {
         schema: SearchEventRow::schema,
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShareEventRow {
+    pub when: String,
+    pub target_id: String,
+    pub platform: String,
+    pub user_id: Option<String>,
+    pub device_id: String,
+    pub interaction_id: String,
+}
+
+impl TableRow for ShareEventRow {
+    const TABLE_NAME: &'static str = "share_events";
+
+    fn schema() -> Schema {
+        Schema::new(vec![
+            Field::new("when", DataType::Utf8, false),
+            Field::new("target_id", DataType::Utf8, false),
+            Field::new("platform", DataType::Utf8, false),
+            Field::new("user_id", DataType::Utf8, true),
+            Field::new("device_id", DataType::Utf8, false),
+            Field::new("interaction_id", DataType::Utf8, false),
+        ])
+    }
+}
+
+inventory::submit! {
+    TableRegistration {
+        name: ShareEventRow::TABLE_NAME,
+        schema: ShareEventRow::schema,
+    }
+}

@@ -426,6 +426,37 @@ pub async fn log_clickthrough(
     .await
 }
 
+/// A convenience wrapper around [`common::service::send`] for recording
+/// social-share button clicks.
+///
+/// A share is an action, not a clickthrough, so it is logged to its own
+/// `share_events` table rather than the clickthrough pipeline. This lets us
+/// answer "how many times was each share option clicked in a given timeframe"
+/// without polluting external-link clickthrough analytics.
+pub fn log_share(
+    when: impl Into<Option<TimeString>>,
+    target_id: Ulid,
+    platform: crate::message::log::SharePlatform,
+    user_id: impl Into<Option<Ulid>>,
+    device_id: impl Into<String>,
+    interaction_id: impl Into<String>,
+) -> impl Future<Output = Result<(), Error>> {
+    let when: String = when.into().unwrap_or_else(|| TimeString::now()).into();
+    let target_id: String = target_id.to_string();
+    let platform: String = platform.to_string();
+    let user_id: Option<String> = user_id
+        .into()
+        .and_then(|u| u.as_ulid().ok())
+        .map(|u| u.to_string());
+    let device_id: String = device_id.into();
+    let interaction_id: String = interaction_id.into();
+
+    send(
+        "log.share",
+        (when, target_id, platform, user_id, device_id, interaction_id),
+    )
+}
+
 /// A convenience wrapper around [`common::service::request`] for sending
 /// emails via the emailer service.
 ///

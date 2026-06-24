@@ -280,6 +280,7 @@ fn user_facing() -> impl Endpoint {
         .at("/demo-forum", get(demo_forum))
         .at("/go/*friendly_url", get(gourl::handle_go_url))
         .at("/-link/:link_id", get(external_link::handle_external_link))
+        .at("/-clickthrough", post(external_link::record_clickthrough))
         .nest("/badges", badge::routes())
         .nest("/evolveme", evolveme::routes())
         .nest("/exchange", exchange::routes())
@@ -317,6 +318,10 @@ fn user_facing() -> impl Endpoint {
         .at(
             "/-detail/:id/share",
             get(component::detail_page::share_modal),
+        )
+        .at(
+            "/-detail/:id/share-click/:platform",
+            post(component::detail_page::record_share),
         )
         .at("/-detail/:id/map", get(component::detail_page::map_modal))
         .at(

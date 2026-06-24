@@ -271,6 +271,31 @@ pub struct ExternalLinkClickthroughResponse {
     pub url: Option<String>, // None if link_id not found
 }
 
+// Share Analytics
+
+/// The social platform a user shared an entity to. Stored as its lowercase
+/// string form (`facebook`, `twitter`, `instagram`, `linkedin`) in the
+/// `share_events` log table, and parsed from the share-click endpoint path so
+/// only known platforms are recorded.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    strum::Display,
+    strum::EnumString,
+)]
+#[strum(serialize_all = "lowercase")]
+pub enum SharePlatform {
+    Facebook,
+    Twitter,
+    Instagram,
+    LinkedIn,
+}
+
 // Wall of Fame Contributors
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
