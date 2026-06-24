@@ -7,32 +7,7 @@
 <% } else { %>
 <ul class="divide-y divide-gray-200">
     <% for component in &self.components { %>
-    <li class="hover:bg-gray-50 flex items-center">
-        <label class="pl-6 py-4 cursor-pointer">
-            <input type="checkbox"
-                   name="ids[]"
-                   value="<%= component.component_id|disp %>"
-                   class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
-        </label>
-        <a href="/-admin/engine-room/components/<%= component.component_id|disp %>" class="flex-1 block px-4 py-4">
-            <div class="flex items-center justify-between">
-                <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-3">
-                        <h3 class="text-sm font-medium text-indigo-600 truncate"><%= &component.name %></h3>
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                            <%= &component.category %>
-                        </span>
-                    </div>
-                    <% if !component.description.is_empty() { %>
-                    <p class="mt-1 text-sm text-gray-500 truncate"><%= &component.description %></p>
-                    <% } %>
-                </div>
-                <div class="ml-4 flex-shrink-0 text-sm text-gray-500">
-                    Updated <%- local_time(&component.updated, TimeFormat::DateTime) %>
-                </div>
-            </div>
-        </a>
-    </li>
+    <%+ PbComponentRow { component } %>
     <% } %>
 </ul>
 <% } %>

@@ -123,6 +123,12 @@ struct PbComponentsContent {
 }
 
 #[derive(sailfish::TemplateOnce)]
+#[template(path = "admin/pagebuilder/component_row.stpl.html")]
+struct PbComponentRow<'a> {
+    component: &'a crate::pagebuilder::PageBuilderComponent,
+}
+
+#[derive(sailfish::TemplateOnce)]
 #[template(path = "admin/pagebuilder/component_form.stpl.html")]
 struct PbComponentForm {
     component: Option<crate::pagebuilder::PageBuilderComponent>,
