@@ -146,18 +146,20 @@ impl<'a> Iterator for AttributeParser<'a> {
 
 /// Unescape a string value that may contain escape sequences like \" or \\
 pub fn unescape_value(input: &str) -> String {
-    let bytes = input.as_bytes();
     let mut result = String::with_capacity(input.len());
-    let mut i = 0;
+    let mut chars = input.chars();
 
-    while i < bytes.len() {
-        if bytes[i] == b'\\' && i + 1 < bytes.len() {
-            i += 1;
-            result.push(bytes[i] as char);
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            // A backslash escapes the next character; a trailing backslash with
+            // nothing after it is kept literally.
+            match chars.next() {
+                Some(next) => result.push(next),
+                None => result.push('\\'),
+            }
         } else {
-            result.push(bytes[i] as char);
+            result.push(c);
         }
-        i += 1;
     }
 
     result
@@ -250,6 +252,14 @@ mod tests {
         assert_eq!(unescape_value(r#"Hello \"World\""#), "Hello \"World\"");
         assert_eq!(unescape_value(r#"foo\\bar"#), "foo\\bar");
         assert_eq!(unescape_value("no escapes"), "no escapes");
+        // Multi-byte UTF-8 must survive unescaping intact (regression: byte-wise
+        // iteration decoded each UTF-8 byte as Latin-1, mangling "español").
+        assert_eq!(
+            unescape_value(r#"También disponible en español. \"sí\""#),
+            "También disponible en español. \"sí\""
+        );
+        // A trailing lone backslash is preserved.
+        assert_eq!(unescape_value(r#"ends with\"#), r#"ends with\"#);
     }
 
     #[test]
