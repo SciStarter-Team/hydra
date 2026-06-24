@@ -1208,6 +1208,23 @@ pub enum WorkflowType {
     Ambassador,
 }
 
+impl WorkflowType {
+    /// Stable identifier used as the per-training SSE event name (and in URLs).
+    /// Both the user-service (which publishes progress events) and the frontend
+    /// training pages (which listen for them) must agree on these.
+    pub fn slug(self) -> &'static str {
+        match self {
+            WorkflowType::Foundations => "foundations",
+            WorkflowType::LibrariesHubs => "libraries-hubs",
+            WorkflowType::DataLiteracy => "data-literacy",
+            WorkflowType::HigherEd => "higher-ed",
+            WorkflowType::DataEthics => "data-ethics",
+            WorkflowType::Ideal => "ideal",
+            WorkflowType::Ambassador => "ambassador",
+        }
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct WorkflowStatusRequest {
     pub user_id: String, // ULID
@@ -1219,6 +1236,16 @@ pub struct WorkflowStatusResponse {
     pub current_step: Option<String>, // Current step identifier, None if not started
     pub completed_steps: Vec<String>, // All completed steps
     pub badge_granted: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WorkflowTutorialCountRequest {
+    pub workflow: WorkflowType,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WorkflowTutorialCountResponse {
+    pub count: i64, // Platform-wide tally of completed tutorials for this workflow
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

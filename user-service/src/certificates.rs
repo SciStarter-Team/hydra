@@ -13,15 +13,26 @@ use ulid::Ulid;
 
 pub async fn create(req: &Request) -> Result<CertificateCreateResponse, Error> {
     let input: CertificateCreateRequest = flexbuffers::from_slice(&req.message.payload)?;
+    create_certificate(input.user_id, input.project, input.mode).await
+}
 
-    let user_id_str = input.user_id.to_string();
+/// Issue a certificate of `mode` to `user_id` (deduped on `(user, project,
+/// mode)`), firing the certificate email on first issue. Callable both from the
+/// `user.certificates.create` handler and directly by in-process flows (e.g.
+/// Champion training completion in [`crate::workflow`]).
+pub async fn create_certificate(
+    user_id: Ulid,
+    project: String,
+    mode: String,
+) -> Result<CertificateCreateResponse, Error> {
+    let user_id_str = user_id.to_string();
 
     // Check if certificate already exists
     let existing = sqlx::query_scalar!(
         "SELECT certificate_id FROM certificates WHERE user_id = ? AND project = ? AND mode = ?",
         user_id_str,
-        input.project,
-        input.mode,
+        project,
+        mode,
     )
     .fetch_optional(db())
     .await?;
@@ -42,19 +53,19 @@ pub async fn create(req: &Request) -> Result<CertificateCreateResponse, Error> {
         certificate_id_str,
         now,
         user_id_str,
-        input.project,
-        input.mode,
+        project,
+        mode,
     )
     .execute(db())
     .await?;
 
     trigger_email(
         TriggerEvent::CertificateEarned,
-        input.user_id,
+        user_id,
         Some(&[
             ("certificate_id".to_string(), certificate_id_str),
-            ("project".to_string(), input.project),
-            ("mode".to_string(), input.mode),
+            ("project".to_string(), project),
+            ("mode".to_string(), mode),
         ]),
     )
     .await

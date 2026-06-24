@@ -1,0 +1,7 @@
+<p><%- self.intro %></p>
+<div class="flex flex-col md:flex-row gap-2">
+  <% for card in &self.cards { %>
+  <a target="_blank" class="ss-articulate" href="<%= card.href %>"><img src="<%= card.image %>" style="max-width: 100%;"></a>
+  <% } %>
+</div>
+<%- self.extra %>

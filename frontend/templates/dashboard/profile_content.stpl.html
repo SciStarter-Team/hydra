@@ -10,6 +10,37 @@
 
     <%+ self.card %>
 
+    <% if !self.badges.is_empty() { %>
+    <div class="ss-card !p-6 mt-6">
+        <h2 class="font-semibold mb-4">Badges</h2>
+        <div class="flex flex-wrap gap-6">
+            <% for badge in &self.badges { %>
+            <div class="flex flex-col items-center w-32 text-center">
+                <img src="<%= badge.image %>" alt="<%= badge.name %>" class="w-24 h-24 object-contain" />
+                <span class="text-xs mt-2 text-gray-700"><%= badge.name %></span>
+            </div>
+            <% } %>
+        </div>
+    </div>
+    <% } %>
+
+    <% if !self.certificates.is_empty() { %>
+    <div class="ss-card !p-6 mt-6">
+        <h2 class="font-semibold mb-4">Certificates</h2>
+        <ul class="divide-y divide-gray-100">
+            <% for cert in &self.certificates { %>
+            <li class="flex items-center justify-between py-3">
+                <div>
+                    <div class="text-sm font-medium text-gray-900"><%= cert.title %></div>
+                    <% if !cert.issued.is_empty() { %><div class="text-xs text-gray-500">Issued <%= cert.issued %></div><% } %>
+                </div>
+                <a href="<%= cert.url %>" class="text-sm font-medium text-primary hover:underline">Download PDF</a>
+            </li>
+            <% } %>
+        </ul>
+    </div>
+    <% } %>
+
     <div class="ss-card !p-6 mt-6">
         <h2 class="font-semibold mb-2">Private information</h2>
         <p class="text-sm text-gray-600 mb-4">Only visible to you. Edit on the

@@ -1,0 +1,31 @@
+<div class="space-y-6">
+    <% if self.saved { %>
+    <div class="rounded-md bg-green-50 border border-green-200 p-4">
+        <p class="text-sm text-green-700">Saved. Changes are live across all frontends.</p>
+    </div>
+    <% } %>
+
+    <form method="post" action="<%= self.action %>" class="space-y-8">
+        <% for section in &self.sections { %>
+        <div class="bg-white rounded-lg shadow border border-gray-200 p-6 space-y-4">
+            <h3 class="text-base font-semibold text-gray-900"><%= section.heading %></h3>
+            <% for field in &section.fields { %>
+            <div>
+                <label class="block text-sm font-medium text-gray-700"><%= field.label %></label>
+                <% if field.rows == 0 { %>
+                <input type="text" name="<%= field.name %>" value="<%= field.value %>" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm" />
+                <% } else { %>
+                <textarea name="<%= field.name %>" rows="<%= field.rows %>" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm <% if field.mono { %>font-mono text-xs<% } else { %>sm:text-sm<% } %>"><%= field.value %></textarea>
+                <% } %>
+            </div>
+            <% } %>
+        </div>
+        <% } %>
+
+        <div class="flex justify-end">
+            <button type="submit" class="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                Save changes
+            </button>
+        </div>
+    </form>
+</div>

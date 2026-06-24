@@ -4,7 +4,8 @@ use async_nats::service::Request;
 use common::badge::Badge;
 use common::message::user::{
     UserAndBadge, WorkflowProgressRequest, WorkflowProgressResponse, WorkflowStatusRequest,
-    WorkflowStatusResponse, WorkflowType,
+    WorkflowStatusResponse, WorkflowTutorialCountRequest, WorkflowTutorialCountResponse,
+    WorkflowType,
 };
 use common::{
     service::{TriggerEvent, decode_structured_message, send, trigger_email},
@@ -39,6 +40,19 @@ pub async fn record_progress(req: &Request) -> Result<WorkflowProgressResponse, 
             update_ambassador_progress(&request.user_id, &request.step, &now).await?
         }
     };
+
+    // Notify any open training page for this user (over the per-user SSE
+    // channel) that their progress changed, so it re-renders live. The event
+    // name is the workflow slug; the payload is just a trigger. Fire-and-forget
+    // — a failed notification must not fail progress recording.
+    if let Ok(user_id) = Ulid::from_string(&request.user_id) {
+        let _ = common::channel::send_to_user(
+            user_id,
+            "training",
+            common::channel::Event::new(request.workflow.slug(), ""),
+        )
+        .await;
+    }
 
     Ok(WorkflowProgressResponse {
         success: true,
@@ -346,48 +360,83 @@ async fn update_data_literacy_progress(
 }
 
 /// Update Higher Ed progress
+/// Higher Education is a sequential three-step workflow (tutorial → list →
+/// explore), matching orrery's HigherEdState. Each step is only recorded once
+/// its predecessor is complete; completing `explore` grants the badge. `list`
+/// and `explore` never create a row — only a participant who has completed the
+/// tutorial can advance — so list/add-to-list actions by non-participants are
+/// harmless no-ops.
 async fn update_higher_ed_progress(
     user_id: &str,
     step: &str,
     now: &str,
 ) -> Result<bool, anyhow::Error> {
-    if step != "tutorial" {
-        return Ok(false);
-    }
+    match step {
+        "tutorial" => {
+            sqlx::query!(
+                "INSERT OR IGNORE INTO higher_ed_progress (user_id) VALUES (?)",
+                user_id
+            )
+            .execute(db())
+            .await?;
+            sqlx::query!(
+                "UPDATE higher_ed_progress SET tutorial_completed_at = COALESCE(tutorial_completed_at, ?) WHERE user_id = ?",
+                now,
+                user_id
+            )
+            .execute(db())
+            .await?;
+            Ok(false)
+        }
+        "list" => {
+            sqlx::query!(
+                "UPDATE higher_ed_progress SET list_completed_at = ?
+                 WHERE user_id = ? AND tutorial_completed_at IS NOT NULL AND list_completed_at IS NULL",
+                now,
+                user_id
+            )
+            .execute(db())
+            .await?;
+            Ok(false)
+        }
+        "explore" => {
+            let result = sqlx::query!(
+                "UPDATE higher_ed_progress
+                 SET explore_completed_at = ?, badge_granted_at = COALESCE(badge_granted_at, ?)
+                 WHERE user_id = ? AND list_completed_at IS NOT NULL AND explore_completed_at IS NULL",
+                now,
+                now,
+                user_id
+            )
+            .execute(db())
+            .await?;
 
-    let result = sqlx::query!(
-        "INSERT OR IGNORE INTO higher_ed_progress (user_id, tutorial_completed_at, badge_granted_at) VALUES (?, ?, ?)",
-        user_id, now, now
-    )
-    .execute(db())
-    .await?;
+            // Reaching explore (with tutorial and list already done) grants the badge.
+            if result.rows_affected() > 0 {
+                send(
+                    "user.tags.add",
+                    (user_id.to_string(), "higher-ed-badge".to_string()),
+                )
+                .await?;
 
-    // Only grant badge if this is a new completion
-    if result.rows_affected() > 0 {
-        // Add user tag
-        send(
-            "user.tags.add",
-            (user_id.to_string(), "higher-ed-badge".to_string()),
-        )
-        .await?;
+                let user_ulid = Ulid::from_string(user_id)?;
+                send(
+                    "user.badges.grant",
+                    UserAndBadge {
+                        user_id: user_ulid,
+                        badge: Badge::TeachingInHigherEducationWithCitizenScience,
+                    },
+                )
+                .await?;
 
-        // Grant badge
-        let user_ulid = Ulid::from_string(user_id)?;
-        send(
-            "user.badges.grant",
-            UserAndBadge {
-                user_id: user_ulid,
-                badge: Badge::TeachingInHigherEducationWithCitizenScience,
-            },
-        )
-        .await?;
+                trigger_email(TriggerEvent::BadgeHigherEd, user_ulid, None).await?;
 
-        // Trigger email notification
-        trigger_email(TriggerEvent::BadgeHigherEd, user_ulid, None).await?;
-
-        Ok(true)
-    } else {
-        Ok(false)
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        }
+        _ => Ok(false),
     }
 }
 
@@ -493,40 +542,42 @@ async fn update_ambassador_progress(
         return Ok(false);
     }
 
+    // Completing the Champion tutorial earns the Champion *certificate* (orrery's
+    // AmbassadorState.tutorial_enter), NOT the Certified Ambassador badge — that
+    // is earned later via the application + verification (granted through the
+    // orrery state sync's "verified" state). So we record the tutorial timestamp,
+    // tag the champion, and issue the certificate; no badge is granted here.
+    sqlx::query!(
+        "INSERT OR IGNORE INTO ambassador_progress (user_id) VALUES (?)",
+        user_id
+    )
+    .execute(db())
+    .await?;
     let result = sqlx::query!(
-        "INSERT OR IGNORE INTO ambassador_progress (user_id, tutorial_completed_at, badge_granted_at) VALUES (?, ?, ?)",
-        user_id, now, now
+        "UPDATE ambassador_progress SET tutorial_completed_at = ? WHERE user_id = ? AND tutorial_completed_at IS NULL",
+        now,
+        user_id
     )
     .execute(db())
     .await?;
 
-    // Only grant badge if this is a new completion
     if result.rows_affected() > 0 {
-        // Add user tag
         send(
             "user.tags.add",
-            (user_id.to_string(), "ambassador-badge".to_string()),
+            (
+                user_id.to_string(),
+                "scistarter-ambassador-training-complete".to_string(),
+            ),
         )
         .await?;
 
-        // Grant badge
         let user_ulid = Ulid::from_string(user_id)?;
-        send(
-            "user.badges.grant",
-            UserAndBadge {
-                user_id: user_ulid,
-                badge: Badge::SciStarterAmbassador,
-            },
-        )
-        .await?;
-
-        // Trigger email notification
-        trigger_email(TriggerEvent::BadgeAmbassador, user_ulid, None).await?;
-
-        Ok(true)
-    } else {
-        Ok(false)
+        crate::certificates::create_certificate(user_ulid, String::new(), "champion".to_string())
+            .await?;
     }
+
+    // The tutorial grants a certificate, not a badge.
+    Ok(false)
 }
 
 /// Get workflow status for a user
@@ -542,6 +593,56 @@ pub async fn get_status(req: &Request) -> Result<WorkflowStatusResponse, anyhow:
         WorkflowType::Ideal => get_ideal_status(&request.user_id).await,
         WorkflowType::Ambassador => get_ambassador_status(&request.user_id).await,
     }
+}
+
+/// Platform-wide count of users who have completed a workflow's tutorial
+/// step. Drives the motivational "Tutorials Completed to Date" figure on
+/// each training page. Each workflow's tutorial lives in a differently named
+/// column, so the queries are spelled out per workflow rather than generic.
+pub async fn tutorial_count(
+    req: &Request,
+) -> Result<WorkflowTutorialCountResponse, anyhow::Error> {
+    let request: WorkflowTutorialCountRequest = decode_structured_message(req.message.clone())?;
+
+    let count = match request.workflow {
+        WorkflowType::Foundations => sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count: i64" FROM foundations_progress WHERE hour1_completed_at IS NOT NULL"#
+        )
+        .fetch_one(db())
+        .await?,
+        WorkflowType::LibrariesHubs => sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count: i64" FROM libraries_hubs_progress WHERE hour2_completed_at IS NOT NULL"#
+        )
+        .fetch_one(db())
+        .await?,
+        WorkflowType::DataLiteracy => sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count: i64" FROM data_literacy_progress WHERE tutorial_completed_at IS NOT NULL"#
+        )
+        .fetch_one(db())
+        .await?,
+        WorkflowType::HigherEd => sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count: i64" FROM higher_ed_progress WHERE tutorial_completed_at IS NOT NULL"#
+        )
+        .fetch_one(db())
+        .await?,
+        WorkflowType::DataEthics => sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count: i64" FROM data_ethics_progress WHERE tutorial_completed_at IS NOT NULL"#
+        )
+        .fetch_one(db())
+        .await?,
+        WorkflowType::Ideal => sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count: i64" FROM ideal_progress WHERE tutorial_completed_at IS NOT NULL"#
+        )
+        .fetch_one(db())
+        .await?,
+        WorkflowType::Ambassador => sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count: i64" FROM ambassador_progress WHERE tutorial_completed_at IS NOT NULL"#
+        )
+        .fetch_one(db())
+        .await?,
+    };
+
+    Ok(WorkflowTutorialCountResponse { count })
 }
 
 async fn get_foundations_status(user_id: &str) -> Result<WorkflowStatusResponse, anyhow::Error> {
@@ -649,7 +750,8 @@ async fn get_data_literacy_status(user_id: &str) -> Result<WorkflowStatusRespons
 
 async fn get_higher_ed_status(user_id: &str) -> Result<WorkflowStatusResponse, anyhow::Error> {
     let row = sqlx::query!(
-        "SELECT tutorial_completed_at, badge_granted_at FROM higher_ed_progress WHERE user_id = ?",
+        "SELECT tutorial_completed_at, list_completed_at, explore_completed_at, badge_granted_at
+         FROM higher_ed_progress WHERE user_id = ?",
         user_id
     )
     .fetch_optional(db())
@@ -663,11 +765,16 @@ async fn get_higher_ed_status(user_id: &str) -> Result<WorkflowStatusResponse, a
         });
     };
 
-    let completed_steps = if row.tutorial_completed_at.is_some() {
-        vec!["tutorial".to_string()]
-    } else {
-        vec![]
-    };
+    let mut completed_steps = Vec::new();
+    if row.tutorial_completed_at.is_some() {
+        completed_steps.push("tutorial".to_string());
+    }
+    if row.list_completed_at.is_some() {
+        completed_steps.push("list".to_string());
+    }
+    if row.explore_completed_at.is_some() {
+        completed_steps.push("explore".to_string());
+    }
 
     Ok(WorkflowStatusResponse {
         current_step: completed_steps.last().cloned(),

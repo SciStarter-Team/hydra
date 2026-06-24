@@ -1,3 +1,12 @@
+//! PDF certificate generation and download.
+//!
+//! Each certificate `mode` is described by a single [`CertificateMode`] config
+//! in [`config_for_mode`] — its drawing [`CertificateLayout`], display title,
+//! how the `project` field is parsed, whether non-owners may view it, and (if
+//! so) the watermarked background to use. Generation is config-driven, so a new
+//! certificate type is one entry here plus its background asset — no per-mode
+//! branching scattered across functions, and no `__watermarked` twin mode.
+
 use anyhow::Result;
 use common::message::user::{BasicInfo, CertificateGetRequest, CertificateGetResponse};
 use oxidize_pdf::{Color, Document, Font, Image, Page, measure_text};
@@ -10,6 +19,7 @@ use ulid::Ulid;
 
 use crate::Static;
 
+/// Where and how the text is drawn on a certificate.
 struct CertificateLayout {
     background: &'static str,
     shape: (f64, f64),
@@ -27,7 +37,6 @@ struct CertificateLayout {
     issued_font: &'static str,
     issued_align: Align,
     color: Color,
-    show_projects: bool,
     show_issued: bool,
 }
 
@@ -56,111 +65,196 @@ impl Default for CertificateLayout {
             issued_font: "Satisfy",
             issued_align: Align::Center,
             color: Color::black(),
-            show_projects: true,
             show_issued: false,
         }
     }
 }
 
-fn layout_for_mode(mode: &str) -> CertificateLayout {
-    match mode {
-        "broward" => CertificateLayout {
-            background: "certificates/certificate_bkg_broward.png",
-            name_y: 445.0,
-            ..Default::default()
-        },
-        "citsciday" => CertificateLayout {
-            background: "certificates/certificate_bkg.png",
-            name_y: 425.0,
-            ..Default::default()
-        },
-        "citsciday2019" => CertificateLayout {
-            background: "certificates/certificate_bkg_2019.jpg",
-            name_y: 470.0,
-            name_x: 490.0,
-            project_y: 304.0,
-            project_x: 380.0,
-            project_dl: 27.7,
-            ..Default::default()
-        },
-        "inventing-tomorrow" => CertificateLayout {
-            background: "certificates/certificate_bkg_inventing_tomorrow.png",
-            name_y: 425.0,
-            name_x: 495.0,
-            show_projects: false,
-            ..Default::default()
-        },
-        "citscicon2021" => CertificateLayout {
-            background: "certificates/certificate_bkg_citscicon2021.png",
-            name_y: 440.0,
-            name_x: 960.0,
-            shape: (1920.0, 1080.0),
-            show_projects: false,
-            ..Default::default()
-        },
-        "explorer2021" => CertificateLayout {
-            background: "certificates/certificate_bkg_explorer2021.png",
-            name_y: 670.0,
-            name_x: 960.0,
-            name_size: 72.0,
-            project_y: 280.0,
-            project_size: 24.0,
-            project_dl: 30.0,
-            shape: (1920.0, 1080.0),
-            ..Default::default()
-        },
-        "csm2022" => CertificateLayout {
-            background: "certificates/certificate_bkg_csm2022.png",
-            name_y: 280.0,
-            name_x: 985.0,
-            shape: (1920.0, 1080.0),
-            color: Color::white(),
-            show_projects: false,
-            ..Default::default()
-        },
-        "broward_coach" => CertificateLayout {
-            background: "certificates/certificate_bkg_broward_coach.png",
-            name_y: 720.0,
-            name_x: 1000.0,
-            name_size: 128.0,
-            issued_y: 220.0,
-            issued_x: 1540.0,
-            shape: (2000.0, 1414.0),
-            show_issued: true,
-            ..Default::default()
-        },
-        "champion" => CertificateLayout {
-            background: "certificates/certificate_bkg_champion.png",
-            name_y: 260.0,
-            name_x: 396.0,
-            name_size: 32.0,
-            issued_y: 130.0,
-            issued_x: 150.0,
-            issued_size: 16.0,
-            issued_font: "Nunito",
-            issued_align: Align::Left,
-            shape: (792.0, 612.0),
-            show_projects: false,
-            show_issued: true,
-            ..Default::default()
-        },
-        "champion__watermarked" => CertificateLayout {
-            background: "certificates/certificate_bkg_champion_watermarked.png",
-            name_y: 260.0,
-            name_x: 396.0,
-            name_size: 32.0,
-            issued_y: 130.0,
-            issued_x: 150.0,
-            issued_size: 16.0,
-            issued_font: "Nunito",
-            issued_align: Align::Left,
-            shape: (792.0, 612.0),
-            show_projects: false,
-            show_issued: true,
-            ..Default::default()
-        },
-        _ => CertificateLayout::default(),
+/// How a certificate's `project` field maps to the printed project lines.
+#[derive(Clone, Copy)]
+enum Projects {
+    /// No project list (e.g. champion, conference certificates).
+    None,
+    /// The whole field is a single project name (empty → none).
+    Single,
+    /// One project per line.
+    Lines,
+}
+
+impl Projects {
+    fn parse<'a>(self, project: &'a str) -> Vec<&'a str> {
+        match self {
+            Projects::None => vec![],
+            Projects::Lines => project.lines().collect(),
+            Projects::Single => {
+                if project.is_empty() {
+                    vec![]
+                } else {
+                    vec![project]
+                }
+            }
+        }
     }
+}
+
+/// The complete description of a certificate mode: everything needed to render,
+/// name, and access-control it, in one place.
+struct CertificateMode {
+    layout: CertificateLayout,
+    /// Display name (also the download filename, with `.pdf`).
+    title: &'static str,
+    projects: Projects,
+    /// Whether someone other than the owner may view a (watermarked) copy.
+    shareable: bool,
+    /// Background to substitute when rendering a watermarked (non-owner) copy.
+    watermark_background: Option<&'static str>,
+}
+
+impl Default for CertificateMode {
+    fn default() -> Self {
+        Self {
+            layout: CertificateLayout::default(),
+            title: "Certificate",
+            projects: Projects::Single,
+            shareable: false,
+            watermark_background: None,
+        }
+    }
+}
+
+impl CertificateMode {
+    fn filename(&self) -> String {
+        format!("{}.pdf", self.title)
+    }
+}
+
+/// The single registry of certificate modes.
+fn config_for_mode(mode: &str) -> CertificateMode {
+    match mode {
+        "broward" => CertificateMode {
+            layout: CertificateLayout {
+                background: "certificates/certificate_bkg_broward.png",
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        "citsciday" => CertificateMode {
+            layout: CertificateLayout {
+                background: "certificates/certificate_bkg.png",
+                name_y: 425.0,
+                ..Default::default()
+            },
+            title: "Citizen Science Day Certificate",
+            ..Default::default()
+        },
+        "citsciday2019" => CertificateMode {
+            layout: CertificateLayout {
+                background: "certificates/certificate_bkg_2019.jpg",
+                name_y: 470.0,
+                name_x: 490.0,
+                project_y: 304.0,
+                project_x: 380.0,
+                project_dl: 27.7,
+                ..Default::default()
+            },
+            title: "Citizen Science Day 2019 Certificate",
+            projects: Projects::Lines,
+            ..Default::default()
+        },
+        "inventing-tomorrow" => CertificateMode {
+            layout: CertificateLayout {
+                background: "certificates/certificate_bkg_inventing_tomorrow.png",
+                name_y: 425.0,
+                name_x: 495.0,
+                ..Default::default()
+            },
+            title: "Inventing Tomorrow Certificate",
+            projects: Projects::None,
+            ..Default::default()
+        },
+        "citscicon2021" => CertificateMode {
+            layout: CertificateLayout {
+                background: "certificates/certificate_bkg_citscicon2021.png",
+                name_y: 440.0,
+                name_x: 960.0,
+                shape: (1920.0, 1080.0),
+                ..Default::default()
+            },
+            title: "CitSciCon2021 Certificate",
+            projects: Projects::None,
+            ..Default::default()
+        },
+        "explorer2021" => CertificateMode {
+            layout: CertificateLayout {
+                background: "certificates/certificate_bkg_explorer2021.png",
+                name_y: 670.0,
+                name_x: 960.0,
+                name_size: 72.0,
+                project_y: 280.0,
+                project_size: 24.0,
+                project_dl: 30.0,
+                shape: (1920.0, 1080.0),
+                ..Default::default()
+            },
+            title: "SciStarter Explorer 2021",
+            projects: Projects::Lines,
+            ..Default::default()
+        },
+        "csm2022" => CertificateMode {
+            layout: CertificateLayout {
+                background: "certificates/certificate_bkg_csm2022.png",
+                name_y: 280.0,
+                name_x: 985.0,
+                shape: (1920.0, 1080.0),
+                color: Color::white(),
+                ..Default::default()
+            },
+            projects: Projects::None,
+            ..Default::default()
+        },
+        "broward_coach" => CertificateMode {
+            layout: CertificateLayout {
+                background: "certificates/certificate_bkg_broward_coach.png",
+                name_y: 720.0,
+                name_x: 1000.0,
+                name_size: 128.0,
+                issued_y: 220.0,
+                issued_x: 1540.0,
+                shape: (2000.0, 1414.0),
+                show_issued: true,
+                ..Default::default()
+            },
+            title: "Broward Coach Certificate",
+            projects: Projects::None,
+            ..Default::default()
+        },
+        "champion" => CertificateMode {
+            layout: CertificateLayout {
+                background: "certificates/certificate_bkg_champion.png",
+                name_y: 260.0,
+                name_x: 396.0,
+                name_size: 32.0,
+                issued_y: 130.0,
+                issued_x: 150.0,
+                issued_size: 16.0,
+                issued_font: "Nunito",
+                issued_align: Align::Left,
+                shape: (792.0, 612.0),
+                show_issued: true,
+                ..Default::default()
+            },
+            title: "SciStarter Champion",
+            projects: Projects::None,
+            shareable: true,
+            watermark_background: Some("certificates/certificate_bkg_champion_watermarked.png"),
+        },
+        _ => CertificateMode::default(),
+    }
+}
+
+/// Display title for a mode (for listing certificates in the UI).
+pub fn title_for_mode(mode: &str) -> String {
+    config_for_mode(mode).title.to_string()
 }
 
 fn load_embedded(path: &str) -> Result<Vec<u8>> {
@@ -177,13 +271,19 @@ fn font_for_name(name: &str) -> Font {
     }
 }
 
-pub fn generate_certificate(
+fn generate_certificate(
+    config: &CertificateMode,
     name: &str,
     projects: &[&str],
     issued: Option<&str>,
-    mode: &str,
+    watermarked: bool,
 ) -> Result<Vec<u8>> {
-    let layout = layout_for_mode(mode);
+    let layout = &config.layout;
+    let background = if watermarked {
+        config.watermark_background.unwrap_or(layout.background)
+    } else {
+        layout.background
+    };
 
     let mut doc = Document::new();
     doc.set_title(name);
@@ -197,8 +297,8 @@ pub fn generate_certificate(
     let mut page = Page::new(layout.shape.0, layout.shape.1);
 
     // Load and draw background image
-    let bg_data = load_embedded(layout.background)?;
-    let image = if layout.background.ends_with(".jpg") || layout.background.ends_with(".jpeg") {
+    let bg_data = load_embedded(background)?;
+    let image = if background.ends_with(".jpg") || background.ends_with(".jpeg") {
         Image::from_jpeg_data(bg_data)?
     } else {
         Image::from_png_data(bg_data)?
@@ -240,54 +340,20 @@ pub fn generate_certificate(
         }
     }
 
-    // Draw project names
-    if layout.show_projects {
-        let mut y = layout.project_y;
-        for proj in projects {
-            page.text()
-                .set_font(Font::Helvetica, layout.project_size)
-                .set_fill_color(layout.color)
-                .at(layout.project_x, y)
-                .write(proj)?;
-            y -= layout.project_dl;
-        }
+    // Draw project names (the parsed list — empty for modes without projects)
+    let mut y = layout.project_y;
+    for proj in projects {
+        page.text()
+            .set_font(Font::Helvetica, layout.project_size)
+            .set_fill_color(layout.color)
+            .at(layout.project_x, y)
+            .write(proj)?;
+        y -= layout.project_dl;
     }
 
     doc.add_page(page);
     let bytes = doc.to_bytes()?;
     Ok(bytes)
-}
-
-pub fn filename_for_mode(mode: &str) -> &'static str {
-    match mode {
-        "citsciday" => "Citizen Science Day Certificate.pdf",
-        "citscicon2021" => "CitSciCon2021 Certificate.pdf",
-        "broward_coach" => "Broward Coach Certificate.pdf",
-        "citsciday2019" => "Citizen Science Day 2019 Certificate.pdf",
-        "inventing-tomorrow" => "Inventing Tomorrow Certificate.pdf",
-        "explorer2021" => "SciStarter Explorer 2021.pdf",
-        "champion" | "champion__watermarked" => "SciStarter Champion.pdf",
-        _ => "certificate.pdf",
-    }
-}
-
-pub fn projects_for_mode<'a>(mode: &str, project: &'a str) -> Vec<&'a str> {
-    match mode {
-        "inventing-tomorrow"
-        | "citscicon2021"
-        | "csm2022"
-        | "champion"
-        | "champion__watermarked"
-        | "broward_coach" => vec![],
-        "citsciday2019" | "explorer2021" => project.lines().collect(),
-        _ => {
-            if project.is_empty() {
-                vec![]
-            } else {
-                vec![project]
-            }
-        }
-    }
 }
 
 #[handler]
@@ -312,34 +378,78 @@ pub async fn download_certificate(
     .await
     .map_err(|_| poem::Error::from_status(StatusCode::NOT_FOUND))?;
 
-    // Non-owners get watermarked champion variant or 404
-    let mode = if cert.user_id != current_user.user_id {
-        if cert.mode == "champion" {
-            "champion__watermarked".to_string()
-        } else {
-            return Err(poem::Error::from_status(StatusCode::NOT_FOUND));
-        }
-    } else {
-        cert.mode.clone()
-    };
+    let config = config_for_mode(&cert.mode);
 
-    let projects = projects_for_mode(&mode, &cert.project);
-    let project_refs: Vec<&str> = projects.iter().map(|s| *s).collect();
-    let filename = filename_for_mode(&mode);
+    // The owner gets the real certificate; anyone else gets a watermarked copy
+    // only if the mode is shareable, otherwise nothing.
+    let watermarked = cert.user_id != current_user.user_id;
+    if watermarked && !config.shareable {
+        return Err(poem::Error::from_status(StatusCode::NOT_FOUND));
+    }
 
-    let issued = Some(cert.created_at.as_str());
-
-    let pdf_bytes = generate_certificate(&cert.display_name, &project_refs, issued, &mode)
-        .map_err(|e| {
-            eprintln!("Certificate generation error: {}", e);
-            poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
-        })?;
+    let projects = config.projects.parse(&cert.project);
+    let pdf_bytes = generate_certificate(
+        &config,
+        &cert.display_name,
+        &projects,
+        Some(cert.created_at.as_str()),
+        watermarked,
+    )
+    .map_err(|e| {
+        eprintln!("Certificate generation error: {}", e);
+        poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
 
     Ok(Response::builder()
         .header("Content-Type", "application/pdf")
         .header(
             "Content-Disposition",
-            format!("attachment; filename=\"{}\"", filename),
+            format!("attachment; filename=\"{}\"", config.filename()),
         )
         .body(pdf_bytes))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn champion_is_shareable_with_watermark() {
+        let c = config_for_mode("champion");
+        assert_eq!(c.title, "SciStarter Champion");
+        assert!(c.shareable);
+        assert!(c.watermark_background.is_some());
+        assert!(matches!(c.projects, Projects::None));
+    }
+
+    #[test]
+    fn unknown_mode_is_private_default() {
+        let c = config_for_mode("totally-unknown-mode");
+        assert_eq!(c.title, "Certificate");
+        assert!(!c.shareable);
+        assert!(c.watermark_background.is_none());
+    }
+
+    #[test]
+    fn project_parsing() {
+        assert!(Projects::None.parse("a\nb").is_empty());
+        assert_eq!(Projects::Single.parse("Project X"), vec!["Project X"]);
+        assert!(Projects::Single.parse("").is_empty());
+        assert_eq!(Projects::Lines.parse("a\nb\nc"), vec!["a", "b", "c"]);
+    }
+
+    /// Exercises the full config-driven generation path for the live champion
+    /// mode, including the watermarked (non-owner) variant.
+    #[test]
+    fn generates_champion_pdf_owner_and_watermarked() {
+        let config = config_for_mode("champion");
+
+        let owner =
+            generate_certificate(&config, "Ada Lovelace", &[], Some("2026-06-24"), false).unwrap();
+        assert!(owner.starts_with(b"%PDF"));
+
+        let watermarked =
+            generate_certificate(&config, "Ada Lovelace", &[], Some("2026-06-24"), true).unwrap();
+        assert!(watermarked.starts_with(b"%PDF"));
+    }
 }

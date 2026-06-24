@@ -3,7 +3,7 @@
 <!-- Wrapper -->
 <div class="o-wrapper"
      hx-ext="sse"
-     sse-connect="/channel/me/completion">
+     sse-connect="/-channel/me/completion">
 
   <div sse-swap="articulate_complete"
        hx-on::before-swap="window.location.reload(); event.preventDefault()">

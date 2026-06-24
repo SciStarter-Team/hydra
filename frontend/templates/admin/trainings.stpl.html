@@ -1,0 +1,20 @@
+<div class="space-y-6">
+    <div class="bg-white rounded-lg shadow border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Trainings</h3>
+            <p class="mt-1 text-sm text-gray-500">
+                Edit the text content of each training page &mdash; titles, prose, Articulate
+                links, project-card copy, and the sidebar. Step structure, gating, and progress
+                tracking are managed in code; this edits only the copy.
+            </p>
+        </div>
+        <div class="divide-y divide-gray-200">
+            <% for training in self.trainings { %>
+            <div class="flex items-center justify-between px-6 py-4">
+                <div class="text-sm font-medium text-gray-900"><%= training.name %></div>
+                <a href="/-admin/trainings/<%= training.slug %>" class="text-sm font-medium text-indigo-600 hover:text-indigo-900">Edit content</a>
+            </div>
+            <% } %>
+        </div>
+    </div>
+</div>

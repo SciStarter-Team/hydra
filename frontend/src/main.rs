@@ -44,6 +44,7 @@ pub mod schedule;
 pub mod search;
 pub mod session;
 pub mod staff_pick;
+pub mod training;
 pub mod ui;
 pub mod upload;
 pub mod wiki;
@@ -373,6 +374,74 @@ fn user_facing() -> impl Endpoint {
             put(component::detail_page_edit::update_participant_file)
                 .delete(component::detail_page_edit::delete_participant_file),
         )
+        .at("/training/foundations", get(training::foundations::page))
+        .at(
+            "/training/foundations/-progress",
+            get(training::foundations::progress),
+        )
+        .at(
+            "/training-foundations",
+            get(training::foundations::legacy_redirect),
+        )
+        .at("/training/data-ethics", get(training::dataethics::page))
+        .at(
+            "/training/data-ethics/-progress",
+            get(training::dataethics::progress),
+        )
+        .at(
+            "/training-dataethics",
+            get(training::dataethics::legacy_redirect),
+        )
+        .at(
+            "/training/data-literacy",
+            get(training::dataliteracy::page),
+        )
+        .at(
+            "/training/data-literacy/-progress",
+            get(training::dataliteracy::progress),
+        )
+        .at(
+            "/training-data-literacy",
+            get(training::dataliteracy::legacy_redirect),
+        )
+        .at("/training/higher-ed", get(training::highered::page))
+        .at(
+            "/training/higher-ed/-progress",
+            get(training::highered::progress),
+        )
+        .at(
+            "/training/higher-ed/explore",
+            get(training::highered::explore),
+        )
+        .at(
+            "/training-highered",
+            get(training::highered::legacy_redirect),
+        )
+        .at(
+            "/training/libraries-hubs",
+            get(training::libraries::page),
+        )
+        .at(
+            "/training/libraries-hubs/-progress",
+            get(training::libraries::progress),
+        )
+        .at(
+            "/training-library",
+            get(training::libraries::legacy_redirect),
+        )
+        .at("/training/champion", get(training::champion::page))
+        .at(
+            "/training/champion/-progress",
+            get(training::champion::progress),
+        )
+        .at(
+            "/training-champion",
+            get(training::champion::legacy_redirect),
+        )
+        .at(
+            "/training-ambassador",
+            get(training::champion::legacy_redirect),
+        )
         .at("/projects/*slug", get(project_page))
         .at("/events/*slug", get(event_page))
         .at("/*slug", get(entity_page))
@@ -511,6 +580,18 @@ async fn main() -> Result<(), Error> {
     let _html_updates = tokio::spawn(misc::Html::peering_task());
     let _pagecontent_updates = tokio::spawn(pagecontent::PageContent::peering_task());
     let _mcp_token_updates = tokio::spawn(mcp_token::McpToken::peering_task());
+    let _foundations_content_updates =
+        tokio::spawn(training::foundations::FoundationsContent::peering_task());
+    let _dataethics_content_updates =
+        tokio::spawn(training::dataethics::DataEthicsContent::peering_task());
+    let _dataliteracy_content_updates =
+        tokio::spawn(training::dataliteracy::DataLiteracyContent::peering_task());
+    let _highered_content_updates =
+        tokio::spawn(training::highered::HigherEdContent::peering_task());
+    let _libraries_content_updates =
+        tokio::spawn(training::libraries::LibrariesContent::peering_task());
+    let _champion_content_updates =
+        tokio::spawn(training::champion::ChampionContent::peering_task());
     let _archive_entry_updates = tokio::spawn(admin::archive::ArchiveEntry::peering_task());
     let _file_metadata_updates = tokio::spawn(upload::storage::FileMetadata::peering_task());
 

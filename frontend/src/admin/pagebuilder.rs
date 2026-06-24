@@ -87,7 +87,7 @@ async fn engine_room_sync_page_managers(
                 count
             );
             Ok(poem::Response::builder()
-                .content_type("text/html")
+                .content_type("text/html; charset=utf-8")
                 .body(success_html))
         }
         Err(e) => {
@@ -98,7 +98,7 @@ async fn engine_room_sync_page_managers(
                 e
             );
             Ok(poem::Response::builder()
-                .content_type("text/html")
+                .content_type("text/html; charset=utf-8")
                 .body(error_html))
         }
     }
@@ -167,7 +167,7 @@ async fn pb_components_list(
         .await?;
 
     Ok(poem::Response::builder()
-        .content_type("text/html")
+        .content_type("text/html; charset=utf-8")
         .body(prepared.render_once()?))
 }
 
@@ -195,7 +195,7 @@ async fn pb_components_search(
     let content = PbComponentsContent { components };
 
     Ok(poem::Response::builder()
-        .content_type("text/html")
+        .content_type("text/html; charset=utf-8")
         .body(content.render_once()?))
 }
 
@@ -222,7 +222,7 @@ async fn pb_components_new(
         .await?;
 
     Ok(poem::Response::builder()
-        .content_type("text/html")
+        .content_type("text/html; charset=utf-8")
         .body(prepared.render_once()?))
 }
 
@@ -242,7 +242,7 @@ async fn pb_components_create(
             message: e.to_string(),
         };
         return Ok(poem::Response::builder()
-            .content_type("text/html")
+            .content_type("text/html; charset=utf-8")
             .header("HX-Retarget", "body")
             .header("HX-Reswap", "beforeend")
             .body(error.render_once()?));
@@ -299,7 +299,7 @@ async fn pb_components_edit(
         .await?;
 
     Ok(poem::Response::builder()
-        .content_type("text/html")
+        .content_type("text/html; charset=utf-8")
         .body(prepared.render_once()?))
 }
 
@@ -320,7 +320,7 @@ async fn pb_components_update(
             message: e.to_string(),
         };
         return Ok(poem::Response::builder()
-            .content_type("text/html")
+            .content_type("text/html; charset=utf-8")
             .header("HX-Retarget", "body")
             .header("HX-Reswap", "beforeend")
             .body(error.render_once()?));
@@ -407,7 +407,7 @@ async fn pb_components_import_form(
     let _user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
 
     Ok(poem::Response::builder()
-        .content_type("text/html")
+        .content_type("text/html; charset=utf-8")
         .body(PbImportForm.render_once()?))
 }
 
@@ -440,7 +440,7 @@ async fn pb_components_import(
     };
 
     Ok(poem::Response::builder()
-        .content_type("text/html")
+        .content_type("text/html; charset=utf-8")
         .body(result.render_once()?))
 }
 
@@ -553,7 +553,7 @@ async fn pb_pages_list(
         .await?;
 
     Ok(poem::Response::builder()
-        .content_type("text/html")
+        .content_type("text/html; charset=utf-8")
         .body(prepared.render_once()?))
 }
 
@@ -580,7 +580,7 @@ async fn pb_pages_search(
     let content = PbPagesContent { pages };
 
     Ok(poem::Response::builder()
-        .content_type("text/html")
+        .content_type("text/html; charset=utf-8")
         .body(content.render_once()?))
 }
 
@@ -603,7 +603,7 @@ async fn pb_pages_new(
         .await?;
 
     Ok(poem::Response::builder()
-        .content_type("text/html")
+        .content_type("text/html; charset=utf-8")
         .body(prepared.render_once()?))
 }
 
@@ -678,7 +678,7 @@ async fn pb_page_editor(
                 .await?;
 
             Ok(poem::Response::builder()
-                .content_type("text/html")
+                .content_type("text/html; charset=utf-8")
                 .body(prepared.render_once()?))
         }
         Err(e) => {
@@ -697,7 +697,7 @@ async fn pb_page_editor(
                 .await?;
 
             Ok(poem::Response::builder()
-                .content_type("text/html")
+                .content_type("text/html; charset=utf-8")
                 .body(prepared.render_once()?))
         }
     }
@@ -728,7 +728,7 @@ async fn pb_page_edit_details(
         .await?;
 
     Ok(poem::Response::builder()
-        .content_type("text/html")
+        .content_type("text/html; charset=utf-8")
         .body(prepared.render_once()?))
 }
 
@@ -784,7 +784,7 @@ async fn pb_page_source_editor(
         .await?;
 
     Ok(poem::Response::builder()
-        .content_type("text/html")
+        .content_type("text/html; charset=utf-8")
         .body(prepared.render_once()?))
 }
 
@@ -814,7 +814,7 @@ async fn pb_page_update_source(
             error_message: e.to_string(),
         };
         return Ok(poem::Response::builder()
-            .content_type("text/html")
+            .content_type("text/html; charset=utf-8")
             .body(error_editor.render_once()?));
     }
 
@@ -965,7 +965,7 @@ async fn pb_slot_insert(
                 ),
             };
             return Ok(poem::Response::builder()
-                .content_type("text/html")
+                .content_type("text/html; charset=utf-8")
                 .body(error.render_once()?));
         }
     };
@@ -975,7 +975,7 @@ async fn pb_slot_insert(
     page.store().await?;
 
     Ok(poem::Response::builder()
-        .content_type("text/html")
+        .content_type("text/html; charset=utf-8")
         .body(canvas_html))
 }
 
@@ -1005,7 +1005,7 @@ async fn pb_slot_clear(
     let canvas_html = render(&ctx, &page.source).await?;
 
     Ok(poem::Response::builder()
-        .content_type("text/html")
+        .content_type("text/html; charset=utf-8")
         .body(canvas_html))
 }
 
@@ -1035,7 +1035,7 @@ async fn pb_slot_move(
     let canvas_html = render(&ctx, &page.source).await?;
 
     Ok(poem::Response::builder()
-        .content_type("text/html")
+        .content_type("text/html; charset=utf-8")
         .body(canvas_html))
 }
 
@@ -1065,7 +1065,7 @@ async fn pb_slot_copy(
     let canvas_html = render(&ctx, &page.source).await?;
 
     Ok(poem::Response::builder()
-        .content_type("text/html")
+        .content_type("text/html; charset=utf-8")
         .body(canvas_html))
 }
 
@@ -1166,7 +1166,7 @@ async fn pb_slot_insert_raw(
     let canvas_html = render(&ctx, &page.source).await?;
 
     Ok(poem::Response::builder()
-        .content_type("text/html")
+        .content_type("text/html; charset=utf-8")
         .body(canvas_html))
 }
 
@@ -1241,7 +1241,7 @@ async fn pb_slot_params_form(
     };
 
     Ok(poem::Response::builder()
-        .content_type("text/html")
+        .content_type("text/html; charset=utf-8")
         .body(form.render_once()?))
 }
 
@@ -1305,7 +1305,7 @@ async fn pb_slot_update_params(
     let canvas_html = render(&ctx, &page.source).await?;
 
     Ok(poem::Response::builder()
-        .content_type("text/html")
+        .content_type("text/html; charset=utf-8")
         .body(canvas_html))
 }
 

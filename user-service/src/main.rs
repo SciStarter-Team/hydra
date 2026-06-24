@@ -1693,14 +1693,19 @@ async fn apply_ambassador_state(
     .execute(db)
     .await?;
 
+    // tutorial_completed_at = the Champion tutorial (grants the Champion
+    // certificate in orrery). The Certified Ambassador badge is granted at the
+    // "verified" state (orrery's verified_enter); "passed" follows verified, so
+    // it also implies the badge. "application"/"international"/"rejected"/"failed"
+    // are tutorial-complete (Champion) but not badge-earning.
     match state {
-        "tutorial" | "application" | "verified" | "international" | "rejected" | "failed" => {
+        "tutorial" | "application" | "international" | "rejected" | "failed" => {
             sqlx::query!(
                 "UPDATE ambassador_progress SET tutorial_completed_at = COALESCE(tutorial_completed_at, ?) WHERE user_id = ?",
                 ts, user_id
             ).execute(db).await?;
         }
-        "passed" => {
+        "verified" | "passed" => {
             sqlx::query!(
                 r#"UPDATE ambassador_progress SET
                     tutorial_completed_at = COALESCE(tutorial_completed_at, ?),
@@ -1733,19 +1738,35 @@ async fn apply_higher_ed_state(
     .execute(db)
     .await?;
 
+    // orrery's HigherEdState is sequential (tutorial → list → explore), and each
+    // state's levels are cumulative, so a later state implies the earlier ones.
+    // Reaching explore grants the badge.
     match state {
-        "tutorial" | "list" => {
+        "tutorial" => {
             sqlx::query!(
                 "UPDATE higher_ed_progress SET tutorial_completed_at = COALESCE(tutorial_completed_at, ?) WHERE user_id = ?",
                 ts, user_id
+            ).execute(db).await?;
+        }
+        "list" => {
+            sqlx::query!(
+                r#"UPDATE higher_ed_progress SET
+                    tutorial_completed_at = COALESCE(tutorial_completed_at, ?),
+                    list_completed_at = COALESCE(list_completed_at, ?)
+                   WHERE user_id = ?"#,
+                ts, ts, user_id
             ).execute(db).await?;
         }
         "explore" => {
             sqlx::query!(
                 r#"UPDATE higher_ed_progress SET
                     tutorial_completed_at = COALESCE(tutorial_completed_at, ?),
+                    list_completed_at = COALESCE(list_completed_at, ?),
+                    explore_completed_at = COALESCE(explore_completed_at, ?),
                     badge_granted_at = COALESCE(badge_granted_at, ?)
                    WHERE user_id = ?"#,
+                ts,
+                ts,
                 ts,
                 ts,
                 user_id
@@ -2207,6 +2228,11 @@ async fn main() {
         workflow::record_progress
     ));
     toplevel.spawn(handler!(workflow_group, "status", workflow::get_status));
+    toplevel.spawn(handler!(
+        workflow_group,
+        "tutorial_count",
+        workflow::tutorial_count
+    ));
 
     let health = service.group("user.health");
     toplevel.spawn(handler!(health, "check", health::health_check));

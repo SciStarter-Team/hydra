@@ -107,6 +107,9 @@ pub async fn create(
             image: String::new(),
         };
         list.store().await?;
+        // Creating a list completes the Higher Education "list" step (no-op
+        // unless the user is in that training and has finished the tutorial).
+        crate::training::highered::record_list_step(&user_info.user_id.to_string()).await;
     }
     Ok(Redirect::see_other("/dashboard/lists").into_response())
 }
@@ -209,6 +212,9 @@ pub async fn add_entry(
                 link: String::new(),
             };
             entry.store().await?;
+            // Adding to a list completes the Higher Education "list" step (no-op
+            // unless the user is in that training and has finished the tutorial).
+            crate::training::highered::record_list_step(&user_info.user_id.to_string()).await;
         }
     }
 
