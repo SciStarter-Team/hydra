@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Exchange</title>
     <script src="/-static/htmx.js"></script>
+    <script src="/-static/js/social_share.js" defer></script>
     <link href="/-static/exchange/css/styles.css" rel="stylesheet">
   </head>
   <body hx-headers='{"X-CSRFToken": "<%= self.csrftoken %>"}'>
@@ -557,13 +558,17 @@
                   </svg>
                   <span class="u-visuallyhidden">Share on Twitter</span>
                 </a>
-                <a data-link="#share-pinterest" href="http://pinterest.com/pin/create/button/?url=<%= &ss_url %>&description=<%= &ss_name %>" target="_blank">
+                <a data-link="#share-instagram" href="https://www.instagram.com/" target="_blank" rel="noopener"
+                   data-share-url="https://scistarter.org/<%= self.project.slug %>"
+                   data-share-image="<%= self.project.image %>"
+                   data-share-caption="<%= self.project.name %>"
+                   hx-on:click="event.preventDefault(); ssShareToInstagram(this)">
                   <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" style="fill: currentcolor;">
-                    <use xlink:href="/img/icons.svg#icon--pinterest"></use>
+                    <use xlink:href="/img/icons.svg#icon--instagram"></use>
                   </svg>
-                  <span class="u-visuallyhidden">Share on Pinterest</span>
+                  <span class="u-visuallyhidden">Share on Instagram</span>
                 </a>
-                <a data-link="#share-linkedin" href="https://www.linkedin.com/shareArticle?mini=true&url=<%= &ss_url %>&title=<%= &ss_name %>&summary=<%= &ss_name %>&source=<%= &ss_url %>" target="_blank">
+                <a data-link="#share-linkedin" href="https://www.linkedin.com/sharing/share-offsite/?url=<%= &ss_url %>" target="_blank">
                   <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" style="fill: currentcolor;">
                     <use xlink:href="/img/icons.svg#icon--linkedin"></use>
                   </svg>

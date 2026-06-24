@@ -37,6 +37,8 @@ use crate::peering::LoadStorePeered;
 use crate::project::ProjectStatus;
 use common::quill::content_to_html;
 
+const DOMAIN: &str = env!("DOMAIN");
+
 // ---------------------------------------------------------------------------
 // Enums
 // ---------------------------------------------------------------------------
@@ -325,6 +327,8 @@ pub struct DetailPageContent {
     pub goal: String,
     pub task: String,
     pub description: String,
+    /// Plain-text excerpt of the description, for the og:description share tag.
+    pub meta_description: String,
     pub how_to_join: String,
 
     // Location
@@ -449,6 +453,13 @@ pub struct DetailPageWrapper {
     pub head: <crate::component::Head as Component>::Prepared,
     pub layout: <crate::component::StandardLayout<DetailPageContent> as Component>::Prepared,
     pub title: String,
+    /// Open Graph metadata so social shares use the entity's own uploaded image
+    /// and details, rather than scraping the SciStarter logo from the header.
+    pub og_title: String,
+    pub og_description: String,
+    /// Absolute URL of the entity's uploaded image. Empty when none was uploaded.
+    pub og_image: String,
+    pub og_url: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -738,6 +749,11 @@ impl DetailPage {
         let (how_to_join_html, how_to_join_delta) =
             content_to_html(&row.how_to_join).unwrap_or_else(|_| (row.how_to_join.clone(), None));
 
+        let meta_description = common::quill::delta_to_excerpt(
+            description_delta.as_deref().unwrap_or(&row.description),
+            200,
+        );
+
         // Save back normalized Delta so future renders skip conversion
         if description_delta.is_some() || how_to_join_delta.is_some() {
             let project_id = self.target_id;
@@ -783,6 +799,7 @@ impl DetailPage {
             goal: row.goal,
             task: row.task,
             description: description_html,
+            meta_description,
             how_to_join: how_to_join_html,
             location_type: row.location_type,
             entirely_online: row.entirely_online,
@@ -989,6 +1006,11 @@ impl DetailPage {
         let (how_to_join_html, how_to_join_delta) =
             content_to_html(&row.how_to_join).unwrap_or_else(|_| (row.how_to_join.clone(), None));
 
+        let meta_description = common::quill::delta_to_excerpt(
+            description_delta.as_deref().unwrap_or(&row.description),
+            200,
+        );
+
         // Save back normalized Delta so future renders skip conversion
         if description_delta.is_some() || how_to_join_delta.is_some() {
             let event_id = self.target_id;
@@ -1032,6 +1054,7 @@ impl DetailPage {
             goal: String::new(),
             task: String::new(),
             description: description_html,
+            meta_description,
             how_to_join: how_to_join_html,
             location_type: row.location_type,
             entirely_online: row.entirely_online,
@@ -1232,10 +1255,14 @@ pub async fn save_project(
 pub async fn share_modal(Path(id): Path<String>) -> poem::Result<poem::Response> {
     let id_str = id.clone();
 
-    // Look up the project/event name and slug
+    // Look up the project/event name, slug, kind, and uploaded image
     let row = sqlx::query!(
         r#"
-        SELECT e.slug, COALESCE(p.name, ev.name) as "name!: String"
+        SELECT
+            e.slug,
+            e.kind,
+            COALESCE(p.name, ev.name) as "name!: String",
+            COALESCE(p.image, ev.image) as "image!: String"
         FROM entities e
         LEFT JOIN projects p ON e.target = p.project_id AND e.kind = 'Project'
         LEFT JOIN events ev ON e.target = ev.event_id AND e.kind = 'Event'
@@ -1250,16 +1277,34 @@ pub async fn share_modal(Path(id): Path<String>) -> poem::Result<poem::Response>
     })?
     .ok_or_else(|| poem::Error::from_string("Not found", poem::http::StatusCode::NOT_FOUND))?;
 
+    // Build the canonical, absolute page URL for sharing.
+    let path_prefix = match row.kind.as_str() {
+        "Event" => "/events/",
+        _ => "/projects/",
+    };
+    let share_url = format!("https://{}{}{}", DOMAIN, path_prefix, row.slug);
+    let url_enc = urlencoding::encode(&share_url);
+    let name_enc = urlencoding::encode(&row.name);
+
     #[derive(TemplateOnce)]
     #[template(path = "pages/detail_page_share_modal.stpl.html")]
     struct ShareModal {
         name: String,
-        slug: String,
+        share_url: String,
+        /// Absolute URL of the uploaded image, shared to Instagram. Empty when none.
+        image: String,
+        facebook_url: String,
+        twitter_url: String,
+        linkedin_url: String,
     }
 
     let html = ShareModal {
+        facebook_url: format!("https://www.facebook.com/sharer/sharer.php?u={url_enc}"),
+        twitter_url: format!("https://twitter.com/intent/tweet?url={url_enc}&text={name_enc}"),
+        linkedin_url: format!("https://www.linkedin.com/sharing/share-offsite/?url={url_enc}"),
         name: row.name,
-        slug: row.slug,
+        image: row.image,
+        share_url,
     }
     .render_once()
     .map_err(|e| {

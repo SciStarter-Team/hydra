@@ -17,6 +17,8 @@ use crate::{
     peering::LoadStorePeered,
 };
 
+const DOMAIN: &str = env!("DOMAIN");
+
 /// Result of checking entity access permissions
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EntityAccessResult {
@@ -575,6 +577,10 @@ impl Entity {
                 let content = detail.prepare(user_info.clone()).await?;
                 let title = content.name.clone();
                 let can_edit = content.can_edit;
+                let og_title = content.name.clone();
+                let og_description = content.meta_description.clone();
+                let og_image = content.image.clone();
+                let og_url = format!("https://{}{}", DOMAIN, self.canonical_path());
 
                 let layout = StandardLayout::new(self.canonical_path(), content)
                     .prepare(user_info.clone())
@@ -589,6 +595,10 @@ impl Entity {
                     head: head.prepare(None).await?,
                     layout,
                     title,
+                    og_title,
+                    og_description,
+                    og_image,
+                    og_url,
                 }
                 .into_response(None)
                 .await?
@@ -610,6 +620,10 @@ impl Entity {
                 let content = detail.prepare(user_info.clone()).await?;
                 let title = content.name.clone();
                 let can_edit = content.can_edit;
+                let og_title = content.name.clone();
+                let og_description = content.meta_description.clone();
+                let og_image = content.image.clone();
+                let og_url = format!("https://{}{}", DOMAIN, self.canonical_path());
 
                 let layout = StandardLayout::new(self.canonical_path(), content)
                     .prepare(user_info.clone())
@@ -624,6 +638,10 @@ impl Entity {
                     head: head.prepare(None).await?,
                     layout,
                     title,
+                    og_title,
+                    og_description,
+                    og_image,
+                    og_url,
                 }
                 .into_response(None)
                 .await?

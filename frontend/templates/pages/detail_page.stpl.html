@@ -3,6 +3,24 @@
   <head>
     <%+ self.head %>
     <title><%= self.title %> - SciStarter</title>
+    <meta property="og:title" content="<%= &self.og_title %>">
+    <% if !self.og_description.is_empty() { %>
+    <meta property="og:description" content="<%= &self.og_description %>">
+    <meta name="description" content="<%= &self.og_description %>">
+    <% } %>
+    <meta property="og:url" content="<%= &self.og_url %>">
+    <meta property="og:type" content="website">
+    <% if !self.og_image.is_empty() { %>
+    <meta property="og:image" content="<%= &self.og_image %>">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="<%= &self.og_image %>">
+    <% } else { %>
+    <meta name="twitter:card" content="summary">
+    <% } %>
+    <meta name="twitter:title" content="<%= &self.og_title %>">
+    <% if !self.og_description.is_empty() { %>
+    <meta name="twitter:description" content="<%= &self.og_description %>">
+    <% } %>
   </head>
   <%+ self.layout %>
 </html>

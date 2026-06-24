@@ -47,8 +47,9 @@ pub fn delta_to_excerpt(delta_json: &str, max_len: usize) -> String {
             .join("");
 
         let trimmed = text.trim();
-        if trimmed.len() > max_len {
-            format!("{}...", &trimmed[..max_len])
+        if trimmed.chars().count() > max_len {
+            let truncated: String = trimmed.chars().take(max_len).collect();
+            format!("{}...", truncated)
         } else {
             trimmed.to_string()
         }
