@@ -156,7 +156,16 @@ impl EntityTarget {
     pub fn parse_for_kind(kind: EntityKind, target: Option<&str>) -> Result<EntityTarget, Error> {
         match target {
             Some(s) if !s.trim().is_empty() => match kind {
-                EntityKind::Redirect => Ok(EntityTarget::Url(s.parse::<Url>()?)),
+                EntityKind::Redirect => {
+                    // A leading-slash target is a relative same-site redirect
+                    // (stored as a String); anything else must be an absolute
+                    // URL. `Redirect::moved_permanent` accepts either form.
+                    if s.starts_with('/') {
+                        Ok(EntityTarget::String(s.to_string()))
+                    } else {
+                        Ok(EntityTarget::Url(s.parse::<Url>()?))
+                    }
+                }
                 EntityKind::WordPress => Ok(EntityTarget::String(s.to_string())),
                 EntityKind::RawHtml
                 | EntityKind::DressedHtml
@@ -218,10 +227,16 @@ impl TryFrom<EntityDB> for Entity {
             EntityTarget::Nil
         } else {
             match value.kind {
-                EntityKind::Redirect => match value.target.parse() {
-                    Ok(url) => EntityTarget::Url(url),
-                    Err(_) => EntityTarget::Nil,
-                },
+                EntityKind::Redirect => {
+                    if value.target.starts_with('/') {
+                        EntityTarget::String(value.target)
+                    } else {
+                        match value.target.parse() {
+                            Ok(url) => EntityTarget::Url(url),
+                            Err(_) => EntityTarget::Nil,
+                        }
+                    }
+                }
                 EntityKind::WordPress => EntityTarget::String(value.target),
                 EntityKind::RawHtml
                 | EntityKind::DressedHtml
@@ -451,8 +466,14 @@ impl Entity {
 
         Ok(match self.kind {
             EntityKind::Redirect => {
-                if let Some(url) = self.target.as_url() {
-                    Redirect::moved_permanent(url).into_response()
+                // Redirect to an absolute URL or a relative same-site path.
+                let location = match &self.target {
+                    EntityTarget::Url(url) => Some(url.to_string()),
+                    EntityTarget::String(path) => Some(path.clone()),
+                    _ => None,
+                };
+                if let Some(location) = location {
+                    Redirect::moved_permanent(location).into_response()
                 } else {
                     return Err(poem::Error::from_status(StatusCode::NOT_FOUND));
                 }
