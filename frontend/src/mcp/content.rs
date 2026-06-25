@@ -7,8 +7,11 @@
 //! manage through the admin interface:
 //!
 //! - **Page content** (`list_content` / `get_content` / `create_content`
-//!   / `update_content`) covering four `content_type`s:
-//!   - `raw_html_page` — a [`PageContent`] of kind `RawHtml`
+//!   / `update_content`) covering five `content_type`s:
+//!   - `raw_html_page` — a [`PageContent`] of kind `RawHtml` (served bare,
+//!     paired with a `RawHtml` entity)
+//!   - `dressed_html_page` — a [`PageContent`] of kind `DressedHtml` (served
+//!     inside the site's standard dressing, paired with a `DressedHtml` entity)
 //!   - `simple_page` — a [`PageContent`] of kind `Wysiwyg` (body is
 //!     Quill Delta JSON)
 //!   - `component_page` — a [`PageBuilderPage`]
@@ -164,6 +167,7 @@ async fn handle_tools_call(id: Option<Value>, params: Option<Value>) -> JsonRpcR
 #[derive(Clone, Copy)]
 enum ContentType {
     RawHtmlPage,
+    DressedHtmlPage,
     SimplePage,
     ComponentPage,
     Component,
@@ -173,11 +177,12 @@ impl ContentType {
     fn parse(args: &Value) -> Result<Self, Error> {
         match required_str(args, "content_type")? {
             "raw_html_page" => Ok(Self::RawHtmlPage),
+            "dressed_html_page" => Ok(Self::DressedHtmlPage),
             "simple_page" => Ok(Self::SimplePage),
             "component_page" => Ok(Self::ComponentPage),
             "component" => Ok(Self::Component),
             other => Err(anyhow!(
-                "Unknown content_type '{other}'. Expected one of: raw_html_page, simple_page, component_page, component"
+                "Unknown content_type '{other}'. Expected one of: raw_html_page, dressed_html_page, simple_page, component_page, component"
             )),
         }
     }
@@ -185,6 +190,7 @@ impl ContentType {
     fn label(self) -> &'static str {
         match self {
             Self::RawHtmlPage => "raw_html_page",
+            Self::DressedHtmlPage => "dressed_html_page",
             Self::SimplePage => "simple_page",
             Self::ComponentPage => "component_page",
             Self::Component => "component",
@@ -195,6 +201,7 @@ impl ContentType {
     fn pagecontent_kind(self) -> Option<PageContentKind> {
         match self {
             Self::RawHtmlPage => Some(PageContentKind::RawHtml),
+            Self::DressedHtmlPage => Some(PageContentKind::DressedHtml),
             Self::SimplePage => Some(PageContentKind::Wysiwyg),
             Self::ComponentPage | Self::Component => None,
         }
@@ -205,6 +212,7 @@ impl ContentType {
     fn body_format(self) -> &'static str {
         match self {
             Self::RawHtmlPage => "raw HTML",
+            Self::DressedHtmlPage => "raw HTML (rendered inside the site's standard dressing)",
             Self::SimplePage => "Quill Delta JSON",
             Self::ComponentPage | Self::Component => "page-builder template source",
         }
@@ -217,7 +225,7 @@ async fn tool_list_content(args: Value) -> Result<String, Error> {
     let content_type = ContentType::parse(&args)?;
 
     let items: Vec<Value> = match content_type {
-        ContentType::RawHtmlPage | ContentType::SimplePage => {
+        ContentType::RawHtmlPage | ContentType::DressedHtmlPage | ContentType::SimplePage => {
             let kind = content_type.pagecontent_kind().unwrap();
             let kind_str = kind.as_ref();
             let rows = sqlx::query!(
@@ -267,7 +275,7 @@ async fn tool_get_content(args: Value) -> Result<String, Error> {
     let id = parse_ulid(&args, "id")?;
 
     let result = match content_type {
-        ContentType::RawHtmlPage | ContentType::SimplePage => {
+        ContentType::RawHtmlPage | ContentType::DressedHtmlPage | ContentType::SimplePage => {
             let kind = content_type.pagecontent_kind().unwrap();
             let content = PageContent::load((kind, id)).await?;
             json!({
@@ -318,7 +326,7 @@ async fn tool_create_content(args: Value) -> Result<String, Error> {
     let body = required_str(&args, "body")?.to_string();
 
     let id = match content_type {
-        ContentType::RawHtmlPage | ContentType::SimplePage => {
+        ContentType::RawHtmlPage | ContentType::DressedHtmlPage | ContentType::SimplePage => {
             reject_field(&args, "description", content_type)?;
             reject_field(&args, "category", content_type)?;
 
@@ -367,7 +375,7 @@ async fn tool_update_content(args: Value) -> Result<String, Error> {
     let id = parse_ulid(&args, "id")?;
 
     match content_type {
-        ContentType::RawHtmlPage | ContentType::SimplePage => {
+        ContentType::RawHtmlPage | ContentType::DressedHtmlPage | ContentType::SimplePage => {
             reject_field(&args, "description", content_type)?;
             reject_field(&args, "category", content_type)?;
 
@@ -438,7 +446,7 @@ async fn tool_patch_content(args: Value) -> Result<String, Error> {
 
     // Load, patch, validate, and persist the body/source in one pass per type.
     let (patched, replacements, start) = match content_type {
-        ContentType::RawHtmlPage | ContentType::SimplePage => {
+        ContentType::RawHtmlPage | ContentType::DressedHtmlPage | ContentType::SimplePage => {
             let kind = content_type.pagecontent_kind().unwrap();
             let mut content = PageContent::load((kind, id)).await?;
             let result = patch_text(content.as_utf8()?, old_string, new_string, replace_all)?;
@@ -1232,8 +1240,8 @@ fn get_tools() -> Value {
 fn content_type_schema() -> Value {
     json!({
         "type": "string",
-        "enum": ["raw_html_page", "simple_page", "component_page", "component"],
-        "description": "The kind of content: raw_html_page, simple_page (Quill Delta JSON), component_page, or component"
+        "enum": ["raw_html_page", "dressed_html_page", "simple_page", "component_page", "component"],
+        "description": "The kind of content: raw_html_page (bare HTML), dressed_html_page (HTML rendered inside the site's standard dressing), simple_page (Quill Delta JSON), component_page, or component"
     })
 }
 
