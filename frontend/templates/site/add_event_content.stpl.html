@@ -1,0 +1,406 @@
+<% let inperson_active = self.values.location_mode == "in_person" || self.values.location_mode.is_empty(); %>
+<% let online_active = self.values.location_mode == "online"; %>
+<% let region_active = self.values.location_mode == "region"; %>
+<div class="ss-container !pt-8 !pb-12 mx-auto">
+  <div class="ss-small-container">
+    <h1 class="text-center">Add an Event</h1>
+    <p class="intro text-center">Promote your bioblitz, workshop, festival, or webinar on the SciStarter Event Calendar.</p>
+
+    <% if let Some(error) = &self.error { %>
+      <div class="ss-alert" role="alert"><%= error %></div>
+    <% } %>
+
+    <form method="post" action="/add-event" class="space-y-6 mt-6">
+
+      <!-- Basics -->
+      <div class="bg-white border border-linework rounded-lg shadow-sm p-6 space-y-4">
+        <div>
+          <label for="event-name">Event name</label>
+          <input id="event-name" type="text" name="name" required value="<%= self.values.name %>">
+        </div>
+      </div>
+
+      <!-- When -->
+      <div class="bg-white border border-linework rounded-lg shadow-sm p-6 space-y-4">
+        <h3>When</h3>
+
+        <div id="instances" class="space-y-4">
+          <% for (i, inst) in self.values.instances.iter().enumerate() { %>
+            <div class="instance-row border border-linework rounded-md p-4 space-y-3">
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label>Start date</label>
+                  <input type="date" name="instances[<%= i %>][begin_date]" value="<%= inst.begin_date %>" required>
+                </div>
+                <div>
+                  <label>Start time</label>
+                  <input type="time" name="instances[<%= i %>][begin_time]" value="<%= inst.begin_time %>" required>
+                </div>
+                <div>
+                  <label>Time zone</label>
+                  <select class="tz-select" name="instances[<%= i %>][timezone]" required>
+                    <option value="" <% if inst.timezone.is_empty() { %>selected<% } %> disabled>Select time zone&hellip;</option>
+                    <% for tz in self.timezones { %>
+                      <option value="<%= tz.0 %>" <% if inst.timezone == tz.0 { %>selected<% } %>><%= tz.1 %></option>
+                    <% } %>
+                  </select>
+                </div>
+              </div>
+
+              <label class="flex items-center gap-2">
+                <input type="checkbox" class="w-auto has-end-toggle" name="instances[<%= i %>][has_end]" <% if inst.has_end { %>checked<% } %>>
+                Set an end date &amp; time
+              </label>
+
+              <div class="end-block grid grid-cols-1 sm:grid-cols-2 gap-3" <% if !inst.has_end { %>hidden<% } %>>
+                <div>
+                  <label>End date</label>
+                  <input type="date" name="instances[<%= i %>][end_date]" value="<%= inst.end_date %>">
+                </div>
+                <div>
+                  <label>End time</label>
+                  <input type="time" name="instances[<%= i %>][end_time]" value="<%= inst.end_time %>">
+                </div>
+              </div>
+
+              <button type="button" class="remove-instance text-sm text-accent1 underline" <% if i == 0 { %>hidden<% } %>>Remove this date</button>
+            </div>
+          <% } %>
+        </div>
+
+        <button type="button" id="add-instance" class="btn">+ Add another date/time</button>
+
+        <details class="border border-linework rounded-md p-3" <% if self.values.repeat_enabled { %>open<% } %>>
+          <summary class="cursor-pointer font-medium">Repeat this event</summary>
+          <div class="mt-3 space-y-3">
+            <label class="flex items-center gap-2">
+              <input type="checkbox" class="w-auto" name="repeat_enabled" <% if self.values.repeat_enabled { %>checked<% } %>>
+              Repeat on a schedule
+            </label>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label>Frequency</label>
+                <select name="repeat_frequency">
+                  <option value="daily" <% if self.values.repeat_frequency == "daily" { %>selected<% } %>>Daily</option>
+                  <option value="weekly" <% if self.values.repeat_frequency == "weekly" { %>selected<% } %>>Weekly</option>
+                  <option value="biweekly" <% if self.values.repeat_frequency == "biweekly" { %>selected<% } %>>Every 2 weeks</option>
+                  <option value="monthly" <% if self.values.repeat_frequency == "monthly" { %>selected<% } %>>Monthly</option>
+                </select>
+              </div>
+              <div>
+                <label>Repeat until</label>
+                <input type="date" name="repeat_until" value="<%= self.values.repeat_until %>">
+              </div>
+            </div>
+            <p class="text-sm text-neutral-mid">Each date/time above repeats at this frequency through the end date.</p>
+          </div>
+        </details>
+      </div>
+
+      <!-- Where -->
+      <div class="bg-white border border-linework rounded-lg shadow-sm p-6 space-y-4">
+        <h3>Where</h3>
+
+        <div class="flex flex-col gap-2">
+          <label class="flex items-center gap-2">
+            <input type="radio" class="w-auto" name="location_mode" value="in_person" <% if inperson_active { %>checked<% } %>>
+            In person (a specific venue)
+          </label>
+          <label class="flex items-center gap-2">
+            <input type="radio" class="w-auto" name="location_mode" value="online" <% if online_active { %>checked<% } %>>
+            Online / virtual
+          </label>
+          <label class="flex items-center gap-2">
+            <input type="radio" class="w-auto" name="location_mode" value="region" <% if region_active { %>checked<% } %>>
+            Across a region / area
+          </label>
+        </div>
+
+        <!-- Each mode's fields live in a fieldset that is disabled (so its
+             controls don't submit) whenever that mode isn't selected. -->
+        <fieldset class="location-fields space-y-3 border-0 p-0 m-0" data-mode="in_person" <% if !inperson_active { %>hidden disabled<% } %>>
+          <div>
+            <label>Venue name</label>
+            <input type="text" name="location_name" value="<%= self.values.location_name %>">
+          </div>
+          <div>
+            <label>Street address</label>
+            <input type="text" name="address" value="<%= self.values.address %>">
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label>City</label>
+              <input type="text" name="city" value="<%= self.values.city %>">
+            </div>
+            <div>
+              <label>State / Province</label>
+              <input type="text" name="state" value="<%= self.values.state %>">
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label>ZIP / Postal code</label>
+              <input type="text" name="zip" value="<%= self.values.zip %>">
+            </div>
+            <div>
+              <label>Country</label>
+              <input type="text" name="country" value="<%= self.values.country %>">
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="location-fields border-0 p-0 m-0" data-mode="online" <% if !online_active { %>hidden disabled<% } %>>
+          <p class="text-sm text-neutral-mid">Add the link people use to join in the Event link field below.</p>
+        </fieldset>
+
+        <fieldset class="location-fields space-y-3 border-0 p-0 m-0" data-mode="region" <% if !region_active { %>hidden disabled<% } %>>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label>City <span class="text-neutral-mid">(optional)</span></label>
+              <input type="text" name="city" value="<%= self.values.city %>">
+            </div>
+            <div>
+              <label>State / Province</label>
+              <input type="text" name="state" value="<%= self.values.state %>">
+            </div>
+            <div>
+              <label>Country</label>
+              <input type="text" name="country" value="<%= self.values.country %>">
+            </div>
+          </div>
+          <%+ self.region_editor %>
+        </fieldset>
+
+        <!-- Location details: a free-text note meaningful in any mode (the
+             area for a region, or a "meet at the north entrance"-style note). -->
+        <div>
+          <label for="location-description">Location details</label>
+          <input id="location-description" type="text" name="location_description" value="<%= self.values.location_description %>" placeholder="e.g. Greater Phoenix metro area, or &ldquo;meet at the north entrance&rdquo;">
+        </div>
+
+        <div>
+          <label for="event-url">Event link / URL</label>
+          <input id="event-url" type="url" name="url" value="<%= self.values.url %>" placeholder="https://&hellip;">
+          <p class="text-sm text-neutral-mid">A website, registration page, or livestream link. Required for online events.</p>
+        </div>
+      </div>
+
+      <!-- Details -->
+      <div class="bg-white border border-linework rounded-lg shadow-sm p-6 space-y-4">
+        <h3>Details</h3>
+        <div>
+          <label for="event-description">Description</label>
+          <textarea id="event-description" name="description" rows="5" required><%= self.values.description %></textarea>
+        </div>
+
+        <details class="border border-linework rounded-md p-3">
+          <summary class="cursor-pointer font-medium">More details (optional)</summary>
+          <div class="mt-3 space-y-4">
+            <div>
+              <label for="event-type">Event type</label>
+              <select id="event-type" name="event_type">
+                <% for et in &self.event_types { %>
+                  <option value="<%= et %>" <% if self.values.event_type == *et { %>selected<% } %>><%= et %></option>
+                <% } %>
+              </select>
+            </div>
+            <div>
+              <label>Organizer / presenter</label>
+              <input type="text" name="presenter" value="<%= self.values.presenter %>">
+            </div>
+            <div>
+              <label>How to join / participate</label>
+              <textarea name="how_to_join" rows="3"><%= self.values.how_to_join %></textarea>
+            </div>
+            <div>
+              <label>Image URL</label>
+              <input type="url" name="image" value="<%= self.values.image %>">
+            </div>
+            <div>
+              <label>Image credit</label>
+              <input type="text" name="image_credit" value="<%= self.values.image_credit %>">
+            </div>
+            <div>
+              <label>Tags</label>
+              <input type="text" name="tags" value="<%= self.values.tags %>" placeholder="comma, separated, tags">
+            </div>
+          </div>
+        </details>
+
+        <details class="border border-linework rounded-md p-3" <% if !self.values.part_of.is_empty() { %>open<% } %>>
+          <summary class="cursor-pointer font-medium">Part of a larger event (optional)</summary>
+          <div class="mt-3 space-y-2">
+            <p class="text-sm text-neutral-mid">If this event belongs to an umbrella event (e.g. a festival), search for and select it.</p>
+            <input type="search" name="parent_q" placeholder="Search published events&hellip;" autocomplete="off"
+              hx-get="/add-event/parent-search" hx-trigger="input changed delay:300ms, search"
+              hx-target="#parent-results" hx-swap="innerHTML"
+              hx-on:keydown="if (event.key === 'Enter') event.preventDefault()">
+            <div id="parent-selected">
+              <% if !self.values.part_of.is_empty() { %>
+                <div class="flex items-center gap-2">
+                  <span>Part of: <strong><%= self.values.part_of_name %></strong></span>
+                  <button type="button" class="text-sm text-accent1 underline"
+                    hx-get="/add-event/parent-clear" hx-target="#parent-selected" hx-swap="innerHTML">Clear</button>
+                </div>
+              <% } %>
+            </div>
+            <div id="parent-results"></div>
+            <input type="hidden" name="part_of" id="part_of" value="<%= self.values.part_of %>">
+          </div>
+        </details>
+
+        <details class="border border-linework rounded-md p-3">
+          <summary class="cursor-pointer font-medium">Organizer contact (optional)</summary>
+          <div class="mt-3 space-y-4">
+            <div>
+              <label>Contact name</label>
+              <input type="text" name="contact_name" value="<%= self.values.contact_name %>">
+            </div>
+            <div>
+              <label>Email</label>
+              <input type="email" name="contact_email" value="<%= self.values.contact_email %>">
+            </div>
+            <div>
+              <label>Affiliation</label>
+              <input type="text" name="contact_affiliation" value="<%= self.values.contact_affiliation %>">
+            </div>
+            <div>
+              <label>Phone</label>
+              <input type="tel" name="contact_phone" value="<%= self.values.contact_phone %>">
+            </div>
+            <div>
+              <label>Mailing address</label>
+              <input type="text" name="contact_address" value="<%= self.values.contact_address %>">
+            </div>
+          </div>
+        </details>
+
+        <details class="border border-linework rounded-md p-3" <% if !self.values.ticketing_date.is_empty() { %>open<% } %>>
+          <summary class="cursor-pointer font-medium">Ticketing / registration (optional)</summary>
+          <div class="mt-3 space-y-3">
+            <p class="text-sm text-neutral-mid">If tickets or registration open at a specific time, set it here.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label>Opens on</label>
+                <input type="date" name="ticketing_date" value="<%= self.values.ticketing_date %>">
+              </div>
+              <div>
+                <label>Time</label>
+                <input type="time" name="ticketing_time" value="<%= self.values.ticketing_time %>">
+              </div>
+              <div>
+                <label>Time zone</label>
+                <select class="tz-select" name="ticketing_timezone">
+                  <option value="" <% if self.values.ticketing_timezone.is_empty() { %>selected<% } %> disabled>Select time zone&hellip;</option>
+                  <% for tz in self.timezones { %>
+                    <option value="<%= tz.0 %>" <% if self.values.ticketing_timezone == tz.0 { %>selected<% } %>><%= tz.1 %></option>
+                  <% } %>
+                </select>
+              </div>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <button type="submit" class="btn btn-primary">Create event</button>
+        <a class="btn" href="/add">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  (function () {
+    // Preselect the visitor's actual browser time zone, adding it to any
+    // <select> that doesn't already list it. Never overrides an existing choice.
+    var browserTz = "";
+    try { browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) {}
+
+    function ensureTz(select) {
+      if (!select) return;
+      if (browserTz) {
+        var present = Array.prototype.some.call(select.options, function (o) { return o.value === browserTz; });
+        if (!present) {
+          var opt = document.createElement("option");
+          opt.value = browserTz;
+          opt.textContent = browserTz;
+          select.appendChild(opt);
+        }
+        if (!select.value) select.value = browserTz;
+      }
+    }
+    document.querySelectorAll("select.tz-select").forEach(ensureTz);
+
+    // Show only the fields for the selected location mode; disabled fieldsets
+    // keep their controls out of the submission (avoids duplicate city/state).
+    function applyMode() {
+      var checked = document.querySelector('input[name="location_mode"]:checked');
+      var mode = checked ? checked.value : "in_person";
+      document.querySelectorAll(".location-fields").forEach(function (fs) {
+        var active = fs.getAttribute("data-mode") === mode;
+        fs.hidden = !active;
+        fs.disabled = !active;
+      });
+      // The region map is initialized while hidden, so it renders at zero size
+      // until its pane is shown — fix it up once the region pane is visible.
+      if (mode === "region" && window.RegionEditor) {
+        window.RegionEditor.resizeAll();
+      }
+    }
+    document.querySelectorAll('input[name="location_mode"]').forEach(function (r) {
+      r.addEventListener("change", applyMode);
+    });
+    applyMode();
+
+    var container = document.getElementById("instances");
+
+    // Reveal a row's end date/time when its "set an end" box is checked.
+    container.addEventListener("change", function (e) {
+      if (e.target.classList.contains("has-end-toggle")) {
+        var block = e.target.closest(".instance-row").querySelector(".end-block");
+        if (block) block.hidden = !e.target.checked;
+      }
+    });
+
+    // Keep instance rows numbered contiguously (instances[0], instances[1], ...)
+    // and hide the remove button when only one row remains.
+    function renumber() {
+      var rows = container.querySelectorAll(".instance-row");
+      rows.forEach(function (row, i) {
+        row.querySelectorAll("[name]").forEach(function (el) {
+          el.name = el.name.replace(/instances\[\d+\]/, "instances[" + i + "]");
+        });
+        var rm = row.querySelector(".remove-instance");
+        if (rm) rm.hidden = rows.length === 1;
+      });
+    }
+
+    document.getElementById("add-instance").addEventListener("click", function () {
+      var rows = container.querySelectorAll(".instance-row");
+      var clone = rows[0].cloneNode(true);
+      clone.querySelectorAll("input").forEach(function (el) {
+        if (el.type === "checkbox") { el.checked = false; } else { el.value = ""; }
+      });
+      var sel = clone.querySelector("select.tz-select");
+      if (sel) sel.selectedIndex = 0;
+      var end = clone.querySelector(".end-block");
+      if (end) end.hidden = true;
+      container.appendChild(clone);
+      ensureTz(clone.querySelector("select.tz-select"));
+      renumber();
+    });
+
+    container.addEventListener("click", function (e) {
+      if (e.target.classList.contains("remove-instance")) {
+        var rows = container.querySelectorAll(".instance-row");
+        if (rows.length > 1) {
+          e.target.closest(".instance-row").remove();
+          renumber();
+        }
+      }
+    });
+
+    renumber();
+  })();
+</script>

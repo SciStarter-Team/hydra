@@ -1,4 +1,8 @@
-use crate::{event::EventStatus, peering::LoadStorePeered};
+use crate::{
+    contact::{Contact, ContactRole},
+    event::EventStatus,
+    peering::LoadStorePeered,
+};
 use anyhow::Error;
 use common::timestring::TimeString;
 use ulid::Ulid;
@@ -48,6 +52,8 @@ pub enum EventFieldValue {
     CircuitId(Option<String>),
     Point(Option<String>),
     Regions(Option<String>),
+    Contacts(Box<[Contact]>),
+    PageEditorIds(Box<[Ulid]>),
 }
 
 impl EventField {
@@ -91,7 +97,144 @@ impl EventField {
             EventFieldValue::CircuitId(_) => EventFieldType::CircuitId,
             EventFieldValue::Point(_) => EventFieldType::Point,
             EventFieldValue::Regions(_) => EventFieldType::Regions,
+            EventFieldValue::Contacts(_) => EventFieldType::Contacts,
+            EventFieldValue::PageEditorIds(_) => EventFieldType::PageEditorIds,
         }
+    }
+
+    /// Replace the event's contact list. Mirrors how `EventAll` persists
+    /// `event_contacts` (delete-then-reinsert, atomically).
+    async fn save_contacts(&self, contacts: &[Contact]) -> Result<(), Error> {
+        use common::shared::db;
+        use common::transaction::Immediate;
+
+        let event_id = self.event_id.to_string();
+        let mut tx = Immediate::begin_with_retry(db(), None, None).await?;
+
+        sqlx::query!(r#"delete from event_contacts where event_id = ?"#, event_id)
+            .execute(&mut tx)
+            .await?;
+
+        for contact in contacts {
+            let contact_id = contact.contact_id.to_string();
+            sqlx::query!(
+                r#"insert into event_contacts (
+                  "contact_id", "event_id", "role", "name",
+                  "affiliation", "email", "phone", "address"
+                ) values (?, ?, ?, ?, ?, ?, ?, ?)"#,
+                contact_id,
+                event_id,
+                contact.role,
+                contact.name,
+                contact.affiliation,
+                contact.email,
+                contact.phone,
+                contact.address,
+            )
+            .execute(&mut tx)
+            .await?;
+        }
+
+        tx.commit().await?;
+        Ok(())
+    }
+
+    async fn read_contacts(event_id: Ulid) -> Result<Self, Error> {
+        use common::shared::db;
+
+        let event_id_str = event_id.to_string();
+        let rows = sqlx::query!(
+            r#"SELECT contact_id, role, name, affiliation, email, phone, address
+               FROM event_contacts WHERE event_id = ? ORDER BY role"#,
+            event_id_str
+        )
+        .fetch_all(db())
+        .await?;
+
+        let mut contacts = Vec::with_capacity(rows.len());
+        for row in rows {
+            let contact_id = row
+                .contact_id
+                .parse::<Ulid>()
+                .map_err(|e| anyhow::anyhow!("Invalid contact ULID: {e}"))?;
+            let role = match row.role.as_str() {
+                "Manager" => ContactRole::Manager,
+                "ContactPerson" => ContactRole::ContactPerson,
+                "Technical" => ContactRole::Technical,
+                "Notification" => ContactRole::Notification,
+                _ => ContactRole::ContactPerson,
+            };
+            contacts.push(Contact {
+                contact_id,
+                role,
+                name: row.name,
+                affiliation: row.affiliation,
+                email: row.email,
+                phone: row.phone,
+                address: row.address,
+            });
+        }
+
+        Ok(EventField::new(
+            event_id,
+            EventFieldValue::Contacts(contacts.into_boxed_slice()),
+        ))
+    }
+
+    /// Replace the event's non-staff page editors (managers).
+    async fn save_page_editor_ids(&self, ids: &[Ulid]) -> Result<(), Error> {
+        use common::shared::db;
+        use common::transaction::Immediate;
+
+        let event_id = self.event_id.to_string();
+        let mut tx = Immediate::begin_with_retry(db(), None, None).await?;
+
+        sqlx::query!(
+            r#"delete from event_page_editors where event_id = ?"#,
+            event_id
+        )
+        .execute(&mut tx)
+        .await?;
+
+        for user_id in ids {
+            let user_id = user_id.to_string();
+            sqlx::query!(
+                r#"insert into event_page_editors ("event_id", "user_id") values (?, ?)"#,
+                event_id,
+                user_id,
+            )
+            .execute(&mut tx)
+            .await?;
+        }
+
+        tx.commit().await?;
+        Ok(())
+    }
+
+    async fn read_page_editor_ids(event_id: Ulid) -> Result<Self, Error> {
+        use common::shared::db;
+
+        let event_id_str = event_id.to_string();
+        let rows = sqlx::query!(
+            r#"SELECT user_id FROM event_page_editors WHERE event_id = ? ORDER BY user_id"#,
+            event_id_str
+        )
+        .fetch_all(db())
+        .await?;
+
+        let mut ids = Vec::with_capacity(rows.len());
+        for row in rows {
+            ids.push(
+                row.user_id
+                    .parse::<Ulid>()
+                    .map_err(|e| anyhow::anyhow!("Invalid editor ULID: {e}"))?,
+            );
+        }
+
+        Ok(EventField::new(
+            event_id,
+            EventFieldValue::PageEditorIds(ids.into_boxed_slice()),
+        ))
     }
 
     // Helper functions for database operations
@@ -1069,6 +1212,8 @@ impl LoadStorePeered for EventField {
             EventFieldValue::CircuitId(circuit_id) => self.save_circuit_id(circuit_id).await,
             EventFieldValue::Point(point) => self.save_point(point).await,
             EventFieldValue::Regions(regions) => self.save_regions(regions).await,
+            EventFieldValue::Contacts(contacts) => self.save_contacts(contacts).await,
+            EventFieldValue::PageEditorIds(ids) => self.save_page_editor_ids(ids).await,
             EventFieldValue::EventId(_) => {
                 // EventId is immutable and should not be updated
                 Err(anyhow::anyhow!("EventId cannot be updated"))
@@ -1116,6 +1261,8 @@ impl LoadStorePeered for EventField {
             EventFieldType::CircuitId => Self::read_circuit_id(event_id).await,
             EventFieldType::Point => Self::read_point(event_id).await,
             EventFieldType::Regions => Self::read_regions(event_id).await,
+            EventFieldType::Contacts => Self::read_contacts(event_id).await,
+            EventFieldType::PageEditorIds => Self::read_page_editor_ids(event_id).await,
         }
     }
 }

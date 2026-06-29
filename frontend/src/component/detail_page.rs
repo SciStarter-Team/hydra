@@ -303,6 +303,23 @@ pub struct DetailPage {
 // Prepared struct (template)
 // ---------------------------------------------------------------------------
 
+/// One organizer contact, for display on the event page (editors only).
+#[derive(Debug, Clone)]
+pub struct ContactDisplay {
+    pub contact_id: String,
+    pub name: String,
+    pub affiliation: String,
+    pub email: String,
+    pub phone: String,
+}
+
+/// One non-staff page manager (editor), for display on the event page (editors only).
+#[derive(Debug, Clone)]
+pub struct ManagerDisplay {
+    pub user_id: String,
+    pub email: String,
+}
+
 #[derive(TemplateOnce)]
 #[template(path = "pages/detail_page_content.stpl.html")]
 pub struct DetailPageContent {
@@ -372,6 +389,15 @@ pub struct DetailPageContent {
     // Event-specific
     pub event_type: Option<String>,
     pub instances: Vec<EventInstanceDisplay>,
+    pub ticketing_begins: Option<TimeString>,
+    /// The umbrella event this one is part of (name + path), empty if none.
+    pub part_of_name: String,
+    pub part_of_path: String,
+    /// The event's region as a GeoJSON string, for the inline map.
+    pub region_geojson: Option<String>,
+    pub contacts: Vec<ContactDisplay>,
+    /// Non-staff page managers (editors), shown to editors only.
+    pub managers: Vec<ManagerDisplay>,
 
     // User state
     pub user_info: Option<Arc<BasicInfo>>,
@@ -681,6 +707,54 @@ impl DetailPage {
         let (like_count, user_has_liked) = likes;
         let (can_edit, is_staff_editor) = edit_permission;
 
+        // Organizer contacts (rendered only for editors — see the template).
+        let contacts = sqlx::query!(
+            r#"SELECT contact_id AS "contact_id!", name, affiliation, email AS "email!", phone
+               FROM project_contacts WHERE project_id = ? ORDER BY role"#,
+            id_str
+        )
+        .fetch_all(db())
+        .await?
+        .into_iter()
+        .map(|c| ContactDisplay {
+            contact_id: c.contact_id,
+            name: c.name.unwrap_or_default(),
+            affiliation: c.affiliation.unwrap_or_default(),
+            email: c.email,
+            phone: c.phone.unwrap_or_default(),
+        })
+        .collect::<Vec<_>>();
+
+        // Non-staff page managers, resolved to emails (editors only).
+        let managers = if can_edit {
+            let user_ids: Vec<Ulid> = sqlx::query_scalar!(
+                r#"SELECT user_id FROM project_page_editors WHERE project_id = ? ORDER BY user_id"#,
+                id_str
+            )
+            .fetch_all(db())
+            .await?
+            .into_iter()
+            .filter_map(|s| s.parse::<Ulid>().ok())
+            .collect();
+
+            let resolved: HashMap<Ulid, String> =
+                crate::admin::autocomplete::resolve_user_names(user_ids.clone())
+                    .await
+                    .unwrap_or_default()
+                    .into_iter()
+                    .collect();
+
+            user_ids
+                .into_iter()
+                .map(|uid| ManagerDisplay {
+                    user_id: uid.to_string(),
+                    email: resolved.get(&uid).cloned().unwrap_or_else(|| uid.to_string()),
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
         let additional_fields = if can_edit {
             super::detail_page_edit::load_additional_fields(
                 &self.target_id.to_string(),
@@ -840,6 +914,12 @@ impl DetailPage {
             member_count,
             event_type: None,
             instances: Vec::new(),
+            ticketing_begins: None,
+            part_of_name: String::new(),
+            part_of_path: String::new(),
+            region_geojson: None,
+            contacts,
+            managers,
             user_info,
             reviews,
             review_count,
@@ -876,6 +956,9 @@ impl DetailPage {
                 zip,
                 country,
                 event_type as "event_type: EventType",
+                ticketing_begins,
+                part_of,
+                AsGeoJSON(regions) as "region_geojson: Option<String>",
                 point IS NOT NULL as "has_point: bool"
             FROM events
             WHERE event_id = ?
@@ -958,6 +1041,73 @@ impl DetailPage {
 
         let (like_count, user_has_liked) = likes;
         let (can_edit, is_staff_editor) = edit_permission;
+
+        // The umbrella event this one is part of (only linked if published).
+        let (part_of_name, part_of_path) = if let Some(parent_id) = row.part_of.clone() {
+            match sqlx::query!(
+                r#"SELECT e.name AS "name!", ent.slug AS "slug!"
+                   FROM events e
+                   JOIN entities ent ON ent.target = e.event_id AND ent.kind = 'Event'
+                   WHERE ent.publish = 1 AND e.event_id = ?"#,
+                parent_id
+            )
+            .fetch_optional(db())
+            .await?
+            {
+                Some(r) => (r.name, format!("/events/{}", r.slug)),
+                None => (String::new(), String::new()),
+            }
+        } else {
+            (String::new(), String::new())
+        };
+
+        // Organizer contacts (rendered only for editors — see the template).
+        let contacts = sqlx::query!(
+            r#"SELECT contact_id AS "contact_id!", name, affiliation, email AS "email!", phone
+               FROM event_contacts WHERE event_id = ? ORDER BY role"#,
+            id_str
+        )
+        .fetch_all(db())
+        .await?
+        .into_iter()
+        .map(|c| ContactDisplay {
+            contact_id: c.contact_id,
+            name: c.name.unwrap_or_default(),
+            affiliation: c.affiliation.unwrap_or_default(),
+            email: c.email,
+            phone: c.phone.unwrap_or_default(),
+        })
+        .collect::<Vec<_>>();
+
+        // Non-staff page managers, resolved to emails (editors only).
+        let managers = if can_edit {
+            let user_ids: Vec<Ulid> = sqlx::query_scalar!(
+                r#"SELECT user_id FROM event_page_editors WHERE event_id = ? ORDER BY user_id"#,
+                id_str
+            )
+            .fetch_all(db())
+            .await?
+            .into_iter()
+            .filter_map(|s| s.parse::<Ulid>().ok())
+            .collect();
+
+            let resolved: HashMap<Ulid, String> =
+                crate::admin::autocomplete::resolve_user_names(user_ids.clone())
+                    .await
+                    .unwrap_or_default()
+                    .into_iter()
+                    .collect();
+
+            user_ids
+                .into_iter()
+                .map(|uid| ManagerDisplay {
+                    user_id: uid.to_string(),
+                    email: resolved.get(&uid).cloned().unwrap_or_else(|| uid.to_string()),
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
 
         let additional_fields = if can_edit {
             super::detail_page_edit::load_additional_fields(
@@ -1086,6 +1236,14 @@ impl DetailPage {
             member_count: 0,
             event_type: event_type_display,
             instances,
+            ticketing_begins: row
+                .ticketing_begins
+                .and_then(|s| TimeString::try_from(s).ok()),
+            part_of_name,
+            part_of_path,
+            region_geojson: row.region_geojson.flatten(),
+            contacts,
+            managers,
             user_info,
             reviews: Vec::new(),
             review_count: 0,

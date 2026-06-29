@@ -1,3 +1,4 @@
+pub mod add;
 pub mod admin;
 pub mod api;
 pub mod auth;
@@ -278,6 +279,15 @@ fn user_facing() -> impl Endpoint {
             get(auth::logout_action)
                 .with(middleware::partitioned_session::EnablePartitionedCookies),
         )
+        .at("/add", get(add::add_chooser_page))
+        .at(
+            "/add-event",
+            get(add::add_event_page).post(add::add_event_submit),
+        )
+        .at("/add-event/submitted", get(add::add_event_submitted_page))
+        .at("/add-event/parent-search", get(add::add_event_parent_search))
+        .at("/add-event/parent-select", get(add::add_event_parent_select))
+        .at("/add-event/parent-clear", get(add::add_event_parent_clear))
         .at("/demo-forum", get(demo_forum))
         .at("/go/*friendly_url", get(gourl::handle_go_url))
         .at("/-link/:link_id", get(external_link::handle_external_link))
@@ -363,6 +373,34 @@ fn user_facing() -> impl Endpoint {
             "/-detail/:id/instances/:index",
             put(component::detail_page_edit::update_instance)
                 .delete(component::detail_page_edit::delete_instance),
+        )
+        .at(
+            "/-detail/:id/contacts",
+            get(component::detail_page_edit::get_contacts_display)
+                .post(component::detail_page_edit::add_contact),
+        )
+        .at(
+            "/-detail/:id/contacts/:contact_id",
+            put(component::detail_page_edit::update_contact)
+                .delete(component::detail_page_edit::delete_contact),
+        )
+        .at(
+            "/-detail/:id/contacts/:contact_id/edit",
+            get(component::detail_page_edit::get_contact_edit_form),
+        )
+        .at(
+            "/-detail/:id/managers",
+            get(component::detail_page_edit::get_managers_display)
+                .post(component::detail_page_edit::add_manager),
+        )
+        .at(
+            "/-detail/:id/managers/:user_id",
+            put(component::detail_page_edit::update_manager)
+                .delete(component::detail_page_edit::delete_manager),
+        )
+        .at(
+            "/-detail/:id/managers/:user_id/edit",
+            get(component::detail_page_edit::get_manager_edit_form),
         )
         .at(
             "/-detail/:id/participant-files",

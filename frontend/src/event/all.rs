@@ -354,12 +354,26 @@ impl LoadStorePeered for EventAll {
 
         tx.commit().await?;
 
-        // Auto-geocode if point is missing but address fields exist
-        if self.point.is_none()
-            && (!self.city.is_empty() || !self.state.is_empty() || !self.country.is_empty())
-        {
-            if let Err(e) = crate::geocode::geocode_and_update_event_point(self.event_id).await {
-                eprintln!("Auto-geocode for event {} failed: {e}", self.event_id);
+        // Derive the point when it wasn't supplied: prefer the centroid of the
+        // region polygon, fall back to geocoding the address/locality, and
+        // otherwise leave it null (e.g. an entirely-online event).
+        if self.point.is_none() {
+            if self.regions.is_some() {
+                let event_id = self.event_id.to_string();
+                if let Err(e) = sqlx::query!(
+                    r#"UPDATE events SET point = ST_Centroid(regions)
+                       WHERE event_id = ? AND point IS NULL AND regions IS NOT NULL"#,
+                    event_id
+                )
+                .execute(db())
+                .await
+                {
+                    eprintln!("Region-centroid point for event {} failed: {e}", self.event_id);
+                }
+            } else if !self.city.is_empty() || !self.state.is_empty() || !self.country.is_empty() {
+                if let Err(e) = crate::geocode::geocode_and_update_event_point(self.event_id).await {
+                    eprintln!("Auto-geocode for event {} failed: {e}", self.event_id);
+                }
             }
         }
 

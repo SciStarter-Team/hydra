@@ -1,0 +1,10 @@
+<div class="region-editor" data-region-editor data-target="<%= self.field_id %>">
+  <input type="hidden" name="<%= self.field_name %>" id="<%= self.field_id %>" value="<%= self.initial %>">
+  <div class="region-editor-map" style="height: 320px; width: 100%; border-radius: 4px; overflow: hidden;"></div>
+  <div class="flex items-center gap-3 mt-2 text-sm">
+    <button type="button" class="region-editor-undo btn">Undo point</button>
+    <button type="button" class="region-editor-clear btn">Clear</button>
+    <span class="region-editor-status text-neutral-mid"></span>
+  </div>
+  <p class="text-sm text-neutral-mid mt-1">Click the map to outline the area. Three or more points define a region.</p>
+</div>

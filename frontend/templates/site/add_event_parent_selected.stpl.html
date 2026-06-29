@@ -1,0 +1,9 @@
+<% if !self.id.is_empty() { %>
+  <div class="flex items-center gap-2">
+    <span>Part of: <strong><%= self.name %></strong></span>
+    <button type="button" class="text-sm text-accent1 underline"
+      hx-get="/add-event/parent-clear" hx-target="#parent-selected" hx-swap="innerHTML">Clear</button>
+  </div>
+<% } %>
+<input type="hidden" name="part_of" id="part_of" value="<%= self.id %>" hx-swap-oob="true">
+<div id="parent-results" hx-swap-oob="true"></div>

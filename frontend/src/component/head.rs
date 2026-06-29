@@ -8,6 +8,7 @@ pub struct Head {
     enable_alpine: bool,
     enable_quill: bool,
     enable_maplibre: bool,
+    enable_region_editor: bool,
     enable_slick: bool,
     enable_jquery: bool,
     enable_geosearch: bool,
@@ -21,6 +22,7 @@ impl Default for Head {
             enable_alpine: false,
             enable_quill: false,
             enable_maplibre: false,
+            enable_region_editor: false,
             enable_slick: false,
             enable_jquery: false,
             enable_geosearch: false,
@@ -56,6 +58,20 @@ impl Head {
     #[tracing::instrument]
     pub fn with_maplibre(mut self) -> Self {
         self.enable_maplibre = true;
+        self
+    }
+
+    /// Enable the reusable map-based region editor. Implies (and builds on)
+    /// `with_maplibre`, since the editor is driven by MapLibre.
+    #[tracing::instrument]
+    pub fn with_region_editor(mut self) -> Self {
+        self.enable_region_editor = true;
+        self.with_maplibre()
+    }
+
+    #[tracing::instrument]
+    pub fn without_region_editor(mut self) -> Self {
+        self.enable_region_editor = false;
         self
     }
 

@@ -7,7 +7,14 @@ use poem::{
 use sailfish::TemplateOnce;
 use ulid::Ulid;
 
-use crate::event::field::{EventField, EventFieldValue};
+use std::collections::HashMap;
+
+use common::message::user::{UserByEmailRequest, UserByEmailResponse};
+use common::service::request;
+
+use crate::admin::autocomplete::resolve_user_names;
+use crate::contact::{Contact, ContactRole};
+use crate::event::field::{EventField, EventFieldType, EventFieldValue};
 use crate::local_time::{TimeFormat, local_time};
 use crate::middleware::authorization::Authenticated;
 use crate::participant_file::ParticipantFile;
@@ -2172,6 +2179,578 @@ async fn load_instances(
             Some(super::detail_page::EventInstanceDisplay { begin, end })
         })
         .collect())
+}
+
+// ---------------------------------------------------------------------------
+// Organizer contacts (projects and events): private (editors-only) inline
+// editor. Contact info is never sent to the public — the card is rendered only
+// when can_edit, and changes peer through {Project,Event}Field::Contacts.
+// The kind is resolved from the target id, so one implementation serves both.
+// ---------------------------------------------------------------------------
+
+#[derive(TemplateOnce)]
+#[template(path = "pages/detail_page_contacts.stpl.html")]
+pub struct ContactsDisplay {
+    pub target_id: String,
+    pub contacts: Vec<super::detail_page::ContactDisplay>,
+    pub can_edit: bool,
+}
+
+#[derive(serde::Deserialize)]
+struct ContactForm {
+    #[serde(default)]
+    role: String,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    affiliation: String,
+    #[serde(default)]
+    email: String,
+    #[serde(default)]
+    phone: String,
+    #[serde(default)]
+    address: String,
+}
+
+fn parse_contact_role(role: &str) -> ContactRole {
+    match role {
+        "Manager" => ContactRole::Manager,
+        "ContactPerson" => ContactRole::ContactPerson,
+        "Technical" => ContactRole::Technical,
+        "Notification" => ContactRole::Notification,
+        _ => ContactRole::ContactPerson,
+    }
+}
+
+fn contact_role_str(role: ContactRole) -> &'static str {
+    match role {
+        ContactRole::Manager => "Manager",
+        ContactRole::ContactPerson => "ContactPerson",
+        ContactRole::Technical => "Technical",
+        ContactRole::Notification => "Notification",
+    }
+}
+
+fn trimmed_option(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
+fn contacts_to_display(contacts: &[Contact]) -> Vec<super::detail_page::ContactDisplay> {
+    contacts
+        .iter()
+        .map(|c| super::detail_page::ContactDisplay {
+            contact_id: c.contact_id.to_string(),
+            name: c.name.clone().unwrap_or_default(),
+            affiliation: c.affiliation.clone().unwrap_or_default(),
+            email: c.email.clone(),
+            phone: c.phone.clone().unwrap_or_default(),
+        })
+        .collect()
+}
+
+// --- Shared helpers used by both the contacts and managers editors ---------
+
+/// Map any displayable error to a 500.
+fn internal_error<E: std::fmt::Display>(e: E) -> poem::Error {
+    poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+/// Resolve the target's kind, confirm the user may edit it, and parse its id.
+/// Rejects unauthenticated callers (handled by the caller's `ok_or`) and
+/// non-editors (403). Works for both projects and events.
+async fn require_editor(id: &str, user: &BasicInfo) -> poem::Result<(DetailPageKind, Ulid)> {
+    let kind = resolve_kind(id).await.map_err(internal_error)?;
+    let (can_edit, _) = check_edit_permission(id, user, kind)
+        .await
+        .map_err(internal_error)?;
+    if !can_edit {
+        return Err(poem::Error::from_string(
+            "Forbidden",
+            poem::http::StatusCode::FORBIDDEN,
+        ));
+    }
+    let target = Ulid::from_string(id)
+        .map_err(|e| poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST))?;
+    Ok((kind, target))
+}
+
+/// The activity-log action name for an edit of the given kind.
+fn edit_action(kind: DetailPageKind) -> &'static str {
+    match kind {
+        DetailPageKind::Project => "project-edit",
+        DetailPageKind::Event => "event-edit",
+    }
+}
+
+fn auth_required() -> poem::Error {
+    poem::Error::from_string("Authentication required", poem::http::StatusCode::UNAUTHORIZED)
+}
+
+/// Load the current contact list via the peered field for either kind.
+async fn load_contacts(kind: DetailPageKind, target: Ulid) -> Result<Vec<Contact>, Error> {
+    match kind {
+        DetailPageKind::Event => {
+            match EventField::load((target, EventFieldType::Contacts)).await?.field {
+                EventFieldValue::Contacts(contacts) => Ok(contacts.into_vec()),
+                _ => Ok(Vec::new()),
+            }
+        }
+        DetailPageKind::Project => {
+            match ProjectField::load((target, ProjectFieldType::Contacts)).await?.field {
+                ProjectFieldValue::Contacts(contacts) => Ok(contacts.into_vec()),
+                _ => Ok(Vec::new()),
+            }
+        }
+    }
+}
+
+/// Persist a contact list via the peered field for either kind.
+async fn store_contacts(
+    kind: DetailPageKind,
+    target: Ulid,
+    contacts: &[Contact],
+) -> Result<(), Error> {
+    let boxed = contacts.to_vec().into_boxed_slice();
+    match kind {
+        DetailPageKind::Event => {
+            EventField::new(target, EventFieldValue::Contacts(boxed)).store().await
+        }
+        DetailPageKind::Project => {
+            ProjectField::new(target, ProjectFieldValue::Contacts(boxed)).store().await
+        }
+    }
+}
+
+fn contacts_response(target_id: String, contacts: &[Contact]) -> poem::Result<poem::Response> {
+    let html = ContactsDisplay {
+        target_id,
+        contacts: contacts_to_display(contacts),
+        can_edit: true,
+    }
+    .render_once()
+    .map_err(internal_error)?;
+
+    Ok(Html(html).into_response())
+}
+
+/// POST /-detail/:id/contacts — add an organizer contact (editors only).
+#[handler]
+pub async fn add_contact(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+    poem::web::Form(form): poem::web::Form<ContactForm>,
+) -> poem::Result<poem::Response> {
+    let user = user_info.ok_or_else(auth_required)?;
+    let (kind, target) = require_editor(&id, &user).await?;
+
+    let email = form.email.trim();
+    if email.is_empty() {
+        return Err(poem::Error::from_string(
+            "A contact email is required.",
+            poem::http::StatusCode::BAD_REQUEST,
+        ));
+    }
+
+    let mut contacts = load_contacts(kind, target).await.map_err(internal_error)?;
+    contacts.push(Contact {
+        contact_id: Ulid::new(),
+        role: parse_contact_role(&form.role),
+        name: trimmed_option(&form.name),
+        affiliation: trimmed_option(&form.affiliation),
+        email: email.to_string(),
+        phone: trimmed_option(&form.phone),
+        address: trimmed_option(&form.address),
+    });
+
+    store_contacts(kind, target, &contacts)
+        .await
+        .map_err(internal_error)?;
+
+    let _ = log_activity(None, edit_action(kind), user.user_id, target, "contacts".to_string()).await;
+
+    contacts_response(id, &contacts)
+}
+
+/// DELETE /-detail/:id/contacts/:contact_id — remove an organizer contact.
+#[handler]
+pub async fn delete_contact(
+    Path((id, contact_id)): Path<(String, String)>,
+    Authenticated(user_info): Authenticated,
+) -> poem::Result<poem::Response> {
+    let user = user_info.ok_or_else(auth_required)?;
+    let (kind, target) = require_editor(&id, &user).await?;
+
+    let contacts: Vec<Contact> = load_contacts(kind, target)
+        .await
+        .map_err(internal_error)?
+        .into_iter()
+        .filter(|c| c.contact_id.to_string() != contact_id)
+        .collect();
+
+    store_contacts(kind, target, &contacts)
+        .await
+        .map_err(internal_error)?;
+
+    let _ = log_activity(None, edit_action(kind), user.user_id, target, "contacts".to_string()).await;
+
+    contacts_response(id, &contacts)
+}
+
+#[derive(TemplateOnce)]
+#[template(path = "pages/detail_page_contact_edit.stpl.html")]
+pub struct ContactEditForm {
+    pub target_id: String,
+    pub contact_id: String,
+    pub role: String,
+    pub name: String,
+    pub affiliation: String,
+    pub email: String,
+    pub phone: String,
+    pub address: String,
+}
+
+/// GET /-detail/:id/contacts — full contacts card (used to refresh / cancel an edit).
+#[handler]
+pub async fn get_contacts_display(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> poem::Result<poem::Response> {
+    let user = user_info.ok_or_else(auth_required)?;
+    let (kind, target) = require_editor(&id, &user).await?;
+    let contacts = load_contacts(kind, target).await.map_err(internal_error)?;
+    contacts_response(id, &contacts)
+}
+
+/// GET /-detail/:id/contacts/:contact_id/edit — inline edit form for one contact.
+#[handler]
+pub async fn get_contact_edit_form(
+    Path((id, contact_id)): Path<(String, String)>,
+    Authenticated(user_info): Authenticated,
+) -> poem::Result<poem::Response> {
+    let user = user_info.ok_or_else(auth_required)?;
+    let (kind, target) = require_editor(&id, &user).await?;
+
+    let contact = load_contacts(kind, target)
+        .await
+        .map_err(internal_error)?
+        .into_iter()
+        .find(|c| c.contact_id.to_string() == contact_id)
+        .ok_or_else(|| {
+            poem::Error::from_string("Contact not found", poem::http::StatusCode::NOT_FOUND)
+        })?;
+
+    let html = ContactEditForm {
+        target_id: id,
+        contact_id,
+        role: contact_role_str(contact.role).to_string(),
+        name: contact.name.unwrap_or_default(),
+        affiliation: contact.affiliation.unwrap_or_default(),
+        email: contact.email,
+        phone: contact.phone.unwrap_or_default(),
+        address: contact.address.unwrap_or_default(),
+    }
+    .render_once()
+    .map_err(internal_error)?;
+    Ok(Html(html).into_response())
+}
+
+/// PUT /-detail/:id/contacts/:contact_id — save edits to a contact.
+#[handler]
+pub async fn update_contact(
+    Path((id, contact_id)): Path<(String, String)>,
+    Authenticated(user_info): Authenticated,
+    poem::web::Form(form): poem::web::Form<ContactForm>,
+) -> poem::Result<poem::Response> {
+    let user = user_info.ok_or_else(auth_required)?;
+    let (kind, target) = require_editor(&id, &user).await?;
+
+    let email = form.email.trim();
+    if email.is_empty() {
+        return Err(poem::Error::from_string(
+            "A contact email is required.",
+            poem::http::StatusCode::BAD_REQUEST,
+        ));
+    }
+
+    let mut contacts = load_contacts(kind, target).await.map_err(internal_error)?;
+
+    let found = contacts.iter_mut().find(|c| c.contact_id.to_string() == contact_id);
+    let Some(contact) = found else {
+        return Err(poem::Error::from_string(
+            "Contact not found",
+            poem::http::StatusCode::NOT_FOUND,
+        ));
+    };
+    contact.role = parse_contact_role(&form.role);
+    contact.name = trimmed_option(&form.name);
+    contact.affiliation = trimmed_option(&form.affiliation);
+    contact.email = email.to_string();
+    contact.phone = trimmed_option(&form.phone);
+    contact.address = trimmed_option(&form.address);
+
+    store_contacts(kind, target, &contacts)
+        .await
+        .map_err(internal_error)?;
+
+    let _ = log_activity(None, edit_action(kind), user.user_id, target, "contacts".to_string()).await;
+
+    contacts_response(id, &contacts)
+}
+
+// ---------------------------------------------------------------------------
+// Page managers (non-staff editors): private (editors-only) inline editor,
+// mirroring contacts. Changes peer through {Project,Event}Field::PageEditorIds.
+// ---------------------------------------------------------------------------
+
+#[derive(TemplateOnce)]
+#[template(path = "pages/detail_page_managers.stpl.html")]
+pub struct ManagersDisplay {
+    pub target_id: String,
+    pub managers: Vec<super::detail_page::ManagerDisplay>,
+    pub can_edit: bool,
+    pub error: Option<String>,
+}
+
+#[derive(TemplateOnce)]
+#[template(path = "pages/detail_page_manager_edit.stpl.html")]
+pub struct ManagerEditForm {
+    pub target_id: String,
+    pub user_id: String,
+    pub email: String,
+}
+
+#[derive(serde::Deserialize)]
+struct ManagerForm {
+    #[serde(default)]
+    email: String,
+}
+
+/// Load the current manager (page-editor) ids via the peered field for either kind.
+async fn load_manager_ids(kind: DetailPageKind, target: Ulid) -> Result<Vec<Ulid>, Error> {
+    match kind {
+        DetailPageKind::Event => {
+            match EventField::load((target, EventFieldType::PageEditorIds)).await?.field {
+                EventFieldValue::PageEditorIds(ids) => Ok(ids.into_vec()),
+                _ => Ok(Vec::new()),
+            }
+        }
+        DetailPageKind::Project => {
+            match ProjectField::load((target, ProjectFieldType::PageEditorIds)).await?.field {
+                ProjectFieldValue::PageEditorIds(ids) => Ok(ids.into_vec()),
+                _ => Ok(Vec::new()),
+            }
+        }
+    }
+}
+
+/// Persist the manager (page-editor) ids via the peered field for either kind.
+async fn store_manager_ids(
+    kind: DetailPageKind,
+    target: Ulid,
+    ids: &[Ulid],
+) -> Result<(), Error> {
+    let boxed = ids.to_vec().into_boxed_slice();
+    match kind {
+        DetailPageKind::Event => {
+            EventField::new(target, EventFieldValue::PageEditorIds(boxed)).store().await
+        }
+        DetailPageKind::Project => {
+            ProjectField::new(target, ProjectFieldValue::PageEditorIds(boxed)).store().await
+        }
+    }
+}
+
+async fn managers_response(
+    target_id: String,
+    ids: &[Ulid],
+    error: Option<String>,
+) -> poem::Result<poem::Response> {
+    let resolved: HashMap<Ulid, String> = resolve_user_names(ids.to_vec())
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+
+    let managers = ids
+        .iter()
+        .map(|uid| super::detail_page::ManagerDisplay {
+            user_id: uid.to_string(),
+            email: resolved.get(uid).cloned().unwrap_or_else(|| uid.to_string()),
+        })
+        .collect();
+
+    let html = ManagersDisplay {
+        target_id,
+        managers,
+        can_edit: true,
+        error,
+    }
+    .render_once()
+    .map_err(internal_error)?;
+    Ok(Html(html).into_response())
+}
+
+/// Resolve an email address to a user id via the user service.
+async fn user_id_for_email(email: &str) -> Option<Ulid> {
+    let response: UserByEmailResponse = request(
+        "user.search.by_email",
+        UserByEmailRequest {
+            email: email.to_string(),
+        },
+    )
+    .await
+    .ok()?;
+    if !response.found {
+        return None;
+    }
+    response.user_id.and_then(|s| s.parse::<Ulid>().ok())
+}
+
+/// GET /-detail/:id/managers — full managers card.
+#[handler]
+pub async fn get_managers_display(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> poem::Result<poem::Response> {
+    let user = user_info.ok_or_else(auth_required)?;
+    let (kind, target) = require_editor(&id, &user).await?;
+    let ids = load_manager_ids(kind, target).await.map_err(internal_error)?;
+    managers_response(id, &ids, None).await
+}
+
+/// POST /-detail/:id/managers — grant edit access to the account with this email.
+#[handler]
+pub async fn add_manager(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+    poem::web::Form(form): poem::web::Form<ManagerForm>,
+) -> poem::Result<poem::Response> {
+    let user = user_info.ok_or_else(auth_required)?;
+    let (kind, target) = require_editor(&id, &user).await?;
+
+    let mut ids = load_manager_ids(kind, target).await.map_err(internal_error)?;
+
+    let email = form.email.trim();
+    if email.is_empty() {
+        return managers_response(id, &ids, Some("Enter an email address.".to_string())).await;
+    }
+
+    let Some(new_id) = user_id_for_email(email).await else {
+        return managers_response(
+            id,
+            &ids,
+            Some(format!("No SciStarter account found for {email}.")),
+        )
+        .await;
+    };
+
+    if !ids.contains(&new_id) {
+        ids.push(new_id);
+        store_manager_ids(kind, target, &ids)
+            .await
+            .map_err(internal_error)?;
+        let _ =
+            log_activity(None, edit_action(kind), user.user_id, target, "managers".to_string()).await;
+    }
+
+    managers_response(id, &ids, None).await
+}
+
+/// GET /-detail/:id/managers/:user_id/edit — inline edit form (change the account).
+#[handler]
+pub async fn get_manager_edit_form(
+    Path((id, user_id)): Path<(String, String)>,
+    Authenticated(user_info): Authenticated,
+) -> poem::Result<poem::Response> {
+    let user = user_info.ok_or_else(auth_required)?;
+    require_editor(&id, &user).await?;
+
+    let email = if let Ok(uid) = user_id.parse::<Ulid>() {
+        resolve_user_names(vec![uid])
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .next()
+            .map(|(_, email)| email)
+            .unwrap_or_else(|| user_id.clone())
+    } else {
+        user_id.clone()
+    };
+
+    let html = ManagerEditForm {
+        target_id: id,
+        user_id,
+        email,
+    }
+    .render_once()
+    .map_err(internal_error)?;
+    Ok(Html(html).into_response())
+}
+
+/// PUT /-detail/:id/managers/:user_id — replace this manager with the account for a new email.
+#[handler]
+pub async fn update_manager(
+    Path((id, user_id)): Path<(String, String)>,
+    Authenticated(user_info): Authenticated,
+    poem::web::Form(form): poem::web::Form<ManagerForm>,
+) -> poem::Result<poem::Response> {
+    let user = user_info.ok_or_else(auth_required)?;
+    let (kind, target) = require_editor(&id, &user).await?;
+
+    let mut ids = load_manager_ids(kind, target).await.map_err(internal_error)?;
+
+    let email = form.email.trim();
+    let Some(new_id) = user_id_for_email(email).await else {
+        return managers_response(
+            id,
+            &ids,
+            Some(format!("No SciStarter account found for {email}.")),
+        )
+        .await;
+    };
+
+    // Drop the edited entry (and any existing copy of the new account), then
+    // add the new account once — leaving exactly one entry for it.
+    ids.retain(|uid| uid.to_string() != user_id && *uid != new_id);
+    ids.push(new_id);
+
+    store_manager_ids(kind, target, &ids)
+        .await
+        .map_err(internal_error)?;
+
+    let _ = log_activity(None, edit_action(kind), user.user_id, target, "managers".to_string()).await;
+
+    managers_response(id, &ids, None).await
+}
+
+/// DELETE /-detail/:id/managers/:user_id — revoke edit access.
+#[handler]
+pub async fn delete_manager(
+    Path((id, user_id)): Path<(String, String)>,
+    Authenticated(user_info): Authenticated,
+) -> poem::Result<poem::Response> {
+    let user = user_info.ok_or_else(auth_required)?;
+    let (kind, target) = require_editor(&id, &user).await?;
+
+    let ids: Vec<Ulid> = load_manager_ids(kind, target)
+        .await
+        .map_err(internal_error)?
+        .into_iter()
+        .filter(|uid| uid.to_string() != user_id)
+        .collect();
+
+    store_manager_ids(kind, target, &ids)
+        .await
+        .map_err(internal_error)?;
+
+    let _ = log_activity(None, edit_action(kind), user.user_id, target, "managers".to_string()).await;
+
+    managers_response(id, &ids, None).await
 }
 
 // ---------------------------------------------------------------------------

@@ -1,0 +1,43 @@
+<div id="contact-row-<%= &self.contact_id %>">
+  <form class="p-3 border border-amber-300 rounded-sm bg-white space-y-2"
+        hx-put="/-detail/<%= &self.target_id %>/contacts/<%= &self.contact_id %>"
+        hx-target="#event-contacts"
+        hx-swap="outerHTML">
+    <div>
+      <label class="block text-xs font-semibold mb-1">Role</label>
+      <select name="role">
+        <option value="ContactPerson" <% if self.role == "ContactPerson" { %>selected<% } %>>Contact person</option>
+        <option value="Manager" <% if self.role == "Manager" { %>selected<% } %>>Manager</option>
+        <option value="Technical" <% if self.role == "Technical" { %>selected<% } %>>Technical</option>
+        <option value="Notification" <% if self.role == "Notification" { %>selected<% } %>>Notification</option>
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs font-semibold mb-1">Name</label>
+      <input type="text" name="name" value="<%= &self.name %>">
+    </div>
+    <div>
+      <label class="block text-xs font-semibold mb-1">Email (required)</label>
+      <input type="email" name="email" value="<%= &self.email %>" required>
+    </div>
+    <div>
+      <label class="block text-xs font-semibold mb-1">Affiliation</label>
+      <input type="text" name="affiliation" value="<%= &self.affiliation %>">
+    </div>
+    <div>
+      <label class="block text-xs font-semibold mb-1">Phone</label>
+      <input type="tel" name="phone" value="<%= &self.phone %>">
+    </div>
+    <div>
+      <label class="block text-xs font-semibold mb-1">Mailing address</label>
+      <input type="text" name="address" value="<%= &self.address %>">
+    </div>
+    <div class="flex gap-2">
+      <button type="submit" class="btn btn-primary btn-xs">Save</button>
+      <button type="button" class="btn btn-xs"
+              hx-get="/-detail/<%= &self.target_id %>/contacts"
+              hx-target="#event-contacts"
+              hx-swap="outerHTML">Cancel</button>
+    </div>
+  </form>
+</div>

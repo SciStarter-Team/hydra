@@ -1,95 +1,88 @@
-<div class="ss-container !pt-8 !pb-8 mx-auto ">
-  <% if self.unauthorized { %>
-    <p>
-      You're not logged in to an account which is authorized to access that resource. If you have a different account which might be allowed, try logging in to that account now.
-    </p>
-  <% } %>
-  <% if self.system { %>
-    <p>
-      Something went wrong on our end. It's not your fault. Please wait a little while and then try again.
-    </p>
-  <% } %>
-  <% if self.password { %>
-    <p>
-      That password was incorrect
-    </p>
-  <% } %>
-  <% if self.turnstile_failed { %>
-    <p>
-      Please confirm you are human and try again.
-    </p>
-  <% } %>
-  <div class="flex flex-col md:flex-row">
-    <div>
-      <h3>Log In</h3>
-      <form method=post action="/login" id="login-form" hx-on:submit="handle_passkey_login(event)">
-        <p>
-          <label>
-            Email
-            <input class="p-1 border-1 border-solid" type=email name=email id="login-email" required>
-          </label>
-        </p>
-        <p>
-          <label>
-            Password
-            <input class="p-1 border-1 border-solid disabled:opacity-50" type=password name=password id="login-password">
-          </label>
-        </p>
-        <p hx-on::load="hide_if_no_webauthn(this)">
-          <label>
-            <input type=checkbox id="use-passkey-login" name=use_passkey value=true hx-on:change="let el = htmx.find('#login-password'); el.required = !this.checked; el.disabled=this.checked;">
-            Use passkey instead of password
-          </label>
-        </p>
-        <p><input class="btn btn-primary" type=submit value="Log In"></p>
-      </form>
-    </div>
-    <div>
-      <h3>Sign Up</h3>
-      <form method=post action="/signup" id="signup-form" hx-on:submit="handle_passkey_signup(event)">
-        <p>
-          <label>
-            Handle
-            <input class="p-1 border-1 border-solid" type=text name=handle id="signup-handle" required>
-          </label>
-        </p>
-        <p>
-          <label>
-            Email
-            <input class="p-1 border-1 border-solid" type=email name=email id="signup-email" required>
-          </label>
-        </p>
-        <p>
-          <label>
-            Password
-            <input class="p-1 border-1 border-solid disabled:opacity-50" type=password name=password1 id="signup-password1">
-          </label>
-          <label>
-            Re-type Password
-            <input class="p-1 border-1 border-solid disabled:opacity-50" type=password name=password2 id="signup-password2">
-          </label>
-        </p>
-        <p hx-on::load="hide_if_no_webauthn(this)">
-          <label>
-            <input type=checkbox id="use-passkey" name=use_passkey value=true hx-on:change="let el1 = htmx.find('#signup-password1'); let el2 = htmx.find('#signup-password2'); el1.required = !this.checked; el1.disabled=this.checked; el2.required = !this.checked; el2.disabled=this.checked;">
-            Use passkey instead of password
-          </label>
-        </p>
-        <p>
-          <label>
-            Zip/Postal Code
-            <input class="p-1 border-1 border-solid" type=text name=zipcode id="signup-zipcode">
-          </label>
-        </p>
-        <p>
-          <label>
-            Sign up for our newsletter
-            <input type=checkbox name=newsletter value=true checked>
-          </label>
-        </p>
-        <div id="signup-turnstile" class="cf-turnstile my-2" data-sitekey="<%= self.turnstile_sitekey %>" data-callback="onSignupTurnstileSuccess" data-expired-callback="onSignupTurnstileReset" data-error-callback="onSignupTurnstileReset"></div>
-        <p><input class="btn btn-primary" type=submit value="Sign Up"></p>
-      </form>
+<div class="ss-container !pt-8 !pb-12 mx-auto">
+  <div class="ss-small-container">
+    <h1 class="text-center">Log In or Sign Up</h1>
+
+    <% if self.unauthorized { %>
+      <div class="ss-alert">
+        You're not logged in to an account which is authorized to access that resource. If you have a different account which might be allowed, try logging in to that account now.
+      </div>
+    <% } %>
+    <% if self.system { %>
+      <div class="ss-alert">
+        Something went wrong on our end. It's not your fault. Please wait a little while and then try again.
+      </div>
+    <% } %>
+    <% if self.password { %>
+      <div class="ss-alert">
+        That password was incorrect.
+      </div>
+    <% } %>
+    <% if self.turnstile_failed { %>
+      <div class="ss-alert">
+        Please confirm you are human and try again.
+      </div>
+    <% } %>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+      <div class="bg-white border border-linework rounded-lg shadow-sm p-6">
+        <h3>Log In</h3>
+        <form method=post action="/login" id="login-form" hx-on:submit="handle_passkey_login(event)">
+          <div class="mb-4">
+            <label for="login-email">Email</label>
+            <input type=email name=email id="login-email" required>
+          </div>
+          <div class="mb-4">
+            <label for="login-password">Password</label>
+            <input class="disabled:opacity-50" type=password name=password id="login-password">
+          </div>
+          <div class="mb-4" hx-on::load="hide_if_no_webauthn(this)">
+            <label class="flex items-center gap-2">
+              <input class="w-auto" type=checkbox id="use-passkey-login" name=use_passkey value=true hx-on:change="let el = htmx.find('#login-password'); el.required = !this.checked; el.disabled=this.checked;">
+              Use passkey instead of password
+            </label>
+          </div>
+          <input class="btn btn-primary w-full" type=submit value="Log In">
+        </form>
+      </div>
+      <div class="bg-white border border-linework rounded-lg shadow-sm p-6">
+        <h3>Sign Up</h3>
+        <form method=post action="/signup" id="signup-form" hx-on:submit="handle_passkey_signup(event)">
+          <div class="mb-4">
+            <label for="signup-handle">Handle</label>
+            <input type=text name=handle id="signup-handle" required>
+          </div>
+          <div class="mb-4">
+            <label for="signup-email">Email</label>
+            <input type=email name=email id="signup-email" required>
+          </div>
+          <div class="mb-4">
+            <label for="signup-password1">Password</label>
+            <input class="disabled:opacity-50" type=password name=password1 id="signup-password1">
+          </div>
+          <div class="mb-4">
+            <label for="signup-password2">Re-type Password</label>
+            <input class="disabled:opacity-50" type=password name=password2 id="signup-password2">
+          </div>
+          <div class="mb-4" hx-on::load="hide_if_no_webauthn(this)">
+            <label class="flex items-center gap-2">
+              <input class="w-auto" type=checkbox id="use-passkey" name=use_passkey value=true hx-on:change="let el1 = htmx.find('#signup-password1'); let el2 = htmx.find('#signup-password2'); el1.required = !this.checked; el1.disabled=this.checked; el2.required = !this.checked; el2.disabled=this.checked;">
+              Use passkey instead of password
+            </label>
+          </div>
+          <div class="mb-4">
+            <label for="signup-zipcode">Zip/Postal Code</label>
+            <input type=text name=zipcode id="signup-zipcode">
+          </div>
+          <div class="mb-4">
+            <label class="flex items-center gap-2">
+              <input class="w-auto" type=checkbox name=newsletter value=true checked>
+              Sign up for our newsletter
+            </label>
+          </div>
+          <div id="signup-turnstile" class="cf-turnstile my-4" data-sitekey="<%= self.turnstile_sitekey %>" data-callback="onSignupTurnstileSuccess" data-expired-callback="onSignupTurnstileReset" data-error-callback="onSignupTurnstileReset"></div>
+          <input class="btn btn-primary w-full" type=submit value="Sign Up">
+        </form>
+      </div>
     </div>
   </div>
 </div>

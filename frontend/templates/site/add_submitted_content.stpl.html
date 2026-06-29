@@ -1,0 +1,16 @@
+<div class="ss-container !pt-8 !pb-12 mx-auto">
+  <div class="ss-small-container text-center">
+    <h1>Thanks for your submission!</h1>
+    <% if !self.name.is_empty() { %>
+      <p class="intro">Your event &ldquo;<%= self.name %>&rdquo; has been submitted and is now pending review by the SciStarter team.</p>
+    <% } else { %>
+      <p class="intro">Your event has been submitted and is now pending review by the SciStarter team.</p>
+    <% } %>
+    <p>We&rsquo;ll take a look and add it to the Event Calendar once it&rsquo;s approved.</p>
+
+    <div class="flex items-center justify-center gap-3 mt-6">
+      <a class="btn btn-primary" href="/add">Add another</a>
+      <a class="btn" href="/">Back to home</a>
+    </div>
+  </div>
+</div>

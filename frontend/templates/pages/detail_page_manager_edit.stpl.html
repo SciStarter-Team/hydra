@@ -1,0 +1,16 @@
+<div id="manager-row-<%= &self.user_id %>">
+  <form class="p-3 border border-indigo-300 rounded-sm bg-white flex gap-2 items-end flex-wrap"
+        hx-put="/-detail/<%= &self.target_id %>/managers/<%= &self.user_id %>"
+        hx-target="#event-managers"
+        hx-swap="outerHTML">
+    <div class="grow">
+      <label class="block text-xs font-semibold mb-1">Account email</label>
+      <input type="email" name="email" value="<%= &self.email %>" required>
+    </div>
+    <button type="submit" class="btn btn-primary btn-xs">Save</button>
+    <button type="button" class="btn btn-xs"
+            hx-get="/-detail/<%= &self.target_id %>/managers"
+            hx-target="#event-managers"
+            hx-swap="outerHTML">Cancel</button>
+  </form>
+</div>

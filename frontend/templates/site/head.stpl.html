@@ -34,6 +34,9 @@
   <link href='/-static/maplibre-gl.css' rel='stylesheet' />
   <script src='/-static/maplibre-gl.js'></script>
 <% } %>
+<% if self.enable_region_editor { %>
+  <script src="/-static/js/region-editor.js" defer></script>
+<% } %>
 <% if self.enable_quill { %>
   <%# https://quilljs.com/docs/quickstart %>
   <link href="/-static/quill.snow.css" rel="stylesheet" />

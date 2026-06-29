@@ -117,7 +117,11 @@
       <%+ self.field("description") %>
       <% } %>
 
-      <% if !self.location_name.is_empty() || !self.location_description.is_empty() || !self.address.is_empty() || self.entirely_online || self.can_edit { %>
+      <% if self.kind.is_event() && !self.part_of_name.is_empty() { %>
+      <p class="mb-4 text-sm text-neutral-mid">Part of <a class="text-primary-action underline" href="<%= &self.part_of_path %>"><%= &self.part_of_name %></a></p>
+      <% } %>
+
+      <% if !self.location_name.is_empty() || !self.location_description.is_empty() || !self.address.is_empty() || self.entirely_online || self.can_edit || (self.kind.is_event() && self.region_geojson.is_some()) { %>
       <div class="border border-linework rounded-sm bg-primary-light mb-4">
         <dl>
           <dt class="ribbon-project bg-primary-dark text-white">Where</dt>
@@ -138,6 +142,27 @@
               View Map
             </button>
             <% } %>
+            <% if self.kind.is_event() { if let Some(geojson) = &self.region_geojson { %>
+            <div id="detail-region-map" class="mt-3" style="height:320px;width:100%;border-radius:4px;overflow:hidden;"></div>
+            <script>
+              (function () {
+                if (typeof maplibregl === "undefined") return;
+                var data = <%- geojson %>;
+                if (!data || !data.coordinates) return;
+                var map = new maplibregl.Map({ container: "detail-region-map", style: "https://tiles.openfreemap.org/styles/liberty", center: [-98.5, 39.8], zoom: 3 });
+                map.on("load", function () {
+                  map.addSource("region", { type: "geojson", data: { type: "Feature", geometry: data, properties: {} } });
+                  map.addLayer({ id: "region-fill", type: "fill", source: "region", paint: { "fill-color": "#037F9B", "fill-opacity": 0.25 } });
+                  map.addLayer({ id: "region-line", type: "line", source: "region", paint: { "line-color": "#037F9B", "line-width": 2 } });
+                  try {
+                    var b = new maplibregl.LngLatBounds();
+                    (function ext(c) { if (typeof c[0] === "number") { b.extend(c); } else { c.forEach(ext); } })(data.coordinates);
+                    map.fitBounds(b, { padding: 30, maxZoom: 12, duration: 0 });
+                  } catch (e) {}
+                });
+              })();
+            </script>
+            <% } } %>
           </dd>
         </dl>
       </div>
@@ -154,9 +179,22 @@
           <dt class="ribbon-project bg-primary-dark text-white">When</dt>
           <dd class="p-4">
             <%+ crate::component::detail_page_edit::InstancesDisplay { target_id: self.target_id.clone(), instances: self.instances.clone(), can_edit: self.can_edit } %>
+            <% if let Some(ticketing) = &self.ticketing_begins { %>
+            <p class="mt-3 text-sm"><strong>Tickets / registration open:</strong> <%- local_time(ticketing, TimeFormat::DateTime) %></p>
+            <% } %>
           </dd>
         </dl>
       </div>
+      <% } %>
+
+      <%/* Organizer contact(s) — private, editors only (never public) */%>
+      <% if self.can_edit { %>
+      <%+ crate::component::detail_page_edit::ContactsDisplay { target_id: self.target_id.clone(), contacts: self.contacts.clone(), can_edit: self.can_edit } %>
+      <% } %>
+
+      <%/* Non-staff page managers — private, editors only (never public) */%>
+      <% if self.can_edit { %>
+      <%+ crate::component::detail_page_edit::ManagersDisplay { target_id: self.target_id.clone(), managers: self.managers.clone(), can_edit: self.can_edit, error: None } %>
       <% } %>
 
       <%/* More Info accordion (project only) */%>
