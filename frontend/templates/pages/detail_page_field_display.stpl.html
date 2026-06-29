@@ -18,5 +18,8 @@
   </button>
   <% } %>
   <% } %>
+  <% if self.can_edit && self.show_label && !self.label.is_empty() { %>
+  <div class="edit-only text-xs font-semibold uppercase tracking-wide text-neutral-mid mb-0.5"><%= &self.label %></div>
+  <% } %>
   <%- &self.content_html %>
 </div>

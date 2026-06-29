@@ -3287,59 +3287,11 @@ async fn projects_create(
     new_project.authoritative = true;
     new_project.status = crate::project::ProjectStatus::Active;
 
-    // Save the new project to the database using LoadStorePeered
-    match new_project.store().await {
-        Ok(_) => {
-            // Create entity for the project
-            let entity = crate::entity::Entity::new_by_name(
-                &form.name,
-                crate::entity::EntityKind::Project,
-                crate::entity::EntityTarget::Ulid(project_id),
-            )
-            .await?;
-
-            // Set publish status on entity
-            let entity_with_publish = crate::entity::Entity::new_with_publish(
-                entity.slug(),
-                *entity.kind(),
-                entity.target().clone(),
-                form.publish,
-            );
-            entity_with_publish.store().await?;
-
-            // Log the activity
-            common::service::log_activity(
-                None,
-                "project-create",
-                user_info.user_id,
-                project_id,
-                format!("name={}", form.name),
-            )
-            .await?;
-
-            // Fire project submission triggers
-            trigger_email(
-                TriggerEvent::ProjectSubmitted,
-                user_info.user_id,
-                Some(&[
-                    ("project_name".to_string(), form.name.clone()),
-                    ("project_id".to_string(), project_id.to_string()),
-                ]),
-            )
-            .await
-            .ok();
-
-            trigger_email(
-                TriggerEvent::ProjectCreatedStaff,
-                user_info.user_id,
-                Some(&[
-                    ("project_name".to_string(), form.name.clone()),
-                    ("project_id".to_string(), project_id.to_string()),
-                ]),
-            )
-            .await
-            .ok();
-
+    // Persist via the shared create core (also used by the public add form).
+    match crate::project::all::persist_new_project(new_project, form.publish, user_info.user_id)
+        .await
+    {
+        Ok(_slug) => {
             // Redirect to the project edit page
             Ok(poem::Response::builder()
                 .status(poem::http::StatusCode::SEE_OTHER)

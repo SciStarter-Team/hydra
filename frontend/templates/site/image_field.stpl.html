@@ -1,0 +1,21 @@
+<div>
+  <label for="add-image">Image</label>
+  <input type="url" id="add-image" name="image" value="<%= self.value %>" placeholder="https://&hellip;">
+  <div class="flex items-center gap-2 mt-1">
+    <input type="file" accept="image/*" name="file"
+      class="text-sm text-neutral-mid cursor-pointer file:mr-3 file:cursor-pointer file:rounded file:border-0 file:bg-primary-action file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:opacity-90"
+      hx-post="/add/upload-image" hx-encoding="multipart/form-data" hx-trigger="change"
+      hx-target="#add-image-status" hx-swap="innerHTML">
+    <span id="add-image-status" class="text-sm text-neutral-mid"></span>
+  </div>
+  <div id="add-image-preview" class="mt-2">
+    <% if !self.value.is_empty() { %>
+    <img src="<%= self.value %>" class="max-h-32 rounded border border-linework" alt="Image preview">
+    <% } %>
+  </div>
+</div>
+
+<div>
+  <label for="add-image-credit">Image credit</label>
+  <input type="text" id="add-image-credit" name="image_credit" value="<%= self.credit %>">
+</div>

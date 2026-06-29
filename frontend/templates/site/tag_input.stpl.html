@@ -1,0 +1,10 @@
+<div data-tag-input>
+  <div class="tag-pills flex flex-wrap gap-2 mb-2"></div>
+  <input type="hidden" name="tags" class="tags-value" value="<%= self.value %>">
+  <div class="relative">
+    <input type="text" class="tag-input" placeholder="Add a tag&hellip;" autocomplete="off"
+      hx-get="/add/tag-search" hx-trigger="input changed delay:200ms" hx-target="next .tag-suggestions" hx-swap="innerHTML">
+    <div class="tag-suggestions border border-linework rounded-md mt-1 bg-white empty:hidden"></div>
+  </div>
+  <p class="text-sm text-neutral-mid mt-1">Press Enter or pick a suggestion to add a tag.</p>
+</div>

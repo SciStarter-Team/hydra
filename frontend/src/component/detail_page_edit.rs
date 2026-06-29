@@ -1078,6 +1078,10 @@ pub struct FieldDisplay {
     /// Whether the edit button flows inline (for inline/icon fields) rather than
     /// being absolutely positioned in the corner.
     pub inline_button: bool,
+    /// Whether to show the field label in editing mode. False for fields whose
+    /// rendered content already includes a heading (ribbon boxes, the online
+    /// toggle) or that are icon-only adornments.
+    pub show_label: bool,
 }
 
 impl FieldDisplay {
@@ -1092,6 +1096,7 @@ impl FieldDisplay {
         FieldDisplay {
             wrapper_extra: field_wrapper_extra(field_type),
             inline_button: field_inline_button(field_type),
+            show_label: !field_self_labeled(field_type),
             target_id,
             field_type: field_type.to_string(),
             label,
@@ -1100,6 +1105,33 @@ impl FieldDisplay {
             empty,
         }
     }
+}
+
+/// Fields whose rendered content already carries its own heading (ribbon
+/// boxes / the online toggle), or that are icon-only links — for these the
+/// wrapper should not add a separate label.
+fn field_self_labeled(field_type: &str) -> bool {
+    matches!(
+        field_type,
+        "goal"
+            | "task"
+            | "description"
+            | "how_to_join"
+            | "video_url"
+            | "total_expense"
+            | "time_per_participation"
+            | "audiences"
+            | "participation_schedule"
+            | "training_materials"
+            | "classroom_materials"
+            | "entirely_online"
+            | "mobile_app_url"
+            | "mobile_app_url_ios"
+            | "mobile_app_url_android"
+            | "facebook_page"
+            | "twitter_name"
+            | "instagram_page"
+    )
 }
 
 /// Extra wrapper classes per field, matching the original full-page layout.
@@ -1480,13 +1512,13 @@ fn ribbon_subbox(label: &str, content: impl std::fmt::Display) -> String {
 }
 
 fn not_set() -> &'static str {
-    r#"<span class="text-gray-400 italic">(not set)</span>"#
+    r#"<span class="edit-only text-gray-400 italic">Empty</span>"#
 }
 
 /// Format a field value for display as HTML
 async fn format_image_display(target_id: &str, value: &str, kind: DetailPageKind) -> String {
     if value.is_empty() {
-        return r#"<div class="rounded-sm border border-linework bg-gray-100 h-48 flex items-center justify-center text-gray-400 italic">(no image)</div>"#.to_string();
+        return r#"<div class="rounded-sm border border-linework bg-gray-100 h-48 flex items-center justify-center text-gray-400 italic">Empty</div>"#.to_string();
     }
     let credit = read_field_value(target_id, "image_credit", kind)
         .await
@@ -1502,11 +1534,6 @@ async fn format_image_display(target_id: &str, value: &str, kind: DetailPageKind
         ));
     }
     html
-}
-
-/// Placeholder shown to editors when an optional field is empty.
-fn edit_placeholder(text: &str) -> String {
-    format!(r#"<span class="edit-only text-gray-400 italic text-sm">{text}</span>"#)
 }
 
 // SVG glyphs reused from the full-page detail template, kept as constants so the
@@ -1539,7 +1566,10 @@ async fn format_display_value(
         // Hero
         "presenter" => {
             if empty {
-                r#"<h2 class="font-condensed uppercase text-gray-400 text-sm tracking-wider m-0 italic">(no presenter)</h2>"#.to_string()
+                format!(
+                    r#"<h2 class="font-condensed uppercase text-sm tracking-wider m-0">{}</h2>"#,
+                    not_set()
+                )
             } else {
                 format!(
                     r#"<h2 class="font-condensed uppercase text-accent1 text-sm tracking-wider m-0">{}</h2>"#,
@@ -1552,15 +1582,17 @@ async fn format_display_value(
             esc()
         ),
         "event_type" => {
-            if empty {
-                String::new()
-            } else {
+            if !empty {
                 format!(r#"<span class="btn btn-xs btn-secondary">{}</span>"#, esc())
+            } else if can_edit {
+                not_set().to_string()
+            } else {
+                String::new()
             }
         }
         "url" => {
             if empty {
-                r#"<span class="text-gray-400 italic">(no URL)</span>"#.to_string()
+                not_set().to_string()
             } else {
                 format!(
                     r#"<a href="{0}" class="text-primary-action flex gap-2" target="_blank" rel="noopener">{1}<span class="underline">{0}</span></a>"#,
@@ -1612,7 +1644,7 @@ async fn format_display_value(
             if !empty {
                 format!(r#"<p class="mb-1 font-semibold">{}</p>"#, esc())
             } else if can_edit {
-                edit_placeholder("Location name")
+                format!(r#"<p class="mb-1 font-semibold">{}</p>"#, not_set())
             } else {
                 String::new()
             }
@@ -1621,7 +1653,7 @@ async fn format_display_value(
             if !empty {
                 format!(r#"<p class="mb-1">{}</p>"#, esc())
             } else if can_edit {
-                edit_placeholder("Location description")
+                format!(r#"<p class="mb-1">{}</p>"#, not_set())
             } else {
                 String::new()
             }
@@ -1630,17 +1662,27 @@ async fn format_display_value(
             if !empty {
                 format!(r#"<p class="mb-1">{}</p>"#, esc())
             } else if can_edit {
-                edit_placeholder("Address")
+                format!(r#"<p class="mb-1">{}</p>"#, not_set())
             } else {
                 String::new()
             }
         }
-        "city" | "state" | "zip" => esc(),
-        "country" => {
-            if empty {
-                String::new()
+        "city" | "state" | "zip" => {
+            if !empty {
+                esc()
+            } else if can_edit {
+                not_set().to_string()
             } else {
+                String::new()
+            }
+        }
+        "country" => {
+            if !empty {
                 format!(r#"<p class="mb-2">{}</p>"#, esc())
+            } else if can_edit {
+                format!(r#"<p class="mb-2">{}</p>"#, not_set())
+            } else {
+                String::new()
             }
         }
 
@@ -1785,7 +1827,7 @@ async fn format_display_value(
         // Tags — chips linking to search
         "tags" => {
             if empty {
-                r#"<span class="text-gray-400 italic">(no tags)</span>"#.to_string()
+                not_set().to_string()
             } else {
                 let chips = value
                     .split(", ")

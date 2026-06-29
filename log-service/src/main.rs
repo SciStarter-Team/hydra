@@ -21,7 +21,8 @@ use handlers::{
     handle_articulate_completion_record, handle_clickthrough, handle_clickthrough_analytics,
     handle_contributors, handle_edit_log, handle_email_event, handle_external_link_clickthrough,
     handle_external_links, handle_go_url_stats, handle_health_check, handle_join,
-    handle_last_edited, handle_page_view, handle_participation_analytics, handle_project_likes,
+    handle_last_edited, handle_page_view, handle_participation_analytics,
+    handle_participation_by_email, handle_participation_summary, handle_project_likes,
     handle_project_member_count, handle_project_participation, handle_project_participation_record,
     handle_project_reviews, handle_rating_set, handle_recent_activity, handle_review_set,
     handle_search_event, handle_share, handle_top_performers_analytics, handle_user_emails_update,
@@ -221,6 +222,16 @@ async fn main() -> Result<()> {
         log_group,
         "participation_analytics",
         handle_participation_analytics
+    ));
+    toplevel.spawn(handler!(
+        log_group,
+        "participation_summary",
+        handle_participation_summary
+    ));
+    toplevel.spawn(handler!(
+        log_group,
+        "participation_by_email",
+        handle_participation_by_email
     ));
     toplevel.spawn(handler!(
         log_group,

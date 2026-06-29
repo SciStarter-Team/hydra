@@ -1,10 +1,15 @@
 <div class="region-editor" data-region-editor data-target="<%= self.field_id %>">
   <input type="hidden" name="<%= self.field_name %>" id="<%= self.field_id %>" value="<%= self.initial %>">
+  <div class="flex gap-2 mb-2">
+    <input type="text" class="region-lookup-input grow" placeholder="Look up a place (city, state, or country)&hellip;">
+    <button type="button" class="region-lookup-btn btn shrink-0">Look up</button>
+  </div>
+  <span class="region-lookup-status block text-sm text-neutral-mid mb-2"></span>
   <div class="region-editor-map" style="height: 320px; width: 100%; border-radius: 4px; overflow: hidden;"></div>
   <div class="flex items-center gap-3 mt-2 text-sm">
     <button type="button" class="region-editor-undo btn">Undo point</button>
     <button type="button" class="region-editor-clear btn">Clear</button>
     <span class="region-editor-status text-neutral-mid"></span>
   </div>
-  <p class="text-sm text-neutral-mid mt-1">Click the map to outline the area. Three or more points define a region.</p>
+  <p class="text-sm text-neutral-mid mt-1">Click the map to add points (3+ make an area). Drag a point to move it, or click a point to remove it. Shift-click to start a separate area.</p>
 </div>

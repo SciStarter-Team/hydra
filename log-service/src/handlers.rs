@@ -22,8 +22,9 @@ use ulid::Ulid;
 
 use log_service::{
     analytics::{
-        get_clickthrough_analytics_realtime, get_go_url_stats,
-        get_participation_analytics_realtime, get_recent_activity, get_top_performers,
+        get_clickthrough_analytics_realtime, get_go_url_stats, get_participation_analytics_realtime,
+        get_participation_by_email, get_participation_summary, get_recent_activity,
+        get_top_performers,
     },
     cache::{update_user_emails_cache, update_user_tags_cache},
     health::HealthResponse,
@@ -259,6 +260,38 @@ pub async fn handle_participation_analytics(
         .expect("Database not initialized")
         .clone();
     get_participation_analytics_realtime(database, query)
+        .await
+        .map_err(Into::into)
+}
+
+pub async fn handle_participation_summary(
+    req: &async_nats::service::Request,
+) -> Result<common::message::log::ParticipationSummaryResponse, anyhow::Error> {
+    let request: common::message::log::ParticipationSummaryRequest =
+        decode_structured_message(req.message.clone())?;
+
+    let database = DATABASE
+        .read()
+        .as_ref()
+        .expect("Database not initialized")
+        .clone();
+    get_participation_summary(database, request)
+        .await
+        .map_err(Into::into)
+}
+
+pub async fn handle_participation_by_email(
+    req: &async_nats::service::Request,
+) -> Result<common::message::log::ParticipationByEmailResponse, anyhow::Error> {
+    let request: common::message::log::ParticipationByEmailRequest =
+        decode_structured_message(req.message.clone())?;
+
+    let database = DATABASE
+        .read()
+        .as_ref()
+        .expect("Database not initialized")
+        .clone();
+    get_participation_by_email(database, request)
         .await
         .map_err(Into::into)
 }

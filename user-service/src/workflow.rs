@@ -3,9 +3,9 @@
 use async_nats::service::Request;
 use common::badge::Badge;
 use common::message::user::{
-    UserAndBadge, WorkflowProgressRequest, WorkflowProgressResponse, WorkflowStatusRequest,
-    WorkflowStatusResponse, WorkflowTutorialCountRequest, WorkflowTutorialCountResponse,
-    WorkflowType,
+    FunnelStage, UserAndBadge, WorkflowFunnel, WorkflowFunnelResponse, WorkflowProgressRequest,
+    WorkflowProgressResponse, WorkflowStatusRequest, WorkflowStatusResponse,
+    WorkflowTutorialCountRequest, WorkflowTutorialCountResponse, WorkflowType,
 };
 use common::{
     service::{TriggerEvent, decode_structured_message, send, trigger_email},
@@ -868,4 +868,152 @@ async fn get_ambassador_status(user_id: &str) -> Result<WorkflowStatusResponse, 
         completed_steps,
         badge_granted: row.badge_granted_at.is_some(),
     })
+}
+
+fn stage(label: &str, count: i64) -> FunnelStage {
+    FunnelStage {
+        label: label.to_string(),
+        count,
+    }
+}
+
+/// Platform-wide engagement funnel for every training workflow. Each
+/// `*_progress` row is one user who started; each `*_completed_at` column is
+/// non-null once that step is reached, so `COUNT(col)` is the number of users
+/// who got that far (the funnel is naturally cumulative since steps complete in
+/// order). Powers the training-analytics staff report.
+pub async fn funnel(_req: &Request) -> Result<WorkflowFunnelResponse, anyhow::Error> {
+    let mut funnels = Vec::new();
+
+    let f = sqlx::query!(
+        r#"SELECT
+            COUNT(*) AS "started!: i64",
+            COUNT(hour1_completed_at) AS "hour1!: i64",
+            COUNT(squirrel_completed_at) AS "squirrel!: i64",
+            COUNT(stall_completed_at) AS "stall!: i64",
+            COUNT(debris_completed_at) AS "debris!: i64",
+            COUNT(badge_granted_at) AS "badge!: i64"
+           FROM foundations_progress"#
+    )
+    .fetch_one(db())
+    .await?;
+    funnels.push(WorkflowFunnel {
+        name: "Foundations".to_string(),
+        stages: vec![
+            stage("Started", f.started),
+            stage("First hour", f.hour1),
+            stage("Project Squirrel", f.squirrel),
+            stage("Stall Catchers", f.stall),
+            stage("Debris Tracker", f.debris),
+            stage("Badge earned", f.badge),
+        ],
+        note: Some(
+            "The badge requires the first hour plus any two of the three projects, \
+             so the three project rows are alternatives rather than sequential steps."
+                .to_string(),
+        ),
+    });
+
+    let l = sqlx::query!(
+        r#"SELECT
+            COUNT(*) AS "started!: i64",
+            COUNT(hour2_completed_at) AS "hour2!: i64",
+            COUNT(supplemental_signup_at) AS "supplemental!: i64",
+            COUNT(badge_granted_at) AS "badge!: i64"
+           FROM libraries_hubs_progress"#
+    )
+    .fetch_one(db())
+    .await?;
+    funnels.push(WorkflowFunnel {
+        name: "Libraries as Hubs".to_string(),
+        stages: vec![
+            stage("Started", l.started),
+            stage("Second hour", l.hour2),
+            stage("Network sign-up", l.supplemental),
+            stage("Badge earned", l.badge),
+        ],
+        note: None,
+    });
+
+    let dl = sqlx::query!(
+        r#"SELECT
+            COUNT(*) AS "started!: i64",
+            COUNT(tutorial_completed_at) AS "tutorial!: i64",
+            COUNT(badge_granted_at) AS "badge!: i64"
+           FROM data_literacy_progress"#
+    )
+    .fetch_one(db())
+    .await?;
+    funnels.push(WorkflowFunnel {
+        name: "Building Data Literacy".to_string(),
+        stages: vec![
+            stage("Started", dl.started),
+            stage("Tutorial", dl.tutorial),
+            stage("Badge earned", dl.badge),
+        ],
+        note: None,
+    });
+
+    let he = sqlx::query!(
+        r#"SELECT
+            COUNT(*) AS "started!: i64",
+            COUNT(tutorial_completed_at) AS "tutorial!: i64",
+            COUNT(list_completed_at) AS "list!: i64",
+            COUNT(explore_completed_at) AS "explore!: i64",
+            COUNT(badge_granted_at) AS "badge!: i64"
+           FROM higher_ed_progress"#
+    )
+    .fetch_one(db())
+    .await?;
+    funnels.push(WorkflowFunnel {
+        name: "Teaching in Higher Education".to_string(),
+        stages: vec![
+            stage("Started", he.started),
+            stage("Tutorial", he.tutorial),
+            stage("Made a list", he.list),
+            stage("Explored", he.explore),
+            stage("Badge earned", he.badge),
+        ],
+        note: None,
+    });
+
+    let de = sqlx::query!(
+        r#"SELECT
+            COUNT(*) AS "started!: i64",
+            COUNT(tutorial_completed_at) AS "tutorial!: i64",
+            COUNT(badge_granted_at) AS "badge!: i64"
+           FROM data_ethics_progress"#
+    )
+    .fetch_one(db())
+    .await?;
+    funnels.push(WorkflowFunnel {
+        name: "Data Ethics for Practitioners".to_string(),
+        stages: vec![
+            stage("Started", de.started),
+            stage("Tutorial", de.tutorial),
+            stage("Badge earned", de.badge),
+        ],
+        note: None,
+    });
+
+    let am = sqlx::query!(
+        r#"SELECT
+            COUNT(*) AS "started!: i64",
+            COUNT(tutorial_completed_at) AS "tutorial!: i64",
+            COUNT(badge_granted_at) AS "badge!: i64"
+           FROM ambassador_progress"#
+    )
+    .fetch_one(db())
+    .await?;
+    funnels.push(WorkflowFunnel {
+        name: "SciStarter Ambassador".to_string(),
+        stages: vec![
+            stage("Started", am.started),
+            stage("Tutorial", am.tutorial),
+            stage("Badge earned", am.badge),
+        ],
+        note: None,
+    });
+
+    Ok(WorkflowFunnelResponse { funnels })
 }

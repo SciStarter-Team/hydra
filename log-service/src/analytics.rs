@@ -2,7 +2,9 @@ use crate::error::{LogServiceError, Result};
 use common::badge::Badge;
 use common::message::log::{
     AnalyticsQuery, AnalyticsResponse, GoUrlChartPoint, GoUrlStatsRequest, GoUrlStatsResponse,
-    GoUrlViewEntry, RecentActivityItem, RecentActivityRequest, RecentActivityResponse,
+    GoUrlViewEntry, ParticipationByEmailEntry, ParticipationByEmailRequest,
+    ParticipationByEmailResponse, ParticipationSummaryEntry, ParticipationSummaryRequest,
+    ParticipationSummaryResponse, RecentActivityItem, RecentActivityRequest, RecentActivityResponse,
     TopItemCount, TopPerformersQuery, WeeklyCount,
 };
 use datafusion::arrow::record_batch::RecordBatch;
@@ -192,6 +194,157 @@ pub async fn get_participation_analytics_realtime(
     let weekly_counts = extract_weekly_counts_from_batches(batches)?;
 
     Ok(AnalyticsResponse::WeeklyCounts(weekly_counts))
+}
+
+/// Per-entity participation summary: the count of participation records within
+/// `[first, last)` and the most recent participation of all time, for each of
+/// the requested entities. Each orrery `repetition` is one record here, so the
+/// count is `COUNT(*)` (not a magnitude sum). Powers the affiliate-activity
+/// staff report.
+pub async fn get_participation_summary(
+    database: Arc<Database>,
+    request: ParticipationSummaryRequest,
+) -> Result<ParticipationSummaryResponse> {
+    use datafusion::arrow::array::{Array, Int64Array, StringArray, StringViewArray};
+
+    // Entity ids are ULIDs; keep only alphanumeric ones so they're safe to
+    // interpolate into the IN list.
+    let ids: Vec<String> = request
+        .project_ids
+        .into_iter()
+        .filter(|id| !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric()))
+        .collect();
+    if ids.is_empty() {
+        return Ok(ParticipationSummaryResponse { entries: Vec::new() });
+    }
+    let in_list = ids
+        .iter()
+        .map(|id| format!("'{id}'"))
+        .collect::<Vec<_>>()
+        .join(",");
+
+    let ctx = database.context();
+    let sql = format!(
+        "SELECT entity_id, \
+            SUM(CASE WHEN `when` > '{first}' AND `when` < '{last}' THEN 1 ELSE 0 END) AS activity, \
+            MAX(`when`) AS latest \
+         FROM participation_realtime \
+         WHERE entity_id IN ({in_list}) \
+         GROUP BY entity_id",
+        first = request.first,
+        last = request.last,
+    );
+
+    let batches = ctx.sql(&sql).await?.collect().await?;
+
+    fn str_at(arr: &dyn Array, i: usize) -> Option<String> {
+        if arr.is_null(i) {
+            return None;
+        }
+        if let Some(a) = arr.as_any().downcast_ref::<StringArray>() {
+            return Some(a.value(i).to_string());
+        }
+        if let Some(a) = arr.as_any().downcast_ref::<StringViewArray>() {
+            return Some(a.value(i).to_string());
+        }
+        None
+    }
+
+    let mut entries = Vec::new();
+    for batch in batches {
+        if batch.num_rows() == 0 {
+            continue;
+        }
+        let id_col = batch.column(0);
+        let activity_col = batch.column(1).as_any().downcast_ref::<Int64Array>();
+        let latest_col = batch.column(2);
+        for i in 0..batch.num_rows() {
+            let project_id = match str_at(id_col, i) {
+                Some(s) => s,
+                None => continue,
+            };
+            let activity = activity_col
+                .map(|a| if a.is_null(i) { 0 } else { a.value(i) })
+                .unwrap_or(0);
+            let latest = str_at(latest_col, i);
+            entries.push(ParticipationSummaryEntry {
+                project_id,
+                activity,
+                latest,
+            });
+        }
+    }
+
+    Ok(ParticipationSummaryResponse { entries })
+}
+
+/// Participation counts grouped by year and entity, for users whose cached
+/// email contains `email_contains` and ends with `email_ends`, since
+/// `since_year`. Joins the participation time-series to `user_emails_cache`.
+/// Powers one-off client reports (e.g. the Verizon report).
+pub async fn get_participation_by_email(
+    database: Arc<Database>,
+    request: ParticipationByEmailRequest,
+) -> Result<ParticipationByEmailResponse> {
+    use datafusion::arrow::array::{Array, Int64Array, StringArray, StringViewArray};
+
+    // Escape single quotes in the interpolated filters.
+    let contains = request.email_contains.to_lowercase().replace('\'', "''");
+    let ends = request.email_ends.to_lowercase().replace('\'', "''");
+    let since = request.since_year.replace('\'', "''");
+
+    let ctx = database.context();
+    let sql = format!(
+        "SELECT substr(p.`when`, 1, 4) AS year, p.entity_id AS entity_id, COUNT(*) AS contributions \
+         FROM participation_realtime p \
+         JOIN user_emails_cache u ON u.user_id = p.user_id \
+         WHERE lower(u.email) LIKE '%{contains}%' AND lower(u.email) LIKE '%{ends}' \
+           AND substr(p.`when`, 1, 4) >= '{since}' \
+         GROUP BY year, p.entity_id \
+         ORDER BY year, contributions DESC",
+    );
+
+    let batches = ctx.sql(&sql).await?.collect().await?;
+
+    fn str_at(arr: &dyn Array, i: usize) -> Option<String> {
+        if arr.is_null(i) {
+            return None;
+        }
+        if let Some(a) = arr.as_any().downcast_ref::<StringArray>() {
+            return Some(a.value(i).to_string());
+        }
+        if let Some(a) = arr.as_any().downcast_ref::<StringViewArray>() {
+            return Some(a.value(i).to_string());
+        }
+        None
+    }
+
+    let mut entries = Vec::new();
+    for batch in batches {
+        if batch.num_rows() == 0 {
+            continue;
+        }
+        let year_col = batch.column(0);
+        let entity_col = batch.column(1);
+        let count_col = batch.column(2).as_any().downcast_ref::<Int64Array>();
+        for i in 0..batch.num_rows() {
+            let year = str_at(year_col, i).unwrap_or_default();
+            let project_id = match str_at(entity_col, i) {
+                Some(s) => s,
+                None => continue,
+            };
+            let contributions = count_col
+                .map(|a| if a.is_null(i) { 0 } else { a.value(i) })
+                .unwrap_or(0);
+            entries.push(ParticipationByEmailEntry {
+                year,
+                project_id,
+                contributions,
+            });
+        }
+    }
+
+    Ok(ParticipationByEmailResponse { entries })
 }
 
 /// Get recent activity from the activity log

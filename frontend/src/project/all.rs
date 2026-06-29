@@ -1934,3 +1934,63 @@ impl LoadStorePeered for ProjectAll {
         })
     }
 }
+
+/// Persist a brand-new project and its page entity, then fire the submission
+/// triggers. This is the single source of truth for project creation, shared by
+/// the admin "Add Project" handler and the public `/add-project` form — callers
+/// build the `ProjectAll` with whatever fields their form collects and set the
+/// system fields (page_creator_id, created, origin, authoritative, status,
+/// draft); this function handles the persistence/entity/notification sequence.
+///
+/// `publish` controls the page entity's visibility (public submissions pass
+/// `false` so the project stays unpublished pending review). Returns the
+/// entity slug.
+pub async fn persist_new_project(
+    project: ProjectAll,
+    publish: bool,
+    user_id: Ulid,
+) -> Result<String, Error> {
+    use crate::entity::{Entity, EntityKind, EntityTarget};
+    use common::service::{TriggerEvent, log_activity, trigger_email};
+
+    let project_id = project.project_id;
+    let name = project.name.clone();
+
+    // Save (and distribute to peers) via LoadStorePeered.
+    project.store().await?;
+
+    // Create the page entity with the requested publish state — it becomes
+    // resolvable at /projects/<slug> only once published.
+    let entity =
+        Entity::new_by_name(&name, EntityKind::Project, EntityTarget::Ulid(project_id)).await?;
+    let entity = Entity::new_with_publish(
+        entity.slug(),
+        *entity.kind(),
+        entity.target().clone(),
+        publish,
+    );
+    let slug = entity.slug().to_string();
+    entity.store().await?;
+
+    log_activity(
+        None,
+        "project-create",
+        user_id,
+        project_id,
+        format!("name={name}"),
+    )
+    .await?;
+
+    let merge = [
+        ("project_name".to_string(), name.clone()),
+        ("project_id".to_string(), project_id.to_string()),
+    ];
+    trigger_email(TriggerEvent::ProjectSubmitted, user_id, Some(&merge))
+        .await
+        .ok();
+    trigger_email(TriggerEvent::ProjectCreatedStaff, user_id, Some(&merge))
+        .await
+        .ok();
+
+    Ok(slug)
+}

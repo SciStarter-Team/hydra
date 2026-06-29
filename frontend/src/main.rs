@@ -1,4 +1,5 @@
 pub mod add;
+pub mod staff;
 pub mod admin;
 pub mod api;
 pub mod auth;
@@ -288,6 +289,18 @@ fn user_facing() -> impl Endpoint {
         .at("/add-event/parent-search", get(add::add_event_parent_search))
         .at("/add-event/parent-select", get(add::add_event_parent_select))
         .at("/add-event/parent-clear", get(add::add_event_parent_clear))
+        .at("/add/tag-search", get(add::add_tag_search))
+        .at("/add/upload-image", post(add::add_upload_image))
+        .at("/add/region-lookup", get(add::add_region_lookup))
+        .nest("/staff", staff::routes())
+        .at(
+            "/add-project",
+            get(add::add_project_page).post(add::add_project_submit),
+        )
+        .at(
+            "/add-project/submitted",
+            get(add::add_project_submitted_page),
+        )
         .at("/demo-forum", get(demo_forum))
         .at("/go/*friendly_url", get(gourl::handle_go_url))
         .at("/-link/:link_id", get(external_link::handle_external_link))

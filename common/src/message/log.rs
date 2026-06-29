@@ -155,6 +155,55 @@ pub struct ProjectParticipationResponse {
     pub participated: bool,
 }
 
+/// Per-entity participation summary over a window (for the affiliate-activity
+/// staff report). `activity` is the number of participation records in
+/// `[first, last)`; `latest` is the most recent participation of all time.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParticipationSummaryRequest {
+    /// Window start (RFC3339, exclusive — matches the legacy report).
+    pub first: String,
+    /// Window end (RFC3339, exclusive).
+    pub last: String,
+    /// Entity (project) ULIDs to summarize.
+    pub project_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParticipationSummaryEntry {
+    pub project_id: String,
+    pub activity: i64,
+    pub latest: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParticipationSummaryResponse {
+    pub entries: Vec<ParticipationSummaryEntry>,
+}
+
+/// Participation counts grouped by year and entity, for users whose cached
+/// email matches the given filters — for one-off client reports (e.g. Verizon).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParticipationByEmailRequest {
+    /// Substring the email must contain (matched case-insensitively, e.g. "@verizon").
+    pub email_contains: String,
+    /// Suffix the email must end with (e.g. ".com").
+    pub email_ends: String,
+    /// Earliest 4-digit year, inclusive (e.g. "2020").
+    pub since_year: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParticipationByEmailEntry {
+    pub year: String,
+    pub project_id: String,
+    pub contributions: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParticipationByEmailResponse {
+    pub entries: Vec<ParticipationByEmailEntry>,
+}
+
 // Recording Completions/Participations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArticulateCompletionRecord {

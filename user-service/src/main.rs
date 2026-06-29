@@ -2233,6 +2233,7 @@ async fn main() {
         "tutorial_count",
         workflow::tutorial_count
     ));
+    toplevel.spawn(handler!(workflow_group, "funnel", workflow::funnel));
 
     let health = service.group("user.health");
     toplevel.spawn(handler!(health, "check", health::health_check));

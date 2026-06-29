@@ -25,6 +25,7 @@ use crate::{
     form::QsForm,
     middleware::authorization::Authenticated,
     peering::LoadStorePeered,
+    project::all::ProjectAll,
 };
 
 // ---------------------------------------------------------------------------
@@ -146,9 +147,12 @@ impl LocationMode {
 
 /// How often a recurring event repeats. Expanded server-side into one
 /// `EventInstance` per occurrence.
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum RepeatFrequency {
+    /// The event happens once (no recurrence). This is the default.
+    #[default]
+    Once,
     Daily,
     Weekly,
     Biweekly,
@@ -158,6 +162,7 @@ enum RepeatFrequency {
 impl RepeatFrequency {
     fn as_str(self) -> &'static str {
         match self {
+            RepeatFrequency::Once => "once",
             RepeatFrequency::Daily => "daily",
             RepeatFrequency::Weekly => "weekly",
             RepeatFrequency::Biweekly => "biweekly",
@@ -165,6 +170,8 @@ impl RepeatFrequency {
         }
     }
 
+    /// The recurrence step. Only meaningful for the repeating variants;
+    /// `Once` never reaches `expand_recurrence`'s stepping branch.
     fn span(self) -> jiff::Span {
         use jiff::ToSpan;
         match self {
@@ -172,6 +179,7 @@ impl RepeatFrequency {
             RepeatFrequency::Weekly => 1.week(),
             RepeatFrequency::Biweekly => 2.weeks(),
             RepeatFrequency::Monthly => 1.month(),
+            RepeatFrequency::Once => 1.day(),
         }
     }
 }
@@ -241,9 +249,6 @@ struct AddEventForm {
     ticketing_time: String,
     #[serde(default)]
     ticketing_timezone: String,
-    /// Checkbox: present (any value) when the visitor enabled repetition.
-    #[serde(default)]
-    repeat_enabled: Option<String>,
     repeat_frequency: Option<RepeatFrequency>,
     #[serde(default)]
     repeat_until: String,
@@ -319,7 +324,6 @@ struct EventFormValues {
     ticketing_date: String,
     ticketing_time: String,
     ticketing_timezone: String,
-    repeat_enabled: bool,
     repeat_frequency: String,
     repeat_until: String,
     instances: Vec<InstanceValues>,
@@ -377,11 +381,11 @@ impl From<&AddEventForm> for EventFormValues {
             ticketing_date: f.ticketing_date.clone(),
             ticketing_time: f.ticketing_time.clone(),
             ticketing_timezone: f.ticketing_timezone.clone(),
-            repeat_enabled: f.repeat_enabled.is_some(),
             repeat_frequency: f
                 .repeat_frequency
-                .map(|r| r.as_str().to_string())
-                .unwrap_or_else(|| RepeatFrequency::Weekly.as_str().to_string()),
+                .unwrap_or_default()
+                .as_str()
+                .to_string(),
             repeat_until: f.repeat_until.clone(),
             instances,
         }
@@ -402,7 +406,9 @@ struct AddEventContent {
     values: EventFormValues,
     timezones: &'static [(&'static str, &'static str)],
     event_types: Vec<String>,
-    region_editor: RegionEditor,
+    location: LocationPicker,
+    image: ImageField,
+    tags: TagInput,
 }
 
 /// Reusable map-based area editor. Renders a MapLibre map plus the hidden
@@ -418,6 +424,77 @@ struct RegionEditor {
     field_id: String,
     /// Existing geometry as a GeoJSON string (empty for a fresh editor).
     initial: String,
+}
+
+// ---------------------------------------------------------------------------
+// Shared add-form components (used by both /add-event and /add-project)
+// ---------------------------------------------------------------------------
+
+/// The location section: in-person / online / region radios, the per-mode
+/// fields, the region editor, a free-text location note, and the link/URL.
+/// Backed by `js/location-picker.js`.
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "site/location_picker.stpl.html")]
+struct LocationPicker {
+    mode: String,
+    location_name: String,
+    address: String,
+    city: String,
+    state: String,
+    zip: String,
+    country: String,
+    location_description: String,
+    url: String,
+    region_editor: RegionEditor,
+}
+
+impl LocationPicker {
+    /// Build from the common location fields shared by both forms.
+    fn build(
+        mode: &str,
+        location_name: &str,
+        address: &str,
+        city: &str,
+        state: &str,
+        zip: &str,
+        country: &str,
+        location_description: &str,
+        url: &str,
+        regions_geojson: &str,
+    ) -> Self {
+        LocationPicker {
+            mode: mode.to_string(),
+            location_name: location_name.to_string(),
+            address: address.to_string(),
+            city: city.to_string(),
+            state: state.to_string(),
+            zip: zip.to_string(),
+            country: country.to_string(),
+            location_description: location_description.to_string(),
+            url: url.to_string(),
+            region_editor: RegionEditor {
+                field_name: "regions".to_string(),
+                field_id: "regions-geojson".to_string(),
+                initial: regions_geojson.to_string(),
+            },
+        }
+    }
+}
+
+/// The image URL field with an upload control + credit, posting to
+/// `/add/upload-image`.
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "site/image_field.stpl.html")]
+struct ImageField {
+    value: String,
+    credit: String,
+}
+
+/// The tag-pill widget with HTMX autocomplete, backed by `js/tags-input.js`.
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "site/tag_input.stpl.html")]
+struct TagInput {
+    value: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -437,7 +514,7 @@ pub async fn add_event_page(
 
     let mut values = EventFormValues::default();
     values.event_type = EventType::Other.to_string();
-    values.repeat_frequency = RepeatFrequency::Weekly.as_str().to_string();
+    values.repeat_frequency = RepeatFrequency::Once.as_str().to_string();
     values.instances.push(InstanceValues::default());
 
     render_event_form(None, values, user_info).await
@@ -522,10 +599,24 @@ async fn render_event_form(
         values.part_of_name = published_event_name(&values.part_of).await.unwrap_or_default();
     }
 
-    let region_editor = RegionEditor {
-        field_name: "regions".to_string(),
-        field_id: "regions-geojson".to_string(),
-        initial: values.regions.clone(),
+    let location = LocationPicker::build(
+        &values.location_mode,
+        &values.location_name,
+        &values.address,
+        &values.city,
+        &values.state,
+        &values.zip,
+        &values.country,
+        &values.location_description,
+        &values.url,
+        &values.regions,
+    );
+    let image = ImageField {
+        value: values.image.clone(),
+        credit: values.image_credit.clone(),
+    };
+    let tags = TagInput {
+        value: values.tags.clone(),
     };
 
     let content = AddEventContent {
@@ -533,7 +624,9 @@ async fn render_event_form(
         values,
         timezones: COMMON_TIMEZONES,
         event_types: EVENT_TYPES.iter().map(|e| e.to_string()).collect(),
-        region_editor,
+        location,
+        image,
+        tags,
     };
 
     let layout = StandardLayout::new("/add-event", content)
@@ -565,6 +658,32 @@ struct AddSubmittedPage {
 #[template(path = "site/add_submitted_content.stpl.html")]
 struct AddSubmittedContent {
     name: String,
+    /// The submitted thing's noun, e.g. "event" or "project".
+    kind: String,
+}
+
+async fn render_submitted(
+    user_info: Option<Arc<BasicInfo>>,
+    path: &'static str,
+    name: String,
+    kind: &str,
+) -> Result<Response, anyhow::Error> {
+    let layout = StandardLayout::new(
+        path,
+        AddSubmittedContent {
+            name,
+            kind: kind.to_string(),
+        },
+    )
+    .prepare(user_info)
+    .await?;
+
+    AddSubmittedPage {
+        head: Head::default().prepare(None).await?,
+        layout,
+    }
+    .into_response(None)
+    .await
 }
 
 /// GET `/add-event/submitted` — "thanks, pending review" confirmation page.
@@ -574,16 +693,17 @@ pub async fn add_event_submitted_page(
     Authenticated(user_info): Authenticated,
     Query(query): Query<SubmittedQuery>,
 ) -> Result<Response, anyhow::Error> {
-    let layout = StandardLayout::new("/add-event", AddSubmittedContent { name: query.name })
-        .prepare(user_info)
-        .await?;
+    render_submitted(user_info, "/add-event", query.name, "event").await
+}
 
-    AddSubmittedPage {
-        head: Head::default().prepare(None).await?,
-        layout,
-    }
-    .into_response(None)
-    .await
+/// GET `/add-project/submitted` — "thanks, pending review" confirmation page.
+#[handler]
+#[tracing::instrument]
+pub async fn add_project_submitted_page(
+    Authenticated(user_info): Authenticated,
+    Query(query): Query<SubmittedQuery>,
+) -> Result<Response, anyhow::Error> {
+    render_submitted(user_info, "/add-project", query.name, "project").await
 }
 
 // ---------------------------------------------------------------------------
@@ -695,6 +815,165 @@ async fn published_event_name(id: &str) -> Option<String> {
     .await
     .ok()
     .flatten()
+}
+
+// ---------------------------------------------------------------------------
+// Add Event: tag autocomplete (HTMX) + image upload
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+struct TagSearchQuery {
+    #[serde(default)]
+    q: String,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "site/add_tag_suggestions.stpl.html")]
+struct TagSuggestions {
+    tags: Vec<String>,
+}
+
+/// GET `/add/tag-search?q=` — suggest existing tags (across both projects and
+/// events) to reduce duplication. Shared by both add forms.
+#[handler]
+#[tracing::instrument]
+pub async fn add_tag_search(Query(query): Query<TagSearchQuery>) -> Result<Response, anyhow::Error> {
+    let q = query.q.trim();
+    if q.is_empty() {
+        return Ok(html_fragment(String::new()));
+    }
+
+    let pattern = format!("%{q}%");
+    let tags = sqlx::query_scalar!(
+        r#"SELECT DISTINCT tag AS "tag!" FROM (
+               SELECT tag FROM event_tags
+               UNION
+               SELECT tag FROM project_tags
+           ) WHERE tag LIKE ? ORDER BY tag LIMIT 10"#,
+        pattern
+    )
+    .fetch_all(db())
+    .await?;
+
+    if tags.is_empty() {
+        return Ok(html_fragment(String::new()));
+    }
+
+    Ok(html_fragment(TagSuggestions { tags }.render_once()?))
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "site/add_image_uploaded.stpl.html")]
+struct ImageUploadResult {
+    url: String,
+}
+
+/// POST `/add/upload-image` — store an uploaded image (untracked) and return
+/// out-of-band updates setting the shared image URL field + preview. Shared by
+/// both add forms.
+#[handler]
+#[tracing::instrument(skip(multipart))]
+pub async fn add_upload_image(
+    Authenticated(user_info): Authenticated,
+    mut multipart: poem::web::Multipart,
+) -> Result<Response, anyhow::Error> {
+    use tokio::io::AsyncReadExt;
+
+    let user = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+
+    while let Some(field) = multipart.next_field().await? {
+        if field.name() != Some("file") {
+            continue;
+        }
+
+        let filename = field.file_name().map(|s| s.to_string());
+        let content_type = field.content_type().map(|s| s.to_string());
+        let file_id = Ulid::new();
+
+        let mut data = Vec::new();
+        field.into_async_read().read_to_end(&mut data).await?;
+
+        let metadata = crate::upload::storage::FileMetadata {
+            file_id,
+            original_filename: filename,
+            content_type,
+            size: data.len() as u64,
+            uploaded_by: user.user_id,
+            access: crate::upload::storage::FileAccess::Untracked,
+            variant: None,
+            force_download: false,
+        };
+        crate::upload::STORAGE.upload_file(metadata, data).await?;
+
+        let url = format!("/-uploaded/{file_id}");
+        return Ok(html_fragment(ImageUploadResult { url }.render_once()?));
+    }
+
+    Err(anyhow::anyhow!("No file provided"))
+}
+
+#[derive(Debug, Deserialize)]
+struct RegionLookupQuery {
+    #[serde(default)]
+    q: String,
+}
+
+/// GET `/add/region-lookup?q=` — resolve a place name (city / state / country)
+/// to a simplified boundary polygon via OpenStreetMap Nominatim, for the region
+/// editor's "look up a place" mode. Returns the GeoJSON geometry, or `{}` when
+/// there's no match. Shared by both add forms (region editor).
+#[handler]
+#[tracing::instrument]
+pub async fn add_region_lookup(
+    Authenticated(user_info): Authenticated,
+    Query(query): Query<RegionLookupQuery>,
+) -> Result<Response, anyhow::Error> {
+    if user_info.is_none() {
+        return Ok(Response::builder()
+            .status(poem::http::StatusCode::UNAUTHORIZED)
+            .finish());
+    }
+
+    let q = query.q.trim();
+    if q.is_empty() {
+        return Ok(Response::builder()
+            .content_type("application/json")
+            .body("{}"));
+    }
+
+    // Nominatim returns the administrative boundary polygon when
+    // `polygon_geojson=1`; `polygon_threshold` applies Douglas-Peucker
+    // simplification (in degrees) so the result is a manageable shape.
+    let results: Vec<serde_json::Value> = reqwest::Client::new()
+        .get("https://nominatim.openstreetmap.org/search")
+        .query(&[
+            ("q", q),
+            ("format", "jsonv2"),
+            ("polygon_geojson", "1"),
+            ("polygon_threshold", "0.01"),
+            ("limit", "1"),
+        ])
+        .header("User-Agent", "SciStarter/1.0 (+https://scistarter.org)")
+        .header("Accept-Language", "en")
+        .send()
+        .await?
+        .json()
+        .await?;
+
+    let geometry = results
+        .into_iter()
+        .next()
+        .and_then(|r| r.get("geojson").cloned())
+        .filter(|g| g.get("coordinates").is_some());
+
+    let body = match geometry {
+        Some(g) => serde_json::to_string(&g)?,
+        None => "{}".to_string(),
+    };
+
+    Ok(Response::builder()
+        .content_type("application/json")
+        .body(body))
 }
 
 // ---------------------------------------------------------------------------
@@ -854,11 +1133,10 @@ fn validate_and_build(form: &AddEventForm, user_id: Ulid) -> Result<EventAll, St
             event.country = form.country.trim().to_string();
         }
         LocationMode::Region => {
+            // A region is defined by the drawn polygon + the location note; it
+            // doesn't carry a single city/state/country.
             event.entirely_online = false;
             event.location_type = "region".to_string();
-            event.city = form.city.trim().to_string();
-            event.state = form.state.trim().to_string();
-            event.country = form.country.trim().to_string();
             let regions = form.regions.trim();
             if !regions.is_empty() {
                 event.regions = Some(regions.to_string());
@@ -880,14 +1158,24 @@ fn empty_to_none(s: &str) -> Option<String> {
     }
 }
 
+/// Keep only submitted values that are part of the controlled vocabulary, so a
+/// forged request can't store arbitrary categorization values.
+fn filter_to_vocabulary(values: &[String], vocabulary: &[&str]) -> Box<[String]> {
+    values
+        .iter()
+        .filter(|v| vocabulary.contains(&v.as_str()))
+        .cloned()
+        .collect()
+}
+
 /// Expand each base date/time into one or more `EventInstance`s according to
 /// the optional recurrence settings.
 fn expand_recurrence(
     base: Vec<ZonedInstance>,
     form: &AddEventForm,
 ) -> Result<Vec<EventInstance>, String> {
-    let recurring = form.repeat_enabled.is_some();
-    let frequency = if recurring { form.repeat_frequency } else { None };
+    let frequency = form.repeat_frequency.unwrap_or_default();
+    let recurring = frequency != RepeatFrequency::Once;
     let until = if recurring && !form.repeat_until.trim().is_empty() {
         Some(parse_date(form.repeat_until.trim())?)
     } else {
@@ -897,8 +1185,8 @@ fn expand_recurrence(
     let mut out: Vec<EventInstance> = Vec::new();
 
     for inst in base {
-        match (frequency, until) {
-            (Some(frequency), Some(until)) => {
+        match until {
+            Some(until) if recurring => {
                 let mut begin = inst.begin.clone();
                 let mut end = inst.end.clone();
                 let mut count = 0usize;
@@ -965,4 +1253,359 @@ fn parse_datetime(date: &str, time: &str, timezone: &str) -> Result<Zoned, Strin
 
 fn parse_date(date: &str) -> Result<civil::Date, String> {
     civil::Date::strptime("%Y-%m-%d", date).map_err(|_| "Please enter a valid date.".to_string())
+}
+
+// ---------------------------------------------------------------------------
+// Add Project
+//
+// Mirrors Add Event, adapted to project data: no dates/recurrence/ticketing,
+// adds scientific goal + participant task. Reuses the shared location picker,
+// image field, tag widget, and region editor, and the shared create core
+// (`project::all::persist_new_project`, also used by the admin add handler).
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+struct AddProjectForm {
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    presenter: String,
+    #[serde(default)]
+    goal: String,
+    #[serde(default)]
+    task: String,
+    #[serde(default)]
+    how_to_join: String,
+    #[serde(default)]
+    image: String,
+    #[serde(default)]
+    image_credit: String,
+    #[serde(default)]
+    tags: String,
+    #[serde(default)]
+    topics: Vec<String>,
+    #[serde(default)]
+    fields_of_science: Vec<String>,
+    #[serde(default)]
+    audience: Vec<String>,
+    #[serde(default)]
+    activities: Vec<String>,
+    location_mode: Option<LocationMode>,
+    #[serde(default)]
+    location_name: String,
+    #[serde(default)]
+    location_description: String,
+    #[serde(default)]
+    address: String,
+    #[serde(default)]
+    city: String,
+    #[serde(default)]
+    state: String,
+    #[serde(default)]
+    zip: String,
+    #[serde(default)]
+    country: String,
+    #[serde(default)]
+    regions: String,
+    #[serde(default)]
+    url: String,
+    #[serde(default)]
+    contact_name: String,
+    #[serde(default)]
+    contact_affiliation: String,
+    #[serde(default)]
+    contact_email: String,
+    #[serde(default)]
+    contact_phone: String,
+    #[serde(default)]
+    contact_address: String,
+}
+
+#[derive(Debug, Default)]
+struct ProjectFormValues {
+    name: String,
+    description: String,
+    presenter: String,
+    goal: String,
+    task: String,
+    how_to_join: String,
+    image: String,
+    image_credit: String,
+    tags: String,
+    topics: Vec<String>,
+    fields_of_science: Vec<String>,
+    audience: Vec<String>,
+    activities: Vec<String>,
+    location_mode: String,
+    location_name: String,
+    location_description: String,
+    address: String,
+    city: String,
+    state: String,
+    zip: String,
+    country: String,
+    regions: String,
+    url: String,
+    contact_name: String,
+    contact_affiliation: String,
+    contact_email: String,
+    contact_phone: String,
+    contact_address: String,
+}
+
+impl From<&AddProjectForm> for ProjectFormValues {
+    fn from(f: &AddProjectForm) -> Self {
+        ProjectFormValues {
+            name: f.name.clone(),
+            description: f.description.clone(),
+            presenter: f.presenter.clone(),
+            goal: f.goal.clone(),
+            task: f.task.clone(),
+            how_to_join: f.how_to_join.clone(),
+            image: f.image.clone(),
+            image_credit: f.image_credit.clone(),
+            tags: f.tags.clone(),
+            topics: f.topics.clone(),
+            fields_of_science: f.fields_of_science.clone(),
+            audience: f.audience.clone(),
+            activities: f.activities.clone(),
+            location_mode: f.location_mode.map(|m| m.as_str().to_string()).unwrap_or_default(),
+            location_name: f.location_name.clone(),
+            location_description: f.location_description.clone(),
+            address: f.address.clone(),
+            city: f.city.clone(),
+            state: f.state.clone(),
+            zip: f.zip.clone(),
+            country: f.country.clone(),
+            regions: f.regions.clone(),
+            url: f.url.clone(),
+            contact_name: f.contact_name.clone(),
+            contact_affiliation: f.contact_affiliation.clone(),
+            contact_email: f.contact_email.clone(),
+            contact_phone: f.contact_phone.clone(),
+            contact_address: f.contact_address.clone(),
+        }
+    }
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "site/add_project.stpl.html")]
+struct AddProjectPage {
+    head: <Head as Component>::Prepared,
+    layout: <StandardLayout<AddProjectContent> as Component>::Prepared,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "site/add_project_content.stpl.html")]
+struct AddProjectContent {
+    error: Option<String>,
+    values: ProjectFormValues,
+    location: LocationPicker,
+    image: ImageField,
+    tags: TagInput,
+}
+
+/// GET `/add-project` — render the (empty) submission form (login required).
+#[handler]
+#[tracing::instrument]
+pub async fn add_project_page(
+    Authenticated(user_info): Authenticated,
+) -> Result<Response, anyhow::Error> {
+    if user_info.is_none() {
+        return Ok(Redirect::see_other("/login?next=/add-project").into_response());
+    }
+    render_project_form(None, ProjectFormValues::default(), user_info).await
+}
+
+/// POST `/add-project` — validate, create the project (draft + unpublished),
+/// and redirect to the confirmation page.
+#[handler]
+#[tracing::instrument(skip(form))]
+pub async fn add_project_submit(
+    Authenticated(user_info): Authenticated,
+    QsForm(form): QsForm<AddProjectForm>,
+) -> Result<Response, anyhow::Error> {
+    let Some(user_info) = user_info else {
+        return Ok(Redirect::see_other("/login?next=/add-project").into_response());
+    };
+
+    match validate_and_build_project(&form, user_info.user_id) {
+        Ok(project) => {
+            let name = project.name.clone();
+            // Public submissions stay unpublished pending review.
+            crate::project::all::persist_new_project(project, false, user_info.user_id).await?;
+            Ok(Redirect::see_other(format!(
+                "/add-project/submitted?name={}",
+                urlencoding::encode(&name)
+            ))
+            .into_response())
+        }
+        Err(message) => {
+            render_project_form(Some(message), ProjectFormValues::from(&form), Some(user_info)).await
+        }
+    }
+}
+
+async fn render_project_form(
+    error: Option<String>,
+    values: ProjectFormValues,
+    user_info: Option<Arc<BasicInfo>>,
+) -> Result<Response, anyhow::Error> {
+    let location = LocationPicker::build(
+        &values.location_mode,
+        &values.location_name,
+        &values.address,
+        &values.city,
+        &values.state,
+        &values.zip,
+        &values.country,
+        &values.location_description,
+        &values.url,
+        &values.regions,
+    );
+    let image = ImageField {
+        value: values.image.clone(),
+        credit: values.image_credit.clone(),
+    };
+    let tags = TagInput {
+        value: values.tags.clone(),
+    };
+
+    let content = AddProjectContent {
+        error,
+        values,
+        location,
+        image,
+        tags,
+    };
+
+    let layout = StandardLayout::new("/add-project", content)
+        .prepare(user_info)
+        .await?;
+
+    AddProjectPage {
+        head: Head::default().with_region_editor().prepare(None).await?,
+        layout,
+    }
+    .into_response(None)
+    .await
+}
+
+/// Validate the submitted project form and assemble a `ProjectAll`. Returns a
+/// user-facing message string on validation failure.
+fn validate_and_build_project(form: &AddProjectForm, user_id: Ulid) -> Result<ProjectAll, String> {
+    let name = form.name.trim();
+    if name.is_empty() {
+        return Err("Please enter a name for your project.".to_string());
+    }
+
+    let description = form.description.trim();
+    if description.is_empty() {
+        return Err("Please add a description of your project.".to_string());
+    }
+
+    let mode = form
+        .location_mode
+        .ok_or_else(|| "Please choose where the project takes place.".to_string())?;
+
+    let url = form.url.trim().to_string();
+    match mode {
+        LocationMode::Online => {
+            if url.is_empty() {
+                return Err("Please provide a link for the online project.".to_string());
+            }
+        }
+        LocationMode::InPerson => {
+            if form.address.trim().is_empty() && form.city.trim().is_empty() {
+                return Err(
+                    "Please provide an address or city for the in-person project.".to_string(),
+                );
+            }
+        }
+        LocationMode::Region => {
+            if form.location_description.trim().is_empty() {
+                return Err("Please describe the area the project covers.".to_string());
+            }
+        }
+    }
+
+    let mut project = ProjectAll::default();
+    project.project_id = Ulid::new();
+    project.created = TimeString::now();
+    project.page_creator_id = user_id;
+    project.origin = "scistarter".to_string();
+    project.authoritative = true;
+    project.status = crate::project::ProjectStatus::Active;
+    project.draft = true;
+    project.name = name.to_string();
+    project.description = description.to_string();
+    project.presenter = form.presenter.trim().to_string();
+    project.goal = form.goal.trim().to_string();
+    project.task = form.task.trim().to_string();
+    project.how_to_join = form.how_to_join.trim().to_string();
+    project.url = url;
+    project.image = form.image.trim().to_string();
+    project.image_credit = form.image_credit.trim().to_string();
+    project.location_description = form.location_description.trim().to_string();
+    project.tags = form
+        .tags
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(InsensitiveString::from)
+        .collect();
+
+    use crate::project::field::{
+        ACTIVITIES_VOCABULARY, AUDIENCE_VOCABULARY, FIELDS_OF_SCIENCE_VOCABULARY, TOPICS_VOCABULARY,
+    };
+    project.topics = filter_to_vocabulary(&form.topics, TOPICS_VOCABULARY);
+    project.fields_of_science =
+        filter_to_vocabulary(&form.fields_of_science, FIELDS_OF_SCIENCE_VOCABULARY);
+    project.audience = filter_to_vocabulary(&form.audience, AUDIENCE_VOCABULARY);
+    project.activities = filter_to_vocabulary(&form.activities, ACTIVITIES_VOCABULARY);
+
+    let contact_email = form.contact_email.trim();
+    if !contact_email.is_empty() || !form.contact_name.trim().is_empty() {
+        project.contacts = Box::new([Contact {
+            contact_id: Ulid::new(),
+            role: ContactRole::ContactPerson,
+            name: empty_to_none(&form.contact_name),
+            affiliation: empty_to_none(&form.contact_affiliation),
+            email: contact_email.to_string(),
+            phone: empty_to_none(&form.contact_phone),
+            address: empty_to_none(&form.contact_address),
+        }]);
+    }
+
+    match mode {
+        LocationMode::Online => {
+            project.entirely_online = true;
+            project.location_type = "Global, anywhere on the planet".to_string();
+        }
+        LocationMode::InPerson => {
+            project.entirely_online = false;
+            project.in_person = true;
+            project.location_type = "At a specific address".to_string();
+            project.location_name = form.location_name.trim().to_string();
+            project.address = form.address.trim().to_string();
+            project.city = form.city.trim().to_string();
+            project.state = form.state.trim().to_string();
+            project.zip = form.zip.trim().to_string();
+            project.country = form.country.trim().to_string();
+        }
+        LocationMode::Region => {
+            // A region is defined by the drawn polygon + the location note; it
+            // doesn't carry a single city/state/country.
+            project.entirely_online = false;
+            project.location_type = "In a geographic location or range".to_string();
+            let regions = form.regions.trim();
+            if !regions.is_empty() {
+                project.regions = Some(regions.to_string());
+            }
+        }
+    }
+
+    Ok(project)
 }

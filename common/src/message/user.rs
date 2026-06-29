@@ -1248,6 +1248,29 @@ pub struct WorkflowTutorialCountResponse {
     pub count: i64, // Platform-wide tally of completed tutorials for this workflow
 }
 
+/// One stage in a training funnel: the number of users who reached it. Stages
+/// are ordered start -> finish, so counts are monotonically non-increasing.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct FunnelStage {
+    pub label: String,
+    pub count: i64,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WorkflowFunnel {
+    pub name: String,
+    pub stages: Vec<FunnelStage>,
+    /// Optional clarification (e.g. when steps are alternatives, not a sequence).
+    pub note: Option<String>,
+}
+
+/// Platform-wide engagement funnel for every training workflow (the
+/// training-analytics staff report).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WorkflowFunnelResponse {
+    pub funnels: Vec<WorkflowFunnel>,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PermissionListByResourceRequest {
     pub resource_type: String,
