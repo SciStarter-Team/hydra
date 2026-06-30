@@ -679,7 +679,10 @@ async fn search_and_save_project(
         params.id
     )
     .fetch_all(db())
-    .await?;
+    .await?
+    .into_iter()
+    .filter(|t| !crate::project::is_hidden_tag(t))
+    .collect::<Vec<_>>();
 
     let project = ProjectDetail {
         id: project_basic.project_id,

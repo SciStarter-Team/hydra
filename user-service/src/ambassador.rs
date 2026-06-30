@@ -2,10 +2,41 @@ use anyhow::Error;
 use async_nats::service::Request;
 use common::{
     message::dashboard::{AmbassadorAppStatus, AmbassadorApplication, AmbassadorApplicationUpdate},
+    message::user::{AmbassadorLocation, AmbassadorPassedLocationsResponse},
     service::decode_structured_message,
     shared::db,
     ulid::AsUlid,
 };
+
+/// Distinct city/state locations of ambassadors who passed application review
+/// (accepted or champion). Backs /api/ambassador_map.geojson; the frontend
+/// geocodes each location for the map. "passed" maps to Accepted/Champion.
+pub async fn passed_locations(
+    _req: &Request,
+) -> Result<AmbassadorPassedLocationsResponse, Error> {
+    let accepted = AmbassadorAppStatus::Accepted as i64;
+    let champion = AmbassadorAppStatus::Champion as i64;
+
+    let rows = sqlx::query!(
+        r#"SELECT DISTINCT city, state FROM ambassador_applications
+           WHERE app_status IN (?, ?) AND city != ''
+           ORDER BY city, state"#,
+        accepted,
+        champion,
+    )
+    .fetch_all(db())
+    .await?;
+
+    let locations = rows
+        .into_iter()
+        .map(|r| AmbassadorLocation {
+            city: r.city,
+            state: r.state,
+        })
+        .collect();
+
+    Ok(AmbassadorPassedLocationsResponse { locations })
+}
 
 pub async fn get(req: &Request) -> Result<Option<AmbassadorApplication>, Error> {
     let user_id: String = flexbuffers::from_slice(&req.message.payload)?;

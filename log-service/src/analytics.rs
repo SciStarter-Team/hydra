@@ -5,7 +5,8 @@ use common::message::log::{
     GoUrlViewEntry, ParticipationByEmailEntry, ParticipationByEmailRequest,
     ParticipationByEmailResponse, ParticipationSummaryEntry, ParticipationSummaryRequest,
     ParticipationSummaryResponse, RecentActivityItem, RecentActivityRequest, RecentActivityResponse,
-    TopItemCount, TopPerformersQuery, WeeklyCount,
+    TopItemCount, TopPerformersQuery, UserFirstParticipationEntry, UserFirstParticipationRequest,
+    UserFirstParticipationResponse, WeeklyCount,
 };
 use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::functions_aggregate::expr_fn::count;
@@ -276,6 +277,63 @@ pub async fn get_participation_summary(
     }
 
     Ok(ParticipationSummaryResponse { entries })
+}
+
+/// For a single user, the earliest participation timestamp in each project they
+/// participated in. Powers the join `when` returned by the check-join API.
+pub async fn get_user_first_participation(
+    database: Arc<Database>,
+    request: UserFirstParticipationRequest,
+) -> Result<UserFirstParticipationResponse> {
+    use datafusion::arrow::array::{Array, StringArray, StringViewArray};
+
+    // user_id is a ULID; keep only alphanumeric so it's safe to interpolate.
+    let user_id = request.user_id;
+    if user_id.is_empty() || !user_id.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return Ok(UserFirstParticipationResponse {
+            entries: Vec::new(),
+        });
+    }
+
+    let ctx = database.context();
+    let sql = format!(
+        "SELECT entity_id, MIN(`when`) AS first_when \
+         FROM participation_realtime \
+         WHERE user_id = '{user_id}' \
+         GROUP BY entity_id",
+    );
+
+    let batches = ctx.sql(&sql).await?.collect().await?;
+
+    fn str_at(arr: &dyn Array, i: usize) -> Option<String> {
+        if arr.is_null(i) {
+            return None;
+        }
+        if let Some(a) = arr.as_any().downcast_ref::<StringArray>() {
+            return Some(a.value(i).to_string());
+        }
+        if let Some(a) = arr.as_any().downcast_ref::<StringViewArray>() {
+            return Some(a.value(i).to_string());
+        }
+        None
+    }
+
+    let mut entries = Vec::new();
+    for batch in batches {
+        if batch.num_rows() == 0 {
+            continue;
+        }
+        let id_col = batch.column(0);
+        let when_col = batch.column(1);
+        for i in 0..batch.num_rows() {
+            let (Some(project_id), Some(when)) = (str_at(id_col, i), str_at(when_col, i)) else {
+                continue;
+            };
+            entries.push(UserFirstParticipationEntry { project_id, when });
+        }
+    }
+
+    Ok(UserFirstParticipationResponse { entries })
 }
 
 /// Participation counts grouped by year and entity, for users whose cached

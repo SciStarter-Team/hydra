@@ -24,7 +24,7 @@ use log_service::{
     analytics::{
         get_clickthrough_analytics_realtime, get_go_url_stats, get_participation_analytics_realtime,
         get_participation_by_email, get_participation_summary, get_recent_activity,
-        get_top_performers,
+        get_top_performers, get_user_first_participation,
     },
     cache::{update_user_emails_cache, update_user_tags_cache},
     health::HealthResponse,
@@ -276,6 +276,22 @@ pub async fn handle_participation_summary(
         .expect("Database not initialized")
         .clone();
     get_participation_summary(database, request)
+        .await
+        .map_err(Into::into)
+}
+
+pub async fn handle_user_first_participation(
+    req: &async_nats::service::Request,
+) -> Result<common::message::log::UserFirstParticipationResponse, anyhow::Error> {
+    let request: common::message::log::UserFirstParticipationRequest =
+        decode_structured_message(req.message.clone())?;
+
+    let database = DATABASE
+        .read()
+        .as_ref()
+        .expect("Database not initialized")
+        .clone();
+    get_user_first_participation(database, request)
         .await
         .map_err(Into::into)
 }

@@ -18,11 +18,15 @@ use crate::{
     peering::LoadStorePeered,
 };
 
-#[derive(Debug, Deserialize)]
+/// A single scanner event. All fields default so that a malformed or partial
+/// event fails only its own index (per-event error isolation) rather than the
+/// whole batch; required fields are validated explicitly in import_single_event.
+#[derive(Debug, Deserialize, Default)]
+#[serde(default)]
 pub struct ImportEvent {
     pub name: String,
     pub description: String,
-    pub start_datetime: String,
+    pub start_datetime: Option<String>,
     pub end_datetime: Option<String>,
     pub image_url: Option<String>,
     pub host_organization: String,
@@ -63,18 +67,30 @@ struct ImportError {
     message: String,
 }
 
+/// A pre-loop error (auth/parse), in orrery's `{result, message}` shape.
+fn import_request_error(status: poem::http::StatusCode, message: &str) -> Response {
+    Json(serde_json::json!({ "result": "error", "message": message }))
+        .with_status(status)
+        .into_response()
+}
+
 /// POST /api/v2/events/import
 ///
-/// Accepts a JSON array of events from the scanner and imports them.
-/// Requires a valid API key with staff/superuser permissions.
+/// Accepts a JSON array of events from the scanner and imports them. Requires a
+/// valid API key (any user — orrery does not require staff). Each event is
+/// validated and imported independently so one bad entry doesn't fail the batch.
 #[handler]
 pub async fn events_import(
     headers: &HeaderMap,
-    Json(events): Json<Vec<ImportEvent>>,
+    Json(body): Json<serde_json::Value>,
 ) -> Result<Response, Error> {
-    // Extract and validate API key from Authorization header
-    let api_key = extract_bearer_token(headers)
-        .ok_or_else(|| anyhow::anyhow!("Missing or invalid Authorization header"))?;
+    // Bearer token required (401 when missing/malformed, matching orrery).
+    let Some(api_key) = extract_bearer_token(headers) else {
+        return Ok(import_request_error(
+            poem::http::StatusCode::UNAUTHORIZED,
+            "Missing or invalid Authorization header",
+        ));
+    };
 
     let validation: ValidateApiKeyResponse = request(
         "user.api_key.validate",
@@ -84,37 +100,30 @@ pub async fn events_import(
     )
     .await?;
 
+    // Any valid key may import (orrery imposes no staff requirement here).
     if !validation.valid {
-        return Ok(Json(ImportResponse {
-            result: "error".into(),
-            imported: 0,
-            errors: vec![ImportError {
-                index: 0,
-                message: "Invalid API key".into(),
-            }],
-        })
-        .with_status(poem::http::StatusCode::FORBIDDEN)
-        .into_response());
+        return Ok(import_request_error(
+            poem::http::StatusCode::FORBIDDEN,
+            "Invalid API key",
+        ));
     }
 
-    if !validation.is_staff && !validation.is_superuser {
-        return Ok(Json(ImportResponse {
-            result: "error".into(),
-            imported: 0,
-            errors: vec![ImportError {
-                index: 0,
-                message: "Staff or superuser permission required".into(),
-            }],
-        })
-        .with_status(poem::http::StatusCode::FORBIDDEN)
-        .into_response());
-    }
+    let serde_json::Value::Array(events) = body else {
+        return Ok(import_request_error(
+            poem::http::StatusCode::BAD_REQUEST,
+            "Request body must be a JSON array",
+        ));
+    };
 
     let mut imported = 0;
     let mut errors = Vec::new();
 
-    for (i, event) in events.into_iter().enumerate() {
-        match import_single_event(event).await {
+    for (i, value) in events.into_iter().enumerate() {
+        let result = match serde_json::from_value::<ImportEvent>(value) {
+            Ok(event) => import_single_event(event).await,
+            Err(e) => Err(anyhow::anyhow!("Invalid event: {}", e)),
+        };
+        match result {
             Ok(()) => imported += 1,
             Err(e) => errors.push(ImportError {
                 index: i,
@@ -136,7 +145,11 @@ async fn import_single_event(event: ImportEvent) -> Result<(), Error> {
         return Err(anyhow::anyhow!("Event name is required"));
     }
 
-    let begin = to_timestring(&event.start_datetime)?;
+    let Some(start_datetime) = event.start_datetime.clone().filter(|s| !s.is_empty()) else {
+        return Err(anyhow::anyhow!("start_datetime is required"));
+    };
+
+    let begin = to_timestring(&start_datetime)?;
 
     // Dedup: check for existing event with same name and origin='scanner'
     let existing = sqlx::query!(
@@ -203,14 +216,16 @@ async fn import_single_event(event: ImportEvent) -> Result<(), Error> {
         ..Default::default()
     };
 
-    event_all.save_to_database().await?;
+    // store() (not save_to_database) so the write is distributed to all peer
+    // frontend instances, per the LoadStorePeered contract.
+    event_all.store().await?;
 
     // Ensure entity exists for this event (publish=true)
     if event_id.is_none() {
         // New event — create entity
         let entity =
             Entity::new_by_name(&event.name, EntityKind::Event, EntityTarget::Ulid(ulid)).await?;
-        entity.save_to_database().await?;
+        entity.store().await?;
     }
 
     Ok(())

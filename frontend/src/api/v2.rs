@@ -8,8 +8,7 @@ use anyhow::Error;
 use common::message::log::ProjectParticipationRecord;
 use common::message::user::{
     IdentifierType, UserMatchRequest, UserMatchResponse, UserOpaqueIdRequest, UserOpaqueIdResponse,
-    ValidateApiKeyRequest, ValidateApiKeyResponse, WorkflowProgressRequest,
-    WorkflowProgressResponse, WorkflowType,
+    WorkflowProgressRequest, WorkflowProgressResponse, WorkflowType,
 };
 use common::service::{request, send};
 use common::shared::db;
@@ -22,28 +21,33 @@ use serde::Deserialize;
 use ulid::Ulid;
 
 /// Form data for participation recording
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct ParticipationForm {
     #[serde(rename = "where")]
     where_point: Option<String>, // GeoJSON point
     when: Option<String>, // ISO datetime
     #[serde(rename = "type")]
     event_type: Option<String>,
-    origin: Option<i16>,
+    /// Only the literal string "widget" is meaningful here (forces origin 2);
+    /// any other value is ignored and the endpoint's own origin is used.
+    origin: Option<String>,
     duration: Option<f64>,
     magnitude: Option<i32>,
     fidelity: Option<f64>,
     extra: Option<String>,
+    /// Number of repetitions; recorded as that many participation rows.
+    count: Option<i32>,
 
     // Identifier fields (depend on endpoint)
     hashed: Option<String>,
     opaque: Option<String>,
+    ulid: Option<String>,
     email: Option<String>,
     #[serde(rename = "Email")] // Handle both cases
     email_cap: Option<String>,
-    token: Option<String>,
-    #[serde(rename = "Token")] // Handle both cases
-    token_cap: Option<String>,
+    // Note: the link-token endpoint accepts repeated `token`/`Token` values and
+    // parses them via its own LinkTokenBody extractor, so they are not fields
+    // here.
 
     // API key for authentication
     key: Option<String>,
@@ -64,73 +68,59 @@ async fn get_entity_id_for_slug(slug: &str) -> Result<String, Error> {
     Ok(row.target)
 }
 
-/// Check if an API key is valid and has permission to write to a project
-async fn check_api_key_permission(api_key: &str, project_id: &str) -> Result<bool, Error> {
-    // Validate the API key
-    let validation: ValidateApiKeyResponse = request(
-        "user.api_key.validate",
-        ValidateApiKeyRequest {
-            api_key: api_key.to_string(),
-        },
-    )
-    .await?;
+use super::check_api_key_permission;
 
-    if !validation.valid {
-        return Ok(false);
-    }
-
-    // Staff/superuser can always write
-    if validation.is_staff || validation.is_superuser {
-        return Ok(true);
-    }
-
-    let Some(user_id) = validation.user_id else {
-        return Ok(false);
-    };
-
-    // Check if user is the project page creator or a page manager
-    let has_permission = sqlx::query_scalar!(
-        r#"SELECT 1 as "has_permission: bool" FROM projects
-         WHERE project_id = ? AND page_creator_id = ?
-         UNION
-         SELECT 1 FROM project_page_editors
-         WHERE project_id = ? AND user_id = ?
-         LIMIT 1"#,
-        project_id,
-        user_id,
-        project_id,
-        user_id
-    )
-    .fetch_optional(db())
-    .await?;
-
-    Ok(has_permission.is_some())
+/// 404 JSON response for an unknown project slug (matches orrery).
+fn project_not_found() -> Response {
+    poem::web::Json(serde_json::json!({
+        "error": "Project slug does not identify a project"
+    }))
+    .with_status(poem::http::StatusCode::NOT_FOUND)
+    .into_response()
 }
 
-/// Record participation event helper
-/// Returns None if user doesn't exist (for privacy)
+/// 200 discard response when the identifier doesn't resolve to a user. `field`
+/// is the identifier's field name (e.g. "hashed"), echoed back like orrery.
+fn discard_success(field: &str, value: &str) -> Response {
+    poem::web::Json(serde_json::json!({
+        "result": "success",
+        "operation": "discard",
+        field: value,
+    }))
+    .into_response()
+}
+
+/// 400 JSON response for a missing required field (matches orrery).
+fn required_field_error(message: &str) -> Response {
+    poem::web::Json(serde_json::json!({ "error": message }))
+        .with_status(poem::http::StatusCode::BAD_REQUEST)
+        .into_response()
+}
+
+/// JSON error response with an explicit status (OAuth token/scope failures on
+/// the openid endpoint, mirroring orrery's protected_resource_view 401/403).
+fn oauth_error(status: poem::http::StatusCode, message: &str) -> Response {
+    poem::web::Json(serde_json::json!({ "error": message }))
+        .with_status(status)
+        .into_response()
+}
+
+/// Record participation event helper. Resolves the project and user, then
+/// delegates to `emit_participation`. Returns a discard response (echoing
+/// `field`) when the identifier doesn't resolve to a user.
 async fn record_participation(
     slug: &str,
     identifier: &str,
+    field: &str,
     identifier_type: IdentifierType,
     form: ParticipationForm,
     api_key: Option<String>,
     origin_override: i16,
 ) -> Result<Response, Error> {
-    // Check if event type is "incidental" - don't record these
-    if let Some(ref event_type) = form.event_type {
-        if event_type == "incidental" {
-            return Ok(poem::web::Json(serde_json::json!({
-                "result": "Not saving incidental event"
-            }))
-            .into_response());
-        }
-    }
-
     // Verify project exists and get entity_id
-    let entity_id = get_entity_id_for_slug(slug)
-        .await
-        .map_err(|_| anyhow::anyhow!("Project slug does not identify a project"))?;
+    let Ok(entity_id) = get_entity_id_for_slug(slug).await else {
+        return Ok(project_not_found());
+    };
 
     // Match user by identifier
     let user_match: UserMatchResponse = request(
@@ -144,12 +134,7 @@ async fn record_participation(
 
     let Some(user_id_str) = user_match.user_id else {
         // User doesn't exist - return success but don't record (privacy)
-        return Ok(poem::web::Json(serde_json::json!({
-            "result": "success",
-            "operation": "discard",
-            "identifier": identifier
-        }))
-        .into_response());
+        return Ok(discard_success(field, identifier));
     };
 
     let user_id = Ulid::from_string(&user_id_str)?;
@@ -161,27 +146,68 @@ async fn record_participation(
         false
     };
 
-    // Determine origin (priority: origin param, form.origin, override)
-    let origin = form.origin.unwrap_or(origin_override);
+    emit_participation(user_id, entity_id, authenticated, form, origin_override).await
+}
 
-    // Record the participation
-    send(
-        "log.project_participation_record",
-        ProjectParticipationRecord {
-            user_id,
-            project_id: entity_id,
-            origin: Some(origin),
-            when: form.when,
-            duration: form.duration,
-            where_point: form.where_point,
-            magnitude: form.magnitude,
-            authenticated: Some(authenticated),
-            extra: form.extra.or(Some(String::new())),
-            fidelity: form.fidelity,
-            task_name: form.event_type,
-        },
-    )
-    .await?;
+/// Shared participation-recording core used by every v2 endpoint (identifier
+/// resolution happens in the callers). Mirrors orrery's `_record_event`: skips
+/// "incidental" events, applies the v2 defaults (duration 0.0, magnitude 1,
+/// fidelity 0.5), honors only the "widget" origin override, truncates `extra`
+/// to 64 KiB, and records `count` repetitions as that many participation rows.
+async fn emit_participation(
+    user_id: Ulid,
+    entity_id: String,
+    authenticated: bool,
+    form: ParticipationForm,
+    origin_override: i16,
+) -> Result<Response, Error> {
+    // "incidental" events are intentionally not recorded.
+    if form.event_type.as_deref() == Some("incidental") {
+        return Ok(poem::web::Json(serde_json::json!({
+            "result": "Not saving incidental event"
+        }))
+        .into_response());
+    }
+
+    // The only meaningful caller-supplied origin is "widget" (forces origin 2);
+    // otherwise the endpoint's own origin is used. Numeric overrides are ignored.
+    let origin = if form.origin.as_deref() == Some("widget") {
+        2
+    } else {
+        origin_override
+    };
+
+    // Apply orrery's v2 defaults at this (API) layer, since the log-service
+    // handler's defaults differ (duration 1.0 / fidelity 1.0).
+    let duration = form.duration.unwrap_or(0.0);
+    let magnitude = form.magnitude.unwrap_or(1);
+    let fidelity = form.fidelity.unwrap_or(0.5);
+    let extra = form
+        .extra
+        .map(|e| e.chars().take(64 * 1024).collect::<String>())
+        .unwrap_or_default();
+
+    // Number of repetitions -> that many participation rows (hydra's data model
+    // represents orrery's `repetitions` as one row per repetition).
+    let count = form.count.unwrap_or(1).max(0);
+
+    let record = ProjectParticipationRecord {
+        user_id,
+        project_id: entity_id,
+        origin: Some(origin),
+        when: form.when,
+        duration: Some(duration),
+        where_point: form.where_point,
+        magnitude: Some(magnitude),
+        authenticated: Some(authenticated),
+        extra: Some(extra),
+        fidelity: Some(fidelity),
+        task_name: form.event_type,
+    };
+
+    for _ in 0..count {
+        send("log.project_participation_record", record.clone()).await?;
+    }
 
     Ok(poem::web::Json(serde_json::json!({
         "result": "success",
@@ -203,18 +229,49 @@ pub async fn record_event_hashed(
         form.key = query.key;
     }
 
-    let hashed = form
-        .hashed
-        .clone()
-        .ok_or_else(|| anyhow::anyhow!("Missing 'hashed' field"))?;
+    // A missing hashed value resolves to no user -> discard (orrery behavior).
+    let hashed = form.hashed.clone().unwrap_or_default();
+
+    let api_key = form.key.clone();
 
     record_participation(
         &slug,
         &hashed,
+        "hashed",
         IdentifierType::Hashed,
         form,
-        None, // API key handled separately for hashed endpoint
-        3,    // origin 3 = hashed email
+        api_key,
+        3, // origin 3 = hashed email
+    )
+    .await
+}
+
+/// Record participation event via the user's ULID
+/// POST /api/participation/ulid/:slug
+#[handler]
+pub async fn record_event_ulid(
+    Path(slug): Path<String>,
+    Query(query): Query<ApiKeyQuery>,
+    Form(mut form): Form<ParticipationForm>,
+) -> Result<Response, Error> {
+    // Merge query key into form key
+    if form.key.is_none() {
+        form.key = query.key;
+    }
+
+    // A missing ulid resolves to no user -> discard (orrery behavior).
+    let ulid = form.ulid.clone().unwrap_or_default();
+
+    let api_key = form.key.clone();
+
+    record_participation(
+        &slug,
+        &ulid,
+        "ulid",
+        IdentifierType::Ulid,
+        form,
+        api_key,
+        3, // origin 3 = same as hashed/ulid identification
     )
     .await
 }
@@ -233,9 +290,9 @@ async fn do_connect_opaque(
     user_info: Option<std::sync::Arc<common::message::user::BasicInfo>>,
 ) -> Result<Response, Error> {
     // Get entity_id (target) from slug
-    let entity_id = get_entity_id_for_slug(&slug)
-        .await
-        .map_err(|_| anyhow::anyhow!("Project slug does not identify a project"))?;
+    let Ok(entity_id) = get_entity_id_for_slug(&slug).await else {
+        return Ok(project_not_found());
+    };
 
     // Query the appropriate connect URL from projects table
     let target = match idx {
@@ -266,7 +323,11 @@ async fn do_connect_opaque(
     };
 
     if target.is_empty() {
-        return Err(anyhow::anyhow!("Project is not set up for this feature"));
+        return Ok(poem::web::Json(serde_json::json!({
+            "error": "Project is not set up for this feature"
+        }))
+        .with_status(poem::http::StatusCode::NOT_FOUND)
+        .into_response());
     }
 
     // If user is authenticated, append opaque_id
@@ -296,12 +357,15 @@ async fn do_connect_opaque(
         // Allow anonymous redirect
         Ok(poem::web::Redirect::see_other(target).into_response())
     } else {
-        // Not authenticated and not allowing anonymous - redirect to login
-        Ok(poem::web::Redirect::see_other(format!(
-            "/login?next=/api/participation/connect/{}",
-            slug
-        ))
-        .into_response())
+        // Not authenticated and not allowing anonymous - redirect to login,
+        // preserving the original path (including the idx variant) so the user
+        // returns to the same connect endpoint after authenticating.
+        let next = if idx == 0 {
+            format!("/api/participation/connect/{}", slug)
+        } else {
+            format!("/api/participation/connect/{}/{}", slug, idx)
+        };
+        Ok(poem::web::Redirect::see_other(format!("/login?next={}", next)).into_response())
     }
 }
 
@@ -340,16 +404,15 @@ pub async fn record_event_opaque(
         form.key = query.key;
     }
 
-    let opaque = form
-        .opaque
-        .clone()
-        .ok_or_else(|| anyhow::anyhow!("Missing 'opaque' field"))?;
+    // A missing opaque value resolves to no user -> discard (orrery behavior).
+    let opaque = form.opaque.clone().unwrap_or_default();
 
     let api_key = form.key.clone();
 
     record_participation(
         &slug,
         &opaque,
+        "opaque",
         IdentifierType::Opaque,
         form,
         api_key,
@@ -371,18 +434,22 @@ pub async fn record_event_email(
         form.key = query.key;
     }
 
-    // Handle both 'email' and 'Email' fields
+    // Handle both 'email' and 'Email' fields; a missing email is a 400 (orrery).
     let email = form
         .email
         .clone()
         .or(form.email_cap.clone())
-        .ok_or_else(|| anyhow::anyhow!("The email value is required"))?;
+        .filter(|e| !e.is_empty());
+    let Some(email) = email else {
+        return Ok(required_field_error("The email value is required"));
+    };
 
     let api_key = form.key.clone();
 
     record_participation(
         &slug,
         &email,
+        "email",
         IdentifierType::Email,
         form,
         api_key,
@@ -391,37 +458,112 @@ pub async fn record_event_email(
     .await
 }
 
+/// Body extractor for the link-token endpoint, which accepts multiple repeated
+/// `token`/`Token` values (orrery reads them with `getlist`). serde form
+/// extractors collapse repeated keys, so we parse the raw body: collect every
+/// token value, and reparse the remaining (single-valued) fields as a
+/// `ParticipationForm`.
+struct LinkTokenBody {
+    form: ParticipationForm,
+    tokens: Vec<String>,
+}
+
+impl<'a> poem::FromRequest<'a> for LinkTokenBody {
+    async fn from_request(
+        _req: &'a poem::Request,
+        body: &mut poem::RequestBody,
+    ) -> poem::Result<Self> {
+        let data = body.take()?.into_vec().await?;
+        let pairs: Vec<(String, String)> =
+            url::form_urlencoded::parse(&data).into_owned().collect();
+
+        let tokens: Vec<String> = pairs
+            .iter()
+            .filter(|(k, _)| k == "token" || k == "Token")
+            .map(|(_, v)| v.clone())
+            .filter(|v| !v.is_empty())
+            .collect();
+
+        // Reparse everything except the multi-valued token fields into the form.
+        let rest = url::form_urlencoded::Serializer::new(String::new())
+            .extend_pairs(
+                pairs
+                    .iter()
+                    .filter(|(k, _)| k != "token" && k != "Token")
+                    .map(|(k, v)| (k.as_str(), v.as_str())),
+            )
+            .finish();
+        let form: ParticipationForm = serde_urlencoded::from_str(&rest).map_err(|e| {
+            poem::Error::from_string(
+                format!("Failed to parse form data: {}", e),
+                poem::http::StatusCode::BAD_REQUEST,
+            )
+        })?;
+
+        Ok(LinkTokenBody { form, tokens })
+    }
+}
+
 /// Record participation event via link token
 /// POST /api/participation/link-token/:slug
 #[handler]
 pub async fn record_event_link_token(
     Path(slug): Path<String>,
     Query(query): Query<ApiKeyQuery>,
-    Form(mut form): Form<ParticipationForm>,
+    LinkTokenBody { mut form, tokens }: LinkTokenBody,
 ) -> Result<Response, Error> {
     // Merge query key into form key
     if form.key.is_none() {
         form.key = query.key;
     }
 
-    // Handle both 'token' and 'Token' fields
-    let token = form
-        .token
-        .clone()
-        .or(form.token_cap.clone())
-        .ok_or_else(|| anyhow::anyhow!("The token value is required"))?;
+    if tokens.is_empty() {
+        return Ok(poem::web::Json(serde_json::json!({
+            "error": "The token value is required"
+        }))
+        .with_status(poem::http::StatusCode::BAD_REQUEST)
+        .into_response());
+    }
 
-    let api_key = form.key.clone();
+    let entity_id = get_entity_id_for_slug(&slug)
+        .await
+        .map_err(|_| anyhow::anyhow!("Project slug does not identify a project"))?;
 
-    record_participation(
-        &slug,
-        &token,
-        IdentifierType::LinkToken,
-        form,
-        api_key,
-        9, // origin 9 = link token
-    )
-    .await
+    let authenticated = if let Some(ref key) = form.key {
+        check_api_key_permission(key, &entity_id).await?
+    } else {
+        false
+    };
+
+    // Record for every valid token's user (orrery records each in turn). The
+    // response mirrors orrery's: the last recording result, or "invalid" if no
+    // token matched a user.
+    let mut response = poem::web::Json(serde_json::json!({
+        "error": "Provided token is invalid"
+    }))
+    .with_status(poem::http::StatusCode::BAD_REQUEST)
+    .into_response();
+
+    for token in tokens {
+        let user_match: UserMatchResponse = request(
+            "user.match",
+            UserMatchRequest {
+                identifier: token,
+                identifier_type: IdentifierType::LinkToken,
+            },
+        )
+        .await?;
+
+        let Some(user_id_str) = user_match.user_id else {
+            continue;
+        };
+        let user_id = Ulid::from_string(&user_id_str)?;
+
+        response =
+            emit_participation(user_id, entity_id.clone(), authenticated, form.clone(), 9).await?;
+    }
+
+    Ok(response)
 }
 
 /// Record Articulate completion event
@@ -476,7 +618,7 @@ pub async fn record_event_articulate(Form(form): Form<ArticulateForm>) -> Result
             let entity_id = get_entity_id_for_slug("foundations-of-citizen-science-training-module").await
                 .map_err(|_| anyhow::anyhow!("Foundations project not found"))?;
 
-            // Record the participation
+            // Record the participation (orrery records a fixed 300s/1.0 event)
             send(
                 "log.project_participation_record",
                 ProjectParticipationRecord {
@@ -484,12 +626,12 @@ pub async fn record_event_articulate(Form(form): Form<ArticulateForm>) -> Result
                     project_id: entity_id,
                     origin: Some(10), // origin 10 = Articulate
                     when: None,
-                    duration: None,
+                    duration: Some(300.0),
                     where_point: None,
-                    magnitude: None,
+                    magnitude: Some(1),
                     authenticated: Some(true), // JWT-authenticated
                     extra: Some(String::new()),
-                    fidelity: None,
+                    fidelity: Some(1.0),
                     task_name: Some("collection".to_string()),
                 }
             ).await?;
@@ -600,28 +742,39 @@ struct ArticulateClaims {
 pub async fn record_event_openid(
     slug: Option<Path<String>>,
     headers: &HeaderMap,
-    Form(mut form): Form<ParticipationForm>,
+    Form(form): Form<ParticipationForm>,
 ) -> Result<Response, Error> {
     // Extract bearer token from Authorization header
-    let token = extract_bearer_token(headers)
-        .ok_or_else(|| anyhow::anyhow!("Missing or invalid Authorization header"))?;
+    let Some(token) = extract_bearer_token(headers) else {
+        return Ok(oauth_error(
+            poem::http::StatusCode::UNAUTHORIZED,
+            "Missing or invalid Authorization header",
+        ));
+    };
 
     // Load and validate access token
-    let access_token = AccessToken::load(token.to_string())
-        .await
-        .map_err(|_| anyhow::anyhow!("Invalid or expired access token"))?;
+    let Ok(access_token) = AccessToken::load(token.to_string()).await else {
+        return Ok(oauth_error(
+            poem::http::StatusCode::UNAUTHORIZED,
+            "Invalid or expired access token",
+        ));
+    };
 
     // Check if token has expired
     if access_token.is_expired() {
         AccessToken::delete(access_token.token.clone()).await?;
-        return Err(anyhow::anyhow!("Access token has expired"));
+        return Ok(oauth_error(
+            poem::http::StatusCode::UNAUTHORIZED,
+            "Access token has expired",
+        ));
     }
 
     // Check if token has participation scope
     let scopes: Vec<&str> = access_token.scope.split_whitespace().collect();
     if !scopes.contains(&"participation") {
-        return Err(anyhow::anyhow!(
-            "Access token does not have participation scope"
+        return Ok(oauth_error(
+            poem::http::StatusCode::FORBIDDEN,
+            "Access token does not have participation scope",
         ));
     }
 
@@ -632,9 +785,10 @@ pub async fn record_event_openid(
     // Determine project ID
     let project_id = if let Some(Path(project_slug)) = slug {
         // Slug provided: look up entity and get its target (project_id)
-        get_entity_id_for_slug(&project_slug)
-            .await
-            .map_err(|_| anyhow::anyhow!("Project slug does not identify a project"))?
+        match get_entity_id_for_slug(&project_slug).await {
+            Ok(id) => id,
+            Err(_) => return Ok(project_not_found()),
+        }
     } else {
         // No slug: find the unique project owned by the client owner
         use crate::oauth2::types::Client;
@@ -665,35 +819,8 @@ pub async fn record_event_openid(
         }
     };
 
-    // Override origin to 6 (OpenID) if not provided
-    if form.origin.is_none() {
-        form.origin = Some(6);
-    }
-
-    // Record the participation
-    send(
-        "log.project_participation_record",
-        ProjectParticipationRecord {
-            user_id,
-            project_id,
-            origin: form.origin,
-            when: form.when.clone(),
-            duration: form.duration,
-            where_point: form.where_point.clone(),
-            magnitude: form.magnitude,
-            authenticated: Some(true), // OAuth2-authenticated
-            extra: form.extra.clone(),
-            fidelity: form.fidelity,
-            task_name: form.event_type.clone(),
-        },
-    )
-    .await?;
-
-    Ok(poem::web::Json(serde_json::json!({
-        "result": "success",
-        "operation": "record"
-    }))
-    .into_response())
+    // OAuth2-authenticated; origin 6 (OpenID) unless the caller marks "widget".
+    emit_participation(user_id, project_id, true, form, 6).await
 }
 
 /// Helper to extract Bearer token from Authorization header

@@ -2032,6 +2032,7 @@ async fn main() {
     let auth = service.group("user.auth");
     toplevel.spawn(handler!(auth, "signup", auth::signup));
     toplevel.spawn(handler!(auth, "login", auth::login));
+    toplevel.spawn(handler!(auth, "snm_login", auth::snm_login));
 
     let tags = service.group("user.tags");
     toplevel.spawn(handler!(tags, "get", users::get_user_tags));
@@ -2198,6 +2199,11 @@ async fn main() {
     let ambassador_group = service.group("user.ambassador");
     toplevel.spawn(handler!(ambassador_group, "get", ambassador::get));
     toplevel.spawn(handler!(ambassador_group, "update", ambassador::update));
+    toplevel.spawn(handler!(
+        ambassador_group,
+        "passed_locations",
+        ambassador::passed_locations
+    ));
 
     // Legacy user-id lookup (User-level legacy ids only — distinct from
     // user.profile.lookup which handles Profile-level legacy ids).
@@ -2234,6 +2240,11 @@ async fn main() {
         workflow::tutorial_count
     ));
     toplevel.spawn(handler!(workflow_group, "funnel", workflow::funnel));
+    toplevel.spawn(handler!(
+        workflow_group,
+        "training_states",
+        workflow::training_states
+    ));
 
     let health = service.group("user.health");
     toplevel.spawn(handler!(health, "check", health::health_check));

@@ -20,6 +20,7 @@ pub async fn match_user(req: &Request) -> Result<UserMatchResponse, anyhow::Erro
         IdentifierType::Opaque => match_by_opaque_id(&request.identifier).await?,
         IdentifierType::Email => match_by_email(&request.identifier).await?,
         IdentifierType::LinkToken => match_by_link_token(&request.identifier).await?,
+        IdentifierType::Ulid => match_by_ulid(&request.identifier).await?,
     };
 
     Ok(UserMatchResponse { user_id })
@@ -71,6 +72,16 @@ async fn match_by_link_token(token: &str) -> Result<Option<String>, anyhow::Erro
     )
     .fetch_optional(db())
     .await?;
+
+    Ok(row.map(|r| r.user_id))
+}
+
+/// Match user by ULID. In hydra the user's ULID is its `user_id` (this is the
+/// same value as orrery's `User.ulid`, which is the cross-system identifier).
+async fn match_by_ulid(ulid: &str) -> Result<Option<String>, anyhow::Error> {
+    let row = sqlx::query!("SELECT user_id FROM users WHERE user_id = ? LIMIT 1", ulid)
+        .fetch_optional(db())
+        .await?;
 
     Ok(row.map(|r| r.user_id))
 }
@@ -188,12 +199,14 @@ pub async fn lookup_profile_id(req: &Request) -> Result<ProfileIdLookupResponse,
             legacy_profile_id: None,
             opaque_id: None,
             known: false,
+            track_contributions: true,
         });
     };
 
     // Fetch profile details
     let user = sqlx::query!(
-        "SELECT legacy_v3_profile_id, opaque_id FROM users WHERE user_id = ?",
+        r#"SELECT legacy_v3_profile_id, opaque_id, track_contributions AS "track_contributions: bool"
+           FROM users WHERE user_id = ?"#,
         user_id
     )
     .fetch_one(db())
@@ -204,6 +217,7 @@ pub async fn lookup_profile_id(req: &Request) -> Result<ProfileIdLookupResponse,
         legacy_profile_id: user.legacy_v3_profile_id.map(|x| x as i64),
         opaque_id: user.opaque_id,
         known: true,
+        track_contributions: user.track_contributions,
     })
 }
 
@@ -266,6 +280,24 @@ pub async fn api_create_user(req: &Request) -> Result<ApiCreateUserResponse, any
         .await?;
     }
 
+    // Apply API-supplied account metadata (origin, referring project, user type).
+    let origin = request.origin.unwrap_or_default();
+    let referer = request.referer.unwrap_or_default();
+    // Mirror orrery's misc format: {"user_type": N}. Empty when not supplied.
+    let misc = request
+        .user_type
+        .map(|ut| format!(r#"{{"user_type": {}}}"#, ut))
+        .unwrap_or_default();
+    sqlx::query!(
+        r#"UPDATE users SET origin = ?, referer = ?, misc = ? WHERE user_id = ?"#,
+        origin,
+        referer,
+        misc,
+        user_id
+    )
+    .execute(db())
+    .await?;
+
     // Fetch the profile info
     let user = sqlx::query!(
         "SELECT legacy_v3_profile_id, opaque_id FROM users WHERE user_id = ?",
@@ -287,7 +319,9 @@ pub async fn validate_api_key(req: &Request) -> Result<ValidateApiKeyResponse, a
     let request: ValidateApiKeyRequest = decode_structured_message(req.message.clone())?;
 
     let row = sqlx::query!(
-        "SELECT user_id, is_staff, is_superuser FROM users WHERE api_key = ? LIMIT 1",
+        r#"SELECT user_id, is_staff, is_superuser,
+            automatic_affiliate AS "automatic_affiliate: bool"
+           FROM users WHERE api_key = ? LIMIT 1"#,
         request.api_key
     )
     .fetch_optional(db())
@@ -299,6 +333,7 @@ pub async fn validate_api_key(req: &Request) -> Result<ValidateApiKeyResponse, a
             user_id: Some(user.user_id),
             is_staff: user.is_staff != 0,
             is_superuser: user.is_superuser != 0,
+            automatic_affiliate: user.automatic_affiliate,
         })
     } else {
         Ok(ValidateApiKeyResponse {
@@ -306,6 +341,7 @@ pub async fn validate_api_key(req: &Request) -> Result<ValidateApiKeyResponse, a
             user_id: None,
             is_staff: false,
             is_superuser: false,
+            automatic_affiliate: false,
         })
     }
 }

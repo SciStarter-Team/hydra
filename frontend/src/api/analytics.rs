@@ -3,9 +3,13 @@
 
 use anyhow::Error;
 use common::{
-    message::user::{
-        AiOptedOutRequest, AiOptedOutResponse, UserJoinsListRequest, UserJoinsListResponse,
-        ValidateApiKeyRequest, ValidateApiKeyResponse,
+    message::{
+        log::{UserFirstParticipationRequest, UserFirstParticipationResponse},
+        user::{
+            AiOptedOutRequest, AiOptedOutResponse, IdentifierType, UserJoinsListRequest,
+            UserJoinsListResponse, UserMatchRequest, UserMatchResponse, ValidateApiKeyRequest,
+            ValidateApiKeyResponse,
+        },
     },
     service::request,
     shared::db,
@@ -100,12 +104,38 @@ pub async fn check_join(Query(query): Query<CheckJoinQuery>) -> Result<Response,
 
     let response: UserJoinsListResponse = request(
         "user.joins.list_by_user",
-        UserJoinsListRequest { opaque_id },
+        UserJoinsListRequest {
+            opaque_id: opaque_id.clone(),
+        },
     )
     .await?;
 
     if !response.found {
         return Ok(Json(serde_json::json!({"error": "No such profile"})).into_response());
+    }
+
+    // The join timestamp is the user's first participation in each project,
+    // which lives in the log service. Resolve the user's ULID, then build a
+    // project_id -> first-participation-time map.
+    let user_match: UserMatchResponse = request(
+        "user.match",
+        UserMatchRequest {
+            identifier: opaque_id,
+            identifier_type: IdentifierType::Opaque,
+        },
+    )
+    .await?;
+
+    let mut first_when: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    if let Some(user_id) = user_match.user_id {
+        let firsts: UserFirstParticipationResponse = request(
+            "log.user_first_participation",
+            UserFirstParticipationRequest { user_id },
+        )
+        .await?;
+        for entry in firsts.entries {
+            first_when.insert(entry.project_id, entry.when);
+        }
     }
 
     // Look up project names and legacy IDs for each joined project
@@ -119,11 +149,11 @@ pub async fn check_join(Query(query): Query<CheckJoinQuery>) -> Result<Response,
         .await?;
 
         if let Some(row) = row {
-            projects.push(serde_json::json!([
-                row.name,
-                row.legacy_id.unwrap_or(0),
-                serde_json::Value::Null
-            ]));
+            let when = first_when
+                .get(&join.project_id)
+                .map(|w| serde_json::Value::String(w.clone()))
+                .unwrap_or(serde_json::Value::Null);
+            projects.push(serde_json::json!([row.name, row.legacy_id.unwrap_or(0), when]));
         }
     }
 

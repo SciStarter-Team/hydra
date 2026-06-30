@@ -1,7 +1,7 @@
 use anyhow::Error;
 use async_nats::service::Request;
 use common::{
-    message::user::{BasicInfo, Login, Signup},
+    message::user::{BasicInfo, Login, Signup, SnmProfile},
     service::{TriggerEvent, log_activity, trigger_email},
     shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower},
     ulid::AsUlid,
@@ -208,4 +208,58 @@ pub async fn login(req: &Request) -> Result<Option<BasicInfo>, Error> {
         // User not found
         Ok(None)
     }
+}
+
+/// Verify credentials for the Science Near Me login bridge and, on success,
+/// return the user's profile fields. Returns None when authentication fails
+/// (the frontend turns that into a 404, matching orrery). The transport is
+/// encrypted end-to-end at the frontend; this handler only sees plaintext
+/// credentials over the internal NATS bus.
+pub async fn snm_login(req: &Request) -> Result<Option<SnmProfile>, Error> {
+    let form: Login = flexbuffers::from_slice(&req.message.payload)?;
+
+    let user = sqlx::query!(
+        r#"SELECT u.user_id, u.handle, u.password, u.first_name, u.last_name,
+            u.zipcode, u.newsletter, u.primary_email
+           FROM users u
+           JOIN emails e ON u.user_id = e.user_id
+           WHERE e.email = ?
+           LIMIT 1"#,
+        form.email
+    )
+    .fetch_optional(db())
+    .await?;
+
+    let Some(user) = user else {
+        return Ok(None);
+    };
+
+    if !djangohashers::check_password(&form.password, &user.password).unwrap_or(false) {
+        return Ok(None);
+    }
+
+    let user_id = user.user_id.clone();
+    log_activity(None, "snm-login", user_id.as_ulid().ok(), None, None)
+        .await
+        .ok();
+
+    // All of the user's emails, primary first.
+    let mut emails = vec![user.primary_email.clone()];
+    let others = sqlx::query_scalar!("SELECT email FROM emails WHERE user_id = ?", user_id)
+        .fetch_all(db())
+        .await?;
+    for email in others {
+        if !emails.contains(&email) {
+            emails.push(email);
+        }
+    }
+
+    Ok(Some(SnmProfile {
+        username: Some(user.handle).filter(|h| !h.is_empty()),
+        first_name: user.first_name,
+        last_name: user.last_name,
+        emails,
+        zip_code: user.zipcode.filter(|z| !z.is_empty()),
+        newsletter: user.newsletter != 0,
+    }))
 }

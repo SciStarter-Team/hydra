@@ -3,9 +3,9 @@
 use async_nats::service::Request;
 use common::badge::Badge;
 use common::message::user::{
-    FunnelStage, UserAndBadge, WorkflowFunnel, WorkflowFunnelResponse, WorkflowProgressRequest,
-    WorkflowProgressResponse, WorkflowStatusRequest, WorkflowStatusResponse,
-    WorkflowTutorialCountRequest, WorkflowTutorialCountResponse, WorkflowType,
+    FoundationsStateEntry, FunnelStage, TrainingStatesResponse, UserAndBadge, WorkflowFunnel,
+    WorkflowFunnelResponse, WorkflowProgressRequest, WorkflowProgressResponse, WorkflowStatusRequest,
+    WorkflowStatusResponse, WorkflowTutorialCountRequest, WorkflowTutorialCountResponse, WorkflowType,
 };
 use common::{
     service::{TriggerEvent, decode_structured_message, send, trigger_email},
@@ -875,6 +875,76 @@ fn stage(label: &str, count: i64) -> FunnelStage {
         label: label.to_string(),
         count,
     }
+}
+
+/// Derive an orrery-style Foundations state name from the completion flags.
+/// Returns None for the "initial" state (no first hour yet), which the
+/// training-state export excludes. hydra tracks independent step timestamps
+/// rather than a single state-machine node, so the deeper orrery nodes between
+/// "bookmark2" and "badge" are collapsed to those representable milestones.
+fn derive_foundations_state(
+    hour1: bool,
+    squirrel: bool,
+    stall: bool,
+    debris: bool,
+    badge: bool,
+) -> Option<&'static str> {
+    if !hour1 {
+        return None;
+    }
+    if badge {
+        return Some("badge");
+    }
+    let projects = [squirrel, stall, debris].iter().filter(|x| **x).count();
+    if projects >= 2 {
+        return Some("bookmark2");
+    }
+    if squirrel {
+        return Some("squirrel");
+    }
+    if stall {
+        return Some("stall");
+    }
+    if debris {
+        return Some("debris");
+    }
+    Some("hour1")
+}
+
+/// Export every user's current Foundations state (opaque id + state), excluding
+/// users still in the initial state. Backs /api/training-state.json.
+pub async fn training_states(_req: &Request) -> Result<TrainingStatesResponse, anyhow::Error> {
+    let rows = sqlx::query!(
+        r#"SELECT u.opaque_id AS "opaque_id?",
+            fp.hour1_completed_at, fp.squirrel_completed_at, fp.stall_completed_at,
+            fp.debris_completed_at, fp.badge_granted_at
+           FROM foundations_progress fp
+           JOIN users u ON u.user_id = fp.user_id
+           WHERE fp.hour1_completed_at IS NOT NULL"#
+    )
+    .fetch_all(db())
+    .await?;
+
+    let mut states = Vec::new();
+    for row in rows {
+        let Some(opaque_id) = row.opaque_id else {
+            continue;
+        };
+        if let Some(state) = derive_foundations_state(
+            row.hour1_completed_at.is_some(),
+            row.squirrel_completed_at.is_some(),
+            row.stall_completed_at.is_some(),
+            row.debris_completed_at.is_some(),
+            row.badge_granted_at.is_some(),
+        ) {
+            states.push(FoundationsStateEntry {
+                person: opaque_id,
+                state: state.to_string(),
+            });
+        }
+    }
+
+    Ok(TrainingStatesResponse { states })
 }
 
 /// Platform-wide engagement funnel for every training workflow. Each

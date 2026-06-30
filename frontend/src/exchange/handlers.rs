@@ -487,7 +487,11 @@ async fn load_exchange_project_detail(
     )
     .fetch_all(common::shared::db())
     .await?;
-    let tags: Vec<String> = tag_rows.into_iter().map(|r| r.tag).collect();
+    let tags: Vec<String> = tag_rows
+        .into_iter()
+        .map(|r| r.tag)
+        .filter(|t| !crate::project::is_hidden_tag(t))
+        .collect();
 
     // Load activities
     let activity_rows = sqlx::query!(

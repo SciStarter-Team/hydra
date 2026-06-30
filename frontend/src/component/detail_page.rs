@@ -707,6 +707,16 @@ impl DetailPage {
         let (like_count, user_has_liked) = likes;
         let (can_edit, is_staff_editor) = edit_permission;
 
+        // Hide internal `_`-prefixed tags from the public view; editors still see
+        // (and can manage) them in the editable field.
+        let tags = if can_edit {
+            tags
+        } else {
+            tags.into_iter()
+                .filter(|t| !crate::project::is_hidden_tag(t))
+                .collect::<Vec<_>>()
+        };
+
         // Organizer contacts (rendered only for editors — see the template).
         let contacts = sqlx::query!(
             r#"SELECT contact_id AS "contact_id!", name, affiliation, email AS "email!", phone
@@ -1041,6 +1051,16 @@ impl DetailPage {
 
         let (like_count, user_has_liked) = likes;
         let (can_edit, is_staff_editor) = edit_permission;
+
+        // Hide internal `_`-prefixed tags from the public view; editors still see
+        // (and can manage) them in the editable field.
+        let tags = if can_edit {
+            tags
+        } else {
+            tags.into_iter()
+                .filter(|t| !crate::project::is_hidden_tag(t))
+                .collect::<Vec<_>>()
+        };
 
         // The umbrella event this one is part of (only linked if published).
         let (part_of_name, part_of_path) = if let Some(parent_id) = row.part_of.clone() {

@@ -180,6 +180,26 @@ pub struct ParticipationSummaryResponse {
     pub entries: Vec<ParticipationSummaryEntry>,
 }
 
+/// A user's first participation timestamp in each project they participated in
+/// (powers the join `when` in the check-join API).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserFirstParticipationRequest {
+    /// The user's ULID.
+    pub user_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserFirstParticipationEntry {
+    pub project_id: String,
+    /// The earliest participation timestamp for this user+project.
+    pub when: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserFirstParticipationResponse {
+    pub entries: Vec<UserFirstParticipationEntry>,
+}
+
 /// Participation counts grouped by year and entity, for users whose cached
 /// email matches the given filters — for one-off client reports (e.g. Verizon).
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1512,13 +1512,13 @@ fn ribbon_subbox(label: &str, content: impl std::fmt::Display) -> String {
 }
 
 fn not_set() -> &'static str {
-    r#"<span class="edit-only text-gray-400 italic">Empty</span>"#
+    r#"<span class="edit-only text-gray-400 italic">(not set)</span>"#
 }
 
 /// Format a field value for display as HTML
 async fn format_image_display(target_id: &str, value: &str, kind: DetailPageKind) -> String {
     if value.is_empty() {
-        return r#"<div class="rounded-sm border border-linework bg-gray-100 h-48 flex items-center justify-center text-gray-400 italic">Empty</div>"#.to_string();
+        return r#"<div class="rounded-sm border border-linework bg-gray-100 h-48 flex items-center justify-center text-gray-400 italic">(not set)</div>"#.to_string();
     }
     let credit = read_field_value(target_id, "image_credit", kind)
         .await

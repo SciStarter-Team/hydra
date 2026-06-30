@@ -6,14 +6,13 @@ use common::{
     message::{
         log::ProjectParticipationRecord,
         user::{
-            ApiCreateUserRequest, ApiCreateUserResponse, ProfileIdLookupRequest,
-            ProfileIdLookupResponse, ProfileIdLookupType, ValidateApiKeyRequest,
-            ValidateApiKeyResponse,
+            ApiCreateUserRequest, ApiCreateUserResponse, IdentifierType, ProfileIdLookupRequest,
+            ProfileIdLookupResponse, ProfileIdLookupType, UserMatchRequest, UserMatchResponse,
+            ValidateApiKeyRequest, ValidateApiKeyResponse,
         },
     },
     service::{request, send},
     shared::db,
-    timestring::TimeString,
 };
 use poem::{
     IntoResponse, Response, handler,
@@ -22,9 +21,7 @@ use poem::{
 use serde::Deserialize;
 use ulid::Ulid;
 
-use crate::entity::{Entity, EntityKind, EntityTarget};
-use crate::event::EventInstance;
-use crate::event::all::EventAll;
+use super::check_api_key_permission;
 use crate::peering::LoadStorePeered;
 use crate::project::ProjectStatus;
 use crate::project::all::ProjectAll;
@@ -46,9 +43,10 @@ struct ProfileIdQuery {
 
 #[handler]
 pub async fn get_profile_id(Query(query): Query<ProfileIdQuery>) -> Result<Response, Error> {
-    let (identifier, id_type) = if let Some(hashed) = query.hashed {
-        (hashed, ProfileIdLookupType::Hashed)
-    } else if let Some(identifier) = query.identifier {
+    // orrery lowercases the hashed (hex) identifier before lookup.
+    let (identifier, id_type) = if let Some(hashed) = query.hashed.filter(|s| !s.is_empty()) {
+        (hashed.to_lowercase(), ProfileIdLookupType::Hashed)
+    } else if let Some(identifier) = query.identifier.filter(|s| !s.is_empty()) {
         (identifier, ProfileIdLookupType::Email)
     } else {
         return Ok(Json(serde_json::json!({
@@ -67,18 +65,27 @@ pub async fn get_profile_id(Query(query): Query<ProfileIdQuery>) -> Result<Respo
     )
     .await?;
 
+    // orrery always returns success here (it creates a placeholder profile when
+    // the identifier is unknown) with a `known` flag indicating whether a real
+    // user is linked. hydra has no userless-profile concept, so when the user
+    // is unknown it reports known:false with null profile ids rather than the
+    // old error response that callers branching on `known` would mishandle.
     if response.known {
         Ok(Json(serde_json::json!({
             "result": "success",
             "scistarter_profile_id": response.legacy_profile_id,
             "scistarter_profile_id_v2": response.opaque_id,
+            "scistarter_profile_ulid": response.user_id,
             "known": true
         }))
         .into_response())
     } else {
         Ok(Json(serde_json::json!({
-            "result": "error",
-            "message": "Not a current SciStarter user"
+            "result": "success",
+            "scistarter_profile_id": serde_json::Value::Null,
+            "scistarter_profile_id_v2": serde_json::Value::Null,
+            "scistarter_profile_ulid": "",
+            "known": false
         }))
         .into_response())
     }
@@ -96,12 +103,9 @@ struct CreateUserForm {
     first_name: Option<String>,
     last_name: Option<String>,
     zip_code: Option<String>,
-    #[allow(dead_code)]
     project_id: Option<String>,
-    #[allow(dead_code)]
     user_type: Option<String>,
     password_cyphertext: Option<String>,
-    #[allow(dead_code)]
     password_cypher: Option<String>,
 }
 
@@ -136,10 +140,38 @@ pub async fn create_user(
         .into_response());
     }
 
-    let email = form
-        .email
-        .or(form.user_id.clone())
-        .ok_or_else(|| anyhow::anyhow!("email or user_id required"))?;
+    let Some(email) = form.email.clone().or(form.user_id.clone()).filter(|e| !e.is_empty()) else {
+        return Ok(Json(serde_json::json!({ "error": "Email is required" })).into_response());
+    };
+
+    // Only the "cleartext" password cypher is supported (it returns the
+    // cyphertext unchanged), matching orrery's PASSWORD_DECYPHER.
+    let password_cypher = form
+        .password_cypher
+        .clone()
+        .unwrap_or_else(|| "cleartext".to_string());
+    if password_cypher != "cleartext" {
+        return Ok(Json(serde_json::json!({ "error": "Unknown password cypher" })).into_response());
+    }
+
+    // Resolve the referring project (by slug or legacy id) to its canonical slug.
+    let referer = if let Some(project_id) = form.project_id.clone().filter(|s| !s.is_empty()) {
+        let Some(entity_id) = resolve_legacy_project_id(&project_id).await else {
+            return Ok(Json(serde_json::json!({
+                "error": "project_id should be your project slug or integer identifier"
+            }))
+            .into_response());
+        };
+        sqlx::query_scalar!(
+            "SELECT slug FROM entities WHERE target = ? AND kind = 'Project' LIMIT 1",
+            entity_id
+        )
+        .fetch_optional(db())
+        .await?
+        .unwrap_or_default()
+    } else {
+        String::new()
+    };
 
     let response: ApiCreateUserResponse = request(
         "user.profile.api_create",
@@ -150,6 +182,9 @@ pub async fn create_user(
             last_name: form.last_name,
             zipcode: form.zip_code,
             password: form.password_cyphertext,
+            origin: Some("API".to_string()),
+            referer: Some(referer),
+            user_type: Some(form.user_type.unwrap_or_else(|| "0".to_string())),
         },
     )
     .await?;
@@ -193,59 +228,142 @@ struct RecordEventForm {
     hashed: Option<String>,
 }
 
+/// Truncate to at most 64 KiB by character, matching orrery's `[:64*1024]`.
+fn truncate_extra(extra: Option<String>) -> String {
+    extra
+        .map(|e| e.chars().take(64 * 1024).collect::<String>())
+        .unwrap_or_default()
+}
+
+/// Recording parameters shared by `record_event` and `record_event_by_email`.
+struct RecordCore {
+    event_type: Option<String>,
+    where_point: Option<String>,
+    when: Option<String>,
+    origin: i16,
+    duration: f64,
+    magnitude: i32,
+    extra: String,
+    repetitions: i32,
+    api_key: Option<String>,
+}
+
+impl RecordCore {
+    fn from_form(form: &RecordEventForm, api_key: Option<String>) -> Self {
+        RecordCore {
+            event_type: form.event_type.clone(),
+            where_point: form.where_point.clone(),
+            when: form.when.clone(),
+            // Default origin 3 (web); 2 for widgets (matches orrery).
+            origin: if form.origin.as_deref() == Some("widget") {
+                2
+            } else {
+                3
+            },
+            duration: form.duration.unwrap_or(0.0),
+            magnitude: form.magnitude.unwrap_or(1),
+            extra: truncate_extra(form.extra.clone()),
+            repetitions: form.count.unwrap_or(1).max(0),
+            api_key,
+        }
+    }
+}
+
+/// Record participation for one resolved user across a comma-separated list of
+/// legacy project ids, collecting per-project errors/notes like orrery. The
+/// `authenticated` flag is set per project, only when the API key may write to
+/// that project (orrery uses `project.can_write(key)`).
+async fn record_user_events(
+    user_id: Ulid,
+    project_ids_str: &str,
+    core: &RecordCore,
+    errors: &mut Vec<String>,
+    notes: &mut Vec<String>,
+) -> Result<(), Error> {
+    let mut seen = std::collections::HashSet::new();
+    for project_id_str in project_ids_str.split(',') {
+        let project_id_str = project_id_str.trim();
+        if project_id_str.is_empty() || !seen.insert(project_id_str.to_string()) {
+            continue;
+        }
+
+        let Some(entity_id) = resolve_legacy_project_id(project_id_str).await else {
+            errors.push("Invalid project id".to_string());
+            continue;
+        };
+
+        // Incidental events are intentionally not recorded.
+        if core.event_type.as_deref() == Some("incidental") {
+            notes.push("Not saving incidental event".to_string());
+            continue;
+        }
+
+        // Authenticated only when the key may write to THIS project.
+        let authenticated = match &core.api_key {
+            Some(key) => check_api_key_permission(key, &entity_id).await?,
+            None => false,
+        };
+
+        let record = ProjectParticipationRecord {
+            user_id,
+            project_id: entity_id.clone(),
+            origin: Some(core.origin),
+            when: core.when.clone(),
+            duration: Some(core.duration),
+            where_point: core.where_point.clone(),
+            magnitude: Some(core.magnitude),
+            authenticated: Some(authenticated),
+            extra: Some(core.extra.clone()),
+            fidelity: None,
+            task_name: core.event_type.clone(),
+        };
+
+        for _ in 0..core.repetitions {
+            send("log.project_participation_record", record.clone()).await?;
+        }
+    }
+    Ok(())
+}
+
+/// Standard success envelope for the record_event endpoints.
+fn record_success(errors: Vec<String>, notes: Vec<String>) -> Response {
+    Json(serde_json::json!({
+        "result": "success",
+        "event_id": "deprecated",
+        "project_name": "deprecated",
+        "errors": errors,
+        "notes": notes
+    }))
+    .into_response()
+}
+
+fn record_error(message: &str) -> Response {
+    Json(serde_json::json!({ "result": "error", "message": message })).into_response()
+}
+
 #[handler]
 pub async fn record_event(
     Query(query): Query<ApiKeyQuery>,
     Form(form): Form<RecordEventForm>,
 ) -> Result<Response, Error> {
-    let mut errors = Vec::<String>::new();
-
-    // Resolve profile IDs to user ULIDs
-    let profile_ids_str = form.profile_id.unwrap_or_default();
-    let project_ids_str = form.project_id.unwrap_or_default();
+    let profile_ids_str = form.profile_id.clone().unwrap_or_default();
+    let project_ids_str = form.project_id.clone().unwrap_or_default();
 
     if profile_ids_str.is_empty() {
-        return Ok(Json(serde_json::json!({
-            "result": "error",
-            "message": "profile_id required"
-        }))
-        .into_response());
+        return Ok(record_error("profile_id required"));
     }
-
     if project_ids_str.is_empty() {
-        return Ok(Json(serde_json::json!({
-            "result": "error",
-            "message": "project_id required"
-        }))
-        .into_response());
+        return Ok(record_error("project_id required"));
     }
 
-    // Determine origin
-    let origin: i16 = match form.origin.as_deref() {
-        Some("widget") => 2,
-        _ => 1,
-    };
+    let core = RecordCore::from_form(&form, query.key.clone());
+    let mut errors = Vec::<String>::new();
+    let mut notes = Vec::<String>::new();
+    let mut seen = std::collections::HashSet::new();
 
-    let repetitions = form.count.unwrap_or(1);
-
-    // API key check (optional for legacy compat)
-    let authenticated = if let Some(ref key) = query.key {
-        let validation: ValidateApiKeyResponse = request(
-            "user.api_key.validate",
-            ValidateApiKeyRequest {
-                api_key: key.to_string(),
-            },
-        )
-        .await?;
-        validation.valid
-    } else {
-        false
-    };
-
-    // Handle comma-separated profile_id and project_id lists
     for profile_id_str in profile_ids_str.split(',') {
         let profile_id_str = profile_id_str.trim();
-        if profile_id_str.is_empty() {
+        if profile_id_str.is_empty() || !seen.insert(profile_id_str.to_string()) {
             continue;
         }
 
@@ -260,56 +378,24 @@ pub async fn record_event(
         .await?;
 
         let Some(user_id_str) = user_lookup.user_id else {
+            // orrery records against a freshly-created placeholder profile here;
+            // hydra participation requires a known user (a ULID), so an unknown
+            // profile id is skipped rather than recorded.
             errors.push(format!("Profile {} not found", profile_id_str));
             continue;
         };
 
-        let user_id: ulid::Ulid = user_id_str.parse()?;
-
-        for project_id_str in project_ids_str.split(',') {
-            let project_id_str = project_id_str.trim();
-            if project_id_str.is_empty() {
-                continue;
-            }
-
-            // Resolve legacy project ID to entity target (ULID)
-            let entity_id = resolve_legacy_project_id(project_id_str).await;
-
-            let Some(entity_id) = entity_id else {
-                errors.push(format!("Project {} not found", project_id_str));
-                continue;
-            };
-
-            for _ in 0..repetitions {
-                send(
-                    "log.project_participation_record",
-                    ProjectParticipationRecord {
-                        user_id,
-                        project_id: entity_id.clone(),
-                        origin: Some(origin),
-                        when: form.when.clone(),
-                        duration: form.duration,
-                        where_point: form.where_point.clone(),
-                        magnitude: form.magnitude,
-                        authenticated: Some(authenticated),
-                        extra: form.extra.clone().or(Some(String::new())),
-                        fidelity: None,
-                        task_name: form.event_type.clone(),
-                    },
-                )
-                .await?;
-            }
+        // Respect the user's opt-out of contribution tracking.
+        if !user_lookup.track_contributions {
+            errors.push("Not recorded, per user request.".to_string());
+            continue;
         }
+
+        let user_id: Ulid = user_id_str.parse()?;
+        record_user_events(user_id, &project_ids_str, &core, &mut errors, &mut notes).await?;
     }
 
-    Ok(Json(serde_json::json!({
-        "result": "success",
-        "event_id": "deprecated",
-        "project_name": "deprecated",
-        "errors": errors,
-        "notes": []
-    }))
-    .into_response())
+    Ok(record_success(errors, notes))
 }
 
 // ============================================================================
@@ -321,11 +407,12 @@ pub async fn record_event_by_email(
     Query(query): Query<ApiKeyQuery>,
     Form(form): Form<RecordEventForm>,
 ) -> Result<Response, Error> {
-    // Resolve identifier to profile_id, then delegate to record_event logic
-    let identifier = if let Some(ref hashed) = form.hashed {
-        Some((hashed.clone(), ProfileIdLookupType::Hashed))
-    } else if let Some(ref identifier) = form.identifier {
-        Some((identifier.clone(), ProfileIdLookupType::Email))
+    // Resolve the identifier to a user, then record exactly like record_event.
+    // orrery lowercases the hashed value (hex), so we do too.
+    let identifier = if let Some(hashed) = form.hashed.clone().filter(|s| !s.is_empty()) {
+        Some((hashed.to_lowercase(), ProfileIdLookupType::Hashed))
+    } else if let Some(ident) = form.identifier.clone().filter(|s| !s.is_empty()) {
+        Some((ident, ProfileIdLookupType::Email))
     } else {
         None
     };
@@ -333,8 +420,9 @@ pub async fn record_event_by_email(
     let Some((ident, id_type)) = identifier else {
         return Ok(Json(serde_json::json!({
             "result": "error",
-            "message": "identifier or hashed required"
+            "message": "profile identifier missing"
         }))
+        .with_status(poem::http::StatusCode::BAD_REQUEST)
         .into_response());
     };
 
@@ -348,88 +436,28 @@ pub async fn record_event_by_email(
     .await?;
 
     let Some(user_id_str) = user_lookup.user_id else {
-        return Ok(Json(serde_json::json!({
-            "result": "success",
-            "event_id": "deprecated",
-            "errors": [],
-            "notes": ["User not found, discarding for privacy"]
-        }))
-        .into_response());
+        return Ok(record_error("Not a current SciStarter user"));
     };
-
-    let user_id: ulid::Ulid = user_id_str.parse()?;
 
     let project_ids_str = form.project_id.clone().unwrap_or_default();
     if project_ids_str.is_empty() {
-        return Ok(Json(serde_json::json!({
-            "result": "error",
-            "message": "project_id required"
-        }))
-        .into_response());
+        return Ok(record_error("project_id required"));
     }
 
-    let origin: i16 = match form.origin.as_deref() {
-        Some("widget") => 2,
-        _ => 1,
-    };
-
-    let repetitions = form.count.unwrap_or(1);
     let mut errors = Vec::<String>::new();
+    let mut notes = Vec::<String>::new();
 
-    let authenticated = if let Some(ref key) = query.key {
-        let validation: ValidateApiKeyResponse = request(
-            "user.api_key.validate",
-            ValidateApiKeyRequest {
-                api_key: key.to_string(),
-            },
-        )
-        .await?;
-        validation.valid
-    } else {
-        false
-    };
-
-    for project_id_str in project_ids_str.split(',') {
-        let project_id_str = project_id_str.trim();
-        if project_id_str.is_empty() {
-            continue;
-        }
-
-        let entity_id = resolve_legacy_project_id(project_id_str).await;
-
-        let Some(entity_id) = entity_id else {
-            errors.push(format!("Project {} not found", project_id_str));
-            continue;
-        };
-
-        for _ in 0..repetitions {
-            send(
-                "log.project_participation_record",
-                ProjectParticipationRecord {
-                    user_id,
-                    project_id: entity_id.clone(),
-                    origin: Some(origin),
-                    when: form.when.clone(),
-                    duration: form.duration,
-                    where_point: form.where_point.clone(),
-                    magnitude: form.magnitude,
-                    authenticated: Some(authenticated),
-                    extra: form.extra.clone().or(Some(String::new())),
-                    fidelity: None,
-                    task_name: form.event_type.clone(),
-                },
-            )
-            .await?;
-        }
+    // Respect the user's opt-out of contribution tracking.
+    if !user_lookup.track_contributions {
+        errors.push("Not recorded, per user request.".to_string());
+        return Ok(record_success(errors, notes));
     }
 
-    Ok(Json(serde_json::json!({
-        "result": "success",
-        "event_id": "deprecated",
-        "errors": errors,
-        "notes": []
-    }))
-    .into_response())
+    let core = RecordCore::from_form(&form, query.key.clone());
+    let user_id: Ulid = user_id_str.parse()?;
+    record_user_events(user_id, &project_ids_str, &core, &mut errors, &mut notes).await?;
+
+    Ok(record_success(errors, notes))
 }
 
 // ============================================================================
@@ -474,12 +502,19 @@ pub async fn get_project(
     // Fetch project data
     let project = sqlx::query!(
         r#"SELECT
-            name, description, status, difficulty,
-            url, guid, search_terms,
-            indoors, outdoors,
-            presenter, origin,
-            "begin", "end"
-           FROM projects WHERE project_id = ?"#,
+            p.name, p.description, p.status, p.difficulty,
+            p.guid, p.search_terms,
+            p.indoors, p.outdoors,
+            p.presenter, p.origin,
+            p."begin", p."end",
+            p.country,
+            p.is_affiliate AS "is_affiliate: bool",
+            AsGeoJSON(p.regions) AS "regions_json: Option<String>",
+            e.publish AS "publish: bool",
+            e.slug AS "slug!"
+           FROM projects p
+           JOIN entities e ON e.target = p.project_id AND e.kind = 'Project'
+           WHERE p.project_id = ?"#,
         entity_id
     )
     .fetch_optional(db())
@@ -508,33 +543,122 @@ pub async fn get_project(
     .fetch_all(db())
     .await?;
 
-    Ok(Json(serde_json::json!({
-        "title": project.name,
-        "description": project.description,
-        "status": project.status,
-        "difficulty": project.difficulty,
-        "url": project.url,
-        "guid": project.guid,
-        "search_terms": project.search_terms,
-        "indoors": project.indoors,
-        "outdoors": project.outdoors,
-        "presenter": project.presenter,
-        "origin": project.origin,
-        "begin_date": project.begin,
-        "end_date": project.end,
-        "tags": tags,
-        "topics": topics
-    }))
-    .into_response())
+    let mut result = serde_json::Map::new();
+    result.insert("title".into(), serde_json::json!(project.name));
+    result.insert("description".into(), serde_json::json!(project.description));
+    result.insert("publish".into(), serde_json::json!(project.publish));
+    // NOTE: orrery returns topics/UN_regions as [{code, name}] from its Choice
+    // vocabularies; hydra stores them as plain strings without numeric codes, so
+    // `topics` is a string list here and `UN_regions` is omitted (see decisions).
+    result.insert("topics".into(), serde_json::json!(topics));
+    result.insert("country".into(), serde_json::json!(project.country));
+    result.insert("origin".into(), serde_json::json!(project.origin));
+    result.insert(
+        "scistarter_affiliate".into(),
+        serde_json::json!(project.is_affiliate),
+    );
+    if let Some(status) = project_status_code_label(&project.status) {
+        result.insert("status".into(), status);
+    }
+    result.insert("indoors".into(), serde_json::json!(project.indoors));
+    result.insert("outdoors".into(), serde_json::json!(project.outdoors));
+    result.insert("guid".into(), serde_json::json!(project.guid));
+    result.insert("search_terms".into(), serde_json::json!(project.search_terms));
+    if let Some(difficulty) = project_difficulty_code_label(&project.difficulty) {
+        result.insert("difficulty".into(), difficulty);
+    }
+    result.insert("begin_date".into(), serde_json::json!(project.begin));
+    result.insert("end_date".into(), serde_json::json!(project.end));
+    result.insert("presenter".into(), serde_json::json!(project.presenter));
+    result.insert(
+        "url".into(),
+        serde_json::json!(format!("https://scistarter.org/{}", project.slug)),
+    );
+    result.insert("tags".into(), serde_json::json!(tags));
+
+    // Region geometry, in orrery's wrapper shape.
+    if let Some(geojson) = project.regions_json.flatten() {
+        if let Ok(geometry) = serde_json::from_str::<serde_json::Value>(&geojson) {
+            result.insert(
+                "regions".into(),
+                serde_json::json!([{
+                    "name": "geometry",
+                    "osm_id": serde_json::Value::Null,
+                    "legal": serde_json::Value::Null,
+                    "geometry": geometry,
+                }]),
+            );
+        }
+    }
+
+    Ok(Json(serde_json::Value::Object(result)).into_response())
+}
+
+/// Map a project status string to orrery's `[code, label]` pair, or None for
+/// statuses orrery's list doesn't cover (e.g. "Expired"), which it omits.
+fn project_status_code_label(status: &str) -> Option<serde_json::Value> {
+    let code = match status {
+        "Pending" => 0,
+        "Active" => 1,
+        "Periodically Active" => 2,
+        "Hiatus" => 3,
+        "Complete" => 4,
+        "Hidden" => 5,
+        _ => return None,
+    };
+    Some(serde_json::json!([code, status]))
+}
+
+/// Map a project difficulty string to orrery's `[code, label]` pair (orrery
+/// labels: 1 Easy, 2 medium, 3 Difficult), or None when unrecognized.
+fn project_difficulty_code_label(difficulty: &str) -> Option<serde_json::Value> {
+    let (code, label) = match difficulty.to_lowercase().as_str() {
+        "easy" => (1, "Easy"),
+        "medium" => (2, "medium"),
+        "difficult" => (3, "Difficult"),
+        _ => return None,
+    };
+    Some(serde_json::json!([code, label]))
 }
 
 // ============================================================================
 // POST /api/participation/failure
 // ============================================================================
 
+#[derive(Debug, Deserialize)]
+struct FailureForm {
+    error: Option<String>,
+}
+
 #[handler]
-pub async fn participation_failure(Form(_form): Form<serde_json::Value>) -> Response {
-    // Just log and return 200 — this endpoint exists for error reporting
+pub async fn participation_failure(Form(form): Form<FailureForm>) -> Response {
+    let error = form.error.unwrap_or_default();
+    let error = error.trim();
+
+    // No error text -> nothing to report (matches orrery).
+    if error.is_empty() {
+        return poem::http::StatusCode::OK.into();
+    }
+
+    // Email the report to the operations address (orrery: REPORTING_EMAIL,
+    // default info@scistarter.org). Braces are escaped so the body is never
+    // interpreted as merge fields. Failure to send must not fail the request.
+    let reporting_email =
+        std::env::var("REPORTING_EMAIL").unwrap_or_else(|_| "info@scistarter.org".to_string());
+    let body = error.replace('{', "{{").replace('}', "}}");
+
+    if let Err(e) = common::service::send_email(
+        vec![common::message::email::EmailRecipient::Email(reporting_email)],
+        "Participation error report",
+        body,
+        Vec::<String>::new(),
+        None,
+    )
+    .await
+    {
+        tracing::warn!("Failed to send participation error report: {}", e);
+    }
+
     poem::http::StatusCode::OK.into()
 }
 
@@ -582,8 +706,13 @@ pub async fn project_add(Json(mut data): Json<serde_json::Value>) -> Result<Resp
         .into_response());
     };
 
-    let validation: ValidateApiKeyResponse =
-        request("user.api_key.validate", ValidateApiKeyRequest { api_key }).await?;
+    let validation: ValidateApiKeyResponse = request(
+        "user.api_key.validate",
+        ValidateApiKeyRequest {
+            api_key: api_key.clone(),
+        },
+    )
+    .await?;
 
     if !validation.valid {
         return Ok(Json(serde_json::json!({
@@ -593,6 +722,12 @@ pub async fn project_add(Json(mut data): Json<serde_json::Value>) -> Result<Resp
         }))
         .into_response());
     };
+
+    // The API key's own user (owner default + image-upload attribution).
+    let api_user_id = validation
+        .user_id
+        .as_ref()
+        .and_then(|s| s.parse::<Ulid>().ok());
 
     // Apply PPSR field name mapping
     if let Some(obj) = data.as_object_mut() {
@@ -605,6 +740,23 @@ pub async fn project_add(Json(mut data): Json<serde_json::Value>) -> Result<Resp
                 }
             }
         }
+    }
+
+    // Goal and task are required (orrery rejects creation/update without them).
+    let has_field = |k: &str| {
+        data.get(k)
+            .and_then(|v| v.as_str())
+            .map(|s| !s.is_empty())
+            .unwrap_or(false)
+    };
+    if !has_field("goal") || !has_field("task") {
+        return Ok(Json(serde_json::json!({
+            "result": "error",
+            "error": 400,
+            "message": "Goal and task are required."
+        }))
+        .with_status(poem::http::StatusCode::BAD_REQUEST)
+        .into_response());
     }
 
     let guid = data
@@ -650,11 +802,44 @@ pub async fn project_add(Json(mut data): Json<serde_json::Value>) -> Result<Resp
         None
     };
 
+    // A scistarter_id (with no guid) must reference an existing project; orrery
+    // returns 400 rather than creating a new project in that case.
+    if guid.is_empty() && scistarter_id_int.is_some() && existing_project_id.is_none() {
+        return Ok(Json(serde_json::json!({
+            "result": "error",
+            "error": 400,
+            "message": "scistarter_id does not contain a valid id"
+        }))
+        .with_status(poem::http::StatusCode::BAD_REQUEST)
+        .into_response());
+    }
+
     let (project_ulid, is_new) = if let Some(ref pid) = existing_project_id {
         (pid.parse::<Ulid>()?, false)
     } else {
         (Ulid::new(), true)
     };
+
+    // For an existing project, only a writer (page creator/manager or staff) may
+    // update it; otherwise report that it already exists without overwriting.
+    if !is_new {
+        let project_id_str = project_ulid.to_string();
+        if !check_api_key_permission(&api_key, &project_id_str).await? {
+            let legacy_id = sqlx::query_scalar!(
+                "SELECT legacy_id FROM projects WHERE project_id = ?",
+                project_id_str
+            )
+            .fetch_optional(db())
+            .await?
+            .flatten();
+            return Ok(Json(serde_json::json!({
+                "result": "success",
+                "message": "This project already exists in the database",
+                "project_id": legacy_id
+            }))
+            .into_response());
+        }
+    }
 
     // Load existing or create new
     let mut proj = if is_new {
@@ -748,6 +933,29 @@ pub async fn project_add(Json(mut data): Json<serde_json::Value>) -> Result<Resp
     }
     if let Some(v) = obj.get("task").and_then(|v| v.as_str()) {
         proj.task = v.to_string();
+    }
+
+    // Image: re-host the supplied URL adjacent to our untracked uploads (orrery
+    // does the same via url_to_file). A fetch/processing failure aborts the
+    // request with the same error orrery returns.
+    if let Some(image_url) = obj
+        .get("image")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+    {
+        let uploaded_by = api_user_id.unwrap_or_else(Ulid::nil);
+        match rehost_image_url(image_url, uploaded_by).await {
+            Some(hosted) => proj.image = hosted,
+            None => {
+                return Ok(Json(serde_json::json!({
+                    "result": "error",
+                    "error": 400,
+                    "message": "Unable to load and process the project image"
+                }))
+                .with_status(poem::http::StatusCode::BAD_REQUEST)
+                .into_response());
+            }
+        }
     }
 
     // Status mapping
@@ -863,6 +1071,23 @@ pub async fn project_add(Json(mut data): Json<serde_json::Value>) -> Result<Resp
         proj.audience = audience_list.into_boxed_slice();
     }
 
+    // Activities
+    if let Some(activities_val) = obj.get("activities") {
+        let activity_list: Vec<String> = if let Some(arr) = activities_val.as_array() {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        } else if let Some(s) = activities_val.as_str() {
+            s.split(',')
+                .map(|t| t.trim().to_string())
+                .filter(|t| !t.is_empty())
+                .collect()
+        } else {
+            vec![]
+        };
+        proj.activities = activity_list.into_boxed_slice();
+    }
+
     // Presenting org (alternative to presenter)
     if let Some(v) = obj.get("presenting_org").and_then(|v| v.as_str()) {
         proj.presenter = v.to_string();
@@ -897,6 +1122,10 @@ pub async fn project_add(Json(mut data): Json<serde_json::Value>) -> Result<Resp
         } else if regions_val.is_null() {
             proj.location_type = "NONE".to_string();
         }
+    } else if proj.location_type.is_empty() {
+        // orrery defaults the coverage to "ANY" (global) when no boundary is
+        // supplied, to accommodate CitSci.org projects.
+        proj.location_type = "ANY".to_string();
     }
 
     // Extra
@@ -912,23 +1141,54 @@ pub async fn project_add(Json(mut data): Json<serde_json::Value>) -> Result<Resp
         proj.origin = "API import".to_string();
     }
 
-    // Set affiliate flag if the API key user has automatic_affiliate
-    // (simplified: just mark it based on the user being staff)
-    if validation.is_staff {
+    // Affiliate flag, keyed on the user's `automatic_affiliate` flag (synced
+    // from orrery), matching orrery exactly.
+    if validation.automatic_affiliate {
         proj.is_affiliate = true;
     }
 
-    // Save project
-    proj.store().await?;
+    // Owner / page managers. orrery resolves admin_email_hashes to users (owner
+    // and managers) and otherwise falls back to the API key's own user.
+    let mut manager_ids: Vec<Ulid> = proj.page_editor_ids.to_vec();
+    if let Some(hashes) = obj.get("admin_email_hashes").and_then(|v| v.as_array()) {
+        for hash in hashes {
+            let Some(hash) = hash.as_str().filter(|s| !s.is_empty()) else {
+                continue;
+            };
+            let matched: UserMatchResponse = request(
+                "user.match",
+                UserMatchRequest {
+                    identifier: hash.to_string(),
+                    identifier_type: IdentifierType::Hashed,
+                },
+            )
+            .await?;
+            if let Some(uid) = matched.user_id.and_then(|s| s.parse::<Ulid>().ok()) {
+                proj.page_creator_id = uid;
+                if !manager_ids.contains(&uid) {
+                    manager_ids.push(uid);
+                }
+            }
+        }
+    }
+    if proj.page_creator_id == Ulid::default() {
+        if let Some(uid) = api_user_id {
+            proj.page_creator_id = uid;
+            if !manager_ids.contains(&uid) {
+                manager_ids.push(uid);
+            }
+        }
+    }
+    proj.page_editor_ids = manager_ids.into_boxed_slice();
 
-    // Create or update entity slug
+    // Persist. New projects go through the shared creation path (store, page
+    // entity, activity log, and submitter/reviewer notification emails); updates
+    // just store the changed fields.
     let slug = if is_new {
-        let slug = generate_slug(&proj.name).await;
-        let entity = Entity::new(&slug, EntityKind::Project, EntityTarget::Ulid(project_ulid));
-        entity.store().await?;
-        slug
+        let creator = api_user_id.unwrap_or(proj.page_creator_id);
+        crate::project::all::persist_new_project(proj, true, creator).await?
     } else {
-        // Find existing slug
+        proj.store().await?;
         let project_id_str = project_ulid.to_string();
         sqlx::query_scalar!(
             "SELECT slug FROM entities WHERE target = ? LIMIT 1",
@@ -962,281 +1222,56 @@ pub async fn project_add(Json(mut data): Json<serde_json::Value>) -> Result<Resp
 // ============================================================================
 
 #[handler]
-pub async fn event_add(Json(mut data): Json<serde_json::Value>) -> Result<Response, Error> {
-    // Validate API key from JSON body
-    let api_key = data
-        .get("key")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-
-    let Some(api_key) = api_key else {
-        return Ok(Json(serde_json::json!({
-            "result": "error",
-            "error": 400,
-            "message": "API key required"
-        }))
-        .into_response());
-    };
-
-    let validation: ValidateApiKeyResponse =
-        request("user.api_key.validate", ValidateApiKeyRequest { api_key }).await?;
-
-    if !validation.valid {
-        return Ok(Json(serde_json::json!({
-            "result": "error",
-            "error": 401,
-            "message": "Invalid API key"
-        }))
-        .into_response());
-    };
-
-    let guid = data
-        .get("guid")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    if guid.is_empty() {
-        return Ok(Json(serde_json::json!({
-            "result": "error",
-            "error": 400,
-            "message": "guid required"
-        }))
-        .into_response());
-    }
-
-    // Remove internal-only fields that shouldn't be set via API
-    if let Some(obj) = data.as_object_mut() {
-        for key in &[
-            "slug",
-            "value",
-            "id",
-            "legacy_id",
-            "box",
-            "link",
-            "type",
-            "publish",
-            "created",
-            "updated",
-            "component",
-            "_metadata",
-            "authoritative",
-            "redirect",
-            "circuit_id",
-            "key",
-        ] {
-            obj.remove(*key);
-        }
-    }
-
-    // Try to find existing event by GUID (stored in admin_notes or a guid-like field)
-    // Events don't have a guid column, so we match by name+origin or create new
-    let existing_event_id = sqlx::query_scalar!(
-        "SELECT e.event_id FROM events e
-         JOIN entities ent ON ent.target = e.event_id
-         WHERE ent.slug = ? LIMIT 1",
-        guid
-    )
-    .fetch_optional(db())
-    .await?;
-
-    let (event_ulid, is_new) = if let Some(ref eid) = existing_event_id {
-        (eid.parse::<Ulid>()?, false)
-    } else {
-        (Ulid::new(), true)
-    };
-
-    let mut evt = if is_new {
-        let mut e = EventAll::default();
-        e.event_id = event_ulid;
-        e
-    } else {
-        EventAll::load(event_ulid).await.unwrap_or_else(|_| {
-            let mut e = EventAll::default();
-            e.event_id = event_ulid;
-            e
-        })
-    };
-
-    let obj = data.as_object().cloned().unwrap_or_default();
-
-    if let Some(v) = obj.get("name").and_then(|v| v.as_str()) {
-        evt.name = v.to_string();
-    }
-    if let Some(v) = obj.get("description").and_then(|v| v.as_str()) {
-        evt.description = v.to_string();
-    }
-    if let Some(v) = obj.get("url").and_then(|v| v.as_str()) {
-        evt.url = v.to_string();
-    }
-    if let Some(v) = obj.get("presenter").and_then(|v| v.as_str()) {
-        evt.presenter = v.to_string();
-    }
-    if let Some(v) = obj
-        .get("image_url")
-        .or(obj.get("image"))
-        .and_then(|v| v.as_str())
-    {
-        evt.image = v.to_string();
-    }
-    if let Some(v) = obj.get("address").and_then(|v| v.as_str()) {
-        evt.address = v.to_string();
-    }
-    if let Some(v) = obj.get("city").and_then(|v| v.as_str()) {
-        evt.city = v.to_string();
-    }
-    if let Some(v) = obj.get("state").and_then(|v| v.as_str()) {
-        evt.state = v.to_string();
-    }
-    if let Some(v) = obj.get("zip").and_then(|v| v.as_str()) {
-        evt.zip = v.to_string();
-    }
-    if let Some(v) = obj.get("country").and_then(|v| v.as_str()) {
-        evt.country = v.to_string();
-    }
-    if let Some(v) = obj.get("how_to_join").and_then(|v| v.as_str()) {
-        evt.how_to_join = v.to_string();
-    }
-    if let Some(v) = obj.get("image_credit").and_then(|v| v.as_str()) {
-        evt.image_credit = v.to_string();
-    }
-
-    // Origin
-    evt.origin = obj
-        .get("origin")
-        .and_then(|v| v.as_str())
-        .unwrap_or("API")
-        .to_string();
-
-    // Location type
-    if let Some(lt) = obj.get("location_type") {
-        if let Some(lt_obj) = lt.as_object() {
-            evt.location_type = lt_obj
-                .get("value")
-                .and_then(|v| v.as_str())
-                .unwrap_or("ANY")
-                .to_string();
-        } else if let Some(s) = lt.as_str() {
-            evt.location_type = s.to_string();
-        }
-    }
-
-    // Regions (GeoJSON)
-    if let Some(v) = obj.get("regions").and_then(|v| v.as_str()) {
-        evt.regions = Some(v.to_string());
-    }
-
-    // Point (GeoJSON)
-    if let Some(v) = obj.get("point").and_then(|v| v.as_str()) {
-        evt.point = Some(v.to_string());
-    }
-
-    // Tags
-    if let Some(tags_val) = obj.get("tags") {
-        let tag_list: Vec<String> = if let Some(arr) = tags_val.as_array() {
-            arr.iter()
-                .filter_map(|v| v.as_str().map(String::from))
-                .collect()
-        } else if let Some(s) = tags_val.as_str() {
-            s.split(',')
-                .map(|t| t.trim().to_string())
-                .filter(|t| !t.is_empty())
-                .collect()
-        } else {
-            vec![]
-        };
-        evt.tags = tag_list.into_iter().map(|t| t.into()).collect();
-    }
-
-    // Begin/end as event instances
-    let begin: Option<TimeString> = obj
-        .get("begin")
-        .and_then(|v| v.as_str())
-        .and_then(|s| TimeString::try_from(s.to_string()).ok());
-    let end: Option<TimeString> = obj
-        .get("end")
-        .and_then(|v| v.as_str())
-        .and_then(|s| TimeString::try_from(s.to_string()).ok());
-    if begin.is_some() || end.is_some() {
-        evt.instances = vec![EventInstance {
-            begin: begin.unwrap_or_default(),
-            end: end.unwrap_or_default(),
-        }]
-        .into_boxed_slice();
-    }
-
-    // Entirely online
-    if let Some(v) = obj.get("entirely_online").and_then(|v| v.as_bool()) {
-        evt.entirely_online = v;
-    }
-
-    // Save event
-    evt.store().await?;
-
-    // Create or find entity slug
-    let slug = if is_new {
-        // Use guid as slug for events
-        let slug = if !guid.is_empty() {
-            guid.clone()
-        } else {
-            generate_slug(&evt.name).await
-        };
-        let entity = Entity::new(&slug, EntityKind::Event, EntityTarget::Ulid(event_ulid));
-        entity.store().await?;
-        slug
-    } else {
-        let event_id_str = event_ulid.to_string();
-        sqlx::query_scalar!(
-            "SELECT slug FROM entities WHERE target = ? LIMIT 1",
-            event_id_str
-        )
-        .fetch_optional(db())
-        .await?
-        .unwrap_or_else(|| event_ulid.to_string())
-    };
-
-    Ok(Json(serde_json::json!({
-        "result": "success",
-        "slug": slug
+pub async fn event_add() -> Response {
+    // Event creation via the API has been retired: there are no known consumers,
+    // and orrery's model (guid-based dedup and arbitrary field passthrough) does
+    // not map onto hydra's typed event model. The endpoint reports that it is gone.
+    Json(serde_json::json!({
+        "result": "error",
+        "error": 410,
+        "message": "The event creation API is no longer available."
     }))
-    .into_response())
+    .with_status(poem::http::StatusCode::GONE)
+    .into_response()
 }
 
 // ============================================================================
 // Helpers
 // ============================================================================
 
-/// Generate a URL-safe slug from a name, ensuring uniqueness
-async fn generate_slug(name: &str) -> String {
-    let base_slug: String = name
-        .to_lowercase()
-        .chars()
-        .map(|c| if c.is_alphanumeric() { c } else { '-' })
-        .collect::<String>()
-        .split('-')
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join("-");
+/// Fetch a remote image and re-host it adjacent to our untracked uploads,
+/// returning the hosted path (`/-uploaded/<id>`). Returns None on any
+/// fetch/upload failure so the caller can report it. Mirrors orrery's
+/// `url_to_file`.
+async fn rehost_image_url(url: &str, uploaded_by: Ulid) -> Option<String> {
+    let response = reqwest::get(url).await.ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let data = response.bytes().await.ok()?.to_vec();
+    if data.is_empty() {
+        return None;
+    }
 
-    let base_slug = if base_slug.is_empty() {
-        "project".to_string()
-    } else {
-        base_slug
+    let file_id = Ulid::new();
+    let metadata = crate::upload::storage::FileMetadata {
+        file_id,
+        original_filename: None,
+        content_type,
+        size: data.len() as u64,
+        uploaded_by,
+        access: crate::upload::storage::FileAccess::Untracked,
+        variant: None,
+        force_download: false,
     };
+    crate::upload::STORAGE.upload_file(metadata, data).await.ok()?;
 
-    // Check for uniqueness, append suffix if needed
-    if !Entity::slug_exists(&base_slug).await.unwrap_or(true) {
-        return base_slug;
-    }
-
-    for i in 2..1000 {
-        let candidate = format!("{}-{}", base_slug, i);
-        if !Entity::slug_exists(&candidate).await.unwrap_or(true) {
-            return candidate;
-        }
-    }
-
-    // Fallback: use ULID
-    format!("{}-{}", base_slug, Ulid::new())
+    Some(format!("/-uploaded/{file_id}"))
 }
 
 /// Resolve a legacy project ID (integer) or slug to a project_id ULID string

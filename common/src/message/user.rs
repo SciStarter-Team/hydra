@@ -26,6 +26,21 @@ pub struct Login {
     pub password: String,
 }
 
+/// Profile fields returned to Science Near Me after a successful credential
+/// check (the encrypted payload of the /api/login-for-snm bridge).
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct SnmProfile {
+    /// The user's handle, or None when unset.
+    pub username: Option<String>,
+    pub first_name: String,
+    pub last_name: String,
+    /// All of the user's email addresses (primary first).
+    pub emails: Vec<String>,
+    /// The user's zip code, or None when unset.
+    pub zip_code: Option<String>,
+    pub newsletter: bool,
+}
+
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Session {
     pub session_id: String,
@@ -1079,6 +1094,7 @@ pub enum IdentifierType {
     Opaque,    // User's opaque_id UUID
     Email,     // Plaintext email
     LinkToken, // Link token string
+    Ulid,      // User's ULID (hydra user_id == orrery User.ulid)
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -1115,6 +1131,49 @@ pub struct ProfileIdLookupResponse {
     pub legacy_profile_id: Option<i64>,
     pub opaque_id: Option<String>,
     pub known: bool,
+    /// Whether the user permits their contributions to be recorded. Defaults to
+    /// true (and is meaningless when `known` is false).
+    #[serde(default = "crate::message::default_true")]
+    pub track_contributions: bool,
+}
+
+// ============================================================================
+// Training-state export (for /api/training-state.json)
+// ============================================================================
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct TrainingStatesRequest {}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct FoundationsStateEntry {
+    /// The user's opaque id.
+    pub person: String,
+    /// Derived Foundations state name (e.g. "hour1", "squirrel", "bookmark2",
+    /// "badge"); only users past the initial state are included.
+    pub state: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct TrainingStatesResponse {
+    pub states: Vec<FoundationsStateEntry>,
+}
+
+// ============================================================================
+// Ambassador map (for /api/ambassador_map.geojson)
+// ============================================================================
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AmbassadorPassedLocationsRequest {}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AmbassadorLocation {
+    pub city: String,
+    pub state: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AmbassadorPassedLocationsResponse {
+    pub locations: Vec<AmbassadorLocation>,
 }
 
 // ============================================================================
@@ -1129,6 +1188,15 @@ pub struct ApiCreateUserRequest {
     pub last_name: Option<String>,
     pub zipcode: Option<String>,
     pub password: Option<String>,
+    /// Account origin (the v1 API sets "API"). Applied to newly-created users.
+    #[serde(default)]
+    pub origin: Option<String>,
+    /// Referring project slug, recorded on newly-created users.
+    #[serde(default)]
+    pub referer: Option<String>,
+    /// Opaque caller-supplied user-type code, stored as misc `{"user_type": N}`.
+    #[serde(default)]
+    pub user_type: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -1178,6 +1246,10 @@ pub struct ValidateApiKeyResponse {
     pub user_id: Option<String>, // ULID if valid
     pub is_staff: bool,
     pub is_superuser: bool,
+    /// Whether the key's user is flagged to auto-affiliate the projects they
+    /// create via the API. Defaults to false.
+    #[serde(default)]
+    pub automatic_affiliate: bool,
 }
 
 // ============================================================================
