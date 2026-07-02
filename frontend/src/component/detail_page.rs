@@ -758,7 +758,10 @@ impl DetailPage {
                 .into_iter()
                 .map(|uid| ManagerDisplay {
                     user_id: uid.to_string(),
-                    email: resolved.get(&uid).cloned().unwrap_or_else(|| uid.to_string()),
+                    email: resolved
+                        .get(&uid)
+                        .cloned()
+                        .unwrap_or_else(|| uid.to_string()),
                 })
                 .collect()
         } else {
@@ -1122,7 +1125,10 @@ impl DetailPage {
                 .into_iter()
                 .map(|uid| ManagerDisplay {
                     user_id: uid.to_string(),
-                    email: resolved.get(&uid).cloned().unwrap_or_else(|| uid.to_string()),
+                    email: resolved
+                        .get(&uid)
+                        .cloned()
+                        .unwrap_or_else(|| uid.to_string()),
                 })
                 .collect()
         } else {

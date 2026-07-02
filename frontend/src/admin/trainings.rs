@@ -169,12 +169,17 @@ struct TrainingsPage {
 async fn trainings_list(
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    let prepared = AdminLayout::new("Trainings", TrainingsPage { trainings: TRAININGS })
-        .with_sidebar_active("engine-room-trainings")
-        .with_breadcrumb("Engine Room", None)
-        .with_breadcrumb("Trainings", None)
-        .prepare(user_info)
-        .await?;
+    let prepared = AdminLayout::new(
+        "Trainings",
+        TrainingsPage {
+            trainings: TRAININGS,
+        },
+    )
+    .with_sidebar_active("engine-room-trainings")
+    .with_breadcrumb("Engine Room", None)
+    .with_breadcrumb("Trainings", None)
+    .prepare(user_info)
+    .await?;
 
     Ok(poem::Response::builder()
         .content_type("text/html")
@@ -219,7 +224,10 @@ fn header_and_skills(
     ]
 }
 
-fn log_edit(user_info: &Option<Arc<BasicInfo>>, slug: &str) -> impl std::future::Future<Output = ()> {
+fn log_edit(
+    user_info: &Option<Arc<BasicInfo>>,
+    slug: &str,
+) -> impl std::future::Future<Output = ()> {
     let user = user_info.clone();
     let slug = slug.to_string();
     async move {
@@ -283,15 +291,27 @@ fn foundations_sections(c: &FoundationsContent) -> Vec<Section> {
     );
     sections.push(section(
         "Step 1 — SciStarter Account",
-        vec![Field::text("account_heading", "Step heading", &c.account_heading)],
+        vec![Field::text(
+            "account_heading",
+            "Step heading",
+            &c.account_heading,
+        )],
     ));
     sections.push(section(
         "Step 2 — Tutorial & quiz",
         vec![
             Field::text("tutorial_heading", "Step heading", &c.tutorial_heading),
             Field::html("tutorial_intro", "Intro (HTML)", &c.tutorial_intro, 3),
-            Field::text("articulate_en", "Articulate URL (English)", &c.articulate_en),
-            Field::text("articulate_es", "Articulate URL (Spanish)", &c.articulate_es),
+            Field::text(
+                "articulate_en",
+                "Articulate URL (English)",
+                &c.articulate_en,
+            ),
+            Field::text(
+                "articulate_es",
+                "Articulate URL (Spanish)",
+                &c.articulate_es,
+            ),
         ],
     ));
     sections.push(section(
@@ -301,14 +321,40 @@ fn foundations_sections(c: &FoundationsContent) -> Vec<Section> {
             Field::html("projects_intro", "Intro (HTML)", &c.projects_intro, 4),
             Field::text("squirrel_title", "Squirrel — title", &c.squirrel_title),
             Field::text("squirrel_image", "Squirrel — image URL", &c.squirrel_image),
-            Field::area("squirrel_description", "Squirrel — description", &c.squirrel_description, 2),
-            Field::text("squirrel_time_tag", "Squirrel — time tag", &c.squirrel_time_tag),
-            Field::text("squirrel_place_tag", "Squirrel — place tag", &c.squirrel_place_tag),
+            Field::area(
+                "squirrel_description",
+                "Squirrel — description",
+                &c.squirrel_description,
+                2,
+            ),
+            Field::text(
+                "squirrel_time_tag",
+                "Squirrel — time tag",
+                &c.squirrel_time_tag,
+            ),
+            Field::text(
+                "squirrel_place_tag",
+                "Squirrel — place tag",
+                &c.squirrel_place_tag,
+            ),
             Field::text("stall_title", "Stall Catchers — title", &c.stall_title),
             Field::text("stall_image", "Stall Catchers — image URL", &c.stall_image),
-            Field::area("stall_description", "Stall Catchers — description", &c.stall_description, 2),
-            Field::text("stall_time_tag", "Stall Catchers — time tag", &c.stall_time_tag),
-            Field::text("stall_place_tag", "Stall Catchers — place tag", &c.stall_place_tag),
+            Field::area(
+                "stall_description",
+                "Stall Catchers — description",
+                &c.stall_description,
+                2,
+            ),
+            Field::text(
+                "stall_time_tag",
+                "Stall Catchers — time tag",
+                &c.stall_time_tag,
+            ),
+            Field::text(
+                "stall_place_tag",
+                "Stall Catchers — place tag",
+                &c.stall_place_tag,
+            ),
         ],
     ));
     sections.push(section(
@@ -320,7 +366,12 @@ fn foundations_sections(c: &FoundationsContent) -> Vec<Section> {
     ));
     sections.push(section(
         "Sidebar",
-        vec![Field::html("sidebar_html", "Sidebar (HTML, badge rendered separately)", &c.sidebar_html, 12)],
+        vec![Field::html(
+            "sidebar_html",
+            "Sidebar (HTML, badge rendered separately)",
+            &c.sidebar_html,
+            12,
+        )],
     ));
     sections
 }
@@ -424,7 +475,11 @@ fn dataethics_sections(c: &DataEthicsContent) -> Vec<Section> {
     );
     sections.push(section(
         "Step 1 — SciStarter Account",
-        vec![Field::text("account_heading", "Step heading", &c.account_heading)],
+        vec![Field::text(
+            "account_heading",
+            "Step heading",
+            &c.account_heading,
+        )],
     ));
     sections.push(section(
         "Step 2 — Tutorial & quiz",
@@ -432,7 +487,11 @@ fn dataethics_sections(c: &DataEthicsContent) -> Vec<Section> {
             Field::text("tutorial_heading", "Step heading", &c.tutorial_heading),
             Field::html("tutorial_intro", "Intro (HTML)", &c.tutorial_intro, 3),
             Field::text("articulate_url", "Articulate URL", &c.articulate_url),
-            Field::text("articulate_image", "Tutorial card image URL", &c.articulate_image),
+            Field::text(
+                "articulate_image",
+                "Tutorial card image URL",
+                &c.articulate_image,
+            ),
         ],
     ));
     sections.push(section(
@@ -444,7 +503,12 @@ fn dataethics_sections(c: &DataEthicsContent) -> Vec<Section> {
     ));
     sections.push(section(
         "Sidebar",
-        vec![Field::html("sidebar_html", "Sidebar (HTML, badge rendered separately)", &c.sidebar_html, 12)],
+        vec![Field::html(
+            "sidebar_html",
+            "Sidebar (HTML, badge rendered separately)",
+            &c.sidebar_html,
+            12,
+        )],
     ));
     sections
 }
@@ -538,17 +602,37 @@ fn dataliteracy_sections(c: &DataLiteracyContent) -> Vec<Section> {
     );
     sections.push(section(
         "Step 1 — SciStarter Account",
-        vec![Field::text("account_heading", "Step heading", &c.account_heading)],
+        vec![Field::text(
+            "account_heading",
+            "Step heading",
+            &c.account_heading,
+        )],
     ));
     sections.push(section(
         "Step 2 — Tutorial & quiz",
         vec![
             Field::text("tutorial_heading", "Step heading", &c.tutorial_heading),
             Field::html("tutorial_intro", "Intro (HTML)", &c.tutorial_intro, 3),
-            Field::text("articulate_en", "Articulate URL (English)", &c.articulate_en),
-            Field::text("articulate_en_image", "Card image URL (English)", &c.articulate_en_image),
-            Field::text("articulate_es", "Articulate URL (Spanish)", &c.articulate_es),
-            Field::text("articulate_es_image", "Card image URL (Spanish)", &c.articulate_es_image),
+            Field::text(
+                "articulate_en",
+                "Articulate URL (English)",
+                &c.articulate_en,
+            ),
+            Field::text(
+                "articulate_en_image",
+                "Card image URL (English)",
+                &c.articulate_en_image,
+            ),
+            Field::text(
+                "articulate_es",
+                "Articulate URL (Spanish)",
+                &c.articulate_es,
+            ),
+            Field::text(
+                "articulate_es_image",
+                "Card image URL (Spanish)",
+                &c.articulate_es_image,
+            ),
         ],
     ));
     sections.push(section(
@@ -560,7 +644,12 @@ fn dataliteracy_sections(c: &DataLiteracyContent) -> Vec<Section> {
     ));
     sections.push(section(
         "Sidebar",
-        vec![Field::html("sidebar_html", "Sidebar (HTML, badge rendered separately)", &c.sidebar_html, 8)],
+        vec![Field::html(
+            "sidebar_html",
+            "Sidebar (HTML, badge rendered separately)",
+            &c.sidebar_html,
+            8,
+        )],
     ));
     sections
 }
@@ -657,7 +746,11 @@ fn highered_sections(c: &HigherEdContent) -> Vec<Section> {
     );
     sections.push(section(
         "Step 1 — SciStarter Account",
-        vec![Field::text("account_heading", "Step heading", &c.account_heading)],
+        vec![Field::text(
+            "account_heading",
+            "Step heading",
+            &c.account_heading,
+        )],
     ));
     sections.push(section(
         "Step 2 — Tutorial & quiz",
@@ -665,7 +758,11 @@ fn highered_sections(c: &HigherEdContent) -> Vec<Section> {
             Field::text("tutorial_heading", "Step heading", &c.tutorial_heading),
             Field::html("tutorial_intro", "Intro (HTML)", &c.tutorial_intro, 3),
             Field::text("articulate_url", "Articulate URL", &c.articulate_url),
-            Field::text("articulate_image", "Tutorial card image URL", &c.articulate_image),
+            Field::text(
+                "articulate_image",
+                "Tutorial card image URL",
+                &c.articulate_image,
+            ),
         ],
     ));
     sections.push(section(
@@ -679,13 +776,27 @@ fn highered_sections(c: &HigherEdContent) -> Vec<Section> {
         "Step 4 — Explore AAPS (tracked, grants badge)",
         vec![
             Field::text("explore_heading", "Step heading", &c.explore_heading),
-            Field::html("explore_html", "Body (HTML) — link to /training/higher-ed/explore", &c.explore_html, 4),
-            Field::text("explore_url", "Explore destination URL (where the link redirects)", &c.explore_url),
+            Field::html(
+                "explore_html",
+                "Body (HTML) — link to /training/higher-ed/explore",
+                &c.explore_html,
+                4,
+            ),
+            Field::text(
+                "explore_url",
+                "Explore destination URL (where the link redirects)",
+                &c.explore_url,
+            ),
         ],
     ));
     sections.push(section(
         "Sidebar",
-        vec![Field::html("sidebar_html", "Sidebar (HTML, badge rendered separately)", &c.sidebar_html, 8)],
+        vec![Field::html(
+            "sidebar_html",
+            "Sidebar (HTML, badge rendered separately)",
+            &c.sidebar_html,
+            8,
+        )],
     ));
     sections
 }
@@ -784,7 +895,11 @@ fn libraries_sections(c: &LibrariesContent) -> Vec<Section> {
     );
     sections.push(section(
         "Step 1 — SciStarter Account",
-        vec![Field::text("account_heading", "Step heading", &c.account_heading)],
+        vec![Field::text(
+            "account_heading",
+            "Step heading",
+            &c.account_heading,
+        )],
     ));
     sections.push(section(
         "Step 2 — Foundations prerequisite",
@@ -799,13 +914,21 @@ fn libraries_sections(c: &LibrariesContent) -> Vec<Section> {
             Field::text("tutorial_heading", "Step heading", &c.tutorial_heading),
             Field::html("tutorial_intro", "Intro (HTML)", &c.tutorial_intro, 3),
             Field::text("articulate_url", "Articulate URL", &c.articulate_url),
-            Field::text("articulate_image", "Tutorial card image URL", &c.articulate_image),
+            Field::text(
+                "articulate_image",
+                "Tutorial card image URL",
+                &c.articulate_image,
+            ),
         ],
     ));
     sections.push(section(
         "Step 4 — Join the Library Network",
         vec![
-            Field::text("supplemental_heading", "Step heading", &c.supplemental_heading),
+            Field::text(
+                "supplemental_heading",
+                "Step heading",
+                &c.supplemental_heading,
+            ),
             Field::html("supplemental_html", "Body (HTML)", &c.supplemental_html, 3),
         ],
     ));
@@ -818,7 +941,12 @@ fn libraries_sections(c: &LibrariesContent) -> Vec<Section> {
     ));
     sections.push(section(
         "Sidebar",
-        vec![Field::html("sidebar_html", "Sidebar (HTML, badge rendered separately)", &c.sidebar_html, 6)],
+        vec![Field::html(
+            "sidebar_html",
+            "Sidebar (HTML, badge rendered separately)",
+            &c.sidebar_html,
+            6,
+        )],
     ));
     sections
 }
@@ -918,7 +1046,11 @@ fn champion_sections(c: &ChampionContent) -> Vec<Section> {
     );
     sections.push(section(
         "Step 1 — SciStarter Account",
-        vec![Field::text("account_heading", "Step heading", &c.account_heading)],
+        vec![Field::text(
+            "account_heading",
+            "Step heading",
+            &c.account_heading,
+        )],
     ));
     sections.push(section(
         "Step 2 — Foundations prerequisite",
@@ -933,7 +1065,11 @@ fn champion_sections(c: &ChampionContent) -> Vec<Section> {
             Field::text("tutorial_heading", "Step heading", &c.tutorial_heading),
             Field::html("tutorial_intro", "Intro (HTML)", &c.tutorial_intro, 3),
             Field::text("articulate_url", "Articulate URL", &c.articulate_url),
-            Field::text("articulate_image", "Tutorial card image URL", &c.articulate_image),
+            Field::text(
+                "articulate_image",
+                "Tutorial card image URL",
+                &c.articulate_image,
+            ),
         ],
     ));
     sections.push(section(
@@ -952,7 +1088,12 @@ fn champion_sections(c: &ChampionContent) -> Vec<Section> {
     ));
     sections.push(section(
         "Sidebar",
-        vec![Field::html("sidebar_html", "Sidebar (HTML, badge rendered separately)", &c.sidebar_html, 6)],
+        vec![Field::html(
+            "sidebar_html",
+            "Sidebar (HTML, badge rendered separately)",
+            &c.sidebar_html,
+            6,
+        )],
     ));
     sections
 }
@@ -1025,9 +1166,6 @@ pub fn routes() -> impl Endpoint {
             get(dataliteracy_edit).post(dataliteracy_save),
         )
         .at("/higher-ed", get(highered_edit).post(highered_save))
-        .at(
-            "/libraries-hubs",
-            get(libraries_edit).post(libraries_save),
-        )
+        .at("/libraries-hubs", get(libraries_edit).post(libraries_save))
         .at("/champion", get(champion_edit).post(champion_save))
 }

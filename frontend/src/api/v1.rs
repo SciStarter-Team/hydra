@@ -140,7 +140,12 @@ pub async fn create_user(
         .into_response());
     }
 
-    let Some(email) = form.email.clone().or(form.user_id.clone()).filter(|e| !e.is_empty()) else {
+    let Some(email) = form
+        .email
+        .clone()
+        .or(form.user_id.clone())
+        .filter(|e| !e.is_empty())
+    else {
         return Ok(Json(serde_json::json!({ "error": "Email is required" })).into_response());
     };
 
@@ -563,7 +568,10 @@ pub async fn get_project(
     result.insert("indoors".into(), serde_json::json!(project.indoors));
     result.insert("outdoors".into(), serde_json::json!(project.outdoors));
     result.insert("guid".into(), serde_json::json!(project.guid));
-    result.insert("search_terms".into(), serde_json::json!(project.search_terms));
+    result.insert(
+        "search_terms".into(),
+        serde_json::json!(project.search_terms),
+    );
     if let Some(difficulty) = project_difficulty_code_label(&project.difficulty) {
         result.insert("difficulty".into(), difficulty);
     }
@@ -648,7 +656,9 @@ pub async fn participation_failure(Form(form): Form<FailureForm>) -> Response {
     let body = error.replace('{', "{{").replace('}', "}}");
 
     if let Err(e) = common::service::send_email(
-        vec![common::message::email::EmailRecipient::Email(reporting_email)],
+        vec![common::message::email::EmailRecipient::Email(
+            reporting_email,
+        )],
         "Participation error report",
         body,
         Vec::<String>::new(),
@@ -1269,7 +1279,10 @@ async fn rehost_image_url(url: &str, uploaded_by: Ulid) -> Option<String> {
         variant: None,
         force_download: false,
     };
-    crate::upload::STORAGE.upload_file(metadata, data).await.ok()?;
+    crate::upload::STORAGE
+        .upload_file(metadata, data)
+        .await
+        .ok()?;
 
     Some(format!("/-uploaded/{file_id}"))
 }

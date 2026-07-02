@@ -126,7 +126,8 @@ pub async fn check_join(Query(query): Query<CheckJoinQuery>) -> Result<Response,
     )
     .await?;
 
-    let mut first_when: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut first_when: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
     if let Some(user_id) = user_match.user_id {
         let firsts: UserFirstParticipationResponse = request(
             "log.user_first_participation",
@@ -153,7 +154,11 @@ pub async fn check_join(Query(query): Query<CheckJoinQuery>) -> Result<Response,
                 .get(&join.project_id)
                 .map(|w| serde_json::Value::String(w.clone()))
                 .unwrap_or(serde_json::Value::Null);
-            projects.push(serde_json::json!([row.name, row.legacy_id.unwrap_or(0), when]));
+            projects.push(serde_json::json!([
+                row.name,
+                row.legacy_id.unwrap_or(0),
+                when
+            ]));
         }
     }
 

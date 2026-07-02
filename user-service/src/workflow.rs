@@ -4,8 +4,9 @@ use async_nats::service::Request;
 use common::badge::Badge;
 use common::message::user::{
     FoundationsStateEntry, FunnelStage, TrainingStatesResponse, UserAndBadge, WorkflowFunnel,
-    WorkflowFunnelResponse, WorkflowProgressRequest, WorkflowProgressResponse, WorkflowStatusRequest,
-    WorkflowStatusResponse, WorkflowTutorialCountRequest, WorkflowTutorialCountResponse, WorkflowType,
+    WorkflowFunnelResponse, WorkflowProgressRequest, WorkflowProgressResponse,
+    WorkflowStatusRequest, WorkflowStatusResponse, WorkflowTutorialCountRequest,
+    WorkflowTutorialCountResponse, WorkflowType,
 };
 use common::{
     service::{TriggerEvent, decode_structured_message, send, trigger_email},
@@ -599,9 +600,7 @@ pub async fn get_status(req: &Request) -> Result<WorkflowStatusResponse, anyhow:
 /// step. Drives the motivational "Tutorials Completed to Date" figure on
 /// each training page. Each workflow's tutorial lives in a differently named
 /// column, so the queries are spelled out per workflow rather than generic.
-pub async fn tutorial_count(
-    req: &Request,
-) -> Result<WorkflowTutorialCountResponse, anyhow::Error> {
+pub async fn tutorial_count(req: &Request) -> Result<WorkflowTutorialCountResponse, anyhow::Error> {
     let request: WorkflowTutorialCountRequest = decode_structured_message(req.message.clone())?;
 
     let count = match request.workflow {

@@ -1,5 +1,7 @@
 use futures::stream::BoxStream;
-use sqlx::{Database, Error as SqlxError, Executor, Sqlite, SqlitePool, SqlStr, pool::PoolConnection};
+use sqlx::{
+    Database, Error as SqlxError, Executor, SqlStr, Sqlite, SqlitePool, pool::PoolConnection,
+};
 use std::future::Future;
 use std::pin::Pin;
 

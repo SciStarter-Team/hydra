@@ -347,15 +347,7 @@ pub struct ExternalLinkClickthroughResponse {
 /// `share_events` log table, and parsed from the share-click endpoint path so
 /// only known platforms are recorded.
 #[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Serialize,
-    Deserialize,
-    strum::Display,
-    strum::EnumString,
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, strum::Display, strum::EnumString,
 )]
 #[strum(serialize_all = "lowercase")]
 pub enum SharePlatform {

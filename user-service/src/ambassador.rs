@@ -11,9 +11,7 @@ use common::{
 /// Distinct city/state locations of ambassadors who passed application review
 /// (accepted or champion). Backs /api/ambassador_map.geojson; the frontend
 /// geocodes each location for the map. "passed" maps to Accepted/Champion.
-pub async fn passed_locations(
-    _req: &Request,
-) -> Result<AmbassadorPassedLocationsResponse, Error> {
+pub async fn passed_locations(_req: &Request) -> Result<AmbassadorPassedLocationsResponse, Error> {
     let accepted = AmbassadorAppStatus::Accepted as i64;
     let champion = AmbassadorAppStatus::Champion as i64;
 

@@ -368,10 +368,14 @@ impl LoadStorePeered for EventAll {
                 .execute(db())
                 .await
                 {
-                    eprintln!("Region-centroid point for event {} failed: {e}", self.event_id);
+                    eprintln!(
+                        "Region-centroid point for event {} failed: {e}",
+                        self.event_id
+                    );
                 }
             } else if !self.city.is_empty() || !self.state.is_empty() || !self.country.is_empty() {
-                if let Err(e) = crate::geocode::geocode_and_update_event_point(self.event_id).await {
+                if let Err(e) = crate::geocode::geocode_and_update_event_point(self.event_id).await
+                {
                     eprintln!("Auto-geocode for event {} failed: {e}", self.event_id);
                 }
             }

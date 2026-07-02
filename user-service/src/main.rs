@@ -1754,8 +1754,12 @@ async fn apply_higher_ed_state(
                     tutorial_completed_at = COALESCE(tutorial_completed_at, ?),
                     list_completed_at = COALESCE(list_completed_at, ?)
                    WHERE user_id = ?"#,
-                ts, ts, user_id
-            ).execute(db).await?;
+                ts,
+                ts,
+                user_id
+            )
+            .execute(db)
+            .await?;
         }
         "explore" => {
             sqlx::query!(

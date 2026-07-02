@@ -351,7 +351,10 @@ impl From<&AddEventForm> for EventFormValues {
         EventFormValues {
             name: f.name.clone(),
             description: f.description.clone(),
-            location_mode: f.location_mode.map(|m| m.as_str().to_string()).unwrap_or_default(),
+            location_mode: f
+                .location_mode
+                .map(|m| m.as_str().to_string())
+                .unwrap_or_default(),
             location_name: f.location_name.clone(),
             location_description: f.location_description.clone(),
             address: f.address.clone(),
@@ -381,11 +384,7 @@ impl From<&AddEventForm> for EventFormValues {
             ticketing_date: f.ticketing_date.clone(),
             ticketing_time: f.ticketing_time.clone(),
             ticketing_timezone: f.ticketing_timezone.clone(),
-            repeat_frequency: f
-                .repeat_frequency
-                .unwrap_or_default()
-                .as_str()
-                .to_string(),
+            repeat_frequency: f.repeat_frequency.unwrap_or_default().as_str().to_string(),
             repeat_until: f.repeat_until.clone(),
             instances,
         }
@@ -596,7 +595,9 @@ async fn render_event_form(
 ) -> Result<Response, anyhow::Error> {
     // Resolve the chosen parent event's name so the picker shows it on re-render.
     if !values.part_of.is_empty() && values.part_of_name.is_empty() {
-        values.part_of_name = published_event_name(&values.part_of).await.unwrap_or_default();
+        values.part_of_name = published_event_name(&values.part_of)
+            .await
+            .unwrap_or_default();
     }
 
     let location = LocationPicker::build(
@@ -837,7 +838,9 @@ struct TagSuggestions {
 /// events) to reduce duplication. Shared by both add forms.
 #[handler]
 #[tracing::instrument]
-pub async fn add_tag_search(Query(query): Query<TagSearchQuery>) -> Result<Response, anyhow::Error> {
+pub async fn add_tag_search(
+    Query(query): Query<TagSearchQuery>,
+) -> Result<Response, anyhow::Error> {
     let q = query.q.trim();
     if q.is_empty() {
         return Ok(html_fragment(String::new()));
@@ -1019,8 +1022,11 @@ fn validate_and_build(form: &AddEventForm, user_id: Ulid) -> Result<EventAll, St
             && !inst.end_date.trim().is_empty()
             && !inst.end_time.trim().is_empty()
         {
-            let end =
-                parse_datetime(inst.end_date.trim(), inst.end_time.trim(), inst.timezone.trim())?;
+            let end = parse_datetime(
+                inst.end_date.trim(),
+                inst.end_time.trim(),
+                inst.timezone.trim(),
+            )?;
             if end < begin {
                 return Err("An event's end time can't be before its start time.".to_string());
             }
@@ -1052,7 +1058,7 @@ fn validate_and_build(form: &AddEventForm, user_id: Ulid) -> Result<EventAll, St
         LocationMode::InPerson => {
             if form.address.trim().is_empty() && form.city.trim().is_empty() {
                 return Err(
-                    "Please provide an address or city for the in-person event.".to_string(),
+                    "Please provide an address or city for the in-person event.".to_string()
                 );
             }
         }
@@ -1092,7 +1098,11 @@ fn validate_and_build(form: &AddEventForm, user_id: Ulid) -> Result<EventAll, St
         } else {
             ticketing_time
         };
-        let begins = parse_datetime(ticketing_date, ticketing_time, form.ticketing_timezone.trim())?;
+        let begins = parse_datetime(
+            ticketing_date,
+            ticketing_time,
+            form.ticketing_timezone.trim(),
+        )?;
         event.ticketing_begins = Some(TimeString::from(begins.timestamp()));
     }
     event.tags = form
@@ -1371,7 +1381,10 @@ impl From<&AddProjectForm> for ProjectFormValues {
             fields_of_science: f.fields_of_science.clone(),
             audience: f.audience.clone(),
             activities: f.activities.clone(),
-            location_mode: f.location_mode.map(|m| m.as_str().to_string()).unwrap_or_default(),
+            location_mode: f
+                .location_mode
+                .map(|m| m.as_str().to_string())
+                .unwrap_or_default(),
             location_name: f.location_name.clone(),
             location_description: f.location_description.clone(),
             address: f.address.clone(),
@@ -1443,7 +1456,12 @@ pub async fn add_project_submit(
             .into_response())
         }
         Err(message) => {
-            render_project_form(Some(message), ProjectFormValues::from(&form), Some(user_info)).await
+            render_project_form(
+                Some(message),
+                ProjectFormValues::from(&form),
+                Some(user_info),
+            )
+            .await
         }
     }
 }

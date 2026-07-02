@@ -22,9 +22,10 @@ use ulid::Ulid;
 
 use log_service::{
     analytics::{
-        get_clickthrough_analytics_realtime, get_go_url_stats, get_participation_analytics_realtime,
-        get_participation_by_email, get_participation_summary, get_recent_activity,
-        get_top_performers, get_user_first_participation,
+        get_clickthrough_analytics_realtime, get_go_url_stats,
+        get_participation_analytics_realtime, get_participation_by_email,
+        get_participation_summary, get_recent_activity, get_top_performers,
+        get_user_first_participation,
     },
     cache::{update_user_emails_cache, update_user_tags_cache},
     health::HealthResponse,

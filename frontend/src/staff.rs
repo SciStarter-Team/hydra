@@ -70,7 +70,9 @@ pub async fn affiliate_activity(
     // otherwise the most recent `days`.
     let (first_date, last_date) =
         if let Some(date) = query.date.as_deref().filter(|s| !s.is_empty()) {
-            let d: civil::Date = date.parse().map_err(|e| anyhow::anyhow!("Invalid date: {e}"))?;
+            let d: civil::Date = date
+                .parse()
+                .map_err(|e| anyhow::anyhow!("Invalid date: {e}"))?;
             (d, d.checked_add(1.day())?)
         } else {
             let days = query.days.unwrap_or(90).max(1);

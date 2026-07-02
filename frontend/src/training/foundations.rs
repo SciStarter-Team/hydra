@@ -17,7 +17,8 @@ use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
 use crate::training::{
     self, ArticulateCard, ClaimBody, ProjectCardView, SidebarBody, SigninBody, StepView, StepsView,
-    TrainingContent, TutorialBody, linear_states, open_flags, render_page, render_progress_fragment,
+    TrainingContent, TutorialBody, linear_states, open_flags, render_page,
+    render_progress_fragment,
 };
 
 const BASE_PATH: &str = "/training/foundations";
@@ -178,13 +179,7 @@ impl FoundationsContent {
 pub async fn page(Authenticated(user_info): Authenticated) -> Result<Response, Error> {
     let content = FoundationsContent::current().await;
     let rendered = build_content(&content, user_info.clone()).await?;
-    render_page(
-        BASE_PATH,
-        content.title.clone(),
-        rendered,
-        user_info,
-    )
-    .await
+    render_page(BASE_PATH, content.title.clone(), rendered, user_info).await
 }
 
 /// SSE-triggered fragment at `/training/foundations/-progress`.
@@ -244,7 +239,10 @@ async fn build_content(
 /// is signed in; the tutorial completes when `tutorial` is recorded; the
 /// projects step completes once any two of the three eligible projects are
 /// recorded; the badge step completes when the badge is granted.
-async fn build_steps(content: &FoundationsContent, user_info: &Option<Arc<BasicInfo>>) -> StepsView {
+async fn build_steps(
+    content: &FoundationsContent,
+    user_info: &Option<Arc<BasicInfo>>,
+) -> StepsView {
     let logged_in = user_info.is_some();
     let status = match user_info {
         Some(user) => {

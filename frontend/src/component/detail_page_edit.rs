@@ -2316,8 +2316,9 @@ async fn require_editor(id: &str, user: &BasicInfo) -> poem::Result<(DetailPageK
             poem::http::StatusCode::FORBIDDEN,
         ));
     }
-    let target = Ulid::from_string(id)
-        .map_err(|e| poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST))?;
+    let target = Ulid::from_string(id).map_err(|e| {
+        poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST)
+    })?;
     Ok((kind, target))
 }
 
@@ -2330,20 +2331,29 @@ fn edit_action(kind: DetailPageKind) -> &'static str {
 }
 
 fn auth_required() -> poem::Error {
-    poem::Error::from_string("Authentication required", poem::http::StatusCode::UNAUTHORIZED)
+    poem::Error::from_string(
+        "Authentication required",
+        poem::http::StatusCode::UNAUTHORIZED,
+    )
 }
 
 /// Load the current contact list via the peered field for either kind.
 async fn load_contacts(kind: DetailPageKind, target: Ulid) -> Result<Vec<Contact>, Error> {
     match kind {
         DetailPageKind::Event => {
-            match EventField::load((target, EventFieldType::Contacts)).await?.field {
+            match EventField::load((target, EventFieldType::Contacts))
+                .await?
+                .field
+            {
                 EventFieldValue::Contacts(contacts) => Ok(contacts.into_vec()),
                 _ => Ok(Vec::new()),
             }
         }
         DetailPageKind::Project => {
-            match ProjectField::load((target, ProjectFieldType::Contacts)).await?.field {
+            match ProjectField::load((target, ProjectFieldType::Contacts))
+                .await?
+                .field
+            {
                 ProjectFieldValue::Contacts(contacts) => Ok(contacts.into_vec()),
                 _ => Ok(Vec::new()),
             }
@@ -2360,10 +2370,14 @@ async fn store_contacts(
     let boxed = contacts.to_vec().into_boxed_slice();
     match kind {
         DetailPageKind::Event => {
-            EventField::new(target, EventFieldValue::Contacts(boxed)).store().await
+            EventField::new(target, EventFieldValue::Contacts(boxed))
+                .store()
+                .await
         }
         DetailPageKind::Project => {
-            ProjectField::new(target, ProjectFieldValue::Contacts(boxed)).store().await
+            ProjectField::new(target, ProjectFieldValue::Contacts(boxed))
+                .store()
+                .await
         }
     }
 }
@@ -2413,7 +2427,14 @@ pub async fn add_contact(
         .await
         .map_err(internal_error)?;
 
-    let _ = log_activity(None, edit_action(kind), user.user_id, target, "contacts".to_string()).await;
+    let _ = log_activity(
+        None,
+        edit_action(kind),
+        user.user_id,
+        target,
+        "contacts".to_string(),
+    )
+    .await;
 
     contacts_response(id, &contacts)
 }
@@ -2438,7 +2459,14 @@ pub async fn delete_contact(
         .await
         .map_err(internal_error)?;
 
-    let _ = log_activity(None, edit_action(kind), user.user_id, target, "contacts".to_string()).await;
+    let _ = log_activity(
+        None,
+        edit_action(kind),
+        user.user_id,
+        target,
+        "contacts".to_string(),
+    )
+    .await;
 
     contacts_response(id, &contacts)
 }
@@ -2521,7 +2549,9 @@ pub async fn update_contact(
 
     let mut contacts = load_contacts(kind, target).await.map_err(internal_error)?;
 
-    let found = contacts.iter_mut().find(|c| c.contact_id.to_string() == contact_id);
+    let found = contacts
+        .iter_mut()
+        .find(|c| c.contact_id.to_string() == contact_id);
     let Some(contact) = found else {
         return Err(poem::Error::from_string(
             "Contact not found",
@@ -2539,7 +2569,14 @@ pub async fn update_contact(
         .await
         .map_err(internal_error)?;
 
-    let _ = log_activity(None, edit_action(kind), user.user_id, target, "contacts".to_string()).await;
+    let _ = log_activity(
+        None,
+        edit_action(kind),
+        user.user_id,
+        target,
+        "contacts".to_string(),
+    )
+    .await;
 
     contacts_response(id, &contacts)
 }
@@ -2576,13 +2613,19 @@ struct ManagerForm {
 async fn load_manager_ids(kind: DetailPageKind, target: Ulid) -> Result<Vec<Ulid>, Error> {
     match kind {
         DetailPageKind::Event => {
-            match EventField::load((target, EventFieldType::PageEditorIds)).await?.field {
+            match EventField::load((target, EventFieldType::PageEditorIds))
+                .await?
+                .field
+            {
                 EventFieldValue::PageEditorIds(ids) => Ok(ids.into_vec()),
                 _ => Ok(Vec::new()),
             }
         }
         DetailPageKind::Project => {
-            match ProjectField::load((target, ProjectFieldType::PageEditorIds)).await?.field {
+            match ProjectField::load((target, ProjectFieldType::PageEditorIds))
+                .await?
+                .field
+            {
                 ProjectFieldValue::PageEditorIds(ids) => Ok(ids.into_vec()),
                 _ => Ok(Vec::new()),
             }
@@ -2591,18 +2634,18 @@ async fn load_manager_ids(kind: DetailPageKind, target: Ulid) -> Result<Vec<Ulid
 }
 
 /// Persist the manager (page-editor) ids via the peered field for either kind.
-async fn store_manager_ids(
-    kind: DetailPageKind,
-    target: Ulid,
-    ids: &[Ulid],
-) -> Result<(), Error> {
+async fn store_manager_ids(kind: DetailPageKind, target: Ulid, ids: &[Ulid]) -> Result<(), Error> {
     let boxed = ids.to_vec().into_boxed_slice();
     match kind {
         DetailPageKind::Event => {
-            EventField::new(target, EventFieldValue::PageEditorIds(boxed)).store().await
+            EventField::new(target, EventFieldValue::PageEditorIds(boxed))
+                .store()
+                .await
         }
         DetailPageKind::Project => {
-            ProjectField::new(target, ProjectFieldValue::PageEditorIds(boxed)).store().await
+            ProjectField::new(target, ProjectFieldValue::PageEditorIds(boxed))
+                .store()
+                .await
         }
     }
 }
@@ -2622,7 +2665,10 @@ async fn managers_response(
         .iter()
         .map(|uid| super::detail_page::ManagerDisplay {
             user_id: uid.to_string(),
-            email: resolved.get(uid).cloned().unwrap_or_else(|| uid.to_string()),
+            email: resolved
+                .get(uid)
+                .cloned()
+                .unwrap_or_else(|| uid.to_string()),
         })
         .collect();
 
@@ -2661,7 +2707,9 @@ pub async fn get_managers_display(
 ) -> poem::Result<poem::Response> {
     let user = user_info.ok_or_else(auth_required)?;
     let (kind, target) = require_editor(&id, &user).await?;
-    let ids = load_manager_ids(kind, target).await.map_err(internal_error)?;
+    let ids = load_manager_ids(kind, target)
+        .await
+        .map_err(internal_error)?;
     managers_response(id, &ids, None).await
 }
 
@@ -2675,7 +2723,9 @@ pub async fn add_manager(
     let user = user_info.ok_or_else(auth_required)?;
     let (kind, target) = require_editor(&id, &user).await?;
 
-    let mut ids = load_manager_ids(kind, target).await.map_err(internal_error)?;
+    let mut ids = load_manager_ids(kind, target)
+        .await
+        .map_err(internal_error)?;
 
     let email = form.email.trim();
     if email.is_empty() {
@@ -2696,8 +2746,14 @@ pub async fn add_manager(
         store_manager_ids(kind, target, &ids)
             .await
             .map_err(internal_error)?;
-        let _ =
-            log_activity(None, edit_action(kind), user.user_id, target, "managers".to_string()).await;
+        let _ = log_activity(
+            None,
+            edit_action(kind),
+            user.user_id,
+            target,
+            "managers".to_string(),
+        )
+        .await;
     }
 
     managers_response(id, &ids, None).await
@@ -2744,7 +2800,9 @@ pub async fn update_manager(
     let user = user_info.ok_or_else(auth_required)?;
     let (kind, target) = require_editor(&id, &user).await?;
 
-    let mut ids = load_manager_ids(kind, target).await.map_err(internal_error)?;
+    let mut ids = load_manager_ids(kind, target)
+        .await
+        .map_err(internal_error)?;
 
     let email = form.email.trim();
     let Some(new_id) = user_id_for_email(email).await else {
@@ -2765,7 +2823,14 @@ pub async fn update_manager(
         .await
         .map_err(internal_error)?;
 
-    let _ = log_activity(None, edit_action(kind), user.user_id, target, "managers".to_string()).await;
+    let _ = log_activity(
+        None,
+        edit_action(kind),
+        user.user_id,
+        target,
+        "managers".to_string(),
+    )
+    .await;
 
     managers_response(id, &ids, None).await
 }
@@ -2790,7 +2855,14 @@ pub async fn delete_manager(
         .await
         .map_err(internal_error)?;
 
-    let _ = log_activity(None, edit_action(kind), user.user_id, target, "managers".to_string()).await;
+    let _ = log_activity(
+        None,
+        edit_action(kind),
+        user.user_id,
+        target,
+        "managers".to_string(),
+    )
+    .await;
 
     managers_response(id, &ids, None).await
 }
@@ -2845,8 +2917,9 @@ async fn require_project_editor(
 }
 
 async fn load_participant_files(id: &str) -> poem::Result<Vec<ParticipantFile>> {
-    let ulid = Ulid::from_string(id)
-        .map_err(|e| poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST))?;
+    let ulid = Ulid::from_string(id).map_err(|e| {
+        poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST)
+    })?;
 
     let field = ProjectField::load((ulid, ProjectFieldType::ParticipantFiles))
         .await
@@ -2866,8 +2939,9 @@ async fn store_and_render_participant_files(
     id: &str,
     files: Vec<ParticipantFile>,
 ) -> poem::Result<poem::Response> {
-    let ulid = Ulid::from_string(id)
-        .map_err(|e| poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST))?;
+    let ulid = Ulid::from_string(id).map_err(|e| {
+        poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST)
+    })?;
 
     ProjectField::new(
         ulid,
@@ -2991,7 +3065,11 @@ pub async fn delete_participant_file(
         files.remove(index);
     }
 
-    log_project_edit(&user_info, &id, format!("remove=participant_files[{}]", index));
+    log_project_edit(
+        &user_info,
+        &id,
+        format!("remove=participant_files[{}]", index),
+    );
     store_and_render_participant_files(&id, files).await
 }
 

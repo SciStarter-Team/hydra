@@ -18,7 +18,9 @@ use crate::geocode::geocode_address_to_point;
 /// workflow by recording the supplemental signup. Always returns an empty 200;
 /// an unknown or missing user is a silent no-op (matches orrery).
 #[handler]
-pub async fn library_network_signup(Json(body): Json<serde_json::Value>) -> Result<Response, Error> {
+pub async fn library_network_signup(
+    Json(body): Json<serde_json::Value>,
+) -> Result<Response, Error> {
     let ulid = body
         .get("ulid")
         .and_then(|v| v.as_str())

@@ -197,7 +197,10 @@ async fn build_steps(content: &LibrariesContent, user_info: &Option<Arc<BasicInf
     };
 
     let tutorial_done = status.completed_steps.iter().any(|step| step == "tutorial");
-    let supplemental_done = status.completed_steps.iter().any(|step| step == "supplemental");
+    let supplemental_done = status
+        .completed_steps
+        .iter()
+        .any(|step| step == "supplemental");
     let states = linear_states(&[
         logged_in,
         foundations_done,

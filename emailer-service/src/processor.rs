@@ -156,7 +156,13 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
                         sending_id = %item.sending_id,
                         "User is not verified, skipping"
                     );
-                    record_skip(queue_id, &item.sending_id, &user_info.primary_email, "unverified").await?;
+                    record_skip(
+                        queue_id,
+                        &item.sending_id,
+                        &user_info.primary_email,
+                        "unverified",
+                    )
+                    .await?;
                     delete_from_queue(queue_id).await?;
                     update_sending_skipped(&item.sending_id, SkipReason::Unverified).await?;
                     return Ok(true);
@@ -169,7 +175,13 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
                         sending_id = %item.sending_id,
                         "User has opted out of emails, skipping"
                     );
-                    record_skip(queue_id, &item.sending_id, &user_info.primary_email, "opted_out").await?;
+                    record_skip(
+                        queue_id,
+                        &item.sending_id,
+                        &user_info.primary_email,
+                        "opted_out",
+                    )
+                    .await?;
                     delete_from_queue(queue_id).await?;
                     update_sending_skipped(&item.sending_id, SkipReason::OptedOut).await?;
                     return Ok(true);

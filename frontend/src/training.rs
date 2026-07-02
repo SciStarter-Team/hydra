@@ -243,9 +243,7 @@ pub async fn save_content_json<T: serde::Serialize>(
 /// Read a training's typed content struct from the shared `training_content`
 /// table. A missing row is an error; callers fall back to `Default` (the live
 /// copy) so a training renders unchanged until its content is first edited.
-pub async fn read_content_json<T: serde::de::DeserializeOwned>(
-    workflow: &str,
-) -> Result<T, Error> {
+pub async fn read_content_json<T: serde::de::DeserializeOwned>(workflow: &str) -> Result<T, Error> {
     let row = sqlx::query!(
         r#"SELECT "content" FROM "training_content" WHERE "workflow" = ?"#,
         workflow,
@@ -330,9 +328,5 @@ fn commafy(n: i64) -> String {
         }
         out.push(*b as char);
     }
-    if negative {
-        format!("-{out}")
-    } else {
-        out
-    }
+    if negative { format!("-{out}") } else { out }
 }

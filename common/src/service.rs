@@ -453,7 +453,14 @@ pub fn log_share(
 
     send(
         "log.share",
-        (when, target_id, platform, user_id, device_id, interaction_id),
+        (
+            when,
+            target_id,
+            platform,
+            user_id,
+            device_id,
+            interaction_id,
+        ),
     )
 }
 
