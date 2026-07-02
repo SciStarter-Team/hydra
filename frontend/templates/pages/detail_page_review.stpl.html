@@ -5,7 +5,7 @@
   </div>
   <% } %>
   <div>
-    <div class="text-sm mb-1"><%- &self.review.text %></div>
+    <div class="text-sm mb-1"><%= &self.review.text %></div>
     <div class="text-xs text-gray-500">
       <a href="/profile?for=<%= &self.review.user_id %>" class="text-primary-action hover:underline"><%= if self.review.user_handle.is_empty() { format!("({})", &self.review.user_id) } else { self.review.user_handle.clone() } %></a>
       <span class="mx-1">&middot;</span>

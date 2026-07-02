@@ -64,23 +64,51 @@ pub async fn authorize_get(
     let user = match user_info {
         Some(user) => user,
         None => {
-            // Redirect to login, then back to this authorization request
-            let login_url = format!(
-                "/login?next={}",
-                urlencoding::encode(&format!(
-                    "/oauth2/authorize?client_id={}&redirect_uri={}&response_type={}&scope={}&state={}",
-                    urlencoding::encode(&query.client_id),
-                    urlencoding::encode(&query.redirect_uri),
-                    urlencoding::encode(&query.response_type),
-                    urlencoding::encode(&query.scope.as_deref().unwrap_or("openid")),
-                    urlencoding::encode(&query.state.as_deref().unwrap_or(""))
-                ))
+            // Redirect to login, then back to this authorization request.
+            // Preserve every request parameter — including the PKCE challenge —
+            // so protection is not silently dropped across the login round-trip.
+            let mut inner = format!(
+                "/oauth2/authorize?client_id={}&redirect_uri={}&response_type={}&scope={}&state={}",
+                urlencoding::encode(&query.client_id),
+                urlencoding::encode(&query.redirect_uri),
+                urlencoding::encode(&query.response_type),
+                urlencoding::encode(query.scope.as_deref().unwrap_or("openid")),
+                urlencoding::encode(query.state.as_deref().unwrap_or(""))
             );
+            if let Some(challenge) = &query.code_challenge {
+                inner.push_str(&format!(
+                    "&code_challenge={}",
+                    urlencoding::encode(challenge)
+                ));
+            }
+            if let Some(method) = &query.code_challenge_method {
+                inner.push_str(&format!(
+                    "&code_challenge_method={}",
+                    urlencoding::encode(method)
+                ));
+            }
+            let login_url = format!("/login?next={}", urlencoding::encode(&inner));
             return Ok(Redirect::see_other(login_url).into_response());
         }
     };
 
-    // Validate response_type
+    // Load and validate the client and redirect_uri BEFORE any error can be
+    // reported by redirecting to that URI. Redirecting an unvalidated
+    // redirect_uri (RFC 6749 §4.1.2.1 forbids this) turns this endpoint into an
+    // open redirector, so an invalid client or redirect_uri is surfaced as an
+    // on-site error rather than a redirect.
+    let client = match Client::load(query.client_id.clone()).await {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(anyhow::anyhow!("Unknown or invalid client_id"));
+        }
+    };
+    if !client.verify_redirect_uri(&query.redirect_uri) {
+        return Err(anyhow::anyhow!("Invalid redirect_uri for client"));
+    }
+
+    // redirect_uri is now confirmed to belong to the client, so OAuth protocol
+    // errors may safely be delivered to it.
     if query.response_type != "code" {
         return error_redirect(
             &query.redirect_uri,
@@ -89,24 +117,6 @@ pub async fn authorize_get(
         );
     }
 
-    // Load and validate client
-    let client = match Client::load(query.client_id.clone()).await {
-        Ok(client) => client,
-        Err(_) => {
-            return error_redirect(
-                &query.redirect_uri,
-                "invalid_client",
-                query.state.as_deref(),
-            );
-        }
-    };
-
-    // Verify redirect_uri
-    if !client.verify_redirect_uri(&query.redirect_uri) {
-        return Err(anyhow::anyhow!("Invalid redirect_uri for client"));
-    }
-
-    // Verify scope
     let scope = query.scope.as_deref().unwrap_or("openid");
     if !client.verify_scope(scope) {
         return error_redirect(&query.redirect_uri, "invalid_scope", query.state.as_deref());
@@ -149,25 +159,23 @@ pub async fn authorize_post(
         }
     };
 
-    // Check if user approved
-    if form.approve.as_deref() != Some("yes") {
-        return error_redirect(&form.redirect_uri, "access_denied", form.state.as_deref());
-    }
-
-    // Load and validate client
+    // Load and validate the client and redirect_uri BEFORE any error can be
+    // reported by redirecting to that URI (otherwise this is an open redirector).
     let client = match Client::load(form.client_id.clone()).await {
         Ok(client) => client,
         Err(_) => {
-            return error_redirect(&form.redirect_uri, "invalid_client", form.state.as_deref());
+            return Err(anyhow::anyhow!("Unknown or invalid client_id"));
         }
     };
-
-    // Verify redirect_uri
     if !client.verify_redirect_uri(&form.redirect_uri) {
         return Err(anyhow::anyhow!("Invalid redirect_uri for client"));
     }
 
-    // Verify scope
+    // redirect_uri is now trusted; OAuth errors may be delivered to it.
+    if form.approve.as_deref() != Some("yes") {
+        return error_redirect(&form.redirect_uri, "access_denied", form.state.as_deref());
+    }
+
     if !client.verify_scope(&form.scope) {
         return error_redirect(&form.redirect_uri, "invalid_scope", form.state.as_deref());
     }

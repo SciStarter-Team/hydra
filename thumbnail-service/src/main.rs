@@ -232,12 +232,18 @@ fn resize_image(
     params: &ThumbnailParams,
     output_format: ImageFormat,
 ) -> Result<Vec<u8>, Error> {
-    let mut decoder = ImageReader::new(Cursor::new(data))
-        .with_guessed_format()?
-        .into_decoder()?;
-    let orientation = decoder
-        .orientation()
-        .unwrap_or(Orientation::NoTransforms);
+    // Bound decoded image dimensions and allocation to prevent decompression
+    // bombs: a small, highly-compressed input can otherwise decode to an
+    // enormous bitmap and exhaust this service's memory.
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(20_000);
+    limits.max_image_height = Some(20_000);
+    limits.max_alloc = Some(256 * 1024 * 1024);
+
+    let mut reader = ImageReader::new(Cursor::new(data)).with_guessed_format()?;
+    reader.limits(limits);
+    let mut decoder = reader.into_decoder()?;
+    let orientation = decoder.orientation().unwrap_or(Orientation::NoTransforms);
     let mut img = DynamicImage::from_decoder(decoder)?;
     img.apply_orientation(orientation);
     let (orig_w, orig_h) = (img.width(), img.height());

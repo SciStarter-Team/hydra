@@ -1,5 +1,4 @@
 pub mod add;
-pub mod staff;
 pub mod admin;
 pub mod api;
 pub mod auth;
@@ -45,6 +44,8 @@ pub mod project;
 pub mod schedule;
 pub mod search;
 pub mod session;
+pub mod ssrf;
+pub mod staff;
 pub mod staff_pick;
 pub mod training;
 pub mod ui;
@@ -166,9 +167,16 @@ async fn entity_password_verify(
         Err(_) => return Err(poem::Error::from_status(poem::http::StatusCode::NOT_FOUND)),
     };
 
-    // Check if the password matches
+    // Check if the password matches, using a constant-time comparison so the
+    // response time does not leak how much of the password was correct.
     if let Some(correct_password) = entity.password() {
-        if form.password == correct_password {
+        use subtle::ConstantTimeEq;
+        let matches: bool = form
+            .password
+            .as_bytes()
+            .ct_eq(correct_password.as_bytes())
+            .into();
+        if matches {
             // Password correct - grant access in session and redirect to entity
             entity::grant_password_authorization(session, &slug);
             return Ok(Redirect::see_other(entity.canonical_path()).into_response());
@@ -267,12 +275,15 @@ fn user_facing() -> impl Endpoint {
         .at(
             "/signup",
             post(auth::signup_action)
+                .with(auth::credential_rate_limit())
                 .with(middleware::partitioned_session::EnablePartitionedCookies),
         )
         .at(
             "/login",
             get(auth::login_signup_page).post(
-                auth::login_action.with(middleware::partitioned_session::EnablePartitionedCookies),
+                auth::login_action
+                    .with(auth::credential_rate_limit())
+                    .with(middleware::partitioned_session::EnablePartitionedCookies),
             ),
         )
         .at(
@@ -286,8 +297,14 @@ fn user_facing() -> impl Endpoint {
             get(add::add_event_page).post(add::add_event_submit),
         )
         .at("/add-event/submitted", get(add::add_event_submitted_page))
-        .at("/add-event/parent-search", get(add::add_event_parent_search))
-        .at("/add-event/parent-select", get(add::add_event_parent_select))
+        .at(
+            "/add-event/parent-search",
+            get(add::add_event_parent_search),
+        )
+        .at(
+            "/add-event/parent-select",
+            get(add::add_event_parent_select),
+        )
         .at("/add-event/parent-clear", get(add::add_event_parent_clear))
         .at("/add/tag-search", get(add::add_tag_search))
         .at("/add/upload-image", post(add::add_upload_image))
@@ -330,7 +347,10 @@ fn user_facing() -> impl Endpoint {
             get(csm::csm_autocomplete_countries),
         )
         .at("/-zipcode/:code", get(zipcode::zipcode_lookup))
-        .at("/-entity-password/*slug", post(entity_password_verify))
+        .at(
+            "/-entity-password/*slug",
+            post(entity_password_verify).with(auth::credential_rate_limit()),
+        )
         .at(
             "/-detail/:id/like",
             post(component::detail_page::toggle_like),
@@ -443,10 +463,7 @@ fn user_facing() -> impl Endpoint {
             "/training-dataethics",
             get(training::dataethics::legacy_redirect),
         )
-        .at(
-            "/training/data-literacy",
-            get(training::dataliteracy::page),
-        )
+        .at("/training/data-literacy", get(training::dataliteracy::page))
         .at(
             "/training/data-literacy/-progress",
             get(training::dataliteracy::progress),
@@ -468,10 +485,7 @@ fn user_facing() -> impl Endpoint {
             "/training-highered",
             get(training::highered::legacy_redirect),
         )
-        .at(
-            "/training/libraries-hubs",
-            get(training::libraries::page),
-        )
+        .at("/training/libraries-hubs", get(training::libraries::page))
         .at(
             "/training/libraries-hubs/-progress",
             get(training::libraries::progress),
@@ -499,9 +513,23 @@ fn user_facing() -> impl Endpoint {
         .with(middleware::analytics::AnalyticsMiddleware)
 }
 
-fn dynamic() -> impl Endpoint {
-    let session_storage = UserServiceSessionStorage;
+/// The shared server-side session middleware configuration. Factored out so
+/// every route tree that needs the session cookie (the main `dynamic()` tree and
+/// the `/oauth2` tree) uses identical cookie settings.
+fn server_session() -> ServerSession<UserServiceSessionStorage> {
+    ServerSession::new(
+        CookieConfig::default()
+            .name(SESSION_COOKIE)
+            .http_only(true)
+            .secure(true)
+            .same_site(SameSite::Lax)
+            .path("/")
+            .max_age(std::time::Duration::from_secs(60 * 60 * 24 * 365)),
+        UserServiceSessionStorage,
+    )
+}
 
+fn dynamic() -> impl Endpoint {
     // IMPORTANT: When adding project/event creation, editing, or page editor management endpoints,
     // remember to call the appropriate page_manager sync functions:
     // - page_manager::after_project_added() when projects are created
@@ -526,16 +554,7 @@ fn dynamic() -> impl Endpoint {
         .nest_no_strip("/", user_facing())
         .catch_all_error(error_dispatch)
         .with(middleware::authorization::AuthMiddleware)
-        .with(ServerSession::new(
-            CookieConfig::default()
-                .name(SESSION_COOKIE)
-                .http_only(true)
-                .secure(true)
-                .same_site(SameSite::Lax)
-                .path("/")
-                .max_age(std::time::Duration::from_secs(60 * 60 * 24 * 365)),
-            session_storage,
-        ))
+        .with(server_session())
         .with(middleware::partitioned_session::PartitionedSessionMiddleware)
         .with(SetHeader::new().overriding("Cache-Control", "no-store"))
         .with(NormalizePath::new(TrailingSlash::Trim))
@@ -580,7 +599,16 @@ async fn main() -> Result<(), Error> {
         )
         .at("/-mcp", post(mcp::mcp_handler))
         .at("/-content-mcp", post(mcp::content::content_mcp_handler))
-        .nest("/oauth2", oauth2::oauth2_routes())
+        .nest(
+            "/oauth2",
+            // The authorize endpoint reads the logged-in user via the session and
+            // the `Authenticated` extractor, so the OAuth2 routes need the same
+            // session + auth middleware as the main route tree. Without this the
+            // `Authenticated` extractor panics.
+            oauth2::oauth2_routes()
+                .with(middleware::authorization::AuthMiddleware)
+                .with(server_session()),
+        )
         .nest("/.well-known", oauth2::well_known_routes())
         .nest_no_strip("/", dynamic())
         .with_if(

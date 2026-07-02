@@ -174,15 +174,7 @@
                   <td class="dont-break-out">
                     <div class="ss-markdown reset-exempt collapse short">
                       <div>
-                        <%- self.description[0] %>
-                        <% if self.description.len() > 1 { %>
-                        <details>
-                          <summary style="color: #47a8d4; cursor: pointer">Read more</summary>
-                          <% for para in self.description.iter().skip(1) { %>
-                          <%- para %>
-                          <% } %>
-                        </details>
-                        <% } %>
+                        <%- self.project.description %>
                       </div>
                       <!-- <div class="fade"></div> -->
                       <!-- <div class="toggle">See <span>more</span></div> -->

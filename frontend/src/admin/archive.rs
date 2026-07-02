@@ -266,8 +266,9 @@ async fn count_archive_entries(search: Option<&str>) -> Result<u64, anyhow::Erro
 }
 
 async fn capture_page_snapshot(url: &str) -> Result<String, anyhow::Error> {
-    // Use reqwest to fetch the page content
-    let response = reqwest::get(url).await?;
+    // Fetch through the SSRF-guarded client: the URL is staff-supplied but must
+    // not be usable to reach internal/link-local addresses.
+    let response = crate::ssrf::guarded_get(url).await?;
     let html = response.text().await?;
     Ok(html)
 }

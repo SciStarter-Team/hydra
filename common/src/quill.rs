@@ -140,7 +140,7 @@ fn delta_to_html_impl(delta: &Delta) -> String {
 
             // Handle regular image embeds
             if let Some(image_url) = embed.get("image") {
-                if let Some(url) = image_url.as_str() {
+                if let Some(url) = image_url.as_str().and_then(sanitize_url) {
                     html.push_str(&format!("<img src=\"{}\" />", html_escape(url)));
                 }
             }
@@ -148,7 +148,11 @@ fn delta_to_html_impl(delta: &Delta) -> String {
             // Handle figure embeds (images with captions)
             if let Some(figure_data) = embed.get("figure") {
                 if let Some(obj) = figure_data.as_object() {
-                    let url = obj.get("url").and_then(|v| v.as_str()).unwrap_or("");
+                    let url = obj
+                        .get("url")
+                        .and_then(|v| v.as_str())
+                        .and_then(sanitize_url)
+                        .unwrap_or("");
                     let caption = obj.get("caption").and_then(|v| v.as_str()).unwrap_or("");
                     let align = obj
                         .get("align")
@@ -409,21 +413,21 @@ fn apply_inline_formatting(text: &str, attrs: &HashMap<String, serde_json::Value
 
     // Handle links
     if let Some(link) = attrs.get("link") {
-        if let Some(url) = link.as_str() {
+        if let Some(url) = link.as_str().and_then(sanitize_url) {
             result = format!("<a href=\"{}\">{}</a>", html_escape(url), result);
         }
     }
 
     // Handle color
     if let Some(color) = attrs.get("color") {
-        if let Some(color_val) = color.as_str() {
+        if let Some(color_val) = color.as_str().and_then(sanitize_css_color) {
             result = format!("<span style=\"color: {}\">{}</span>", color_val, result);
         }
     }
 
     // Handle background
     if let Some(background) = attrs.get("background") {
-        if let Some(bg_val) = background.as_str() {
+        if let Some(bg_val) = background.as_str().and_then(sanitize_css_color) {
             result = format!(
                 "<span style=\"background-color: {}\">{}</span>",
                 bg_val, result
@@ -440,6 +444,53 @@ fn html_escape(text: &str) -> String {
         .replace('>', "&gt;")
         .replace('"', "&quot;")
         .replace('\'', "&#39;")
+}
+
+/// Return a URL only if its scheme is safe to place in an `href`/`src`
+/// attribute, otherwise `None`.
+///
+/// Rich-text values arrive as raw Delta JSON, so a malicious author can supply
+/// a `javascript:` (or other active) scheme even though the legitimate editor
+/// never emits one. We allow relative URLs (no scheme) and an explicit
+/// allowlist of inert schemes; everything else is dropped.
+fn sanitize_url(url: &str) -> Option<&str> {
+    let trimmed = url.trim();
+
+    // A scheme is `scheme:` before any '/', '?', or '#'. If there is no scheme
+    // delimiter before those, the URL is relative and therefore safe.
+    let scheme_end = trimmed.find(|c| c == ':' || c == '/' || c == '?' || c == '#');
+    match scheme_end {
+        Some(idx) if trimmed.as_bytes()[idx] == b':' => {
+            let scheme = trimmed[..idx].to_ascii_lowercase();
+            const ALLOWED: [&str; 4] = ["http", "https", "mailto", "tel"];
+            if ALLOWED.contains(&scheme.as_str()) {
+                Some(trimmed)
+            } else {
+                None
+            }
+        }
+        // No ':' before the first path/query/fragment separator: relative URL.
+        _ => Some(trimmed),
+    }
+}
+
+/// Return the CSS color value only if it is a safe literal (hex color or a
+/// plain alphanumeric color keyword), otherwise `None`.
+///
+/// This is interpolated into a `style` attribute, so anything outside this
+/// strict shape (quotes, `url(...)`, `expression(...)`, semicolons) is dropped
+/// to prevent attribute breakout and CSS-based injection.
+fn sanitize_css_color(color: &str) -> Option<&str> {
+    let trimmed = color.trim();
+    let is_hex = trimmed.starts_with('#')
+        && trimmed.len() > 1
+        && trimmed[1..].chars().all(|c| c.is_ascii_hexdigit());
+    let is_keyword = !trimmed.is_empty() && trimmed.chars().all(|c| c.is_ascii_alphabetic());
+    if is_hex || is_keyword {
+        Some(trimmed)
+    } else {
+        None
+    }
 }
 
 /// Content format detected from input

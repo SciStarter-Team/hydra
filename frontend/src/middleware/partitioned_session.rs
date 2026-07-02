@@ -81,40 +81,63 @@ impl<E: Endpoint> Endpoint for PartitionedSessionEndpoint<E> {
         let needs_partitioned = resp.extensions().get::<NeedsPartitionedCookies>().is_some();
 
         if needs_partitioned {
+            use poem::http::header::SET_COOKIE;
             let headers = resp.headers_mut();
 
-            // Collect existing Set-Cookie values that need modification
-            let mut modified_cookies = Vec::new();
+            // Pull out every Set-Cookie header so we can re-emit them in a
+            // controlled order.
+            let all: Vec<_> = headers.get_all(SET_COOKIE).iter().cloned().collect();
+            headers.remove(SET_COOKIE);
 
-            for (_name, value) in headers.iter() {
-                if let Ok(cookie_str) = value.to_str() {
-                    // Only modify session cookies, not CSRF or other cookies
-                    if cookie_str.starts_with("session-id=")
-                        || cookie_str.starts_with("__Host-session-id=")
-                    {
-                        let mut modified = cookie_str.to_string();
+            let mut others = Vec::new();
+            let mut session_lax = Vec::new();
+            let mut session_partitioned = Vec::new();
 
-                        // Replace SameSite=Lax with SameSite=None
-                        modified = modified.replace("SameSite=Lax", "SameSite=None");
+            for value in all {
+                let is_session = value
+                    .to_str()
+                    .map(|s| s.starts_with("session-id=") || s.starts_with("__Host-session-id="))
+                    .unwrap_or(false);
 
-                        // Add Partitioned attribute if not present
+                if is_session {
+                    // Build the SameSite=None; Partitioned variant for the
+                    // iframe (CHIPS) context.
+                    if let Ok(s) = value.to_str() {
+                        let mut modified = s.replace("SameSite=Lax", "SameSite=None");
                         if !modified.contains("Partitioned") {
                             modified.push_str("; Partitioned");
                         }
-
-                        modified_cookies.push(modified);
+                        if let Ok(v) = poem::http::HeaderValue::from_str(&modified) {
+                            session_partitioned.push(v);
+                        }
                     }
+                    session_lax.push(value);
+                } else {
+                    others.push(value);
                 }
             }
 
-            // Add partitioned versions alongside the originals
-            // Browsers will store both variants of the same cookie name:
-            // - session-id: SameSite=Lax for normal (non-iframe) contexts
-            // - session-id: SameSite=None; Partitioned for iframe contexts
-            for cookie in modified_cookies {
-                if let Ok(value) = poem::http::HeaderValue::from_str(&cookie) {
-                    headers.append(poem::http::header::SET_COOKIE, value);
-                }
+            // Re-emit: unrelated cookies first, then the SameSite=None;
+            // Partitioned session cookie, and finally the SameSite=Lax session
+            // cookie LAST.
+            //
+            // On browsers that support CHIPS, the Partitioned cookie is stored
+            // under a separate partition key and coexists with the unpartitioned
+            // Lax cookie, so order is irrelevant. On browsers that ignore
+            // `Partitioned`, two cookies with the same name collapse to
+            // last-write-wins; emitting the Lax variant last keeps the session
+            // cookie SameSite=Lax globally instead of silently downgrading it to
+            // SameSite=None (which would strip CSRF protection app-wide). Those
+            // browsers block third-party cookies in iframes anyway, so losing the
+            // None variant there costs nothing.
+            for v in others {
+                headers.append(SET_COOKIE, v);
+            }
+            for v in session_partitioned {
+                headers.append(SET_COOKIE, v);
+            }
+            for v in session_lax {
+                headers.append(SET_COOKIE, v);
             }
         }
 

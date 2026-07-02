@@ -289,7 +289,7 @@ async fn tool_search_projects(args: Value) -> Result<String, Error> {
         return Ok("[]".to_string());
     }
 
-    let search_term = format!("{}*", query.trim());
+    let search_term = crate::search::fts5_prefix_query(query);
 
     let rows = sqlx::query!(
         r#"
@@ -411,7 +411,7 @@ async fn tool_search_events(args: Value) -> Result<String, Error> {
         return Ok("[]".to_string());
     }
 
-    let search_term = format!("{}*", query.trim());
+    let search_term = crate::search::fts5_prefix_query(query);
 
     let rows = sqlx::query!(
         r#"

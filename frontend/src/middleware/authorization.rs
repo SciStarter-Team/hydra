@@ -260,14 +260,21 @@ impl<E: Endpoint> Endpoint for AuthOnlyEndpoint<E> {
 /// restrictions in handlers.
 #[tracing::instrument]
 pub fn auth_only(req: &poem::Request) -> Result<(), NotAuthorized> {
-    let Some(_user_info) = req.extensions().get::<Authenticated>() else {
-        let uri = req.original_uri();
-        if let Some(query) = uri.query() {
-            return Err(NotAuthorized::with_path_and_query(uri.path(), query));
-        } else {
-            return Err(NotAuthorized::with_path(uri.path()));
-        }
-    };
+    // `AuthMiddleware` always inserts an `Authenticated` extension, using
+    // `Authenticated(None)` for anonymous requests. Checking only for the
+    // extension's presence would therefore pass every request; we must confirm
+    // the inner `Option` actually holds a logged-in user.
+    if matches!(
+        req.extensions().get::<Authenticated>(),
+        Some(Authenticated(Some(_)))
+    ) {
+        return Ok(());
+    }
 
-    Ok(())
+    let uri = req.original_uri();
+    if let Some(query) = uri.query() {
+        Err(NotAuthorized::with_path_and_query(uri.path(), query))
+    } else {
+        Err(NotAuthorized::with_path(uri.path()))
+    }
 }

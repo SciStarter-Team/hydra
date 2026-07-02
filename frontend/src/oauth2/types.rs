@@ -31,9 +31,14 @@ impl Client {
             .all(|s| self.allowed_scopes.contains(&s.to_string()))
     }
 
-    /// Verify client secret
+    /// Verify client secret using a constant-time comparison to avoid leaking
+    /// the secret through timing side channels.
     pub fn verify_secret(&self, secret: &str) -> bool {
-        self.client_secret == secret
+        use subtle::ConstantTimeEq;
+        self.client_secret
+            .as_bytes()
+            .ct_eq(secret.as_bytes())
+            .into()
     }
 }
 

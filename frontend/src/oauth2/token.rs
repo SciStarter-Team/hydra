@@ -77,7 +77,7 @@ async fn handle_authorization_code_grant(req: TokenRequest) -> Result<Response, 
 
     // Verify client_secret
     if let Some(secret) = req.client_secret {
-        if client.client_secret != secret {
+        if !client.verify_secret(&secret) {
             return Ok(error_response(
                 "invalid_client",
                 Some("Invalid client_secret"),
@@ -221,7 +221,7 @@ async fn handle_refresh_token_grant(req: TokenRequest) -> Result<Response, Error
 
     // Verify client_secret
     if let Some(secret) = req.client_secret {
-        if client.client_secret != secret {
+        if !client.verify_secret(&secret) {
             return Ok(error_response(
                 "invalid_client",
                 Some("Invalid client_secret"),
@@ -285,11 +285,20 @@ async fn handle_refresh_token_grant(req: TokenRequest) -> Result<Response, Error
     // Store new access token
     access_token.store().await?;
 
-    // Update refresh token to point to new access token
-    let new_refresh = RefreshToken {
-        access_token: access_token.token.clone(),
-        ..old_refresh
-    };
+    // Rotate the refresh token: invalidate the presented token and issue a new
+    // one. A stolen or replayed refresh token then fails on its next use because
+    // the value has been deleted.
+    RefreshToken::delete(refresh_token_str.clone()).await?;
+
+    let mut new_refresh = RefreshToken::new(
+        access_token.token.clone(),
+        old_refresh.client_id.clone(),
+        old_refresh.user_id.clone(),
+        scope.clone(),
+    );
+    // Preserve the original absolute expiry so repeated rotation cannot extend
+    // the refresh token's lifetime indefinitely.
+    new_refresh.expires_at = old_refresh.expires_at.clone();
     new_refresh.store().await?;
 
     // Calculate expires_in
@@ -300,7 +309,7 @@ async fn handle_refresh_token_grant(req: TokenRequest) -> Result<Response, Error
         access_token: access_token.token,
         token_type: "Bearer".to_string(),
         expires_in,
-        refresh_token: Some(refresh_token_str),
+        refresh_token: Some(new_refresh.token),
         id_token: None,
         scope,
     };

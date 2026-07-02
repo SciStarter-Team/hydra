@@ -4,6 +4,7 @@ use common::{
         log::{ExchangeEvent, ProjectLikesResponse, RatingSetRequest},
         user::{PermissionCheckRequest, PermissionCheckResponse},
     },
+    quill::content_to_html,
     service::{request, send},
     shared::db,
     timestring::TimeString,
@@ -422,7 +423,6 @@ struct ExchangeProjectPage {
     exchange: TemplateExchange,
     user: TemplateUser,
     project: ExchangeProjectDetail,
-    description: Vec<String>,
     csrftoken: String,
 }
 
@@ -655,8 +655,15 @@ async fn load_exchange_project_detail(
         image_credit: row.image_credit,
         goal: row.goal,
         task: row.task,
-        description: row.description,
-        how_to_join: row.how_to_join,
+        // Render rich-text fields through the sanitizing quill renderer so the
+        // template can emit them without exposing stored XSS (the same path the
+        // main detail page uses).
+        description: content_to_html(&row.description)
+            .map(|(html, _)| html)
+            .unwrap_or(row.description),
+        how_to_join: content_to_html(&row.how_to_join)
+            .map(|(html, _)| html)
+            .unwrap_or(row.how_to_join),
         presenter: row.presenter,
         url,
         twitter_name,
@@ -2204,13 +2211,6 @@ pub async fn exchange_project(
         load_exchange_project_detail(&project_id, &project_slug, auth.0.as_ref(), &exchange_info)
             .await?;
 
-    // Split description into paragraphs
-    let description: Vec<String> = project
-        .description
-        .split("\n\n")
-        .map(|s| s.to_string())
-        .collect();
-
     // Get CSRF token
     let csrftoken = session
         .get::<String>("csrf-token")
@@ -2222,7 +2222,6 @@ pub async fn exchange_project(
         exchange,
         user,
         project,
-        description,
         csrftoken,
     };
 

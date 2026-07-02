@@ -42,6 +42,19 @@ pub async fn get_engagement_stats(
     req: &async_nats::service::Request,
 ) -> Result<ExchangeEngagementResponse> {
     let request: ExchangeEngagementRequest = decode_structured_message(req.message.clone())?;
+
+    // `exchange_id` is interpolated into DataFusion SQL literals below. It is
+    // always a ULID, so require it to be alphanumeric; this rejects any quote or
+    // metacharacter and closes the injection surface regardless of the caller.
+    if request.exchange_id.is_empty()
+        || !request
+            .exchange_id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric())
+    {
+        anyhow::bail!("invalid exchange_id: {:?}", request.exchange_id);
+    }
+
     let database = DATABASE
         .read()
         .as_ref()

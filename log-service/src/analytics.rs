@@ -4,9 +4,9 @@ use common::message::log::{
     AnalyticsQuery, AnalyticsResponse, GoUrlChartPoint, GoUrlStatsRequest, GoUrlStatsResponse,
     GoUrlViewEntry, ParticipationByEmailEntry, ParticipationByEmailRequest,
     ParticipationByEmailResponse, ParticipationSummaryEntry, ParticipationSummaryRequest,
-    ParticipationSummaryResponse, RecentActivityItem, RecentActivityRequest, RecentActivityResponse,
-    TopItemCount, TopPerformersQuery, UserFirstParticipationEntry, UserFirstParticipationRequest,
-    UserFirstParticipationResponse, WeeklyCount,
+    ParticipationSummaryResponse, RecentActivityItem, RecentActivityRequest,
+    RecentActivityResponse, TopItemCount, TopPerformersQuery, UserFirstParticipationEntry,
+    UserFirstParticipationRequest, UserFirstParticipationResponse, WeeklyCount,
 };
 use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::functions_aggregate::expr_fn::count;
@@ -15,6 +15,30 @@ use std::str::FromStr;
 
 use crate::database::storage::Database;
 use std::sync::Arc;
+
+/// Validate a date/timestamp string that will be interpolated into a DataFusion
+/// SQL literal.
+///
+/// Several analytics queries build their `WHERE \`when\` >= '{}'` bounds with
+/// `format!` because DataFusion's `ctx.sql` does not take bind parameters here.
+/// To keep that safe against SQL injection, we require the value to consist only
+/// of characters that appear in an ISO-8601 date/timestamp. Any quote, comment,
+/// or other metacharacter is rejected, so the value cannot break out of the
+/// literal regardless of what an upstream caller passes.
+fn validate_sql_date(value: &str) -> Result<&str> {
+    let ok = !value.is_empty()
+        && value.len() <= 40
+        && value
+            .chars()
+            .all(|c| c.is_ascii_digit() || matches!(c, '-' | ':' | 'T' | 'Z' | ' ' | '.' | '+'));
+    if ok {
+        Ok(value)
+    } else {
+        Err(LogServiceError::Validation(format!(
+            "invalid date value: {value:?}"
+        )))
+    }
+}
 
 /// Get clickthrough analytics using DataFusion with safe parameter binding on pre-computed summary tables
 pub async fn get_clickthrough_analytics(
@@ -159,7 +183,8 @@ pub async fn get_clickthrough_analytics_realtime(
          WHERE `when` >= '{}' AND `when` <= '{}' \
          GROUP BY week_start \
          ORDER BY week_start DESC",
-        query.start_date, query.end_date
+        validate_sql_date(&query.start_date)?,
+        validate_sql_date(&query.end_date)?
     );
 
     let df = ctx.sql(&sql).await?;
@@ -187,7 +212,8 @@ pub async fn get_participation_analytics_realtime(
          WHERE `when` >= '{}' AND `when` <= '{}' \
          GROUP BY week_start \
          ORDER BY week_start DESC",
-        query.start_date, query.end_date
+        validate_sql_date(&query.start_date)?,
+        validate_sql_date(&query.end_date)?
     );
 
     let df = ctx.sql(&sql).await?;
@@ -216,7 +242,9 @@ pub async fn get_participation_summary(
         .filter(|id| !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric()))
         .collect();
     if ids.is_empty() {
-        return Ok(ParticipationSummaryResponse { entries: Vec::new() });
+        return Ok(ParticipationSummaryResponse {
+            entries: Vec::new(),
+        });
     }
     let in_list = ids
         .iter()
@@ -232,8 +260,8 @@ pub async fn get_participation_summary(
          FROM participation_realtime \
          WHERE entity_id IN ({in_list}) \
          GROUP BY entity_id",
-        first = request.first,
-        last = request.last,
+        first = validate_sql_date(&request.first)?,
+        last = validate_sql_date(&request.last)?,
     );
 
     let batches = ctx.sql(&sql).await?.collect().await?;
@@ -1033,6 +1061,9 @@ pub async fn get_top_performers(
 ) -> Result<AnalyticsResponse> {
     let ctx = database.context();
 
+    let start_date = validate_sql_date(&query.start_date)?;
+    let end_date = validate_sql_date(&query.end_date)?;
+
     let sql = match query.criterion.as_str() {
         "views" => {
             format!(
@@ -1045,7 +1076,7 @@ pub async fn get_top_performers(
                  GROUP BY path \
                  ORDER BY count DESC \
                  LIMIT {}",
-                query.start_date, query.end_date, query.limit
+                start_date, end_date, query.limit
             )
         }
         "clickthroughs" => {
@@ -1059,7 +1090,7 @@ pub async fn get_top_performers(
                  GROUP BY program_id \
                  ORDER BY count DESC \
                  LIMIT {}",
-                query.start_date, query.end_date, query.limit
+                start_date, end_date, query.limit
             )
         }
         "participation" => {
@@ -1073,7 +1104,7 @@ pub async fn get_top_performers(
                  GROUP BY entity_id \
                  ORDER BY count DESC \
                  LIMIT {}",
-                query.start_date, query.end_date, query.limit
+                start_date, end_date, query.limit
             )
         }
         _ => {

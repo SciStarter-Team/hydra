@@ -83,6 +83,20 @@ pub struct SearchAutocompleteResults {
     pub results: Vec<SearchResult>,
 }
 
+/// Build a safe FTS5 prefix-match query from raw user input.
+///
+/// The result is always passed as a bind parameter to `MATCH`, so it cannot
+/// inject SQL. It is, however, interpreted as an FTS5 *query expression*, in
+/// which `"`, `*`, `:`, `(`, and words like `OR`/`NEAR` are operators. Passing
+/// raw user text lets a user inject those operators (causing query errors / mild
+/// DoS or altering matching). Wrapping the text in a double-quoted string
+/// (escaping embedded quotes) and appending `*` treats it as a literal prefix
+/// search — a quoted string followed by `*` is a valid FTS5 prefix token.
+pub fn fts5_prefix_query(input: &str) -> String {
+    let escaped = input.trim().replace('"', "\"\"");
+    format!("\"{}\"*", escaped)
+}
+
 /// Search published entities using FTS
 pub async fn search_entities(query: &str) -> Result<Vec<SearchResult>, Error> {
     let query = query.trim();
@@ -91,7 +105,7 @@ pub async fn search_entities(query: &str) -> Result<Vec<SearchResult>, Error> {
     }
 
     // Use FTS5 MATCH with prefix search
-    let search_term = format!("{}*", query);
+    let search_term = fts5_prefix_query(query);
 
     // This selects columns directly from an FTS5 virtual table. The compile-time
     // `query!` macro cannot describe FTS5 virtual-table columns under sqlx 0.9
@@ -565,7 +579,7 @@ async fn search_all(fq: &FinderQuery, page: u32) -> Result<FinderSearchResult, E
 
 async fn search_text_only(fq: &FinderQuery, page: u32) -> Result<FinderSearchResult, Error> {
     let q = fq.q.as_deref().unwrap_or("");
-    let search_term = format!("{}*", q);
+    let search_term = fts5_prefix_query(q);
     let limit = FINDER_PER_PAGE as i64;
     let offset = ((page - 1) * FINDER_PER_PAGE) as i64;
 
@@ -683,7 +697,7 @@ async fn search_with_location(
     page: u32,
 ) -> Result<FinderSearchResult, Error> {
     let q = fq.q.as_deref().unwrap_or("");
-    let search_term = format!("{}*", q);
+    let search_term = fts5_prefix_query(q);
 
     // Count
     let proj_count: i64 = build_project_count_text(&search_term, fq)

@@ -629,7 +629,15 @@ async fn render_badge_html(
         email,
         &user_badge.when.to_string(),
     )?;
-    let badge_json = serde_json::to_string_pretty(&assertion)?;
+    // This JSON is embedded verbatim inside a <script type="application/ld+json">
+    // block. serde_json does not escape '<' or '/', so a string field containing
+    // "</script>" would break out of the element (stored XSS). Escape the
+    // characters that are dangerous in an HTML script context as unicode
+    // escapes, which are still valid JSON.
+    let badge_json = serde_json::to_string_pretty(&assertion)?
+        .replace('<', "\\u003c")
+        .replace('>', "\\u003e")
+        .replace('&', "\\u0026");
 
     let confirm = params.confirm.is_some();
     let confirm_email = params.confirm.clone().unwrap_or_default();

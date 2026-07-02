@@ -304,12 +304,16 @@ async fn get_tracked_file(
                 .content_type
                 .unwrap_or_else(|| "application/octet-stream".to_string());
 
+            // Never let the browser MIME-sniff uploaded bytes into an active
+            // type, and force download for content types that execute inline.
+            let force_download = metadata.force_download || is_active_content_type(&content_type);
+
             let mut response = Response::builder()
                 .status(StatusCode::OK)
+                .header("X-Content-Type-Options", "nosniff")
                 .header(CONTENT_TYPE, content_type);
 
-            // Add attachment headers if force_download is true
-            if metadata.force_download {
+            if force_download {
                 response = response.header(
                     "Content-Disposition",
                     if let Some(filename) = &metadata.original_filename {
@@ -332,6 +336,30 @@ async fn get_tracked_file(
     }
 }
 
+/// Content types a browser will render as active content (executing embedded
+/// script) when served inline. Uploaded files carry a caller-supplied
+/// content type, so any of these must be forced to download rather than served
+/// inline on our own origin, otherwise an uploaded HTML/SVG file becomes stored
+/// XSS.
+fn is_active_content_type(content_type: &str) -> bool {
+    let ct = content_type
+        .split(';')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
+    matches!(
+        ct.as_str(),
+        "text/html"
+            | "application/xhtml+xml"
+            | "image/svg+xml"
+            | "text/xml"
+            | "application/xml"
+            | "text/xsl"
+            | "application/mathml+xml"
+    )
+}
+
 #[handler]
 async fn get_untracked_file(Path(file_id): Path<String>) -> Result<impl IntoResponse, poem::Error> {
     let file_id: Ulid = file_id
@@ -344,12 +372,16 @@ async fn get_untracked_file(Path(file_id): Path<String>) -> Result<impl IntoResp
                 .content_type
                 .unwrap_or_else(|| "application/octet-stream".to_string());
 
+            // Never let the browser MIME-sniff uploaded bytes into an active
+            // type, and force download for content types that execute inline.
+            let force_download = metadata.force_download || is_active_content_type(&content_type);
+
             let mut response = Response::builder()
                 .status(StatusCode::OK)
+                .header("X-Content-Type-Options", "nosniff")
                 .header(CONTENT_TYPE, content_type);
 
-            // Add attachment headers if force_download is true
-            if metadata.force_download {
+            if force_download {
                 response = response.header(
                     "Content-Disposition",
                     if let Some(filename) = &metadata.original_filename {

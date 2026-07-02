@@ -16,7 +16,7 @@ pub trait LoadStorePeered:
     std::fmt::Debug + serde::Serialize + for<'d> serde::Deserialize<'d>
 {
     //type DatabaseKey<'k>;
-    type DatabaseKey: Clone + serde::Serialize; // Should be DatabaseKey<'k> but as of Rust 1.87 that triggers https://github.com/rust-lang/rust/issues/100013
+    type DatabaseKey: Clone + serde::Serialize + serde::de::DeserializeOwned; // Should be DatabaseKey<'k> but as of Rust 1.87 that triggers https://github.com/rust-lang/rust/issues/100013
 
     const GROUP: &str;
     const SPECIFIC: &str = "";
@@ -95,6 +95,7 @@ pub trait LoadStorePeered:
 
         let store_subject = peering_subject_store::<Self>();
         let load_subject = peering_subject_load::<Self>();
+        let delete_subject = peering_subject_delete::<Self>();
 
         let mut updates = client.subscribe(peering_subject_listen::<Self>()).await?;
 
@@ -122,6 +123,28 @@ pub trait LoadStorePeered:
                         if let Err(err) = value.save_to_database().await {
                             eprintln!(
                                 "({}:{}) Error in save_to_database(): {}",
+                                Self::GROUP,
+                                Self::SPECIFIC,
+                                err
+                            );
+                        }
+                    } else if msg_subject == delete_subject {
+                        let key: Self::DatabaseKey = match flexbuffers::from_slice(&msg.payload) {
+                            Ok(key) => key,
+                            Err(err) => {
+                                eprintln!(
+                                    "({}:{}) Unable to decode delete key in peering_task: {}",
+                                    Self::GROUP,
+                                    Self::SPECIFIC,
+                                    err
+                                );
+                                continue;
+                            }
+                        };
+
+                        if let Err(err) = Self::delete_from_database(key).await {
+                            eprintln!(
+                                "({}:{}) Error in delete_from_database(): {}",
                                 Self::GROUP,
                                 Self::SPECIFIC,
                                 err

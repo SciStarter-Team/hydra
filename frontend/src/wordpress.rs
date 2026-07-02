@@ -39,7 +39,9 @@ pub async fn fetch_page_with_styles(page_url: &str) -> Result<WordPressPageWithS
 
     tracing::debug!("Fetching WordPress page: {}", page_url);
 
-    let response = reqwest::get(page_url).await?;
+    // Fetch through the SSRF-guarded client so a staff-supplied URL cannot be
+    // pointed at internal/link-local addresses.
+    let response = crate::ssrf::guarded_get(page_url).await?;
 
     if !response.status().is_success() {
         return Err(anyhow::anyhow!(

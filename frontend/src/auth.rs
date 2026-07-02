@@ -416,7 +416,10 @@ pub async fn signup_action(
         // Call user-service's signup via NATS
         match request_with_retry::<Option<BasicInfo>>("user.auth.signup", signup_request).await {
             Ok(Some(basic_info)) => {
-                // Regular password signup - log them in immediately
+                // Regular password signup - log them in immediately.
+                // Rotate the session ID on this privilege transition to
+                // prevent session fixation.
+                session.renew();
                 session.set("basic_info", &basic_info);
 
                 // Clear signup-specific session data
@@ -484,7 +487,9 @@ pub async fn login_action(session: &Session, Form(form): Form<LoginForm>) -> Res
                 }
             }
 
-            // Store user info in session
+            // Store user info in session. Rotate the session ID on this
+            // privilege transition to prevent session fixation.
+            session.renew();
             session.set("basic_info", &basic_info);
 
             log_activity(None, "user_login", basic_info.user_id, None, next.clone())
@@ -534,7 +539,9 @@ pub async fn logout_action(
         return Redirect::see_other("/");
     };
 
-    session.remove("basic_info");
+    // Destroy the whole server-side session (not just the identity key) so the
+    // session ID cannot be reused and no residual state survives logout.
+    session.purge();
 
     log_activity(None, "logout", info.user_id, None, None)
         .await
@@ -705,7 +712,9 @@ pub async fn webauthn_authentication_complete(
             session.remove("webauthn_authentication_state");
 
             if let Some(basic_info) = response.basic_info {
-                // Store user info in session (same as regular login)
+                // Store user info in session (same as regular login).
+                // Rotate the session ID to prevent session fixation.
+                session.renew();
                 session.set("basic_info", &basic_info);
 
                 let next: Option<String> = session.get("auth_next");
@@ -1021,7 +1030,9 @@ pub async fn webauthn_registration_complete(
                     .await
                     {
                         Ok(Some(basic_info)) => {
-                            // Store user info in session (complete the login)
+                            // Store user info in session (complete the login).
+                            // Rotate the session ID to prevent session fixation.
+                            session.renew();
                             session.set("basic_info", &basic_info);
 
                             // Clear pending user data
@@ -1101,6 +1112,16 @@ pub async fn webauthn_registration_complete(
 }
 
 // WebAuthn API routes with rate limiting
+/// Rate limiter for password credential endpoints (login and signup) to throttle
+/// brute-force and credential-stuffing attempts. Keyed per client IP, consistent
+/// with the WebAuthn limiter. Returns a fresh instance per call so it can be
+/// applied to more than one route.
+pub fn credential_rate_limit() -> RateLimitMiddleware {
+    let config = RateLimitConfig::new(10, Duration::from_secs(300))
+        .with_error_message("Too many attempts. Please try again in a few minutes.");
+    RateLimitMiddleware::new(config)
+}
+
 pub fn webauthn_routes() -> impl Endpoint {
     // Conservative rate limits for WebAuthn: 5 attempts per 5 minutes per IP
     let rate_limit_config = RateLimitConfig::new(5, Duration::from_secs(300))
