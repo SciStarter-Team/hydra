@@ -67,6 +67,7 @@ impl ProcessedFile {
 #[derive(Debug)]
 pub enum FileProcessor {
     Security(SecurityFilter),
+    Svg(SvgSanitizer),
     Image(ImageProcessor),
     Document(DocumentProcessor),
 }
@@ -75,6 +76,7 @@ impl FileProcessor {
     fn can_process(&self, metadata: &FileMetadata) -> bool {
         match self {
             FileProcessor::Security(p) => p.can_process(metadata),
+            FileProcessor::Svg(p) => p.can_process(metadata),
             FileProcessor::Image(p) => p.can_process(metadata),
             FileProcessor::Document(p) => p.can_process(metadata),
         }
@@ -83,9 +85,83 @@ impl FileProcessor {
     async fn process(&self, metadata: &FileMetadata, data: &[u8]) -> Result<Vec<ProcessedFile>> {
         match self {
             FileProcessor::Security(p) => p.process(metadata, data).await,
+            FileProcessor::Svg(p) => p.process(metadata, data).await,
             FileProcessor::Image(p) => p.process(metadata, data).await,
             FileProcessor::Document(p) => p.process(metadata, data).await,
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct SvgSanitizer;
+
+impl SvgSanitizer {
+    fn can_process(&self, metadata: &FileMetadata) -> bool {
+        if let Some(content_type) = &metadata.content_type {
+            let ct = content_type
+                .split(';')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_ascii_lowercase();
+            if ct == "image/svg+xml" {
+                return true;
+            }
+        }
+        metadata
+            .original_filename
+            .as_ref()
+            .is_some_and(|f| f.to_ascii_lowercase().ends_with(".svg"))
+    }
+
+    async fn process(&self, metadata: &FileMetadata, data: &[u8]) -> Result<Vec<ProcessedFile>> {
+        info!("Sanitizing SVG upload: {}", metadata.file_id);
+
+        // SVGs can carry active content (scripts, event handlers, external
+        // references). Rewrite the file through an allowlist-based SVG sanitizer
+        // so the stored copy is inert and safe to serve inline. The XML parse +
+        // rewrite is CPU-bound, so run it off the async executor.
+        let input = data.to_vec();
+        let sanitized = tokio::task::spawn_blocking(move || {
+            use svg_hush::{Filter, data_url_filter};
+            let mut filter = Filter::new();
+            // Keep standard raster image `data:` URLs so embedded bitmaps still
+            // render, while scripts/handlers/external references are dropped.
+            filter.set_data_url_filter(data_url_filter::allow_standard_images);
+            let mut out = Vec::new();
+            filter.filter(input.as_slice(), &mut out).map(|()| out)
+        })
+        .await;
+
+        // On any failure, reject the upload by returning an empty vec. We must
+        // never fall through to storing the unsanitized bytes — returning `Err`
+        // here would do exactly that, because the pipeline keeps the original
+        // file when a processor errors.
+        let sanitized = match sanitized {
+            Ok(Ok(bytes)) => bytes,
+            Ok(Err(e)) => {
+                warn!(
+                    "Rejected SVG {}: could not sanitize: {}",
+                    metadata.file_id, e
+                );
+                return Ok(vec![]);
+            }
+            Err(e) => {
+                warn!(
+                    "Rejected SVG {}: sanitizer task failed: {}",
+                    metadata.file_id, e
+                );
+                return Ok(vec![]);
+            }
+        };
+
+        // Normalize the stored content type to SVG so the serving side treats it
+        // as the sanitized image it now is.
+        let mut processed = ProcessedFile::new(sanitized, None)
+            .with_metadata(metadata)
+            .with_content_type("image/svg+xml");
+        processed.file_id = metadata.file_id;
+        Ok(vec![processed])
     }
 }
 
@@ -243,6 +319,7 @@ impl ProcessingPipeline {
         Self {
             processors: vec![
                 FileProcessor::Security(SecurityFilter), // Security filter runs first
+                FileProcessor::Svg(SvgSanitizer),        // Sanitize SVGs before storage
                 FileProcessor::Image(ImageProcessor),
                 FileProcessor::Document(DocumentProcessor),
             ],
@@ -301,5 +378,51 @@ impl ProcessingPipeline {
 impl Default for ProcessingPipeline {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use svg_hush::{Filter, data_url_filter};
+
+    /// Sanitize exactly as [`SvgSanitizer::process`] does.
+    fn sanitize(svg: &[u8]) -> String {
+        let mut filter = Filter::new();
+        filter.set_data_url_filter(data_url_filter::allow_standard_images);
+        let mut out = Vec::new();
+        filter.filter(svg, &mut out).expect("filter should succeed");
+        String::from_utf8(out).expect("output is utf-8")
+    }
+
+    #[test]
+    fn strips_active_content() {
+        let malicious = br#"<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)">
+            <script>alert(document.cookie)</script>
+            <a href="javascript:alert(2)"><rect width="10" height="10"/></a>
+            <image href="http://169.254.169.254/latest/meta-data/"/>
+            <foreignObject><body xmlns="http://www.w3.org/1999/xhtml"><script>alert(3)</script></body></foreignObject>
+        </svg>"#;
+        let out = sanitize(malicious).to_ascii_lowercase();
+
+        assert!(!out.contains("<script"), "script element survived: {out}");
+        assert!(!out.contains("onload"), "onload handler survived: {out}");
+        assert!(
+            !out.contains("javascript:"),
+            "javascript: url survived: {out}"
+        );
+        assert!(
+            !out.contains("169.254.169.254"),
+            "external reference survived: {out}"
+        );
+        assert!(!out.contains("alert("), "script payload survived: {out}");
+    }
+
+    #[test]
+    fn preserves_static_image() {
+        let clean = br#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="red"/></svg>"#;
+        let out = sanitize(clean);
+        assert!(out.contains("svg"), "svg root dropped: {out}");
+        assert!(out.contains("rect"), "rect dropped: {out}");
+        assert!(out.contains("red"), "fill color dropped: {out}");
     }
 }

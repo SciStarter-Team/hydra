@@ -307,11 +307,16 @@ async fn get_tracked_file(
             // Never let the browser MIME-sniff uploaded bytes into an active
             // type, and force download for content types that execute inline.
             let force_download = metadata.force_download || is_active_content_type(&content_type);
+            let is_svg = is_svg_content_type(&content_type);
 
             let mut response = Response::builder()
                 .status(StatusCode::OK)
                 .header("X-Content-Type-Options", "nosniff")
                 .header(CONTENT_TYPE, content_type);
+
+            if is_svg {
+                response = response.header("Content-Security-Policy", svg_inline_csp());
+            }
 
             if force_download {
                 response = response.header(
@@ -339,8 +344,13 @@ async fn get_tracked_file(
 /// Content types a browser will render as active content (executing embedded
 /// script) when served inline. Uploaded files carry a caller-supplied
 /// content type, so any of these must be forced to download rather than served
-/// inline on our own origin, otherwise an uploaded HTML/SVG file becomes stored
-/// XSS.
+/// inline on our own origin, otherwise an uploaded HTML file becomes stored XSS.
+///
+/// `image/svg+xml` is intentionally NOT in this list: SVG uploads are sanitized
+/// through an allowlist filter at upload time (see the upload processing
+/// pipeline), so the stored bytes are inert and safe to serve inline as an
+/// image. They are additionally served with a restrictive Content-Security-Policy
+/// (see [`svg_inline_csp`]) as defense in depth.
 fn is_active_content_type(content_type: &str) -> bool {
     let ct = content_type
         .split(';')
@@ -352,12 +362,31 @@ fn is_active_content_type(content_type: &str) -> bool {
         ct.as_str(),
         "text/html"
             | "application/xhtml+xml"
-            | "image/svg+xml"
             | "text/xml"
             | "application/xml"
             | "text/xsl"
             | "application/mathml+xml"
     )
+}
+
+/// Whether a stored file is an SVG that we serve inline (and therefore want to
+/// harden with a Content-Security-Policy).
+fn is_svg_content_type(content_type: &str) -> bool {
+    content_type
+        .split(';')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .eq_ignore_ascii_case("image/svg+xml")
+}
+
+/// A restrictive Content-Security-Policy for inline SVG responses. Even though
+/// uploaded SVGs are sanitized, this independently prevents script execution and
+/// any outbound loads if the SVG is opened as a top-level document: no scripts,
+/// no plugins, and only inline styles / embedded `data:` images (which the
+/// sanitizer permits) are allowed to render.
+fn svg_inline_csp() -> &'static str {
+    "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox"
 }
 
 #[handler]
@@ -375,11 +404,16 @@ async fn get_untracked_file(Path(file_id): Path<String>) -> Result<impl IntoResp
             // Never let the browser MIME-sniff uploaded bytes into an active
             // type, and force download for content types that execute inline.
             let force_download = metadata.force_download || is_active_content_type(&content_type);
+            let is_svg = is_svg_content_type(&content_type);
 
             let mut response = Response::builder()
                 .status(StatusCode::OK)
                 .header("X-Content-Type-Options", "nosniff")
                 .header(CONTENT_TYPE, content_type);
+
+            if is_svg {
+                response = response.header("Content-Security-Policy", svg_inline_csp());
+            }
 
             if force_download {
                 response = response.header(
