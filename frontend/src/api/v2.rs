@@ -698,7 +698,9 @@ pub async fn record_event_articulate(Form(form): Form<ArticulateForm>) -> Result
         }
 
         // Ambassador
-        "http://ambassador_rise_xapi" | "http://re3jvlrvw-cibju89pefhvvnoma-60ig_rise" => {
+        "http://ambassador_rise_xapi"
+        | "http://re3jvlrvw-cibju89pefhvvnoma-60ig_rise"
+        | "http://cd2gspumolo6vyxczli9dnavy4skhgne_rise" => {
             let _: WorkflowProgressResponse = request(
                 "user.workflow.progress",
                 WorkflowProgressRequest {
