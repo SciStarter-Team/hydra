@@ -316,6 +316,10 @@ async fn load_filter_options() -> Result<(Vec<String>, Vec<String>, Vec<String>)
 
 /// Apply project-specific filters to a QueryBuilder
 fn apply_project_filters<'a>(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, query: &'a FinderQuery) {
+    // Never surface test or draft projects in public results (matches the
+    // is_test gate used for public project listings elsewhere).
+    qb.push(" AND p.is_test = 0 AND p.draft = 0");
+
     // Filter out bad geographic data: (0,0) points and swapped lat/lng
     qb.push(" AND NOT (p.point IS NOT NULL AND ST_X(p.point) = 0 AND ST_Y(p.point) = 0)");
     qb.push(" AND NOT (p.point IS NOT NULL AND ABS(ST_Y(p.point)) > 90)");
@@ -421,20 +425,29 @@ fn apply_event_filters<'a>(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, query: &'a
     }
 }
 
-fn make_snippet(desc: &str) -> String {
-    if desc.len() > 200 {
-        format!(
-            "{}...",
-            &desc[..desc
-                .char_indices()
-                .take(200)
-                .last()
-                .map(|(i, _)| i)
-                .unwrap_or(200)]
-        )
-    } else {
-        desc.to_string()
+/// Convert a description stored in any supported format — Quill Delta JSON,
+/// HTML, or Markdown — into plain text, stripping formatting and truncating to
+/// `max_len` characters. Descriptions are increasingly stored as Delta, so
+/// printing the raw string would show JSON; normalize to Delta and extract a
+/// formatting-free excerpt instead. Shared by finder snippets and featured
+/// cards so both render Delta descriptions identically.
+pub(crate) fn description_excerpt(desc: &str, max_len: usize) -> String {
+    match common::quill::to_delta(desc, None) {
+        Ok(delta) => common::quill::delta_to_excerpt(&delta, max_len),
+        Err(_) => {
+            let trimmed = desc.trim();
+            if trimmed.chars().count() > max_len {
+                format!("{}...", trimmed.chars().take(max_len).collect::<String>())
+            } else {
+                trimmed.to_string()
+            }
+        }
     }
+}
+
+/// Finder card snippet: a ~200-character plain-text excerpt.
+fn make_snippet(desc: &str) -> String {
+    description_excerpt(desc, 200)
 }
 
 struct FinderSearchResult {
@@ -1028,16 +1041,53 @@ fn push_event_location_subquery(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, lat: 
     );
 }
 
-/// Up to `limit` published projects and events nearest to `(lat, lng)`, ranked
-/// by the same distance/`comparison_value` expression as the finder's
-/// location-only search (online items rank after physically-near ones). No
-/// finder filters are applied. Powers the home page "near you" list; the "see
-/// all" link hands the same coordinates to `/finder`.
-pub async fn nearby_entities(lat: f64, lng: f64, limit: i64) -> Result<Vec<FinderResult>, Error> {
-    let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new("SELECT * FROM (");
-    push_project_location_subquery(&mut qb, lat, lng);
+/// Push the full location-ranked projects∪events body — both subqueries with
+/// their finder filters applied — into `qb`, without the outer wrapper or
+/// `ORDER BY`. Shared by [`search_location_only`] and [`nearby_entities`] so the
+/// home-page "near you" list and the finder's location search filter and rank
+/// identically.
+fn push_location_union(
+    qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>,
+    fq: &FinderQuery,
+    lat: f64,
+    lng: f64,
+) {
+    push_project_location_subquery(qb, lat, lng);
+    apply_project_filters(qb, fq);
     qb.push(" UNION ALL ");
-    push_event_location_subquery(&mut qb, lat, lng);
+    push_event_location_subquery(qb, lat, lng);
+    apply_event_filters(qb, fq);
+}
+
+/// The finder query the home page's "see all" link produces: a bare
+/// location-only search (lat/lng set, no other filters). `location_name` is
+/// display-only and does not affect results, so it is left unset here.
+fn default_location_query(lat: f64, lng: f64) -> FinderQuery {
+    FinderQuery {
+        q: None,
+        lat: Some(lat),
+        lng: Some(lng),
+        location_name: None,
+        page: None,
+        location_type: None,
+        topic: Vec::new(),
+        audience: Vec::new(),
+        activity: Vec::new(),
+        show_completed: None,
+        misc_filter: Vec::new(),
+    }
+}
+
+/// Up to `limit` published projects and events nearest to `(lat, lng)` — the
+/// top of the finder's location-only search for the same point. Uses the same
+/// default query, filters, and `comparison_value` ranking as
+/// [`search_location_only`], so the home-page "near you" list and the finder's
+/// "see all" results agree.
+pub async fn nearby_entities(lat: f64, lng: f64, limit: i64) -> Result<Vec<FinderResult>, Error> {
+    let fq = default_location_query(lat, lng);
+
+    let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new("SELECT * FROM (");
+    push_location_union(&mut qb, &fq, lat, lng);
     qb.push(") ORDER BY comparison_value LIMIT ");
     qb.push_bind(limit.max(0));
 
@@ -1067,13 +1117,7 @@ async fn search_location_only(
 
     let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new("SELECT * FROM (");
 
-    push_project_location_subquery(&mut qb, lat, lng);
-    apply_project_filters(&mut qb, fq);
-
-    qb.push(" UNION ALL ");
-
-    push_event_location_subquery(&mut qb, lat, lng);
-    apply_event_filters(&mut qb, fq);
+    push_location_union(&mut qb, fq, lat, lng);
 
     qb.push(") ORDER BY comparison_value LIMIT ");
     qb.push_bind(limit);
@@ -1286,4 +1330,30 @@ pub async fn handle_finder(
     .map_err(|e| {
         poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::make_snippet;
+
+    #[test]
+    fn delta_description_renders_as_plain_text() {
+        let delta = r#"{"ops":[{"insert":"Fight malaria from home by analyzing images.\n"}]}"#;
+        let snippet = make_snippet(delta);
+        assert_eq!(snippet, "Fight malaria from home by analyzing images.");
+        assert!(!snippet.contains('{'));
+    }
+
+    #[test]
+    fn html_description_is_stripped_to_text() {
+        let snippet = make_snippet("<p>Hello <strong>world</strong></p>");
+        assert!(snippet.contains("Hello"));
+        assert!(snippet.contains("world"));
+        assert!(!snippet.contains('<'));
+    }
+
+    #[test]
+    fn plain_text_passes_through() {
+        assert_eq!(make_snippet("Just plain text"), "Just plain text");
+    }
 }

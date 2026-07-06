@@ -271,11 +271,15 @@ impl Schedule {
                     return None;
                 }
 
-                // Schedule content overrides entity description when non-empty
+                // Schedule content overrides entity description when non-empty.
+                // Descriptions may be stored as Quill Delta JSON; render them as
+                // plain text so the card never shows raw JSON (full length, as
+                // featured blurbs were never truncated).
                 let description = row
                     .schedule_content
                     .filter(|s| !s.is_empty())
                     .unwrap_or(row.entity_description);
+                let description = crate::search::description_excerpt(&description, usize::MAX);
 
                 // Schedule URL provides custom link (None means link to entity page)
                 let custom_url = row.schedule_url.filter(|u| !u.is_empty());
