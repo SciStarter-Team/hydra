@@ -49,6 +49,11 @@
                         <span>Dashboard</span>
                     </a>
 
+                    <a href="/-admin/dashboard-settings" class="<%= if self.sidebar_active == "home-dashboard" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
+                        <wa-icon name="house" class="w-5 h-5 flex-shrink-0"></wa-icon>
+                        <span>Home Page</span>
+                    </a>
+
                     <a href="/-admin/analytics" class="<%= if self.sidebar_active == "analytics" { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500" } else { "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200" } %>">
                         <wa-icon name="chart-bar" class="w-5 h-5 flex-shrink-0"></wa-icon>
                         <span>Analytics</span>

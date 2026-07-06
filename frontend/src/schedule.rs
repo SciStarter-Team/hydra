@@ -125,7 +125,43 @@ impl TryFrom<ScheduleDB> for Schedule {
     }
 }
 
+/// A compact featured-schedule row for admin listings: the id needed to edit
+/// it, plus title/active/date-range. `get_current_featured_items` returns
+/// display cards without ids; this exposes the editable rows.
+#[derive(Debug, Clone)]
+pub struct FeaturedScheduleRow {
+    pub schedule_id: Ulid,
+    pub title: String,
+    pub active: bool,
+    pub start_date: String,
+    pub end_date: String,
+}
+
 impl Schedule {
+    /// All `featured` schedules as editable rows, newest first.
+    pub async fn list_featured_admin() -> Result<Vec<FeaturedScheduleRow>, Error> {
+        let rows = sqlx::query!(
+            r#"SELECT schedule_id, title, active, start_date, end_date
+               FROM schedules
+               WHERE schedule_type = 'featured'
+               ORDER BY start_date DESC"#
+        )
+        .fetch_all(db())
+        .await?;
+
+        rows.into_iter()
+            .map(|r| {
+                Ok(FeaturedScheduleRow {
+                    schedule_id: r.schedule_id.parse()?,
+                    title: r.title,
+                    active: r.active != 0,
+                    start_date: r.start_date,
+                    end_date: r.end_date,
+                })
+            })
+            .collect()
+    }
+
     pub fn new(
         schedule_type: ScheduleType,
         target_type: Option<TargetType>,

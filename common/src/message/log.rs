@@ -476,6 +476,22 @@ pub struct UserRecentVisitsResponse {
     pub visits: Vec<UserRecentVisit>,
 }
 
+/// Request the timestamp of the user's most recent page view, with no
+/// recency window or path-deduplication. Unlike `UserRecentVisits` (which
+/// is tuned for "recent activity" listings), this answers an unbounded
+/// "when was this user last seen" question.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserLastViewRequest {
+    pub user_id: Ulid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserLastViewResponse {
+    /// RFC 3339 timestamp of the most recent page view, or `None` if the
+    /// user has no recorded page views.
+    pub when: Option<String>,
+}
+
 /// Request the number of unique participants for a project.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectMemberCountRequest {

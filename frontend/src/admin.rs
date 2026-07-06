@@ -7,6 +7,7 @@ pub mod badges;
 pub mod communities;
 pub mod content;
 pub mod dashboard;
+pub mod dashboard_settings;
 pub mod email;
 pub mod entities;
 pub mod events;
@@ -43,6 +44,8 @@ pub fn routes() -> impl Endpoint {
     Route::new()
         // Dashboard and help
         .nest("/", dashboard::routes())
+        // Home Page / Dashboard settings
+        .nest("/dashboard-settings", dashboard_settings::routes())
         // Users
         .nest("/users", users::routes())
         // Projects

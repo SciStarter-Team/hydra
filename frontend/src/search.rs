@@ -887,29 +887,48 @@ fn build_event_count_location<'a>(fq: &'a FinderQuery) -> sqlx::QueryBuilder<sql
     qb
 }
 
-async fn search_location_only(
-    fq: &FinderQuery,
-    lat: f64,
-    lng: f64,
-    page: u32,
-) -> Result<FinderSearchResult, Error> {
-    // Count
-    let proj_count: i64 = build_project_count_location(fq)
-        .build_query_scalar()
-        .fetch_one(db())
-        .await?;
-    let evt_count: i64 = build_event_count_location(fq)
-        .build_query_scalar()
-        .fetch_one(db())
-        .await?;
-    let total = (proj_count + evt_count) as u32;
+/// The 13-column row shape produced by the location-ranked project/event
+/// subqueries. Shared so the finder's location-only search and the home-page
+/// [`nearby_entities`] list decode identically.
+type LocationRow = (
+    String,         // slug
+    String,         // entity_type
+    String,         // title
+    String,         // description
+    String,         // image
+    String,         // goal
+    String,         // task
+    String,         // status
+    String,         // location_display
+    Option<String>, // event_begin
+    Option<f64>,    // distance_km
+    Option<String>, // geo_json
+    f64,            // comparison_value
+);
 
-    let limit = FINDER_PER_PAGE as i64;
-    let offset = ((page - 1) * FINDER_PER_PAGE) as i64;
+/// Map a [`LocationRow`] into a [`FinderResult`].
+fn location_row_to_result(row: LocationRow) -> FinderResult {
+    FinderResult {
+        slug: row.0,
+        entity_type: row.1,
+        title: row.2,
+        description_snippet: make_snippet(&row.3),
+        image: row.4,
+        goal: row.5,
+        task: row.6,
+        is_completed: row.7 == "Complete",
+        location_display: row.8,
+        event_begin: row.9,
+        distance_km: row.10,
+        geo_json: row.11,
+    }
+}
 
-    let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new("SELECT * FROM (");
-
-    // Project subquery
+/// Push the location-ranked **project** subquery into `qb` (no filters, no outer
+/// wrapper). Shared by [`search_location_only`] and [`nearby_entities`] so the
+/// distance and `comparison_value` sort expression has a single source of
+/// truth. Callers append their own filters and close the statement.
+fn push_project_location_subquery(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, lat: f64, lng: f64) {
     qb.push(
         "SELECT e.slug, 'Project' AS entity_type, p.name AS title, p.description, p.image, \
          p.goal, p.task, p.status, \
@@ -954,11 +973,11 @@ async fn search_location_only(
          WHERE e.kind = 'Project' AND e.publish = 1 \
          AND (p.point IS NOT NULL OR p.regions IS NOT NULL OR p.entirely_online = 1)",
     );
-    apply_project_filters(&mut qb, fq);
+}
 
-    qb.push(" UNION ALL ");
-
-    // Event subquery
+/// Push the location-ranked **event** subquery into `qb` (no filters, no outer
+/// wrapper). Companion to [`push_project_location_subquery`].
+fn push_event_location_subquery(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, lat: f64, lng: f64) {
     qb.push(
         "SELECT e.slug, 'Event' AS entity_type, ev.name AS title, ev.description, ev.image, \
          '' AS goal, '' AS task, '' AS status, \
@@ -1007,6 +1026,53 @@ async fn search_location_only(
          WHERE e.kind = 'Event' AND e.publish = 1 \
          AND (ev.point IS NOT NULL OR ev.regions IS NOT NULL OR ev.entirely_online = 1)",
     );
+}
+
+/// Up to `limit` published projects and events nearest to `(lat, lng)`, ranked
+/// by the same distance/`comparison_value` expression as the finder's
+/// location-only search (online items rank after physically-near ones). No
+/// finder filters are applied. Powers the home page "near you" list; the "see
+/// all" link hands the same coordinates to `/finder`.
+pub async fn nearby_entities(lat: f64, lng: f64, limit: i64) -> Result<Vec<FinderResult>, Error> {
+    let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new("SELECT * FROM (");
+    push_project_location_subquery(&mut qb, lat, lng);
+    qb.push(" UNION ALL ");
+    push_event_location_subquery(&mut qb, lat, lng);
+    qb.push(") ORDER BY comparison_value LIMIT ");
+    qb.push_bind(limit.max(0));
+
+    let rows = qb.build_query_as::<LocationRow>().fetch_all(db()).await?;
+    Ok(rows.into_iter().map(location_row_to_result).collect())
+}
+
+async fn search_location_only(
+    fq: &FinderQuery,
+    lat: f64,
+    lng: f64,
+    page: u32,
+) -> Result<FinderSearchResult, Error> {
+    // Count
+    let proj_count: i64 = build_project_count_location(fq)
+        .build_query_scalar()
+        .fetch_one(db())
+        .await?;
+    let evt_count: i64 = build_event_count_location(fq)
+        .build_query_scalar()
+        .fetch_one(db())
+        .await?;
+    let total = (proj_count + evt_count) as u32;
+
+    let limit = FINDER_PER_PAGE as i64;
+    let offset = ((page - 1) * FINDER_PER_PAGE) as i64;
+
+    let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new("SELECT * FROM (");
+
+    push_project_location_subquery(&mut qb, lat, lng);
+    apply_project_filters(&mut qb, fq);
+
+    qb.push(" UNION ALL ");
+
+    push_event_location_subquery(&mut qb, lat, lng);
     apply_event_filters(&mut qb, fq);
 
     qb.push(") ORDER BY comparison_value LIMIT ");
@@ -1014,42 +1080,9 @@ async fn search_location_only(
     qb.push(" OFFSET ");
     qb.push_bind(offset);
 
-    let rows = qb
-        .build_query_as::<(
-            String,         // slug
-            String,         // entity_type
-            String,         // title
-            String,         // description
-            String,         // image
-            String,         // goal
-            String,         // task
-            String,         // status
-            String,         // location_display
-            Option<String>, // event_begin
-            Option<f64>,    // distance_km
-            Option<String>, // geo_json
-            f64,            // comparison_value
-        )>()
-        .fetch_all(db())
-        .await?;
+    let rows = qb.build_query_as::<LocationRow>().fetch_all(db()).await?;
 
-    let results = rows
-        .into_iter()
-        .map(|row| FinderResult {
-            slug: row.0,
-            entity_type: row.1,
-            title: row.2,
-            description_snippet: make_snippet(&row.3),
-            image: row.4,
-            goal: row.5,
-            task: row.6,
-            is_completed: row.7 == "Complete",
-            location_display: row.8,
-            event_begin: row.9,
-            distance_km: row.10,
-            geo_json: row.11,
-        })
-        .collect();
+    let results = rows.into_iter().map(location_row_to_result).collect();
 
     Ok(FinderSearchResult { results, total })
 }

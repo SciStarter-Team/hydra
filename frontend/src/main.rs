@@ -23,6 +23,7 @@ pub mod form;
 pub mod geocode;
 pub mod gourl;
 pub mod health;
+pub mod home;
 pub mod lazy_cache;
 pub mod local_time;
 pub mod lru_cache;
@@ -657,6 +658,7 @@ async fn main() -> Result<(), Error> {
     let _entity_updates = tokio::spawn(entity::Entity::peering_task());
     let _redirect_updates = tokio::spawn(misc::Redirect::peering_task());
     let _html_updates = tokio::spawn(misc::Html::peering_task());
+    let _home_settings_updates = tokio::spawn(home::HomeSettings::peering_task());
     let _pagecontent_updates = tokio::spawn(pagecontent::PageContent::peering_task());
     let _mcp_token_updates = tokio::spawn(mcp_token::McpToken::peering_task());
     let _foundations_content_updates =

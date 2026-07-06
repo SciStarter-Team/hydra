@@ -11,9 +11,9 @@ use common::{
         ProjectMemberCountResponse, ProjectParticipationRecord, ProjectParticipationRequest,
         ProjectParticipationResponse, ProjectReviewsRequest, ProjectReviewsResponse,
         RatingSetRequest, RecentActivityRequest, RecentActivityResponse, ReviewEntry,
-        ReviewSetRequest, UserParticipationEntry, UserParticipationRequest,
-        UserParticipationResponse, UserRecentVisit, UserRecentVisitsRequest,
-        UserRecentVisitsResponse,
+        ReviewSetRequest, UserLastViewRequest, UserLastViewResponse, UserParticipationEntry,
+        UserParticipationRequest, UserParticipationResponse, UserRecentVisit,
+        UserRecentVisitsRequest, UserRecentVisitsResponse,
     },
     service::{TriggerEvent, decode_structured_message, trigger_email},
 };
@@ -1449,6 +1449,47 @@ pub async fn handle_user_recent_visits(
     }
 
     Ok(UserRecentVisitsResponse { visits })
+}
+
+/// The timestamp of the user's most recent page view, unbounded by any recency
+/// window (unlike `handle_user_recent_visits`). Returns `None` when the user
+/// has no recorded page views.
+pub async fn handle_user_last_view(
+    req: &async_nats::service::Request,
+) -> Result<UserLastViewResponse> {
+    use datafusion::arrow::array::{Array, StringArray};
+
+    let request: UserLastViewRequest = decode_structured_message(req.message.clone())?;
+    let user_id_str = request.user_id.to_string();
+
+    let database = DATABASE
+        .read()
+        .as_ref()
+        .expect("Database not initialized")
+        .clone();
+
+    let ctx = database.context();
+
+    let df = ctx
+        .table("page_views_realtime")
+        .await?
+        .filter(col("user_id").eq(lit(&user_id_str)))?
+        .select(vec![col("when")])?
+        .sort(vec![col("when").sort(false, true)])?
+        .limit(0, Some(1))?;
+
+    let batches = df.collect().await?;
+
+    let when = batches.iter().find_map(|batch| {
+        let when_col = batch
+            .column(0)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .expect("when column should be StringArray");
+        (batch.num_rows() > 0 && !when_col.is_null(0)).then(|| when_col.value(0).to_string())
+    });
+
+    Ok(UserLastViewResponse { when })
 }
 
 pub async fn handle_edit_log(req: &async_nats::service::Request) -> Result<EditLogResponse> {
