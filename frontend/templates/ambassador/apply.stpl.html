@@ -1,0 +1,132 @@
+<div class="ss-container mx-auto py-8 max-w-3xl">
+  <ul class="ss-breadcrumbs flex gap-2 text-sm mb-4">
+    <li><a href="/training/champion">Champion Training</a></li>
+    <li>/</li>
+    <li>Ambassador Application</li>
+  </ul>
+  <h1 class="text-primary-dark mb-2">Apply to be a SciStarter Ambassador</h1>
+
+  <% if !self.logged_in { %>
+    <p class="mb-4">Please <a class="text-primary-action underline" href="/login?next=<%= self.login_next %>">log in</a> to your SciStarter account to apply.</p>
+
+  <% } else if !self.foundations_done { %>
+    <p class="mb-4">You must first complete the <a class="text-primary-action underline" href="/training/foundations">Foundations of Citizen Science</a> training and earn the badge before applying.</p>
+
+  <% } else if !self.champion_done { %>
+    <p class="mb-4">You must first complete the <a class="text-primary-action underline" href="/training/champion">Citizen Science Champion</a> training before applying.</p>
+
+  <% } else { %>
+    <% if self.already_submitted { %>
+      <div class="rounded border border-green-300 bg-green-50 text-green-800 p-4 mb-6">
+        <strong>Your application has been received.</strong> Our team reviews applications and a third-party background screening is completed; this can take a few weeks. You can update your answers below if needed.
+      </div>
+    <% } %>
+    <% if !self.applications_open { %>
+      <div class="rounded border border-amber-300 bg-amber-50 text-amber-800 p-4 mb-6">
+        <strong>Applications are currently closed.</strong> You can prepare and save a draft now — everyone who completed the Champion training will be notified when applications reopen.
+      </div>
+    <% } %>
+    <% if let Some(error) = &self.error { %>
+      <div class="rounded border border-red-300 bg-red-50 text-red-800 p-4 mb-6"><%= error %></div>
+    <% } %>
+
+    <form method="post" action="/ambassadors-apply" class="space-y-8">
+      <fieldset class="ss-card !p-6">
+        <legend class="font-semibold mb-2">About You</legend>
+        <div class="grid md:grid-cols-2 gap-4">
+          <label class="block">First name <span class="text-red-600">*</span>
+            <input type="text" name="first_name" value="<%= self.first_name %>" class="w-full border border-gray-300 rounded p-2" required></label>
+          <label class="block">Last name <span class="text-red-600">*</span>
+            <input type="text" name="last_name" value="<%= self.last_name %>" class="w-full border border-gray-300 rounded p-2" required></label>
+          <label class="block">Email <span class="text-red-600">*</span>
+            <input type="email" name="email" value="<%= self.email %>" class="w-full border border-gray-300 rounded p-2" required></label>
+          <label class="block">Phone <span class="text-red-600">*</span>
+            <input type="tel" name="phone" value="<%= self.phone %>" class="w-full border border-gray-300 rounded p-2" required></label>
+          <label class="block">Date of birth <span class="text-red-600">*</span>
+            <input type="date" name="birthdate" value="<%= self.birthdate %>" class="w-full border border-gray-300 rounded p-2" required></label>
+          <label class="block">T-shirt size <span class="text-red-600">*</span>
+            <input type="text" name="tee_size" value="<%= self.tee_size %>" class="w-full border border-gray-300 rounded p-2" required></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="ss-card !p-6">
+        <legend class="font-semibold mb-2">Mailing Address</legend>
+        <div class="grid md:grid-cols-2 gap-4">
+          <label class="block md:col-span-2">Street address <span class="text-red-600">*</span>
+            <input type="text" name="address1" value="<%= self.address1 %>" class="w-full border border-gray-300 rounded p-2" required></label>
+          <label class="block md:col-span-2">Address line 2
+            <input type="text" name="address2" value="<%= self.address2 %>" class="w-full border border-gray-300 rounded p-2"></label>
+          <label class="block">City <span class="text-red-600">*</span>
+            <input type="text" name="city" value="<%= self.city %>" class="w-full border border-gray-300 rounded p-2" required></label>
+          <label class="block">State <span class="text-red-600">*</span>
+            <input type="text" name="state" value="<%= self.state %>" class="w-full border border-gray-300 rounded p-2" required></label>
+          <label class="block">ZIP <span class="text-red-600">*</span>
+            <input type="text" name="zip" value="<%= self.zip %>" class="w-full border border-gray-300 rounded p-2" required></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="ss-card !p-6">
+        <legend class="font-semibold mb-2">Your Interest in the Program</legend>
+        <div class="space-y-4">
+          <label class="block">Briefly describe yourself
+            <textarea name="self_description" rows="3" class="w-full border border-gray-300 rounded p-2"><%= self.self_description %></textarea></label>
+          <label class="block">Relevant experience <span class="text-red-600">*</span>
+            <textarea name="experience" rows="3" class="w-full border border-gray-300 rounded p-2" required><%= self.experience %></textarea></label>
+          <label class="block">What motivates you to become an Ambassador? <span class="text-red-600">*</span>
+            <textarea name="motivation" rows="3" class="w-full border border-gray-300 rounded p-2" required><%= self.motivation %></textarea></label>
+          <label class="block">Your vision as an Ambassador <span class="text-red-600">*</span>
+            <textarea name="vision" rows="3" class="w-full border border-gray-300 rounded p-2" required><%= self.vision %></textarea></label>
+          <label class="block">Related organizations or affiliations
+            <textarea name="related" rows="2" class="w-full border border-gray-300 rounded p-2"><%= self.related %></textarea></label>
+          <label class="block">Communities you can reach
+            <textarea name="community_access" rows="2" class="w-full border border-gray-300 rounded p-2"><%= self.community_access %></textarea></label>
+          <label class="block">Anything else you'd like us to know?
+            <textarea name="questions" rows="2" class="w-full border border-gray-300 rounded p-2"><%= self.questions %></textarea></label>
+          <label class="block">Social media handles
+            <input type="text" name="handles" value="<%= self.handles %>" class="w-full border border-gray-300 rounded p-2"></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="ss-card !p-6">
+        <legend class="font-semibold mb-2">Optional Demographics</legend>
+        <p class="text-sm text-gray-500 mb-3">Comma-separated; used only in aggregate to understand and broaden program reach.</p>
+        <div class="grid md:grid-cols-2 gap-4">
+          <label class="block">Gender
+            <input type="text" name="gender" value="<%= self.gender %>" class="w-full border border-gray-300 rounded p-2"></label>
+          <label class="block">Race / ethnicity
+            <input type="text" name="ethnicity" value="<%= self.ethnicity %>" class="w-full border border-gray-300 rounded p-2"></label>
+          <label class="block md:col-span-2">Activities you're interested in leading
+            <input type="text" name="activities" value="<%= self.activities %>" class="w-full border border-gray-300 rounded p-2"></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="ss-card !p-6">
+        <legend class="font-semibold mb-2">Agreements</legend>
+        <div class="space-y-2">
+          <label class="flex items-start gap-2"><input type="checkbox" name="citscimonth" value="Yes" class="mt-1"<% if self.citscimonth { %> checked<% } %>>
+            <span>I'm interested in supporting Citizen Science Month events.</span></label>
+          <label class="flex items-start gap-2"><input type="checkbox" name="background_check" value="Yes" class="mt-1"<% if self.background_check { %> checked<% } %>>
+            <span>I consent to a third-party background screening.</span></label>
+          <label class="flex items-start gap-2"><input type="checkbox" name="conduct" value="Yes" class="mt-1"<% if self.conduct { %> checked<% } %>>
+            <span>I agree to abide by the SciStarter Ambassador code of conduct.</span></label>
+        </div>
+        <div class="grid md:grid-cols-2 gap-4 mt-4">
+          <label class="block">Signature (type your full name)
+            <input type="text" name="signature_name" value="<%= self.signature_name %>" class="w-full border border-gray-300 rounded p-2"></label>
+          <label class="block">Date
+            <input type="date" name="signature_date" value="<%= self.signature_date %>" class="w-full border border-gray-300 rounded p-2"></label>
+        </div>
+      </fieldset>
+
+      <div class="flex items-center gap-4">
+        <button type="submit" class="btn btn-accent"<% if !self.applications_open { %> disabled<% } %>>Submit application</button>
+        <button type="button" class="btn"
+                hx-post="/ambassadors-apply/draft"
+                hx-include="closest form"
+                hx-target="#draft-status"
+                hx-swap="innerHTML">Save draft</button>
+        <span id="draft-status" class="text-sm"></span>
+      </div>
+    </form>
+  <% } %>
+</div>

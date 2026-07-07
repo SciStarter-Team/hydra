@@ -479,6 +479,7 @@ async fn email_stored_send(
             recipients,
             data_sets: email_response.email.datasets,
             additional_data: None,
+            reply_to: None,
         },
     )
     .await?;
@@ -790,6 +791,7 @@ async fn email_oneoff_send(
             recipients,
             data_sets: email_response.email.datasets,
             additional_data: None,
+            reply_to: None,
         },
     )
     .await?;

@@ -1030,6 +1030,8 @@ struct ChampionForm {
     claim_html: String,
     apply_heading: String,
     apply_html: String,
+    received_heading: String,
+    received_html: String,
     sidebar_html: String,
 }
 
@@ -1087,6 +1089,13 @@ fn champion_sections(c: &ChampionContent) -> Vec<Section> {
         ],
     ));
     sections.push(section(
+        "Step 6 — Application received (shown after submitting)",
+        vec![
+            Field::text("received_heading", "Step heading", &c.received_heading),
+            Field::html("received_html", "Body (HTML)", &c.received_html, 4),
+        ],
+    ));
+    sections.push(section(
         "Sidebar",
         vec![Field::html(
             "sidebar_html",
@@ -1139,6 +1148,8 @@ async fn champion_save(
         claim_html: form.claim_html,
         apply_heading: form.apply_heading,
         apply_html: form.apply_html,
+        received_heading: form.received_heading,
+        received_html: form.received_html,
         sidebar_html: form.sidebar_html,
     };
     content.store().await?;

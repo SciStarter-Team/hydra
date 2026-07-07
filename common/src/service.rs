@@ -481,14 +481,19 @@ pub fn log_share(
 ///     "<h1>Welcome!</h1><p>Thanks for joining.</p>",
 ///     vec!["user_profile".to_string()],
 ///     None,
+///     None,
 /// ).await?;
 /// ```
+///
+/// `reply_to` sets optional Reply-To addresses; pass `None` for the default
+/// (replies go to the send-from address).
 pub async fn send_email(
     recipients: impl Into<Vec<crate::message::email::EmailRecipient>>,
     subject: impl Into<String>,
     template_html: impl Into<String>,
     data_sets: impl Into<Vec<String>>,
     additional_data: impl Into<Option<Vec<(String, String)>>>,
+    reply_to: impl Into<Option<Vec<String>>>,
 ) -> Result<Ulid, Error> {
     use crate::message::email::{SendEmailRequest, SendEmailResponse};
 
@@ -498,6 +503,7 @@ pub async fn send_email(
         recipients: recipients.into(),
         data_sets: data_sets.into(),
         additional_data: additional_data.into(),
+        reply_to: reply_to.into(),
     };
 
     let response: SendEmailResponse = request("emailer.send", email_request).await?;
@@ -637,6 +643,18 @@ pub enum TriggerEvent {
     /// Sent when the SciStarter Ambassador badge is earned
     BadgeAmbassador,
 
+    /// Sent when the Champion (ambassador) training tutorial is completed
+    AmbassadorTrainingComplete,
+
+    /// Sent to confirm an ambassador application was submitted
+    AmbassadorApplicationSubmitted,
+
+    /// Sent when an ambassador application is rejected
+    AmbassadorRejected,
+
+    /// Sent when an ambassador applicant is outside the US (international)
+    AmbassadorInternational,
+
     /// Sent when Foundations tutorial is completed
     FoundationsTutorial,
 
@@ -717,6 +735,10 @@ impl TriggerEvent {
             Self::BadgeDataEthics => "When the Data Ethics for Practitioners badge is earned",
             Self::BadgeIdeal => "When the Ideal Participatory Science badge is earned",
             Self::BadgeAmbassador => "When the SciStarter Ambassador badge is earned",
+            Self::AmbassadorTrainingComplete => "When the Champion training tutorial is completed",
+            Self::AmbassadorApplicationSubmitted => "When an ambassador application is submitted",
+            Self::AmbassadorRejected => "When an ambassador application is rejected",
+            Self::AmbassadorInternational => "When an ambassador applicant is international",
             Self::FoundationsTutorial => "When Foundations tutorial is completed",
             Self::FoundationsSquirrel => "When Squirrel Mapper project is completed (Foundations)",
             Self::FoundationsStall => "When Stall Catchers project is completed (Foundations)",
@@ -760,6 +782,10 @@ impl TriggerEvent {
             | Self::BadgeDataEthics
             | Self::BadgeIdeal
             | Self::BadgeAmbassador => "badge",
+            Self::AmbassadorTrainingComplete
+            | Self::AmbassadorApplicationSubmitted
+            | Self::AmbassadorRejected
+            | Self::AmbassadorInternational => "ambassador",
             Self::FoundationsTutorial
             | Self::FoundationsSquirrel
             | Self::FoundationsStall

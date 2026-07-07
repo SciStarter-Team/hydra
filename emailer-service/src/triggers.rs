@@ -409,6 +409,7 @@ pub async fn handle_trigger_event(req: &Request) -> Result<TriggerEmailResponse,
                     recipients,
                     datasets,
                     Some(additional_data),
+                    None,
                 )
                 .await?;
 

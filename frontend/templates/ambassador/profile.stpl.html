@@ -1,0 +1,83 @@
+<div class="ss-container mx-auto py-8 max-w-4xl">
+  <ul class="ss-breadcrumbs flex gap-2 text-sm mb-4">
+    <li><a href="/ambassadors">Ambassadors</a></li>
+    <li>/</li>
+    <li><%= self.profile.name %></li>
+  </ul>
+
+  <div class="flex flex-col md:flex-row gap-8">
+    <div class="md:w-1/3 flex flex-col items-center text-center">
+      <% if let Some(image) = &self.profile.image { %>
+        <img src="<%= image %>" alt="<%= self.profile.name %>" class="w-40 h-40 rounded-full object-cover mb-4">
+      <% } else { %>
+        <div class="w-40 h-40 rounded-full bg-primary-light/30 flex items-center justify-center text-5xl font-bold text-primary-dark mb-4"><%= self.profile.name.chars().next().unwrap_or('?') %></div>
+      <% } %>
+      <h1 class="text-primary-dark text-2xl mb-1"><%= self.profile.name %></h1>
+      <div class="text-gray-500"><%= self.profile.city %><% if !self.profile.state.is_empty() { %>, <%= self.profile.state %><% } %></div>
+      <div class="mt-2 inline-block text-xs uppercase tracking-wide font-semibold text-primary-action">Certified SciStarter Ambassador</div>
+    </div>
+
+    <div class="md:w-2/3">
+      <% if !self.profile.bio.trim().is_empty() { %>
+        <h2 class="text-primary-dark text-lg mb-2">About</h2>
+        <p class="mb-6 whitespace-pre-line"><%= self.profile.bio %></p>
+      <% } %>
+
+      <% if !self.profile.youtube_video_url.trim().is_empty() { %>
+        <h2 class="text-primary-dark text-lg mb-2">Introduction</h2>
+        <p class="mb-6"><a class="text-primary-action underline" href="<%= self.profile.youtube_video_url %>" target="_blank" rel="noopener noreferrer">Watch <%= self.profile.name %>'s introduction video</a></p>
+      <% } %>
+
+      <hr class="my-6 text-primary-light">
+      <h2 class="text-primary-dark text-lg mb-2">Contact <%= self.profile.name %></h2>
+      <p class="text-sm text-gray-500 mb-4">Messages are reviewed by SciStarter staff before being forwarded. Please adhere to your organization's screening protocols when inviting an Ambassador to an event.</p>
+      <% if self.logged_in { %>
+        <form hx-post="/ambassadors/<%= self.profile.user_id |disp %>/contact"
+              hx-target="#contact-result" hx-swap="innerHTML"
+              hx-on::after-request="if(event.detail.successful) this.reset()"
+              class="flex flex-col gap-3 max-w-lg">
+          <div class="flex flex-col sm:flex-row gap-3">
+            <label class="flex-1 text-sm">First name<span class="text-red-600">*</span>
+              <input type="text" name="first_name" required value="<%= self.viewer_first %>"
+                     class="mt-1 w-full border border-gray-300 rounded p-2">
+            </label>
+            <label class="flex-1 text-sm">Last name<span class="text-red-600">*</span>
+              <input type="text" name="last_name" required value="<%= self.viewer_last %>"
+                     class="mt-1 w-full border border-gray-300 rounded p-2">
+            </label>
+          </div>
+          <label class="text-sm">Dates (if applicable)
+            <input type="text" name="dates" class="mt-1 w-full border border-gray-300 rounded p-2">
+          </label>
+          <label class="text-sm">Message<span class="text-red-600">*</span>
+            <textarea name="body" required rows="4" class="mt-1 w-full border border-gray-300 rounded p-2"></textarea>
+          </label>
+          <div>
+            <button type="submit" class="btn btn-accent">Send message</button>
+          </div>
+        </form>
+        <div id="contact-result" class="mt-3"></div>
+      <% } else { %>
+        <p class="text-sm"><span class="mr-1">&#9993;</span><a class="text-primary-action underline" href="/login?next=/ambassadors/<%= self.profile.user_id |disp %>">Log in</a> or <a class="text-primary-action underline" href="/signup?next=/ambassadors/<%= self.profile.user_id |disp %>">create an account</a> to contact <%= self.profile.name %>.</p>
+      <% } %>
+    </div>
+  </div>
+
+  <% if !self.profile.others.is_empty() { %>
+    <hr class="my-8 text-primary-light">
+    <h2 class="text-primary-dark text-lg mb-4">More Ambassadors</h2>
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+      <% for e in &self.profile.others { %>
+        <a href="/ambassadors/<%= e.user_id |disp %>" class="ss-card !p-3 flex flex-col items-center text-center hover:shadow-md transition">
+          <% if let Some(image) = &e.image { %>
+            <img src="<%= image %>" alt="<%= e.name %>" class="w-16 h-16 rounded-full object-cover mb-2">
+          <% } else { %>
+            <div class="w-16 h-16 rounded-full bg-primary-light/30 flex items-center justify-center text-lg font-bold text-primary-dark mb-2"><%= e.name.chars().next().unwrap_or('?') %></div>
+          <% } %>
+          <div class="text-sm font-medium text-primary-dark"><%= e.name %></div>
+          <div class="text-xs text-gray-500"><%= e.city %><% if !e.state.is_empty() { %>, <%= e.state %><% } %></div>
+        </a>
+      <% } %>
+    </div>
+  <% } %>
+</div>

@@ -663,6 +663,7 @@ pub async fn participation_failure(Form(form): Form<FailureForm>) -> Response {
         body,
         Vec::<String>::new(),
         None,
+        None,
     )
     .await
     {

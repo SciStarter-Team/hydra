@@ -1,0 +1,56 @@
+<% use common::message::dashboard::{AmbassadorAppStatus, AmbassadorScreeningStatus, ambassador_cohort_label}; %>
+<tr id="amb-row-<%= self.row.user_id |disp %>" class="border-b border-gray-200 align-top text-xs">
+  <td class="px-2 py-2 whitespace-nowrap">
+    <div class="font-medium text-gray-900"><%= self.row.name %></div>
+    <div class="text-gray-500">@<%= self.row.handle %></div>
+    <div class="text-gray-500"><%= self.row.email %></div>
+  </td>
+  <td class="px-2 py-2 whitespace-nowrap"><%= self.row.city %><% if !self.row.state.is_empty() { %>, <%= self.row.state %><% } %></td>
+  <td class="px-2 py-2 text-center">
+    <% if self.row.in_directory { %>
+      <span title="In the public Ambassador directory" class="text-green-600 font-semibold">● Directory</span>
+    <% } else { %>
+      <span class="text-gray-300">—</span>
+    <% } %>
+  </td>
+  <td class="px-2 py-2">
+    <select name="app_status" class="border border-gray-300 rounded p-1">
+      <% for s in AmbassadorAppStatus::all() { %>
+        <option value="<%= s.as_i64() %>"<% if *s == self.row.app_status { %> selected<% } %>><%= s.label() %></option>
+      <% } %>
+    </select>
+  </td>
+  <td class="px-2 py-2">
+    <select name="screening_status" class="border border-gray-300 rounded p-1">
+      <% for s in AmbassadorScreeningStatus::all() { %>
+        <option value="<%= s.as_i64() %>"<% if *s == self.row.screening_status { %> selected<% } %>><%= s.label() %></option>
+      <% } %>
+    </select>
+  </td>
+  <td class="px-2 py-2"><input type="date" name="verified" value="<%= self.row.verified.as_deref().unwrap_or("") %>" class="border border-gray-300 rounded p-1" /></td>
+  <td class="px-2 py-2"><input type="number" name="cohort" value="<%= self.row.cohort %>" title="<%= ambassador_cohort_label(self.row.cohort) %>" class="border border-gray-300 rounded p-1 w-16" /></td>
+  <td class="px-2 py-2 whitespace-nowrap">
+    <label class="mr-1"><input type="checkbox" name="marked"<% if self.row.marked { %> checked<% } %> /> M</label>
+    <label class="mr-1"><input type="checkbox" name="archived"<% if self.row.archived { %> checked<% } %> /> A</label>
+    <label class="mr-1"><input type="checkbox" name="hidden"<% if self.row.hidden { %> checked<% } %> /> H</label>
+  </td>
+  <td class="px-2 py-2 whitespace-nowrap">
+    <label class="mr-1"><input type="checkbox" name="rejection_sent"<% if self.row.rejection_sent { %> checked<% } %> /> Rej</label>
+    <label class="mr-1"><input type="checkbox" name="welcome_sent"<% if self.row.welcome_sent { %> checked<% } %> /> Wel</label>
+    <label class="mr-1"><input type="checkbox" name="survey"<% if self.row.survey { %> checked<% } %> /> Srv</label>
+  </td>
+  <td class="px-2 py-2"><input type="date" name="orientation" value="<%= self.row.orientation.as_deref().unwrap_or("") %>" class="border border-gray-300 rounded p-1" /></td>
+  <td class="px-2 py-2"><input type="date" name="kit_sent" value="<%= self.row.kit_sent.as_deref().unwrap_or("") %>" class="border border-gray-300 rounded p-1" /></td>
+  <td class="px-2 py-2"><input type="text" name="handles" value="<%= self.row.handles %>" class="border border-gray-300 rounded p-1 w-28" /></td>
+  <td class="px-2 py-2"><input type="text" name="reviewers" value="<%= self.row.reviewers %>" class="border border-gray-300 rounded p-1 w-24" /></td>
+  <td class="px-2 py-2"><textarea name="notes" rows="2" class="border border-gray-300 rounded p-1 w-40"><%= self.row.notes %></textarea></td>
+  <td class="px-2 py-2 whitespace-nowrap">
+    <label class="block mb-1"><input type="checkbox" name="draft"<% if self.row.draft { %> checked<% } %> /> Draft</label>
+    <button type="button"
+            hx-post="/-admin/ambassadors/save/<%= self.row.user_id |disp %>"
+            hx-include="closest tr"
+            hx-target="closest tr"
+            hx-swap="outerHTML"
+            class="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded">Save</button>
+  </td>
+</tr>

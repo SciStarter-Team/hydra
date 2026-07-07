@@ -1,5 +1,4 @@
 <% use crate::dashboard::settings::SettingsTab; %>
-<% use common::message::dashboard::AmbassadorAppStatus; %>
 <div class="ss-container !pt-8 !pb-8 mx-auto">
     <h1>Account Settings</h1>
 
@@ -198,7 +197,7 @@
 
                 <p class="text-sm mb-4">
                     Application status:
-                    <strong><% match ambassador.app_status { AmbassadorAppStatus::UnderReview => { %>Under review<% } AmbassadorAppStatus::Accepted => { %>Accepted<% } AmbassadorAppStatus::Rejected => { %>Rejected<% } AmbassadorAppStatus::Flagged => { %>Flagged<% } AmbassadorAppStatus::Ineligible => { %>Ineligible<% } AmbassadorAppStatus::Champion => { %>Champion<% } AmbassadorAppStatus::Withdrawn => { %>Withdrawn<% } } %></strong>
+                    <strong><%= ambassador.app_status.label() %></strong>
                 </p>
             </div>
 

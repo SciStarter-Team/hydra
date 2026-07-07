@@ -573,8 +573,18 @@ async fn update_ambassador_progress(
         .await?;
 
         let user_ulid = Ulid::from_string(user_id)?;
+
+        // Native tutorial completion (this path is never taken by the orrery
+        // state sync, which goes through apply_ambassador_state) — mirrors
+        // orrery's AmbassadorState.tutorial_enter: send the completion email and
+        // issue the Champion certificate (which fires its own CertificateEarned).
+        trigger_email(TriggerEvent::AmbassadorTrainingComplete, user_ulid, None).await?;
         crate::certificates::create_certificate(user_ulid, String::new(), "champion".to_string())
             .await?;
+
+        // Advance the native state machine to `tutorial` (Champion) so a later
+        // application/verification transition is detected correctly.
+        crate::ambassador::advance_state_if(user_id, &["initial"], "tutorial").await?;
     }
 
     // The tutorial grants a certificate, not a badge.

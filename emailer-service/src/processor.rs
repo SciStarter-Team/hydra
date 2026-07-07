@@ -84,7 +84,7 @@ pub async fn run_scheduled_processor() {
 async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
     // Fetch next pending email from queue
     let queue_item = sqlx::query!(
-        r#"SELECT queue_id, sending_id, target_type, target_value, data_sets, template_html, subject, additional_data, retry_count
+        r#"SELECT queue_id, sending_id, target_type, target_value, data_sets, template_html, subject, additional_data, reply_to, retry_count
            FROM send_queue
            WHERE status = 'pending'
            LIMIT 1"#
@@ -320,6 +320,12 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
             "Sending email via SES"
         );
 
+        // Decode the optional Reply-To addresses (JSON array; NULL when unset).
+        let reply_to: Vec<String> = match &item.reply_to {
+            Some(json) => serde_json::from_str(json).unwrap_or_default(),
+            None => Vec::new(),
+        };
+
         // Send via SES
         let sending_ulid = item.sending_id.parse::<Ulid>()?;
         let ses_message_id = match send_email(
@@ -329,6 +335,7 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
             &merged_subject,
             &final_html,
             &final_text,
+            &reply_to,
             sending_ulid,
             user_id_opt,
         )

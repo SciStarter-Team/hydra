@@ -1,6 +1,8 @@
 pub mod add;
 pub mod admin;
+pub mod ambassador;
 pub mod api;
+pub mod articulate;
 pub mod auth;
 pub mod badge;
 pub mod builder;
@@ -508,6 +510,14 @@ fn user_facing() -> impl Endpoint {
             "/training-ambassador",
             get(training::champion::legacy_redirect),
         )
+        .at(
+            "/ambassadors-apply",
+            get(ambassador::index).post(ambassador::submit),
+        )
+        .at("/ambassadors-apply/draft", post(ambassador::draft))
+        .at("/ambassadors", get(ambassador::directory))
+        .at("/ambassadors/:id", get(ambassador::profile_page))
+        .at("/ambassadors/:id/contact", post(ambassador::contact))
         .at("/projects/*slug", get(project_page))
         .at("/events/*slug", get(event_page))
         .at("/*slug", get(entity_page))

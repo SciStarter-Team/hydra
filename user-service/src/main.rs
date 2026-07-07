@@ -1721,6 +1721,23 @@ async fn apply_ambassador_state(
         _ => {}
     }
 
+    // Keep the native state-machine column in step with orrery so a later native
+    // staff review sees the correct prior state and does not re-fire an entry
+    // email for a transition orrery already handled. The orrery state strings map
+    // one-to-one onto the native states. This is a sync, so it never emails.
+    if matches!(
+        state,
+        "tutorial" | "application" | "verified" | "passed" | "rejected" | "international" | "failed"
+    ) {
+        sqlx::query!(
+            "UPDATE ambassador_progress SET state = ? WHERE user_id = ?",
+            state,
+            user_id
+        )
+        .execute(db)
+        .await?;
+    }
+
     Ok(())
 }
 
@@ -2203,6 +2220,27 @@ async fn main() {
     let ambassador_group = service.group("user.ambassador");
     toplevel.spawn(handler!(ambassador_group, "get", ambassador::get));
     toplevel.spawn(handler!(ambassador_group, "update", ambassador::update));
+    toplevel.spawn(handler!(ambassador_group, "save_draft", ambassador::save_draft));
+    toplevel.spawn(handler!(ambassador_group, "submit", ambassador::submit));
+    toplevel.spawn(handler!(ambassador_group, "list", ambassador::list));
+    toplevel.spawn(handler!(ambassador_group, "review", ambassador::review));
+    toplevel.spawn(handler!(ambassador_group, "directory", ambassador::directory));
+    toplevel.spawn(handler!(ambassador_group, "profile", ambassador::profile));
+    toplevel.spawn(handler!(
+        ambassador_group,
+        "message_send",
+        ambassador::message_send
+    ));
+    toplevel.spawn(handler!(
+        ambassador_group,
+        "message_list",
+        ambassador::message_list
+    ));
+    toplevel.spawn(handler!(
+        ambassador_group,
+        "message_review",
+        ambassador::message_review
+    ));
     toplevel.spawn(handler!(
         ambassador_group,
         "passed_locations",

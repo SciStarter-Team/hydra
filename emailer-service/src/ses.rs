@@ -39,6 +39,7 @@ pub async fn send_email(
     subject: &str,
     html_body: &str,
     text_body: &str,
+    reply_to: &[String],
     sending_id: Ulid,
     user_id: Option<Ulid>,
 ) -> Result<String, Error> {
@@ -58,10 +59,19 @@ pub async fn send_email(
     // Create MIME multipart message with proper headers
     let boundary = format!("----=_Part_{}", ulid::Ulid::new());
 
+    // Optional Reply-To header (comma-separated per RFC 5322), emitted only when
+    // reply-to addresses were supplied.
+    let reply_to_header = if reply_to.is_empty() {
+        String::new()
+    } else {
+        format!("Reply-To: {}\r\n", reply_to.join(", "))
+    };
+
     // Build raw MIME message with List-Unsubscribe headers
     let raw_email = format!(
         "From: {}\r\n\
          To: {}\r\n\
+         {}\
          Subject: {}\r\n\
          MIME-Version: 1.0\r\n\
          List-Unsubscribe: <{}>\r\n\
@@ -81,6 +91,7 @@ pub async fn send_email(
          --{}--\r\n",
         from_email,
         to_email,
+        reply_to_header,
         subject,
         unsubscribe_url,
         boundary,

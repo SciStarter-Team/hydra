@@ -24,8 +24,10 @@ async fn process_recipients_background(
     subject: String,
     data_sets_json: String,
     additional_data_json: String,
+    reply_to_json: Option<String>,
 ) -> Result<(), Error> {
     let queued_at = TimeString::now();
+    let reply_to_json = reply_to_json.as_deref();
 
     for (idx, recipient) in recipients.iter().enumerate() {
         tracing::debug!(
@@ -55,6 +57,7 @@ async fn process_recipients_background(
                     &subject,
                     &data_sets_json,
                     &additional_data_json,
+                    reply_to_json,
                     &queued_at,
                 )
                 .await?;
@@ -77,6 +80,7 @@ async fn process_recipients_background(
                     &subject,
                     &data_sets_json,
                     &additional_data_json,
+                    reply_to_json,
                     &queued_at,
                 )
                 .await?;
@@ -98,6 +102,7 @@ async fn process_recipients_background(
                     &subject,
                     &data_sets_json,
                     &additional_data_json,
+                    reply_to_json,
                     &queued_at,
                 )
                 .await
@@ -115,6 +120,7 @@ async fn process_recipients_background(
                     &subject,
                     &data_sets_json,
                     &additional_data_json,
+                    reply_to_json,
                     &queued_at,
                 )
                 .await
@@ -160,6 +166,7 @@ async fn queue_single_recipient(
     subject: &str,
     data_sets_json: &str,
     additional_data_json: &str,
+    reply_to_json: Option<&str>,
     queued_at: &TimeString,
 ) -> Result<u32, Error> {
     let queue_id = Ulid::new();
@@ -167,8 +174,8 @@ async fn queue_single_recipient(
 
     sqlx::query!(
         r#"INSERT INTO send_queue
-           (queue_id, sending_id, target_type, target_value, data_sets, template_html, subject, additional_data, queued_at, status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')"#,
+           (queue_id, sending_id, target_type, target_value, data_sets, template_html, subject, additional_data, reply_to, queued_at, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')"#,
         queue_id_str,
         sending_id,
         target_type,
@@ -177,6 +184,7 @@ async fn queue_single_recipient(
         template_html,
         subject,
         additional_data_json,
+        reply_to_json,
         queued_at,
     )
     .execute(db())
@@ -194,6 +202,7 @@ async fn process_user_set(
     subject: &str,
     data_sets_json: &str,
     additional_data_json: &str,
+    reply_to_json: Option<&str>,
     queued_at: &TimeString,
 ) -> Result<(), Error> {
     tracing::info!(
@@ -249,6 +258,7 @@ async fn process_user_set(
                 subject,
                 data_sets_json,
                 additional_data_json,
+                reply_to_json,
                 queued_at,
             )
             .await?;
@@ -293,6 +303,7 @@ async fn process_address_set(
     subject: &str,
     data_sets_json: &str,
     additional_data_json: &str,
+    reply_to_json: Option<&str>,
     queued_at: &TimeString,
 ) -> Result<(), Error> {
     tracing::info!(
@@ -342,6 +353,7 @@ async fn process_address_set(
                 subject,
                 data_sets_json,
                 additional_data_json,
+                reply_to_json,
                 queued_at,
             )
             .await?;
@@ -375,6 +387,7 @@ pub async fn send_email(
     recipients: Vec<EmailRecipient>,
     data_sets: Vec<String>,
     additional_data: Option<Vec<(String, String)>>,
+    reply_to: Option<Vec<String>>,
 ) -> Result<Ulid, Error> {
     let sending_id = Ulid::new();
     let sending_id_str = sending_id.to_string();
@@ -383,17 +396,23 @@ pub async fn send_email(
     // Serialize data for storage
     let data_sets_json = serde_json::to_string(&data_sets)?;
     let additional_data_json = serde_json::to_string(&additional_data.unwrap_or_default())?;
+    // Reply-To is stored as a JSON array, or NULL when unset.
+    let reply_to_json = reply_to
+        .filter(|r| !r.is_empty())
+        .map(|r| serde_json::to_string(&r))
+        .transpose()?;
 
     // Create sending record with total_queued = 0 initially
     sqlx::query!(
-        r#"INSERT INTO sendings (sending_id, created_at, subject, total_queued, template_html, data_sets, additional_data)
-           VALUES (?, ?, ?, 0, ?, ?, ?)"#,
+        r#"INSERT INTO sendings (sending_id, created_at, subject, total_queued, template_html, data_sets, additional_data, reply_to)
+           VALUES (?, ?, ?, 0, ?, ?, ?, ?)"#,
         sending_id_str,
         created_at,
         subject,
         template_html,
         data_sets_json,
-        additional_data_json
+        additional_data_json,
+        reply_to_json
     )
     .execute(db())
     .await?;
@@ -414,6 +433,7 @@ pub async fn send_email(
             subject,
             data_sets_json,
             additional_data_json,
+            reply_to_json,
         )
         .await
         {
@@ -448,6 +468,7 @@ pub async fn handle_send_request(req: &Request) -> Result<SendEmailResponse, Err
         request.recipients,
         request.data_sets,
         request.additional_data,
+        request.reply_to,
     )
     .await?;
 
@@ -465,7 +486,7 @@ pub async fn handle_add_targets_request(
 
     // Get the template and other data from the sendings table
     let sending = sqlx::query!(
-        r#"SELECT template_html, subject, data_sets, additional_data
+        r#"SELECT template_html, subject, data_sets, additional_data, reply_to
            FROM sendings
            WHERE sending_id = ?"#,
         sending_id_str
@@ -485,6 +506,7 @@ pub async fn handle_add_targets_request(
             sending.subject,
             sending.data_sets,
             sending.additional_data,
+            sending.reply_to,
         )
         .await
         {

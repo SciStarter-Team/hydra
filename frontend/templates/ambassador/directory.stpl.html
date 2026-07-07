@@ -1,0 +1,82 @@
+<div class="ss-container mx-auto py-8">
+  <h1 class="text-primary-dark mb-2">SciStarter Certified Ambassadors</h1>
+  <p class="mb-6 max-w-3xl text-gray-700">
+    Certified Ambassadors have completed the Foundations of Citizen Science training and badge and
+    the Ambassador training and badge. They've also been screened by a third party and submitted an
+    application to commit to being part of this searchable directory. Please adhere to your
+    organization's screening protocols when inviting an Ambassador to attend an event. SciStarter is
+    not liable or responsible for any interaction once you connect with an Ambassador.
+  </p>
+
+  <form method="get" action="/ambassadors" class="flex flex-col sm:flex-row gap-3 mb-8 max-w-2xl">
+    <input type="text" name="name" value="<%= self.name %>" placeholder="Search by name"
+           class="flex-1 border border-gray-300 rounded p-2">
+    <input type="text" name="near" value="<%= self.near %>" placeholder="City, state, or ZIP"
+           class="flex-1 border border-gray-300 rounded p-2">
+    <button type="submit" class="btn btn-accent">Search</button>
+  </form>
+
+  <div id="ambassador-map" class="w-full h-80 rounded-lg mb-8 border border-gray-200"></div>
+  <script>
+    (function () {
+      if (typeof maplibregl === "undefined") return;
+      var map = new maplibregl.Map({
+        container: "ambassador-map",
+        style: "https://tiles.openfreemap.org/styles/liberty",
+        center: [-98.5, 39.8],
+        zoom: 3,
+      });
+      map.on("load", function () {
+        fetch("/api/ambassador_map.geojson")
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            map.addSource("ambassadors", { type: "geojson", data: data });
+            map.addLayer({
+              id: "ambassador-points",
+              type: "circle",
+              source: "ambassadors",
+              paint: {
+                "circle-radius": 6,
+                "circle-color": "#7c3aed",
+                "circle-stroke-width": 2,
+                "circle-stroke-color": "#ffffff",
+              },
+            });
+          })
+          .catch(function () {});
+      });
+    })();
+  </script>
+
+  <p class="text-sm text-gray-500 mb-4"><%= self.total %> ambassador<% if self.total != 1 { %>s<% } %></p>
+
+  <% if self.entries.is_empty() { %>
+    <p class="text-gray-500">No ambassadors match your search.</p>
+  <% } else { %>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <% for e in &self.entries { %>
+        <a href="/ambassadors/<%= e.user_id |disp %>" class="ss-card !p-4 flex flex-col items-center text-center hover:shadow-md transition">
+          <% if let Some(image) = &e.image { %>
+            <img src="<%= image %>" alt="<%= e.name %>" class="w-24 h-24 rounded-full object-cover mb-3">
+          <% } else { %>
+            <div class="w-24 h-24 rounded-full bg-primary-light/30 flex items-center justify-center text-2xl font-bold text-primary-dark mb-3"><%= e.name.chars().next().unwrap_or('?') %></div>
+          <% } %>
+          <div class="font-semibold text-primary-dark"><%= e.name %></div>
+          <div class="text-sm text-gray-500"><%= e.city %><% if !e.state.is_empty() { %>, <%= e.state %><% } %></div>
+        </a>
+      <% } %>
+    </div>
+
+    <% if self.pages > 1 { %>
+      <div class="flex justify-center items-center gap-4 mt-8">
+        <% if self.page > 1 { %>
+          <a class="btn" href="/ambassadors?name=<%= self.name %>&near=<%= self.near %>&page=<%= self.page - 1 %>">&larr; Previous</a>
+        <% } %>
+        <span class="text-sm text-gray-500">Page <%= self.page %> of <%= self.pages %></span>
+        <% if self.page < self.pages { %>
+          <a class="btn" href="/ambassadors?name=<%= self.name %>&near=<%= self.near %>&page=<%= self.page + 1 %>">Next &rarr;</a>
+        <% } %>
+      </div>
+    <% } %>
+  <% } %>
+</div>

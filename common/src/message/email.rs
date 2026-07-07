@@ -15,6 +15,10 @@ pub struct SendEmailRequest {
     pub recipients: Vec<EmailRecipient>,
     pub data_sets: Vec<String>, // Names of data sets to use
     pub additional_data: Option<Vec<(String, String)>>, // Custom merge fields
+    /// Optional Reply-To addresses for the message. When set, replies from the
+    /// recipient are directed here instead of to the send-from address.
+    #[serde(default)]
+    pub reply_to: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

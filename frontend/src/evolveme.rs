@@ -315,83 +315,10 @@ struct LessonPage {
     user: Arc<BasicInfo>,
 }
 
-/// Parameters for Articulate Storyline LRS integration
-#[derive(Debug)]
-struct ArticulateParams {
-    lrs_url: String,
-    user: Arc<BasicInfo>,
-    activity: Option<String>,
-    jwt: String,
-}
-
-impl ArticulateParams {
-    fn new(lrs_url: &str, user: Arc<BasicInfo>) -> Self {
-        use jsonwebtoken::{EncodingKey, Header, encode};
-        use serde::Serialize;
-
-        #[derive(Serialize)]
-        struct ArticulateJwtClaims {
-            email: String,
-        }
-
-        // Generate JWT with email field containing ULID@scistarter.org
-        let claims = ArticulateJwtClaims {
-            email: format!("{}@scistarter.org", user.user_id),
-        };
-
-        let jwt_secret = env!("SCISTARTER_JWT_SECRET");
-        let jwt = encode(
-            &Header::default(),
-            &claims,
-            &EncodingKey::from_secret(jwt_secret.as_bytes()),
-        )
-        .unwrap_or_else(|_| String::from(""));
-
-        Self {
-            lrs_url: lrs_url.to_string(),
-            user,
-            activity: None,
-            jwt,
-        }
-    }
-
-    fn with_activity(mut self, activity: &str) -> Self {
-        self.activity = Some(activity.to_string());
-        self
-    }
-}
-
-impl std::fmt::Display for ArticulateParams {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // Build query string for Articulate Storyline
-        let mut params = vec![
-            format!("endpoint={}", urlencoding::encode(&self.lrs_url)),
-            format!(
-                "actor={}",
-                urlencoding::encode(
-                    &serde_json::json!({
-                        "objectType": "Agent",
-                        "name": self.user.handle,
-                        "mbox": format!("mailto:{}@scistarter.org", self.user.user_id),
-                    })
-                    .to_string()
-                )
-            ),
-            format!(
-                "auth={}",
-                urlencoding::encode(&format!("Bearer {}", self.jwt))
-            ),
-        ];
-
-        if let Some(activity) = &self.activity {
-            params.push(format!("activity={}", urlencoding::encode(activity)));
-        }
-
-        params.push("tincan=true".to_string());
-
-        write!(f, "{}", params.join("&"))
-    }
-}
+// Articulate Storyline LRS launch parameters live in `crate::articulate`
+// (shared with the Champion training). Re-exported into this module's scope so
+// `evolveme/lesson.stpl.html` can reference `ArticulateParams` unqualified.
+use crate::articulate::ArticulateParams;
 
 #[derive(TemplateOnce, Debug)]
 #[template(path = "evolveme/waiting.stpl.html")]

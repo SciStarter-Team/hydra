@@ -1,0 +1,44 @@
+<tr class="border-t border-gray-100 align-top">
+  <td class="px-2 py-2 whitespace-nowrap text-gray-500"><%= self.row.when %></td>
+  <td class="px-2 py-2">
+    <a class="text-primary-action hover:underline" href="/ambassadors/<%= self.row.recipient_id |disp %>"><%= self.row.recipient_name %></a>
+    <div class="text-gray-400"><%= self.row.recipient_email %></div>
+  </td>
+  <td class="px-2 py-2">
+    <div><%= self.row.first_name %> <%= self.row.last_name %></div>
+    <div class="text-gray-400"><%= self.row.sender_email %></div>
+  </td>
+  <td class="px-2 py-2 whitespace-nowrap"><%= self.row.dates %></td>
+  <td class="px-2 py-2 max-w-md">
+    <% if !self.row.subject.trim().is_empty() { %>
+      <div class="font-medium"><%= self.row.subject %></div>
+    <% } %>
+    <div class="whitespace-pre-line text-gray-700"><%= self.row.body %></div>
+  </td>
+  <td class="px-2 py-2 whitespace-nowrap">
+    <% if let Some(sent) = &self.row.sent { %>
+      <span class="text-green-700 font-medium">Delivered</span>
+      <div class="text-gray-400"><%= sent %></div>
+    <% } else if self.row.accepted { %>
+      <span class="text-amber-600">Accepted</span>
+    <% } else { %>
+      <span class="text-gray-500">Pending</span>
+    <% } %>
+  </td>
+  <td class="px-2 py-2 whitespace-nowrap">
+    <% if self.row.sent.is_none() { %>
+      <div class="flex gap-2">
+        <button class="btn btn-accent !py-1 !px-2 text-xs"
+                hx-post="/-admin/ambassadors/messages/review/<%= self.row.id |disp %>"
+                hx-vals='{"decision":"accept"}'
+                hx-target="closest tr" hx-swap="outerHTML">Accept &amp; send</button>
+        <% if !self.row.accepted { %>
+          <button class="btn !py-1 !px-2 text-xs"
+                  hx-post="/-admin/ambassadors/messages/review/<%= self.row.id |disp %>"
+                  hx-vals='{"decision":"reject"}'
+                  hx-target="closest tr" hx-swap="outerHTML">Reject</button>
+        <% } %>
+      </div>
+    <% } %>
+  </td>
+</tr>

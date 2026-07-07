@@ -9,14 +9,17 @@
 use std::sync::Arc;
 
 use anyhow::Error;
+use common::message::dashboard::AmbassadorApplication;
 use common::message::user::{BasicInfo, WorkflowStatusResponse, WorkflowType};
+use common::service::request;
 use poem::{Response, handler, web::Redirect};
 use sailfish::TemplateOnce;
 
+use crate::articulate::{ArticulateParams, LRS_URL};
 use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
 use crate::training::{
-    self, ArticulateCard, SidebarBody, SigninBody, StepView, StepsView, TrainingContent,
+    self, ArticulateCard, SidebarBody, SigninBody, StepState, StepView, StepsView, TrainingContent,
     TutorialBody, linear_states, open_flags, render_page, render_progress_fragment,
 };
 
@@ -48,6 +51,8 @@ pub struct ChampionContent {
     pub claim_html: String,
     pub apply_heading: String,
     pub apply_html: String,
+    pub received_heading: String,
+    pub received_html: String,
     pub sidebar_html: String,
 }
 
@@ -74,20 +79,23 @@ impl Default for ChampionContent {
 </details>"#.to_string(),
             estimated_time: "1 hour".to_string(),
             badge_image: "https://media.scistarter.org/curated/2026/Citizen_Science_Champion_certificate.png".to_string(),
-            skills_intro: "By the end of this course, you will be able to:".to_string(),
+            skills_intro: "This training will help you become confident introducing citizen science to others. In this training you will:".to_string(),
             skills: vec![
-                "<strong>Determine</strong> how to perform the primary roles of a SciStarter Ambassador by leveraging resources from SciStarter and relationships with your local library and other community organizations.".to_string(),
-                "<strong>Recognize</strong> the importance of SciStarter Ambassadors in furthering citizen science initiatives in communities across the country.".to_string(),
-                "<strong>Identify</strong> strategies and resources for planning and hosting citizen science events that fit your community's needs and interests.".to_string(),
+                "<strong>Learn</strong> how to start conversations, answer common questions, and help people discover opportunities that fit their interests and availability.".to_string(),
+                "<strong>Become</strong> familiar with SciStarter's resources so you can guide people to projects, events, and activities that are meaningful to them.".to_string(),
+                "<strong>Develop</strong> practical facilitation skills that can help you lead conversations, introduce citizen science to groups you're already part of, and create welcoming experiences for people who may be discovering citizen science for the first time.".to_string(),
             ],
             skills_footnote: r#"You will practice or acquire the following skills which are part of an "open skills taxonomy" used by employers and schools: <a href="https://lightcast.io/open-skills/skills/BGS6F9F4F7DBABC95CE3/community-outreach" target="_blank">Community Outreach</a>, <a href="https://lightcast.io/open-skills/skills/KS122CZ71K19596XHQ92/event-planning" target="_blank">Event Planning</a>, <a href="https://lightcast.io/open-skills/skills/KS440BS61162WZN04SVD/science-communication" target="_blank">Science Communication</a>, <a href="https://lightcast.io/open-skills/skills/KS124JB619VXG6RQ810C/leadership" target="_blank">Leadership</a>, <a href="https://lightcast.io/open-skills/skills/ESA420F05EBBD34B3C2A/curiosity" target="_blank">Curiosity</a>, and <a href="https://lightcast.io/open-skills/skills/KS4401D6PYRMFQC4HR62/resource-management" target="_blank">Resource Management</a>."#.to_string(),
             account_heading: "SciStarter Account".to_string(),
             prereq_heading: "Foundations of Citizen Science".to_string(),
             prereq_html: r#"<p>Complete the <a href="/training/foundations">Foundations of Citizen Science</a> training module and earn the badge to access the SciStarter Ambassador Tutorial.</p>"#.to_string(),
             tutorial_heading: "Ambassador training and quiz".to_string(),
-            tutorial_intro: "Complete the SciStarter Ambassador training module.".to_string(),
-            articulate_url: "#".to_string(),
-            articulate_image: "https://media.scistarter.org/curated/2024/SciStarter_Web_Landing_Ambassadors.png".to_string(),
+            tutorial_intro: "Complete the Citizen Science Champion training module.".to_string(),
+            // Base URL of the Champion Storyline package. It is wrapped per-user
+            // with the LRS launch parameters at render time (see `build_steps`).
+            articulate_url: "https://media.scistarter.org/champion-training/scormdriver/indexAPI.html"
+                .to_string(),
+            articulate_image: "https://orrery-media.s3.amazonaws.com/attr/2026-07/Citizen_Science_Champion_nP0OiMQ.png".to_string(),
             claim_heading: "Congratulations, Champion!".to_string(),
             claim_html: r#"<p>🎉 <strong>Congratulations, you are a Citizen Science Champion!</strong> 🎉</p>
 <p>You've taken an exciting step in advancing citizen science in your community.<br>
@@ -113,6 +121,8 @@ Your <strong>Champion Certificate</strong> is now available on your <a href="/da
   </ul>
   <p>You may be contacted if additional information is needed. Once approved, you'll receive an email with your Certified SciStarter Ambassador badge, and it will appear on your SciStarter profile and in the public Ambassador directory.</p>
 </details>"#.to_string(),
+            received_heading: "Application Received".to_string(),
+            received_html: r#"<p>Your application is under review and a third-party background screening is in progress. This process may take a few weeks. We'll email you if we need anything else—and again when your Certified Ambassador badge is ready.</p>"#.to_string(),
             sidebar_html: String::new(),
         }
     }
@@ -202,12 +212,19 @@ async fn build_content(
 /// open terminal step once the Champion badge is earned.
 async fn build_steps(content: &ChampionContent, user_info: &Option<Arc<BasicInfo>>) -> StepsView {
     let logged_in = user_info.is_some();
-    let (status, foundations_done) = match user_info {
+    let (status, foundations_done, applied) = match user_info {
         Some(user) => {
             let id = user.user_id.to_string();
             let status = training::fetch_status(WorkflowType::Ambassador, &id).await;
             let foundations = training::fetch_status(WorkflowType::Foundations, &id).await;
-            (status, foundations.badge_granted)
+            // Has the user submitted (not just drafted) an ambassador application?
+            let applied = request::<Option<AmbassadorApplication>>("user.ambassador.get", id)
+                .await
+                .ok()
+                .flatten()
+                .map(|a| !a.draft && a.submitted.is_some())
+                .unwrap_or(false);
+            (status, foundations.badge_granted, applied)
         }
         None => (
             WorkflowStatusResponse {
@@ -215,6 +232,7 @@ async fn build_steps(content: &ChampionContent, user_info: &Option<Arc<BasicInfo
                 completed_steps: vec![],
                 badge_granted: false,
             },
+            false,
             false,
         ),
     };
@@ -224,9 +242,10 @@ async fn build_steps(content: &ChampionContent, user_info: &Option<Arc<BasicInfo
     // Champion certificate on tutorial_enter); it is NOT the Certified Ambassador
     // badge (`status.badge_granted`), which comes later via the application. So
     // the "Congratulations, Champion!" celebration opens once the tutorial is
-    // done (carries `false` — it is a celebration, not a completable task), and
-    // the "apply" step stays informational (applications open periodically).
-    let states = linear_states(&[logged_in, foundations_done, tutorial_done, false, false]);
+    // done (carries `false` — it is a celebration, not a completable task). The
+    // "apply" step completes once an application is submitted; a follow-on
+    // "Application Received" step is appended while the application is pending.
+    let states = linear_states(&[logged_in, foundations_done, tutorial_done, false, applied]);
     let opens = open_flags(&states);
 
     let account_body = SigninBody {
@@ -240,10 +259,23 @@ async fn build_steps(content: &ChampionContent, user_info: &Option<Arc<BasicInfo
     .render_once()
     .unwrap_or_default();
 
+    // Wrap the Storyline base URL with this user's LRS launch parameters
+    // (xAPI actor + JWT), so completion reports back through the LRS to
+    // `record_event_articulate`. Logged-out visitors (the tutorial step is
+    // blocked for them anyway) just see the bare base URL.
+    let tutorial_href = match user_info {
+        Some(user) => format!(
+            "{}?{}",
+            content.articulate_url,
+            ArticulateParams::new(LRS_URL, user.clone())
+        ),
+        None => content.articulate_url.clone(),
+    };
+
     let tutorial_body = TutorialBody {
         intro: content.tutorial_intro.clone(),
         cards: vec![ArticulateCard {
-            href: content.articulate_url.clone(),
+            href: tutorial_href,
             image: content.articulate_image.clone(),
         }],
         extra: String::new(),
@@ -251,7 +283,7 @@ async fn build_steps(content: &ChampionContent, user_info: &Option<Arc<BasicInfo
     .render_once()
     .unwrap_or_default();
 
-    let steps = vec![
+    let mut steps = vec![
         StepView {
             heading: content.account_heading.clone(),
             state: states[0],
@@ -283,6 +315,18 @@ async fn build_steps(content: &ChampionContent, user_info: &Option<Arc<BasicInfo
             body: content.apply_html.clone(),
         },
     ];
+
+    // Once an application is submitted, surface the pending "Application
+    // Received" step as the open terminal step (hidden until then, mirroring
+    // orrery's champion page).
+    if applied {
+        steps.push(StepView {
+            heading: content.received_heading.clone(),
+            state: StepState::Current,
+            open: true,
+            body: content.received_html.clone(),
+        });
+    }
 
     StepsView { steps }
 }

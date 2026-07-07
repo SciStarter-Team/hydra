@@ -1,5 +1,6 @@
 // Admin module - routes and submodule declarations
 
+pub mod ambassadors;
 pub mod analytics;
 pub mod archive;
 pub mod autocomplete;
@@ -48,6 +49,8 @@ pub fn routes() -> impl Endpoint {
         .nest("/dashboard-settings", dashboard_settings::routes())
         // Users
         .nest("/users", users::routes())
+        // Ambassador application processing (staff-facing)
+        .nest("/ambassadors", ambassadors::routes())
         // Projects
         .nest("/projects", projects::routes())
         // Events
