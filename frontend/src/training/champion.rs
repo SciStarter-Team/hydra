@@ -268,6 +268,7 @@ async fn build_steps(content: &ChampionContent, user_info: &Option<Arc<BasicInfo
             "{}?{}",
             content.articulate_url,
             ArticulateParams::new(LRS_URL, user.clone())
+                .with_activity_id("http://YybhOFIHBlvaKm-VUHTjY0FUnt-JClWI_rise")
         ),
         None => content.articulate_url.clone(),
     };
