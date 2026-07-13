@@ -21,7 +21,7 @@
                                 <span class="font-semibold text-primary-dark"><%= conv.subject %></span>
                             </div>
                             <div class="text-sm text-gray-600 mt-1">
-                                with @<%= conv.other_user_handle %>
+                                with <% if !conv.is_entity { %>@<% } %><%= conv.other_user_handle %>
                                 <span class="text-gray-400">·</span>
                                 <%= conv.post_count %> message<% if conv.post_count != 1 { %>s<% } %>
                             </div>

@@ -15,6 +15,7 @@ pub mod events;
 pub mod files;
 pub mod integrations;
 pub mod mcp_tokens;
+pub mod messages;
 pub mod news;
 pub mod pagebuilder;
 pub mod projects;
@@ -49,6 +50,8 @@ pub fn routes() -> impl Endpoint {
         .nest("/dashboard-settings", dashboard_settings::routes())
         // Users
         .nest("/users", users::routes())
+        // Direct-message staff review queue
+        .nest("/messages", messages::routes())
         // Ambassador application processing (staff-facing)
         .nest("/ambassadors", ambassadors::routes())
         // Projects

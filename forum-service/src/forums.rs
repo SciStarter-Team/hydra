@@ -148,7 +148,7 @@ pub async fn list_forums(req: &Request) -> Result<Vec<ForumInfo>> {
         sqlx::query!(
             r#"SELECT forum_id, slug, name, description, created_at, updated_at, is_active, display_order
                FROM "forums"
-               WHERE is_active = 1 AND slug NOT LIKE 'user-%'
+               WHERE is_active = 1 AND slug NOT LIKE 'inbox-%'
                ORDER BY display_order ASC, created_at ASC
                LIMIT ? OFFSET ?"#,
             limit,
@@ -163,7 +163,7 @@ pub async fn list_forums(req: &Request) -> Result<Vec<ForumInfo>> {
         sqlx::query!(
             r#"SELECT forum_id, slug, name, description, created_at, updated_at, is_active, display_order
                FROM "forums"
-               WHERE slug NOT LIKE 'user-%'
+               WHERE slug NOT LIKE 'inbox-%'
                ORDER BY display_order ASC, created_at ASC
                LIMIT ? OFFSET ?"#,
             limit,
@@ -340,7 +340,7 @@ pub async fn get_personal_forum(req: &Request) -> Result<ForumInfo> {
 
     // Create personal forum with user_id as forum_id
     // Use user_id for slug since it's guaranteed unique
-    let slug = format!("user-{}", user_id_str);
+    let slug = format!("inbox-{}", user_id_str);
     let name = format!("{}'s Personal Forum", user_info.handle); // Use actual handle, not display_handle
     let description = Some(format!(
         "Personal discussion space for {}",

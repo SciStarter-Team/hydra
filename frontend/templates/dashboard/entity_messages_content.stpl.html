@@ -1,0 +1,59 @@
+<div class="ss-container !pt-8 !pb-8 mx-auto">
+    <p class="text-sm">
+        <a href="/dashboard/owned" class="text-primary-action hover:underline">&larr; Back to my projects &amp; events</a>
+    </p>
+    <h1 class="mt-2">Messages for "<%= &self.entity_name %>"</h1>
+    <p class="text-sm mb-6">
+        Messages members have sent to this listing. Replies are sent as <span class="font-semibold"><%= &self.entity_name %></span>.
+    </p>
+
+    <% if self.conversations.is_empty() && !self.has_prev_page { %>
+    <p class="ss-card !p-6 text-center text-gray-600">
+        No messages yet.
+    </p>
+    <% } else { %>
+    <div class="ss-card !p-0 overflow-hidden">
+        <ul class="divide-y divide-gray-200">
+            <% for conv in &self.conversations { %>
+            <li class="<% if !conv.seen { %>bg-amber-50<% } %>">
+                <a href="/dashboard/owned/<%= &self.entity_id %>/messages/<%= conv.topic_id |disp %>" class="block px-6 py-4 hover:bg-gray-50">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2">
+                                <% if !conv.seen { %><span class="inline-block w-2 h-2 rounded-full bg-primary"></span><% } %>
+                                <span class="font-semibold text-primary-dark"><%= conv.subject %></span>
+                            </div>
+                            <div class="text-sm text-gray-600 mt-1">
+                                from @<%= conv.other_user_handle %>
+                                <span class="text-gray-400">·</span>
+                                <%= conv.post_count %> message<% if conv.post_count != 1 { %>s<% } %>
+                            </div>
+                            <p class="text-sm text-gray-500 mt-1 truncate"><%= conv.last_message_preview %></p>
+                        </div>
+                        <span class="text-xs text-gray-500 whitespace-nowrap"><%- local_time(&conv.last_message_at, TimeFormat::DateTime) %></span>
+                    </div>
+                </a>
+            </li>
+            <% } %>
+        </ul>
+    </div>
+
+    <% if self.has_prev_page || self.has_next_page { %>
+    <nav class="mt-4 flex items-center justify-center gap-3 text-sm" aria-label="Inbox pagination">
+        <% if self.has_prev_page { %>
+            <a href="/dashboard/owned/<%= &self.entity_id %>/messages<% if self.page > 1 { %>?page=<%= self.page - 1 %><% } %>"
+               class="px-3 py-1 border border-linework rounded-md text-primary hover:bg-gray-50">
+                &larr; Newer
+            </a>
+        <% } %>
+        <span class="text-primary">Page <%= self.page + 1 %></span>
+        <% if self.has_next_page { %>
+            <a href="/dashboard/owned/<%= &self.entity_id %>/messages?page=<%= self.page + 1 %>"
+               class="px-3 py-1 border border-linework rounded-md text-primary hover:bg-gray-50">
+                Older &rarr;
+            </a>
+        <% } %>
+    </nav>
+    <% } %>
+    <% } %>
+</div>

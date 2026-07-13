@@ -847,12 +847,12 @@ pub async fn message_send(req: &Request) -> Result<(), Error> {
     .unwrap_or_default();
 
     let body = format!(
-        "<p>A new message to ambassador {recipient} is waiting for staff approval \
-         in the admin before it will be delivered.</p>\
-         <p><strong>Sender name:</strong> {first} {last}<br>\
-         <strong>Sender email:</strong> {email}<br>\
+        "<p>A SciStarter message to an ambassador is awaiting staff review before it can be delivered.</p>\
+         <p><strong>From:</strong> {first} {last} &lt;{email}&gt;<br>\
+         <strong>To:</strong> ambassador {recipient}<br>\
          <strong>Dates (if applicable):</strong> {dates}</p>\
-         <p><strong>Message:</strong></p><p>{message}</p>",
+         <blockquote>{message}</blockquote>\
+         <p><a href=\"https://scistarter.org/-admin/ambassadors/messages\">Review pending messages (approve or reject)</a></p>",
         recipient = escape_html(&recipient_name),
         first = escape_html(&form.first_name),
         last = escape_html(&form.last_name),
@@ -865,7 +865,7 @@ pub async fn message_send(req: &Request) -> Result<(), Error> {
     let staff_reply_to = (!sender_email.trim().is_empty()).then(|| vec![sender_email.clone()]);
     send_email(
         vec![EmailRecipient::Email(STAFF_MAILBOX.to_string())],
-        "New ambassador message awaiting review",
+        "Message pending review: ambassador message",
         body,
         Vec::<String>::new(),
         None,

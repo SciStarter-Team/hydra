@@ -1,0 +1,23 @@
+<tr class="border-t border-gray-100 align-top">
+  <td class="px-2 py-2 whitespace-nowrap text-gray-500"><%= self.row.when %></td>
+  <td class="px-2 py-2"><%= self.row.sender %></td>
+  <td class="px-2 py-2"><%= self.row.recipient %></td>
+  <td class="px-2 py-2 max-w-md">
+    <% if !self.row.subject.trim().is_empty() { %>
+      <div class="font-medium"><%= self.row.subject %></div>
+    <% } %>
+    <div class="whitespace-pre-line text-gray-700"><%= self.row.body %></div>
+  </td>
+  <td class="px-2 py-2 whitespace-nowrap">
+    <div class="flex gap-2">
+      <button class="btn btn-accent !py-1 !px-2 text-xs"
+              hx-post="/-admin/messages/review/<%= self.row.post_id |disp %>"
+              hx-vals='{"decision":"accept"}'
+              hx-target="closest tr" hx-swap="outerHTML">Approve</button>
+      <button class="btn !py-1 !px-2 text-xs"
+              hx-post="/-admin/messages/review/<%= self.row.post_id |disp %>"
+              hx-vals='{"decision":"reject"}'
+              hx-target="closest tr" hx-swap="outerHTML">Reject</button>
+    </div>
+  </td>
+</tr>

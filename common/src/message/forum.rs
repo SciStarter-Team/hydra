@@ -59,6 +59,11 @@ pub struct PostInfo {
     pub parent_post_id: Option<Ulid>,
     pub is_deleted: bool,
     pub is_flagged: bool,
+    /// Whether this message has cleared the staff review queue. Direct
+    /// messages start unapproved and are hidden from the recipient until a
+    /// staff member approves them; the sender sees their own unapproved
+    /// posts (badged "pending"). Non-DM forum posts are created approved.
+    pub approved: bool,
 }
 
 impl PostInfo {
@@ -92,6 +97,11 @@ pub struct PostListQuery {
     pub topic_id: Ulid,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
+    /// The user viewing the thread. Unapproved (pending-review) posts are
+    /// only returned to their own author, so a recipient never sees a message
+    /// still awaiting staff review. `None` (no specific viewer) sees only
+    /// approved posts.
+    pub viewer_id: Option<Ulid>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -248,12 +258,14 @@ pub struct GetCommunityForum {
     pub user_id: Option<Ulid>,
 }
 
-/// Personal forums (the DM inbox backing store) carry the `user-{user_id}`
-/// slug convention. They must only be written to via `forum.messaging.*`
-/// endpoints, never the generic topic-creation flow — otherwise any
-/// authenticated user could spam any inbox by forging the slug field.
+/// Personal forums (the DM inbox backing store) carry the `inbox-{id}`
+/// slug convention, where `id` is the recipient's ULID — a user, project,
+/// or event (all addressable the same way). They must only be written to
+/// via `forum.messaging.*` endpoints, never the generic topic-creation
+/// flow — otherwise any authenticated user could spam any inbox by forging
+/// the slug field.
 pub fn is_personal_forum_slug(slug: &str) -> bool {
-    slug.starts_with("user-")
+    slug.starts_with("inbox-")
 }
 
 // ============================================================================
@@ -263,7 +275,9 @@ pub fn is_personal_forum_slug(slug: &str) -> bool {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SendMessage {
     pub from_user_id: Ulid,
-    pub to_user_id: Ulid,
+    /// Recipient ULID — a user, project, or event. Its personal-forum
+    /// inbox (`forums.forum_id == to_id`) receives the message.
+    pub to_id: Ulid,
     pub subject: String,
     pub body: String,
     pub reply_ref: Option<String>,
@@ -337,4 +351,37 @@ pub struct UnreadCountRequest {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UnreadCountResponse {
     pub count: i64,
+}
+
+/// Query for `forum.messaging.recipients_since`. Returns the distinct set
+/// of correspondents (the *other* participant ULID) that `author_id` has
+/// messaged — via a new conversation or a reply — since `since`. Used to
+/// enforce the "one new project/event per day" limit: the frontend keeps
+/// only the project/event ULIDs from the result and counts distinct ones.
+/// The response is `Vec<Ulid>`.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct RecipientsSince {
+    pub author_id: Ulid,
+    pub since: TimeString,
+}
+
+/// One pending direct message in the staff review queue
+/// (`forum.messaging.pending_list`). A message is not delivered to its
+/// recipient until a staff member approves it.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ReviewMessageRow {
+    pub post_id: Ulid,
+    pub sender: String,
+    pub recipient: String,
+    pub subject: String,
+    pub body: String,
+    pub when: String,
+}
+
+/// A staff decision on a pending message (`forum.messaging.review`): accept
+/// delivers it (approved = 1); reject drops it (is_deleted = 1).
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ReviewMessageDecision {
+    pub post_id: Ulid,
+    pub accept: bool,
 }

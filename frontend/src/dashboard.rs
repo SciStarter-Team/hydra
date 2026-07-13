@@ -1,4 +1,5 @@
 pub mod bookmarks;
+pub mod entity_messages;
 pub mod entity_summary;
 pub mod interests;
 pub mod lists;
@@ -26,6 +27,18 @@ pub fn routes() -> impl Endpoint {
     Route::new()
         .at("/", get(main::page))
         .at("/owned", get(owned::page))
+        .at(
+            "/owned/:entity_id/messages",
+            get(entity_messages::inbox),
+        )
+        .at(
+            "/owned/:entity_id/messages/:topic_id",
+            get(entity_messages::thread),
+        )
+        .at(
+            "/owned/:entity_id/messages/:topic_id/reply",
+            post(entity_messages::reply),
+        )
         .at("/lists", get(lists::page).post(lists::create))
         .at("/lists/:list_id/update", post(lists::update))
         .at("/lists/:list_id/delete", post(lists::delete))

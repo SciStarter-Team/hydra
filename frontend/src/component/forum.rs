@@ -273,6 +273,8 @@ impl Component for TopicDetail {
             topic_id: self.topic.topic_id,
             limit: Some(self.per_page),
             offset: Some(offset),
+            // Generic forum posts are always approved; no per-viewer gating.
+            viewer_id: None,
         };
 
         let forum_request = GetForumById {

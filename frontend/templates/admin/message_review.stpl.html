@@ -1,0 +1,31 @@
+<% use crate::admin::messages::ReviewRow; %>
+<div class="p-6">
+  <div class="flex items-center gap-4 mb-1">
+    <h1 class="text-2xl font-bold text-gray-900">Message Review</h1>
+  </div>
+  <p class="text-sm text-gray-500 mb-4 max-w-3xl">
+    Direct messages between members (and messages to projects and events), held for review.
+    <strong>Approve</strong> delivers the message to its recipient; <strong>Reject</strong> drops it.
+  </p>
+  <div class="overflow-x-auto border border-gray-200 rounded-lg">
+    <table class="min-w-full text-xs">
+      <thead class="bg-gray-50 text-left text-gray-600">
+        <tr>
+          <th class="px-2 py-2 font-medium">Received</th>
+          <th class="px-2 py-2 font-medium">From</th>
+          <th class="px-2 py-2 font-medium">To</th>
+          <th class="px-2 py-2 font-medium">Message</th>
+          <th class="px-2 py-2 font-medium"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% if self.rows.is_empty() { %>
+          <tr><td colspan="5" class="px-2 py-8 text-center text-gray-500">No messages pending review.</td></tr>
+        <% } %>
+        <% for row in &self.rows { %>
+          <%+ ReviewRow { row: row.clone() } %>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</div>

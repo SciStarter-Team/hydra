@@ -1,14 +1,16 @@
+use std::collections::HashSet;
+
 use anyhow::{Error, anyhow};
 use common::message::forum::{
     ConversationSummary, DiscardMessage, ForumInfo, GetForumById, InboxQuery, InboxResponse,
-    MarkMessageRead, PostInfo, PostListQuery, ReplyToMessage, ReplyToMessageResponse, SendMessage,
-    SendMessageResponse, TopicInfo, is_personal_forum_slug,
+    MarkMessageRead, PostInfo, PostListQuery, RecipientsSince, ReplyToMessage,
+    ReplyToMessageResponse, SendMessage, SendMessageResponse, TopicInfo, is_personal_forum_slug,
 };
 use common::message::user::BasicInfo;
 use common::service::{request, send as nats_send};
+use common::timestring::TimeString;
 use poem::{
     IntoResponse, Response, handler,
-    http::StatusCode,
     session::Session,
     web::{Form, Html, Path, Query, RealIp, Redirect},
 };
@@ -17,8 +19,71 @@ use serde::Deserialize;
 use ulid::Ulid;
 
 use crate::component::{Component, Head, StandardLayout};
+use crate::dashboard::entity_summary;
 use crate::local_time::{TimeFormat, local_time};
 use crate::middleware::authorization::Authenticated;
+
+/// Maximum number of distinct projects/events a member may message per day.
+const DAILY_ENTITY_LIMIT: usize = 10;
+
+/// Enforce the daily distinct-project/event message limit.
+///
+/// Returns `Ok(None)` when the user may message `target_entity_id`, or
+/// `Ok(Some(message))` when they have already messaged `DAILY_ENTITY_LIMIT`
+/// *different* projects/events today. Entities already contacted today can
+/// always be messaged again (a conversation continues), and messaging a
+/// fellow user never reaches this helper. Mirrors orrery's rule
+/// (projects/events are limited; users are not).
+async fn daily_entity_limit_block(
+    user_id: Ulid,
+    target_entity_id: Ulid,
+) -> Result<Option<String>, Error> {
+    let recipients: Vec<Ulid> = request(
+        "forum.messaging.recipients_since",
+        RecipientsSince {
+            author_id: user_id,
+            since: TimeString::start_of_utc_day(),
+        },
+    )
+    .await?;
+
+    let recipient_ids: Vec<String> = recipients.iter().map(|id| id.to_string()).collect();
+    let messaged_today: HashSet<Ulid> = entity_summary::lookup_batch(&recipient_ids)
+        .await?
+        .into_iter()
+        .map(|summary| summary.id)
+        .collect();
+
+    if messaged_today.contains(&target_entity_id) || messaged_today.len() < DAILY_ENTITY_LIMIT {
+        Ok(None)
+    } else {
+        Ok(Some(
+            "You can only message 10 different projects per day. You've reached \
+             today's limit — you can keep replying to projects you've already \
+             contacted, but please wait until tomorrow to contact new ones."
+                .to_string(),
+        ))
+    }
+}
+
+/// Render a message-limit rejection as an HTMX-swappable fragment.
+fn limit_error_fragment(message: &str) -> Response {
+    Html(format!("<p class=\"text-sm text-red-600\">{message}</p>")).into_response()
+}
+
+/// The confirmation shown after a message is accepted for delivery. Every
+/// message is held for staff review before it reaches its recipient, so we
+/// tell the sender that — and warn that spam gets their account flagged.
+pub fn pending_review_fragment() -> Response {
+    Html(
+        "<div class=\"ss-card !p-4 text-sm\">\
+           <p class=\"font-semibold text-primary-dark\">Your message is pending review.</p>\
+           <p class=\"mt-1 text-gray-600\">If we detect spam, your account will be flagged and potentially blocked.</p>\
+         </div>"
+            .to_string(),
+    )
+    .into_response()
+}
 
 #[derive(Debug, Deserialize)]
 pub struct InboxPageQuery {
@@ -51,10 +116,29 @@ pub async fn page(
     )
     .await?;
 
+    // Classify the correspondents so conversations with a project/event
+    // render as an entity (name, no "@") rather than assuming a member handle.
+    let other_ids: Vec<String> = inbox
+        .conversations
+        .iter()
+        .map(|c| c.other_user_id.to_string())
+        .collect();
+    let entity_ids: HashSet<Ulid> = entity_summary::lookup_batch(&other_ids)
+        .await?
+        .into_iter()
+        .map(|summary| summary.id)
+        .collect();
+
     let conversations: Vec<ConversationModel> = inbox
         .conversations
         .into_iter()
-        .map(ConversationModel::from)
+        .map(|conv| {
+            let is_entity = entity_ids.contains(&conv.other_user_id);
+            ConversationModel {
+                is_entity,
+                ..ConversationModel::from(conv)
+            }
+        })
         .collect();
 
     let content = InboxContent {
@@ -115,7 +199,7 @@ pub async fn send(
     Form(form): Form<SendForm>,
 ) -> Result<Response, Error> {
     let user_info = user_info.ok_or_else(|| anyhow!("Login required"))?;
-    let to_user_id: Ulid = form
+    let to_id: Ulid = form
         .to
         .parse()
         .map_err(|err| anyhow!("Invalid recipient: {}", err))?;
@@ -124,11 +208,23 @@ pub async fn send(
         return Err(anyhow!("Subject and body are required"));
     }
 
-    let resp: SendMessageResponse = request(
+    // Messaging a project/event is subject to the one-per-day limit;
+    // messaging a fellow user is not. Classify the recipient locally.
+    if let Some(entity) = entity_summary::lookup_batch(&[to_id.to_string()])
+        .await?
+        .into_iter()
+        .next()
+    {
+        if let Some(message) = daily_entity_limit_block(user_info.user_id, entity.id).await? {
+            return Ok(limit_error_fragment(&message));
+        }
+    }
+
+    let _: SendMessageResponse = request(
         "forum.messaging.send",
         SendMessage {
             from_user_id: user_info.user_id,
-            to_user_id,
+            to_id,
             subject: form.subject,
             body: form.body,
             reply_ref: None,
@@ -136,14 +232,8 @@ pub async fn send(
     )
     .await?;
 
-    let target = format!("/dashboard/messages/{}", resp.topic_id);
-    Ok(Response::builder()
-        .header("HX-Redirect", &target)
-        .status(StatusCode::OK)
-        .body(format!(
-            "<p>Message sent. <a href=\"{}\">View conversation</a>.</p>",
-            target
-        )))
+    // The message is held for staff review, not delivered yet — tell the sender.
+    Ok(pending_review_fragment())
 }
 
 #[derive(Debug, Deserialize)]
@@ -191,6 +281,8 @@ pub async fn thread(
             topic_id: topic_ulid,
             limit: Some(200),
             offset: Some(0),
+            // The viewer sees approved posts plus their own pending ones.
+            viewer_id: Some(user_info.user_id),
         },
     )
     .await?;
@@ -212,6 +304,7 @@ pub async fn thread(
             author_handle: p.author_handle,
             paragraphs: p.content.split("\n\n").map(|s| s.to_string()).collect(),
             created_at: p.created_at.to_string(),
+            approved: p.approved,
         })
         .collect();
 
@@ -220,17 +313,36 @@ pub async fn thread(
     } else {
         topic.author_id
     };
-    let other_user_handle =
-        request::<BasicInfo>("user.basic_info.by_user_id", other_user_id.to_string())
-            .await
-            .map(|info| info.handle)
-            .unwrap_or_else(|_| "Unknown".to_string());
+
+    // The other participant is a user (profile link) or a project/event
+    // (entity-page link). Resolve which so the thread links correctly — a
+    // conversation with a project must not link to a nonexistent profile.
+    let (other_user_handle, other_link, other_is_entity) = match entity_summary::lookup_batch(
+        &[other_user_id.to_string()],
+    )
+    .await?
+    .into_iter()
+    .next()
+    {
+        Some(entity) => {
+            let link = entity_summary::entity_link(&entity);
+            (entity.name, link, true)
+        }
+        None => {
+            let handle = request::<BasicInfo>("user.basic_info.by_user_id", other_user_id.to_string())
+                .await
+                .map(|info| info.handle)
+                .unwrap_or_else(|_| "Unknown".to_string());
+            (handle, format!("/profile/{}", other_user_id), false)
+        }
+    };
 
     let content = ThreadContent {
         topic_id: topic_ulid,
         subject: topic.title,
-        other_user_id,
         other_user_handle,
+        other_link,
+        other_is_entity,
         posts: post_models,
         from_page: q.from.unwrap_or(0).max(0),
     };
@@ -267,6 +379,25 @@ pub async fn reply(
         return Err(anyhow!("Reply body is required"));
     }
 
+    // A reply a user sends *to* a project/event counts toward the one-per-day
+    // limit (the same project can always be continued; a different one can't).
+    // The other participant is the conversation's non-author side.
+    let topic: TopicInfo = request("forum.topics.get", topic_id.clone()).await?;
+    let other_participant = if topic.author_id == user_info.user_id {
+        topic.forum_id
+    } else {
+        topic.author_id
+    };
+    if let Some(entity) = entity_summary::lookup_batch(&[other_participant.to_string()])
+        .await?
+        .into_iter()
+        .next()
+    {
+        if let Some(message) = daily_entity_limit_block(user_info.user_id, entity.id).await? {
+            return Ok(limit_error_fragment(&message));
+        }
+    }
+
     let _: ReplyToMessageResponse = request(
         "forum.messaging.reply",
         ReplyToMessage {
@@ -277,7 +408,9 @@ pub async fn reply(
     )
     .await?;
 
-    Ok(Redirect::see_other(format!("/dashboard/messages/{}", topic_id)).into_response())
+    // The reply is held for staff review, not delivered yet — tell the sender.
+    // (The reply form posts via HTMX, so this renders inline.)
+    Ok(pending_review_fragment())
 }
 
 #[handler]
@@ -307,6 +440,9 @@ pub struct ConversationModel {
     pub subject: String,
     pub other_user_id: Ulid,
     pub other_user_handle: String,
+    /// True when the correspondent is a project/event rather than a member,
+    /// so the personal inbox can label it by name (no "@") instead of a handle.
+    pub is_entity: bool,
     pub last_message_at: String,
     pub last_message_preview: String,
     pub post_count: i64,
@@ -320,6 +456,7 @@ impl From<ConversationSummary> for ConversationModel {
             subject: c.subject,
             other_user_id: c.other_user_id,
             other_user_handle: c.other_user_handle,
+            is_entity: false,
             last_message_at: c.last_message_at.to_string(),
             last_message_preview: c.last_message_preview,
             post_count: c.post_count,
@@ -334,6 +471,10 @@ pub struct PostModel {
     pub author_handle: String,
     pub paragraphs: Vec<String>,
     pub created_at: String,
+    /// False while this message is awaiting staff review. Only ever surfaced
+    /// on the author's own messages (the recipient never receives an
+    /// unapproved post), rendered as a "pending approval" badge.
+    pub approved: bool,
 }
 
 #[derive(TemplateOnce)]
@@ -364,8 +505,11 @@ struct ThreadPage {
 struct ThreadContent {
     topic_id: Ulid,
     subject: String,
-    other_user_id: Ulid,
     other_user_handle: String,
+    /// Link to the correspondent — a member profile or a project/event page.
+    other_link: String,
+    /// True when the correspondent is a project/event (label by name, no "@").
+    other_is_entity: bool,
     posts: Vec<PostModel>,
     /// The inbox page the user was on when they clicked into this thread,
     /// so the back link returns them there. 0 means "first page".

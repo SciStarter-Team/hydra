@@ -150,6 +150,13 @@ async fn main() {
     toplevel.spawn(recv_handler!(messaging, "read", messaging::mark_read));
     toplevel.spawn(recv_handler!(messaging, "discard", messaging::discard));
     toplevel.spawn(handler!(messaging, "unread_count", messaging::unread_count));
+    toplevel.spawn(handler!(
+        messaging,
+        "recipients_since",
+        messaging::recipients_since
+    ));
+    toplevel.spawn(handler!(messaging, "pending_list", messaging::pending_list));
+    toplevel.spawn(handler!(messaging, "review", messaging::review_message));
 
     // Content filtering endpoints
     let filter = service.group("forum.filter");

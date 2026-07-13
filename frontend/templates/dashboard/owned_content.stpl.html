@@ -23,6 +23,7 @@
                 <% if !entity.status.is_empty() { %>
                 <span class="text-xs text-gray-500 mt-1"><%= entity.status %></span>
                 <% } %>
+                <a href="/dashboard/owned/<%= entity.id %>/messages" class="text-xs text-primary-action hover:underline mt-2">Messages</a>
             </div>
         </li>
         <% } %>
@@ -42,6 +43,7 @@
                 <% if !entity.status.is_empty() { %>
                 <span class="text-xs text-gray-500 mt-1"><%= entity.status %></span>
                 <% } %>
+                <a href="/dashboard/owned/<%= entity.id %>/messages" class="text-xs text-primary-action hover:underline mt-2">Messages</a>
             </div>
         </li>
         <% } %>

@@ -367,6 +367,10 @@ fn user_facing() -> impl Endpoint {
             get(component::detail_page::share_modal),
         )
         .at(
+            "/-detail/:id/message",
+            get(component::detail_page::message_modal),
+        )
+        .at(
             "/-detail/:id/share-click/:platform",
             post(component::detail_page::record_share),
         )
@@ -711,8 +715,23 @@ async fn main() -> Result<(), Error> {
         tasks.join_all().await;
     });
 
+    // Entity resolution for other services (e.g. forum-service classifying a
+    // message recipient/participant ULID). The Service API queue-groups this
+    // across all frontend instances, so a request is answered by exactly one.
+    let entity_group = service.group("frontend.entity");
+    tokio::spawn(async move {
+        use common::handler;
+        let mut tasks = tokio::task::JoinSet::new();
+        tasks.spawn(handler!(
+            entity_group,
+            "summary_by_id",
+            dashboard::entity_summary::summary_by_id
+        ));
+        tasks.join_all().await;
+    });
+
     println!("Listening on {}", env!("LISTEN_ON"));
-    println!("Frontend NATS service started: frontend.health.check");
+    println!("Frontend NATS service started: frontend.health.check, frontend.entity.summary_by_id");
 
     // Set up graceful shutdown
     let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel::<()>();

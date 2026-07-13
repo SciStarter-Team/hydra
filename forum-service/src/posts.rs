@@ -69,11 +69,12 @@ pub async fn create_post(req: &Request) -> Result<PostInfo> {
 
     let db = db();
 
-    // Insert the post
+    // Insert the post. Generic (non-DM) forum posts are not subject to the
+    // direct-message staff-review queue, so they are created approved.
     let parent_post_id_str = message.parent_post_id.map(|id| id.to_string());
     sqlx::query!(
-        r#"INSERT INTO "posts" ("post_id", "topic_id", "content", "author_id", "parent_post_id", "created_at")
-           VALUES (?, ?, ?, ?, ?, ?)"#,
+        r#"INSERT INTO "posts" ("post_id", "topic_id", "content", "author_id", "parent_post_id", "created_at", "approved")
+           VALUES (?, ?, ?, ?, ?, ?, 1)"#,
         post_id_str,
         topic_id_str,
         message.content,
@@ -124,7 +125,7 @@ async fn get_post_internal(post_id: Ulid) -> Result<PostInfo> {
 
     let row = sqlx::query!(
         r#"SELECT post_id, topic_id, content, author_id, parent_post_id,
-                  created_at, updated_at, is_deleted, is_flagged
+                  created_at, updated_at, is_deleted, is_flagged, approved
            FROM "posts"
            WHERE post_id = ?"#,
         post_id_str
@@ -157,6 +158,7 @@ async fn get_post_internal(post_id: Ulid) -> Result<PostInfo> {
             .transpose()?,
         is_deleted: row.is_deleted == 1,
         is_flagged: row.is_flagged == 1,
+        approved: row.approved == 1,
     })
 }
 
@@ -167,14 +169,23 @@ pub async fn list_posts(req: &Request) -> Result<Vec<PostInfo>> {
     let offset = query.offset.unwrap_or(0);
 
     let topic_id_str = query.topic_id.to_string();
+    // Unapproved (pending-review) direct messages are visible only to their
+    // own author; everyone else (including the recipient) sees only approved
+    // posts. An empty viewer matches no author, so it sees only approved.
+    let viewer_id_str = query
+        .viewer_id
+        .map(|id| id.to_string())
+        .unwrap_or_default();
     let rows = sqlx::query!(
         r#"SELECT post_id, topic_id, content, author_id, parent_post_id,
-                  created_at, updated_at, is_deleted, is_flagged
+                  created_at, updated_at, is_deleted, is_flagged, approved
            FROM "posts"
            WHERE topic_id = ? AND is_deleted = 0
+             AND (approved = 1 OR author_id = ?)
            ORDER BY created_at ASC
            LIMIT ? OFFSET ?"#,
         topic_id_str,
+        viewer_id_str,
         limit,
         offset
     )
@@ -229,6 +240,7 @@ pub async fn list_posts(req: &Request) -> Result<Vec<PostInfo>> {
                 .transpose()?,
             is_deleted: row.is_deleted == 1,
             is_flagged: row.is_flagged == 1,
+            approved: row.approved == 1,
         });
     }
 

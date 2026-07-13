@@ -57,6 +57,9 @@ async fn render_bookmarks(
 }
 
 pub struct EntityCardModel {
+    /// The entity ULID (string form), used to build management links such
+    /// as the owned-entity message inbox.
+    pub id: String,
     pub name: String,
     pub link: String,
     pub image: Option<String>,
@@ -66,6 +69,7 @@ pub struct EntityCardModel {
 impl EntityCardModel {
     pub fn from_summary(summary: &EntitySummary) -> Self {
         Self {
+            id: summary.id.to_string(),
             name: summary.name.clone(),
             link: entity_link(summary),
             image: summary.image.clone(),

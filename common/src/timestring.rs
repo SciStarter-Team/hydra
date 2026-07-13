@@ -14,6 +14,17 @@ impl TimeString {
         TimeString(Timestamp::now().to_string())
     }
 
+    /// The start of the current day (00:00:00 UTC). Used for per-day
+    /// windows such as the "one new project/event per day" message limit.
+    pub fn start_of_utc_day() -> TimeString {
+        let start = Timestamp::now()
+            .to_zoned(jiff::tz::TimeZone::UTC)
+            .start_of_day()
+            .map(|zoned| zoned.timestamp())
+            .unwrap_or_else(|_| Timestamp::now());
+        TimeString(start.to_string())
+    }
+
     pub fn format_display(&self) -> String {
         match Timestamp::from_str(&self.0) {
             Ok(ts) => {

@@ -1,10 +1,22 @@
 use anyhow::Error;
+use async_nats::service::Request;
 use common::{
     message::dashboard::{EntitySummary, EntitySummaryKind},
     shared::db,
     transaction::Immediate,
     ulid::AsUlid,
 };
+
+/// NATS `frontend.entity.summary_by_id` endpoint. Resolves a single
+/// project/event ULID (sent as its string form) to its `EntitySummary`,
+/// or `None` when the ULID isn't a known project/event. This lets other
+/// services (notably forum-service) classify a message recipient/participant
+/// ULID and render its name and link. Any frontend instance can answer,
+/// since the entity tables are replicated to all of them.
+pub async fn summary_by_id(req: &Request) -> Result<Option<EntitySummary>, Error> {
+    let id: String = flexbuffers::from_slice(&req.message.payload)?;
+    Ok(lookup_batch(&[id]).await?.into_iter().next())
+}
 
 /// Look up entity summaries for the given target ids (project_id or
 /// event_id strings). Performs a local read against the frontend's

@@ -144,8 +144,8 @@ async fn insert_message(msg: &MessageData) -> Result<()> {
             let post_id = Ulid::new().to_string();
 
             sqlx::query!(
-                r#"INSERT INTO "posts" ("post_id", "topic_id", "content", "author_id", "created_at", "is_deleted", "is_flagged")
-                   VALUES (?, ?, ?, ?, ?, 0, 0)"#,
+                r#"INSERT INTO "posts" ("post_id", "topic_id", "content", "author_id", "created_at", "is_deleted", "is_flagged", "approved")
+                   VALUES (?, ?, ?, ?, ?, 0, 0, 1)"#,
                 post_id,
                 topic_id_str,
                 msg.body,
@@ -206,8 +206,8 @@ async fn insert_message(msg: &MessageData) -> Result<()> {
     .await?;
 
     sqlx::query!(
-        r#"INSERT INTO "posts" ("post_id", "topic_id", "content", "author_id", "created_at", "is_deleted", "is_flagged")
-           VALUES (?, ?, ?, ?, ?, 0, 0)"#,
+        r#"INSERT INTO "posts" ("post_id", "topic_id", "content", "author_id", "created_at", "is_deleted", "is_flagged", "approved")
+           VALUES (?, ?, ?, ?, ?, 0, 0, 1)"#,
         post_id,
         topic_id,
         msg.body,

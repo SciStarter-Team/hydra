@@ -1502,6 +1502,63 @@ pub async fn share_modal(Path(id): Path<String>) -> poem::Result<poem::Response>
     Ok(Html(html).into_response())
 }
 
+/// Compose-a-message modal. Lets a logged-in visitor send a message to this
+/// project/event; the entity's inbox (a personal forum keyed by the entity
+/// ULID) receives it, and its managers read/reply. Mirrors the share modal's
+/// fragment+dialog pattern; the form posts to the unified
+/// `/dashboard/messages/send`.
+#[handler]
+pub async fn message_modal(
+    Authenticated(user_info): Authenticated,
+    Path(id): Path<String>,
+) -> poem::Result<poem::Response> {
+    use poem::http::StatusCode;
+
+    // Messaging requires a signed-in sender.
+    if user_info.is_none() {
+        return Err(poem::Error::from_string(
+            "Please log in to send a message.",
+            StatusCode::UNAUTHORIZED,
+        ));
+    }
+
+    // Confirm the id is a real project/event and get its name for the title.
+    let row = sqlx::query!(
+        r#"
+        SELECT COALESCE(p.name, ev.name) as "name!: String"
+        FROM entities e
+        LEFT JOIN projects p ON e.target = p.project_id AND e.kind = 'Project'
+        LEFT JOIN events ev ON e.target = ev.event_id AND e.kind = 'Event'
+        WHERE e.target = ?
+        "#,
+        id
+    )
+    .fetch_optional(db())
+    .await
+    .map_err(|e| {
+        poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR)
+    })?
+    .ok_or_else(|| poem::Error::from_string("Not found", StatusCode::NOT_FOUND))?;
+
+    #[derive(TemplateOnce)]
+    #[template(path = "pages/detail_page_message_modal.stpl.html")]
+    struct MessageModal {
+        target_id: String,
+        name: String,
+    }
+
+    let html = MessageModal {
+        target_id: id,
+        name: row.name,
+    }
+    .render_once()
+    .map_err(|e| {
+        poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+
+    Ok(Html(html).into_response())
+}
+
 /// Record a social-share button click (fire-and-forget analytics).
 ///
 /// A share is an action, not an external-content clickthrough, so it is logged
