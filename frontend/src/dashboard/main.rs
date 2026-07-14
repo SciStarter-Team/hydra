@@ -1,12 +1,9 @@
-use std::sync::Arc;
-
 use anyhow::{Error, anyhow};
 use common::message::dashboard::{EntitySummary, LinkToken, UserProfile};
 use common::message::log::{
     UserParticipationRequest, UserParticipationResponse, UserRecentVisitsRequest,
     UserRecentVisitsResponse,
 };
-use common::message::user::BasicInfo;
 use poem::web::{Html, Path, Query};
 use poem::{IntoResponse, Response, handler, session::Session, web::RealIp};
 use sailfish::TemplateOnce;
@@ -167,28 +164,31 @@ pub async fn section(
 ) -> Result<Response, Error> {
     let user_info = user_info.ok_or_else(|| anyhow!("Login required"))?;
     let user_id_str = user_info.user_id.to_string();
-    let page = query.page;
 
     let html = match section.as_str() {
         "owned-projects" => {
             let (projects, _) = fetch_owned(&user_id_str).await?;
-            owned_projects_section(&projects, page).await.render_once()?
+            owned_projects_section(&projects, query.page)
+                .await
+                .render_once()?
         }
         "owned-events" => {
             let (_, events) = fetch_owned(&user_id_str).await?;
-            owned_events_section(&events, page).await.render_once()?
+            owned_events_section(&events, query.page)
+                .await
+                .render_once()?
         }
         "joined" => {
             let joined = fetch_joined(&user_id_str).await?;
-            joined_section(&joined, page).render_once()?
+            joined_section(&joined, query.page).render_once()?
         }
         "saves" => {
             let (projects, _) = fetch_bookmarked(&user_id_str).await?;
-            saves_section(&projects, page).render_once()?
+            saves_section(&projects, query.page).render_once()?
         }
         "my-events" => {
             let (_, events) = fetch_bookmarked(&user_id_str).await?;
-            my_events_section(&events, page).render_once()?
+            my_events_section(&events, query.page).render_once()?
         }
         other => return Err(anyhow!("Unknown dashboard section: {other}")),
     };
@@ -196,30 +196,39 @@ pub async fn section(
     Ok(Html(html).into_response())
 }
 
-fn joined_section(joined: &[EntitySummary], page: usize) -> crate::dashboard::EntityGridSection {
+fn joined_section(
+    joined: &[EntitySummary],
+    page_num: usize,
+) -> crate::dashboard::EntityGridSection {
     entity_grid_section(
         joined,
-        page,
+        page_num,
         "/dashboard/section/joined",
         "dash-sec-joined",
         "You have not joined any projects via SciStarter.",
     )
 }
 
-fn saves_section(projects: &[EntitySummary], page: usize) -> crate::dashboard::EntityGridSection {
+fn saves_section(
+    projects: &[EntitySummary],
+    page_num: usize,
+) -> crate::dashboard::EntityGridSection {
     entity_grid_section(
         projects,
-        page,
+        page_num,
         "/dashboard/section/saves",
         "dash-sec-saves",
         "You have not bookmarked any projects.",
     )
 }
 
-fn my_events_section(events: &[EntitySummary], page: usize) -> crate::dashboard::EntityGridSection {
+fn my_events_section(
+    events: &[EntitySummary],
+    page_num: usize,
+) -> crate::dashboard::EntityGridSection {
     entity_grid_section(
         events,
-        page,
+        page_num,
         "/dashboard/section/my-events",
         "dash-sec-my-events",
         "You do not have any saved events.",
@@ -228,11 +237,15 @@ fn my_events_section(events: &[EntitySummary], page: usize) -> crate::dashboard:
 
 /// One page of the detailed owned-entity rows, with the engagement
 /// counts fetched only for the rows on the page.
-async fn owned_rows(summaries: &[EntitySummary], page: usize, with_joins: bool) -> (Vec<OwnedEntityRow>, usize, usize) {
-    let (page, pages) = clamp_page(summaries.len(), page);
+async fn owned_rows(
+    summaries: &[EntitySummary],
+    page_num: usize,
+    with_joins: bool,
+) -> (Vec<OwnedEntityRow>, usize, usize) {
+    let (page_num, pages) = clamp_page(summaries.len(), page_num);
     let slice: Vec<&EntitySummary> = summaries
         .iter()
-        .skip(page * SECTION_PAGE_SIZE)
+        .skip(page_num * SECTION_PAGE_SIZE)
         .take(SECTION_PAGE_SIZE)
         .collect();
     let ids: Vec<String> = slice.iter().map(|s| s.id.to_string()).collect();
@@ -252,16 +265,19 @@ async fn owned_rows(summaries: &[EntitySummary], page: usize, with_joins: bool) 
             saves: *save_counts.get(&s.id.to_string()).unwrap_or(&0),
         })
         .collect();
-    (rows, page, pages)
+    (rows, page_num, pages)
 }
 
-async fn owned_projects_section(summaries: &[EntitySummary], page: usize) -> OwnedProjectsSection {
-    let (rows, page, pages) = owned_rows(summaries, page, true).await;
+async fn owned_projects_section(
+    summaries: &[EntitySummary],
+    page_num: usize,
+) -> OwnedProjectsSection {
+    let (rows, page_num, pages) = owned_rows(summaries, page_num, true).await;
     OwnedProjectsSection {
         target: "dash-sec-owned-projects".to_string(),
         rows,
         pager: Pager {
-            page,
+            page: page_num,
             pages,
             endpoint: "/dashboard/section/owned-projects".to_string(),
             target: "dash-sec-owned-projects".to_string(),
@@ -269,13 +285,13 @@ async fn owned_projects_section(summaries: &[EntitySummary], page: usize) -> Own
     }
 }
 
-async fn owned_events_section(summaries: &[EntitySummary], page: usize) -> OwnedEventsSection {
-    let (rows, page, pages) = owned_rows(summaries, page, false).await;
+async fn owned_events_section(summaries: &[EntitySummary], page_num: usize) -> OwnedEventsSection {
+    let (rows, page_num, pages) = owned_rows(summaries, page_num, false).await;
     OwnedEventsSection {
         target: "dash-sec-owned-events".to_string(),
         rows,
         pager: Pager {
-            page,
+            page: page_num,
             pages,
             endpoint: "/dashboard/section/owned-events".to_string(),
             target: "dash-sec-owned-events".to_string(),

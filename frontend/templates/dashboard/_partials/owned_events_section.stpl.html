@@ -1,0 +1,37 @@
+<div id="<%= self.target %>">
+    <% if self.rows.is_empty() { %>
+    <p class="mb-0">You have not created any events.</p>
+    <% } else { %>
+    <% for row in &self.rows { %>
+    <div class="flex flex-col md:flex-row gap-4 py-4 border-b border-linework last:border-b-0">
+        <div class="md:w-48 shrink-0 text-center">
+            <% if let Some(image) = &row.card.image { %>
+            <a href="<%= row.card.link %>" class="ss-entity-thumb rounded">
+                <img src="<%= image %>" alt="" />
+            </a>
+            <% } %>
+            <p class="text-xs opacity-60 mt-1 mb-0">Created: <%- local_time(&row.card.created, TimeFormat::ShortDate) %></p>
+        </div>
+        <div class="flex-1">
+            <h3 class="font-semibold text-lg mb-1"><a href="<%= row.card.link %>" class="hover:text-primary"><%= row.card.name %></a></h3>
+            <% if let Some(begin) = &row.card.begin { %>
+            <p class="text-sm opacity-70 mb-2">
+                <%- local_time(begin, TimeFormat::DateTime) %>
+                <% if let Some(end) = &row.card.end { %>
+                to <%- local_time(end, TimeFormat::DateTime) %>
+                <% } %>
+            </p>
+            <% } %>
+            <div class="flex gap-8 mb-3">
+                <div><span class="text-xl font-bold"><%= row.saves %></span> <span class="text-sm">saves</span></div>
+            </div>
+            <ul class="flex flex-wrap gap-x-6 gap-y-1 text-sm list-none m-0 p-0">
+                <li><a href="<%= row.card.link %>" class="text-primary-action hover:underline">View/Edit Event</a></li>
+                <li><a href="/dashboard/owned/<%= row.card.id %>/messages" class="text-primary-action hover:underline">View Event Inbox</a></li>
+            </ul>
+        </div>
+    </div>
+    <% } %>
+    <%+ self.pager %>
+    <% } %>
+</div>

@@ -1,0 +1,19 @@
+/* Dashboard entity thumbnails. Project and event logos come in wildly
+   varying dimensions; a fixed frame with object-contain keeps the layout
+   stable and shows the whole logo uncropped. */
+.ss-entity-thumb {
+    @apply flex items-center justify-center w-full h-32 bg-neutral-xlight overflow-hidden;
+}
+
+.ss-entity-thumb img {
+    @apply max-w-full max-h-full object-contain;
+}
+
+/* Compact variant for the profile page's row lists. */
+.ss-entity-thumb-sm {
+    @apply flex items-center justify-center w-16 h-12 shrink-0 bg-neutral-xlight rounded overflow-hidden;
+}
+
+.ss-entity-thumb-sm img {
+    @apply max-w-full max-h-full object-contain;
+}

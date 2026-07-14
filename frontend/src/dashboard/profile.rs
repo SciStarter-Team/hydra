@@ -1,16 +1,21 @@
 use std::sync::Arc;
 
 use anyhow::Error;
-use common::message::dashboard::{EntitySummaryKind, UserPlace, UserProfile};
+use common::message::dashboard::{EntitySummary, UserPlace, UserProfile};
 use common::message::user::{
     BasicInfo, CertificateInfo, UserBadge, UserCertificatesRequest, UserCertificatesResponse,
 };
-use poem::{Response, handler, session::Session, web::RealIp};
+use poem::web::{Html, Path, Query};
+use poem::{IntoResponse, Response, handler, session::Session, web::RealIp};
 use sailfish::TemplateOnce;
 
 use crate::component::{Component, Head, StandardLayout};
 use crate::dashboard::interests::{InterestKind, labels_for};
-use crate::dashboard::{EntityCardModel, entity_summary};
+use crate::dashboard::main::SectionQuery;
+use crate::dashboard::{
+    EntityCardModel, EntityGridSection, Pager, SECTION_PAGE_SIZE, clamp_page, entity_grid_section,
+    fetch_bookmarked, fetch_joined, fetch_owned,
+};
 use crate::entity_list::EntityList;
 use crate::middleware::authorization::Authenticated;
 use crate::profile_card::ProfileCard;
@@ -55,38 +60,9 @@ pub async fn page(
         .await
         .unwrap_or_default();
 
-    let owned_ids = crate::dashboard::owned_entity_ids(&user_id_str).await;
-    let owned = entity_summary::lookup_batch(&owned_ids).await?;
-
-    let joined_ids: Vec<String> =
-        common::service::request("user.joins.list_by_user_id", user_id_str.clone())
-            .await
-            .unwrap_or_default();
-    let joined = entity_summary::lookup_batch(&joined_ids).await?;
-
-    let bookmark_ids: Vec<String> =
-        common::service::request("user.bookmarks.list_by_user", user_id_str.clone())
-            .await
-            .unwrap_or_default();
-    let bookmarked = entity_summary::lookup_batch(&bookmark_ids).await?;
-
-    let owned_projects: Vec<EntityCardModel> = owned
-        .iter()
-        .filter(|s| s.kind == EntitySummaryKind::Project)
-        .map(EntityCardModel::from_summary)
-        .collect();
-    let owned_events: Vec<EntityCardModel> = owned
-        .iter()
-        .filter(|s| s.kind == EntitySummaryKind::Event)
-        .map(EntityCardModel::from_summary)
-        .collect();
-    let joined_cards: Vec<EntityCardModel> =
-        joined.iter().map(EntityCardModel::from_summary).collect();
-    let bookmarked_projects: Vec<EntityCardModel> = bookmarked
-        .iter()
-        .filter(|s| s.kind == EntitySummaryKind::Project)
-        .map(EntityCardModel::from_summary)
-        .collect();
+    let (owned_projects, owned_events) = fetch_owned(&user_id_str).await?;
+    let joined = fetch_joined(&user_id_str).await?;
+    let (bookmarked_projects, _) = fetch_bookmarked(&user_id_str).await?;
 
     render_profile(
         user_info,
@@ -98,10 +74,111 @@ pub async fn page(
         lists,
         owned_projects,
         owned_events,
-        joined_cards,
+        joined,
         bookmarked_projects,
     )
     .await
+}
+
+/// HTMX fragment endpoint: one page of a profile section, swapped in
+/// place of the section container by the pager buttons.
+#[handler]
+pub async fn section(
+    Path(section): Path<String>,
+    Query(query): Query<SectionQuery>,
+    Authenticated(user_info): Authenticated,
+) -> Result<Response, Error> {
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Login required"))?;
+    let user_id_str = user_info.user_id.to_string();
+
+    let html = match section.as_str() {
+        "owned-projects" => {
+            let (projects, _) = fetch_owned(&user_id_str).await?;
+            owned_projects_section(&projects, query.page).render_once()?
+        }
+        "owned-events" => {
+            let (_, events) = fetch_owned(&user_id_str).await?;
+            owned_events_section(&events, query.page).render_once()?
+        }
+        "joined" => {
+            let joined = fetch_joined(&user_id_str).await?;
+            joined_section(&joined, query.page).render_once()?
+        }
+        "saves" => {
+            let (projects, _) = fetch_bookmarked(&user_id_str).await?;
+            saves_section(&projects, query.page).render_once()?
+        }
+        other => return Err(anyhow::anyhow!("Unknown profile section: {other}")),
+    };
+
+    Ok(Html(html).into_response())
+}
+
+fn owned_projects_section(summaries: &[EntitySummary], page_num: usize) -> EntityGridSection {
+    entity_grid_section(
+        summaries,
+        page_num,
+        "/dashboard/profile/section/owned-projects",
+        "prof-sec-owned-projects",
+        "You do not lead any projects.",
+    )
+}
+
+fn owned_events_section(summaries: &[EntitySummary], page_num: usize) -> EntityGridSection {
+    entity_grid_section(
+        summaries,
+        page_num,
+        "/dashboard/profile/section/owned-events",
+        "prof-sec-owned-events",
+        "You have not created any events.",
+    )
+}
+
+fn joined_section(summaries: &[EntitySummary], page_num: usize) -> ProfileListSection {
+    profile_list_section(
+        summaries,
+        page_num,
+        "/dashboard/profile/section/joined",
+        "prof-sec-joined",
+        "You have not joined any projects via SciStarter.",
+    )
+}
+
+fn saves_section(summaries: &[EntitySummary], page_num: usize) -> ProfileListSection {
+    profile_list_section(
+        summaries,
+        page_num,
+        "/dashboard/profile/section/saves",
+        "prof-sec-saves",
+        "You have not bookmarked any projects.",
+    )
+}
+
+fn profile_list_section(
+    summaries: &[EntitySummary],
+    page_num: usize,
+    endpoint: &str,
+    target: &str,
+    empty_text: &str,
+) -> ProfileListSection {
+    let (page_num, pages) = clamp_page(summaries.len(), page_num);
+    let items = summaries
+        .iter()
+        .skip(page_num * SECTION_PAGE_SIZE)
+        .take(SECTION_PAGE_SIZE)
+        .map(EntityCardModel::from_summary)
+        .collect();
+    ProfileListSection {
+        target: target.to_string(),
+        items,
+        empty_text: empty_text.to_string(),
+        pager: Pager {
+            page: page_num,
+            pages,
+            endpoint: endpoint.to_string(),
+            target: target.to_string(),
+        },
+    }
 }
 
 /// Join interest labels for an info-table row, folding in the
@@ -124,10 +201,10 @@ async fn render_profile(
     tags: Vec<String>,
     places_count: usize,
     lists: Vec<EntityList>,
-    owned_projects: Vec<EntityCardModel>,
-    owned_events: Vec<EntityCardModel>,
-    joined: Vec<EntityCardModel>,
-    bookmarked_projects: Vec<EntityCardModel>,
+    owned_projects: Vec<EntitySummary>,
+    owned_events: Vec<EntitySummary>,
+    joined: Vec<EntitySummary>,
+    bookmarked_projects: Vec<EntitySummary>,
 ) -> Result<Response, Error> {
     let card = ProfileCard::from_user_profile(&profile);
 
@@ -176,11 +253,11 @@ async fn render_profile(
         places_count,
         lists,
         has_owned,
-        owned_projects,
-        owned_events,
+        owned_projects: owned_projects_section(&owned_projects, 0),
+        owned_events: owned_events_section(&owned_events, 0),
         participation: ProfileParticipation {
-            joined,
-            bookmarked_projects,
+            joined: joined_section(&joined, 0),
+            saves: saves_section(&bookmarked_projects, 0),
         },
     };
 
@@ -212,11 +289,22 @@ struct ListView {
     private: bool,
 }
 
+/// One page of the profile's compact entity list (small thumbnail plus
+/// name per row), swapped in place by its pager.
+#[derive(TemplateOnce)]
+#[template(path = "dashboard/_partials/profile_list_section.stpl.html")]
+pub struct ProfileListSection {
+    target: String,
+    items: Vec<EntityCardModel>,
+    empty_text: String,
+    pager: Pager,
+}
+
 #[derive(TemplateOnce)]
 #[template(path = "dashboard/_partials/profile_participation.stpl.html")]
 struct ProfileParticipation {
-    joined: Vec<EntityCardModel>,
-    bookmarked_projects: Vec<EntityCardModel>,
+    joined: ProfileListSection,
+    saves: ProfileListSection,
 }
 
 #[derive(TemplateOnce)]
@@ -240,7 +328,7 @@ struct ProfileContent {
     places_count: usize,
     lists: Vec<ListView>,
     has_owned: bool,
-    owned_projects: Vec<EntityCardModel>,
-    owned_events: Vec<EntityCardModel>,
+    owned_projects: EntityGridSection,
+    owned_events: EntityGridSection,
     participation: ProfileParticipation,
 }

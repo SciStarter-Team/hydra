@@ -114,40 +114,12 @@
         <div class="tab-panels border border-linework border-t-0 p-4">
             <div class="tab-panel" id="panel-role-leader" role="tabpanel" aria-hidden="false">
                 <h3 class="font-semibold mb-3">Projects</h3>
-                <% if self.owned_projects.is_empty() { %>
-                <p>You do not lead any projects.</p>
-                <% } else { %>
-                <ul class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-                    <% for entity in &self.owned_projects { %>
-                    <li class="ss-card overflow-hidden flex flex-col">
-                        <% if let Some(image) = &entity.image { %>
-                        <img src="<%= image %>" alt="" class="w-full h-32 object-cover" />
-                        <% } %>
-                        <div class="p-4 flex-1 flex flex-col">
-                            <a href="<%= entity.link %>" class="font-semibold hover:text-primary"><%= entity.name %></a>
-                        </div>
-                    </li>
-                    <% } %>
-                </ul>
-                <% } %>
+                <div class="mb-6">
+                    <%+ self.owned_projects %>
+                </div>
 
                 <h3 class="font-semibold mb-3">Events</h3>
-                <% if self.owned_events.is_empty() { %>
-                <p class="mb-0">You have not created any events.</p>
-                <% } else { %>
-                <ul class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <% for entity in &self.owned_events { %>
-                    <li class="ss-card overflow-hidden flex flex-col">
-                        <% if let Some(image) = &entity.image { %>
-                        <img src="<%= image %>" alt="" class="w-full h-32 object-cover" />
-                        <% } %>
-                        <div class="p-4 flex-1 flex flex-col">
-                            <a href="<%= entity.link %>" class="font-semibold hover:text-primary"><%= entity.name %></a>
-                        </div>
-                    </li>
-                    <% } %>
-                </ul>
-                <% } %>
+                <%+ self.owned_events %>
             </div>
             <div class="tab-panel" id="panel-role-participant" role="tabpanel" aria-hidden="true">
                 <%+ self.participation %>

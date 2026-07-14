@@ -1,0 +1,19 @@
+<div id="<%= self.target %>">
+    <% if self.items.is_empty() { %>
+    <p><%= self.empty_text %></p>
+    <% } else { %>
+    <ul class="list-none m-0 p-0 divide-y divide-gray-100">
+        <% for entity in &self.items { %>
+        <li class="flex items-center gap-3 py-3">
+            <% if let Some(image) = &entity.image { %>
+            <a href="<%= entity.link %>" class="ss-entity-thumb-sm">
+                <img src="<%= image %>" alt="" />
+            </a>
+            <% } %>
+            <a href="<%= entity.link %>" class="font-medium hover:text-primary"><%= entity.name %></a>
+        </li>
+        <% } %>
+    </ul>
+    <%+ self.pager %>
+    <% } %>
+</div>
