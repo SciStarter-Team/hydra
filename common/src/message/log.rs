@@ -462,6 +462,27 @@ pub struct UserParticipationResponse {
     pub recent_count: i64,
 }
 
+/// Request a per-entity breakdown of the user's contributions within
+/// the trailing `days` window. Used by the dashboard's participant
+/// panel to show recent activity per affiliate project.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserParticipationBreakdownRequest {
+    pub user_id: Ulid,
+    pub days: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserParticipationBreakdownEntry {
+    pub entity_id: String,
+    pub count: i64,
+}
+
+/// Entries are sorted by descending count, ties broken by entity id.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserParticipationBreakdownResponse {
+    pub entries: Vec<UserParticipationBreakdownEntry>,
+}
+
 /// Request the user's recent page-view paths over the last `days`
 /// days. The caller is responsible for resolving paths against its
 /// local entity catalog (entities are routed at `/<slug>`, but other

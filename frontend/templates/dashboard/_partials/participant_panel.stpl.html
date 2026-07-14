@@ -17,6 +17,20 @@
     </div>
 </section>
 
+<% if !self.recent_by_project.is_empty() { %>
+<section class="ss-card !p-4 mb-6">
+    <h3 class="font-semibold mb-2">Your contributions by project <span class="text-sm opacity-70 font-normal">— last <%= self.breakdown_days %> days</span></h3>
+    <ul class="list-none m-0 p-0 divide-y divide-gray-100">
+        <% for row in &self.recent_by_project { %>
+        <li class="flex items-center justify-between gap-4 py-2 text-sm">
+            <a href="<%= row.link %>" class="font-medium hover:text-primary"><%= row.name %></a>
+            <span class="font-bold shrink-0"><%= row.count %></span>
+        </li>
+        <% } %>
+    </ul>
+</section>
+<% } %>
+
 <details class="ss-accordion-accessible border border-linework rounded-sm bg-primary-light mb-4" open>
     <summary class="accordion__summary !flex justify-between items-center text-lg p-4 m-0 text-primary-dark">
         <span>My Joined Projects <span class="text-sm opacity-70">— projects you participate in</span></span>

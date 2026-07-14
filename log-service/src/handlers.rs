@@ -11,9 +11,11 @@ use common::{
         ProjectMemberCountResponse, ProjectParticipationRecord, ProjectParticipationRequest,
         ProjectParticipationResponse, ProjectReviewsRequest, ProjectReviewsResponse,
         RatingSetRequest, RecentActivityRequest, RecentActivityResponse, ReviewEntry,
-        ReviewSetRequest, UserLastViewRequest, UserLastViewResponse, UserParticipationEntry,
-        UserParticipationRequest, UserParticipationResponse, UserRecentVisit,
-        UserRecentVisitsRequest, UserRecentVisitsResponse,
+        ReviewSetRequest, UserLastViewRequest, UserLastViewResponse,
+        UserParticipationBreakdownEntry, UserParticipationBreakdownRequest,
+        UserParticipationBreakdownResponse, UserParticipationEntry, UserParticipationRequest,
+        UserParticipationResponse, UserRecentVisit, UserRecentVisitsRequest,
+        UserRecentVisitsResponse,
     },
     service::{TriggerEvent, decode_structured_message, trigger_email},
 };
@@ -1396,6 +1398,71 @@ pub async fn handle_user_participation(
         recent,
         recent_count,
     })
+}
+
+/// Count the user's contributions per entity within the trailing
+/// `days` window, most-active entity first.
+pub async fn handle_user_participation_breakdown(
+    req: &async_nats::service::Request,
+) -> Result<UserParticipationBreakdownResponse> {
+    use datafusion::arrow::array::{Array, StringArray};
+    use std::collections::HashMap;
+
+    let request: UserParticipationBreakdownRequest =
+        decode_structured_message(req.message.clone())?;
+    let user_id_str = request.user_id.to_string();
+
+    let cutoff = jiff::Zoned::now()
+        .checked_sub(jiff::Span::new().days(request.days.max(0)))
+        .map(|z| z.timestamp().to_string())
+        .unwrap_or_default();
+
+    let database = DATABASE
+        .read()
+        .as_ref()
+        .expect("Database not initialized")
+        .clone();
+
+    let ctx = database.context();
+
+    let df = ctx
+        .table("participation_realtime")
+        .await?
+        .filter(
+            col("user_id")
+                .eq(lit(&user_id_str))
+                .and(col("when").gt_eq(lit(&cutoff))),
+        )?
+        .select(vec![col("entity_id")])?;
+
+    let batches = df.collect().await?;
+
+    let mut counts: HashMap<String, i64> = HashMap::new();
+    for batch in &batches {
+        let entity_col = batch
+            .column(0)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .expect("entity_id column should be StringArray");
+        for i in 0..batch.num_rows() {
+            if entity_col.is_null(i) {
+                continue;
+            }
+            *counts.entry(entity_col.value(i).to_string()).or_insert(0) += 1;
+        }
+    }
+
+    let mut entries: Vec<UserParticipationBreakdownEntry> = counts
+        .into_iter()
+        .map(|(entity_id, count)| UserParticipationBreakdownEntry { entity_id, count })
+        .collect();
+    entries.sort_by(|a, b| {
+        b.count
+            .cmp(&a.count)
+            .then_with(|| a.entity_id.cmp(&b.entity_id))
+    });
+
+    Ok(UserParticipationBreakdownResponse { entries })
 }
 
 pub async fn handle_user_recent_visits(

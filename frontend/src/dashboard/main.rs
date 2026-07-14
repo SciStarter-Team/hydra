@@ -1,6 +1,7 @@
 use anyhow::{Error, anyhow};
 use common::message::dashboard::{EntitySummary, LinkToken, UserProfile};
 use common::message::log::{
+    UserParticipationBreakdownRequest, UserParticipationBreakdownResponse,
     UserParticipationRequest, UserParticipationResponse, UserRecentVisitsRequest,
     UserRecentVisitsResponse,
 };
@@ -20,6 +21,7 @@ use crate::middleware::authorization::Authenticated;
 const RECENT_VISIT_DAYS: i64 = 30;
 const RECENT_VISIT_LIMIT: i64 = 12;
 const RECENT_CONTRIBUTION_DAYS: i64 = 14;
+const BREAKDOWN_DAYS: i64 = 30;
 
 #[handler]
 pub async fn page(
@@ -51,6 +53,43 @@ pub async fn page(
         recent: vec![],
         recent_count: 0,
     });
+
+    // Per-affiliate contribution counts over the trailing window,
+    // resolved to entity names for display. Unknown entity ids (not in
+    // this frontend's catalog) are dropped, matching the other sections.
+    let breakdown: UserParticipationBreakdownResponse = common::service::request(
+        "log.user_participation_breakdown",
+        UserParticipationBreakdownRequest {
+            user_id,
+            days: BREAKDOWN_DAYS,
+        },
+    )
+    .await
+    .unwrap_or(UserParticipationBreakdownResponse { entries: vec![] });
+
+    let breakdown_ids: Vec<String> = breakdown
+        .entries
+        .iter()
+        .map(|e| e.entity_id.clone())
+        .collect();
+    let breakdown_summaries = entity_summary::lookup_batch(&breakdown_ids).await?;
+    let recent_by_project: Vec<AffiliateParticipationRow> = breakdown
+        .entries
+        .iter()
+        .filter_map(|entry| {
+            breakdown_summaries
+                .iter()
+                .find(|s| s.id.to_string() == entry.entity_id)
+                .map(|summary| {
+                    let card = EntityCardModel::from_summary(summary);
+                    AffiliateParticipationRow {
+                        name: card.name,
+                        link: card.link,
+                        count: entry.count,
+                    }
+                })
+        })
+        .collect();
 
     let (owned_projects, owned_events) = fetch_owned(&user_id_str).await?;
     let joined = fetch_joined(&user_id_str).await?;
@@ -128,6 +167,8 @@ pub async fn page(
             total_contributions: participation.total,
             recent_contributions: participation.recent_count,
             joined_count: joined.len(),
+            breakdown_days: BREAKDOWN_DAYS,
+            recent_by_project,
             joined: joined_section(&joined, 0),
             saves: saves_section(&bookmarked_projects, 0),
             my_events: my_events_section(&bookmarked_events, 0),
@@ -299,6 +340,14 @@ async fn owned_events_section(summaries: &[EntitySummary], page_num: usize) -> O
     }
 }
 
+/// One affiliate project the user contributed to recently, with the
+/// contribution count inside the breakdown window.
+pub struct AffiliateParticipationRow {
+    pub name: String,
+    pub link: String,
+    pub count: i64,
+}
+
 /// An owned project or event decorated with its engagement counts for
 /// the leader panel's management rows.
 pub struct OwnedEntityRow {
@@ -354,6 +403,8 @@ struct ParticipantPanel {
     total_contributions: i64,
     recent_contributions: i64,
     joined_count: usize,
+    breakdown_days: i64,
+    recent_by_project: Vec<AffiliateParticipationRow>,
     joined: crate::dashboard::EntityGridSection,
     saves: crate::dashboard::EntityGridSection,
     my_events: crate::dashboard::EntityGridSection,
