@@ -467,6 +467,13 @@ pub struct EntitySummary {
     pub image: Option<String>,
     pub status: String,
     pub created: String,
+    /// Event start time (RFC 3339), if the entity is an event with a
+    /// scheduled start. Always `None` for projects.
+    #[serde(default)]
+    pub begin: Option<String>,
+    /// Event end time (RFC 3339), if scheduled. Always `None` for projects.
+    #[serde(default)]
+    pub end: Option<String>,
 }
 
 /// A user-saved point-of-interest. Returned by

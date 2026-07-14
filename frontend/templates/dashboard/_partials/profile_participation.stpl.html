@@ -1,0 +1,40 @@
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div>
+        <h3 class="font-semibold mb-3">Projects</h3>
+        <% if self.joined.is_empty() { %>
+        <p>You have not joined any projects via SciStarter.</p>
+        <% } else { %>
+        <ul class="list-none m-0 p-0 divide-y divide-gray-100">
+            <% for entity in &self.joined { %>
+            <li class="flex items-center gap-3 py-3">
+                <% if let Some(image) = &entity.image { %>
+                <a href="<%= entity.link %>" class="shrink-0">
+                    <img src="<%= image %>" alt="" class="w-16 h-12 object-cover rounded" />
+                </a>
+                <% } %>
+                <a href="<%= entity.link %>" class="font-medium hover:text-primary"><%= entity.name %></a>
+            </li>
+            <% } %>
+        </ul>
+        <% } %>
+    </div>
+    <div>
+        <h3 class="font-semibold mb-3">Saves</h3>
+        <% if self.bookmarked_projects.is_empty() { %>
+        <p>You have not bookmarked any projects.</p>
+        <% } else { %>
+        <ul class="list-none m-0 p-0 divide-y divide-gray-100">
+            <% for entity in &self.bookmarked_projects { %>
+            <li class="flex items-center gap-3 py-3">
+                <% if let Some(image) = &entity.image { %>
+                <a href="<%= entity.link %>" class="shrink-0">
+                    <img src="<%= image %>" alt="" class="w-16 h-12 object-cover rounded" />
+                </a>
+                <% } %>
+                <a href="<%= entity.link %>" class="font-medium hover:text-primary"><%= entity.name %></a>
+            </li>
+            <% } %>
+        </ul>
+        <% } %>
+    </div>
+</div>

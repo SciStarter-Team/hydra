@@ -1,0 +1,88 @@
+<section class="grid grid-cols-2 gap-4 mb-6">
+    <div class="ss-card !p-4">
+        <div class="text-3xl font-bold"><%= self.owned_projects.len() %></div>
+        <div class="text-xs opacity-70">Projects you own</div>
+    </div>
+    <div class="ss-card !p-4">
+        <div class="text-3xl font-bold"><%= self.owned_events.len() %></div>
+        <div class="text-xs opacity-70">Events you've created</div>
+    </div>
+</section>
+
+<details class="ss-accordion-accessible border border-linework rounded-sm bg-primary-light mb-4" open>
+    <summary class="accordion__summary !flex justify-between items-center text-lg p-4 m-0 text-primary-dark">
+        <span>Owned Projects <span class="text-sm opacity-70">— projects you created</span></span>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="w-4 fill-primary-action"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
+    </summary>
+    <div class="accordion__panel bg-white p-4">
+        <% if self.owned_projects.is_empty() { %>
+        <p class="mb-0">You do not lead any projects.</p>
+        <% } else { %>
+        <% for row in &self.owned_projects { %>
+        <div class="flex flex-col md:flex-row gap-4 py-4 border-b border-linework last:border-b-0">
+            <div class="md:w-1/4 text-center">
+                <% if let Some(image) = &row.card.image { %>
+                <a href="<%= row.card.link %>"><img src="<%= image %>" alt="" class="w-full h-32 object-cover rounded" /></a>
+                <% } %>
+                <p class="text-xs opacity-60 mt-1 mb-0">Created: <%- local_time(&row.card.created, TimeFormat::ShortDate) %></p>
+            </div>
+            <div class="flex-1">
+                <h3 class="font-semibold text-lg mb-1"><a href="<%= row.card.link %>" class="hover:text-primary"><%= row.card.name %></a></h3>
+                <% if !row.card.status.is_empty() { %>
+                <p class="text-sm opacity-70 mb-2">Project Status: <%= row.card.status %></p>
+                <% } %>
+                <div class="flex gap-8 mb-3">
+                    <div><span class="text-xl font-bold"><%= row.joins %></span> <span class="text-sm">joins</span></div>
+                    <div><span class="text-xl font-bold"><%= row.saves %></span> <span class="text-sm">saves</span></div>
+                </div>
+                <ul class="flex flex-wrap gap-x-6 gap-y-1 text-sm list-none m-0 p-0">
+                    <li><a href="<%= row.card.link %>" class="text-primary-action hover:underline">View, Edit, and Review Project</a></li>
+                    <li><a href="/dashboard/owned/<%= row.card.id %>/messages" class="text-primary-action hover:underline">View Project Inbox</a></li>
+                </ul>
+            </div>
+        </div>
+        <% } %>
+        <% } %>
+    </div>
+</details>
+
+<details class="ss-accordion-accessible border border-linework rounded-sm bg-primary-light mb-4">
+    <summary class="accordion__summary !flex justify-between items-center text-lg p-4 m-0 text-primary-dark">
+        <span>Owned Events <span class="text-sm opacity-70">— events you created</span></span>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="w-4 fill-primary-action"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
+    </summary>
+    <div class="accordion__panel bg-white p-4">
+        <% if self.owned_events.is_empty() { %>
+        <p class="mb-0">You have not created any events.</p>
+        <% } else { %>
+        <% for row in &self.owned_events { %>
+        <div class="flex flex-col md:flex-row gap-4 py-4 border-b border-linework last:border-b-0">
+            <div class="md:w-1/4 text-center">
+                <% if let Some(image) = &row.card.image { %>
+                <a href="<%= row.card.link %>"><img src="<%= image %>" alt="" class="w-full h-32 object-cover rounded" /></a>
+                <% } %>
+                <p class="text-xs opacity-60 mt-1 mb-0">Created: <%- local_time(&row.card.created, TimeFormat::ShortDate) %></p>
+            </div>
+            <div class="flex-1">
+                <h3 class="font-semibold text-lg mb-1"><a href="<%= row.card.link %>" class="hover:text-primary"><%= row.card.name %></a></h3>
+                <% if let Some(begin) = &row.card.begin { %>
+                <p class="text-sm opacity-70 mb-2">
+                    <%- local_time(begin, TimeFormat::DateTime) %>
+                    <% if let Some(end) = &row.card.end { %>
+                    to <%- local_time(end, TimeFormat::DateTime) %>
+                    <% } %>
+                </p>
+                <% } %>
+                <div class="flex gap-8 mb-3">
+                    <div><span class="text-xl font-bold"><%= row.saves %></span> <span class="text-sm">saves</span></div>
+                </div>
+                <ul class="flex flex-wrap gap-x-6 gap-y-1 text-sm list-none m-0 p-0">
+                    <li><a href="<%= row.card.link %>" class="text-primary-action hover:underline">View/Edit Event</a></li>
+                    <li><a href="/dashboard/owned/<%= row.card.id %>/messages" class="text-primary-action hover:underline">View Event Inbox</a></li>
+                </ul>
+            </div>
+        </div>
+        <% } %>
+        <% } %>
+    </div>
+</details>

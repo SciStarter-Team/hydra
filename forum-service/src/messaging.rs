@@ -372,7 +372,8 @@ pub async fn inbox(req: &Request) -> Result<InboxResponse> {
         // participant as a user or an entity (deleted account, or bogus
         // author_id left over from spam before the gating fixes) there's
         // nothing useful to show.
-        let Some(other_participant_name) = resolve_participant_name(&other_user_id_str).await else {
+        let Some(other_participant_name) = resolve_participant_name(&other_user_id_str).await
+        else {
             continue;
         };
 

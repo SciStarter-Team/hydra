@@ -1,0 +1,26 @@
+<div id="<%= self.target %>">
+    <% if self.items.is_empty() { %>
+    <p class="mb-0"><%= self.empty_text %></p>
+    <% } else { %>
+    <ul class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <% for entity in &self.items { %>
+        <li class="ss-card overflow-hidden flex flex-col">
+            <% if let Some(image) = &entity.image { %>
+            <a href="<%= entity.link %>" class="ss-entity-thumb">
+                <img src="<%= image %>" alt="" />
+            </a>
+            <% } %>
+            <div class="p-4 flex-1 flex flex-col">
+                <a href="<%= entity.link %>" class="font-semibold hover:text-primary"><%= entity.name %></a>
+                <% if let Some(begin) = &entity.begin { %>
+                <span class="text-xs opacity-60 mt-1">
+                    <%- local_time(begin, TimeFormat::DateTime) %><% if let Some(end) = &entity.end { %> to <%- local_time(end, TimeFormat::DateTime) %><% } %>
+                </span>
+                <% } %>
+            </div>
+        </li>
+        <% } %>
+    </ul>
+    <%+ self.pager %>
+    <% } %>
+</div>

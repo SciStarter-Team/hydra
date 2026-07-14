@@ -1370,7 +1370,32 @@ pub async fn handle_user_participation(
         }
     }
 
-    Ok(UserParticipationResponse { total, recent })
+    let recent_days = request.recent_days.max(0);
+    let mut recent_count = 0;
+
+    if recent_days > 0 {
+        let cutoff = jiff::Zoned::now()
+            .checked_sub(jiff::Span::new().days(recent_days))
+            .map(|z| z.timestamp().to_string())
+            .unwrap_or_default();
+
+        recent_count = ctx
+            .table("participation_realtime")
+            .await?
+            .filter(
+                col("user_id")
+                    .eq(lit(&user_id_str))
+                    .and(col("when").gt_eq(lit(cutoff))),
+            )?
+            .count()
+            .await? as i64;
+    }
+
+    Ok(UserParticipationResponse {
+        total,
+        recent,
+        recent_count,
+    })
 }
 
 pub async fn handle_user_recent_visits(

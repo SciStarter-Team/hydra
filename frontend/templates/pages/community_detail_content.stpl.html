@@ -155,39 +155,4 @@
 }
 </style>
 
-<script>
-(function() {
-  const tabRow = document.getElementById('tabRow');
-  if (!tabRow) return;
-  const chevron = document.getElementById('chevron');
-  const chevBtn = document.getElementById('chevBtn');
-  const tabs = Array.from(tabRow.querySelectorAll('.tab'));
-  const panels = Array.from(document.querySelectorAll('.tab-panel'));
-
-  function updateChevron(){
-    const overflowRight = tabRow.scrollWidth - (tabRow.scrollLeft + tabRow.clientWidth);
-    if (chevron) chevron.classList.toggle('visible', overflowRight > 2);
-  }
-
-  // Tab switching
-  tabRow.addEventListener('click', (e) => {
-    const btn = e.target.closest('.tab');
-    if (!btn) return;
-    tabs.forEach(t => t.setAttribute('aria-selected','false'));
-    btn.setAttribute('aria-selected','true');
-    panels.forEach(p => p.setAttribute('aria-hidden','true'));
-    const panel = document.getElementById(btn.getAttribute('aria-controls'));
-    if (panel) panel.setAttribute('aria-hidden','false');
-  });
-
-  if (chevBtn) {
-    chevBtn.addEventListener('click', () => {
-      tabRow.scrollBy({ left: 120, behavior: 'smooth' });
-    });
-  }
-
-  tabRow.addEventListener('scroll', updateChevron);
-  window.addEventListener('resize', updateChevron);
-  updateChevron();
-})();
-</script>
+<%# Tab switching and chevron behavior come from /-static/js/tabs.js %>

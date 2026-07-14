@@ -1535,9 +1535,7 @@ pub async fn message_modal(
     )
     .fetch_optional(db())
     .await
-    .map_err(|e| {
-        poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR)
-    })?
+    .map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR))?
     .ok_or_else(|| poem::Error::from_string("Not found", StatusCode::NOT_FOUND))?;
 
     #[derive(TemplateOnce)]
@@ -1552,9 +1550,7 @@ pub async fn message_modal(
         name: row.name,
     }
     .render_once()
-    .map_err(|e| {
-        poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
+    .map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR))?;
 
     Ok(Html(html).into_response())
 }

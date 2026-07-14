@@ -1,113 +1,36 @@
 <div class="ss-container !pt-8 !pb-8 mx-auto">
-    <h1>Welcome, @<%= self.first_name %></h1>
-    <p class="text-sm mb-6 opacity-80">
-        Your activity, the things you manage, and the lists you keep.
-    </p>
+    <div class="flex flex-wrap items-center gap-4 mb-8">
+        <% if let Some(image) = &self.image { %>
+        <img src="<%= image %>" alt="" class="w-20 h-20 rounded-full object-cover" />
+        <% } %>
+        <div class="flex-1">
+            <h1 class="mb-0"><%= self.display_name %></h1>
+            <p class="text-sm opacity-70 mb-0">@<%= self.handle %></p>
+        </div>
+        <a href="/profile/<%= self.user_id %>" class="btn btn-primary">View Public Profile</a>
+    </div>
 
-    <section class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <div class="ss-card !p-4">
-            <div class="text-3xl font-bold"><%= self.total_contributions %></div>
-            <div class="text-xs opacity-70">Contributions</div>
+    <% if self.has_owned { %>
+    <div class="tabs-bar-wrapper mb-8">
+        <div class="tabs-wrapper no-shadow">
+            <div class="tabs tabs-bar" role="tablist" aria-label="Dashboard roles">
+                <button class="tab" role="tab" aria-selected="true" aria-controls="panel-leader" id="tab-leader">As a leader</button>
+                <button class="tab" role="tab" aria-selected="false" aria-controls="panel-participant" id="tab-participant">As a participant</button>
+            </div>
         </div>
-        <div class="ss-card !p-4">
-            <div class="text-3xl font-bold"><%= self.owned_count %></div>
-            <div class="text-xs opacity-70">Things you manage</div>
+        <div class="tab-panels border border-linework border-t-0 p-4">
+            <div class="tab-panel" id="panel-leader" role="tabpanel" aria-hidden="false">
+                <%+ self.leader %>
+            </div>
+            <div class="tab-panel" id="panel-participant" role="tabpanel" aria-hidden="true">
+                <%+ self.participant %>
+            </div>
         </div>
-        <div class="ss-card !p-4">
-            <div class="text-3xl font-bold"><%= self.joined_count %></div>
-            <div class="text-xs opacity-70">Projects joined</div>
-        </div>
-        <div class="ss-card !p-4">
-            <div class="text-3xl font-bold"><%= self.bookmarked_count %></div>
-            <div class="text-xs opacity-70">Bookmarks</div>
-        </div>
-    </section>
-
-    <% if !self.owned.is_empty() { %>
-    <section class="mb-8">
-        <div class="flex items-baseline justify-between mb-3">
-            <h2 class="font-semibold text-lg mb-0">Things you manage</h2>
-            <a href="/dashboard/owned" class="text-sm text-primary-action hover:underline">See all</a>
-        </div>
-        <ul class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <% for entity in self.owned.iter().take(6) { %>
-            <li class="ss-card overflow-hidden flex flex-col">
-                <% if let Some(image) = &entity.image { %>
-                <img src="<%= image %>" alt="" class="w-full h-32 object-cover" />
-                <% } %>
-                <div class="p-4 flex-1 flex flex-col">
-                    <span class="text-xs uppercase opacity-60 mb-1"><%= entity.kind_label() %></span>
-                    <a href="<%= entity.link %>" class="font-semibold hover:text-primary"><%= entity.name %></a>
-                    <% if !entity.status.is_empty() { %>
-                    <span class="text-xs text-gray-500 mt-1"><%= entity.status %></span>
-                    <% } %>
-                </div>
-            </li>
-            <% } %>
-        </ul>
-    </section>
-    <% } %>
-
-    <% if !self.joined.is_empty() { %>
-    <section class="mb-8">
-        <div class="flex items-baseline justify-between mb-3">
-            <h2 class="font-semibold text-lg mb-0">Projects you've joined</h2>
-        </div>
-        <ul class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <% for entity in self.joined.iter().take(6) { %>
-            <li class="ss-card overflow-hidden flex flex-col">
-                <% if let Some(image) = &entity.image { %>
-                <img src="<%= image %>" alt="" class="w-full h-32 object-cover" />
-                <% } %>
-                <div class="p-4 flex-1 flex flex-col">
-                    <a href="<%= entity.link %>" class="font-semibold hover:text-primary"><%= entity.name %></a>
-                </div>
-            </li>
-            <% } %>
-        </ul>
-    </section>
-    <% } %>
-
-    <% if !self.bookmarked.is_empty() { %>
-    <section class="mb-8">
-        <div class="flex items-baseline justify-between mb-3">
-            <h2 class="font-semibold text-lg mb-0">Recent bookmarks</h2>
-            <a href="/dashboard/bookmarks" class="text-sm text-primary-action hover:underline">See all</a>
-        </div>
-        <ul class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <% for entity in self.bookmarked.iter().take(6) { %>
-            <li class="ss-card overflow-hidden flex flex-col">
-                <% if let Some(image) = &entity.image { %>
-                <img src="<%= image %>" alt="" class="w-full h-32 object-cover" />
-                <% } %>
-                <div class="p-4 flex-1 flex flex-col">
-                    <a href="<%= entity.link %>" class="font-semibold hover:text-primary"><%= entity.name %></a>
-                </div>
-            </li>
-            <% } %>
-        </ul>
-    </section>
-    <% } %>
-
-    <% if !self.visited.is_empty() { %>
-    <section class="mb-8">
-        <div class="flex items-baseline justify-between mb-3">
-            <h2 class="font-semibold text-lg mb-0">Recently visited</h2>
-        </div>
-        <ul class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <% for entity in &self.visited { %>
-            <li class="ss-card overflow-hidden flex flex-col">
-                <% if let Some(image) = &entity.image { %>
-                <img src="<%= image %>" alt="" class="w-full h-24 object-cover" />
-                <% } %>
-                <div class="p-4 flex-1 flex flex-col">
-                    <span class="text-xs uppercase opacity-60 mb-1"><%= entity.kind_label() %></span>
-                    <a href="<%= entity.link %>" class="font-semibold text-sm hover:text-primary"><%= entity.name %></a>
-                </div>
-            </li>
-            <% } %>
-        </ul>
-    </section>
+    </div>
+    <% } else { %>
+    <div class="mb-8">
+        <%+ self.participant %>
+    </div>
     <% } %>
 
     <section class="mb-8">
@@ -133,7 +56,7 @@
         <% } %>
     </section>
 
-    <% if self.total_contributions == 0 && self.owned_count == 0 && self.joined_count == 0 && self.bookmarked_count == 0 { %>
+    <% if self.show_empty_state { %>
     <section class="ss-card !p-8 text-center">
         <p class="mb-2 font-semibold">Nothing here yet.</p>
         <p class="text-sm opacity-80 mb-0">

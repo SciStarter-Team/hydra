@@ -15,7 +15,7 @@ use serde::Deserialize;
 use ulid::Ulid;
 
 use crate::component::{Component, Head, StandardLayout};
-use crate::dashboard::bookmarks::EntityCardModel;
+use crate::dashboard::EntityCardModel;
 use crate::dashboard::entity_summary;
 use crate::entity_list::{EntityList, EntityListEntry, EntityListViewer};
 use crate::middleware::authorization::Authenticated;

@@ -3,6 +3,7 @@ use async_nats::service::Request;
 use common::{
     message::user::{
         BookmarkCheckRequest, BookmarkCheckResponse, BookmarkCreateRequest, BookmarkCreateResponse,
+        EntityCountsRequest, EntityCountsResponse,
     },
     service::{decode_structured_message, log_activity},
     shared::db,
@@ -62,6 +63,30 @@ pub async fn list_by_user(req: &Request) -> Result<Vec<String>, Error> {
     .await?;
 
     Ok(project_ids)
+}
+
+/// How many users have an active bookmark on each of the requested
+/// projects. Serves the dashboard's owned-entity "saves" figures.
+pub async fn count_by_projects(req: &Request) -> Result<EntityCountsResponse, Error> {
+    let message: EntityCountsRequest = decode_structured_message(req.message.clone())?;
+
+    let mut counts = Vec::new();
+    for entity_id in &message.entity_ids {
+        let count = sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count!: i64"
+            FROM "bookmarks"
+            WHERE "project_id" = ? AND "active" = 1"#,
+            entity_id
+        )
+        .fetch_one(db())
+        .await?;
+
+        if count > 0 {
+            counts.push((entity_id.clone(), count));
+        }
+    }
+
+    Ok(EntityCountsResponse { counts })
 }
 
 pub async fn check_bookmark(req: &Request) -> Result<BookmarkCheckResponse, Error> {

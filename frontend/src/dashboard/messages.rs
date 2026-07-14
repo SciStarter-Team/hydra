@@ -317,25 +317,25 @@ pub async fn thread(
     // The other participant is a user (profile link) or a project/event
     // (entity-page link). Resolve which so the thread links correctly — a
     // conversation with a project must not link to a nonexistent profile.
-    let (other_user_handle, other_link, other_is_entity) = match entity_summary::lookup_batch(
-        &[other_user_id.to_string()],
-    )
-    .await?
-    .into_iter()
-    .next()
-    {
-        Some(entity) => {
-            let link = entity_summary::entity_link(&entity);
-            (entity.name, link, true)
-        }
-        None => {
-            let handle = request::<BasicInfo>("user.basic_info.by_user_id", other_user_id.to_string())
-                .await
-                .map(|info| info.handle)
-                .unwrap_or_else(|_| "Unknown".to_string());
-            (handle, format!("/profile/{}", other_user_id), false)
-        }
-    };
+    let (other_user_handle, other_link, other_is_entity) =
+        match entity_summary::lookup_batch(&[other_user_id.to_string()])
+            .await?
+            .into_iter()
+            .next()
+        {
+            Some(entity) => {
+                let link = entity_summary::entity_link(&entity);
+                (entity.name, link, true)
+            }
+            None => {
+                let handle =
+                    request::<BasicInfo>("user.basic_info.by_user_id", other_user_id.to_string())
+                        .await
+                        .map(|info| info.handle)
+                        .unwrap_or_else(|_| "Unknown".to_string());
+                (handle, format!("/profile/{}", other_user_id), false)
+            }
+        };
 
     let content = ThreadContent {
         topic_id: topic_ulid,

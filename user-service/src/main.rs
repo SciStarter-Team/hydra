@@ -1323,6 +1323,280 @@ async fn userbadges_synchronize() {
     }
 }
 
+/// Mirror orrery's join records into the `project_joins` operational
+/// store. Only kind 1 rows ("clicked to join") are joins; kind 0 rows
+/// are explicit page visits and are skipped. Inactive joins are
+/// removed. Starting bookmarks at the epoch backfills the full orrery
+/// history on first run.
+async fn joins_synchronize() {
+    #[derive(serde::Deserialize)]
+    struct JoinDataImport {
+        id: i64,
+        user_ulid: String,
+        entity_ulid: String,
+        active: bool,
+        activity: String,
+        kind: i64,
+    }
+
+    loop {
+        let last: String = misc::get("join-sync-bookmark")
+            .await
+            .expect("Retrieving sync bookmark failed")
+            .unwrap_or_else(|| String::from("1900-01-01T00:00:00Z"));
+        let last_id: i64 = misc::get("join-sync-last-id")
+            .await
+            .expect("Retrieving sync last_id failed")
+            .unwrap_or(0);
+
+        println!("Syncing joins since {} with last_id {}", last, last_id);
+
+        let client = reqwest::Client::new();
+
+        let joins: Vec<JoinDataImport> = match client
+            .get("https://scistarter.org/staff/sync/joins")
+            .bearer_auth(env!("SYNC_TOKEN"))
+            .query(&[("since", &last), ("last_id", &last_id.to_string())])
+            .send()
+            .await
+        {
+            Ok(response) => match response.error_for_status() {
+                Ok(resp) => {
+                    let response_text = match resp.text().await {
+                        Ok(text) => text,
+                        Err(e) => {
+                            eprintln!("Failed to read joins response body: {}", e);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    };
+
+                    match serde_json::from_str(&response_text) {
+                        Ok(joins) => joins,
+                        Err(e) => {
+                            eprintln!("Joins JSON parsing error: {}", e);
+                            eprintln!("Response body: {}", response_text);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Joins HTTP error: {}", e);
+                    sleep(Duration::from_secs(60)).await;
+                    continue;
+                }
+            },
+            Err(e) => {
+                eprintln!("Joins request error: {}", e);
+                sleep(Duration::from_secs(60)).await;
+                continue;
+            }
+        };
+
+        let db = db();
+        let mut bookmark = last.clone();
+        let mut bookmark_id = last_id;
+        let got_joins = joins.len();
+        let mut stopped_early = false;
+
+        for join in joins {
+            let result = if join.kind != 1 {
+                // Kind 0 rows are page visits, not joins; skip but
+                // advance past them.
+                Ok(())
+            } else if join.active {
+                sqlx::query!(
+                    r#"INSERT OR IGNORE INTO "project_joins" ("user_id", "project_id")
+                       VALUES (?, ?)"#,
+                    join.user_ulid,
+                    join.entity_ulid,
+                )
+                .execute(db)
+                .await
+                .map(|_| ())
+            } else {
+                sqlx::query!(
+                    r#"DELETE FROM "project_joins" WHERE "user_id" = ? AND "project_id" = ?"#,
+                    join.user_ulid,
+                    join.entity_ulid,
+                )
+                .execute(db)
+                .await
+                .map(|_| ())
+            };
+
+            if let Err(e) = result {
+                // Most likely the user row hasn't been synced yet.
+                // Stop without advancing past this row; the retry after
+                // the user sync catches up will pick it up again.
+                eprintln!(
+                    "Failed to save join {} for user {}: {}",
+                    join.id, join.user_ulid, e
+                );
+                stopped_early = true;
+                break;
+            }
+
+            if join.activity > bookmark || (join.activity == bookmark && join.id > bookmark_id) {
+                bookmark = join.activity;
+                bookmark_id = join.id;
+            }
+        }
+
+        misc::set("join-sync-bookmark", bookmark)
+            .await
+            .expect("Saving sync bookmark failed");
+        misc::set("join-sync-last-id", bookmark_id)
+            .await
+            .expect("Saving sync last_id failed");
+
+        if stopped_early {
+            sleep(Duration::from_secs(60)).await;
+        } else if got_joins == 500 {
+            // Full page: more history is waiting, keep going quickly so
+            // the initial backfill completes in reasonable time.
+            sleep(Duration::from_secs(1)).await;
+        } else {
+            sleep(Duration::from_secs(60 * 60)).await;
+        }
+    }
+}
+
+/// Mirror orrery's bookmarks into the `bookmarks` operational store,
+/// carrying the active flag so un-bookmarking in orrery is reflected
+/// here. Starting bookmarks at the epoch backfills the full orrery
+/// history on first run.
+async fn bookmarks_synchronize() {
+    #[derive(serde::Deserialize)]
+    struct BookmarkDataImport {
+        id: i64,
+        when: String,
+        user_ulid: String,
+        entity_ulid: String,
+        active: bool,
+        activity: String,
+        contacted: Option<String>,
+    }
+
+    loop {
+        let last: String = misc::get("bookmark-sync-bookmark")
+            .await
+            .expect("Retrieving sync bookmark failed")
+            .unwrap_or_else(|| String::from("1900-01-01T00:00:00Z"));
+        let last_id: i64 = misc::get("bookmark-sync-last-id")
+            .await
+            .expect("Retrieving sync last_id failed")
+            .unwrap_or(0);
+
+        println!("Syncing bookmarks since {} with last_id {}", last, last_id);
+
+        let client = reqwest::Client::new();
+
+        let bookmarks: Vec<BookmarkDataImport> = match client
+            .get("https://scistarter.org/staff/sync/bookmarks")
+            .bearer_auth(env!("SYNC_TOKEN"))
+            .query(&[("since", &last), ("last_id", &last_id.to_string())])
+            .send()
+            .await
+        {
+            Ok(response) => match response.error_for_status() {
+                Ok(resp) => {
+                    let response_text = match resp.text().await {
+                        Ok(text) => text,
+                        Err(e) => {
+                            eprintln!("Failed to read bookmarks response body: {}", e);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    };
+
+                    match serde_json::from_str(&response_text) {
+                        Ok(bookmarks) => bookmarks,
+                        Err(e) => {
+                            eprintln!("Bookmarks JSON parsing error: {}", e);
+                            eprintln!("Response body: {}", response_text);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Bookmarks HTTP error: {}", e);
+                    sleep(Duration::from_secs(60)).await;
+                    continue;
+                }
+            },
+            Err(e) => {
+                eprintln!("Bookmarks request error: {}", e);
+                sleep(Duration::from_secs(60)).await;
+                continue;
+            }
+        };
+
+        let db = db();
+        let mut bookmark = last.clone();
+        let mut bookmark_id = last_id;
+        let got_bookmarks = bookmarks.len();
+        let mut stopped_early = false;
+
+        for bm in bookmarks {
+            let result = sqlx::query!(
+                r#"INSERT INTO "bookmarks"
+                       ("user_id", "project_id", "created", "activity", "contacted", "active")
+                   VALUES (?, ?, ?, ?, ?, ?)
+                   ON CONFLICT ("user_id", "project_id") DO UPDATE SET
+                       "created" = excluded."created",
+                       "activity" = excluded."activity",
+                       "contacted" = excluded."contacted",
+                       "active" = excluded."active""#,
+                bm.user_ulid,
+                bm.entity_ulid,
+                bm.when,
+                bm.activity,
+                bm.contacted,
+                bm.active,
+            )
+            .execute(db)
+            .await;
+
+            if let Err(e) = result {
+                // Most likely the user row hasn't been synced yet.
+                // Stop without advancing past this row; the retry after
+                // the user sync catches up will pick it up again.
+                eprintln!(
+                    "Failed to save bookmark {} for user {}: {}",
+                    bm.id, bm.user_ulid, e
+                );
+                stopped_early = true;
+                break;
+            }
+
+            if bm.activity > bookmark || (bm.activity == bookmark && bm.id > bookmark_id) {
+                bookmark = bm.activity;
+                bookmark_id = bm.id;
+            }
+        }
+
+        misc::set("bookmark-sync-bookmark", bookmark)
+            .await
+            .expect("Saving sync bookmark failed");
+        misc::set("bookmark-sync-last-id", bookmark_id)
+            .await
+            .expect("Saving sync last_id failed");
+
+        if stopped_early {
+            sleep(Duration::from_secs(60)).await;
+        } else if got_bookmarks == 500 {
+            // Full page: more history is waiting, keep going quickly so
+            // the initial backfill completes in reasonable time.
+            sleep(Duration::from_secs(1)).await;
+        } else {
+            sleep(Duration::from_secs(60 * 60)).await;
+        }
+    }
+}
+
 async fn certificates_synchronize() {
     #[derive(serde::Deserialize)]
     struct CertificateDataImport {
@@ -1727,7 +2001,13 @@ async fn apply_ambassador_state(
     // one-to-one onto the native states. This is a sync, so it never emails.
     if matches!(
         state,
-        "tutorial" | "application" | "verified" | "passed" | "rejected" | "international" | "failed"
+        "tutorial"
+            | "application"
+            | "verified"
+            | "passed"
+            | "rejected"
+            | "international"
+            | "failed"
     ) {
         sqlx::query!(
             "UPDATE ambassador_progress SET state = ? WHERE user_id = ?",
@@ -1993,6 +2273,10 @@ async fn main() {
 
     let userbadges_sync_task = spawn(userbadges_synchronize());
 
+    let _joins_sync_task = spawn(joins_synchronize());
+
+    let _bookmarks_sync_task = spawn(bookmarks_synchronize());
+
     let _certificates_sync_task = spawn(certificates_synchronize());
 
     let _workflow_states_sync_task = spawn(workflow_states_synchronize());
@@ -2139,6 +2423,11 @@ async fn main() {
     toplevel.spawn(handler!(bookmarks, "create", bookmarks::create_bookmark));
     toplevel.spawn(handler!(bookmarks, "check", bookmarks::check_bookmark));
     toplevel.spawn(handler!(bookmarks, "list_by_user", bookmarks::list_by_user));
+    toplevel.spawn(handler!(
+        bookmarks,
+        "count_by_projects",
+        bookmarks::count_by_projects
+    ));
 
     // Project join endpoints
     let joins = service.group("user.joins");
@@ -2153,6 +2442,11 @@ async fn main() {
         joins,
         "list_by_user_id",
         project_joins::list_by_user_id
+    ));
+    toplevel.spawn(handler!(
+        joins,
+        "count_by_projects",
+        project_joins::count_by_projects
     ));
 
     let permissions = service.group("user.permissions");
@@ -2220,11 +2514,19 @@ async fn main() {
     let ambassador_group = service.group("user.ambassador");
     toplevel.spawn(handler!(ambassador_group, "get", ambassador::get));
     toplevel.spawn(handler!(ambassador_group, "update", ambassador::update));
-    toplevel.spawn(handler!(ambassador_group, "save_draft", ambassador::save_draft));
+    toplevel.spawn(handler!(
+        ambassador_group,
+        "save_draft",
+        ambassador::save_draft
+    ));
     toplevel.spawn(handler!(ambassador_group, "submit", ambassador::submit));
     toplevel.spawn(handler!(ambassador_group, "list", ambassador::list));
     toplevel.spawn(handler!(ambassador_group, "review", ambassador::review));
-    toplevel.spawn(handler!(ambassador_group, "directory", ambassador::directory));
+    toplevel.spawn(handler!(
+        ambassador_group,
+        "directory",
+        ambassador::directory
+    ));
     toplevel.spawn(handler!(ambassador_group, "profile", ambassador::profile));
     toplevel.spawn(handler!(
         ambassador_group,

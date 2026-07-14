@@ -440,6 +440,10 @@ pub struct UserParticipationRequest {
     pub user_id: Ulid,
     /// Maximum number of recent contributions to return.
     pub recent_limit: i64,
+    /// When positive, also count the user's contributions within this
+    /// many days and return it as `recent_count`.
+    #[serde(default)]
+    pub recent_days: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -452,6 +456,10 @@ pub struct UserParticipationEntry {
 pub struct UserParticipationResponse {
     pub total: i64,
     pub recent: Vec<UserParticipationEntry>,
+    /// Number of contributions within the requested `recent_days`
+    /// window. Zero when no window was requested.
+    #[serde(default)]
+    pub recent_count: i64,
 }
 
 /// Request the user's recent page-view paths over the last `days`

@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use anyhow::Error;
 use common::message::dashboard::{EntitySummary, EntitySummaryKind};
-use common::message::user::{BasicInfo, PermissionListRequest, PermissionListResponse};
+use common::message::user::BasicInfo;
 use poem::{Response, handler, session::Session, web::RealIp};
 use sailfish::TemplateOnce;
 
 use crate::component::{Component, Head, StandardLayout};
-use crate::dashboard::bookmarks::EntityCardModel;
+use crate::dashboard::EntityCardModel;
 use crate::dashboard::entity_summary;
 use crate::middleware::authorization::Authenticated;
 
@@ -19,19 +19,7 @@ pub async fn page(
 ) -> Result<Response, Error> {
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Login required"))?;
 
-    let mut all_ids: Vec<String> = Vec::new();
-    for resource_type in ["project", "event"] {
-        let response: PermissionListResponse = common::service::request(
-            "user.permissions.list",
-            PermissionListRequest {
-                user_id: user_info.user_id.to_string(),
-                resource_type: Some(resource_type.to_string()),
-            },
-        )
-        .await?;
-        all_ids.extend(response.permissions.into_iter().map(|p| p.resource_id));
-    }
-
+    let all_ids = crate::dashboard::owned_entity_ids(&user_info.user_id.to_string()).await;
     let summaries = entity_summary::lookup_batch(&all_ids).await?;
 
     render_owned(user_info, summaries).await

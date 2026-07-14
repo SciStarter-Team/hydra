@@ -1,0 +1,21 @@
+<% if self.pages > 1 { %>
+<nav class="flex items-center justify-center gap-4 mt-4 text-sm" aria-label="Pagination">
+    <% if self.page > 0 { %>
+    <button type="button" class="btn btn-secondary btn-small"
+            hx-get="<%= self.endpoint %>?page=<%= self.page - 1 %>"
+            hx-target="#<%= self.target %>"
+            hx-swap="outerHTML">
+        Previous
+    </button>
+    <% } %>
+    <span class="opacity-70">Page <%= self.page + 1 %> of <%= self.pages %></span>
+    <% if self.page + 1 < self.pages { %>
+    <button type="button" class="btn btn-secondary btn-small"
+            hx-get="<%= self.endpoint %>?page=<%= self.page + 1 %>"
+            hx-target="#<%= self.target %>"
+            hx-swap="outerHTML">
+        Next
+    </button>
+    <% } %>
+</nav>
+<% } %>

@@ -22,7 +22,7 @@ const PREFIXES: &[(InterestKind, &str)] = &[
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum InterestKind {
+pub enum InterestKind {
     Topic,
     Activity,
     Skill,
@@ -53,11 +53,17 @@ fn lines_to_tags(text: &str, kind: InterestKind) -> Vec<String> {
 }
 
 fn tags_to_text(tags: &[String], kind: InterestKind) -> String {
+    labels_for(tags, kind).join("\n")
+}
+
+/// Human-readable labels of one interest kind, extracted from the
+/// user's prefixed tag list in tag order.
+pub fn labels_for(tags: &[String], kind: InterestKind) -> Vec<String> {
     let prefix = prefix_for(kind);
     tags.iter()
         .filter_map(|t| t.strip_prefix(prefix))
-        .collect::<Vec<_>>()
-        .join("\n")
+        .map(str::to_string)
+        .collect()
 }
 
 #[derive(Debug, Deserialize, Default)]

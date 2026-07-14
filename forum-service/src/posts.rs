@@ -172,10 +172,7 @@ pub async fn list_posts(req: &Request) -> Result<Vec<PostInfo>> {
     // Unapproved (pending-review) direct messages are visible only to their
     // own author; everyone else (including the recipient) sees only approved
     // posts. An empty viewer matches no author, so it sees only approved.
-    let viewer_id_str = query
-        .viewer_id
-        .map(|id| id.to_string())
-        .unwrap_or_default();
+    let viewer_id_str = query.viewer_id.map(|id| id.to_string()).unwrap_or_default();
     let rows = sqlx::query!(
         r#"SELECT post_id, topic_id, content, author_id, parent_post_id,
                   created_at, updated_at, is_deleted, is_flagged, approved

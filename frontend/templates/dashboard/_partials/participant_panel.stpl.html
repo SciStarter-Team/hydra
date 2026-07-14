@@ -1,0 +1,119 @@
+<p class="text-sm opacity-70 mb-4">
+    Only projects marked as "SciStarter Affiliates" count contributions toward these stats.
+</p>
+
+<section class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="ss-card !p-4">
+        <div class="text-3xl font-bold"><%= self.joined.len() %></div>
+        <div class="text-xs opacity-70">Projects clicked to join</div>
+    </div>
+    <div class="ss-card !p-4">
+        <div class="text-3xl font-bold"><%= self.total_contributions %></div>
+        <div class="text-xs opacity-70">Contributions to Affiliate Projects</div>
+    </div>
+    <div class="ss-card !p-4">
+        <div class="text-3xl font-bold"><%= self.recent_contributions %></div>
+        <div class="text-xs opacity-70">Recent Contributions to Affiliate Projects (last 14 days)</div>
+    </div>
+</section>
+
+<details class="ss-accordion-accessible border border-linework rounded-sm bg-primary-light mb-4" open>
+    <summary class="accordion__summary !flex justify-between items-center text-lg p-4 m-0 text-primary-dark">
+        <span>My Joined Projects <span class="text-sm opacity-70">— projects you participate in</span></span>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="w-4 fill-primary-action"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
+    </summary>
+    <div class="accordion__panel bg-white p-4">
+        <% if self.joined.is_empty() { %>
+        <p class="mb-0">You have not joined any projects via SciStarter.</p>
+        <% } else { %>
+        <ul class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <% for entity in &self.joined { %>
+            <li class="ss-card overflow-hidden flex flex-col">
+                <% if let Some(image) = &entity.image { %>
+                <img src="<%= image %>" alt="" class="w-full h-32 object-cover" />
+                <% } %>
+                <div class="p-4 flex-1 flex flex-col">
+                    <a href="<%= entity.link %>" class="font-semibold hover:text-primary"><%= entity.name %></a>
+                </div>
+            </li>
+            <% } %>
+        </ul>
+        <% } %>
+    </div>
+</details>
+
+<details class="ss-accordion-accessible border border-linework rounded-sm bg-primary-light mb-4">
+    <summary class="accordion__summary !flex justify-between items-center text-lg p-4 m-0 text-primary-dark">
+        <span>Saved and Visited Projects <span class="text-sm opacity-70">— review later &amp; join!</span></span>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="w-4 fill-primary-action"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
+    </summary>
+    <div class="accordion__panel bg-white p-4">
+        <div class="flex items-baseline justify-between mb-3">
+            <h3 class="font-semibold mb-0">Saves</h3>
+            <a href="/dashboard/bookmarks" class="text-sm text-primary-action hover:underline">See all</a>
+        </div>
+        <% if self.bookmarked_projects.is_empty() { %>
+        <p>You have not bookmarked any projects.</p>
+        <% } else { %>
+        <ul class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+            <% for entity in self.bookmarked_projects.iter().take(6) { %>
+            <li class="ss-card overflow-hidden flex flex-col">
+                <% if let Some(image) = &entity.image { %>
+                <img src="<%= image %>" alt="" class="w-full h-32 object-cover" />
+                <% } %>
+                <div class="p-4 flex-1 flex flex-col">
+                    <a href="<%= entity.link %>" class="font-semibold hover:text-primary"><%= entity.name %></a>
+                </div>
+            </li>
+            <% } %>
+        </ul>
+        <% } %>
+
+        <% if !self.visited.is_empty() { %>
+        <h3 class="font-semibold mb-3">Recently visited</h3>
+        <ul class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <% for entity in &self.visited { %>
+            <li class="ss-card overflow-hidden flex flex-col">
+                <% if let Some(image) = &entity.image { %>
+                <img src="<%= image %>" alt="" class="w-full h-24 object-cover" />
+                <% } %>
+                <div class="p-4 flex-1 flex flex-col">
+                    <span class="text-xs uppercase opacity-60 mb-1"><%= entity.kind_label() %></span>
+                    <a href="<%= entity.link %>" class="font-semibold text-sm hover:text-primary"><%= entity.name %></a>
+                </div>
+            </li>
+            <% } %>
+        </ul>
+        <% } %>
+    </div>
+</details>
+
+<details class="ss-accordion-accessible border border-linework rounded-sm bg-primary-light mb-4">
+    <summary class="accordion__summary !flex justify-between items-center text-lg p-4 m-0 text-primary-dark">
+        <span>My Events <span class="text-sm opacity-70">— events you participate in</span></span>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="w-4 fill-primary-action"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
+    </summary>
+    <div class="accordion__panel bg-white p-4">
+        <% if self.bookmarked_events.is_empty() { %>
+        <p class="mb-0">You do not have any saved events.</p>
+        <% } else { %>
+        <ul class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <% for entity in &self.bookmarked_events { %>
+            <li class="ss-card overflow-hidden flex flex-col">
+                <% if let Some(image) = &entity.image { %>
+                <img src="<%= image %>" alt="" class="w-full h-32 object-cover" />
+                <% } %>
+                <div class="p-4 flex-1 flex flex-col">
+                    <a href="<%= entity.link %>" class="font-semibold hover:text-primary"><%= entity.name %></a>
+                    <% if let Some(begin) = &entity.begin { %>
+                    <span class="text-xs opacity-60 mt-1">
+                        <%- local_time(begin, TimeFormat::DateTime) %><% if let Some(end) = &entity.end { %> to <%- local_time(end, TimeFormat::DateTime) %><% } %>
+                    </span>
+                    <% } %>
+                </div>
+            </li>
+            <% } %>
+        </ul>
+        <% } %>
+    </div>
+</details>

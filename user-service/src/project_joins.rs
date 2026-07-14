@@ -2,8 +2,9 @@ use anyhow::Error;
 use async_nats::service::Request;
 use common::{
     message::user::{
-        ProjectJoinCheckRequest, ProjectJoinCheckResponse, ProjectJoinRequest, ProjectJoinResponse,
-        UserJoinEntry, UserJoinsListRequest, UserJoinsListResponse,
+        EntityCountsRequest, EntityCountsResponse, ProjectJoinCheckRequest,
+        ProjectJoinCheckResponse, ProjectJoinRequest, ProjectJoinResponse, UserJoinEntry,
+        UserJoinsListRequest, UserJoinsListResponse,
     },
     service::{decode_structured_message, log_activity},
     shared::db,
@@ -64,6 +65,30 @@ pub async fn check_join(req: &Request) -> Result<ProjectJoinCheckResponse, Error
     Ok(ProjectJoinCheckResponse {
         has_joined: result.is_some(),
     })
+}
+
+/// How many users have joined each of the requested projects. Serves
+/// the dashboard's owned-entity "joins" figures.
+pub async fn count_by_projects(req: &Request) -> Result<EntityCountsResponse, Error> {
+    let message: EntityCountsRequest = decode_structured_message(req.message.clone())?;
+
+    let mut counts = Vec::new();
+    for entity_id in &message.entity_ids {
+        let count = sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count!: i64"
+            FROM "project_joins"
+            WHERE "project_id" = ?"#,
+            entity_id
+        )
+        .fetch_one(db())
+        .await?;
+
+        if count > 0 {
+            counts.push((entity_id.clone(), count));
+        }
+    }
+
+    Ok(EntityCountsResponse { counts })
 }
 
 pub async fn list_by_user_id(req: &Request) -> Result<Vec<String>, Error> {

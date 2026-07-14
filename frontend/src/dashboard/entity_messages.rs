@@ -1,18 +1,18 @@
 //! Manager-facing inbox for a project or event. A project/event is an
 //! addressable message recipient (its inbox is a personal forum keyed by the
 //! entity ULID); its managers read those messages and reply *as* the entity
-//! here. Authorization uses the same `user.permissions` store that the
-//! owned-projects dashboard reads.
+//! here. Authorization uses the same page-editor tables the detail pages
+//! and the owned-projects dashboard read: staff, or a page-editor row.
 
 use std::sync::Arc;
 
 use anyhow::{Error, anyhow};
-use common::message::dashboard::{EntitySummary, EntitySummaryKind};
+use common::message::dashboard::EntitySummary;
 use common::message::forum::{
     InboxQuery, InboxResponse, MarkMessageRead, PostInfo, PostListQuery, ReplyToMessage,
     ReplyToMessageResponse, TopicInfo,
 };
-use common::message::user::{BasicInfo, PermissionCheckRequest, PermissionCheckResponse};
+use common::message::user::BasicInfo;
 use common::service::{request, send as nats_send};
 use poem::{
     Response, handler,
@@ -48,22 +48,11 @@ async fn authorize_manager(
         return Ok(None);
     };
 
-    let resource_type = match summary.kind {
-        EntitySummaryKind::Project => "project",
-        EntitySummaryKind::Event => "event",
-    };
+    let allowed = user.is_staff
+        || user.is_superuser
+        || crate::dashboard::manages_entity(&user.user_id.to_string(), &summary).await?;
 
-    let check: PermissionCheckResponse = request(
-        "user.permissions.check",
-        PermissionCheckRequest {
-            user_id: user.user_id.to_string(),
-            resource_type: resource_type.to_string(),
-            resource_id: entity_id.to_string(),
-        },
-    )
-    .await?;
-
-    if check.has_permission {
+    if allowed {
         Ok(Some((user, summary)))
     } else {
         Ok(None)
@@ -141,7 +130,9 @@ pub async fn thread(
         return Err(forbidden());
     };
     let entity_ulid: Ulid = entity_id.parse().map_err(|e| anyhow!("Invalid id: {e}"))?;
-    let topic_ulid: Ulid = topic_id.parse().map_err(|e| anyhow!("Invalid topic id: {e}"))?;
+    let topic_ulid: Ulid = topic_id
+        .parse()
+        .map_err(|e| anyhow!("Invalid topic id: {e}"))?;
 
     let topic: TopicInfo = request("forum.topics.get", topic_id.clone()).await?;
     // The conversation must live in this entity's inbox.
@@ -230,7 +221,9 @@ pub async fn reply(
         return Err(forbidden());
     };
     let entity_ulid: Ulid = entity_id.parse().map_err(|e| anyhow!("Invalid id: {e}"))?;
-    let topic_ulid: Ulid = topic_id.parse().map_err(|e| anyhow!("Invalid topic id: {e}"))?;
+    let topic_ulid: Ulid = topic_id
+        .parse()
+        .map_err(|e| anyhow!("Invalid topic id: {e}"))?;
 
     if form.body.trim().is_empty() {
         return Err(anyhow!("Reply body is required"));

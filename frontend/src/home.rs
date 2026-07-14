@@ -390,6 +390,7 @@ async fn fetch_participation(user_id: Ulid) -> Option<(i64, Option<Timestamp>)> 
         UserParticipationRequest {
             user_id,
             recent_limit: 1,
+            recent_days: 0,
         },
     )
     .await

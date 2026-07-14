@@ -1002,6 +1002,21 @@ pub struct ProjectJoinCheckResponse {
     pub has_joined: bool,
 }
 
+/// Batch request for per-entity engagement counts. Used by
+/// `user.joins.count_by_projects` and `user.bookmarks.count_by_projects`
+/// to decorate the dashboard's owned-entity listings.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct EntityCountsRequest {
+    pub entity_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct EntityCountsResponse {
+    /// One `(entity_id, count)` pair per requested id that has a
+    /// nonzero count; ids with no rows are omitted.
+    pub counts: Vec<(String, i64)>,
+}
+
 // List all project joins for a user (for API check-join endpoint)
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct UserJoinsListRequest {

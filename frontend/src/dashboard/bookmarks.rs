@@ -7,7 +7,8 @@ use poem::{Response, handler, session::Session, web::RealIp};
 use sailfish::TemplateOnce;
 
 use crate::component::{Component, Head, StandardLayout};
-use crate::dashboard::entity_summary::{self, entity_link};
+use crate::dashboard::EntityCardModel;
+use crate::dashboard::entity_summary;
 use crate::middleware::authorization::Authenticated;
 
 #[handler]
@@ -54,28 +55,6 @@ async fn render_bookmarks(
     }
     .into_response(None)
     .await
-}
-
-pub struct EntityCardModel {
-    /// The entity ULID (string form), used to build management links such
-    /// as the owned-entity message inbox.
-    pub id: String,
-    pub name: String,
-    pub link: String,
-    pub image: Option<String>,
-    pub status: String,
-}
-
-impl EntityCardModel {
-    pub fn from_summary(summary: &EntitySummary) -> Self {
-        Self {
-            id: summary.id.to_string(),
-            name: summary.name.clone(),
-            link: entity_link(summary),
-            image: summary.image.clone(),
-            status: summary.status.clone(),
-        }
-    }
 }
 
 #[derive(TemplateOnce)]

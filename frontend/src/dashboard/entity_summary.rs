@@ -148,11 +148,14 @@ async fn fetch_summary(
                 },
                 status: row.status,
                 created,
+                begin: None,
+                end: None,
             }))
         }
         "Event" => {
             let row = sqlx::query!(
-                r#"SELECT "name", "image", "status"
+                r#"SELECT "name", "image", "status",
+                    "begin" as "begin_time?", "end" as "end_time?"
                 FROM "events"
                 WHERE "event_id" = ?"#,
                 target
@@ -172,6 +175,8 @@ async fn fetch_summary(
                 },
                 status: row.status,
                 created,
+                begin: row.begin_time.filter(|b| !b.is_empty()),
+                end: row.end_time.filter(|e| !e.is_empty()),
             }))
         }
         _ => Ok(None),

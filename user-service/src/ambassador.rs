@@ -843,7 +843,11 @@ pub async fn message_send(req: &Request) -> Result<(), Error> {
     )
     .fetch_optional(db())
     .await?
-    .map(|r| format!("{} {}", r.first_name, r.last_name).trim().to_string())
+    .map(|r| {
+        format!("{} {}", r.first_name, r.last_name)
+            .trim()
+            .to_string()
+    })
     .unwrap_or_default();
 
     let body = format!(

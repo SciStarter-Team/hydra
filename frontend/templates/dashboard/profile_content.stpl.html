@@ -10,34 +10,153 @@
 
     <%+ self.card %>
 
-    <% if !self.badges.is_empty() { %>
     <div class="ss-card !p-6 mt-6">
-        <h2 class="font-semibold mb-4">Badges</h2>
-        <div class="flex flex-wrap gap-6">
-            <% for badge in &self.badges { %>
-            <div class="flex flex-col items-center w-32 text-center">
-                <img src="<%= badge.image %>" alt="<%= badge.name %>" class="w-24 h-24 object-contain" />
-                <span class="text-xs mt-2 text-gray-700"><%= badge.name %></span>
+        <h2 class="font-semibold mb-4">Interests, activities, and recognition</h2>
+        <table class="w-full text-sm">
+            <caption class="sr-only">User interests, activities, places, and other information</caption>
+            <tbody class="divide-y divide-gray-100">
+                <tr>
+                    <th scope="row" class="text-left align-top py-3 pr-6 w-40 text-gray-500 font-medium">Interests</th>
+                    <td class="py-3">
+                        <% if self.interests_row.is_empty() { %>none listed<% } else { %><%= self.interests_row %><% } %>
+                        <a href="/dashboard/interests" class="text-primary-action hover:underline ml-2">Edit</a>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row" class="text-left align-top py-3 pr-6 text-gray-500 font-medium">Activities</th>
+                    <td class="py-3">
+                        <% if self.activities_row.is_empty() { %>none listed<% } else { %><%= self.activities_row %><% } %>
+                        <a href="/dashboard/interests" class="text-primary-action hover:underline ml-2">Edit</a>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row" class="text-left align-top py-3 pr-6 text-gray-500 font-medium">Skills</th>
+                    <td class="py-3">
+                        <% if self.skills_row.is_empty() { %>none listed<% } else { %><%= self.skills_row %><% } %>
+                        <a href="/dashboard/interests" class="text-primary-action hover:underline ml-2">Edit</a>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row" class="text-left align-top py-3 pr-6 text-gray-500 font-medium">Instruments</th>
+                    <td class="py-3">
+                        <% if self.instruments_row.is_empty() { %>No instruments have been added<% } else { %><%= self.instruments_row %><% } %>
+                        <a href="/dashboard/interests" class="text-primary-action hover:underline ml-2">Edit</a>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row" class="text-left align-top py-3 pr-6 text-gray-500 font-medium">Places</th>
+                    <td class="py-3">
+                        <% if self.places_count == 0 { %>
+                        No places have been added. (To protect your privacy, your places are never shown to the public.)
+                        <% } else { %>
+                        You have added places. (To protect your privacy, your places are never shown to the public.)
+                        <% } %>
+                        <a href="/dashboard/places" class="text-primary-action hover:underline ml-2">Edit</a>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row" class="text-left align-top py-3 pr-6 text-gray-500 font-medium">My Lists</th>
+                    <td class="py-3">
+                        <% if self.lists.is_empty() { %>
+                        No lists yet.
+                        <% } else { %>
+                        <% for (i, list) in self.lists.iter().enumerate() { %><% if i > 0 { %>, <% } %><%= list.name %><% if list.private { %> <span class="text-xs opacity-60">(private)</span><% } %><% } %>
+                        <% } %>
+                        <a href="/dashboard/lists" class="text-primary-action hover:underline ml-2">Edit</a>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row" class="text-left align-top py-3 pr-6 text-gray-500 font-medium">Certificates</th>
+                    <td class="py-3">
+                        <% if self.certificates.is_empty() { %>
+                        No certificates yet
+                        <% } else { %>
+                        <ul class="list-none m-0 p-0 space-y-1">
+                            <% for cert in &self.certificates { %>
+                            <li>
+                                <a href="<%= cert.url %>" class="text-primary-action hover:underline"><%= cert.title %></a>
+                                <% if !cert.issued.is_empty() { %><span class="text-xs opacity-60">issued <%= cert.issued %></span><% } %>
+                            </li>
+                            <% } %>
+                        </ul>
+                        <% } %>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row" class="text-left align-top py-3 pr-6 text-gray-500 font-medium">Badges</th>
+                    <td class="py-3">
+                        <% if self.badges.is_empty() { %>
+                        <a href="/training" class="text-primary-action hover:underline">Get started on your badges!</a>
+                        <% } else { %>
+                        <div class="flex flex-wrap gap-4">
+                            <% for badge in &self.badges { %>
+                            <div class="flex flex-col items-center w-20 text-center">
+                                <img src="<%= badge.image %>" alt="<%= badge.name %>" class="w-16 h-16 object-contain" />
+                                <span class="text-xs mt-1 text-gray-700"><%= badge.name %></span>
+                            </div>
+                            <% } %>
+                        </div>
+                        <% } %>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <% if self.has_owned { %>
+    <div class="tabs-bar-wrapper mt-6">
+        <div class="tabs-wrapper no-shadow">
+            <div class="tabs tabs-bar" role="tablist" aria-label="Profile roles">
+                <button class="tab" role="tab" aria-selected="true" aria-controls="panel-role-leader" id="tab-role-leader">As a leader</button>
+                <button class="tab" role="tab" aria-selected="false" aria-controls="panel-role-participant" id="tab-role-participant">As a participant</button>
             </div>
-            <% } %>
+        </div>
+        <div class="tab-panels border border-linework border-t-0 p-4">
+            <div class="tab-panel" id="panel-role-leader" role="tabpanel" aria-hidden="false">
+                <h3 class="font-semibold mb-3">Projects</h3>
+                <% if self.owned_projects.is_empty() { %>
+                <p>You do not lead any projects.</p>
+                <% } else { %>
+                <ul class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                    <% for entity in &self.owned_projects { %>
+                    <li class="ss-card overflow-hidden flex flex-col">
+                        <% if let Some(image) = &entity.image { %>
+                        <img src="<%= image %>" alt="" class="w-full h-32 object-cover" />
+                        <% } %>
+                        <div class="p-4 flex-1 flex flex-col">
+                            <a href="<%= entity.link %>" class="font-semibold hover:text-primary"><%= entity.name %></a>
+                        </div>
+                    </li>
+                    <% } %>
+                </ul>
+                <% } %>
+
+                <h3 class="font-semibold mb-3">Events</h3>
+                <% if self.owned_events.is_empty() { %>
+                <p class="mb-0">You have not created any events.</p>
+                <% } else { %>
+                <ul class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <% for entity in &self.owned_events { %>
+                    <li class="ss-card overflow-hidden flex flex-col">
+                        <% if let Some(image) = &entity.image { %>
+                        <img src="<%= image %>" alt="" class="w-full h-32 object-cover" />
+                        <% } %>
+                        <div class="p-4 flex-1 flex flex-col">
+                            <a href="<%= entity.link %>" class="font-semibold hover:text-primary"><%= entity.name %></a>
+                        </div>
+                    </li>
+                    <% } %>
+                </ul>
+                <% } %>
+            </div>
+            <div class="tab-panel" id="panel-role-participant" role="tabpanel" aria-hidden="true">
+                <%+ self.participation %>
+            </div>
         </div>
     </div>
-    <% } %>
-
-    <% if !self.certificates.is_empty() { %>
+    <% } else { %>
     <div class="ss-card !p-6 mt-6">
-        <h2 class="font-semibold mb-4">Certificates</h2>
-        <ul class="divide-y divide-gray-100">
-            <% for cert in &self.certificates { %>
-            <li class="flex items-center justify-between py-3">
-                <div>
-                    <div class="text-sm font-medium text-gray-900"><%= cert.title %></div>
-                    <% if !cert.issued.is_empty() { %><div class="text-xs text-gray-500">Issued <%= cert.issued %></div><% } %>
-                </div>
-                <a href="<%= cert.url %>" class="text-sm font-medium text-primary hover:underline">Download PDF</a>
-            </li>
-            <% } %>
-        </ul>
+        <%+ self.participation %>
     </div>
     <% } %>
 

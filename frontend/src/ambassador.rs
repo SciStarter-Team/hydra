@@ -27,9 +27,9 @@ use poem::{
     http::StatusCode,
     web::{Form, Path, Query, Redirect},
 };
-use ulid::Ulid;
 use sailfish::TemplateOnce;
 use serde::Deserialize;
+use ulid::Ulid;
 
 use crate::component::{Component, Head, StandardLayout};
 use crate::middleware::authorization::Authenticated;
@@ -317,7 +317,10 @@ async fn gate_for(user_info: &Option<Arc<BasicInfo>>) -> Gate {
     }
 }
 
-async fn render(user_info: Option<Arc<BasicInfo>>, content: ApplyContent) -> Result<Response, Error> {
+async fn render(
+    user_info: Option<Arc<BasicInfo>>,
+    content: ApplyContent,
+) -> Result<Response, Error> {
     let layout = StandardLayout::new(PATH.to_string(), content)
         .prepare(user_info)
         .await?;
@@ -414,7 +417,13 @@ pub async fn submit(
         return err(user_info, form, gate, "You must complete the Citizen Science Champion training before submitting your application.").await;
     }
     if !APPLICATIONS_OPEN {
-        return err(user_info, form, gate, "Ambassador applications are not open right now. You'll be notified when they reopen.").await;
+        return err(
+            user_info,
+            form,
+            gate,
+            "Ambassador applications are not open right now. You'll be notified when they reopen.",
+        )
+        .await;
     }
 
     // Required fields (mirrors orrery's _ambassador_apply_required_fields).
@@ -439,7 +448,10 @@ pub async fn submit(
         .map(|(label, _)| *label)
         .collect();
     if !missing.is_empty() {
-        let msg = format!("Please fill in the required fields: {}.", missing.join(", "));
+        let msg = format!(
+            "Please fill in the required fields: {}.",
+            missing.join(", ")
+        );
         return err(user_info, form, gate, &msg).await;
     }
 
@@ -452,7 +464,13 @@ pub async fn submit(
     match age_at_least_18(&form.birthdate, today) {
         Some(true) => {}
         Some(false) => {
-            return err(user_info, form, gate, "You must be at least 18 years old to apply.").await;
+            return err(
+                user_info,
+                form,
+                gate,
+                "You must be at least 18 years old to apply.",
+            )
+            .await;
         }
         None => {
             return err(user_info, form, gate, "Please enter a valid birthdate.").await;
@@ -463,10 +481,22 @@ pub async fn submit(
         match form.signature_date.get(0..10) {
             Some(sig) if sig <= today => {}
             Some(_) => {
-                return err(user_info, form, gate, "The signature date cannot be in the future.").await;
+                return err(
+                    user_info,
+                    form,
+                    gate,
+                    "The signature date cannot be in the future.",
+                )
+                .await;
             }
             None => {
-                return err(user_info, form, gate, "Please enter a valid signature date.").await;
+                return err(
+                    user_info,
+                    form,
+                    gate,
+                    "Please enter a valid signature date.",
+                )
+                .await;
             }
         }
     }
@@ -492,7 +522,9 @@ pub async fn draft(
     Form(form): Form<ApplyForm>,
 ) -> Result<Response, Error> {
     let Some(user) = user_info else {
-        return Ok(poem::web::Html("<span class=\"text-red-600\">Please log in.</span>").into_response());
+        return Ok(
+            poem::web::Html("<span class=\"text-red-600\">Please log in.</span>").into_response(),
+        );
     };
     let _: () = request("user.ambassador.save_draft", form.to_wire(user.user_id)).await?;
     Ok(poem::web::Html("<span class=\"text-green-600\">Draft saved.</span>").into_response())
