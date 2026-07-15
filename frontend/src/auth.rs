@@ -268,6 +268,7 @@ struct LoginPageParameters {
     unauthorized: Option<bool>,
     turnstile: Option<bool>,
     next: Option<String>,
+    tag: Option<String>,
 }
 
 #[derive(sailfish::TemplateOnce)]
@@ -298,6 +299,16 @@ pub async fn login_signup_page(
         // Absolute local paths only for next values. No relative, no off-site
         if next.starts_with("/") {
             session.set("auth_next", next);
+        }
+    }
+
+    if let Some(tag) = params.tag {
+        // Stash the tag in the session so it is applied to the account on
+        // signup (via Signup.tags) or on login into an existing account (via
+        // user.tags.add). Empty values are ignored.
+        let tag = tag.trim();
+        if !tag.is_empty() {
+            session_tags::add(session, tag);
         }
     }
 
