@@ -3321,6 +3321,7 @@ dependencies = [
  "fxhash",
  "hex",
  "hmac 0.12.1",
+ "inventory",
  "jiff",
  "jsonwebtoken",
  "markdown-ppp",

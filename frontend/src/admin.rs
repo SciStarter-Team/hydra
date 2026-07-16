@@ -25,6 +25,7 @@ pub mod staff_picks;
 pub mod trainings;
 pub mod types;
 pub mod users;
+pub mod webinars;
 pub mod wiki;
 
 // Re-exports for templates and other modules that reference crate::admin::*
@@ -74,6 +75,8 @@ pub fn routes() -> impl Endpoint {
         .nest("/news", news::routes())
         // Staff Picks (CSM)
         .nest("/staff-picks", staff_picks::routes())
+        // Webinars
+        .nest("/webinars", webinars::routes())
         // Communities
         .nest("/communities", communities::routes())
         // Email

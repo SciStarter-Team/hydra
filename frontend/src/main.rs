@@ -53,6 +53,7 @@ pub mod staff_pick;
 pub mod training;
 pub mod ui;
 pub mod upload;
+pub mod webinar;
 pub mod wiki;
 pub mod wordpress;
 pub mod zipcode;
@@ -117,12 +118,20 @@ async fn entity_page(
     poem::web::RealIp(client_ip): poem::web::RealIp,
     Authenticated(user_info): Authenticated,
     session: &poem::session::Session,
+    req: &poem::Request,
     Path(slug): Path<String>,
 ) -> poem::Result<poem::Response> {
     if &slug == "" {
         Ok(index_page_pseudo_handler(client_ip, user_info).await?)
     } else {
-        Entity::response_for_slug(slug, "/", user_info, session).await
+        Entity::response_for_slug(
+            slug,
+            "/",
+            user_info,
+            session,
+            req.uri().query().unwrap_or(""),
+        )
+        .await
     }
 }
 
@@ -135,9 +144,17 @@ async fn entity_page(
 async fn project_page(
     Authenticated(user_info): Authenticated,
     session: &poem::session::Session,
+    req: &poem::Request,
     Path(slug): Path<String>,
 ) -> poem::Result<poem::Response> {
-    Entity::response_for_slug(slug, "/projects/", user_info, session).await
+    Entity::response_for_slug(
+        slug,
+        "/projects/",
+        user_info,
+        session,
+        req.uri().query().unwrap_or(""),
+    )
+    .await
 }
 
 /// Serve an event at its canonical `/events/<slug>` path.
@@ -146,9 +163,17 @@ async fn project_page(
 async fn event_page(
     Authenticated(user_info): Authenticated,
     session: &poem::session::Session,
+    req: &poem::Request,
     Path(slug): Path<String>,
 ) -> poem::Result<poem::Response> {
-    Entity::response_for_slug(slug, "/events/", user_info, session).await
+    Entity::response_for_slug(
+        slug,
+        "/events/",
+        user_info,
+        session,
+        req.uri().query().unwrap_or(""),
+    )
+    .await
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -657,6 +682,7 @@ async fn main() -> Result<(), Error> {
     let _wiki_page_updates = tokio::spawn(wiki::WikiPage::peering_task());
     let _news_item_updates = tokio::spawn(news::NewsItem::peering_task());
     let _staff_pick_updates = tokio::spawn(staff_pick::StaffPick::peering_task());
+    let _webinar_updates = tokio::spawn(webinar::Webinar::peering_task());
     let _pagebuilder_component_updates =
         tokio::spawn(pagebuilder::PageBuilderComponent::peering_task());
     let _pagebuilder_page_updates = tokio::spawn(pagebuilder::PageBuilderPage::peering_task());

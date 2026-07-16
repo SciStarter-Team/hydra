@@ -1,0 +1,54 @@
+<article class="flex flex-col bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
+    <% if !self.webinar.image.is_empty() { %>
+        <figure class="m-0">
+            <img src="<%= self.webinar.image %>" alt="" class="w-full h-48 object-cover">
+            <% if !self.webinar.image_credit.is_empty() { %>
+                <figcaption class="px-4 pt-1 text-xs text-gray-500">Credit: <%= self.webinar.image_credit %></figcaption>
+            <% } %>
+        </figure>
+    <% } %>
+
+    <div class="flex flex-col flex-1 p-4">
+        <div class="flex items-center gap-2 mb-2">
+            <% if !self.webinar.date.is_empty() { %>
+                <span class="text-sm font-semibold text-primary-dark"><%= self.webinar.date %></span>
+            <% } %>
+            <% if !self.webinar.platform.is_empty() { %>
+                <span class="text-xs text-gray-500"><%= self.webinar.platform %></span>
+            <% } %>
+            <% if self.webinar.upcoming { %>
+                <span class="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">Upcoming</span>
+            <% } %>
+        </div>
+
+        <h3 class="text-base font-semibold text-gray-900 mb-1"><%= self.webinar.title %></h3>
+
+        <% if !self.webinar.featured_entity_slug.is_empty() { %>
+            <p class="text-sm text-gray-600 mb-2">
+                Featured Project:
+                <a href="<%= self.webinar.featured_entity_path() %>" class="text-indigo-600 hover:text-indigo-800">
+                    <%= self.webinar.featured_entity_slug %>
+                </a>
+            </p>
+        <% } %>
+
+        <% if !self.webinar.description.is_empty() { %>
+            <p class="text-sm text-gray-600 mb-4"><%= self.webinar.description %></p>
+        <% } %>
+
+        <%# Which links a webinar carries is what makes it read as upcoming or
+            archived: Register before, Watch Recording and Link Bank after. %>
+        <% if !self.webinar.links.is_empty() { %>
+            <div class="flex flex-wrap gap-2 mt-auto">
+                <% for link in &self.webinar.links { %>
+                    <a
+                        href="<%= link.url %>"
+                        class="inline-flex items-center px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 no-underline"
+                    >
+                        <%= link.display_label() %>
+                    </a>
+                <% } %>
+            </div>
+        <% } %>
+    </div>
+</article>

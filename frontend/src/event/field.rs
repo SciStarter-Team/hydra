@@ -45,7 +45,7 @@ pub enum EventFieldValue {
     Zip(String),
     State(String),
     Country(String),
-    EventType(String),
+    EventType(crate::event::EventType),
     TicketingBegins(Option<TimeString>),
     OutcomesLabel(Option<String>),
     OutcomesLink(Option<String>),
@@ -594,7 +594,7 @@ impl EventField {
         Ok(())
     }
 
-    async fn save_event_type(&self, event_type: &str) -> Result<(), Error> {
+    async fn save_event_type(&self, event_type: &crate::event::EventType) -> Result<(), Error> {
         use common::shared::db;
         let event_id_str = self.event_id.to_string();
         sqlx::query!(
@@ -1017,7 +1017,7 @@ impl EventField {
         use common::shared::db;
         let event_id_str = event_id.to_string();
         let event_type = sqlx::query_scalar!(
-            "SELECT event_type FROM events WHERE event_id = ?",
+            r#"SELECT event_type as "event_type: crate::event::EventType" FROM events WHERE event_id = ?"#,
             event_id_str
         )
         .fetch_one(db())

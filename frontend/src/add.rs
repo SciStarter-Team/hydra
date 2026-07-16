@@ -100,30 +100,6 @@ const COMMON_TIMEZONES: &[(&str, &str)] = &[
 
 /// All event types, in the order they appear in the picker. The option value
 /// is the type's `Display` string, which round-trips through `FromStr`.
-const EVENT_TYPES: &[EventType] = &[
-    EventType::BioBlitz,
-    EventType::CitizenForum,
-    EventType::CityNatureChallenge,
-    EventType::Conference,
-    EventType::Hackfest,
-    EventType::InternationalMonarchMonitoringBlitz,
-    EventType::KidFriendly,
-    EventType::Library,
-    EventType::Megathon,
-    EventType::MuseumEvent,
-    EventType::NatureMonitoring,
-    EventType::Online,
-    EventType::ProfessionalDevelopment,
-    EventType::ScienceFestival,
-    EventType::SocialMediaEvent,
-    EventType::TalkOrScienceCafe,
-    EventType::Training,
-    EventType::Webinar,
-    EventType::Ambassador,
-    EventType::ActsOfScienceConnected,
-    EventType::Other,
-];
-
 /// Where the event takes place. Every mode also permits an event URL, so a
 /// venue or region event can carry a livestream/info link (covering the
 /// hybrid case) without a dedicated mode.
@@ -624,7 +600,7 @@ async fn render_event_form(
         error,
         values,
         timezones: COMMON_TIMEZONES,
-        event_types: EVENT_TYPES.iter().map(|e| e.to_string()).collect(),
+        event_types: EventType::ALL.iter().map(|e| e.to_string()).collect(),
         location,
         image,
         tags,

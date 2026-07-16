@@ -1,0 +1,85 @@
+<%# The filter form is an ordinary GET back to this page, so it works with no
+    JavaScript at all. HTMX only upgrades the round trip: it fetches the same URL
+    and lifts this element out of the response with hx-select, which keeps the
+    address bar honest so a filtered view can be linked to and shared.
+
+    The form is inside the swapped region rather than beside it, so the dropdowns
+    and the "Clear filters" link are re-rendered from the same state as the
+    results and cannot drift apart. HTMX restores focus to the element with the
+    matching id after a swap, so the dropdown being used stays where it was. %>
+<div id="<%= self.list_id %>" class="webinar-list">
+    <% if !self.groups.is_empty() { %>
+        <form
+            method="get"
+            action="<%= self.action %>"
+            hx-get="<%= self.action %>"
+            hx-trigger="change"
+            hx-target="#<%= self.list_id %>"
+            hx-select="#<%= self.list_id %>"
+            hx-swap="outerHTML"
+            hx-push-url="true"
+            class="flex flex-wrap items-end gap-4 mb-6"
+        >
+            <% for group in &self.groups { %>
+                <% let selection = self.selection_for(group); %>
+                <div class="flex flex-col">
+                    <label for="webinar-filter-<%= group.slug() %>" class="text-sm font-medium text-gray-700 mb-1">
+                        <%= group.label %>
+                    </label>
+                    <select
+                        id="webinar-filter-<%= group.slug() %>"
+                        name="tag[]"
+                        class="block px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    >
+                        <option value="">All</option>
+                        <% for value in &group.values { %>
+                            <option value="<%= value %>" <% if selection == value { %>selected<% } %>><%= value %></option>
+                        <% } %>
+                    </select>
+                </div>
+            <% } %>
+
+            <%# Without JavaScript the change trigger never fires, so the form
+                still needs a way to be submitted. %>
+            <noscript>
+                <button type="submit" class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700">
+                    Apply Filters
+                </button>
+            </noscript>
+
+            <% if self.filtered { %>
+                <a href="<%= self.action %>" class="text-sm text-indigo-600 hover:text-indigo-800 pb-2">
+                    Clear filters
+                </a>
+            <% } %>
+        </form>
+    <% } %>
+
+    <% if self.is_empty() { %>
+        <p class="py-8 text-center text-gray-500">
+            <% if self.filtered { %>
+                No webinars match those filters.
+            <% } else { %>
+                No webinars have been published yet.
+            <% } %>
+        </p>
+    <% } %>
+
+    <% if !self.upcoming.is_empty() { %>
+        <h2 class="text-xl font-semibold text-gray-900 mb-4">Upcoming Webinars</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
+            <% for webinar in &self.upcoming { %>
+                <%+ crate::webinar::list::WebinarCardTemplate { webinar } %>
+            <% } %>
+        </div>
+    <% } %>
+
+    <% if !self.archived.is_empty() { %>
+        <h2 class="text-xl font-semibold text-gray-900 mb-4">Webinar Archives</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <% for webinar in &self.archived { %>
+                <%+ crate::webinar::list::WebinarCardTemplate { webinar } %>
+            <% } %>
+        </div>
+    <% } %>
+</div>

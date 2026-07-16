@@ -18,6 +18,23 @@ pub enum ContextMode {
     Presenting,
 }
 
+/// Where the page being rendered was requested from.
+///
+/// Page-builder pages became request-dependent once they could hold a
+/// [`crate::builder::widget::Widget`]: a widget that filters needs to know what
+/// the reader asked for. Keeping that state in the URL is what lets its filter
+/// form be an ordinary GET that works with no JavaScript, with HTMX only
+/// upgrading the round trip — and the widget needs `path` to point that form
+/// back at the page it lives on, since it cannot know its own address.
+///
+/// Carried as typed extra data rather than a binding so it cannot collide with
+/// a component's params.
+#[derive(Clone, Debug, Default)]
+pub struct RequestUrl {
+    pub path: String,
+    pub query: String,
+}
+
 pub struct Context {
     mode: ContextMode,
     parent: Option<Arc<Context>>,

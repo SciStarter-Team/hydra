@@ -8,6 +8,10 @@
 //! - {$ slot name [component=ID key=value...] $} .. {$ /slot $} defines a slot for page builder
 //! - {$ param name [label="Label" default="value" description="Help text"] $} declares a parameter
 //! - {$ use name $} renders nothing directly, but invokes the named function to update the local bindings
+//! - {$ widget name [key=value...] $} renders a Rust-implemented component (see
+//!     [`super::widget`]). Unlike everything else here, a widget does real work —
+//!     it is how a page gets data-driven content without this language growing
+//!     records, field access, or expressions to fetch it with.
 //! - {$= name $} to render the value bound to name
 //! - {$- name $} to render the value bound to name, without HTML escaping
 //! - One or more ^ can be included after the opening $, e.g. {$^^ if name $}
@@ -98,6 +102,14 @@ enum Node {
     },
     /// Parameter declaration - renders nothing but declares a configurable parameter
     Param(ParamDef),
+    /// A Rust-implemented component, looked up by name at render time
+    ///
+    /// Reached via the `^` escape, so the directive survives placement and runs
+    /// per request instead of being baked to frozen HTML.
+    Widget {
+        name: String,
+        params: SmallVec<[(String, String); 4]>,
+    },
 }
 
 impl CompiledTemplate {
@@ -215,6 +227,10 @@ fn extract_vars_from_nodes(
             Node::Slot { body, .. } => {
                 extract_vars_from_nodes(body, vars, bound_vars);
             }
+            // A widget's attributes are literal strings by the time they reach
+            // this node — anything variable about them was interpolated when
+            // the component was placed — so it references no variables.
+            Node::Widget { .. } => {}
             Node::Param(_) => {
                 // Param declarations don't reference variables
             }
@@ -273,6 +289,11 @@ enum Item<'a> {
     },
     /// {$ /slot $} - end of slot block
     EndSlot,
+    /// {$ widget name [key=value...] $} - a Rust-implemented component
+    Widget {
+        name: &'a str,
+        params: Vec<(&'a str, String)>,
+    },
     /// {$ param name [label="Label" default="value" description="Help" type="textarea"] $}
     /// The default is an Expression (variable lookups are rejected during parsing)
     Param {
@@ -378,6 +399,14 @@ fn parse_item(raw: &[u8]) -> Result<Item<'_>, Error> {
         return Err(anyhow!("slot requires a name"));
     }
 
+    if let Some(rest) = inner_str.strip_prefix("widget ") {
+        return parse_widget_item(rest.trim());
+    }
+
+    if inner_str == "widget" {
+        return Err(anyhow!("widget requires a name"));
+    }
+
     if let Some(rest) = inner_str.strip_prefix("param ") {
         return parse_param_item(rest.trim());
     }
@@ -415,6 +444,25 @@ fn parse_slot_item(rest: &str) -> Result<Item<'_>, Error> {
         component,
         params,
     })
+}
+
+/// Parse widget item: `name [key=value...]`
+///
+/// Attributes are read exactly like a slot's, so a widget's configuration looks
+/// the same as a component's wherever it appears.
+fn parse_widget_item(rest: &str) -> Result<Item<'_>, Error> {
+    use super::parse::{parse_attributes, unescape_value};
+
+    let mut parser = parse_attributes(rest);
+    let name = parser
+        .name()
+        .ok_or_else(|| anyhow!("widget requires a name"))?;
+
+    let params = parser
+        .map(|attr| (attr.key, unescape_value(attr.value)))
+        .collect();
+
+    Ok(Item::Widget { name, params })
 }
 
 /// Parsed param attribute value
@@ -640,6 +688,16 @@ fn parse_nodes(
                         nodes.push(Node::Use {
                             name: name.to_string(),
                             args: args.iter().map(|s| s.to_string()).collect(),
+                        });
+                        i += 1;
+                    }
+                    Item::Widget { name, params } => {
+                        nodes.push(Node::Widget {
+                            name: name.to_string(),
+                            params: params
+                                .into_iter()
+                                .map(|(key, value)| (key.to_string(), value))
+                                .collect(),
                         });
                         i += 1;
                     }
@@ -1162,6 +1220,19 @@ fn render_nodes<'a>(
                 Node::Param(_) => {
                     // Param declarations render nothing - they're just metadata
                 }
+                Node::Widget { name, params } => {
+                    let widget = super::widget::lookup(name)
+                        .ok_or_else(|| anyhow!("Unknown widget: {}", name))?;
+
+                    // Rendered the same way in both modes: the editor shows the
+                    // real thing rather than a stand-in, which is the point of
+                    // being able to compose it there.
+                    let html = widget
+                        .render(ctx, super::widget::WidgetParams::new(params))
+                        .await?;
+
+                    buffer.extend_from_slice(html.as_bytes());
+                }
             }
         }
         Ok(())
@@ -1211,6 +1282,108 @@ mod tests {
     /// Create a test context in editing mode
     async fn test_ctx_editing() -> Arc<Context> {
         Context::new(test_db().await, &None, ContextMode::Editing).unwrap()
+    }
+
+    /// A widget that renders its own attributes, so the tests can see exactly
+    /// what reached it.
+    struct EchoWidget;
+
+    impl super::super::widget::Widget for EchoWidget {
+        fn name(&self) -> &'static str {
+            "test_echo"
+        }
+
+        fn label(&self) -> &'static str {
+            "Echo (test only)"
+        }
+
+        fn render<'a>(
+            &'a self,
+            _ctx: &'a Arc<Context>,
+            params: super::super::widget::WidgetParams<'a>,
+        ) -> futures::future::BoxFuture<'a, Result<String, Error>> {
+            Box::pin(async move { Ok(format!("[{}]", params.get_or_empty("greeting"))) })
+        }
+    }
+
+    crate::register_widget!(EchoWidget);
+
+    #[tokio::test]
+    async fn a_widget_renders_through_its_registration() {
+        let ctx = test_ctx().await;
+        let template =
+            CompiledTemplate::compile(r#"{$ widget test_echo greeting="hello" $}"#).unwrap();
+
+        check!(template.render(&ctx).await.unwrap() == "[hello]");
+    }
+
+    #[tokio::test]
+    async fn an_unknown_widget_is_an_error_rather_than_silence() {
+        let ctx = test_ctx().await;
+        let template = CompiledTemplate::compile("{$ widget nonexistent $}").unwrap();
+
+        check!(template.render(&ctx).await.is_err());
+    }
+
+    /// The editor is meant to show the real component, not a stand-in.
+    #[tokio::test]
+    async fn a_widget_renders_in_the_editor_too() {
+        let ctx = test_ctx_editing().await;
+        let template =
+            CompiledTemplate::compile(r#"{$ widget test_echo greeting="hi" $}"#).unwrap();
+
+        check!(template.render(&ctx).await.unwrap() == "[hi]");
+    }
+
+    /// The whole reason a widget exists: placing it must NOT bake it to HTML.
+    ///
+    /// This is the first of the two stages. Rendering a component's source (what
+    /// `compose_component_into_slot` does at placement) has to leave the
+    /// directive behind as text, with the staff-supplied param interpolated into
+    /// it — not the widget's output.
+    #[tokio::test]
+    async fn placing_a_widget_bakes_the_directive_not_its_output() {
+        let ctx = test_ctx().await;
+        ctx.bind_string("greeting", "good morning").unwrap();
+
+        let component_source = r#"{$^ widget test_echo greeting="*greeting" $}"#;
+        let placed = CompiledTemplate::compile(component_source)
+            .unwrap()
+            .render(&ctx)
+            .await
+            .unwrap();
+
+        check!(placed == r#"{$ widget test_echo greeting="good morning" $}"#);
+    }
+
+    /// The second stage: what placement baked into the page source runs on
+    /// request, against data as it is then — which a frozen component cannot do.
+    #[tokio::test]
+    async fn the_baked_directive_runs_when_the_page_is_rendered() {
+        let ctx = test_ctx().await;
+        ctx.bind_string("greeting", "good morning").unwrap();
+
+        let placed = CompiledTemplate::compile(r#"{$^ widget test_echo greeting="*greeting" $}"#)
+            .unwrap()
+            .render(&ctx)
+            .await
+            .unwrap();
+
+        // The page context knows nothing of the component's params; everything
+        // the widget needs travelled in the directive.
+        let page_ctx = test_ctx().await;
+        let rendered = CompiledTemplate::compile(&placed)
+            .unwrap()
+            .render(&page_ctx)
+            .await
+            .unwrap();
+
+        check!(rendered == "[good morning]");
+    }
+
+    #[test]
+    fn a_widget_needs_a_name() {
+        check!(CompiledTemplate::compile("{$ widget $}").is_err());
     }
 
     #[test]

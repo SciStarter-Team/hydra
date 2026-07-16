@@ -395,7 +395,8 @@ impl LoadStorePeered for EventAll {
                 page_creator_id, name, description, origin, presenter, url,
                 image, image_credit, how_to_join, part_of, location_type,
                 entirely_online, location_name, location_description, address,
-                city, zip, state, country, event_type, ticketing_begins,
+                city, zip, state, country, event_type as "event_type: EventType",
+                ticketing_begins,
                 outcomes_label, outcomes_link, circuit_id,
                 AsGeoJSON(regions) as "regions: Option<String>",
                 AsGeoJSON(point) as "point: Option<String>"
@@ -485,8 +486,13 @@ impl LoadStorePeered for EventAll {
             .collect::<Result<Vec<_>, anyhow::Error>>()?
             .into_boxed_slice();
 
-        // Parse event_type
-        let event_type = event_row.event_type.parse::<EventType>()?;
+        // The column holds the `sqlx::Type` encoding, which is what
+        // `save_to_database` writes, so it is decoded the same way rather than
+        // through `FromStr` — `FromStr` is the inverse of `Display` and parses
+        // the human-facing labels the add-event form submits, which are a
+        // different vocabulary ("professional development", not
+        // "ProfessionalDevelopment").
+        let event_type = event_row.event_type;
 
         Ok(EventAll {
             event_id,

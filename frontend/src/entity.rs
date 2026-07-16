@@ -450,6 +450,7 @@ impl Entity {
         &self,
         user_info: Option<Arc<BasicInfo>>,
         session: &poem::session::Session,
+        query: &str,
     ) -> poem::Result<poem::Response> {
         // Check access permissions for unpublished entities
         let password_authorized = is_password_authorized(session, &self.slug);
@@ -534,7 +535,7 @@ impl Entity {
             }
             EntityKind::PageBuilder => {
                 if let Some(ulid) = self.target.as_ulid() {
-                    use crate::builder::context::{Context, ContextMode};
+                    use crate::builder::context::{Context, ContextMode, RequestUrl};
                     use crate::pagebuilder::{PageBuilderPage, cache};
 
                     let page = PageBuilderPage::load(ulid)
@@ -558,6 +559,16 @@ impl Entity {
                                 StatusCode::INTERNAL_SERVER_ERROR,
                             )
                         })?;
+                    // Widgets on the page read their filter state from here, and
+                    // aim their own forms back at the page with it.
+                    ctx.set(RequestUrl {
+                        path: self.canonical_path(),
+                        query: query.to_string(),
+                    })
+                    .map_err(|e| {
+                        poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR)
+                    })?;
+
                     let html = compiled.render(&ctx).await.map_err(|e| {
                         poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR)
                     })?;
@@ -732,6 +743,7 @@ impl Entity {
         prefix: &str,
         user_info: Option<Arc<BasicInfo>>,
         session: &poem::session::Session,
+        query: &str,
     ) -> poem::Result<poem::Response> {
         // This as_ref().to_string() silliness is due to the issue
         // mentioned in peering.rs forcing us to use String instead of
@@ -745,7 +757,7 @@ impl Entity {
                 if prefix != ent.kind().path_prefix() {
                     Ok(Redirect::moved_permanent(ent.canonical_path()).into_response())
                 } else {
-                    ent.response(user_info, session).await
+                    ent.response(user_info, session, query).await
                 }
             }
             Err(err) => match err.downcast_ref::<sqlx::Error>() {

@@ -8,12 +8,14 @@ use sailfish::TemplateOnce;
 use ulid::Ulid;
 
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
 use common::message::user::{UserByEmailRequest, UserByEmailResponse};
 use common::service::request;
 
 use crate::admin::autocomplete::resolve_user_names;
 use crate::contact::{Contact, ContactRole};
+use crate::event::EventType;
 use crate::event::field::{EventField, EventFieldType, EventFieldValue};
 use crate::local_time::{TimeFormat, local_time};
 use crate::middleware::authorization::Authenticated;
@@ -45,6 +47,19 @@ pub struct FieldMeta {
     pub label: &'static str,
     pub input_kind: FieldInputKind,
 }
+
+/// Every event type, as (stored value, human label).
+///
+/// Built from [`EventType::ALL`] rather than written out, because a hand-kept
+/// copy drifted: it once offered "Festival", "Meeting" and "Workshop", none of
+/// which are variants, so choosing one wrote a string into `events.event_type`
+/// that no reader could decode — while most of the real types were unreachable.
+static EVENT_TYPE_OPTIONS: LazyLock<Vec<(&'static str, &'static str)>> = LazyLock::new(|| {
+    EventType::ALL
+        .iter()
+        .map(|event_type| (event_type.storage_name(), event_type.label()))
+        .collect()
+});
 
 static AUDIENCE_OPTIONS: &[(&str, &str)] = &[
     ("Families", "Families"),
@@ -299,15 +314,7 @@ pub fn field_meta(field_type: &str, kind: DetailPageKind) -> Option<FieldMeta> {
         // Event-only fields
         ("event_type", DetailPageKind::Event) => Some(FieldMeta {
             label: "Event Type",
-            input_kind: FieldInputKind::Select(&[
-                ("Conference", "Conference"),
-                ("Festival", "Festival"),
-                ("Meeting", "Meeting"),
-                ("Training", "Training"),
-                ("Workshop", "Workshop"),
-                ("Webinar", "Webinar"),
-                ("Other", "Other"),
-            ]),
+            input_kind: FieldInputKind::Select(&EVENT_TYPE_OPTIONS),
         }),
 
         // Event additional fields
@@ -1022,7 +1029,10 @@ async fn save_event_field(
         "zip" => EventFieldValue::Zip(value.to_string()),
         "country" => EventFieldValue::Country(value.to_string()),
         "entirely_online" => EventFieldValue::EntirelyOnline(value == "true"),
-        "event_type" => EventFieldValue::EventType(value.to_string()),
+        "event_type" => EventFieldValue::EventType(
+            EventType::from_storage_name(value)
+                .ok_or_else(|| anyhow::anyhow!("Invalid event type: {}", value))?,
+        ),
         "status" => {
             let status = match value {
                 "Active" => crate::event::EventStatus::Active,

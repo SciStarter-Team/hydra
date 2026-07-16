@@ -13,3 +13,4 @@ pub mod context;
 pub mod parse;
 pub mod render;
 pub mod value;
+pub mod widget;
