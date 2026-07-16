@@ -1,5 +1,5 @@
 {
-  "component_id": "01KXP2G3C1QP1M1HYBDPE044ZK",
+  "component_id": "01KXP44BPSZE3569EADCSKY2D8",
   "name": "Filtered Webinar List",
   "description": "Published webinars, split into upcoming and archived, with a row of dropdown filters. Each page defines its own filter vocabulary in audience-familiar words; a webinar is tagged once and every page decides which axes it exposes. Unlike the other components, this one stays live: it reflects the webinars as they are on each visit rather than as they were when it was placed.",
   "source": "{$ param groups label=\"Filter Groups\" type=\"textarea\" default=\"Audience: Professional Development, For the Public | Topic: Citizen Science Month, Animals, Pollinators, Space, Citizen Science Kits, Human Health | Age: All Ages or Families, Youth, Teens, Adults\" description=\"One dropdown per group, separated by |. Each group is a label, a colon, then its options separated by commas. The options must match the tags on the webinars themselves. Avoid quote marks.\" $}\n{$^ widget webinar_list groups=\"*groups\" $}\n",

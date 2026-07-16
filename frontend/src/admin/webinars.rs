@@ -2,7 +2,7 @@ use crate::component::{AdminLayout, Component};
 use crate::form::QsForm;
 use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
-use crate::webinar::{Webinar, WebinarLink, WebinarLinkKind};
+use crate::webinar::{WEBINAR_TIMEZONE, Webinar, WebinarLink, WebinarLinkKind, held_zoned};
 use common::insensitivestring::InsensitiveString;
 use common::shared::db;
 use common::timestring::TimeString;
@@ -14,11 +14,6 @@ use poem::{
 use sailfish::TemplateOnce;
 use serde::Deserialize;
 use ulid::Ulid;
-
-/// SciStarter schedules and describes its webinars in Eastern time, so a bare
-/// date from the editor is anchored there rather than in UTC — otherwise a
-/// webinar entered as the 29th reads as the 28th to anyone rendering it.
-const WEBINAR_TIMEZONE: &str = "US/Eastern";
 
 // Templates
 #[derive(TemplateOnce)]
@@ -52,7 +47,7 @@ impl WebinarListRow {
     }
 
     fn is_upcoming(&self) -> bool {
-        self.held_at > TimeString::now()
+        crate::webinar::is_upcoming(&self.held_at)
     }
 }
 
@@ -132,10 +127,7 @@ fn parse_held_at(date: &str) -> Result<TimeString, anyhow::Error> {
 
 /// Renders the stored instant back into a `<input type="date">` value.
 fn held_at_date(held_at: &TimeString) -> Option<String> {
-    let timestamp: jiff::Timestamp = held_at.clone().try_into().ok()?;
-    let zone = TimeZone::get(WEBINAR_TIMEZONE).ok()?;
-
-    Some(timestamp.to_zoned(zone).strftime("%Y-%m-%d").to_string())
+    Some(held_zoned(held_at)?.strftime("%Y-%m-%d").to_string())
 }
 
 fn parse_tags(tags: &str) -> std::collections::HashSet<InsensitiveString> {

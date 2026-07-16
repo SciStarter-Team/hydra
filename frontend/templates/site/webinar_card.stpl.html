@@ -1,54 +1,71 @@
-<article class="flex flex-col bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
-    <% if !self.webinar.image.is_empty() { %>
-        <figure class="m-0">
-            <img src="<%= self.webinar.image %>" alt="" class="w-full h-48 object-cover">
-            <% if !self.webinar.image_credit.is_empty() { %>
-                <figcaption class="px-4 pt-1 text-xs text-gray-500">Credit: <%= self.webinar.image_credit %></figcaption>
-            <% } %>
-        </figure>
-    <% } %>
-
-    <div class="flex flex-col flex-1 p-4">
-        <div class="flex items-center gap-2 mb-2">
-            <% if !self.webinar.date.is_empty() { %>
-                <span class="text-sm font-semibold text-primary-dark"><%= self.webinar.date %></span>
-            <% } %>
-            <% if !self.webinar.platform.is_empty() { %>
-                <span class="text-xs text-gray-500"><%= self.webinar.platform %></span>
-            <% } %>
-            <% if self.webinar.upcoming { %>
-                <span class="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">Upcoming</span>
-            <% } %>
-        </div>
-
-        <h3 class="text-base font-semibold text-gray-900 mb-1"><%= self.webinar.title %></h3>
-
-        <% if !self.webinar.featured_entity_slug.is_empty() { %>
-            <p class="text-sm text-gray-600 mb-2">
-                Featured Project:
-                <a href="<%= self.webinar.featured_entity_path() %>" class="text-indigo-600 hover:text-indigo-800">
-                    <%= self.webinar.featured_entity_slug %>
-                </a>
-            </p>
-        <% } %>
-
-        <% if !self.webinar.description.is_empty() { %>
-            <p class="text-sm text-gray-600 mb-4"><%= self.webinar.description %></p>
-        <% } %>
-
-        <%# Which links a webinar carries is what makes it read as upcoming or
-            archived: Register before, Watch Recording and Link Bank after. %>
-        <% if !self.webinar.links.is_empty() { %>
-            <div class="flex flex-wrap gap-2 mt-auto">
-                <% for link in &self.webinar.links { %>
-                    <a
-                        href="<%= link.url %>"
-                        class="inline-flex items-center px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 no-underline"
-                    >
-                        <%= link.display_label() %>
-                    </a>
+<%# Follows the site's event-card pattern verbatim — see
+    static/design/components/event-card.html and
+    static/css/components/event-card.css. A webinar is an event card in every
+    visual respect: date column, platform tag, image, title, date line, buttons.
+    Upcoming shows month over day; the archive shows month over year. %>
+<div class="ss-ec <% if self.webinar.upcoming { %>ss-ec-upcoming<% } else { %>ss-ec-archived<% } %>">
+    <div class="ss-ec-info">
+        <% if !self.webinar.month.is_empty() { %>
+            <div>
+                <span class="cc-ec-info-month"><%= self.webinar.month %></span>
+                <% if self.webinar.upcoming { %>
+                    <span class="cc-ec-info-day"><%= self.webinar.day %></span>
+                <% } else { %>
+                    <span class="cc-ec-info-year"><%= self.webinar.year %></span>
                 <% } %>
             </div>
         <% } %>
+
+        <% if !self.webinar.platform.is_empty() { %>
+            <div class="ss-ec-tag">
+                <svg viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+                    <path fill-rule="evenodd" clip-rule="evenodd" d="M12.4811 12.1834C13.5317 10.7251 14.25 9.12233 14.25 7.5C14.25 4.60051 11.8995 2.25 9 2.25C6.10051 2.25 3.75 4.60051 3.75 7.5C3.75 9.12233 4.46827 10.7251 5.51885 12.1834C6.56151 13.6307 7.84358 14.8127 8.75768 15.5614C8.9076 15.6842 9.0924 15.6842 9.24232 15.5614C10.1564 14.8127 11.4385 13.6307 12.4811 12.1834ZM10.1928 16.7218C12.1309 15.1343 15.75 11.6188 15.75 7.5C15.75 3.77208 12.728 0.75 9 0.75C5.27208 0.75 2.25 3.77208 2.25 7.5C2.25 11.6188 5.86903 15.1343 7.8072 16.7218C8.50995 17.2973 9.49005 17.2973 10.1928 16.7218Z" />
+                    <path fill-rule="evenodd" clip-rule="evenodd" d="M9 6C8.17155 6 7.5 6.67157 7.5 7.5C7.5 8.32845 8.17155 9 9 9C9.82845 9 10.5 8.32845 10.5 7.5C10.5 6.67157 9.82845 6 9 6ZM6 7.5C6 5.84315 7.34315 4.5 9 4.5C10.6568 4.5 12 5.84315 12 7.5C12 9.15683 10.6568 10.5 9 10.5C7.34315 10.5 6 9.15683 6 7.5Z" />
+                </svg>
+                <span><%= self.webinar.platform %></span>
+            </div>
+        <% } %>
     </div>
-</article>
+
+    <div class="ss-ec-content">
+        <% if !self.webinar.image.is_empty() { %>
+            <img src="<%= self.webinar.image %>" alt="" />
+            <% if !self.webinar.image_credit.is_empty() { %>
+                <div class="text-xs text-neutral-dark mb-4 -mt-2">Credit: <%= self.webinar.image_credit %></div>
+            <% } %>
+        <% } %>
+
+        <h3>
+            <% if !self.webinar.primary_href().is_empty() { %>
+                <a href="<%= self.webinar.primary_href() %>"><%= self.webinar.title %></a>
+            <% } else { %>
+                <%= self.webinar.title %>
+            <% } %>
+        </h3>
+
+        <% if !self.webinar.date_line.is_empty() { %>
+            <h4><%= self.webinar.date_line %></h4>
+        <% } %>
+
+        <% if !self.webinar.featured_entity_slug.is_empty() { %>
+            <div class="ss-ec-loc">
+                Featured Project:
+                <a href="<%= self.webinar.featured_entity_path() %>"><%= self.webinar.featured_entity_slug %></a>
+            </div>
+        <% } %>
+
+        <% if !self.webinar.description.is_empty() { %>
+            <p><%= self.webinar.description %></p>
+        <% } %>
+
+        <%# Which links a webinar carries is what makes it read as upcoming or
+            archived: Register before, Watch Recording and Link Bank after. The
+            first leads, the rest support — a webinar with two sessions gets two
+            buttons labelled with their times. %>
+        <% for (index, link) in self.webinar.links.iter().enumerate() { %>
+            <a href="<%= link.url %>" class="btn <% if index == 0 { %>btn-primary<% } else { %>btn-secondary<% } %>">
+                <%= link.display_label() %>
+            </a>
+        <% } %>
+    </div>
+</div>

@@ -11,6 +11,46 @@ use crate::peering::LoadStorePeered;
 
 pub mod list;
 
+/// SciStarter schedules and describes its webinars in Eastern time.
+///
+/// Everything that turns `held_at` into a date — the editor, the card's badge —
+/// works in this zone, so an entry made as the 29th reads as the 29th
+/// everywhere rather than slipping a day at some renderings and not others.
+pub const WEBINAR_TIMEZONE: &str = "US/Eastern";
+
+/// The moment a webinar was held, in the zone it was scheduled in.
+///
+/// `None` when it has no date, which is the un-dated draft case.
+pub fn held_zoned(held_at: &TimeString) -> Option<jiff::Zoned> {
+    let timestamp: jiff::Timestamp = held_at.clone().try_into().ok()?;
+
+    Some(timestamp.to_zoned(jiff::tz::TimeZone::get(WEBINAR_TIMEZONE).ok()?))
+}
+
+/// True while a webinar dated `held_at` is still to come.
+///
+/// Compared by *date*, in the zone webinars are scheduled in, rather than by
+/// instant. `held_at` carries only a day — session times live on the `Register`
+/// links — so it is stored at midnight, and comparing instants would file a talk
+/// happening at 6pm tonight under the archive from this morning onwards.
+///
+/// A webinar with no date is never upcoming, which is the safe reading: an entry
+/// nobody has dated is not something to advertise as forthcoming.
+///
+/// Free-standing because the admin list draws its rows from a cut-down query
+/// rather than a whole [`Webinar`], and the two must agree on what "upcoming"
+/// means.
+pub fn is_upcoming(held_at: &TimeString) -> bool {
+    let (Some(held), Ok(zone)) = (
+        held_zoned(held_at),
+        jiff::tz::TimeZone::get(WEBINAR_TIMEZONE),
+    ) else {
+        return false;
+    };
+
+    held.date() >= jiff::Timestamp::now().to_zoned(zone).date()
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum WebinarError {
     #[error("Unable to parse WebinarLinkKind from string")]
@@ -178,12 +218,9 @@ impl TryFrom<WebinarDB> for Webinar {
 }
 
 impl Webinar {
-    /// True once the webinar is scheduled for a moment still in the future.
-    ///
-    /// A webinar with no `held_at` sorts as past, which is the safe reading:
-    /// an entry nobody has dated is not something to advertise as upcoming.
+    /// True while the webinar is still to come. See [`is_upcoming`].
     pub fn is_upcoming(&self) -> bool {
-        self.held_at > TimeString::now()
+        is_upcoming(&self.held_at)
     }
 
     pub fn links_of_kind(&self, kind: WebinarLinkKind) -> impl Iterator<Item = &WebinarLink> {
@@ -433,5 +470,56 @@ impl LoadStorePeered for Webinar {
         tx.commit().await?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use assert2::check;
+
+    /// A webinar held `offset` days from today, in the scheduling zone.
+    fn held_on(offset: i64) -> TimeString {
+        let zone = jiff::tz::TimeZone::get(WEBINAR_TIMEZONE).unwrap();
+
+        let date = jiff::Timestamp::now()
+            .to_zoned(zone.clone())
+            .date()
+            .checked_add(jiff::Span::new().days(offset))
+            .unwrap();
+
+        TimeString::from(date.to_zoned(zone).unwrap().timestamp())
+    }
+
+    fn held(offset: i64) -> Webinar {
+        Webinar {
+            held_at: held_on(offset),
+            ..Webinar::default()
+        }
+    }
+
+    /// A talk happening tonight has not happened yet.
+    ///
+    /// `held_at` is stored at midnight, so comparing instants rather than dates
+    /// filed today's webinar under the archive from midnight onwards — eighteen
+    /// hours before it took place.
+    #[test]
+    fn a_webinar_held_today_is_still_upcoming() {
+        check!(held(0).is_upcoming());
+    }
+
+    #[test]
+    fn a_webinar_held_tomorrow_is_upcoming() {
+        check!(held(1).is_upcoming());
+    }
+
+    #[test]
+    fn a_webinar_held_yesterday_is_not_upcoming() {
+        check!(!held(-1).is_upcoming());
+    }
+
+    #[test]
+    fn an_undated_webinar_is_not_upcoming() {
+        check!(!Webinar::default().is_upcoming());
     }
 }

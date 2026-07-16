@@ -142,13 +142,21 @@ fn matching(webinars: Vec<Webinar>, selected: &[String]) -> Vec<Webinar> {
 }
 
 /// A webinar as the list draws it.
+///
+/// Shaped to the site's existing event-card pattern (`ss-ec`, see
+/// `static/design/components/event-card.html`): a date column beside the
+/// content, showing month over day for something upcoming and month over year
+/// for the archive, since the day of a talk from two years ago is noise.
 pub struct WebinarCard {
     pub title: String,
     pub description: String,
     pub image: String,
     pub image_credit: String,
     pub platform: String,
-    pub date: String,
+    pub month: String,
+    pub day: String,
+    pub year: String,
+    pub date_line: String,
     pub upcoming: bool,
     pub featured_entity_slug: String,
     pub links: Vec<WebinarLink>,
@@ -156,8 +164,19 @@ pub struct WebinarCard {
 
 impl WebinarCard {
     fn new(webinar: Webinar) -> WebinarCard {
+        let held = crate::webinar::held_zoned(&webinar.held_at);
+
+        let format = |pattern: &str| {
+            held.as_ref()
+                .map(|held| held.strftime(pattern).to_string())
+                .unwrap_or_default()
+        };
+
         WebinarCard {
-            date: format_date(&webinar.held_at),
+            month: format("%b").to_uppercase(),
+            day: format("%-d"),
+            year: format("%Y"),
+            date_line: format("%B %-d, %Y"),
             upcoming: webinar.is_upcoming(),
             title: webinar.title,
             description: webinar.description,
@@ -169,33 +188,18 @@ impl WebinarCard {
         }
     }
 
+    /// Where the title points: the webinar's first link, matching the card
+    /// pattern's title-and-primary-button pairing. Empty when it has none, in
+    /// which case the title is not a link at all.
+    pub fn primary_href(&self) -> &str {
+        self.links
+            .first()
+            .map(|link| link.url.as_str())
+            .unwrap_or_default()
+    }
+
     pub fn featured_entity_path(&self) -> String {
         format!("/{}", self.featured_entity_slug)
-    }
-}
-
-/// Renders the date the way both pages show it — "APR 29", "JUN 17 2026".
-///
-/// The year is dropped for the current year, since an archive of this year's
-/// webinars repeating "2026" on every card is noise.
-fn format_date(held_at: &common::timestring::TimeString) -> String {
-    let Ok(timestamp): Result<jiff::Timestamp, _> = held_at.clone().try_into() else {
-        return String::new();
-    };
-
-    let Ok(zone) = jiff::tz::TimeZone::get("US/Eastern") else {
-        return String::new();
-    };
-
-    let held = timestamp.to_zoned(zone);
-    let this_year = jiff::Timestamp::now()
-        .to_zoned(held.time_zone().clone())
-        .year();
-
-    if held.year() == this_year {
-        held.strftime("%b %-d").to_string().to_uppercase()
-    } else {
-        held.strftime("%b %-d %Y").to_string().to_uppercase()
     }
 }
 
