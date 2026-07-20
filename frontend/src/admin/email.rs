@@ -232,6 +232,9 @@ pub struct CreateStoredEmailForm {
     body_delta: String,
     #[serde(default, deserialize_with = "deserialize_string_or_vec")]
     datasets: Vec<String>,
+    /// Absent from the form body when the checkbox is unchecked.
+    #[serde(default)]
+    reply_to_noreply: bool,
 }
 
 #[handler]
@@ -244,6 +247,7 @@ async fn email_stored_create(
         subject: form.subject,
         body_delta: form.body_delta,
         datasets: form.datasets,
+        reply_to_noreply: form.reply_to_noreply,
     };
 
     match common::service::request::<common::message::email::CreateStoredEmailResponse>(
@@ -289,6 +293,7 @@ pub struct EditStoredEmailPage {
     pub subject: String,
     pub body_delta: String,
     pub selected_datasets: Vec<String>,
+    pub reply_to_noreply: bool,
     pub error_message: Option<String>,
     pub available_datasets: Vec<common::message::email::DatasetInfo>,
 }
@@ -327,6 +332,7 @@ async fn email_stored_edit(
                 subject: email.subject,
                 body_delta: email.body_delta,
                 selected_datasets: email.datasets,
+                reply_to_noreply: email.reply_to_noreply,
                 error_message: None,
                 available_datasets: datasets_response.datasets,
             };
@@ -351,6 +357,9 @@ pub struct UpdateStoredEmailForm {
     body_delta: Option<String>,
     #[serde(default, deserialize_with = "deserialize_string_or_vec")]
     datasets: Vec<String>,
+    /// Absent from the form body when the checkbox is unchecked.
+    #[serde(default)]
+    reply_to_noreply: bool,
 }
 
 #[handler]
@@ -384,6 +393,9 @@ async fn email_stored_update(
                 } else {
                     Some(form.datasets)
                 },
+                // Always sent: the edit form posts the full checkbox state, so
+                // an absent field means "unchecked", not "leave unchanged".
+                reply_to_noreply: Some(form.reply_to_noreply),
             };
             common::service::request::<common::message::email::UpdateStoredEmailResponse>(
                 "emailer.stored.update",
@@ -479,7 +491,9 @@ async fn email_stored_send(
             recipients,
             data_sets: email_response.email.datasets,
             additional_data: None,
-            reply_to: None,
+            reply_to: common::message::email::noreply_reply_to(
+                email_response.email.reply_to_noreply,
+            ),
         },
     )
     .await?;
@@ -531,6 +545,9 @@ pub struct CreateOneoffEmailForm {
     body_delta: String,
     #[serde(default, deserialize_with = "deserialize_string_or_vec")]
     datasets: Vec<String>,
+    /// Absent from the form body when the checkbox is unchecked.
+    #[serde(default)]
+    reply_to_noreply: bool,
 }
 
 #[handler]
@@ -542,6 +559,7 @@ async fn email_oneoff_create(
         subject: form.subject,
         body_delta: form.body_delta,
         datasets: form.datasets,
+        reply_to_noreply: form.reply_to_noreply,
     };
 
     match common::service::request::<common::message::email::CreateOneoffEmailResponse>(
@@ -587,6 +605,7 @@ pub struct EditOneoffEmailPage {
     pub body_delta: String,
     pub archived: bool,
     pub selected_datasets: Vec<String>,
+    pub reply_to_noreply: bool,
     pub error_message: Option<String>,
     pub available_datasets: Vec<common::message::email::DatasetInfo>,
     pub legacy_slug: Option<String>,
@@ -626,6 +645,7 @@ async fn email_oneoff_edit(
                 body_delta: email.body_delta,
                 archived: email.archived,
                 selected_datasets: email.datasets,
+                reply_to_noreply: email.reply_to_noreply,
                 error_message: None,
                 available_datasets: datasets_response.datasets,
                 legacy_slug: email.legacy_slug,
@@ -650,6 +670,9 @@ pub struct UpdateOneoffEmailForm {
     body_delta: Option<String>,
     #[serde(default, deserialize_with = "deserialize_string_or_vec")]
     datasets: Vec<String>,
+    /// Absent from the form body when the checkbox is unchecked.
+    #[serde(default)]
+    reply_to_noreply: bool,
 }
 
 #[handler]
@@ -704,6 +727,9 @@ async fn email_oneoff_update(
                 } else {
                     Some(form.datasets)
                 },
+                // Always sent: the edit form posts the full checkbox state, so
+                // an absent field means "unchecked", not "leave unchanged".
+                reply_to_noreply: Some(form.reply_to_noreply),
             };
             common::service::request::<common::message::email::UpdateOneoffEmailResponse>(
                 "emailer.oneoff.update",
@@ -791,7 +817,9 @@ async fn email_oneoff_send(
             recipients,
             data_sets: email_response.email.datasets,
             additional_data: None,
-            reply_to: None,
+            reply_to: common::message::email::noreply_reply_to(
+                email_response.email.reply_to_noreply,
+            ),
         },
     )
     .await?;
@@ -1547,6 +1575,7 @@ async fn email_oneoff_to_stored(
                 subject: email.subject,
                 body_delta: email.body_delta,
                 datasets: email.datasets,
+                reply_to_noreply: email.reply_to_noreply,
             },
         )
         .await?;
@@ -1592,6 +1621,7 @@ async fn email_stored_to_oneoff(
                 subject: email.subject,
                 body_delta: email.body_delta,
                 datasets: email.datasets,
+                reply_to_noreply: email.reply_to_noreply,
             },
         )
         .await?;

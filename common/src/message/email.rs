@@ -4,6 +4,15 @@ use ulid::Ulid;
 #[cfg(feature = "database")]
 use crate::timestring::TimeString;
 
+/// Mailbox used as the Reply-To when an email is marked no-reply. Replies sent
+/// here are not read by anyone; the point is to keep them out of a staffed inbox.
+pub const NOREPLY_ADDRESS: &str = "noreply@scistarter.org";
+
+/// The Reply-To list for an email, given whether it is marked no-reply.
+pub fn noreply_reply_to(reply_to_noreply: bool) -> Option<Vec<String>> {
+    reply_to_noreply.then(|| vec![NOREPLY_ADDRESS.to_string()])
+}
+
 // ============================================================================
 // Send Request Messages
 // ============================================================================
@@ -60,6 +69,9 @@ pub struct ScheduleSendRequest {
     pub data_sets: Vec<String>,
     pub additional_data: Option<Vec<(String, String)>>,
     pub recipients: Option<String>,
+    /// Reply-To addresses to apply when the scheduled send is finally queued.
+    #[serde(default)]
+    pub reply_to: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -234,8 +246,9 @@ pub struct StoredEmail {
     pub stored_email_id: Ulid,
     pub slug: String,
     pub subject: String,
-    pub body_delta: String,    // Quill Delta JSON
-    pub datasets: Vec<String>, // Dataset names
+    pub body_delta: String,     // Quill Delta JSON
+    pub datasets: Vec<String>,  // Dataset names
+    pub reply_to_noreply: bool, // Direct replies to NOREPLY_ADDRESS
     pub created_at: TimeString,
     pub updated_at: TimeString,
 }
@@ -271,6 +284,8 @@ pub struct CreateStoredEmailRequest {
     pub subject: String,
     pub body_delta: String,    // Quill Delta JSON
     pub datasets: Vec<String>, // Dataset names
+    #[serde(default)]
+    pub reply_to_noreply: bool, // Direct replies to NOREPLY_ADDRESS
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -283,8 +298,9 @@ pub struct UpdateStoredEmailRequest {
     pub stored_email_id: Ulid,
     pub slug: Option<String>,
     pub subject: Option<String>,
-    pub body_delta: Option<String>,    // Quill Delta JSON
-    pub datasets: Option<Vec<String>>, // Dataset names
+    pub body_delta: Option<String>,     // Quill Delta JSON
+    pub datasets: Option<Vec<String>>,  // Dataset names
+    pub reply_to_noreply: Option<bool>, // Direct replies to NOREPLY_ADDRESS
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -311,8 +327,9 @@ pub struct DeleteStoredEmailResponse {
 pub struct OneoffEmail {
     pub oneoff_email_id: Ulid,
     pub subject: String,
-    pub body_delta: String,    // Quill Delta JSON
-    pub datasets: Vec<String>, // Dataset names
+    pub body_delta: String,     // Quill Delta JSON
+    pub datasets: Vec<String>,  // Dataset names
+    pub reply_to_noreply: bool, // Direct replies to NOREPLY_ADDRESS
     pub created_at: TimeString,
     pub archived: bool,
     pub legacy_slug: Option<String>,
@@ -348,6 +365,8 @@ pub struct CreateOneoffEmailRequest {
     pub subject: String,
     pub body_delta: String,    // Quill Delta JSON
     pub datasets: Vec<String>, // Dataset names
+    #[serde(default)]
+    pub reply_to_noreply: bool, // Direct replies to NOREPLY_ADDRESS
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -359,8 +378,9 @@ pub struct CreateOneoffEmailResponse {
 pub struct UpdateOneoffEmailRequest {
     pub oneoff_email_id: Ulid,
     pub subject: Option<String>,
-    pub body_delta: Option<String>,    // Quill Delta JSON
-    pub datasets: Option<Vec<String>>, // Dataset names
+    pub body_delta: Option<String>,     // Quill Delta JSON
+    pub datasets: Option<Vec<String>>,  // Dataset names
+    pub reply_to_noreply: Option<bool>, // Direct replies to NOREPLY_ADDRESS
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

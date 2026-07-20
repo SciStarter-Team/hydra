@@ -373,7 +373,7 @@ pub async fn handle_trigger_event(req: &Request) -> Result<TriggerEmailResponse,
         // Get the stored email content
         let stored_email_id_str = trigger.stored_email_id.to_string();
         let stored_email_row = sqlx::query!(
-            r#"SELECT subject, body_delta, datasets FROM stored_emails WHERE stored_email_id = ?"#,
+            r#"SELECT subject, body_delta, datasets, reply_to_noreply FROM stored_emails WHERE stored_email_id = ?"#,
             stored_email_id_str
         )
         .fetch_optional(db())
@@ -394,6 +394,8 @@ pub async fn handle_trigger_event(req: &Request) -> Result<TriggerEmailResponse,
         // Convert body_delta to HTML
         let template_html = common::quill::delta_to_html(&stored_email.body_delta)?;
 
+        let reply_to = common::message::email::noreply_reply_to(stored_email.reply_to_noreply);
+
         // Build additional data with user_id
         let mut additional_data = request.additional_data.clone().unwrap_or_default();
         additional_data.push(("user_id".to_string(), request.user_id.to_string()));
@@ -409,7 +411,7 @@ pub async fn handle_trigger_event(req: &Request) -> Result<TriggerEmailResponse,
                     recipients,
                     datasets,
                     Some(additional_data),
-                    None,
+                    reply_to,
                 )
                 .await?;
 
@@ -439,6 +441,7 @@ pub async fn handle_trigger_event(req: &Request) -> Result<TriggerEmailResponse,
                     datasets,
                     Some(additional_data),
                     trigger.recipients.clone(),
+                    reply_to,
                 )
                 .await?;
 

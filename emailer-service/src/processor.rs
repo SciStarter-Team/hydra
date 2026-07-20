@@ -597,7 +597,7 @@ async fn process_scheduled_sends() -> Result<bool, Error> {
 
     // Fetch next scheduled send that is due
     let scheduled = sqlx::query!(
-        r#"SELECT scheduled_id, user_id, hook, template_html, subject, data_sets, additional_data
+        r#"SELECT scheduled_id, user_id, hook, template_html, subject, data_sets, additional_data, reply_to
            FROM scheduled_sends
            WHERE scheduled_time <= ?
            ORDER BY scheduled_time ASC
@@ -617,11 +617,12 @@ async fn process_scheduled_sends() -> Result<bool, Error> {
     let created_at = TimeString::now();
 
     sqlx::query!(
-        r#"INSERT INTO sendings (sending_id, created_at, subject, total_queued)
-           VALUES (?, ?, ?, 1)"#,
+        r#"INSERT INTO sendings (sending_id, created_at, subject, total_queued, reply_to)
+           VALUES (?, ?, ?, 1, ?)"#,
         sending_id_str,
         created_at,
-        item.subject
+        item.subject,
+        item.reply_to
     )
     .execute(db())
     .await?;
@@ -633,8 +634,8 @@ async fn process_scheduled_sends() -> Result<bool, Error> {
 
     sqlx::query!(
         r#"INSERT INTO send_queue
-           (queue_id, sending_id, target_type, target_value, data_sets, template_html, subject, additional_data, queued_at, status)
-           VALUES (?, ?, 'user_id', ?, ?, ?, ?, ?, ?, 'pending')"#,
+           (queue_id, sending_id, target_type, target_value, data_sets, template_html, subject, additional_data, reply_to, queued_at, status)
+           VALUES (?, ?, 'user_id', ?, ?, ?, ?, ?, ?, ?, 'pending')"#,
         queue_id_str,
         sending_id_str,
         item.user_id,
@@ -642,6 +643,7 @@ async fn process_scheduled_sends() -> Result<bool, Error> {
         item.template_html,
         item.subject,
         item.additional_data,
+        item.reply_to,
         queued_at
     )
     .execute(db())

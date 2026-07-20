@@ -20,6 +20,7 @@ pub async fn schedule_send(
     data_sets: Vec<String>,
     additional_data: Option<Vec<(String, String)>>,
     recipients: Option<String>,
+    reply_to: Option<Vec<String>>,
 ) -> Result<Ulid, Error> {
     let scheduled_id = Ulid::new();
     let created_at = TimeString::now();
@@ -28,11 +29,15 @@ pub async fn schedule_send(
     let scheduled_id_str = scheduled_id.to_string();
     let data_sets_json = serde_json::to_string(&data_sets)?;
     let additional_data_json = serde_json::to_string(&additional_data.unwrap_or_default())?;
+    let reply_to_json = reply_to
+        .filter(|addresses| !addresses.is_empty())
+        .map(|addresses| serde_json::to_string(&addresses))
+        .transpose()?;
 
     sqlx::query!(
         r#"INSERT INTO scheduled_sends
-           (scheduled_id, user_id, hook, scheduled_time, template_html, subject, data_sets, additional_data, recipients, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+           (scheduled_id, user_id, hook, scheduled_time, template_html, subject, data_sets, additional_data, recipients, reply_to, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         scheduled_id_str,
         user_id_str,
         hook,
@@ -42,6 +47,7 @@ pub async fn schedule_send(
         data_sets_json,
         additional_data_json,
         recipients,
+        reply_to_json,
         created_at
     )
     .execute(db())
@@ -72,6 +78,7 @@ pub async fn handle_schedule_send(req: &Request) -> Result<ScheduleSendResponse,
         request.data_sets,
         request.additional_data,
         request.recipients,
+        request.reply_to,
     )
     .await?;
 

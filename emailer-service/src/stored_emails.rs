@@ -14,6 +14,7 @@ struct StoredEmailRow {
     subject: Option<String>,
     body_delta: Option<String>,
     datasets: Option<String>,
+    reply_to_noreply: Option<bool>,
     created_at: Option<String>,
     updated_at: Option<String>,
 }
@@ -34,7 +35,7 @@ pub async fn handle_list_stored_emails(req: &Request) -> Result<ListStoredEmails
         let rows = sqlx::query_as!(
             StoredEmailRow,
             r#"
-            SELECT stored_email_id, slug, subject, body_delta, datasets, created_at, updated_at
+            SELECT stored_email_id, slug, subject, body_delta, datasets, reply_to_noreply, created_at, updated_at
             FROM stored_emails
             WHERE slug LIKE ? OR subject LIKE ?
             ORDER BY created_at DESC
@@ -61,7 +62,7 @@ pub async fn handle_list_stored_emails(req: &Request) -> Result<ListStoredEmails
         let rows = sqlx::query_as!(
             StoredEmailRow,
             r#"
-            SELECT stored_email_id, slug, subject, body_delta, datasets, created_at, updated_at
+            SELECT stored_email_id, slug, subject, body_delta, datasets, reply_to_noreply, created_at, updated_at
             FROM stored_emails
             ORDER BY created_at DESC
             LIMIT ? OFFSET ?
@@ -109,6 +110,7 @@ pub async fn handle_list_stored_emails(req: &Request) -> Result<ListStoredEmails
                     .body_delta
                     .ok_or_else(|| anyhow::anyhow!("body_delta is NULL"))?,
                 datasets,
+                reply_to_noreply: row.reply_to_noreply.unwrap_or(false),
                 created_at,
                 updated_at,
             })
@@ -129,7 +131,7 @@ pub async fn handle_get_stored_email(req: &Request) -> Result<GetStoredEmailResp
     let row = sqlx::query_as!(
         StoredEmailRow,
         r#"
-        SELECT stored_email_id, slug, subject, body_delta, datasets, created_at, updated_at
+        SELECT stored_email_id, slug, subject, body_delta, datasets, reply_to_noreply, created_at, updated_at
         FROM stored_emails
         WHERE stored_email_id = ?
         "#,
@@ -166,6 +168,7 @@ pub async fn handle_get_stored_email(req: &Request) -> Result<GetStoredEmailResp
                 .body_delta
                 .ok_or_else(|| anyhow::anyhow!("body_delta is NULL"))?,
             datasets,
+            reply_to_noreply: row.reply_to_noreply.unwrap_or(false),
             created_at,
             updated_at,
         },
@@ -187,14 +190,15 @@ pub async fn handle_create_stored_email(req: &Request) -> Result<CreateStoredEma
 
     sqlx::query!(
         r#"
-        INSERT INTO stored_emails (stored_email_id, slug, subject, body_delta, datasets, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO stored_emails (stored_email_id, slug, subject, body_delta, datasets, reply_to_noreply, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         "#,
         id_str,
         request.slug,
         request.subject,
         request.body_delta,
         datasets_json,
+        request.reply_to_noreply,
         now_str,
         now_str
     )
@@ -254,6 +258,17 @@ pub async fn handle_update_stored_email(req: &Request) -> Result<UpdateStoredEma
         sqlx::query!(
             "UPDATE stored_emails SET datasets = ?, updated_at = ? WHERE stored_email_id = ?",
             datasets_json,
+            now_str,
+            id
+        )
+        .execute(db())
+        .await?;
+    }
+
+    if let Some(reply_to_noreply) = request.reply_to_noreply {
+        sqlx::query!(
+            "UPDATE stored_emails SET reply_to_noreply = ?, updated_at = ? WHERE stored_email_id = ?",
+            reply_to_noreply,
             now_str,
             id
         )

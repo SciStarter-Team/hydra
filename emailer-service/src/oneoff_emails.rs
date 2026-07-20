@@ -13,6 +13,7 @@ struct OneoffEmailRow {
     subject: Option<String>,
     body_delta: Option<String>,
     datasets: Option<String>,
+    reply_to_noreply: Option<bool>,
     created_at: Option<String>,
     archived: Option<i64>,
     legacy_slug: Option<String>,
@@ -32,7 +33,7 @@ pub async fn handle_list_oneoff_emails(req: &Request) -> Result<ListOneoffEmails
         let rows = sqlx::query_as!(
             OneoffEmailRow,
             r#"
-            SELECT oneoff_email_id, subject, body_delta, datasets, created_at, archived, legacy_slug
+            SELECT oneoff_email_id, subject, body_delta, datasets, reply_to_noreply, created_at, archived, legacy_slug
             FROM oneoff_emails
             ORDER BY created_at DESC
             LIMIT ? OFFSET ?
@@ -52,7 +53,7 @@ pub async fn handle_list_oneoff_emails(req: &Request) -> Result<ListOneoffEmails
         let rows = sqlx::query_as!(
             OneoffEmailRow,
             r#"
-            SELECT oneoff_email_id, subject, body_delta, datasets, created_at, archived, legacy_slug
+            SELECT oneoff_email_id, subject, body_delta, datasets, reply_to_noreply, created_at, archived, legacy_slug
             FROM oneoff_emails
             WHERE archived = 0
             ORDER BY created_at DESC
@@ -98,6 +99,7 @@ pub async fn handle_list_oneoff_emails(req: &Request) -> Result<ListOneoffEmails
                     .body_delta
                     .ok_or_else(|| anyhow::anyhow!("body_delta is NULL"))?,
                 datasets,
+                reply_to_noreply: row.reply_to_noreply.unwrap_or(false),
                 created_at,
                 archived: row
                     .archived
@@ -122,7 +124,7 @@ pub async fn handle_get_oneoff_email(req: &Request) -> Result<GetOneoffEmailResp
     let row = sqlx::query_as!(
         OneoffEmailRow,
         r#"
-        SELECT oneoff_email_id, subject, body_delta, datasets, created_at, archived, legacy_slug
+        SELECT oneoff_email_id, subject, body_delta, datasets, reply_to_noreply, created_at, archived, legacy_slug
         FROM oneoff_emails
         WHERE oneoff_email_id = ?
         "#,
@@ -154,6 +156,7 @@ pub async fn handle_get_oneoff_email(req: &Request) -> Result<GetOneoffEmailResp
                 .body_delta
                 .ok_or_else(|| anyhow::anyhow!("body_delta is NULL"))?,
             datasets,
+            reply_to_noreply: row.reply_to_noreply.unwrap_or(false),
             created_at,
             archived: row
                 .archived
@@ -179,13 +182,14 @@ pub async fn handle_create_oneoff_email(req: &Request) -> Result<CreateOneoffEma
 
     sqlx::query!(
         r#"
-        INSERT INTO oneoff_emails (oneoff_email_id, subject, body_delta, datasets, created_at, archived)
-        VALUES (?, ?, ?, ?, ?, 0)
+        INSERT INTO oneoff_emails (oneoff_email_id, subject, body_delta, datasets, reply_to_noreply, created_at, archived)
+        VALUES (?, ?, ?, ?, ?, ?, 0)
         "#,
         id_str,
         request.subject,
         request.body_delta,
         datasets_json,
+        request.reply_to_noreply,
         now_str
     )
     .execute(db())
@@ -229,6 +233,16 @@ pub async fn handle_update_oneoff_email(req: &Request) -> Result<UpdateOneoffEma
         sqlx::query!(
             "UPDATE oneoff_emails SET datasets = ? WHERE oneoff_email_id = ?",
             datasets_json,
+            id
+        )
+        .execute(db())
+        .await?;
+    }
+
+    if let Some(reply_to_noreply) = request.reply_to_noreply {
+        sqlx::query!(
+            "UPDATE oneoff_emails SET reply_to_noreply = ? WHERE oneoff_email_id = ?",
+            reply_to_noreply,
             id
         )
         .execute(db())
