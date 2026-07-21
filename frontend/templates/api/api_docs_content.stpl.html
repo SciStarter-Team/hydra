@@ -891,8 +891,7 @@ with urlopen('https://scistarter.org/api/record_event?key=kjsdfh8fsao48u3...',
   // links on the About cards, or a shared #docs-* URL) have to activate the
   // tab and expand the target accordion before the browser can scroll to it.
   (function () {
-      function reveal() {
-          const id = window.location.hash.slice(1);
+      function reveal(id, behavior) {
           if (!id) return;
           const target = document.getElementById(id);
           if (!target) return;
@@ -908,17 +907,36 @@ with urlopen('https://scistarter.org/api/record_event?key=kjsdfh8fsao48u3...',
               details.open = true;
           }
 
-          target.scrollIntoView({behavior: 'smooth', block: 'start'});
+          target.scrollIntoView({behavior: behavior, block: 'start'});
       }
 
-      window.addEventListener('hashchange', reveal);
+      // Instant scroll: a smooth scroll during page load can be cancelled
+      // by layout shifts as images and fonts arrive, leaving the page
+      // stranded at the top.
+      function revealFromHash() {
+          reveal(window.location.hash.slice(1), 'auto');
+      }
+
+      // Clicking a link whose fragment matches the current hash fires no
+      // hashchange event, so in-page anchor clicks are handled directly.
+      // The default navigation is replaced with pushState so the URL still
+      // updates without an instant jump preempting the smooth scroll.
+      document.addEventListener('click', function (event) {
+          const link = event.target.closest('.ss-api a[href^="#"]');
+          if (!link) return;
+          event.preventDefault();
+          history.pushState(null, '', link.getAttribute('href'));
+          reveal(link.getAttribute('href').slice(1), 'smooth');
+      });
+
+      window.addEventListener('hashchange', revealFromHash);
 
       // The initial reveal must wait for DOMContentLoaded so that the
       // deferred tabs.js has attached its click handler first.
       if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', reveal);
+          document.addEventListener('DOMContentLoaded', revealFromHash);
       } else {
-          reveal();
+          revealFromHash();
       }
   })();
 </script>
