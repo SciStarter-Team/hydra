@@ -1,0 +1,924 @@
+<div class="ss-container !pt-8 !pb-8 mx-auto ss-api">
+  <h1>SciStarter API</h1>
+
+  <div class="tabs-bar-wrapper mb-8">
+    <div class="tabs-wrapper no-shadow">
+      <div class="tabs tabs-bar" role="tablist" aria-label="SciStarter API">
+        <button class="tab" role="tab" aria-selected="true" aria-controls="panel-about" id="tab-about">About</button>
+        <button class="tab" role="tab" aria-selected="false" aria-controls="panel-docs" id="tab-docs">Documentation</button>
+      </div>
+    </div>
+    <div class="tab-panels border border-linework border-t-0 p-4">
+
+      <div class="tab-panel" id="panel-about" role="tabpanel" aria-hidden="false">
+
+        <div class="flex flex-col md:flex-row items-center gap-6 mb-8">
+          <img src="/-static/img/api/ai-robot.svg" alt="" class="w-32 shrink-0" />
+          <div>
+            <h2 class="text-neutral-dark">SciStarter provides <span class="text-accent1">3 free tools</span> to benefit project owners, participants, organizations, and researchers!</h2>
+            <p>
+              New to SciStarter's Affiliate Program?
+              <a href="https://blog.scistarter.org/2021/12/citizen-science-project-leaders-heres-how-and-why-to-become-a-scistarter-affiliate/">Read How and Why to Become a SciStarter Affiliate</a>
+              for a quick overview.
+            </p>
+          </div>
+        </div>
+
+        <div class="grid gap-6 lg:grid-cols-3 mb-12">
+
+          <div class="flex flex-col border border-linework rounded-sm bg-white">
+            <div class="flex flex-col grow p-4">
+              <div class="flex items-center gap-3 mb-2">
+                <svg width="30" height="30" aria-hidden="true" class="shrink-0 fill-primary-action"><use xlink:href="/-static/img/icons.svg#icon--org-contributions"></use></svg>
+                <h3 class="text-accent1 mb-0">Participation API</h3>
+              </div>
+              <p class="font-bold border-b border-linework pb-4">Amplify your project, recruit more participants, and help your volunteers earn credit for contributions to your project.</p>
+              <h4 class="uppercase text-primary-action text-sm">Best for:</h4>
+              <ul class="bullets grow">
+                <li>Project owners that want to be part of our <a href="/for-researchers">affiliate program</a>, which allows your project to be eligible for inclusion in special, curated programming with the Girl Scouts, Discover, PBS, Nature, schools, universities, libraries, and more!</li>
+              </ul>
+              <a href="#docs-first" class="font-bold">View documentation</a>
+            </div>
+            <div class="bg-neutral-xlight p-4 text-sm">
+              <a href="https://blog.scistarter.com/2019/08/scistarter-affiliate-tools/">Read about how Anecdata.org and Stall Catchers by EyesOnAlz use the Participation API.</a>
+            </div>
+          </div>
+
+          <div class="flex flex-col border border-linework rounded-sm bg-white">
+            <div class="flex flex-col grow p-4">
+              <div class="flex items-center gap-3 mb-2">
+                <svg width="30" height="30" aria-hidden="true" class="shrink-0 fill-primary-action"><use xlink:href="/-static/img/icons.svg#icon--key"></use></svg>
+                <h3 class="text-accent1 mb-0">SciStarter Login System</h3>
+              </div>
+              <p class="font-bold border-b border-linework pb-4">Reduce the code overhead of your project by implementing the SciStarter Login system. We'll manage usernames and passwords for you!</p>
+              <h4 class="uppercase text-primary-action text-sm">Best for:</h4>
+              <ul class="bullets grow">
+                <li>Project owners with limited web development teams</li>
+              </ul>
+              <a href="#docs-other" class="font-bold">View documentation</a>
+            </div>
+            <div class="bg-neutral-xlight p-4 text-sm">
+              <a href="https://blog.scistarter.com/2019/08/scistarter-affiliate-tools/">Read about how Sparrow Swap uses the SciStarter Login System.</a>
+            </div>
+          </div>
+
+          <div class="flex flex-col border border-linework rounded-sm bg-white">
+            <div class="flex flex-col grow p-4">
+              <div class="flex items-center gap-3 mb-2">
+                <svg width="25" height="30" aria-hidden="true" class="shrink-0 fill-primary-action"><use xlink:href="/-static/img/icons.svg#icon--org-binoculars"></use></svg>
+                <h3 class="text-accent1 mb-0">Project Finder Widget</h3>
+              </div>
+              <p class="font-bold border-b border-linework pb-4">Customize and embed on your site to allow users to find citizen science projects. You can filter by topic, location or audience.</p>
+              <h4 class="uppercase text-primary-action text-sm">Best for:</h4>
+              <ul class="bullets grow">
+                <li>Anyone who owns a website that wants to get people involved in citizen science projects</li>
+              </ul>
+              <a href="#docs-widget" class="font-bold">View documentation</a>
+            </div>
+            <div class="bg-neutral-xlight p-4 text-sm">
+              <a href="https://blog.scistarter.com/2019/08/scistarter-affiliate-tools/">Read about how Cornerstones of Science and Science Connected use the Project Finder Widget.</a>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="bg-neutral-dark rounded-sm p-6 text-center mb-12">
+          <h2 class="inline-block bg-accent2 text-white px-4 py-2 my-4 text-xl">Our tools benefit everyone in citizen science!</h2>
+          <div class="flex flex-col md:flex-row md:flex-wrap justify-around gap-6">
+            <div class="md:w-1/4 lg:w-1/6 mx-auto">
+              <img src="/-static/img/api/participants.jpg" alt="A project participant" class="w-[122px] h-[122px] rounded-full border-2 border-neutral-xlight mx-auto mb-2" />
+              <h3 class="text-accent1 text-lg mb-1">Participants</h3>
+              <p class="text-white text-sm">Track and earn credit for their contributions to projects</p>
+            </div>
+            <div class="md:w-1/4 lg:w-1/6 mx-auto">
+              <img src="/-static/img/api/leader.jpg" alt="A project leader" class="w-[122px] h-[122px] rounded-full border-2 border-neutral-xlight mx-auto mb-2" />
+              <h3 class="text-accent1 text-lg mb-1">Project Leaders</h3>
+              <p class="text-white text-sm">Amplify projects, recruit more participants, and learn more about participants' experiences and interests while advancing scientific research</p>
+            </div>
+            <div class="md:w-1/4 lg:w-1/6 mx-auto">
+              <img src="/-static/img/api/org.jpg" alt="Organization members" class="w-[122px] h-[122px] rounded-full border-2 border-neutral-xlight mx-auto mb-2" />
+              <h3 class="text-accent1 text-lg mb-1">Organizations</h3>
+              <p class="text-white text-sm">Including Girl Scouts USA, Discover, PBS, school districts, college campuses, libraries and others share projects from SciStarter with their communities and acquire evidence needed to award badges, credits, and recognition</p>
+            </div>
+            <div class="md:w-1/4 lg:w-1/6 mx-auto">
+              <img src="/-static/img/api/researcher.jpg" alt="A researcher" class="w-[122px] h-[122px] rounded-full border-2 border-neutral-xlight mx-auto mb-2" />
+              <h3 class="text-accent1 text-lg mb-1">Researchers</h3>
+              <p class="text-white text-sm">Learn more about the motivations, behaviors, and learning outcomes of participants</p>
+            </div>
+            <div class="md:w-1/4 lg:w-1/6 mx-auto">
+              <img src="/-static/img/api/website.jpg" alt="A website on a laptop" class="w-[122px] h-[122px] rounded-full border-2 border-neutral-xlight mx-auto mb-2" />
+              <h3 class="text-accent1 text-lg mb-1">Website Owners</h3>
+              <p class="text-white text-sm">Add citizen science to their websites through an embeddable project finder widget</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="mb-8">
+          <h2 class="text-xl">Be eligible for inclusion in special, curated programming!</h2>
+          <h3 class="text-base text-neutral-dark font-normal">Implement our <span class="text-accent1 font-bold">Participation API</span> to allow you to be part of special programs with organizations like the following:</h3>
+          <div class="flex flex-wrap items-center justify-around gap-4 my-6">
+            <div class="w-1/2 md:w-1/4 lg:w-1/6"><img src="/-static/img/api/girl-scouts.jpg" alt="Girl Scouts" class="max-w-full p-2 mx-auto" /></div>
+            <div class="w-1/2 md:w-1/4 lg:w-1/6"><img src="/-static/img/api/discover.jpg" alt="Discover Magazine" class="max-w-full p-2 mx-auto" /></div>
+            <div class="w-1/2 md:w-1/4 lg:w-1/6"><img src="/-static/img/api/pbs.png" alt="PBS" class="max-w-full p-2 mx-auto" /></div>
+            <div class="w-1/2 md:w-1/4 lg:w-1/6"><img src="/-static/img/api/ncstate.png" alt="NC State University" class="max-w-full p-2 mx-auto" /></div>
+            <div class="w-1/2 md:w-1/4 lg:w-1/6"><img src="/-static/img/api/broward.jpg" alt="Broward County Public Schools" class="max-w-full p-2 mx-auto" /></div>
+          </div>
+          <h4 class="text-accent1 text-center text-lg">And more libraries, educational institutions, and organizations!</h4>
+        </div>
+
+      </div>
+
+      <div class="tab-panel" id="panel-docs" role="tabpanel" aria-hidden="true">
+
+        <p>If your project uses Qualtrics or similar form-based surveys and services, contact <a href="mailto:info@scistarter.org">info@SciStarter.org</a> to explore affiliate connections.</p>
+
+        <details class="ss-accordion-accessible border border-linework rounded-sm bg-primary-light mb-4" id="docs-first">
+          <summary class="accordion__summary !flex justify-between items-center text-lg p-4 m-0 text-primary-dark">
+            <span>First Steps</span>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="w-4 fill-primary-action"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
+          </summary>
+          <div class="accordion__panel bg-white p-4">
+            <h3 class="mt-0">First Step - Your API Key</h3>
+            <ol class="mb-4">
+              <li>Create a SciStarter account and <a href="/api/key">retrieve your API key</a></li>
+              <li>Register your <a href="/add-project">project on SciStarter</a>
+                <ul class="bullets">
+                  <li>(If you have an inventory of projects to upload, you can do a bulk upload of projects using API calls and your API key. See "Adding Bulk Projects to SciStarter" below.)</li>
+                </ul>
+              </li>
+              <li>Our editors will review your project and either email you with questions or approve and publish your project. You'll hear from us either way.</li>
+            </ol>
+          </div>
+        </details>
+
+        <details class="ss-accordion-accessible border border-linework rounded-sm bg-primary-light mb-4" id="docs-hashed">
+          <summary class="accordion__summary !flex justify-between items-center text-lg p-4 m-0 text-primary-dark">
+            <span>Use the Participant API with email hashes</span>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="w-4 fill-primary-action"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
+          </summary>
+          <div class="accordion__panel bg-white p-4">
+            <p><strong>Get your API key</strong>. The keys are associated with people, rather than projects, and you'll need to use the key of somebody who is authorized to manage the project page on SciStarter. You can fetch your key by logging in as such a user and visiting <a href="/api/key">https://scistarter.org/api/key</a>. Please email <a href="mailto:info@scistarter.org">info@SciStarter.org</a> with questions.</p>
+
+            <h3>Recording participation</h3>
+            <p>
+              It's possible to record user participation using your API key and a hash of the user's
+              email address, rather than an OpenID Connect access token. There is example source code
+              demonstrating this process, available in both
+              <a href="/api-key-and-hashing-example-source-code">HTML formatted</a> and
+              <a href="/-static/files/hash_and_report.py">plain text</a> formats.
+            </p>
+
+            <p>
+              <em>This process is designed to protect user privacy</em>, while still giving credit to
+              users for their participation. The use of a <em>cryptographic hash</em> of the email
+              address means that SciStarter <em>can not</em> connect that hash to a specific person or
+              a specific email address, unless the person in question is a SciStarter member.
+            </p>
+
+            <p>It works by sending an HTTP POST to</p>
+            <code class="api-endpoint">https://scistarter.org/api/participation/hashed/<em>PROJECT-SLUG</em>?key=<em>API-KEY</em></code>
+
+            <p>The parameters of the POST, sent in application/x-www-form-urlencoded format, are:</p>
+
+            <table class="api-params">
+              <thead>
+                <tr>
+                  <th>parameter</th>
+                  <th>type</th>
+                  <th>required</th>
+                  <th>default</th>
+                  <th>description</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>hashed</td>
+                  <td>string</td>
+                  <td>yes</td>
+                  <td></td>
+                  <td>The cryptographic hash of the user's email</td>
+                </tr>
+                <tr>
+                  <td>type</td>
+                  <td><strong>collection</strong>, <strong>classification</strong>, or <strong>signup</strong></td>
+                  <td>yes</td>
+                  <td></td>
+                  <td>Describes what general type of participation the user engaged in: data collection, data classification/analysis, or signing up for the project</td>
+                </tr>
+                <tr>
+                  <td>duration</td>
+                  <td>real number</td>
+                  <td></td>
+                  <td></td>
+                  <td>How long did the user spend on this participation, in seconds, or if count &gt; 1 the mean time per participation. If this information is not available, please provide an estimate</td>
+                </tr>
+                <tr>
+                  <td>fidelity</td>
+                  <td>real number</td>
+                  <td></td>
+                  <td>0.5</td>
+                  <td>Probability that the contribution is accurate, on a range from [0.0-1.0], or mean probability if count &gt; 1</td>
+                </tr>
+                <tr>
+                  <td>where</td>
+                  <td>GeoJSON point (not a feature, just an object containing "type": "Point" and a "coordinates" attribute)</td>
+                  <td></td>
+                  <td>no location</td>
+                  <td>Location where the participation took place</td>
+                </tr>
+                <tr>
+                  <td>when</td>
+                  <td>YYYY-mm-ddThh:mm:ss (in UTC)</td>
+                  <td><strong>Required</strong> if you send reports in batches rather than in real-time</td>
+                  <td>current time</td>
+                  <td>Time when the participation took place</td>
+                </tr>
+                <tr>
+                  <td>count</td>
+                  <td>integer</td>
+                  <td></td>
+                  <td>1</td>
+                  <td>How many participations does this report describe</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <p>
+              The project slug is the identifier used for the project's SciStarter page. If a
+              project's SciStarter URL is https://scistarter.org/an-example then the slug is
+              <strong>an-example</strong>.
+            </p>
+
+            <p>
+              The value of the <strong>hashed</strong> parameter is calculated in Python 3 as
+              <code class="border border-linework px-1">hashlib.sha256(<em>email</em>.lower().encode("utf8")).hexdigest()</code>,
+              or the equivalent operations in other programming languages.
+            </p>
+
+            <p>
+              If we can't match the hash to a SciStarter user, we ignore the post, returning a simple
+              success response.
+            </p>
+
+            <p>
+              When using this integration mechanism, the participant might not realize that the
+              integration is happening, unless you tell them, so it's very important to display some
+              form of notification. For example:
+            </p>
+            <img class="max-w-[600px] w-full border border-dotted border-neutral-mid" title="Notification as displayed on Stall Catchers" alt="A notification reading 'Your participation will be recorded on SciStarter'" src="/-static/img/api/notify.png">
+          </div>
+        </details>
+
+        <details class="ss-accordion-accessible border border-linework rounded-sm bg-primary-light mb-4" id="docs-token">
+          <summary class="accordion__summary !flex justify-between items-center text-lg p-4 m-0 text-primary-dark">
+            <span>Use the Participant API with Link Tokens</span>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="w-4 fill-primary-action"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
+          </summary>
+          <div class="accordion__panel bg-white p-4">
+            <p><strong>Get your API key</strong>. The keys are associated with people, rather than projects, and you'll need to use the key of somebody who is authorized to manage the project page on SciStarter. You can fetch your key by logging in as such a user and visiting <a href="/api/key">https://scistarter.org/api/key</a>. Please email <a href="mailto:info@scistarter.org">info@SciStarter.org</a> with questions.</p>
+
+            <h3>Recording participation</h3>
+            <p>
+              It's possible to record user participation using your API key and a Link Token, rather
+              than a hashed email. A Link Token is an opaque value generated by SciStarter at the
+              request of the user, which the user can copy and paste into your application to
+              establish the connection between your app and SciStarter. The token can be re-used any
+              number of times, so you can store it as part of your user account data, and send it when
+              reporting participation.
+            </p>
+
+            <p>
+              This process is designed to protect user privacy, while still giving credit to users
+              for their participation. A Link Token contains no information about the user, and is
+              entirely under the user's control.
+            </p>
+
+            <p>It works by sending an HTTP POST to</p>
+            <code class="api-endpoint">https://scistarter.org/api/participation/link-token/<em>PROJECT-SLUG</em>?key=<em>API-KEY</em></code>
+
+            <p>The parameters of the POST, sent in application/x-www-form-urlencoded format, are:</p>
+
+            <table class="api-params">
+              <thead>
+                <tr>
+                  <th>parameter</th>
+                  <th>type</th>
+                  <th>required</th>
+                  <th>default</th>
+                  <th>description</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>token</td>
+                  <td>string</td>
+                  <td>yes</td>
+                  <td></td>
+                  <td>The link token generated by the user (on their SciStarter dashboard) and provided to you</td>
+                </tr>
+                <tr>
+                  <td>type</td>
+                  <td><strong>collection</strong>, <strong>classification</strong>, or <strong>signup</strong></td>
+                  <td>yes</td>
+                  <td></td>
+                  <td>Describes what general type of participation the user engaged in: data collection, data classification/analysis, or signing up for the project</td>
+                </tr>
+                <tr>
+                  <td>duration</td>
+                  <td>real number</td>
+                  <td>yes</td>
+                  <td></td>
+                  <td>How long did the user spend on this participation, or if count &gt; 1 the mean time per participation. If this information is not available, please provide an estimate</td>
+                </tr>
+                <tr>
+                  <td>fidelity</td>
+                  <td>real number</td>
+                  <td></td>
+                  <td>0.5</td>
+                  <td>Probability that the contribution is accurate, on a range from [0.0-1.0], or mean probability if count &gt; 1</td>
+                </tr>
+                <tr>
+                  <td>where</td>
+                  <td>GeoJSON point (not a feature, just an object containing "type": "Point" and a "coordinates" attribute)</td>
+                  <td></td>
+                  <td>no location</td>
+                  <td>Location where the participation took place</td>
+                </tr>
+                <tr>
+                  <td>when</td>
+                  <td>YYYY-mm-ddThh:mm:ss (in UTC)</td>
+                  <td><strong>Required</strong> if you send reports in batches rather than in real-time</td>
+                  <td>current time</td>
+                  <td>Time when the participation took place</td>
+                </tr>
+                <tr>
+                  <td>count</td>
+                  <td>integer</td>
+                  <td></td>
+                  <td>1</td>
+                  <td>How many participations does this report describe</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <p>
+              The project slug is the identifier used for the project's SciStarter page. If a
+              project's SciStarter URL is https://scistarter.org/an-example then the slug is
+              <strong>an-example</strong>.
+            </p>
+
+            <p>
+              The value of the <strong>token</strong> parameter should be the Link Token, exactly as
+              input into your app by the user. Capitalization matters. You should encourage the users
+              to use copy-and-paste from their SciStarter dashboard to input the Link Token into your
+              app.
+            </p>
+          </div>
+        </details>
+
+        <details class="ss-accordion-accessible border border-linework rounded-sm bg-primary-light mb-4" id="docs-email">
+          <summary class="accordion__summary !flex justify-between items-center text-lg p-4 m-0 text-primary-dark">
+            <span>Turn a Qualtrics survey into a SciStarter affiliate</span>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="w-4 fill-primary-action"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
+          </summary>
+          <div class="accordion__panel bg-white p-4">
+            <p><strong>Get your API key</strong>. The keys are associated with people, rather than projects, and you'll need to use the key of somebody who is authorized to manage the project page on SciStarter. You can fetch your key by logging in as such a user and visiting <a href="/api/key">https://scistarter.org/api/key</a>. Please email <a href="mailto:info@scistarter.org">info@SciStarter.org</a> with questions.</p>
+
+            <h3>Recording participation from a Qualtrics survey</h3>
+            <p>
+              If your project runs on Qualtrics (or a similar form-based survey tool), you can record
+              participation directly from the survey, without writing any code, by having the survey
+              POST the respondent's email address to SciStarter. This turns your survey into a
+              SciStarter affiliate and credits participation to respondents who are SciStarter
+              members.
+            </p>
+
+            <p>It works by sending an HTTP POST to</p>
+            <code class="api-endpoint">https://scistarter.org/api/participation/email/<em>PROJECT-SLUG</em>?key=<em>API-KEY</em></code>
+
+            <p>
+              Unlike the hashed-email and Link Token integrations, this endpoint accepts the
+              participant's email address in the clear, because the survey collects it directly from
+              the participant. If the email address does not match a SciStarter member, the report is
+              silently discarded and we return a success response, so no participation is recorded
+              for non-members.
+            </p>
+
+            <h3>Setting up the survey</h3>
+            <ol class="mb-4">
+              <li>
+                Add an email question to your survey with a label that makes the integration clear,
+                for example: <em>&ldquo;Want credit on SciStarter? Enter your SciStarter login email
+                here.&rdquo;</em> Making participation opt-in and transparent in this way is important
+                &mdash; the participant should understand that their email will be shared with
+                SciStarter to credit their contribution.
+              </li>
+              <li>
+                In Qualtrics, add a <strong>Web Service</strong> element to your survey flow (placed
+                after the email question), configured to send a <strong>POST</strong> request to
+                <strong>https://scistarter.org/api/participation/email/<em>PROJECT-SLUG</em>?key=<em>API-KEY</em></strong>.
+                Be sure the <code>?key=<em>API-KEY</em></code> query parameter is included in the POST
+                URL.
+              </li>
+              <li>
+                Configure the Web Service to send the value of the email question as the
+                <strong>email</strong> body parameter (Qualtrics lets you map a piped survey field to
+                the parameter value).
+              </li>
+            </ol>
+
+            <p>The parameters of the POST, sent in application/x-www-form-urlencoded format, are:</p>
+
+            <table class="api-params">
+              <thead>
+                <tr>
+                  <th>parameter</th>
+                  <th>type</th>
+                  <th>required</th>
+                  <th>default</th>
+                  <th>description</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>email</td>
+                  <td>string</td>
+                  <td>yes</td>
+                  <td></td>
+                  <td>The participant's SciStarter login email address, exactly as entered in the survey</td>
+                </tr>
+                <tr>
+                  <td>type</td>
+                  <td><strong>collection</strong>, <strong>classification</strong>, or <strong>signup</strong></td>
+                  <td></td>
+                  <td>generic participation</td>
+                  <td>Describes what general type of participation the user engaged in: data collection, data classification/analysis, or signing up for the project. If omitted, a generic participation event is recorded</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <p>When provided, the <strong>type</strong> parameter must be exactly one of the following values:</p>
+            <ul class="bullets">
+              <li><strong>collection</strong> &mdash; the participant collected data for the project</li>
+              <li><strong>classification</strong> &mdash; the participant classified, analyzed, or transcribed data for the project</li>
+              <li><strong>signup</strong> &mdash; the participant signed up for or joined the project</li>
+            </ul>
+
+            <p>
+              The project slug is the identifier used for the project's SciStarter page. If a
+              project's SciStarter URL is https://scistarter.org/an-example then the slug is
+              <strong>an-example</strong>.
+            </p>
+          </div>
+        </details>
+
+        <details class="ss-accordion-accessible border border-linework rounded-sm bg-primary-light mb-4" id="docs-adding">
+          <summary class="accordion__summary !flex justify-between items-center text-lg p-4 m-0 text-primary-dark">
+            <span>Adding Bulk Projects to SciStarter</span>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="w-4 fill-primary-action"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
+          </summary>
+          <div class="accordion__panel bg-white p-4">
+            <h3 class="mt-0" id="add">Adding a project to SciStarter</h3>
+            <code class="api-endpoint"><strong>POST https://scistarter.org/api/project/add</strong></code>
+
+            <p>After being successfully added, projects must pass an editorial review (usually less than 24 hours) before being published on SciStarter.</p>
+
+            <p>The POST body must be an object in JSON format, and must contain <strong>"key": "<em>your API key</em>"</strong> among its fields. The rest of the fields should be <a href="http://www.citsci.org/cwis438/websites/citsci/PPSR_Core_Documentation.php">PPSR fields and values</a>, or fields and values from the following list.</p>
+
+            <dl class="api-fields">
+              <dt>scistarter_id</dt>
+              <dd>If included, this allows you to update the record for a previously added project. The same API key must be used to update the project as was originally used to add it.</dd>
+              <dt>name</dt>
+              <dd>The project name (<strong>required</strong>, unless the PPSR equivalent is used; a string)</dd>
+              <dt>guid</dt>
+              <dd>A <a href="https://en.wikipedia.org/wiki/Universally_unique_identifier" target="_blank">globally unique identifier</a> for the project. UUID version 5 is recommended. (<strong>Required</strong> unless the PPSR equivalent is used; a string)</dd>
+              <dt>description</dt>
+              <dd>A description of the project (required, unless the PPSR equivalent is used; a string; one to three paragraphs suggested)</dd>
+              <dt>url</dt>
+              <dd>The URL of the project's primary web page (required, unless the PPSR equivalent is used; a string)</dd>
+              <dt>origin</dt>
+              <dd>A string identifying the organization adding these data to SciStarter (required, unless the PPSR equivalent is used; a short string)</dd>
+              <dt>contact_name</dt>
+              <dd>The name of the person SciStarter should contact about this project (a string)</dd>
+              <dt>contact_affiliation</dt>
+              <dd>The name of the contact person's organization (a string)</dd>
+              <dt>contact_email</dt>
+              <dd>The contact person's email address (required, unless the PPSR equivalent is used; a string)</dd>
+              <dt>contact_phone</dt>
+              <dd>The contact person's phone number (a string)</dd>
+              <dt>contact_address</dt>
+              <dd>The contact person's mailing address (a string)</dd>
+              <dt>presenting_org</dt>
+              <dd>The organization sponsoring or presenting the project to the public (a string)</dd>
+              <dt>rsvp</dt>
+              <dd>The email address or URL to which participants should RSVP, if applicable</dd>
+              <dt>address</dt>
+              <dd>The street address where this project or event takes place, if applicable</dd>
+              <dt>city</dt>
+              <dd>The city where this project or event takes place, if applicable</dd>
+              <dt>state</dt>
+              <dd>The state, province, or administrative region where this project or event takes place, if applicable</dd>
+              <dt>zip</dt>
+              <dd>The zip or postal code where this project or event takes place, if applicable</dd>
+              <dt>country</dt>
+              <dd>The country where this project or event takes place, if applicable</dd>
+              <dt>video_url</dt>
+              <dd>The URL of the project's introductory video (a string)</dd>
+              <dt>blog_url</dt>
+              <dd>The URL of the project's blog (a string)</dd>
+              <dt>twitter_name</dt>
+              <dd>The Twitter handle of the project (a string)</dd>
+              <dt>facebook_page</dt>
+              <dd>The URL of the project's Facebook page (a string)</dd>
+              <dt>status</dt>
+              <dd>One of 'starting', 'active', 'hiatus', 'complete', 'hidden'</dd>
+              <dt>goal</dt>
+              <dd>A short description (64 characters or less recommended, 120 max) of what the project hopes to accomplish (a string)</dd>
+              <dt>task</dt>
+              <dd>A short description (64 characters or less recommended, 120 max) of what the participant will do to help the project (a string)</dd>
+              <dt>image</dt>
+              <dd>The URL where SciStarter may fetch a project logo or introductory image (a string)</dd>
+              <dt>image_credit</dt>
+              <dd>The proper way to credit the image (a string)</dd>
+              <dt>how_to_join</dt>
+              <dd>Instructions to help willing participants begin to participate (a string)</dd>
+              <dt>special_skills</dt>
+              <dd>Particular skills or training that are needed to participate (a string)</dd>
+              <dt>gear</dt>
+              <dd>Special equipment that is needed before a person can participate (a string)</dd>
+              <dt>outdoors</dt>
+              <dd>Whether project participation takes place outside (boolean, default true)</dd>
+              <dt>indoors</dt>
+              <dd>Whether project participation takes place inside (boolean, default true)</dd>
+              <dt>time_commitment</dt>
+              <dd>A plain-language description of how much time will be asked of participants (a string)</dd>
+              <dt>project_type</dt>
+              <dd>Either 'Project' or 'Event' (default 'Project')</dd>
+              <dt>audience</dt>
+              <dd>A list containing one or more of 'Adults', 'College', 'Elementary school (6 - 10 years)', 'Families', 'Graduate Students', 'High school (14 - 17 years)', 'Middle school (11 - 13 years)'</dd>
+              <dt>regions</dt>
+              <dd>A GeoJSON polygon or multipolygon representing the area of coverage for participating in this project, <em>or</em> a string containing either the word <strong>online</strong>, <strong>anywhere</strong>, or <strong>address</strong> to indicate a project with online participation, global participation, or participation at a specific address (as defined by the address, city, state, zip, and country fields) respectively.</dd>
+              <dt>region_label</dt>
+              <dd>A short plain language description of the region or regions (a string; optional)</dd>
+              <dt>UN_regions</dt>
+              <dd>A list of <a href="http://unstats.un.org/unsd/methods/m49/m49regin.htm">UN geographical region</a> names or <code>{code: "FOO", name: "BAR"}</code> pairs</dd>
+              <dt>entirely_online</dt>
+              <dd>Send true if the project takes place entirely online (boolean, default false)</dd>
+            </dl>
+          </div>
+        </details>
+
+        <details class="ss-accordion-accessible border border-linework rounded-sm bg-primary-light mb-4" id="docs-retrieving">
+          <summary class="accordion__summary !flex justify-between items-center text-lg p-4 m-0 text-primary-dark">
+            <span>Retrieving Project Information from SciStarter</span>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="w-4 fill-primary-action"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
+          </summary>
+          <div class="accordion__panel bg-white p-4">
+            <h3 class="mt-0" id="search">Searching for projects</h3>
+            <code class="api-endpoint"><strong>GET https://scistarter.org/p/finder?format=json&amp;key=</strong><em>API key</em><strong>&amp;q=</strong><em>search term</em></code>
+            <p>Instead of <strong>q</strong>, which is a very broad search, you can combine the following search parameters:</p>
+            <ul class="bullets">
+              <li>phrase</li>
+              <li>topic</li>
+              <li>activity</li>
+              <li>url</li>
+              <li>lat - latitude in decimal degrees (lng must be provided as well)</li>
+              <li>lng - longitude in decimal degrees (lat must be provided as well)</li>
+              <li>UN - either the name or code of a <a href="http://unstats.un.org/unsd/methods/m49/m49regin.htm">UN geographical region</a>, to limit the search to projects explicitly in that region (if a project does not specify a UN region, it will be excluded)</li>
+              <li>jsonp - If you want the result in JSONP instead of plain JSON, set this parameter to the callback name.</li>
+            </ul>
+
+            <h4>Example: Retrieving projects about butterflies (Python 3)</h4>
+            <pre class="api-example">from json import load
+from urllib.request import urlopen
+
+with urlopen('https://scistarter.org/p/finder?format=json&amp;key=kjsdfh8fsao48u3...&amp;q=butterfly') as f:
+    data = load(f)</pre>
+
+            <h4>Result: Dictionary of butterfly-related projects</h4>
+            <pre class="api-result">{'total': 123, 'page': 1, 'entities': [ ... ]}</pre>
+
+            <h4>Example: Retrieving space projects that contain the word 'amateur' (Python 3)</h4>
+            <pre class="api-example">from json import load
+from urllib.request import urlopen
+
+with urlopen('https://scistarter.org/p/finder?format=json&amp;key=kjsdfh8fsao48u3...&amp;topic=space&amp;phrase=amateur') as f:
+    data = load(f)</pre>
+
+            <h4>Result: Dictionary of amateur space projects</h4>
+            <pre class="api-result">{'results':
+ [{'id': 917,
+   'title': 'Independent Generation of Research',
+   ...
+  },
+  {'id': 871,
+   'title': 'Slooh',
+   ...
+  }, ...</pre>
+          </div>
+        </details>
+
+        <details class="ss-accordion-accessible border border-linework rounded-sm bg-primary-light mb-4" id="docs-other">
+          <summary class="accordion__summary !flex justify-between items-center text-lg p-4 m-0 text-primary-dark">
+            <span>Other Integrations</span>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="w-4 fill-primary-action"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
+          </summary>
+          <div class="accordion__panel bg-white p-4">
+            <h3 class="mt-0">Anecdata.org and CitSci.org</h3>
+            <p>
+              We support integration with projects hosted on <a href="https://anecdata.org/">Anecdata.org</a>
+              and <a href="https://citsci.org/">CitSci.org</a>. If your project data form is hosted on
+              these platforms, a SciStarter profile is automatically created for you and your project
+              becomes an affiliate.
+            </p>
+            <h3>Zooniverse and iNaturalist</h3>
+            <p>
+              We also support integration with projects hosted on <strong>Zooniverse</strong> and
+              <strong>iNaturalist</strong>. <em>Note:</em> your participants will need to add their
+              iNaturalist or Zooniverse user name to the settings panel in their SciStarter dashboard
+              before their contributions can be recognized.
+            </p>
+            <p>
+              For Zooniverse integration, you'll need to make sure your project has been
+              <a href="/add-project">added to our database</a>, then email your Zooniverse project ID
+              to us at <a href="mailto:info@scistarter.org">info@scistarter.org</a>. We'll also need
+              you to add our account as a collaborator on your Zooniverse project. We'll help walk you
+              through the process.
+            </p>
+            <p>
+              For iNaturalist integration, first <a href="/add-project">add your project</a> to
+              iNaturalist, making sure to set it up as a project, rather than an event. Next, add your
+              project to SciStarter, using the URL of the iNaturalist project page as your project
+              URL. Finally, email us at <a href="mailto:info@scistarter.org">info@scistarter.org</a>.
+              If you know your iNaturalist project id, include that in the email.
+            </p>
+          </div>
+        </details>
+
+        <details class="ss-accordion-accessible border border-linework rounded-sm bg-primary-light mb-4" id="docs-widget">
+          <summary class="accordion__summary !flex justify-between items-center text-lg p-4 m-0 text-primary-dark">
+            <span>Project Finder Widget</span>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="w-4 fill-primary-action"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
+          </summary>
+          <div class="accordion__panel bg-white p-4">
+            <p>Use our <a href="https://scistarter.org/widget/new">widget builder</a> to generate your widget and embed code. The example shown here is a widget for a single project with a header.</p>
+            <iframe src="https://scistarter.org/ui/widget?widget=1&amp;style=header&amp;layout=single-project&amp;type=featured" width="202" height="306" title="Example SciStarter project finder widget"></iframe>
+          </div>
+        </details>
+
+        <details class="ss-accordion-accessible border border-linework rounded-sm bg-primary-light mb-4" id="docs-deprecated">
+          <summary class="accordion__summary !flex justify-between items-center text-lg p-4 m-0 text-primary-dark">
+            <span>Deprecated 2020-02-24</span>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="w-4 fill-primary-action"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
+          </summary>
+          <div class="accordion__panel bg-white p-4">
+            <h3 class="mt-0" id="project">Retrieving project data in JSON</h3>
+            <code class="api-endpoint"><strong>GET https://scistarter.org/api/project/</strong><em>project-id</em><strong>?key=</strong><em>API key</em></code>
+
+            <h4>Example: Retrieving the LepiMAP project (Python 3)</h4>
+            <pre class="api-example">from json import load
+from urllib.request import urlopen
+
+with urlopen('https://scistarter.org/api/project/899?key=kjsdfh8fsao48u3...') as f:
+    data = load(f)</pre>
+
+            <h4>Result: Dictionary of project fields</h4>
+            <pre class="api-result">{'activities': ['While fishing',
+                'On a hike',
+                'At home',
+                'On a walk, run',
+                'At school',
+                'At night'],
+ 'description': "LepiMAP is the African butterfly and moth mapping project. LepiMAP is a joint project of the...",
+ 'tags': ['africa', 'biodiversity', 'butterflies', 'butterfly', 'conservation',
+          'lepidoptera', 'mapping', 'moths', 'science'],
+ 'title': 'LepiMAP',
+ 'topics': ['Nature &amp; Outdoors', 'Animals', 'Ecology &amp; Environment', 'Education', 'Biology'],
+ 'url': 'https://scistarter.org/project/899-LepiMAP',
+ 'UN_regions': [{'code': '001', 'name': 'World'},
+                {'code': '019', 'name': 'Americas'},
+                {'code': '021', 'name': 'Northern America'}],
+ 'regions': [
+    { # LepiMAP has no region, so this is just to show the structure
+        'name': 'LepiMAP region',
+        'osm_id': 0,   # Open Street Map ID, if we have one available
+        'legal': '',   # Legal terms that apply to the geometry, if different from SciStarter TOS
+        'geometry': {} # GeoJSON formatted geometry information
+    }
+ ]}</pre>
+
+            <h3 id="profiles">Retrieving Profile IDs</h3>
+            <p>There are several ways of retrieving a profile number as described on this page and in more detail on your project page dashboard (click "Tools" from the top navigation bar on your project page on SciStarter).</p>
+            <p>Note: We've considered skipping the profile id step and using hashed emails directly in the recording activity step, and we're able to allow that on a case-by-case basis. However, doing it that way costs extra CPU time for both you and us, and we don't encourage it in most cases.</p>
+
+            <h3 id="profile-by-email-hash">Option 1: By Hashed Email Address</h3>
+            <p>
+              We immediately hash the emails sent to us through <a href="#profile-by-email">option 2</a>,
+              and discard the plaintext, but if you're more comfortable or legally required to, you
+              can hash the email yourself and send us only the hash digest. <strong>We won't have any
+              idea what the email address actually is</strong>, unless it belongs to somebody who has
+              explicitly given us permission to know, by registering their email with us.
+            </p>
+            <p>
+              All calls to this endpoint succeed, whether the hash matches a SciStarter member or
+              not. A profile id is returned either way, and that profile id will be consistent each
+              time the same hash is used. If the hash doesn't match a current SciStarter user, we
+              have no idea who the person actually is, but if they later join SciStarter, we will
+              assign that profile id to them. Thus, it does not matter whether they sign up for
+              SciStarter before or after your project; either way, the user experience is the same.
+            </p>
+            <p>
+              Even though all calls to the endpoint succeed and return a profile id, you may want to
+              know whether the person is actually a SciStarter participant. You can examine the
+              <strong>known</strong> attribute of the API call result to determine that. If the known
+              value is true, the person is a SciStarter member. If it is false, we do not recognize
+              them. You can use that information to decide how to handle the user's activity, and we
+              do recommend doing so. There's no need to report activity for people who are not
+              SciStarter members.
+            </p>
+            <p>
+              We discard data sent to us regarding profiles that are not known SciStarter members.
+              Anonymous profiles only exist to smooth out the user experience when people join an
+              affiliate project, and then join SciStarter later.
+            </p>
+            <p>
+              To use this feature, you need to use the SHA256 hash function, and send us the
+              lowercase hexadecimal-encoded digest.
+            </p>
+            <p>
+              Note: The URL for a user's "profile page" contains a number, but that number is
+              <em>not</em> that user's profile id.
+            </p>
+            <code class="api-endpoint"><strong>GET https://scistarter.org/api/profile/id?hashed=</strong><em>HEX(SHA256(email address))</em><strong>&amp;key=</strong><em>API key</em></code>
+
+            <h4>Example: Retrieving a profile number by hashed email address (Python 3)</h4>
+            <pre class="api-example">from json import load
+from hashlib import sha256
+from urllib.request import urlopen
+
+hashed = sha256('example@example.com'.lower().encode('utf8')).hexdigest()
+with urlopen(f'https://scistarter.org/api/profile/id?hashed={hashed}&amp;key=kjsdfh8fsao48u3...') as f:
+    data = load(f)</pre>
+
+            <h4>Result: Dictionary containing the profile number</h4>
+            <pre class="api-result">{"scistarter_profile_id": 42006, "result": "success", "known": true}</pre>
+
+            <h3 id="profile-by-email">Option 2: By Email Address</h3>
+            <p>
+              Using a user's email address is the simplest way to get their profile number. Using the
+              email address and your API key, you can retrieve the ID in a single GET request.
+              <strong>We only store a hash of the email</strong>, unless it belongs to one of our
+              registered users, and we require that the encrypted HTTPS protocol is used for
+              communication.
+            </p>
+            <code class="api-endpoint"><strong>GET https://scistarter.org/api/profile/id?identifier=</strong><em>email address</em><strong>&amp;key=</strong><em>API key</em></code>
+
+            <h4>Example: Retrieving a profile number by email address (Python 3)</h4>
+            <pre class="api-example">from json import load
+from urllib.request import urlopen
+
+with urlopen('https://scistarter.org/api/profile/id?identifier=example%40example.com&amp;key=kjsdfh8fsao48u3...') as f:
+    data = load(f)</pre>
+
+            <h4>Result: Dictionary containing the profile number</h4>
+            <pre class="api-result">{"scistarter_profile_id": 42006, "result": "success", "known": true}</pre>
+
+            <h3 id="profile-from-oauth">Option 3: After OpenID Connect Authorization</h3>
+            <p>
+              You can also use an OpenID Connect token to retrieve the ID. For help setting up OpenID
+              Connect integration with your site, please contact us directly at
+              <a href="mailto:info@scistarter.org">info@scistarter.org</a>.
+            </p>
+            <p>
+              This method requires the user to explicitly authorize you, which means they must create
+              a SciStarter account if they don't have one already. Once a user has authorized you via
+              OpenID Connect, you can retrieve that user's profile number with a single additional
+              request. We recommend that you store it rather than going through the process of
+              retrieving it multiple times.
+            </p>
+            <p>
+              To use this method, you must have requested, and the user must have granted you, the
+              <strong>profile</strong> scope. Minimally, that means you would have used
+              <strong>openid&nbsp;profile</strong> for your requested scope value when retrieving
+              your access token, since the openid scope is always required.
+            </p>
+            <code class="api-endpoint"><strong>GET https://scistarter.org/userinfo</strong> (requires Authorization header)</code>
+
+            <h4>Example: Retrieving a profile number after OpenID authorization (Python 3)</h4>
+            <pre class="api-example">from json import load
+from urllib.request import Request, urlopen
+
+req = Request('https://scistarter.org/userinfo',
+              headers={'Authorization': 'Bearer <em>[OpenID token]</em>'})
+with urlopen(req) as f:
+    data = load(f)</pre>
+
+            <h4>Result: Dictionary containing the profile number and some other information</h4>
+            <pre class="api-result">{
+    "profile_id": 42006,
+    <em>... other information ...</em>
+}</pre>
+
+            <h3 id="record">Recording a user activity event to a user's profile</h3>
+            <code class="api-endpoint"><strong>POST https://scistarter.org/api/record_event?key=</strong><em>API key</em></code>
+            <p>
+              We <em>highly recommend</em> performing this request asynchronously, in a worker
+              process or by some other asynchronous mechanism. There is no need for your site to wait
+              for the result of this call before proceeding with processing the user's interactions.
+              Tools such as <a target="_blank" href="http://www.celeryproject.org/">Celery (Python)</a>,
+              <a target="_blank" href="https://bernard.readthedocs.io/">Bernard (PHP)</a>, or
+              <a target="_blank" href="https://www.hangfire.io/">Hangfire (.NET)</a> make it easy to
+              perform asynchronous operations.
+            </p>
+            <p>
+              The proper time to make this call is after a user has contributed meaningfully to the
+              project. That can mean either immediately after, or shortly after (no more than 24
+              hours delay at most, please).
+            </p>
+            <p>
+              In addition to the API key as a GET parameter, the POST body must contain at least the
+              following items, in application/x-www-form-urlencoded format:
+            </p>
+            <dl class="api-fields">
+              <dt>profile_id</dt>
+              <dd>The user's profile number, as retrieved above</dd>
+              <dt>project_id</dt>
+              <dd>
+                Your project's SciStarter id number. Once your project is added to SciStarter, sign
+                in and go to your dashboard and select your project page on SciStarter. Click the
+                "Tools" tab on the top navigation where you will find your Project ID #.
+              </dd>
+              <dt>type</dt>
+              <dd>What did the participant actually do? One of <strong>classification</strong> (Classification / Transcription), <strong>collection</strong> (Data collection), <strong>signup</strong> (Joined the project)</dd>
+              <dt>duration</dt>
+              <dd>The duration of the reported user participation, in seconds, in integer or real number format. Preferably this is an actual measurement, but an estimate based on your local knowledge of the task is acceptable.</dd>
+            </dl>
+            <p>
+              There are also several optional fields you can provide in order to better identify the
+              user activity:
+            </p>
+            <dl class="api-fields">
+              <dt>where</dt>
+              <dd>GeoJSON or WKT encoding of the geographic point where the activity occurred</dd>
+              <dt>when</dt>
+              <dd>The time at which the activity occurred, in ISO yyyy-mm-ddThh:mm:ss format (note the T separating date and time). UTC times preferred.</dd>
+              <dt>magnitude</dt>
+              <dd>Integer representing how valuable this particular contribution was, as defined by you</dd>
+              <dt>extra</dt>
+              <dd>Any additional data you want to attach to the event. JSON recommended. Limited to 64k</dd>
+            </dl>
+
+            <h4>Example: Recording a data collection event (Python 3)</h4>
+            <pre class="api-example">from json import load
+from urllib.request import urlopen
+
+with urlopen('https://scistarter.org/api/record_event?key=kjsdfh8fsao48u3...',
+             data=b'profile_id=42006&amp;project_id=1979&amp;type=collection&amp;duration=300') as f:
+    data = load(f)</pre>
+
+            <h4>Result: Dictionary indicating success or error</h4>
+            <pre class="api-result">{"event_id": <em>[This event's unique id]</em>, "result": "success"}</pre>
+          </div>
+        </details>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Deep links into the Documentation tab (e.g. the "View documentation"
+  // links on the About cards, or a shared #docs-* URL) have to activate the
+  // tab and expand the target accordion before the browser can scroll to it.
+  (function () {
+      function reveal() {
+          const id = window.location.hash.slice(1);
+          if (!id) return;
+          const target = document.getElementById(id);
+          if (!target) return;
+
+          const panel = target.closest('.tabs-bar-wrapper [role="tabpanel"]');
+          if (panel && panel.getAttribute('aria-hidden') === 'true') {
+              const tab = document.querySelector('[role="tab"][aria-controls="' + panel.id + '"]');
+              if (tab) tab.click();
+          }
+
+          for (let details = target.closest('details'); details;
+               details = details.parentElement && details.parentElement.closest('details')) {
+              details.open = true;
+          }
+
+          target.scrollIntoView({behavior: 'smooth', block: 'start'});
+      }
+
+      window.addEventListener('hashchange', reveal);
+
+      // The initial reveal must wait for DOMContentLoaded so that the
+      // deferred tabs.js has attached its click handler first.
+      if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', reveal);
+      } else {
+          reveal();
+      }
+  })();
+</script>

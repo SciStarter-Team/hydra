@@ -590,7 +590,6 @@ fn dynamic() -> impl Endpoint {
         .nest("/-upload", upload::authenticated_routes())
         .nest("/-forum", component::forum::forum_routes())
         .nest("/-webauthn", auth::webauthn_routes())
-        .nest("/api", api::authenticated_routes())
         .nest_no_strip("/", user_facing())
         .catch_all_error(error_dispatch)
         .with(middleware::authorization::AuthMiddleware)
@@ -633,10 +632,7 @@ async fn main() -> Result<(), Error> {
         .nest("/-static", StaticFiles::new())
         .nest("/-uploaded", upload::anonymous_routes())
         .nest("/messaging/emailer", emailer::routes())
-        .nest(
-            "/api",
-            api::external_routes().with(api::middleware::api_cors()),
-        )
+        .nest("/api", api::routes().with(api::middleware::api_cors()))
         .at("/-mcp", post(mcp::mcp_handler))
         .at("/-content-mcp", post(mcp::content::content_mcp_handler))
         .nest(

@@ -1,0 +1,63 @@
+/* API documentation page (/api) */
+
+/* Parameter tables in the endpoint documentation */
+.ss-api .api-params {
+    @apply w-full my-6 border border-linework text-sm;
+    border-collapse: collapse;
+}
+
+.ss-api .api-params th {
+    @apply bg-primary-light text-primary-dark font-bold text-left p-2 border border-linework;
+}
+
+.ss-api .api-params td {
+    @apply p-2 border border-linework align-top;
+}
+
+/* Field definition lists (bulk project upload, deprecated endpoints) */
+.ss-api .api-fields {
+    @apply my-6 border border-linework text-sm;
+}
+
+.ss-api .api-fields dt {
+    @apply font-bold font-mono px-3 pt-3;
+}
+
+.ss-api .api-fields dd {
+    @apply px-3 pb-3 ml-6;
+}
+
+.ss-api .api-fields dt + dd {
+    border-bottom: 1px solid var(--color-linework);
+}
+
+.ss-api .api-fields dd:last-child {
+    border-bottom: 0;
+}
+
+/* Code samples: requests are green-tinted, responses blue-tinted */
+.ss-api .api-example,
+.ss-api .api-result {
+    @apply block my-4 p-4 border border-linework rounded-sm text-sm overflow-x-auto;
+}
+
+.ss-api .api-example {
+    background: #f4ffdd;
+}
+
+.ss-api .api-result {
+    background: #d8eaff;
+}
+
+/* Inline endpoint URLs and code fragments */
+.ss-api .api-endpoint {
+    @apply block my-4 p-3 bg-neutral-xlight border border-linework rounded-sm text-sm overflow-x-auto;
+}
+
+.ss-api .accordion__panel h3 {
+    @apply text-lg mt-6;
+}
+
+.ss-api .accordion__panel h4 {
+    @apply text-base mt-4 mb-2;
+}

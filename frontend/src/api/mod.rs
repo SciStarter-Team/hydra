@@ -1,6 +1,7 @@
-use poem::{Endpoint, Route, get, post};
+use poem::{Endpoint, EndpointExt, IntoEndpoint, Route, get, post};
 
 pub mod analytics;
+pub mod docs;
 pub mod import;
 pub mod middleware;
 pub mod misc;
@@ -59,10 +60,40 @@ pub(crate) async fn check_api_key_permission(
     Ok(has_permission.is_some())
 }
 
-/// External API routes - for partner projects (no session auth required)
-/// These use API keys, JWT, or OAuth for authentication
-pub fn external_routes() -> impl Endpoint {
+/// Wrap a user-facing page endpoint in the same session/authorization stack
+/// that the main site's dynamic routes use, so pages under /api can render the
+/// standard site chrome and redirect anonymous visitors to /login. This is
+/// needed because the whole /api tree is mounted outside the session-wrapped
+/// dynamic tree; poem routes have no fall-through, so these pages must live in
+/// the same route tree as the partner API endpoints.
+fn user_page<E>(ep: E) -> impl Endpoint
+where
+    E: IntoEndpoint,
+    E::Endpoint: 'static,
+{
+    ep.into_endpoint()
+        .with(crate::middleware::authorization::AuthMiddleware)
+        .with(crate::server_session())
+        .catch_all_error(crate::error_dispatch)
+        .with(
+            poem::middleware::SetHeader::new().overriding("Cache-Control", "no-store"),
+        )
+}
+
+/// All routes under /api: partner-facing API endpoints (API key, JWT, or
+/// OAuth authentication) plus a few user-facing pages (session
+/// authentication) that share the /api URL prefix
+pub fn routes() -> impl Endpoint {
+    use crate::middleware::authorization::AuthOnly;
+
     Route::new()
+        // User-facing pages
+        .at("/", user_page(get(docs::api_docs_page)))
+        .at("/key", user_page(get(user::api_key_page).with(AuthOnly)))
+        .at(
+            "/delete",
+            user_page(post(user::delete_account).with(AuthOnly)),
+        )
         // v1 Legacy APIs
         .at("/profile/id", get(v1::get_profile_id))
         .at("/user/new", post(v1::create_user))
@@ -108,12 +139,4 @@ pub fn external_routes() -> impl Endpoint {
         .at("/training-state.json", get(misc::training_state))
         .at("/ambassador_map.geojson", get(misc::ambassador_map))
         .at("/login-for-snm", post(misc::snm_login))
-}
-
-/// Authenticated API routes - for logged-in users
-/// User-facing pages like API key display
-pub fn authenticated_routes() -> impl Endpoint {
-    Route::new()
-        .at("/key", get(user::api_key_page))
-        .at("/delete", post(user::delete_account))
 }
