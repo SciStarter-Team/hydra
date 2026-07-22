@@ -101,6 +101,15 @@
       if (fields.longitude) fields.longitude.value = s.longitude;
       input.value = s.context ? s.name + ", " + s.context : s.name;
       close();
+      // A picked venue pinpoints its time zone; forms with time-zone fields
+      // (the event form) listen and default any untouched selects. Regions
+      // and virtual events get no inference — a region may span zones.
+      if (s.timezone) {
+        root.dispatchEvent(new CustomEvent("ss:place-timezone", {
+          bubbles: true,
+          detail: { timezone: s.timezone },
+        }));
+      }
       // Photon's OSM feature often lacks a postcode; backfill it with one
       // reverse lookup, unless the visitor has typed one in the meantime.
       if (!s.zip && fields.zip) {

@@ -44,8 +44,17 @@
                     <span class="pill-label">Time zone</span>
                     <select class="tz-select" name="instances[<%= i %>][timezone]" required>
                       <option value="" <% if inst.timezone.is_empty() { %>selected<% } %> disabled>Select time zone&hellip;</option>
-                      <% for tz in self.timezones { %>
-                        <option value="<%= tz.0 %>" <% if inst.timezone == tz.0 { %>selected<% } %>><%= tz.1 %></option>
+                      <optgroup label="Common">
+                        <% for tz in self.timezones { %>
+                          <option value="<%= tz.0 %>" <% if inst.timezone == tz.0 { %>selected<% } %>><%= tz.1 %></option>
+                        <% } %>
+                      </optgroup>
+                      <% for (region, zones) in self.all_timezones { %>
+                        <optgroup label="<%= region %>">
+                          <% for tz in zones { %>
+                            <option value="<%= tz.0 %>" <% if inst.timezone == tz.0 { %>selected<% } %>><%= tz.1 %></option>
+                          <% } %>
+                        </optgroup>
                       <% } %>
                     </select>
                   </label>
@@ -213,8 +222,17 @@
                 <label>Time zone</label>
                 <select class="tz-select" name="ticketing_timezone">
                   <option value="" <% if self.values.ticketing_timezone.is_empty() { %>selected<% } %> disabled>Select time zone&hellip;</option>
-                  <% for tz in self.timezones { %>
-                    <option value="<%= tz.0 %>" <% if self.values.ticketing_timezone == tz.0 { %>selected<% } %>><%= tz.1 %></option>
+                  <optgroup label="Common">
+                    <% for tz in self.timezones { %>
+                      <option value="<%= tz.0 %>" <% if self.values.ticketing_timezone == tz.0 { %>selected<% } %>><%= tz.1 %></option>
+                    <% } %>
+                  </optgroup>
+                  <% for (region, zones) in self.all_timezones { %>
+                    <optgroup label="<%= region %>">
+                      <% for tz in zones { %>
+                        <option value="<%= tz.0 %>" <% if self.values.ticketing_timezone == tz.0 { %>selected<% } %>><%= tz.1 %></option>
+                      <% } %>
+                    </optgroup>
                   <% } %>
                 </select>
               </div>
@@ -235,25 +253,52 @@
 
 <script>
   (function () {
-    // Preselect the visitor's actual browser time zone, adding it to any
-    // <select> that doesn't already list it. Never overrides an existing choice.
+    // Preselect a sensible time zone: the zone of a venue picked in the
+    // location search when there is one, else the visitor's browser zone.
+    // Never overrides a zone the visitor chose themselves.
     var browserTz = "";
     try { browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) {}
+    var placeTz = "";
+
+    function hasOption(select, tz) {
+      return Array.prototype.some.call(select.options, function (o) { return o.value === tz; });
+    }
 
     function ensureTz(select) {
       if (!select) return;
-      if (browserTz) {
-        var present = Array.prototype.some.call(select.options, function (o) { return o.value === browserTz; });
-        if (!present) {
-          var opt = document.createElement("option");
-          opt.value = browserTz;
-          opt.textContent = browserTz;
-          select.appendChild(opt);
+      if (browserTz && !hasOption(select, browserTz)) {
+        var opt = document.createElement("option");
+        opt.value = browserTz;
+        opt.textContent = browserTz;
+        select.appendChild(opt);
+      }
+      if (!select.value) {
+        if (placeTz && hasOption(select, placeTz)) {
+          select.value = placeTz;
+        } else if (browserTz) {
+          select.value = browserTz;
         }
-        if (!select.value) select.value = browserTz;
       }
     }
     document.querySelectorAll("select.tz-select").forEach(ensureTz);
+
+    // A hand-picked zone is an explicit choice; remember not to overwrite it.
+    document.addEventListener("change", function (e) {
+      if (e.isTrusted && e.target.matches && e.target.matches("select.tz-select")) {
+        e.target.dataset.userSet = "1";
+      }
+    });
+
+    // The location picker announces the zone of a picked venue; default every
+    // untouched select to it (regions and virtual events announce nothing).
+    document.addEventListener("ss:place-timezone", function (e) {
+      placeTz = e.detail.timezone;
+      document.querySelectorAll("select.tz-select").forEach(function (select) {
+        if (!select.dataset.userSet && hasOption(select, placeTz)) {
+          select.value = placeTz;
+        }
+      });
+    });
 
     var container = document.getElementById("instances");
 
@@ -298,7 +343,10 @@
         if (el.type === "checkbox") { el.checked = false; } else { el.value = ""; }
       });
       var sel = clone.querySelector("select.tz-select");
-      if (sel) sel.selectedIndex = 0;
+      if (sel) {
+        sel.selectedIndex = 0;
+        delete sel.dataset.userSet;
+      }
       var end = clone.querySelector(".end-block");
       if (end) end.hidden = true;
       var endToggle = clone.querySelector(".end-toggle");

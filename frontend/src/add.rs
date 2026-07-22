@@ -99,6 +99,53 @@ const COMMON_TIMEZONES: &[(&str, &str)] = &[
     ("Australia/Sydney", "Australian Eastern Time"),
 ];
 
+/// Every IANA time zone, grouped by region for the picker's `<optgroup>`s.
+/// The curated `COMMON_TIMEZONES` stay at the top of the select; these groups
+/// make the rest of the world reachable. Entries are `(value, label)` where
+/// the label drops the region prefix and underscores ("America/Argentina/
+/// Buenos_Aires" -> "Argentina/Buenos Aires" under "America"). Built once.
+fn all_timezones() -> &'static [(String, Vec<(String, String)>)] {
+    static ZONES: std::sync::OnceLock<Vec<(String, Vec<(String, String)>)>> =
+        std::sync::OnceLock::new();
+    ZONES.get_or_init(|| {
+        const REGIONS: &[&str] = &[
+            "Africa",
+            "America",
+            "Antarctica",
+            "Asia",
+            "Atlantic",
+            "Australia",
+            "Europe",
+            "Indian",
+            "Pacific",
+        ];
+        let mut groups: Vec<(String, Vec<(String, String)>)> = REGIONS
+            .iter()
+            .map(|region| (region.to_string(), Vec::new()))
+            .collect();
+
+        let mut names: Vec<String> = jiff::tz::db()
+            .available()
+            .map(|name| name.to_string())
+            .collect();
+        names.sort();
+
+        for name in names {
+            // Region-less names (UTC, EST5EDT, ...) and non-geographic
+            // regions (Etc/*, US/*, ...) are aliases or legacy entries; the
+            // canonical geographic zones all live under the regions above.
+            let Some((region, rest)) = name.split_once('/') else {
+                continue;
+            };
+            if let Some(group) = groups.iter_mut().find(|(r, _)| r == region) {
+                let label = rest.replace('_', " ");
+                group.1.push((name.clone(), label));
+            }
+        }
+        groups
+    })
+}
+
 /// All event types, in the order they appear in the picker. The option value
 /// is the type's `Display` string, which round-trips through `FromStr`.
 /// Where the event takes place. Every mode also permits an event URL, so a
@@ -411,6 +458,7 @@ struct AddEventContent {
     error: Option<String>,
     values: EventFormValues,
     timezones: &'static [(&'static str, &'static str)],
+    all_timezones: &'static [(String, Vec<(String, String)>)],
     event_types: Vec<String>,
     location: LocationPicker,
     image: ImageField,
@@ -652,6 +700,7 @@ async fn render_event_form(
         error,
         values,
         timezones: COMMON_TIMEZONES,
+        all_timezones: all_timezones(),
         event_types: EventType::ALL.iter().map(|e| e.to_string()).collect(),
         location,
         image,
@@ -1025,6 +1074,11 @@ struct PlaceSuggestion {
     kind: String,
     /// The secondary line: the locality context ("Beach Haven West, NJ, USA").
     context: String,
+    /// The IANA time zone at the place's coordinates (empty when unknown).
+    /// Used to default the event form's time-zone selects on pick — a venue
+    /// pinpoints its zone, unlike a drawn region, which may span several and
+    /// deliberately gets no inference.
+    timezone: String,
     /// Venue name for the form's `location_name` (empty for a plain locality).
     location_name: String,
     address: String,
@@ -1086,6 +1140,17 @@ pub async fn add_place_search(
     Ok(Response::builder()
         .content_type("application/json")
         .body(serde_json::to_string(&suggestions)?))
+}
+
+/// The IANA time zone at a coordinate, from tzf-rs's embedded boundary data
+/// (empty when the lookup has no answer). The finder builds its spatial index
+/// once, on first use.
+fn timezone_at(latitude: f64, longitude: f64) -> String {
+    static FINDER: std::sync::OnceLock<tzf_rs::DefaultFinder> = std::sync::OnceLock::new();
+    FINDER
+        .get_or_init(tzf_rs::DefaultFinder::new)
+        .get_tz_name(longitude, latitude)
+        .to_string()
 }
 
 /// A short human label for what kind of place a Photon feature is, from its
@@ -1226,6 +1291,7 @@ fn photon_suggestion(feature: &serde_json::Value) -> Option<PlaceSuggestion> {
         name,
         kind: photon_kind(&osm_value),
         context,
+        timezone: timezone_at(latitude, longitude),
         location_name,
         address,
         city,
@@ -1918,4 +1984,24 @@ fn validate_and_build_project(form: &AddProjectForm, user_id: Ulid) -> Result<Pr
     }
 
     Ok(project)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A venue pick's inferred zone must be a real IANA zone that the form's
+    /// time-zone select actually offers, or the client-side defaulting is a
+    /// silent no-op.
+    #[test]
+    fn venue_timezone_is_selectable() {
+        // Philadelphia city hall.
+        let zone = timezone_at(39.9527, -75.1635);
+        assert_eq!(zone, "America/New_York");
+
+        let listed = all_timezones()
+            .iter()
+            .any(|(_, zones)| zones.iter().any(|(value, _)| *value == zone));
+        assert!(listed, "inferred zone {zone} missing from the tz select");
+    }
 }
