@@ -1,12 +1,12 @@
 # IDEAL Participatory Science
 ## Skills and Competencies
-The recipient of this certification has demonstrated all of the following skills associated with leading Inclusive, Diverse, Equitable, Accessible, Large-scale (IDEAL) Participatory Science projects and obtained a score of 80% or better via traditional assessment:
+The recipient has demonstrated all of the following skills associated with leading Inclusive, Diverse, Equitable, Accessible, Large-scale (IDEAL) Participatory Science projects and obtained a score of 80% or better via traditional assessment:
 
-- Recognize the influence and limitations of one's positionality (social identities, lived experiences, etc.) on project design, implementation, and subsequent engagement
+- Recognize the influence and limitations of one’s positionality (social identities, lived experiences, etc.) on project design, implementation, and subsequent engagement
 - Recognize best practices for collecting, analyzing, and using data about participant engagement to inform diversity goals
 - Identify ways to increase diverse representation in project governance
 - Identify ways to create reciprocity between projects and participants
-- Identify ways to "center at the margins" by adjusting projects to perspectives of identity groups currently and/or historically underserved by science
+- Identify ways to “center at the margins” by adjusting projects to perspectives of identity groups currently and/or historically underserved by science
 - Recognize the value of committing to a long-term, iterative cycle of sustained work
 - Identify ways to plan and build capacity for practices that promote inclusion, equity, and/or accessibility
 
@@ -31,7 +31,7 @@ Visit [https://scistarter.org/](https://scistarter.org/) to learn more.
 Recipients of the IDEAL Participatory Science have completed the following requirements:
 
 - Completion of the Positionality Worksheet (independent)
-— Recognize the influence and limitations of one's positionality (social identities, lived experiences, etc.) on project design, implementation, and subsequent engagement
+— Recognize the influence and limitations of one’s positionality (social identities, lived experiences, etc.) on project design, implementation, and subsequent engagement
 - Completion of the Information Gathering Plan (independent or with leadership team)
 — Recognize best practices for collecting, analyzing, and using data about participant engagement to inform diversity goals
 - Completion of Engagement Goals (collaborate with other members of project leadership team)
@@ -39,10 +39,10 @@ Recipients of the IDEAL Participatory Science have completed the following requi
 
 ## Positionality
 ### What is Positionality?
-Positionality refers to the way in which an individual's perceptions, experiences, and research activities are shaped by the current institutions, frameworks, and sociopolitical context within which they live and how one's position influences and shapes a participatory science project. Positionality can also include one's assumptions and beliefs about ways of knowing and discovering, and perspectives on what constitutes worthwhile research.
+Positionality refers to the way in which an individual’s perceptions, experiences, and research activities are shaped by the current institutions, frameworks, and sociopolitical context within which they live and how one’s position influences and shapes a participatory science project. Positionality can also include one’s assumptions and beliefs about ways of knowing and discovering, and perspectives on what constitutes worthwhile research.
 
 ### Completion of the Positionality Worksheet
-The Positionality Worksheet is designed to support reflection about oneself and an examination of one's relation to the privilege and power dynamics in society. It helps to critically consider how one's positionality influences aspects of a participatory science project.
+The Positionality Worksheet is designed to support reflection about oneself and an examination of one’s relation to the privilege and power dynamics in society. It helps to critically consider how one’s positionality influences aspects of a participatory science project.
 
 ## Participatory Science
 ### What is Participatory Science?
@@ -51,7 +51,7 @@ Participatory science is considered a method for democratizing science. Unfortun
 Improving diversity within a project can lead to both better science and more equitable outcomes for participants and the communities to which they belong. In order to achieve this, it is important for project leaders to know which identity groups are currently present and which groups are absent within their project.
 
 Collecting demographic data about participants is important for several reasons:
-1. Affirm the project's commitment and accountability to equity and inclusion.
+1. Affirm the project’s commitment and accountability to equity and inclusion.
 2. Assist project leadership to function with more awareness of the identities and characteristics of participants.
 3. Enable project leadership to determine who is already actively engaged in the project.
 4. Enable project leadership to recognize which identities are missing among participants.
@@ -63,7 +63,7 @@ The Information Gathering Plan is an optional part of the project cycle. Its pur
 
 ## Engagement Goals
 ### What are Engagement Goals?
-It is crucial to set engagement goals to steer project leadership and track progress. These goals should align with your values and priorities while taking into account the project's scope limitations.
+It is crucial to set engagement goals to steer project leadership and track progress. These goals should align with your values and priorities while taking into account the project’s scope limitations.
 
 ### (Optional) Completion of the Engagement Goals Worksheet
 The Engagement Goals Worksheet is a valuable tool in the development of engagement goals. It provides a framework for identifying key perspectives regarding project governance and outlines the participants involved in the project in a SMART Goals format. This worksheet is particularly useful for practitioners and leaders of large-scale participatory science projects, as it helps to establish a clear and concise plan for achieving project objectives. By utilizing this tool, project leaders can ensure that all stakeholders are aligned and working towards the same goals, ultimately leading to a successful outcome.
@@ -74,7 +74,7 @@ The Engagement Goals Worksheet is a valuable tool in the development of engageme
 Recipients of the IDEAL Participatory Science have completed the following requirements:
 
 - Completion of a plan for broadening representation in governance
-— Plan for Broadening Representation in Governance is designed to help you think through how to increase representation in your project's leadership.
+— Plan for Broadening Representation in Governance is designed to help you think through how to increase representation in your project’s leadership.
 - Completion of a plan for reciprocity
 — Plan for Reciprocity guides consideration of making projects relevant and meaningful to participants and re-creating project design and implementation in ways that hold more potential to serve those historically and currently underserved by science.
 - Completion of a plan for centering at the margins
@@ -82,7 +82,7 @@ Recipients of the IDEAL Participatory Science have completed the following requi
 
 ## Relationality
 ### What is Relationality?
-Relationality is a term we coined to refer to acting based on positionality, one's relationship to others, to the project's research question and methods, and to power dynamics. Whereas positionality is focused on internal reflections and self-awareness of how one might be unwittingly reinforcing the status quo, relationality is focused on taking actions to purposefully situate oneself and the project differently in relation to everything else to change the status quo.
+Relationality is a term we coined to refer to acting based on positionality, one’s relationship to others, to the project’s research question and methods, and to power dynamics. Whereas positionality is focused on internal reflections and self-awareness of how one might be unwittingly reinforcing the status quo, relationality is focused on taking actions to purposefully situate oneself and the project differently in relation to everything else to change the status quo.
 
 ## Broadening Representation in Governance
 
@@ -109,13 +109,13 @@ This worksheet is designed to assist leaders and teams of large-scale participat
 ## Centering at the Margins
 
 ### What is Centering at the margins and why is it an essential IDEAL participatory science practice?
-"Center at the margins" is a concept that counters the dominant culture and norms by shifting viewpoints away from a majority group's perspective to that of the marginalized group(s) (Ford et al. 2010). The historic and current dominance of White, nondisabled culture and norms in the United States means these are often the default. In other words, if you do not consciously center your project away from the default, it will be centered around White, nondisabled culture, and diversity will arise only through assimilation rather than equity.
+“Center at the margins” is a concept that counters the dominant culture and norms by shifting viewpoints away from a majority group’s perspective to that of the marginalized group(s) (Ford et al. 2010). The historic and current dominance of White, nondisabled culture and norms in the United States means these are often the default. In other words, if you do not consciously center your project away from the default, it will be centered around White, nondisabled culture, and diversity will arise only through assimilation rather than equity.
 
 Centering at the margins is part of the principles of universal design for accessibility. When systemically marginalized people are centered in programs, the program will serve not only the margins, but also better serve the needs of the mainstream or dominant culture. 
 
 For example, when adding ramps on curbs became a requirement of the Americans with Disabilities Act, the ramps met the needs of people using wheelchairs as well as others, such as those pushing baby strollers, roller skating, pulling luggage, etc.
 
-Though implementation of the concept will vary in details, the broad approach is general and generalizable and forms the basis for IDEAL participatory science practices. Centering at the margins will be a cyclical and ongoing process because there are many groups "at the margins" and they vary with culture and context. Practices that center one group may or may not be effective for other groups or address intersectional identities.
+Though implementation of the concept will vary in details, the broad approach is general and generalizable and forms the basis for IDEAL participatory science practices. Centering at the margins will be a cyclical and ongoing process because there are many groups “at the margins” and they vary with culture and context. Practices that center one group may or may not be effective for other groups or address intersectional identities.
 
 ### Completion of the Plan for Centering on the Margins
 The Centering at the Margins worksheet is designed to help pratictioners and leaders of large-scale participatory science projects reflect on and plan how their project might incorporate suggestions or improve project practices related to centering at the margins.

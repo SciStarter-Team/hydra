@@ -1,24 +1,24 @@
 # One Million Acts of Science
 ## Award Requirements
-The recipient of the "One Million Acts of Science" badge has demonstrated a comprehensive understanding and commitment to advancing scientific research during citizen science on the SciStarter platform, meeting the following criteria within the designated timeframe of Citizen Science Month (April 2024):
+The recipient of the “One Million Acts of Science” badge has demonstrated a comprehensive understanding and commitment to advancing scientific research during citizen science on the SciStarter platform, meeting the following criteria within the designated timeframe of Citizen Science Month (April 2024):
 
 - Successfully create or log into an existing SciStarter account, showcasing the ability to navigate and utilize the platform for citizen science engagement.
-- Identify and select one or more Affiliate projects on SciStarter by utilizing the [https://scistarter.org/citizensciencemonth](https://scistarter.org/citizensciencemonth) portal, [https://scistarter.org/affiliates](https://scistarter.org/affiliates), or employing the Project Finder's advanced search feature to filter for ["projects that are Affiliates"](https://scistarter.org/finder?projects=true&active=true&filters=4), demonstrating an understanding of how to locate and engage with projects that contribute to the collective goal of One Million Acts of science.
-- Follow detailed instructions to correctly link a SciStarter account with the selected Affiliate project's account, ensuring that contributions are accurately recorded and attributed, reflecting an awareness of the importance of data integrity in citizen science.
+- Identify and select one or more Affiliate projects on SciStarter by utilizing the [https://scistarter.org/citizensciencemonth](https://scistarter.org/citizensciencemonth) portal, [https://scistarter.org/affiliates](https://scistarter.org/affiliates), or employing the Project Finder’s advanced search feature to filter for [“projects that are Affiliates”](https://scistarter.org/finder?projects=true&active=true&filters=4), demonstrating an understanding of how to locate and engage with projects that contribute to the collective goal of One Million Acts of science.
+- Follow detailed instructions to correctly link a SciStarter account with the selected Affiliate project’s account, ensuring that contributions are accurately recorded and attributed, reflecting an awareness of the importance of data integrity in citizen science.
 - Actively participate in and contribute to the chosen citizen science project(s) between April 1 and April 30, 2024, demonstrating a commitment to contributing to scientific research and understanding the collaborative effort required to achieve a significant milestone.
 
 ****
 ## Skills and Competencies
-Earners of the "One Million Acts of Science" badge have demonstrated all of the following skills. Each skill has been linked with Lightcast's open skills library. To learn more, visit [https://lightcast.io/open-skills](https://lightcast.io/open-skills).
+Earners of the “One Million Acts of Science” badge have demonstrated all of the following skills. Each skill has been linked with Lightcast’s open skills library. To learn more, visit [https://lightcast.io/open-skills](https://lightcast.io/open-skills).
 1. **Data Collection:** Participants will harness their data collection skills by logging observations and activities, contributing to the vast dataset required to reach the One Million Acts of Science goal.
 
 2. **Data Analysis:** Badge earners apply their data analysis expertise to interpret findings from citizen science projects, aiding in advancing scientific research.
 
 3. **Critical Thinking:** This badge rewards those who utilize critical thinking to assess scientific data and methodologies, ensuring meaningful contributions to research questions.
 
-4. **Digital Literacy:** Navigating SciStarter's platform and Affiliate projects requires digital literacy, enabling participants to engage with and contribute to online citizen science initiatives effectively.
+4. **Digital Literacy:** Navigating SciStarter’s platform and Affiliate projects requires digital literacy, enabling participants to engage with and contribute to online citizen science initiatives effectively.
 
-5. **Collaboration:** Earning this badge signifies an individual's ability to work collaboratively within a global community of citizen scientists, sharing data and insights to achieve the project's ambitious goal collectively.
+5. **Collaboration:** Earning this badge signifies an individual’s ability to work collaboratively within a global community of citizen scientists, sharing data and insights to achieve the project’s ambitious goal collectively.
 
 6. **Scientific Literacy:** Participants demonstrate scientific literacy by understanding and engaging with the scientific concepts underlying their chosen projects, contributing to informed, quality scientific output.
 
@@ -31,9 +31,9 @@ Earners of the "One Million Acts of Science" badge have demonstrated all of the 
 ****
 ## What is Citizen Science Month?
 
-SciStarter helps connect people to projects and events all year long, but during Citizen Science Month, we work with many partners to reach people we're not reaching throughout the year. Too many people are unaware that they are both needed and invited to take part in helping to shape the future through science.
+SciStarter helps connect people to projects and events all year long, but during Citizen Science Month, we work with many partners to reach people we’re not reaching throughout the year. Too many people are unaware that they are both needed and invited to take part in helping to shape the future through science.
 
-There's something for everyone.
+There’s something for everyone.
 
 In just a few years, [Global Citizen Science Month (April)](https://www.citizensciencemonth.org/participate) has grown from a single day of events to a coordinated effort supported by SciStarter, the National Library of Medicine (NLM) through the Network of the National Library of Medicine (NNLM), Arizona State University, the Association for Advancing Participatory Sciences, Science Friday, National Geographic, and many other collaborators from around the world.
 

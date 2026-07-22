@@ -1,6 +1,6 @@
 # Teaching in Higher Education with Citizen Science
 ## Learning Outcomes
-The recipient of this certification has achieved the following learning outcomes associated with the application and inclusion of citizen science within the context of a higher education:
+The recipient has achieved the following learning outcomes associated with the application and inclusion of citizen science within the context of a higher education:
 
 - Identify the benefits of including citizen science experiences in your courses.
 - Identify the utility of citizen science from the perspective of multiple learning theories and effective pedagogical approaches to undergraduate learning.
