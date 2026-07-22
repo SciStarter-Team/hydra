@@ -6,11 +6,12 @@ use poem::{
     web::{Query, Redirect},
 };
 use sailfish::TemplateOnce;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
 use common::{
     insensitivestring::InsensitiveString,
+    message::location::Point,
     message::user::BasicInfo,
     service::{TriggerEvent, log_activity, trigger_email},
     shared::db,
@@ -121,6 +122,25 @@ impl LocationMode {
     }
 }
 
+/// Deserialize an optional field, treating an empty string as `None`. The
+/// location-mode select submits an empty value while its "Is it in person or
+/// virtual?" placeholder is still selected.
+fn empty_as_none<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::de::DeserializeOwned,
+{
+    let value: Option<String> = Option::deserialize(deserializer)?;
+    match value.as_deref() {
+        None | Some("") => Ok(None),
+        Some(s) => {
+            T::deserialize(serde::de::value::StrDeserializer::<serde::de::value::Error>::new(s))
+                .map(Some)
+                .map_err(serde::de::Error::custom)
+        }
+    }
+}
+
 /// How often a recurring event repeats. Expanded server-side into one
 /// `EventInstance` per occurrence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
@@ -174,6 +194,7 @@ struct AddEventForm {
     name: String,
     #[serde(default)]
     description: String,
+    #[serde(default, deserialize_with = "empty_as_none")]
     location_mode: Option<LocationMode>,
     #[serde(default)]
     location_name: String,
@@ -189,7 +210,13 @@ struct AddEventForm {
     zip: String,
     #[serde(default)]
     country: String,
-    /// GeoJSON populated by the (forthcoming) reusable map-draw component.
+    /// Coordinates of the place chosen in the location picker's type-ahead
+    /// search, when one was picked (empty for a hand-entered address).
+    #[serde(default)]
+    latitude: String,
+    #[serde(default)]
+    longitude: String,
+    /// GeoJSON populated by the reusable map-draw component.
     #[serde(default)]
     regions: String,
     #[serde(default)]
@@ -282,6 +309,8 @@ struct EventFormValues {
     state: String,
     zip: String,
     country: String,
+    latitude: String,
+    longitude: String,
     regions: String,
     url: String,
     event_type: String,
@@ -338,6 +367,8 @@ impl From<&AddEventForm> for EventFormValues {
             state: f.state.clone(),
             zip: f.zip.clone(),
             country: f.country.clone(),
+            latitude: f.latitude.clone(),
+            longitude: f.longitude.clone(),
             regions: f.regions.clone(),
             url: f.url.clone(),
             event_type: if f.event_type.is_empty() {
@@ -405,9 +436,11 @@ struct RegionEditor {
 // Shared add-form components (used by both /add-event and /add-project)
 // ---------------------------------------------------------------------------
 
-/// The location section: in-person / online / region radios, the per-mode
-/// fields, the region editor, a free-text location note, and the link/URL.
-/// Backed by `js/location-picker.js`.
+/// The location section: an "in person or virtual?" mode select, a place
+/// type-ahead search backed by `/add/place-search` with the structured address
+/// fields behind a details disclosure, the region editor (revealed on request),
+/// a free-text location note, and the link/URL. Backed by
+/// `js/location-picker.js`.
 #[derive(sailfish::TemplateOnce)]
 #[template(path = "site/location_picker.stpl.html")]
 struct LocationPicker {
@@ -418,6 +451,8 @@ struct LocationPicker {
     state: String,
     zip: String,
     country: String,
+    latitude: String,
+    longitude: String,
     location_description: String,
     url: String,
     region_editor: RegionEditor,
@@ -433,6 +468,8 @@ impl LocationPicker {
         state: &str,
         zip: &str,
         country: &str,
+        latitude: &str,
+        longitude: &str,
         location_description: &str,
         url: &str,
         regions_geojson: &str,
@@ -445,6 +482,8 @@ impl LocationPicker {
             state: state.to_string(),
             zip: zip.to_string(),
             country: country.to_string(),
+            latitude: latitude.to_string(),
+            longitude: longitude.to_string(),
             location_description: location_description.to_string(),
             url: url.to_string(),
             region_editor: RegionEditor {
@@ -453,6 +492,17 @@ impl LocationPicker {
                 initial: regions_geojson.to_string(),
             },
         }
+    }
+
+    /// Whether any structured address component has a value (used to open the
+    /// address-details disclosure on re-render).
+    fn has_address(&self) -> bool {
+        !(self.location_name.is_empty()
+            && self.address.is_empty()
+            && self.city.is_empty()
+            && self.state.is_empty()
+            && self.zip.is_empty()
+            && self.country.is_empty())
     }
 }
 
@@ -584,6 +634,8 @@ async fn render_event_form(
         &values.state,
         &values.zip,
         &values.country,
+        &values.latitude,
+        &values.longitude,
         &values.location_description,
         &values.url,
         &values.regions,
@@ -955,6 +1007,156 @@ pub async fn add_region_lookup(
         .body(body))
 }
 
+#[derive(Debug, Deserialize)]
+struct PlaceSearchQuery {
+    #[serde(default)]
+    q: String,
+}
+
+/// One suggestion returned by `/add/place-search`: a display label plus the
+/// structured address components the location picker copies into the form.
+#[derive(Debug, Serialize)]
+struct PlaceSuggestion {
+    /// The suggestion's primary line (place or venue name).
+    name: String,
+    /// The secondary line: the locality context ("Beach Haven West, NJ, USA").
+    context: String,
+    /// Venue name for the form's `location_name` (empty for a plain locality).
+    location_name: String,
+    address: String,
+    city: String,
+    state: String,
+    zip: String,
+    country: String,
+    latitude: f64,
+    longitude: f64,
+}
+
+/// GET `/add/place-search?q=` — type-ahead place and address search for the
+/// location picker, via the Photon geocoder (OSM data; Photon permits
+/// autocomplete-style traffic, which Nominatim's usage policy does not).
+/// Returns a JSON array of `PlaceSuggestion`s. Shared by both add forms.
+#[handler]
+#[tracing::instrument]
+pub async fn add_place_search(
+    Authenticated(user_info): Authenticated,
+    Query(query): Query<PlaceSearchQuery>,
+) -> Result<Response, anyhow::Error> {
+    if user_info.is_none() {
+        return Ok(Response::builder()
+            .status(poem::http::StatusCode::UNAUTHORIZED)
+            .finish());
+    }
+
+    let q = query.q.trim();
+    if q.len() < 3 {
+        return Ok(Response::builder()
+            .content_type("application/json")
+            .body("[]"));
+    }
+
+    let response: serde_json::Value = reqwest::Client::new()
+        .get("https://photon.komoot.io/api")
+        .query(&[("q", q), ("limit", "5"), ("lang", "en")])
+        .header("User-Agent", "SciStarter/1.0 (+https://scistarter.org)")
+        .send()
+        .await?
+        .json()
+        .await?;
+
+    let suggestions: Vec<PlaceSuggestion> = response
+        .get("features")
+        .and_then(|f| f.as_array())
+        .map(|features| features.iter().filter_map(photon_suggestion).collect())
+        .unwrap_or_default();
+
+    Ok(Response::builder()
+        .content_type("application/json")
+        .body(serde_json::to_string(&suggestions)?))
+}
+
+/// Convert one Photon GeoJSON feature into a `PlaceSuggestion`, sorting the
+/// feature's name into the right address component: venues keep it as the
+/// venue name, while a bare locality result (a city, state, or country) files
+/// it under the component it names.
+fn photon_suggestion(feature: &serde_json::Value) -> Option<PlaceSuggestion> {
+    let props = feature.get("properties")?;
+    let prop = |key: &str| {
+        props
+            .get(key)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string()
+    };
+
+    let coordinates = feature.get("geometry")?.get("coordinates")?.as_array()?;
+    let longitude = coordinates.first()?.as_f64()?;
+    let latitude = coordinates.get(1)?.as_f64()?;
+
+    let name = prop("name");
+    if name.is_empty() {
+        return None;
+    }
+
+    let mut address = prop("street");
+    let housenumber = prop("housenumber");
+    if !housenumber.is_empty() {
+        address = if address.is_empty() {
+            housenumber
+        } else {
+            format!("{housenumber} {address}")
+        };
+    }
+
+    let mut city = [
+        prop("city"),
+        prop("town"),
+        prop("village"),
+        prop("district"),
+    ]
+    .into_iter()
+    .find(|c| !c.is_empty())
+    .unwrap_or_default();
+    let mut state = prop("state");
+    let mut country = prop("country");
+    let zip = prop("postcode");
+
+    let mut location_name = name.clone();
+    let osm_key = prop("osm_key");
+    if osm_key == "place" || osm_key == "boundary" {
+        // A locality, not a venue: the name belongs in an address component.
+        // When the component it names is already filled (e.g. a neighborhood
+        // inside a known city), keep it as the place name instead.
+        location_name = String::new();
+        match prop("osm_value").as_str() {
+            "state" | "region" | "province" if state.is_empty() => state = name.clone(),
+            "country" if country.is_empty() => country = name.clone(),
+            _ if city.is_empty() => city = name.clone(),
+            _ => location_name = name.clone(),
+        }
+    }
+
+    let context = [&city, &state, &country]
+        .into_iter()
+        .filter(|part| !part.is_empty() && **part != name)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    Some(PlaceSuggestion {
+        name,
+        context,
+        location_name,
+        address,
+        city,
+        state,
+        zip,
+        country,
+        latitude,
+        longitude,
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Add Event: validation + assembly (the event create core)
 // ---------------------------------------------------------------------------
@@ -1117,6 +1319,7 @@ fn validate_and_build(form: &AddEventForm, user_id: Ulid) -> Result<EventAll, St
             event.state = form.state.trim().to_string();
             event.zip = form.zip.trim().to_string();
             event.country = form.country.trim().to_string();
+            event.point = picked_point(&form.latitude, &form.longitude);
         }
         LocationMode::Region => {
             // A region is defined by the drawn polygon + the location note; it
@@ -1142,6 +1345,25 @@ fn empty_to_none(s: &str) -> Option<String> {
     } else {
         Some(s.to_string())
     }
+}
+
+/// The coordinates of the place picked in the location search, as a GeoJSON
+/// point string, when both are present and in range. A picked place pins the
+/// point column exactly; without one the save path falls back to geocoding
+/// the address fields.
+fn picked_point(latitude: &str, longitude: &str) -> Option<String> {
+    let latitude: f64 = latitude.trim().parse().ok()?;
+    let longitude: f64 = longitude.trim().parse().ok()?;
+    if !(-90.0..=90.0).contains(&latitude) || !(-180.0..=180.0).contains(&longitude) {
+        return None;
+    }
+    Some(
+        Point {
+            latitude,
+            longitude,
+        }
+        .to_string(),
+    )
 }
 
 /// Keep only submitted values that are part of the controlled vocabulary, so a
@@ -1278,6 +1500,7 @@ struct AddProjectForm {
     audience: Vec<String>,
     #[serde(default)]
     activities: Vec<String>,
+    #[serde(default, deserialize_with = "empty_as_none")]
     location_mode: Option<LocationMode>,
     #[serde(default)]
     location_name: String,
@@ -1293,6 +1516,12 @@ struct AddProjectForm {
     zip: String,
     #[serde(default)]
     country: String,
+    /// Coordinates of the place chosen in the location picker's type-ahead
+    /// search, when one was picked (empty for a hand-entered address).
+    #[serde(default)]
+    latitude: String,
+    #[serde(default)]
+    longitude: String,
     #[serde(default)]
     regions: String,
     #[serde(default)]
@@ -1332,6 +1561,8 @@ struct ProjectFormValues {
     state: String,
     zip: String,
     country: String,
+    latitude: String,
+    longitude: String,
     regions: String,
     url: String,
     contact_name: String,
@@ -1368,6 +1599,8 @@ impl From<&AddProjectForm> for ProjectFormValues {
             state: f.state.clone(),
             zip: f.zip.clone(),
             country: f.country.clone(),
+            latitude: f.latitude.clone(),
+            longitude: f.longitude.clone(),
             regions: f.regions.clone(),
             url: f.url.clone(),
             contact_name: f.contact_name.clone(),
@@ -1455,6 +1688,8 @@ async fn render_project_form(
         &values.state,
         &values.zip,
         &values.country,
+        &values.latitude,
+        &values.longitude,
         &values.location_description,
         &values.url,
         &values.regions,
@@ -1588,6 +1823,7 @@ fn validate_and_build_project(form: &AddProjectForm, user_id: Ulid) -> Result<Pr
             project.state = form.state.trim().to_string();
             project.zip = form.zip.trim().to_string();
             project.country = form.country.trim().to_string();
+            project.point = picked_point(&form.latitude, &form.longitude);
         }
         LocationMode::Region => {
             // A region is defined by the drawn polygon + the location note; it

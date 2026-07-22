@@ -25,39 +25,54 @@
           <% for (i, inst) in self.values.instances.iter().enumerate() { %>
             <div class="instance-row border border-linework rounded-md p-4 space-y-3">
               <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label>Start date</label>
-                  <input type="date" name="instances[<%= i %>][begin_date]" value="<%= inst.begin_date %>" required>
+                <div class="pill-field">
+                  <svg class="pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+                  <label class="pill-body">
+                    <span class="pill-label">Start date</span>
+                    <input type="date" name="instances[<%= i %>][begin_date]" value="<%= inst.begin_date %>" required>
+                  </label>
                 </div>
-                <div>
-                  <label>Start time</label>
-                  <input type="time" name="instances[<%= i %>][begin_time]" value="<%= inst.begin_time %>" required>
+                <div class="pill-field">
+                  <svg class="pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+                  <label class="pill-body">
+                    <span class="pill-label">Start time</span>
+                    <input type="time" name="instances[<%= i %>][begin_time]" value="<%= inst.begin_time %>" required>
+                  </label>
                 </div>
-                <div>
-                  <label>Time zone</label>
-                  <select class="tz-select" name="instances[<%= i %>][timezone]" required>
-                    <option value="" <% if inst.timezone.is_empty() { %>selected<% } %> disabled>Select time zone&hellip;</option>
-                    <% for tz in self.timezones { %>
-                      <option value="<%= tz.0 %>" <% if inst.timezone == tz.0 { %>selected<% } %>><%= tz.1 %></option>
-                    <% } %>
-                  </select>
+                <div class="pill-field">
+                  <label class="pill-body">
+                    <span class="pill-label">Time zone</span>
+                    <select class="tz-select" name="instances[<%= i %>][timezone]" required>
+                      <option value="" <% if inst.timezone.is_empty() { %>selected<% } %> disabled>Select time zone&hellip;</option>
+                      <% for tz in self.timezones { %>
+                        <option value="<%= tz.0 %>" <% if inst.timezone == tz.0 { %>selected<% } %>><%= tz.1 %></option>
+                      <% } %>
+                    </select>
+                  </label>
                 </div>
               </div>
 
-              <label class="flex items-center gap-2">
-                <input type="checkbox" class="w-auto has-end-toggle" name="instances[<%= i %>][has_end]" <% if inst.has_end { %>checked<% } %>>
-                Set an end date &amp; time
-              </label>
+              <input type="checkbox" class="has-end-toggle sr-only" name="instances[<%= i %>][has_end]" <% if inst.has_end { %>checked<% } %> tabindex="-1" aria-hidden="true">
+              <button type="button" class="link-btn end-toggle" <% if inst.has_end { %>hidden<% } %>>+ End date and time</button>
 
-              <div class="end-block grid grid-cols-1 sm:grid-cols-2 gap-3" <% if !inst.has_end { %>hidden<% } %>>
-                <div>
-                  <label>End date</label>
-                  <input type="date" name="instances[<%= i %>][end_date]" value="<%= inst.end_date %>">
+              <div class="end-block space-y-3" <% if !inst.has_end { %>hidden<% } %>>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div class="pill-field">
+                    <svg class="pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+                    <label class="pill-body">
+                      <span class="pill-label">End date</span>
+                      <input type="date" name="instances[<%= i %>][end_date]" value="<%= inst.end_date %>">
+                    </label>
+                  </div>
+                  <div class="pill-field">
+                    <svg class="pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+                    <label class="pill-body">
+                      <span class="pill-label">End time</span>
+                      <input type="time" name="instances[<%= i %>][end_time]" value="<%= inst.end_time %>">
+                    </label>
+                  </div>
                 </div>
-                <div>
-                  <label>End time</label>
-                  <input type="time" name="instances[<%= i %>][end_time]" value="<%= inst.end_time %>">
-                </div>
+                <button type="button" class="link-btn end-remove">Remove end date &amp; time</button>
               </div>
 
               <button type="button" class="remove-instance text-sm text-accent1 underline" <% if i == 0 { %>hidden<% } %>>Remove this date</button>
@@ -102,7 +117,7 @@
         <h3>Details</h3>
         <div>
           <label for="event-description">Description</label>
-          <textarea id="event-description" name="description" rows="5" required><%= self.values.description %></textarea>
+          <textarea id="event-description" name="description" rows="5" required placeholder="What are the details?"><%= self.values.description %></textarea>
         </div>
 
         <%+ self.image %>
@@ -208,6 +223,8 @@
         </details>
       </div>
 
+      <p class="text-sm text-neutral-mid">Your event will be reviewed by SciStarter staff before it appears on the public calendar.</p>
+
       <div class="flex items-center gap-3">
         <button type="submit" class="btn btn-primary">Create event</button>
         <a class="btn" href="/add">Cancel</a>
@@ -240,11 +257,24 @@
 
     var container = document.getElementById("instances");
 
-    // Reveal a row's end date/time when its "set an end" box is checked.
-    container.addEventListener("change", function (e) {
-      if (e.target.classList.contains("has-end-toggle")) {
-        var block = e.target.closest(".instance-row").querySelector(".end-block");
-        if (block) block.hidden = !e.target.checked;
+    // "+ End date and time" reveals a row's end fields (and checks the hidden
+    // has_end box that carries the state to the server); "Remove" undoes it.
+    function setEnd(row, on) {
+      var toggle = row.querySelector(".has-end-toggle");
+      var block = row.querySelector(".end-block");
+      var link = row.querySelector(".end-toggle");
+      if (toggle) toggle.checked = on;
+      if (block) block.hidden = !on;
+      if (link) link.hidden = on;
+      if (!on && block) {
+        block.querySelectorAll("input").forEach(function (el) { el.value = ""; });
+      }
+    }
+    container.addEventListener("click", function (e) {
+      if (e.target.classList.contains("end-toggle")) {
+        setEnd(e.target.closest(".instance-row"), true);
+      } else if (e.target.classList.contains("end-remove")) {
+        setEnd(e.target.closest(".instance-row"), false);
       }
     });
 
@@ -271,6 +301,8 @@
       if (sel) sel.selectedIndex = 0;
       var end = clone.querySelector(".end-block");
       if (end) end.hidden = true;
+      var endToggle = clone.querySelector(".end-toggle");
+      if (endToggle) endToggle.hidden = false;
       container.appendChild(clone);
       ensureTz(clone.querySelector("select.tz-select"));
       renumber();

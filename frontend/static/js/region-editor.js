@@ -108,11 +108,11 @@
       var valid = validRings().length;
       var pending = rings[rings.length - 1].length;
       if (valid === 0 && pending === 0) {
-        statusEl.textContent = "No area drawn";
+        statusEl.textContent = "Look up a place, or click the map to add points — 3 or more outline an area";
       } else if (valid === 0) {
         statusEl.textContent = pending + " point" + (pending === 1 ? "" : "s") + " — add " + (3 - pending) + " more for a region";
       } else {
-        statusEl.textContent = valid + " area" + (valid === 1 ? "" : "s") + " drawn — shift-click to start another";
+        statusEl.textContent = valid + " area" + (valid === 1 ? "" : "s") + " drawn — drag points to adjust, shift-click to start another";
       }
     }
 

@@ -1,73 +1,88 @@
-<% let inperson_active = self.mode == "in_person" || self.mode.is_empty(); %>
+<% let inperson_active = self.mode == "in_person"; %>
 <% let online_active = self.mode == "online"; %>
 <% let region_active = self.mode == "region"; %>
+<% let has_address = self.has_address(); %>
 <div data-location-picker class="space-y-4">
-  <div class="flex flex-col gap-2">
-    <label class="flex items-center gap-2">
-      <input type="radio" class="w-auto" name="location_mode" value="in_person" <% if inperson_active { %>checked<% } %>>
-      In person (a specific venue)
-    </label>
-    <label class="flex items-center gap-2">
-      <input type="radio" class="w-auto" name="location_mode" value="online" <% if online_active { %>checked<% } %>>
-      Online / virtual
-    </label>
-    <label class="flex items-center gap-2">
-      <input type="radio" class="w-auto" name="location_mode" value="region" <% if region_active { %>checked<% } %>>
-      Across a region / area
-    </label>
+  <div>
+    <label for="location-mode" class="sr-only">Is it in person or virtual?</label>
+    <select id="location-mode" name="location_mode" required>
+      <option value="" <% if self.mode.is_empty() { %>selected<% } %> disabled hidden>Is it in person or virtual?</option>
+      <option value="in_person" <% if inperson_active { %>selected<% } %>>In person</option>
+      <option value="online" <% if online_active { %>selected<% } %>>Virtual</option>
+      <%# Not offered in the dropdown; selected via the "wider area" link. %>
+      <option value="region" <% if region_active { %>selected<% } %> hidden>Across a wider area</option>
+    </select>
   </div>
 
   <%# Each mode's fields live in a fieldset that is disabled (so its controls
       don't submit) whenever that mode isn't selected. %>
   <fieldset class="location-fields space-y-3 border-0 p-0 m-0" data-mode="in_person" <% if !inperson_active { %>hidden disabled<% } %>>
-    <div>
-      <label>Venue name</label>
-      <input type="text" name="location_name" value="<%= self.location_name %>">
+    <div class="place-search" data-place-search>
+      <label for="place-search-input" class="sr-only">Place or address</label>
+      <input id="place-search-input" type="search" placeholder="Include a place or address&hellip;"
+        autocomplete="off" role="combobox" aria-expanded="false" aria-controls="place-search-results">
+      <ul id="place-search-results" class="place-search-results" role="listbox" hidden></ul>
     </div>
-    <div>
-      <label>Street address</label>
-      <input type="text" name="address" value="<%= self.address %>">
-    </div>
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      <div>
-        <label>City</label>
-        <input type="text" name="city" value="<%= self.city %>">
-      </div>
-      <div>
-        <label>State / Province</label>
-        <input type="text" name="state" value="<%= self.state %>">
-      </div>
-    </div>
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      <div>
-        <label>ZIP / Postal code</label>
-        <input type="text" name="zip" value="<%= self.zip %>">
-      </div>
-      <div>
-        <label>Country</label>
-        <input type="text" name="country" value="<%= self.country %>">
-      </div>
-    </div>
-  </fieldset>
 
-  <fieldset class="location-fields border-0 p-0 m-0" data-mode="online" <% if !online_active { %>hidden disabled<% } %>>
-    <p class="text-sm text-neutral-mid">Add the link people use to join in the Link / URL field below.</p>
+    <input type="hidden" name="latitude" value="<%= self.latitude %>">
+    <input type="hidden" name="longitude" value="<%= self.longitude %>">
+
+    <details class="place-details" <% if has_address { %>open<% } %>>
+      <summary class="cursor-pointer text-sm">Venue &amp; address details</summary>
+      <div class="mt-3 space-y-3">
+        <div>
+          <label>Venue name</label>
+          <input type="text" name="location_name" value="<%= self.location_name %>">
+        </div>
+        <div>
+          <label>Street address</label>
+          <input type="text" name="address" value="<%= self.address %>">
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label>City</label>
+            <input type="text" name="city" value="<%= self.city %>">
+          </div>
+          <div>
+            <label>State / Province</label>
+            <input type="text" name="state" value="<%= self.state %>">
+          </div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label>ZIP / Postal code</label>
+            <input type="text" name="zip" value="<%= self.zip %>">
+          </div>
+          <div>
+            <label>Country</label>
+            <input type="text" name="country" value="<%= self.country %>">
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <button type="button" class="link-btn" data-mode-link="region">Happens across a wider area? Draw the region instead.</button>
   </fieldset>
 
   <fieldset class="location-fields space-y-3 border-0 p-0 m-0" data-mode="region" <% if !region_active { %>hidden disabled<% } %>>
     <%+ self.region_editor %>
+    <button type="button" class="link-btn" data-mode-link="in_person">Back to a single place</button>
   </fieldset>
+
+  <div data-url-field
+    data-online-label="Join link"
+    data-online-help="The link people use to join or participate online."
+    data-default-label="Link / URL"
+    data-default-help="A website, registration page, or livestream link.">
+    <label for="add-url" class="url-label"><% if online_active { %>Join link<% } else { %>Link / URL<% } %></label>
+    <input id="add-url" type="url" name="url" value="<%= self.url %>" placeholder="https://&hellip;">
+    <p class="text-sm text-neutral-mid url-help"><% if online_active { %>The link people use to join or participate online.<% } else { %>A website, registration page, or livestream link.<% } %></p>
+  </div>
 
   <%# A location note meaningful in any mode (the area for a region, or a
       "meet at the north entrance"-style note). %>
   <div>
     <label for="location-description">Location details</label>
     <input id="location-description" type="text" name="location_description" value="<%= self.location_description %>" placeholder="e.g. Greater Phoenix metro area, or &ldquo;meet at the north entrance&rdquo;">
-  </div>
-
-  <div>
-    <label for="add-url">Link / URL</label>
-    <input id="add-url" type="url" name="url" value="<%= self.url %>" placeholder="https://&hellip;">
-    <p class="text-sm text-neutral-mid">A website, registration page, or livestream link. Required for online.</p>
   </div>
 </div>

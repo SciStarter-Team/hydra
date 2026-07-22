@@ -28,7 +28,7 @@
         <h3>Details</h3>
         <div>
           <label for="project-description">Description</label>
-          <textarea id="project-description" name="description" rows="5" required><%= self.values.description %></textarea>
+          <textarea id="project-description" name="description" rows="5" required placeholder="What are the details?"><%= self.values.description %></textarea>
         </div>
         <div>
           <label for="project-goal">Scientific goal</label>
@@ -133,6 +133,8 @@
           </div>
         </details>
       </div>
+
+      <p class="text-sm text-neutral-mid">Your project will be reviewed by SciStarter staff before it appears publicly.</p>
 
       <div class="flex items-center gap-3">
         <button type="submit" class="btn btn-primary">Create project</button>

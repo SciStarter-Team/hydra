@@ -1,0 +1,121 @@
+/* Add Event / Add Project form controls: the pill-style date/time fields,
+   the place type-ahead, the calendar popover, and quiet link-style buttons. */
+
+/* A compact bordered field with an optional icon and a small floating label
+   above the value, sharing one focus ring. */
+form .pill-field {
+    @apply flex items-center gap-3 bg-white border border-linework rounded-lg px-4 py-2;
+}
+form .pill-field:focus-within {
+    border-color: var(--color-primary-action);
+    box-shadow: 0 0 0 1px var(--color-primary-action);
+}
+.pill-icon {
+    @apply w-5 h-5 text-neutral-mid shrink-0;
+}
+form .pill-body {
+    @apply flex flex-col grow mb-0 min-w-0;
+}
+form .pill-body .pill-label {
+    @apply block text-sm text-neutral-mid;
+}
+form .pill-field input,
+form .pill-field select {
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    width: 100%;
+    background: transparent;
+}
+form .pill-field input:focus,
+form .pill-field select:focus {
+    outline: none;
+    box-shadow: none;
+}
+
+/* A button that reads as a quiet inline link ("+ End date and time"). */
+form .link-btn {
+    @apply text-sm text-accent1 underline text-left;
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    width: fit-content;
+}
+
+/* Place type-ahead suggestions, anchored under the search input. */
+.place-search {
+    position: relative;
+}
+.place-search-results {
+    @apply absolute inset-x-0 z-40 mt-1 bg-white border border-linework rounded-md shadow-lg overflow-y-auto;
+    top: 100%;
+    max-height: 20rem;
+    list-style: none;
+    margin-left: 0;
+    padding-left: 0;
+}
+.place-search-results li button {
+    @apply block w-full text-left px-4 py-2;
+    background: none;
+    border: 0;
+    cursor: pointer;
+}
+.place-search-results li button:hover,
+.place-search-results li button:focus {
+    @apply bg-primary-light;
+}
+.place-search-results .place-name {
+    @apply block font-medium;
+}
+.place-search-results .place-context {
+    @apply block text-sm text-neutral-mid;
+}
+
+/* Month-grid calendar popover for date inputs (js/calendar-popover.js). */
+.cal-popover {
+    @apply absolute z-50 bg-white border border-linework rounded-lg shadow-lg p-3;
+    width: 18rem;
+}
+.cal-header {
+    @apply flex items-center justify-between mb-2;
+}
+.cal-title {
+    @apply font-medium;
+}
+.cal-prev,
+.cal-next {
+    @apply w-8 h-8 rounded-full text-lg leading-none;
+    background: none;
+    border: 0;
+    cursor: pointer;
+}
+.cal-prev:hover,
+.cal-next:hover {
+    @apply bg-primary-light;
+}
+.cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+}
+.cal-dow {
+    @apply text-xs text-neutral-mid text-center py-1;
+}
+.cal-day {
+    @apply rounded-full text-sm text-center;
+    aspect-ratio: 1;
+    background: none;
+    border: 0;
+    cursor: pointer;
+}
+.cal-day:hover {
+    @apply bg-primary-light;
+}
+.cal-day.is-today {
+    @apply font-bold text-primary-action;
+}
+.cal-day.is-selected {
+    @apply text-white;
+    background-color: var(--color-primary-action);
+}

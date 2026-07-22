@@ -75,9 +75,7 @@ where
         .with(crate::middleware::authorization::AuthMiddleware)
         .with(crate::server_session())
         .catch_all_error(crate::error_dispatch)
-        .with(
-            poem::middleware::SetHeader::new().overriding("Cache-Control", "no-store"),
-        )
+        .with(poem::middleware::SetHeader::new().overriding("Cache-Control", "no-store"))
 }
 
 /// All routes under /api: partner-facing API endpoints (API key, JWT, or
