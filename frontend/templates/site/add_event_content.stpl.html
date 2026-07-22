@@ -17,6 +17,12 @@
         </div>
       </div>
 
+      <!-- Where: before When — a picked venue defaults When's time zones -->
+      <div class="bg-white border border-linework rounded-lg shadow-sm p-6 space-y-4">
+        <h3>Where</h3>
+        <%+ self.location %>
+      </div>
+
       <!-- When -->
       <div class="bg-white border border-linework rounded-lg shadow-sm p-6 space-y-4">
         <h3>When</h3>
@@ -113,12 +119,6 @@
             <p class="text-sm text-neutral-mid">Leave as &ldquo;Just once&rdquo; for a one-time event. Otherwise each date/time above repeats at this frequency through the end date.</p>
           </div>
         </details>
-      </div>
-
-      <!-- Where -->
-      <div class="bg-white border border-linework rounded-lg shadow-sm p-6 space-y-4">
-        <h3>Where</h3>
-        <%+ self.location %>
       </div>
 
       <!-- Details -->

@@ -2,20 +2,30 @@
 #
 # pending-deploys.sh — report which services have undeployed changes.
 #
-# Each `deploy-<service>` action in remote.ron writes the current time
-# to `<service>/deployed` (via `date --rfc-3339=seconds > deployed`)
-# immediately before building the release binary from the working
-# tree. A service therefore has a *pending* deployment when its source
-# has changed since that timestamp.
+# Each `deploy-<service>` action in remote.ron writes a marker to
+# `<service>/deployed` immediately before building the release binary
+# from the working tree:
 #
-# For every `<service>/deployed` marker this script compares the
-# recorded deploy time against the most recent source change, where the
-# source is the service's own directory plus the in-repo crates it
-# depends on (its `path = "../<crate>"` Cargo.toml entries, e.g.
-# `common`) and the workspace manifest/lock. A change counts if either:
-#   * a commit touching those paths is newer than the deploy time, or
-#   * those paths have uncommitted (or new, untracked) edits — the
-#     deploy builds from the working tree, so these ship too.
+#     line 1: the deploy time (`date --rfc-3339=seconds`)
+#     line 2: the deployed revision (`git rev-parse HEAD`)
+#
+# A service has a *pending* deployment when the source it is built from
+# — its own directory plus the in-repo crates it path-depends on, and
+# the workspace manifest/lock — differs from what that deploy shipped.
+#
+# With a recorded revision the check is content-based: the working tree
+# (committed or not) is diffed against the deployed revision, and a
+# differing file counts only if it was modified after the marker was
+# stamped (the marker file's own mtime). That makes the check immune to
+# commit-timestamp skew (pulled or rebased commits carry old dates) and
+# stops flagging edits that were already in the working tree when the
+# deploy built it. The shared Cargo.lock is handled precisely: a lock
+# change only flags the services whose dependency closure contains a
+# changed package. Old single-line markers (date only) fall back to the
+# previous timestamp comparison until their next deploy upgrades them.
+#
+# Services that remote.ron knows how to deploy but that have no marker
+# at all are reported as pending ("never deployed").
 #
 # Exit status is 0 when everything is up to date and 1 when at least
 # one service is pending, so it can gate a deploy script or hook.
@@ -26,6 +36,13 @@
 # user-service second, frontend last — with any other pending services
 # in between (their relative order matters less). The run stops at the
 # first failed deploy.
+#
+# Known limitation: the marker is stamped before the build, so a deploy
+# that fails partway still looks deployed. And when the working tree was
+# dirty at deploy time, the recorded revision can't describe exactly
+# what shipped — the mtime gate approximates it (deciding by whether the
+# file changed after the stamp), which errs toward "pending" after
+# branch switches or checkouts that refresh mtimes.
 
 set -euo pipefail
 
@@ -60,10 +77,10 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-# Resolve the in-repo source paths a service is built from: its own
-# directory, any sibling crates it path-depends on, and the workspace
-# manifest + lockfile (which affect every build).
-service_paths() {
+# The service's own directory plus any sibling crates it path-depends
+# on. The workspace manifest and lock are deliberately not included —
+# they are shared, and handled with finer grain by the caller.
+service_core_paths() {
     local service=$1
     local -a paths=("$service")
 
@@ -78,67 +95,180 @@ service_paths() {
                  | sed 's#^\.\./##' | sort -u)
     fi
 
-    [[ -f Cargo.toml ]] && paths+=("Cargo.toml")
-    [[ -f Cargo.lock ]] && paths+=("Cargo.lock")
-
     printf '%s\n' "${paths[@]}"
+}
+
+# Every file under the given paths whose working-tree content differs
+# from the given revision: committed changes since the revision, dirty
+# tracked files, and untracked (non-ignored) files.
+changed_files() {
+    local rev=$1; shift
+    {
+        git diff --name-only "$rev" -- "$@" 2>/dev/null || true
+        git status --porcelain -uall -- "$@" 2>/dev/null \
+            | awk '/^\?\?/ { print substr($0, 4) }'
+    } | sort -u
+}
+
+# Was the file modified after the deploy stamped this marker? Missing
+# files (deletions) can't be dated, so they count as changed.
+newer_than_marker() {
+    local file=$1 marker=$2
+    [[ ! -e "$file" || "$file" -nt "$marker" ]]
+}
+
+# Emit "name version" per [[package]] entry of a Cargo.lock on stdin.
+lock_packages() {
+    awk -F'"' '/^name = /{n=$2} /^version = /{print n " " $2}'
+}
+
+# "name version" pairs whose lock entry differs between the given
+# revision and the working tree (added, removed, or version-changed).
+# Version-precise so that e.g. adding prost 0.14 for one crate doesn't
+# implicate services still on an untouched prost 0.13 entry.
+lock_changed_packages() {
+    local rev=$1
+    comm -3 \
+        <(git show "$rev:Cargo.lock" 2>/dev/null | lock_packages | sort) \
+        <(lock_packages < Cargo.lock | sort) \
+        | sed 's/^\t//' | sort -u
+}
+
+# "name version" pairs for every package in the service's dependency
+# closure, per the current lock. Fails when the closure can't be
+# resolved (caller then falls back to the conservative answer).
+service_closure() {
+    local service=$1 pkg
+    pkg=$(sed -nE 's/^name *= *"([^"]+)".*/\1/p' "$service/Cargo.toml" | head -1)
+    [[ -n "$pkg" ]] || return 1
+    cargo tree -p "$pkg" --prefix none --locked 2>/dev/null \
+        | awk 'NF >= 2 { v = $2; sub(/^v/, "", v); print $1 " " v }' | sort -u
 }
 
 pending=0
 checked=0
 pending_services=()
 
-# Iterate services in a stable order.
-while IFS= read -r marker; do
-    service=$(dirname "$marker")
-    service=${service#./}
+# Services = every directory holding a `deployed` marker, plus every
+# service remote.ron stamps one for (so a service that has never been
+# deployed from this checkout still shows up).
+services=$(
+    {
+        find . -maxdepth 2 -name deployed -type f | sed 's#^\./##; s#/deployed$##'
+        sed -nE 's/.*cd ([A-Za-z0-9_-]+) && date --rfc-3339=seconds > deployed.*/\1/p' remote.ron
+    } | sort -u
+)
+
+while IFS= read -r service; do
+    [[ -n "$service" ]] || continue
+    marker="$service/deployed"
     checked=$((checked + 1))
 
-    deployed_raw=$(<"$marker")
-    deployed_raw=${deployed_raw//$'\n'/}
-
-    # An empty or unparseable marker means we can't trust that a deploy
-    # ever succeeded — treat it as pending and say so.
-    if [[ -z "${deployed_raw// /}" ]] || ! deployed_ts=$(date -d "$deployed_raw" +%s 2>/dev/null); then
-        printf 'PENDING  %-20s (no valid deploy timestamp: %q)\n' "$service" "$deployed_raw"
+    if [[ ! -f "$marker" ]]; then
+        printf 'PENDING  %-20s (never deployed — no %s marker)\n' "$service" "$marker"
         pending=$((pending + 1))
         pending_services+=("$service")
         continue
     fi
 
-    mapfile -t paths < <(service_paths "$service")
+    deployed_raw=$(sed -n 1p "$marker")
+    deployed_rev=$(sed -n 2p "$marker")
+    deployed_ts=""
+    if [[ -n "${deployed_raw// /}" ]]; then
+        deployed_ts=$(date -d "$deployed_raw" +%s 2>/dev/null) || deployed_ts=""
+    fi
 
-    # Newest commit touching any of the build's source paths.
-    last_commit_ts=$(git log -1 --format=%ct -- "${paths[@]}" 2>/dev/null || true)
-
-    # Uncommitted or untracked (non-ignored) edits to those paths.
-    if [[ -n "$(git status --porcelain -- "${paths[@]}" 2>/dev/null)" ]]; then
-        uncommitted=1
+    if [[ -n "$deployed_ts" ]]; then
+        deployed_desc="deployed $(date -d "@$deployed_ts" '+%Y-%m-%d %H:%M')"
     else
-        uncommitted=0
+        deployed_desc="deployed at ${deployed_rev:0:12}"
     fi
 
+    mapfile -t core_paths < <(service_core_paths "$service")
     reasons=()
-    if [[ -n "$last_commit_ts" && "$last_commit_ts" -gt "$deployed_ts" ]]; then
-        reasons+=("new commit $(date -d "@$last_commit_ts" '+%Y-%m-%d %H:%M')")
-    fi
-    if [[ "$uncommitted" -eq 1 ]]; then
-        reasons+=("uncommitted changes")
+
+    if [[ "$deployed_rev" =~ ^[0-9a-f]{40}$ ]] \
+        && git cat-file -e "$deployed_rev^{commit}" 2>/dev/null; then
+        # Content-based check against the recorded deployed revision.
+
+        # Source drift: files differing from the deployed revision that
+        # changed after the deploy stamped the marker. (Files already in
+        # their current state at deploy time shipped with it.)
+        changed=()
+        while IFS= read -r file; do
+            [[ -n "$file" ]] || continue
+            if newer_than_marker "$file" "$marker"; then
+                changed+=("$file")
+            fi
+        done < <(changed_files "$deployed_rev" "${core_paths[@]}")
+
+        if [[ ${#changed[@]} -gt 0 ]]; then
+            sample=$(printf '%s, ' "${changed[@]:0:3}")
+            sample=${sample%, }
+            if [[ ${#changed[@]} -gt 3 ]]; then
+                sample+=" +$((${#changed[@]} - 3)) more"
+            fi
+            reasons+=("${#changed[@]} source file(s) changed: $sample")
+        fi
+
+        # The workspace manifest affects every build (profiles, patches).
+        if [[ -n "$(changed_files "$deployed_rev" Cargo.toml)" ]] \
+            && newer_than_marker Cargo.toml "$marker"; then
+            reasons+=("workspace Cargo.toml changed")
+        fi
+
+        # The lock is shared by the whole workspace; a change only
+        # matters here if it touches a package this service's dependency
+        # closure actually contains.
+        if [[ -n "$(changed_files "$deployed_rev" Cargo.lock)" ]] \
+            && newer_than_marker Cargo.lock "$marker"; then
+            if closure=$(service_closure "$service"); then
+                affected=$(comm -12 <(lock_changed_packages "$deployed_rev") \
+                                    <(printf '%s\n' "$closure") \
+                    | awk '{print $1}' | sort -u || true)
+                if [[ -n "$affected" ]]; then
+                    reasons+=("dependencies changed: $(echo "$affected" | paste -sd' ')")
+                fi
+            else
+                # Closure unknown — be conservative.
+                reasons+=("Cargo.lock changed (dependency closure unresolvable)")
+            fi
+        fi
+    else
+        # Old-format marker (no revision): fall back to comparing the
+        # deploy time against commit times and any dirty state, with the
+        # shared manifests included wholesale.
+        if [[ -z "$deployed_ts" ]]; then
+            printf 'PENDING  %-20s (no valid deploy timestamp or revision: %q)\n' \
+                "$service" "$deployed_raw"
+            pending=$((pending + 1))
+            pending_services+=("$service")
+            continue
+        fi
+
+        paths=("${core_paths[@]}")
+        [[ -f Cargo.toml ]] && paths+=("Cargo.toml")
+        [[ -f Cargo.lock ]] && paths+=("Cargo.lock")
+
+        last_commit_ts=$(git log -1 --format=%ct -- "${paths[@]}" 2>/dev/null || true)
+        if [[ -n "$last_commit_ts" && "$last_commit_ts" -gt "$deployed_ts" ]]; then
+            reasons+=("new commit $(date -d "@$last_commit_ts" '+%Y-%m-%d %H:%M')")
+        fi
+        if [[ -n "$(git status --porcelain -- "${paths[@]}" 2>/dev/null)" ]]; then
+            reasons+=("uncommitted changes")
+        fi
     fi
 
     if [[ ${#reasons[@]} -gt 0 ]]; then
-        reason_str=$(printf '%s, ' "${reasons[@]}")
-        printf 'PENDING  %-20s deployed %s — %s\n' \
-            "$service" \
-            "$(date -d "@$deployed_ts" '+%Y-%m-%d %H:%M')" \
-            "${reason_str%, }"
+        reason_str=$(printf '%s; ' "${reasons[@]}")
+        printf 'PENDING  %-20s %s — %s\n' \
+            "$service" "$deployed_desc" "${reason_str%; }"
         pending=$((pending + 1))
         pending_services+=("$service")
     else
-        printf 'current  %-20s deployed %s\n' \
-            "$service" "$(date -d "@$deployed_ts" '+%Y-%m-%d %H:%M')"
+        printf 'current  %-20s %s\n' "$service" "$deployed_desc"
     fi
-done < <(find . -maxdepth 2 -name deployed -type f | sort)
+done <<< "$services"
 
 echo
 if [[ "$pending" -eq 0 ]]; then
