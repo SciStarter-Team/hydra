@@ -21,6 +21,13 @@
       // The region map is initialized while hidden, so it renders at zero size
       // until its pane is shown — fix it up once the region pane is visible.
       if (mode === "region" && window.RegionEditor) window.RegionEditor.resizeAll();
+      // The URL and location-note fields apply to every mode, but stay out of
+      // the way until the in-person-or-virtual question is answered. The note
+      // is required for a region, so drawing one opens it.
+      var common = root.querySelector("[data-location-common]");
+      if (common) common.hidden = mode === "";
+      var note = root.querySelector(".location-note");
+      if (note && mode === "region") note.open = true;
       applyUrlText(mode);
     }
 
@@ -94,6 +101,16 @@
       if (fields.longitude) fields.longitude.value = s.longitude;
       input.value = s.context ? s.name + ", " + s.context : s.name;
       close();
+      // Photon's OSM feature often lacks a postcode; backfill it with one
+      // reverse lookup, unless the visitor has typed one in the meantime.
+      if (!s.zip && fields.zip) {
+        fetch("/add/zip-lookup?lat=" + s.latitude + "&lon=" + s.longitude, { headers: { Accept: "application/json" } })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (data) {
+            if (data && data.zip && !fields.zip.value) fields.zip.value = data.zip;
+          })
+          .catch(function () {});
+      }
     }
 
     function render(suggestions) {
@@ -111,10 +128,13 @@
         name.className = "place-name";
         name.textContent = s.name;
         btn.appendChild(name);
-        if (s.context) {
+        // The kind ("City", "County") is often the only difference between
+        // same-named places, so it leads the context line.
+        var contextText = [s.kind, s.context].filter(Boolean).join(" · ");
+        if (contextText) {
           var context = document.createElement("span");
           context.className = "place-context";
-          context.textContent = s.context;
+          context.textContent = contextText;
           btn.appendChild(context);
         }
         btn.addEventListener("click", function () { pick(s); });

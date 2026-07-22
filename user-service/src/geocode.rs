@@ -3,7 +3,8 @@ use async_nats::service::Request;
 use common::{
     message::location::{
         GeocodeForwardRequest, GeocodeForwardResponse, GeocodeRequest, GeocodeResolveRequest,
-        GeocodeResolveResponse, GeocodeResponse, GeocodeResult,
+        GeocodeResolveResponse, GeocodeResponse, GeocodeResult, GeocodeReverseRequest,
+        GeocodeReverseResponse,
     },
     service::decode_structured_message,
     shared::db,
@@ -14,12 +15,51 @@ use common::{
 struct OpenCageResult {
     formatted: String,
     geometry: OpenCageGeometry,
+    #[serde(default)]
+    components: OpenCageComponents,
 }
 
 #[derive(serde::Deserialize)]
 struct OpenCageGeometry {
     lat: f64,
     lng: f64,
+}
+
+/// The address components OpenCage returns per result. The city-like level
+/// arrives under whichever key fits the place (city / town / village /
+/// hamlet); `city_level()` collapses them.
+#[derive(serde::Deserialize, Default)]
+struct OpenCageComponents {
+    #[serde(default)]
+    road: String,
+    #[serde(default)]
+    house_number: String,
+    #[serde(default)]
+    postcode: String,
+    #[serde(default)]
+    city: String,
+    #[serde(default)]
+    town: String,
+    #[serde(default)]
+    village: String,
+    #[serde(default)]
+    hamlet: String,
+    #[serde(default)]
+    state: String,
+    #[serde(default)]
+    country: String,
+    #[serde(default)]
+    country_code: String,
+}
+
+impl OpenCageComponents {
+    fn city_level(&self) -> String {
+        [&self.city, &self.town, &self.village, &self.hamlet]
+            .into_iter()
+            .find(|c| !c.is_empty())
+            .cloned()
+            .unwrap_or_default()
+    }
 }
 
 #[derive(serde::Deserialize)]
@@ -131,6 +171,104 @@ pub async fn resolve(req: &Request) -> Result<GeocodeResolveResponse, Error> {
         latitude: row.latitude,
         longitude: row.longitude,
     })
+}
+
+/// `user.geocode.reverse` — resolve coordinates to address components via
+/// OpenCage, cached in `geocode_reverse_cache`. A point with no result caches
+/// (and returns) empty components — that's a real answer (open ocean), not an
+/// error.
+pub async fn reverse(req: &Request) -> Result<GeocodeReverseResponse, Error> {
+    let message: GeocodeReverseRequest = decode_structured_message(req.message.clone())?;
+
+    if !(-90.0..=90.0).contains(&message.latitude) || !(-180.0..=180.0).contains(&message.longitude)
+    {
+        anyhow::bail!("Coordinates out of range");
+    }
+
+    // Round to 5 decimal places (~1 m) so nearby lookups share a cache entry.
+    let latitude = (message.latitude * 1e5).round() / 1e5;
+    let longitude = (message.longitude * 1e5).round() / 1e5;
+
+    let cached = sqlx::query!(
+        r#"SELECT formatted, road, house_number, city, state, postcode, country, country_code
+           FROM geocode_reverse_cache
+           WHERE latitude = ? AND longitude = ?"#,
+        latitude,
+        longitude
+    )
+    .fetch_optional(db())
+    .await?;
+
+    if let Some(row) = cached {
+        return Ok(GeocodeReverseResponse {
+            formatted: row.formatted,
+            road: row.road,
+            house_number: row.house_number,
+            city: row.city,
+            state: row.state,
+            postcode: row.postcode,
+            country: row.country,
+            country_code: row.country_code,
+        });
+    }
+
+    let api_key = env!("OPENCAGEDATA_KEY");
+    let query = format!("{latitude},{longitude}");
+    let response = reqwest::Client::new()
+        .get("https://api.opencagedata.com/geocode/v1/json")
+        .query(&[
+            ("q", query.as_str()),
+            ("key", api_key),
+            ("limit", "1"),
+            ("no_annotations", "1"),
+        ])
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<OpenCageResponse>()
+        .await?;
+
+    let result = response
+        .results
+        .into_iter()
+        .next()
+        .map(|r| GeocodeReverseResponse {
+            formatted: r.formatted,
+            city: r.components.city_level(),
+            road: r.components.road,
+            house_number: r.components.house_number,
+            state: r.components.state,
+            postcode: r.components.postcode,
+            country: r.components.country,
+            country_code: r.components.country_code,
+        })
+        .unwrap_or_default();
+
+    let id = ulid::Ulid::new().to_string();
+    let now = TimeString::now().to_string();
+    sqlx::query!(
+        r#"INSERT INTO geocode_reverse_cache
+               (id, latitude, longitude, formatted, road, house_number,
+                city, state, postcode, country, country_code, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT (latitude, longitude) DO NOTHING"#,
+        id,
+        latitude,
+        longitude,
+        result.formatted,
+        result.road,
+        result.house_number,
+        result.city,
+        result.state,
+        result.postcode,
+        result.country,
+        result.country_code,
+        now
+    )
+    .execute(db())
+    .await?;
+
+    Ok(result)
 }
 
 pub async fn forward(req: &Request) -> Result<GeocodeForwardResponse, Error> {

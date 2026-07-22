@@ -69,20 +69,28 @@
     <button type="button" class="link-btn" data-mode-link="in_person">Back to a single place</button>
   </fieldset>
 
-  <div data-url-field
-    data-online-label="Join link"
-    data-online-help="The link people use to join or participate online."
-    data-default-label="Link / URL"
-    data-default-help="A website, registration page, or livestream link.">
-    <label for="add-url" class="url-label"><% if online_active { %>Join link<% } else { %>Link / URL<% } %></label>
-    <input id="add-url" type="url" name="url" value="<%= self.url %>" placeholder="https://&hellip;">
-    <p class="text-sm text-neutral-mid url-help"><% if online_active { %>The link people use to join or participate online.<% } else { %>A website, registration page, or livestream link.<% } %></p>
-  </div>
+  <%# Fields meaningful in every mode, held back until the "in person or
+      virtual?" question is answered so the section starts as one control. %>
+  <div class="space-y-4" data-location-common <% if self.mode.is_empty() { %>hidden<% } %>>
+    <div data-url-field
+      data-online-label="Join link"
+      data-online-help="The link people use to join or participate online."
+      data-default-label="Link / URL"
+      data-default-help="A website, registration page, or livestream link.">
+      <label for="add-url" class="url-label"><% if online_active { %>Join link<% } else { %>Link / URL<% } %></label>
+      <input id="add-url" type="url" name="url" value="<%= self.url %>" placeholder="https://&hellip;">
+      <p class="text-sm text-neutral-mid url-help"><% if online_active { %>The link people use to join or participate online.<% } else { %>A website, registration page, or livestream link.<% } %></p>
+    </div>
 
-  <%# A location note meaningful in any mode (the area for a region, or a
-      "meet at the north entrance"-style note). %>
-  <div>
-    <label for="location-description">Location details</label>
-    <input id="location-description" type="text" name="location_description" value="<%= self.location_description %>" placeholder="e.g. Greater Phoenix metro area, or &ldquo;meet at the north entrance&rdquo;">
+    <%# A location note meaningful in any mode (the area for a region, or a
+        "meet at the north entrance"-style note). Collapsed behind a quiet
+        disclosure; region mode requires it, so it opens there. %>
+    <details class="location-note" <% if region_active || !self.location_description.is_empty() { %>open<% } %>>
+      <summary class="location-note-summary"><span class="when-closed">+ Add a location note</span><span class="when-open">Location note</span></summary>
+      <div class="mt-2">
+        <label for="location-description" class="sr-only">Location note</label>
+        <input id="location-description" type="text" name="location_description" value="<%= self.location_description %>" placeholder="e.g. Greater Phoenix metro area, or &ldquo;meet at the north entrance&rdquo;">
+      </div>
+    </details>
   </div>
 </div>

@@ -43,6 +43,30 @@ form .link-btn {
     width: fit-content;
 }
 
+/* Optional-field disclosures in the location section: quiet link-style
+   summaries; the location note's summary reads "+ Add a location note"
+   closed and becomes a plain label once open. */
+form .place-details > summary {
+    @apply text-sm text-neutral-mid;
+}
+form .location-note > summary {
+    @apply text-sm text-accent1 underline cursor-pointer;
+    width: fit-content;
+    list-style: none;
+}
+form .location-note > summary::-webkit-details-marker {
+    display: none;
+}
+form .location-note[open] > summary {
+    @apply text-base text-black no-underline;
+}
+form .location-note:not([open]) .when-open {
+    display: none;
+}
+form .location-note[open] .when-closed {
+    display: none;
+}
+
 /* Place type-ahead suggestions, anchored under the search input. */
 .place-search {
     position: relative;

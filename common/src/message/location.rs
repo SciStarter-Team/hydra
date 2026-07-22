@@ -97,3 +97,24 @@ pub struct GeocodeForwardResponse {
     pub latitude: f64,
     pub longitude: f64,
 }
+
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+pub struct GeocodeReverseRequest {
+    pub latitude: f64,
+    pub longitude: f64,
+}
+
+/// Address components for a reverse-geocoded point. Components the geocoder
+/// couldn't determine are empty strings.
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+pub struct GeocodeReverseResponse {
+    pub formatted: String,
+    pub road: String,
+    pub house_number: String,
+    pub city: String,
+    pub state: String,
+    pub postcode: String,
+    pub country: String,
+    /// ISO 3166-1 alpha-2, lowercase.
+    pub country_code: String,
+}

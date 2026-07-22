@@ -2676,6 +2676,7 @@ async fn main() {
     toplevel.spawn(handler!(geocode, "search", geocode::geocode));
     toplevel.spawn(handler!(geocode, "resolve", geocode::resolve));
     toplevel.spawn(handler!(geocode, "forward", geocode::forward));
+    toplevel.spawn(handler!(geocode, "reverse", geocode::reverse));
 
     // Certificate endpoints
     let certs = service.group("user.certificates");

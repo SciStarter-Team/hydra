@@ -11,7 +11,7 @@ use ulid::Ulid;
 
 use common::{
     insensitivestring::InsensitiveString,
-    message::location::Point,
+    message::location::{GeocodeReverseRequest, GeocodeReverseResponse, Point},
     message::user::BasicInfo,
     service::{TriggerEvent, log_activity, trigger_email},
     shared::db,
@@ -1019,6 +1019,10 @@ struct PlaceSearchQuery {
 struct PlaceSuggestion {
     /// The suggestion's primary line (place or venue name).
     name: String,
+    /// A short label for what the place is ("City", "County", "Museum") —
+    /// often the only thing telling same-named suggestions apart. May be
+    /// empty. Display-only: the picker shows it but never stores it.
+    kind: String,
     /// The secondary line: the locality context ("Beach Haven West, NJ, USA").
     context: String,
     /// Venue name for the form's `location_name` (empty for a plain locality).
@@ -1055,24 +1059,98 @@ pub async fn add_place_search(
             .body("[]"));
     }
 
+    // Over-fetch: OSM often carries same-named entries (a city and its
+    // county, a node and its relation) that render identically and are
+    // deduplicated below, so ask for more than we intend to show.
     let response: serde_json::Value = reqwest::Client::new()
         .get("https://photon.komoot.io/api")
-        .query(&[("q", q), ("limit", "5"), ("lang", "en")])
+        .query(&[("q", q), ("limit", "10"), ("lang", "en")])
         .header("User-Agent", "SciStarter/1.0 (+https://scistarter.org)")
         .send()
         .await?
         .json()
         .await?;
 
-    let suggestions: Vec<PlaceSuggestion> = response
+    let mut suggestions: Vec<PlaceSuggestion> = response
         .get("features")
         .and_then(|f| f.as_array())
         .map(|features| features.iter().filter_map(photon_suggestion).collect())
         .unwrap_or_default();
 
+    // Drop suggestions the visitor couldn't tell apart: same name, kind, and
+    // context. Photon ranks better matches first, so keep the first of each.
+    let mut seen = std::collections::HashSet::new();
+    suggestions.retain(|s| seen.insert((s.name.clone(), s.kind.clone(), s.context.clone())));
+    suggestions.truncate(5);
+
     Ok(Response::builder()
         .content_type("application/json")
         .body(serde_json::to_string(&suggestions)?))
+}
+
+/// A short human label for what kind of place a Photon feature is, from its
+/// OSM tag value ("city" -> "City", "place_of_worship" -> "Place of worship").
+/// Values that don't describe anything ("yes") map to an empty label.
+fn photon_kind(osm_value: &str) -> String {
+    match osm_value {
+        "yes" | "unclassified" => String::new(),
+        "administrative" => "Area".to_string(),
+        "neighbourhood" => "Neighborhood".to_string(),
+        other => {
+            let words = other.replace('_', " ");
+            let mut chars = words.chars();
+            match chars.next() {
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                None => String::new(),
+            }
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct ZipLookupQuery {
+    lat: f64,
+    lon: f64,
+}
+
+/// GET `/add/zip-lookup?lat=&lon=` — resolve coordinates to a postal code via
+/// the `user.geocode.reverse` service (OpenCage, cached), which knows
+/// postcodes the OSM feature Photon matched may lack. Called once per picked
+/// place-search suggestion and only when the suggestion itself carried no
+/// postcode. Returns `{"zip": "..."}`, with an empty string when none was
+/// found.
+#[handler]
+#[tracing::instrument]
+pub async fn add_zip_lookup(
+    Authenticated(user_info): Authenticated,
+    Query(query): Query<ZipLookupQuery>,
+) -> Result<Response, anyhow::Error> {
+    if user_info.is_none() {
+        return Ok(Response::builder()
+            .status(poem::http::StatusCode::UNAUTHORIZED)
+            .finish());
+    }
+
+    if !(-90.0..=90.0).contains(&query.lat) || !(-180.0..=180.0).contains(&query.lon) {
+        return Ok(Response::builder()
+            .status(poem::http::StatusCode::BAD_REQUEST)
+            .finish());
+    }
+
+    let response: GeocodeReverseResponse = common::service::request(
+        "user.geocode.reverse",
+        GeocodeReverseRequest {
+            latitude: query.lat,
+            longitude: query.lon,
+        },
+    )
+    .await?;
+
+    Ok(Response::builder()
+        .content_type("application/json")
+        .body(serde_json::to_string(
+            &serde_json::json!({ "zip": response.postcode }),
+        )?))
 }
 
 /// Convert one Photon GeoJSON feature into a `PlaceSuggestion`, sorting the
@@ -1123,12 +1201,13 @@ fn photon_suggestion(feature: &serde_json::Value) -> Option<PlaceSuggestion> {
 
     let mut location_name = name.clone();
     let osm_key = prop("osm_key");
+    let osm_value = prop("osm_value");
     if osm_key == "place" || osm_key == "boundary" {
         // A locality, not a venue: the name belongs in an address component.
         // When the component it names is already filled (e.g. a neighborhood
         // inside a known city), keep it as the place name instead.
         location_name = String::new();
-        match prop("osm_value").as_str() {
+        match osm_value.as_str() {
             "state" | "region" | "province" if state.is_empty() => state = name.clone(),
             "country" if country.is_empty() => country = name.clone(),
             _ if city.is_empty() => city = name.clone(),
@@ -1145,6 +1224,7 @@ fn photon_suggestion(feature: &serde_json::Value) -> Option<PlaceSuggestion> {
 
     Some(PlaceSuggestion {
         name,
+        kind: photon_kind(&osm_value),
         context,
         location_name,
         address,
