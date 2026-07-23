@@ -141,6 +141,10 @@
   </ul>
 </div>
 
+<% if let Some(concierge) = self.concierge { %>
+<%+ concierge %>
+<% } %>
+
 <% if let Some(nearby) = &self.nearby { %>
 <!-- PROJECTS AND EVENTS NEAR YOU -->
 <div class="home-nearby ss-container my-8">

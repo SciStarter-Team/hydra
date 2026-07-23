@@ -97,6 +97,40 @@ pub fn fts5_prefix_query(input: &str) -> String {
     format!("\"{}\"*", escaped)
 }
 
+/// Build a safe FTS5 query matching every word of the input as its own
+/// prefix token (space-separated terms are an implicit AND in FTS5). Looser
+/// than [`fts5_prefix_query`]'s exact-phrase match: "bird migration" matches
+/// any document containing both a "bird"-prefixed and a "migration"-prefixed
+/// word, in any order. Each word gets the same quote-escaping treatment, so
+/// the same injection-safety argument applies.
+pub fn fts5_all_words_query(input: &str) -> String {
+    input
+        .split_whitespace()
+        .map(|word| format!("\"{}\"*", word.replace('"', "\"\"")))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// How free-text input is turned into an FTS5 query expression.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FtsTermStyle {
+    /// The whole input as one exact phrase prefix — the `/finder` behavior.
+    Phrase,
+    /// Every word as an independent prefix term, AND-ed. Used by the
+    /// concierge, where the model supplies keyword lists rather than
+    /// phrases.
+    AllWords,
+}
+
+impl FtsTermStyle {
+    fn term_for(self, input: &str) -> String {
+        match self {
+            FtsTermStyle::Phrase => fts5_prefix_query(input),
+            FtsTermStyle::AllWords => fts5_all_words_query(input),
+        }
+    }
+}
+
 /// Search published entities using FTS
 pub async fn search_entities(query: &str) -> Result<Vec<SearchResult>, Error> {
     let query = query.trim();
@@ -299,7 +333,7 @@ impl FinderContent {
 const FINDER_PER_PAGE: u32 = 24;
 
 /// Load available filter options from the database
-async fn load_filter_options() -> Result<(Vec<String>, Vec<String>, Vec<String>), Error> {
+pub(crate) async fn load_filter_options() -> Result<(Vec<String>, Vec<String>, Vec<String>), Error> {
     let topics = sqlx::query_scalar!("SELECT DISTINCT topic FROM project_topics ORDER BY topic")
         .fetch_all(db())
         .await?;
@@ -450,9 +484,9 @@ fn make_snippet(desc: &str) -> String {
     description_excerpt(desc, 200)
 }
 
-struct FinderSearchResult {
-    results: Vec<FinderResult>,
-    total: u32,
+pub(crate) struct FinderSearchResult {
+    pub(crate) results: Vec<FinderResult>,
+    pub(crate) total: u32,
 }
 
 /// Count projects matching text search + filters
@@ -590,9 +624,13 @@ async fn search_all(fq: &FinderQuery, page: u32) -> Result<FinderSearchResult, E
     Ok(FinderSearchResult { results, total })
 }
 
-async fn search_text_only(fq: &FinderQuery, page: u32) -> Result<FinderSearchResult, Error> {
+async fn search_text_only(
+    fq: &FinderQuery,
+    page: u32,
+    style: FtsTermStyle,
+) -> Result<FinderSearchResult, Error> {
     let q = fq.q.as_deref().unwrap_or("");
-    let search_term = fts5_prefix_query(q);
+    let search_term = style.term_for(q);
     let limit = FINDER_PER_PAGE as i64;
     let offset = ((page - 1) * FINDER_PER_PAGE) as i64;
 
@@ -708,9 +746,10 @@ async fn search_with_location(
     lat: f64,
     lng: f64,
     page: u32,
+    style: FtsTermStyle,
 ) -> Result<FinderSearchResult, Error> {
     let q = fq.q.as_deref().unwrap_or("");
-    let search_term = fts5_prefix_query(q);
+    let search_term = style.term_for(q);
 
     // Count
     let proj_count: i64 = build_project_count_text(&search_term, fq)
@@ -1131,6 +1170,27 @@ async fn search_location_only(
     Ok(FinderSearchResult { results, total })
 }
 
+/// Run one page of a finder search using the same strategy selection as the
+/// `/finder` page: text + location, location only, text only, or browse-all,
+/// with the query's facet filters applied in every case.
+pub(crate) async fn run_finder_search(
+    query: &FinderQuery,
+    page: u32,
+    style: FtsTermStyle,
+) -> Result<FinderSearchResult, Error> {
+    let q = query.q.as_deref().unwrap_or("").trim();
+    let has_query = !q.is_empty();
+
+    match (query.lat, query.lng) {
+        (Some(lat), Some(lng)) if has_query => {
+            search_with_location(query, lat, lng, page, style).await
+        }
+        (Some(lat), Some(lng)) => search_location_only(query, lat, lng, page).await,
+        _ if has_query => search_text_only(query, page, style).await,
+        _ => search_all(query, page).await,
+    }
+}
+
 #[handler]
 pub async fn handle_finder(
     _session: &Session,
@@ -1153,47 +1213,15 @@ pub async fn handle_finder(
             poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
         })?;
 
-    let search_result = if has_location {
-        let lat_val = lat.unwrap();
-        let lng_val = lng.unwrap();
-        if has_query {
-            search_with_location(&query, lat_val, lng_val, page)
-                .await
-                .unwrap_or_else(|e| {
-                    tracing::error!("Finder search_with_location error: {}", e);
-                    FinderSearchResult {
-                        results: Vec::new(),
-                        total: 0,
-                    }
-                })
-        } else {
-            search_location_only(&query, lat_val, lng_val, page)
-                .await
-                .unwrap_or_else(|e| {
-                    tracing::error!("Finder search_location_only error: {}", e);
-                    FinderSearchResult {
-                        results: Vec::new(),
-                        total: 0,
-                    }
-                })
-        }
-    } else if has_query {
-        search_text_only(&query, page).await.unwrap_or_else(|e| {
-            tracing::error!("Finder search_text_only error: {}", e);
+    let search_result = run_finder_search(&query, page, FtsTermStyle::Phrase)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::error!("Finder search error: {}", e);
             FinderSearchResult {
                 results: Vec::new(),
                 total: 0,
             }
-        })
-    } else {
-        search_all(&query, page).await.unwrap_or_else(|e| {
-            tracing::error!("Finder search_all error: {}", e);
-            FinderSearchResult {
-                results: Vec::new(),
-                total: 0,
-            }
-        })
-    };
+        });
 
     // Log search event
     {

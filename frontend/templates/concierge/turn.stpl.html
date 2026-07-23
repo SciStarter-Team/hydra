@@ -1,0 +1,30 @@
+<div class="concierge-msg self-end max-w-[85%] rounded-lg bg-primary-light p-3 text-sm whitespace-pre-line"><%= self.user_text %></div>
+<div class="flex items-end gap-2 self-start max-w-[85%]">
+  <img src="/-static/img/concierge/flower-avatar.jpg" alt="Flower, a scruffy golden dog" class="w-9 h-9 rounded-full shrink-0" />
+  <div class="concierge-msg rounded-lg bg-gray-100 p-3 text-sm whitespace-pre-line"><%= self.assistant_text %></div>
+</div>
+<% if !self.cards.is_empty() { %>
+<div class="concierge-cards grid grid-cols-1 sm:grid-cols-2 gap-3 my-1">
+  <% for card in self.cards.iter() { %>
+  <div class="border border-gray-200 rounded-lg overflow-hidden bg-white">
+    <a href="<%= card.link() %>"><img src="<%= card.image %>" alt="<%= card.title %>" class="w-full h-24 object-cover" /></a>
+    <div class="p-2">
+      <h3 class="text-sm font-bold mb-1"><a href="<%= card.link() %>"><%= card.title %></a></h3>
+      <% if !card.location_display.is_empty() { %>
+      <p class="text-xs text-gray-600 mb-1">
+        <%= card.location_display %>
+        <% if let Some(mi) = card.distance_mi() { %> &middot; <%= format!("{:.0} mi away", mi) %><% } %>
+      </p>
+      <% } %>
+      <% if !card.description_snippet.is_empty() { %>
+      <p class="text-xs text-gray-700 mb-0"><%= card.description_snippet %></p>
+      <% } %>
+    </div>
+  </div>
+  <% } %>
+</div>
+<% if !self.finder_url.is_empty() { %>
+<a href="<%= self.finder_url %>" class="self-start text-sm text-primary-action font-bold">See all matches in the Finder &rarr;</a>
+<% } %>
+<% } %>
+<%+ self.form %>

@@ -368,3 +368,17 @@ pub async fn ai_opted_out(req: &Request) -> Result<AiOptedOutResponse, anyhow::E
             .collect(),
     })
 }
+
+/// Check whether a single user has opted out of AI features
+pub async fn ai_opt_out_status(req: &Request) -> Result<bool, anyhow::Error> {
+    let user_id: String = flexbuffers::from_slice(&req.message.payload)?;
+
+    let opted_out = sqlx::query_scalar!(
+        r#"SELECT "ai_opt_out" FROM "users" WHERE "user_id" = ?"#,
+        user_id
+    )
+    .fetch_optional(db())
+    .await?;
+
+    Ok(opted_out.is_some_and(|flag| flag != 0))
+}

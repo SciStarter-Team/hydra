@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use crate::{
     component::{Component, Head, StandardLayout},
+    concierge::ConciergeSection,
     home::{HomeSettings, UserState, WelcomeMessage},
     middleware::authorization::Authenticated,
     search::FinderResult,
@@ -27,6 +28,7 @@ struct IndexPageLoggedIn {
 #[template(path = "pages/index_content_logged_in.stpl.html")]
 struct IndexPageContentLoggedIn {
     welcome: Option<WelcomeMessage>,
+    concierge: Option<ConciergeSection>,
     nearby: Option<NearbySection>,
     featured_items: Vec<crate::schedule::FeaturedItem>,
     news_items: Vec<crate::news::RenderedNewsItem>,
@@ -47,6 +49,7 @@ struct IndexPageLoggedOut {
 #[derive(sailfish::TemplateOnce)]
 #[template(path = "pages/index_content_logged_out.stpl.html")]
 struct IndexPageContentLoggedOut {
+    concierge: Option<ConciergeSection>,
     nearby: Option<NearbySection>,
     featured_items: Vec<crate::schedule::FeaturedItem>,
     featured_communities: Vec<CommunityInfo>,
@@ -158,6 +161,7 @@ async fn render_index_page(
     // Location (and therefore the "near you" list) is resolved for everyone.
     let location = resolve_location(client_ip).await;
     let nearby = build_nearby_section(&location, &settings).await;
+    let concierge = crate::concierge::section_for(&settings, user_info.as_deref()).await;
 
     if let Some(user) = user_info.clone() {
         let location_display = location_display_from_ip(&location);
@@ -176,6 +180,7 @@ async fn render_index_page(
             "/",
             IndexPageContentLoggedIn {
                 welcome,
+                concierge,
                 nearby,
                 featured_items,
                 news_items,
@@ -203,6 +208,7 @@ async fn render_index_page(
         let layout = StandardLayout::new(
             "/",
             IndexPageContentLoggedOut {
+                concierge,
                 nearby,
                 featured_items,
                 featured_communities,

@@ -1,0 +1,21 @@
+<div id="concierge-form-area" class="mt-4"<% if self.oob { %> hx-swap-oob="true"<% } %>>
+  <% if !self.notice.is_empty() { %>
+  <p class="text-sm text-gray-600 mb-2"><%= self.notice %></p>
+  <% } %>
+  <% if self.disabled { %>
+  <a href="/finder" class="text-primary-action font-bold">Browse the project finder &rarr;</a>
+  <% } else { %>
+  <form hx-post="/-concierge/turn" hx-target="#concierge-log" hx-swap="beforeend"
+        hx-disabled-elt="find textarea, find button" hx-indicator="#concierge-spinner"
+        hx-on::response-error="this.parentElement.querySelector('.concierge-rate-note').classList.remove('hidden')"
+        class="flex gap-2 items-end">
+    <input type="hidden" name="conversation_id" value="<%= self.conversation_id %>">
+    <textarea name="message" maxlength="500" required rows="2"
+              class="flex-1 border border-gray-300 rounded p-2 text-sm"
+              placeholder="Tell Flower what you're curious about&hellip;"></textarea>
+    <button type="submit" class="ss-button">Send</button>
+    <span id="concierge-spinner" class="htmx-indicator text-sm text-gray-500">Flower is thinking&hellip;</span>
+  </form>
+  <p class="concierge-rate-note hidden text-sm text-red-600 mt-2">You&rsquo;re going fast &mdash; please wait a moment and try again.</p>
+  <% } %>
+</div>

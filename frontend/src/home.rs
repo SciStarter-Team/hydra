@@ -211,6 +211,17 @@ pub struct HomeSettings {
     /// Heading for the nearby list.
     #[serde(default = "default_nearby_heading")]
     pub nearby_heading: String,
+    /// Whether to show the Flower concierge chat widget. Off by default so
+    /// the feature rolls out deliberately.
+    #[serde(default)]
+    pub show_concierge: bool,
+    /// Heading for the concierge section.
+    #[serde(default = "default_concierge_heading")]
+    pub concierge_heading: String,
+}
+
+pub fn default_concierge_heading() -> String {
+    "Ask Flower: Find Your Project".to_string()
 }
 
 fn default_show_nearby() -> bool {
@@ -238,6 +249,8 @@ impl Default for HomeSettings {
             show_nearby: default_show_nearby(),
             nearby_limit: default_nearby_limit(),
             nearby_heading: default_nearby_heading(),
+            show_concierge: false,
+            concierge_heading: default_concierge_heading(),
         }
     }
 }

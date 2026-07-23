@@ -2506,6 +2506,11 @@ async fn main() {
         "ai_opted_out",
         user_matching::ai_opted_out
     ));
+    toplevel.spawn(handler!(
+        profile,
+        "ai_opt_out_status",
+        user_matching::ai_opt_out_status
+    ));
     toplevel.spawn(handler!(profile, "get", profile::get));
     toplevel.spawn(handler!(profile, "save", profile::save));
     toplevel.spawn(handler!(profile, "public_get", profile::public_get));

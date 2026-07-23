@@ -17,6 +17,7 @@ pub mod dev;
 pub mod emailer;
 pub mod entity;
 pub mod entity_list;
+pub mod concierge;
 pub mod event;
 pub mod evolveme;
 pub mod exchange;
@@ -356,6 +357,7 @@ fn user_facing() -> impl Endpoint {
         .nest("/evolveme", evolveme::routes())
         .nest("/exchange", exchange::routes())
         .nest("/-search", search::routes())
+        .nest("/-concierge", concierge::routes())
         .at("/finder", get(search::handle_finder))
         .at("/-news/:id/content", get(news::news_content))
         .nest("/communities", communities::routes())
@@ -681,6 +683,7 @@ async fn main() -> Result<(), Error> {
     let _news_item_updates = tokio::spawn(news::NewsItem::peering_task());
     let _staff_pick_updates = tokio::spawn(staff_pick::StaffPick::peering_task());
     let _webinar_updates = tokio::spawn(webinar::Webinar::peering_task());
+    concierge::spawn_background_tasks();
     let _pagebuilder_component_updates =
         tokio::spawn(pagebuilder::PageBuilderComponent::peering_task());
     let _pagebuilder_page_updates = tokio::spawn(pagebuilder::PageBuilderPage::peering_task());

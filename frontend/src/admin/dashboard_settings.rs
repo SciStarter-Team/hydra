@@ -135,6 +135,11 @@ struct WelcomeForm {
     nearby_heading: String,
     #[serde(default)]
     nearby_limit: Option<i64>,
+    /// Present (any value) when the "show concierge" checkbox is ticked.
+    #[serde(default)]
+    show_concierge: Option<String>,
+    #[serde(default)]
+    concierge_heading: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -251,6 +256,7 @@ impl RuleForm {
 
 fn to_settings(form: WelcomeForm) -> HomeSettings {
     let nearby_heading = form.nearby_heading.trim();
+    let concierge_heading = form.concierge_heading.trim();
     HomeSettings {
         welcome_rules: form
             .rules
@@ -269,6 +275,12 @@ fn to_settings(form: WelcomeForm) -> HomeSettings {
             "Projects & Events Near You".to_string()
         } else {
             nearby_heading.to_string()
+        },
+        show_concierge: form.show_concierge.is_some(),
+        concierge_heading: if concierge_heading.is_empty() {
+            crate::home::default_concierge_heading()
+        } else {
+            concierge_heading.to_string()
         },
     }
 }
@@ -393,6 +405,8 @@ struct DashboardSettingsPage {
     show_nearby: bool,
     nearby_heading: String,
     nearby_limit: i64,
+    show_concierge: bool,
+    concierge_heading: String,
     communities: Vec<CommunityOption>,
     sections: Vec<ManagedSection>,
 }
@@ -422,6 +436,8 @@ async fn render_page(
         show_nearby: settings.show_nearby,
         nearby_heading: settings.nearby_heading.clone(),
         nearby_limit: settings.nearby_limit,
+        show_concierge: settings.show_concierge,
+        concierge_heading: settings.concierge_heading.clone(),
         communities,
         sections: build_managed_sections().await,
     };
