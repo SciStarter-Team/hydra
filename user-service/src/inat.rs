@@ -42,6 +42,20 @@ pub async fn list_users(req: &Request) -> Result<Vec<InatUser>, Error> {
     Ok(users)
 }
 
+/// Whether the user has an iNaturalist username on their profile. Drives the
+/// K-12 training's "Affiliation Tracking Check" step.
+pub async fn username_set(req: &Request) -> Result<bool, Error> {
+    let user_id: String = flexbuffers::from_slice(&req.message.payload)?;
+
+    Ok(sqlx::query_scalar!(
+        r#"SELECT COALESCE(inat_username, '') != '' AS "set!: bool" FROM users WHERE user_id = ?"#,
+        user_id
+    )
+    .fetch_optional(db())
+    .await?
+    .unwrap_or(false))
+}
+
 pub async fn update_last_sync(req: &Request) -> Result<(), Error> {
     let input: InatUpdateLastSync = flexbuffers::from_slice(&req.message.payload)?;
 

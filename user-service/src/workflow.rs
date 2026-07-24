@@ -40,6 +40,7 @@ pub async fn record_progress(req: &Request) -> Result<WorkflowProgressResponse, 
         WorkflowType::Ambassador => {
             update_ambassador_progress(&request.user_id, &request.step, &now).await?
         }
+        WorkflowType::K12 => update_k12_progress(&request.user_id, &request.step, &now).await?,
     };
 
     // Notify any open training page for this user (over the per-user SSE
@@ -591,6 +592,67 @@ async fn update_ambassador_progress(
     Ok(false)
 }
 
+/// Update Citizen Science for K-12 Educators progress
+/// (tutorial → education; reaching education grants the badge)
+async fn update_k12_progress(user_id: &str, step: &str, now: &str) -> Result<bool, anyhow::Error> {
+    match step {
+        "tutorial" => {
+            sqlx::query!(
+                "INSERT OR IGNORE INTO k12_progress (user_id) VALUES (?)",
+                user_id
+            )
+            .execute(db())
+            .await?;
+            sqlx::query!(
+                "UPDATE k12_progress SET tutorial_completed_at = COALESCE(tutorial_completed_at, ?) WHERE user_id = ?",
+                now,
+                user_id
+            )
+            .execute(db())
+            .await?;
+            Ok(false)
+        }
+        "education" => {
+            let result = sqlx::query!(
+                "UPDATE k12_progress
+                 SET education_completed_at = ?, badge_granted_at = COALESCE(badge_granted_at, ?)
+                 WHERE user_id = ? AND tutorial_completed_at IS NOT NULL AND education_completed_at IS NULL",
+                now,
+                now,
+                user_id
+            )
+            .execute(db())
+            .await?;
+
+            // Visiting the Education Hub (with the tutorial already done) grants the badge.
+            if result.rows_affected() > 0 {
+                send(
+                    "user.tags.add",
+                    (user_id.to_string(), "k12-educators-badge".to_string()),
+                )
+                .await?;
+
+                let user_ulid = Ulid::from_string(user_id)?;
+                send(
+                    "user.badges.grant",
+                    UserAndBadge {
+                        user_id: user_ulid,
+                        badge: Badge::CitizenScienceForK12Educators,
+                    },
+                )
+                .await?;
+
+                trigger_email(TriggerEvent::BadgeK12, user_ulid, None).await?;
+
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        }
+        _ => Ok(false),
+    }
+}
+
 /// Get workflow status for a user
 pub async fn get_status(req: &Request) -> Result<WorkflowStatusResponse, anyhow::Error> {
     let request: WorkflowStatusRequest = decode_structured_message(req.message.clone())?;
@@ -603,6 +665,7 @@ pub async fn get_status(req: &Request) -> Result<WorkflowStatusResponse, anyhow:
         WorkflowType::DataEthics => get_data_ethics_status(&request.user_id).await,
         WorkflowType::Ideal => get_ideal_status(&request.user_id).await,
         WorkflowType::Ambassador => get_ambassador_status(&request.user_id).await,
+        WorkflowType::K12 => get_k12_status(&request.user_id).await,
     }
 }
 
@@ -646,6 +709,11 @@ pub async fn tutorial_count(req: &Request) -> Result<WorkflowTutorialCountRespon
         .await?,
         WorkflowType::Ambassador => sqlx::query_scalar!(
             r#"SELECT COUNT(*) as "count: i64" FROM ambassador_progress WHERE tutorial_completed_at IS NOT NULL"#
+        )
+        .fetch_one(db())
+        .await?,
+        WorkflowType::K12 => sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count: i64" FROM k12_progress WHERE tutorial_completed_at IS NOT NULL"#
         )
         .fetch_one(db())
         .await?,
@@ -879,6 +947,38 @@ async fn get_ambassador_status(user_id: &str) -> Result<WorkflowStatusResponse, 
     })
 }
 
+async fn get_k12_status(user_id: &str) -> Result<WorkflowStatusResponse, anyhow::Error> {
+    let row = sqlx::query!(
+        "SELECT tutorial_completed_at, education_completed_at, badge_granted_at
+         FROM k12_progress WHERE user_id = ?",
+        user_id
+    )
+    .fetch_optional(db())
+    .await?;
+
+    let Some(row) = row else {
+        return Ok(WorkflowStatusResponse {
+            current_step: None,
+            completed_steps: vec![],
+            badge_granted: false,
+        });
+    };
+
+    let mut completed_steps = Vec::new();
+    if row.tutorial_completed_at.is_some() {
+        completed_steps.push("tutorial".to_string());
+    }
+    if row.education_completed_at.is_some() {
+        completed_steps.push("education".to_string());
+    }
+
+    Ok(WorkflowStatusResponse {
+        current_step: completed_steps.last().cloned(),
+        completed_steps,
+        badge_granted: row.badge_granted_at.is_some(),
+    })
+}
+
 fn stage(label: &str, count: i64) -> FunnelStage {
     FunnelStage {
         label: label.to_string(),
@@ -1090,6 +1190,27 @@ pub async fn funnel(_req: &Request) -> Result<WorkflowFunnelResponse, anyhow::Er
             stage("Started", am.started),
             stage("Tutorial", am.tutorial),
             stage("Badge earned", am.badge),
+        ],
+        note: None,
+    });
+
+    let k = sqlx::query!(
+        r#"SELECT
+            COUNT(*) AS "started!: i64",
+            COUNT(tutorial_completed_at) AS "tutorial!: i64",
+            COUNT(education_completed_at) AS "education!: i64",
+            COUNT(badge_granted_at) AS "badge!: i64"
+           FROM k12_progress"#
+    )
+    .fetch_one(db())
+    .await?;
+    funnels.push(WorkflowFunnel {
+        name: "Citizen Science for K-12 Educators".to_string(),
+        stages: vec![
+            stage("Started", k.started),
+            stage("Tutorial", k.tutorial),
+            stage("Education Hub", k.education),
+            stage("Badge earned", k.badge),
         ],
         note: None,
     });

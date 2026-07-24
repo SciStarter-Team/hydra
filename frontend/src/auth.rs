@@ -1,7 +1,10 @@
 use common::{
     message::{
         location::LocationInfo,
-        user::{BasicInfo, Login, Signup},
+        user::{
+            BasicInfo, CompleteSignup, CompleteSignupResponse, DeferSignup, DeferSignupOutcome,
+            Login, Signup,
+        },
         webauthn::{
             WebAuthnAuthenticationCompleteRequest, WebAuthnAuthenticationCompleteResponse,
             WebAuthnAuthenticationStartRequest, WebAuthnAuthenticationStartResponse,
@@ -266,7 +269,8 @@ struct LoginPageParameters {
     system: Option<bool>,
     password: Option<bool>,
     unauthorized: Option<bool>,
-    turnstile: Option<bool>,
+    exists: Option<bool>,
+    ratelimited: Option<bool>,
     next: Option<String>,
     tag: Option<String>,
 }
@@ -284,7 +288,8 @@ struct LoginSignupContent {
     system: bool,
     password: bool,
     unauthorized: bool,
-    turnstile_failed: bool,
+    exists: bool,
+    ratelimited: bool,
     turnstile_sitekey: String,
 }
 
@@ -318,7 +323,8 @@ pub async fn login_signup_page(
             system: params.system.unwrap_or_default(),
             password: params.password.unwrap_or_default(),
             unauthorized: params.unauthorized.unwrap_or_default(),
-            turnstile_failed: params.turnstile.unwrap_or_default(),
+            exists: params.exists.unwrap_or_default(),
+            ratelimited: params.ratelimited.unwrap_or_default(),
             turnstile_sitekey: env!("TURNSTILE_SITEKEY").to_string(),
         },
     )
@@ -384,15 +390,13 @@ pub async fn signup_action(
 
     let use_passkey = form.use_passkey.unwrap_or(false);
 
-    let token = form.cf_turnstile_response.as_deref().unwrap_or("");
-    if token.is_empty() || !verify_turnstile(token, client_ip).await {
-        return Redirect::see_other("/login?turnstile=true").into_response();
-    }
-
     // Validate password confirmation (only if not using passkey)
     if !use_passkey && form.password1 != form.password2 {
         return Redirect::see_other("/login?password=mismatch").into_response();
     }
+
+    let token = form.cf_turnstile_response.as_deref().unwrap_or("");
+    let turnstile_ok = !token.is_empty() && verify_turnstile(token, client_ip).await;
 
     // Get session values for protected and tags
     let protected = session.get::<bool>("signup_protected").unwrap_or(false);
@@ -411,6 +415,8 @@ pub async fn signup_action(
     // For passkey users, this shouldn't be reached since JavaScript handles the flow
     // This is only for password users now
     if !use_passkey {
+        let email = form.email.clone();
+
         // Regular password signup - create user immediately
         let signup_request = Signup {
             handle: form.handle,
@@ -423,6 +429,33 @@ pub async fn signup_action(
             tags,
             disabled_password: false, // Regular password account
         };
+
+        if !turnstile_ok {
+            // Turnstile never produced a token (blocked script, filtered
+            // network) or its verdict was negative. Neither proves the
+            // visitor is a bot, so instead of rejecting them the signup is
+            // deferred behind an emailed completion link: a human gets in
+            // with one click, a bot without a real inbox gets nothing.
+            let deferral = DeferSignup {
+                signup: signup_request,
+                next,
+                ip_address: client_ip.map(|ip| ip.to_string()),
+            };
+
+            return match request::<DeferSignupOutcome>("user.auth.defer_signup", deferral).await {
+                Ok(DeferSignupOutcome::Deferred) => {
+                    session.set("pending_signup_email", &email);
+                    Redirect::see_other("/check-email").into_response()
+                }
+                Ok(DeferSignupOutcome::AlreadyRegistered) => {
+                    Redirect::see_other("/login?exists=true").into_response()
+                }
+                Ok(DeferSignupOutcome::RateLimited) => {
+                    Redirect::see_other("/login?ratelimited=true").into_response()
+                }
+                Err(_) => Redirect::see_other("/login?system=true").into_response(),
+            };
+        }
 
         // Call user-service's signup via NATS
         match request_with_retry::<Option<BasicInfo>>("user.auth.signup", signup_request).await {
@@ -464,6 +497,127 @@ pub async fn signup_action(
         // Return an error if somehow we get here
         Redirect::see_other("/login?signup=error").into_response()
     }
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "auth/check_email.stpl.html")]
+struct CheckEmailPage {
+    head: <Head as Component>::Prepared,
+    layout: <StandardLayout<CheckEmailContent> as Component>::Prepared,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "auth/check_email_content.stpl.html")]
+struct CheckEmailContent {
+    email: String,
+}
+
+/// Landing page after a signup was deferred behind an emailed completion
+/// link, telling the visitor to go click it.
+#[handler]
+#[tracing::instrument]
+pub async fn check_email_page(
+    session: &Session,
+    Authenticated(user_info): Authenticated,
+) -> Result<Response, anyhow::Error> {
+    let email: String = session.get("pending_signup_email").unwrap_or_default();
+
+    let layout = StandardLayout::new("/login", CheckEmailContent { email })
+        .prepare(user_info.clone())
+        .await?;
+
+    CheckEmailPage {
+        head: Head::default().prepare(None).await?,
+        layout,
+    }
+    .into_response(None)
+    .await
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "auth/signup_link_expired.stpl.html")]
+struct SignupLinkExpiredPage {
+    head: <Head as Component>::Prepared,
+    layout: <StandardLayout<SignupLinkExpiredContent> as Component>::Prepared,
+}
+
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "auth/signup_link_expired_content.stpl.html")]
+struct SignupLinkExpiredContent {}
+
+#[derive(Debug, serde::Deserialize)]
+struct CompleteSignupParameters {
+    code: Option<String>,
+}
+
+/// Redeem an emailed signup-completion link: the deferred account is created
+/// now, the visitor is logged in, and their original destination restored.
+#[handler]
+#[tracing::instrument]
+pub async fn complete_signup_action(
+    session: &Session,
+    Authenticated(user_info): Authenticated,
+    Query(params): Query<CompleteSignupParameters>,
+) -> Result<Response, anyhow::Error> {
+    let code = params.code.unwrap_or_default();
+
+    if !code.is_empty() {
+        match request::<Option<CompleteSignupResponse>>(
+            "user.auth.complete_signup",
+            CompleteSignup { code },
+        )
+        .await
+        {
+            Ok(Some(completed)) => {
+                // Rotate the session ID on this privilege transition to
+                // prevent session fixation.
+                session.renew();
+                session.set("basic_info", &completed.basic_info);
+
+                // Clear signup-specific session data
+                session.remove("signup_protected");
+                session_tags::clear(session);
+                session.remove("auth_next");
+                session.remove("pending_signup_email");
+
+                log_activity(
+                    None,
+                    "user_signup",
+                    completed.basic_info.user_id,
+                    None,
+                    completed.next.clone(),
+                )
+                .await
+                .ok();
+
+                return Ok(
+                    Redirect::see_other(completed.next.unwrap_or_else(|| "/".to_string()))
+                        .into_response(),
+                );
+            }
+            Ok(None) => {
+                // Fall through to the expired-link page
+            }
+            Err(_) => {
+                return Ok(Redirect::see_other("/login?system=true").into_response());
+            }
+        }
+    }
+
+    let layout = StandardLayout::new("/login", SignupLinkExpiredContent {})
+        .prepare(user_info.clone())
+        .await?;
+
+    let mut response = SignupLinkExpiredPage {
+        head: Head::default().prepare(None).await?,
+        layout,
+    }
+    .into_response(None)
+    .await?;
+
+    response.set_status(poem::http::StatusCode::GONE);
+
+    Ok(response)
 }
 
 #[derive(Debug, serde::Deserialize)]

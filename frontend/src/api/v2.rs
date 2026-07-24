@@ -712,6 +712,18 @@ pub async fn record_event_articulate(Form(form): Form<ArticulateForm>) -> Result
             ).await?;
         }
 
+        // Citizen Science for K-12 Educators
+        "http://fr0w9cmlh3blsc9ykp_zbzherpeldg6t_rise" => {
+            let _: WorkflowProgressResponse = request(
+                "user.workflow.progress",
+                WorkflowProgressRequest {
+                    user_id: user_id_str,
+                    workflow: WorkflowType::K12,
+                    step: "tutorial".to_string(),
+                }
+            ).await?;
+        }
+
         _ => {
             tracing::warn!("Unknown Articulate activity: '{}'", activity);
         }

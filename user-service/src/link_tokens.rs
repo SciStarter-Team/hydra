@@ -73,7 +73,7 @@ pub async fn delete(req: &Request) -> Result<(), Error> {
     Ok(())
 }
 
-fn generate_token() -> String {
+pub(crate) fn generate_token() -> String {
     use base64::Engine;
     let mut rng = rand::thread_rng();
     let bytes: Vec<u8> = (0..32).map(|_| rng.r#gen()).collect();

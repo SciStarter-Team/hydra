@@ -1,12 +1,22 @@
 use anyhow::Error;
 use async_nats::service::Request;
 use common::{
-    message::user::{BasicInfo, Login, Signup, SnmProfile},
-    service::{TriggerEvent, log_activity, trigger_email},
+    message::email::{EmailRecipient, SendEmailRequest, SendEmailResponse, noreply_reply_to},
+    message::user::{
+        BasicInfo, CompleteSignup, CompleteSignupResponse, DeferSignup, DeferSignupOutcome, Login,
+        Signup, SnmProfile,
+    },
+    service::{TriggerEvent, log_activity, request, trigger_email},
     shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower},
+    timestring::TimeString,
     ulid::AsUlid,
 };
 use ulid::Ulid;
+
+/// How many deferred signups a single IP can generate per hour. Set high
+/// enough that a classroom behind one NAT (exactly the population most
+/// likely to have Turnstile blocked) isn't locked out.
+const PENDING_SIGNUP_IP_HOURLY_LIMIT: i64 = 30;
 
 #[derive(Debug)]
 struct UserWithPassword {
@@ -24,10 +34,6 @@ struct UserWithPassword {
 pub async fn signup(req: &Request) -> Result<Option<BasicInfo>, Error> {
     let form: Signup = flexbuffers::from_slice(&req.message.payload)?;
 
-    let user_id = Ulid::new();
-    let user_id_str = user_id.to_string();
-    let handle = form.handle;
-    let email = form.email;
     let password = if form.disabled_password {
         // Store Django-style disabled password marker directly
         "!".to_string()
@@ -35,6 +41,25 @@ pub async fn signup(req: &Request) -> Result<Option<BasicInfo>, Error> {
         // Hash the user's password
         djangohashers::make_password(&form.password)
     };
+
+    Ok(Some(create_account(form, password, false).await?))
+}
+
+/// Insert the user, primary email, and tags, then fire the welcome email.
+/// Shared by the immediate signup lane and the deferred (email-completion)
+/// lane; `password` must already be hashed. `email_verified` marks accounts
+/// whose owner has proven control of the inbox by clicking a completion
+/// link, which outweighs the signals that would otherwise leave the account
+/// unverified.
+async fn create_account(
+    form: Signup,
+    password: String,
+    email_verified: bool,
+) -> Result<BasicInfo, Error> {
+    let user_id = Ulid::new();
+    let user_id_str = user_id.to_string();
+    let handle = form.handle;
+    let email = form.email;
     let newsletter = form.newsletter;
     let zipcode = form.zipcode;
     let protected = form.protected;
@@ -50,6 +75,10 @@ pub async fn signup(req: &Request) -> Result<Option<BasicInfo>, Error> {
 
     if form.tags.iter().any(|s| s == "evolveme") {
         verified = false;
+    }
+
+    if email_verified {
+        verified = true;
     }
 
     sqlx::query!(
@@ -151,7 +180,7 @@ pub async fn signup(req: &Request) -> Result<Option<BasicInfo>, Error> {
     .await
     .ok();
 
-    Ok(Some(BasicInfo {
+    Ok(BasicInfo {
         user_id: user_id,
         handle,
         is_staff: false,
@@ -159,6 +188,280 @@ pub async fn signup(req: &Request) -> Result<Option<BasicInfo>, Error> {
         public: true,
         protected,
         needs_point: point.is_none(),
+    })
+}
+
+async fn send_completion_email(email: &str, code: &str) -> Result<(), Error> {
+    let complete_url = format!("https://scistarter.org/complete-signup?code={code}");
+
+    request::<SendEmailResponse>(
+        "emailer.send",
+        SendEmailRequest {
+            template_html: format!(
+                "<p>You're almost there! To finish creating your SciStarter \
+                 account, click the link below:</p>\
+                 <p><a href=\"{complete_url}\">Complete my SciStarter signup</a></p>\
+                 <p>This link expires in 7 days. If you didn't try to create a \
+                 SciStarter account, you can safely ignore this email.</p>"
+            ),
+            subject: "Finish creating your SciStarter account".to_string(),
+            recipients: vec![EmailRecipient::Email(email.to_string())],
+            data_sets: vec![],
+            additional_data: None,
+            reply_to: noreply_reply_to(true),
+        },
+    )
+    .await?;
+
+    Ok(())
+}
+
+/// Store (or refresh) a signup that Turnstile could not vouch for, and email
+/// its completion link. No users row is created until the link is clicked,
+/// so a bot without a real inbox gets nothing.
+pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
+    let defer: DeferSignup = flexbuffers::from_slice(&req.message.payload)?;
+    let form = defer.signup;
+
+    // Sweep expired rows opportunistically so the table cannot grow without
+    // bound even if the periodic cleanup never runs.
+    sqlx::query!(
+        r#"delete from "pending_signups" where datetime("created") < datetime('now', '-7 days')"#
+    )
+    .execute(db())
+    .await?;
+
+    let email_exists = sqlx::query_scalar!(
+        r#"select count(*) from "emails" where "email" = ?"#,
+        form.email
+    )
+    .fetch_one(db())
+    .await?;
+
+    if email_exists > 0 {
+        return Ok(DeferSignupOutcome::AlreadyRegistered);
+    }
+
+    let ip_address = defer.ip_address.unwrap_or_default();
+
+    let recent_from_ip = sqlx::query_scalar!(
+        r#"select count(*) from "pending_signups"
+           where "ip_address" = ? and datetime("email_sent") > datetime('now', '-1 hour')"#,
+        ip_address
+    )
+    .fetch_one(db())
+    .await?;
+
+    if recent_from_ip >= PENDING_SIGNUP_IP_HOURLY_LIMIT {
+        eprintln!("Pending-signup rate limit tripped for {ip_address}");
+        return Ok(DeferSignupOutcome::RateLimited);
+    }
+
+    let email_lower = form.email.to_lowercase();
+    let password = djangohashers::make_password(&form.password);
+    let tags = form.tags.join(",");
+    let now = TimeString::now().to_string();
+
+    let existing_code = sqlx::query_scalar!(
+        r#"select "code" from "pending_signups" where "email_lower" = ?"#,
+        email_lower
+    )
+    .fetch_optional(db())
+    .await?;
+
+    match existing_code {
+        Some(code) => {
+            let within_cooldown = sqlx::query_scalar!(
+                r#"select count(*) from "pending_signups"
+                   where "email_lower" = ? and datetime("email_sent") > datetime('now', '-15 minutes')"#,
+                email_lower
+            )
+            .fetch_one(db())
+            .await?;
+
+            // A retry refreshes the stored payload either way, but the
+            // completion email is only resent outside the cooldown, so the
+            // form cannot be used to flood an inbox.
+            if within_cooldown == 0 {
+                sqlx::query!(
+                    r#"update "pending_signups" set
+                       "email" = ?, "handle" = ?, "password" = ?, "newsletter" = ?,
+                       "zipcode" = ?, "protected" = ?, "point" = ?, "tags" = ?,
+                       "next" = ?, "ip_address" = ?, "email_sent" = ?
+                       where "email_lower" = ?"#,
+                    form.email,
+                    form.handle,
+                    password,
+                    form.newsletter,
+                    form.zipcode,
+                    form.protected,
+                    form.point,
+                    tags,
+                    defer.next,
+                    ip_address,
+                    now,
+                    email_lower,
+                )
+                .execute(db())
+                .await?;
+
+                println!("Deferring signup to email completion: {}", form.email);
+                send_completion_email(&form.email, &code).await?;
+            } else {
+                sqlx::query!(
+                    r#"update "pending_signups" set
+                       "email" = ?, "handle" = ?, "password" = ?, "newsletter" = ?,
+                       "zipcode" = ?, "protected" = ?, "point" = ?, "tags" = ?,
+                       "next" = ?, "ip_address" = ?
+                       where "email_lower" = ?"#,
+                    form.email,
+                    form.handle,
+                    password,
+                    form.newsletter,
+                    form.zipcode,
+                    form.protected,
+                    form.point,
+                    tags,
+                    defer.next,
+                    ip_address,
+                    email_lower,
+                )
+                .execute(db())
+                .await?;
+
+                println!(
+                    "Deferred signup refreshed within cooldown, not resending: {}",
+                    form.email
+                );
+            }
+        }
+        None => {
+            let code = crate::link_tokens::generate_token();
+
+            sqlx::query!(
+                r#"insert into "pending_signups" (
+                   "code", "email", "email_lower", "handle", "password",
+                   "newsletter", "zipcode", "protected", "point", "tags",
+                   "next", "ip_address", "created", "email_sent"
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                code,
+                form.email,
+                email_lower,
+                form.handle,
+                password,
+                form.newsletter,
+                form.zipcode,
+                form.protected,
+                form.point,
+                tags,
+                defer.next,
+                ip_address,
+                now,
+                now,
+            )
+            .execute(db())
+            .await?;
+
+            println!("Deferring signup to email completion: {}", form.email);
+            send_completion_email(&form.email, &code).await?;
+        }
+    }
+
+    Ok(DeferSignupOutcome::Deferred)
+}
+
+/// Redeem an emailed completion code: create the deferred account and log
+/// the completion. Returns None when the code is unknown, expired, or the
+/// account already exists.
+pub async fn complete_signup(req: &Request) -> Result<Option<CompleteSignupResponse>, Error> {
+    let complete: CompleteSignup = flexbuffers::from_slice(&req.message.payload)?;
+
+    let row = sqlx::query!(
+        r#"select "email", "handle", "password", "newsletter", "zipcode",
+                  "protected", "point", "tags", "next"
+           from "pending_signups"
+           where "code" = ? and datetime("created") >= datetime('now', '-7 days')"#,
+        complete.code
+    )
+    .fetch_optional(db())
+    .await?;
+
+    let Some(row) = row else {
+        // Unknown or expired; clear any expired row still bearing this code.
+        sqlx::query!(
+            r#"delete from "pending_signups" where "code" = ?"#,
+            complete.code
+        )
+        .execute(db())
+        .await?;
+
+        return Ok(None);
+    };
+
+    let mut tags: Vec<String> = row
+        .tags
+        .split(',')
+        .filter(|tag| !tag.is_empty())
+        .map(str::to_string)
+        .collect();
+
+    // Marks accounts that arrived through the deferred lane, so the rate of
+    // Turnstile failures among real humans can be measured.
+    tags.push("signup-turnstile-fallback".to_string());
+
+    let email = row.email.clone();
+
+    let form = Signup {
+        handle: row.handle,
+        // The stored password is already hashed and passed separately.
+        password: String::new(),
+        email: row.email,
+        newsletter: row.newsletter != 0,
+        zipcode: row.zipcode,
+        protected: row.protected != 0,
+        point: row.point,
+        tags,
+        disabled_password: false,
+    };
+
+    let basic_info = match create_account(form, row.password, true).await {
+        Ok(info) => info,
+        Err(err) => {
+            let unique_violation = err
+                .downcast_ref::<sqlx::Error>()
+                .and_then(|e| e.as_database_error())
+                .map(|e| e.is_unique_violation())
+                .unwrap_or(false);
+
+            if unique_violation {
+                // The account came into being some other way after this
+                // signup was deferred, so the pending record is obsolete.
+                sqlx::query!(
+                    r#"delete from "pending_signups" where "code" = ?"#,
+                    complete.code
+                )
+                .execute(db())
+                .await?;
+
+                return Ok(None);
+            }
+
+            return Err(err);
+        }
+    };
+
+    sqlx::query!(
+        r#"delete from "pending_signups" where "code" = ?"#,
+        complete.code
+    )
+    .execute(db())
+    .await?;
+
+    println!("Deferred signup completed: {email}");
+
+    Ok(Some(CompleteSignupResponse {
+        basic_info,
+        next: row.next,
     }))
 }
 

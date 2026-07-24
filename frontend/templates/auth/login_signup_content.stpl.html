@@ -17,9 +17,14 @@
         That password was incorrect.
       </div>
     <% } %>
-    <% if self.turnstile_failed { %>
+    <% if self.exists { %>
       <div class="ss-alert">
-        Please confirm you are human and try again.
+        That email address already belongs to a SciStarter account. Log in below to continue.
+      </div>
+    <% } %>
+    <% if self.ratelimited { %>
+      <div class="ss-alert">
+        Too many signup attempts from your network right now. Please try again in an hour.
       </div>
     <% } %>
 
@@ -79,7 +84,8 @@
               Sign up for our newsletter
             </label>
           </div>
-          <div id="signup-turnstile" class="cf-turnstile my-4" data-sitekey="<%= self.turnstile_sitekey %>" data-callback="onSignupTurnstileSuccess" data-expired-callback="onSignupTurnstileReset" data-error-callback="onSignupTurnstileReset"></div>
+          <div id="signup-turnstile" class="cf-turnstile my-4" data-sitekey="<%= self.turnstile_sitekey %>" data-callback="onSignupTurnstileSuccess" data-expired-callback="onSignupTurnstileReset" data-error-callback="onSignupTurnstileError"></div>
+          <div id="signup-turnstile-fallback" class="hidden text-sm text-gray-600 my-4">We couldn't run our automatic spam check on your browser or network. You can still sign up&mdash;we'll email you a link to finish creating your account.</div>
           <input class="btn btn-primary w-full" type=submit value="Sign Up">
         </form>
       </div>
@@ -87,17 +93,27 @@
   </div>
 </div>
 
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <script>
  function onSignupTurnstileSuccess(_token) {
      let widget = document.getElementById("signup-turnstile");
      if (widget) widget.style.display = "none";
+     let note = document.getElementById("signup-turnstile-fallback");
+     if (note) note.classList.add("hidden");
  }
  function onSignupTurnstileReset() {
      let widget = document.getElementById("signup-turnstile");
      if (widget) widget.style.display = "";
  }
+ function onSignupTurnstileError() {
+     // Turnstile can't run here (blocked script or failed challenge). The
+     // form still works: the server defers the account behind an emailed
+     // completion link instead.
+     onSignupTurnstileReset();
+     let note = document.getElementById("signup-turnstile-fallback");
+     if (note) note.classList.remove("hidden");
+ }
 </script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer onerror="onSignupTurnstileError()"></script>
 
 <script>
  // htmx.logAll();

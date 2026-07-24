@@ -643,6 +643,9 @@ pub enum TriggerEvent {
     /// Sent when the SciStarter Ambassador badge is earned
     BadgeAmbassador,
 
+    /// Sent when the Citizen Science for K-12 Educators badge is earned
+    BadgeK12,
+
     /// Sent when the Champion (ambassador) training tutorial is completed
     AmbassadorTrainingComplete,
 
@@ -735,6 +738,7 @@ impl TriggerEvent {
             Self::BadgeDataEthics => "When the Data Ethics for Practitioners badge is earned",
             Self::BadgeIdeal => "When the Ideal Participatory Science badge is earned",
             Self::BadgeAmbassador => "When the SciStarter Ambassador badge is earned",
+            Self::BadgeK12 => "When the Citizen Science for K-12 Educators badge is earned",
             Self::AmbassadorTrainingComplete => "When the Champion training tutorial is completed",
             Self::AmbassadorApplicationSubmitted => "When an ambassador application is submitted",
             Self::AmbassadorRejected => "When an ambassador application is rejected",
@@ -781,7 +785,8 @@ impl TriggerEvent {
             | Self::BadgeHigherEd
             | Self::BadgeDataEthics
             | Self::BadgeIdeal
-            | Self::BadgeAmbassador => "badge",
+            | Self::BadgeAmbassador
+            | Self::BadgeK12 => "badge",
             Self::AmbassadorTrainingComplete
             | Self::AmbassadorApplicationSubmitted
             | Self::AmbassadorRejected

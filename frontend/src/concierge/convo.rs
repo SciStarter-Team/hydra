@@ -143,8 +143,8 @@ impl LoadStorePeered for Conversation {
 /// the same expired rows from its own database.
 pub async fn expire_conversations() {
     loop {
-        let cutoff = (jiff::Timestamp::now() - jiff::Span::new().hours(RETENTION_HOURS))
-            .to_string();
+        let cutoff =
+            (jiff::Timestamp::now() - jiff::Span::new().hours(RETENTION_HOURS)).to_string();
         match sqlx::query!(
             r#"DELETE FROM "concierge_conversations" WHERE "updated" < ?"#,
             cutoff,
@@ -154,10 +154,7 @@ pub async fn expire_conversations() {
         {
             Ok(result) => {
                 if result.rows_affected() > 0 {
-                    tracing::info!(
-                        "Expired {} concierge conversations",
-                        result.rows_affected()
-                    );
+                    tracing::info!("Expired {} concierge conversations", result.rows_affected());
                 }
             }
             Err(e) => tracing::warn!("Concierge conversation expiry failed: {}", e),

@@ -216,7 +216,11 @@ async fn handle_turn(
 ) -> Result<Response, poem::Error> {
     let mut message = input.message.trim().to_string();
     if message.is_empty() {
-        return notice_fragment("", "Tell me what you're curious about!", ConciergeForm::initial());
+        return notice_fragment(
+            "",
+            "Tell me what you're curious about!",
+            ConciergeForm::initial(),
+        );
     }
     if message.chars().count() > MAX_USER_MSG_CHARS {
         message = message.chars().take(MAX_USER_MSG_CHARS).collect();
@@ -263,8 +267,7 @@ async fn handle_turn(
     let mut conversation = match conversation_id {
         Some(id) => match Conversation::load(id).await {
             Ok(existing)
-                if existing.user_id == user.map(|u| u.user_id)
-                    || existing.user_id.is_none() =>
+                if existing.user_id == user.map(|u| u.user_id) || existing.user_id.is_none() =>
             {
                 existing
             }
@@ -278,7 +281,9 @@ async fn handle_turn(
             &message,
             "We've covered a lot of ground! For anything more, the project \
              finder is the best next stop.",
-            ConciergeForm::disabled("This conversation has ended — refresh the page to start a new one."),
+            ConciergeForm::disabled(
+                "This conversation has ended — refresh the page to start a new one.",
+            ),
         );
     }
 
@@ -530,8 +535,7 @@ async fn visitor_context(
 
     if let Some(user) = user {
         if let Ok(tags) =
-            common::service::request::<Vec<String>>("user.tags.get", user.user_id.to_string())
-                .await
+            common::service::request::<Vec<String>>("user.tags.get", user.user_id.to_string()).await
         {
             if !tags.is_empty() {
                 parts.push(format!("interests: {}", tags.join(", ")));

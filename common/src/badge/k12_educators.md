@@ -24,16 +24,16 @@ Earning the Citizen Science for K–12 Educators badge signifies that the recipi
 ## Skills and Competencies
 Recipients of the Citizen Science for K–12 Educators badge have developed and applied the following skills, aligned with an open skills taxonomy recognized by employers and educational institutions:
 
-**Instructional and Curriculum Design**, including:
-- Curriculum Development
-- Curriculum Mapping
-- Instructional Design
+[**Instructional and Curriculum Design**](https://lightcast.io/open-skills/skills/KS1256C6DBYG39V53J4V/instructional-design), including:
+- [Curriculum Development](https://lightcast.io/open-skills/skills/KS122LF6587VF0NZFZJW/curriculum-development)
+- [Curriculum Mapping](https://lightcast.io/open-skills/skills/KS122LF709JLK7D9PL8J/curriculum-mapping)
+- [Instructional Design](https://lightcast.io/open-skills/skills/KS1256C6DBYG39V53J4V/instructional-design)
 
-**Teaching**, including:
-- Lesson Planning
-- K-12 Education
-- Interdisciplinary Teaching
-- Experiential Learning
+[**Teaching**](https://lightcast.io/open-skills/skills/KS120PQ6XD1JWMFQVJNW/teaching), including:
+- [Lesson Planning](https://lightcast.io/open-skills/skills/KS125SS6Z01PYP99SN5G/lesson-planning)
+- [K-12 Education](https://lightcast.io/open-skills/skills/BGS4866E4D4C7E1F272F/k-12-education)
+- [Interdisciplinary Teaching](https://lightcast.io/open-skills/skills/KS125856JH9VGVNY0TBP/interdisciplinary-teaching)
+- [Experiential Learning](https://lightcast.io/open-skills/skills/KS123R966Z5R6D81XZK4/experiential-learning)
 
 ****
 ## Earn the Citizen Science for K-12 Educators badge

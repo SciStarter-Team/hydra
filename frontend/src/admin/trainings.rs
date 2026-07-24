@@ -18,6 +18,7 @@ use crate::training::dataethics::DataEthicsContent;
 use crate::training::dataliteracy::DataLiteracyContent;
 use crate::training::foundations::FoundationsContent;
 use crate::training::highered::HigherEdContent;
+use crate::training::k12::K12Content;
 use crate::training::libraries::LibrariesContent;
 use common::message::user::BasicInfo;
 use poem::{Endpoint, Route, get, handler, web::Form};
@@ -156,6 +157,10 @@ const TRAININGS: &[TrainingRow] = &[
     TrainingRow {
         name: "Citizen Science Champion",
         slug: "champion",
+    },
+    TrainingRow {
+        name: "Citizen Science for K-12 Educators",
+        slug: "k12",
     },
 ];
 
@@ -1167,6 +1172,199 @@ async fn champion_save(
 
 // ==================== Routes ====================
 
+// ==================== K-12 Educators ====================
+
+#[derive(Debug, Deserialize)]
+struct K12Form {
+    title: String,
+    sponsor: String,
+    intro: String,
+    estimated_time: String,
+    badge_image: String,
+    skills_intro: String,
+    skills: String,
+    skills_footnote: String,
+    account_heading: String,
+    prereq_heading: String,
+    prereq_html: String,
+    tutorial_heading: String,
+    tutorial_intro: String,
+    articulate_url: String,
+    articulate_image: String,
+    affiliation_heading: String,
+    affiliation_html: String,
+    affiliation_done_html: String,
+    education_heading: String,
+    education_html: String,
+    education_url: String,
+    claim_heading: String,
+    claim_html: String,
+    list_heading: String,
+    list_html: String,
+    sidebar_html: String,
+}
+
+fn k12_sections(c: &K12Content) -> Vec<Section> {
+    let mut sections = header_and_skills(
+        &c.title,
+        &c.sponsor,
+        &c.intro,
+        &c.estimated_time,
+        &c.badge_image,
+        &c.skills_intro,
+        &c.skills,
+        &c.skills_footnote,
+    );
+    sections.push(section(
+        "Step 1 — SciStarter Account",
+        vec![Field::text(
+            "account_heading",
+            "Step heading",
+            &c.account_heading,
+        )],
+    ));
+    sections.push(section(
+        "Step 2 — Foundations prerequisite",
+        vec![
+            Field::text("prereq_heading", "Step heading", &c.prereq_heading),
+            Field::html("prereq_html", "Body (HTML)", &c.prereq_html, 3),
+        ],
+    ));
+    sections.push(section(
+        "Step 3 — Tutorial & quiz",
+        vec![
+            Field::text("tutorial_heading", "Step heading", &c.tutorial_heading),
+            Field::html("tutorial_intro", "Intro (HTML)", &c.tutorial_intro, 3),
+            Field::text("articulate_url", "Articulate URL", &c.articulate_url),
+            Field::text(
+                "articulate_image",
+                "Tutorial card image URL",
+                &c.articulate_image,
+            ),
+        ],
+    ));
+    sections.push(section(
+        "Step 4 — Affiliation tracking check",
+        vec![
+            Field::text(
+                "affiliation_heading",
+                "Step heading",
+                &c.affiliation_heading,
+            ),
+            Field::html(
+                "affiliation_html",
+                "Body while incomplete (HTML)",
+                &c.affiliation_html,
+                8,
+            ),
+            Field::html(
+                "affiliation_done_html",
+                "Body once complete (HTML)",
+                &c.affiliation_done_html,
+                2,
+            ),
+        ],
+    ));
+    sections.push(section(
+        "Step 5 — Education Hub visit",
+        vec![
+            Field::text("education_heading", "Step heading", &c.education_heading),
+            Field::html("education_html", "Body (HTML)", &c.education_html, 4),
+            Field::text(
+                "education_url",
+                "Redirect destination after recording the visit",
+                &c.education_url,
+            ),
+        ],
+    ));
+    sections.push(section(
+        "Step 6 — Congratulations",
+        vec![
+            Field::text("claim_heading", "Step heading", &c.claim_heading),
+            Field::html("claim_html", "Body (HTML)", &c.claim_html, 5),
+        ],
+    ));
+    sections.push(section(
+        "Optional — Create a list",
+        vec![
+            Field::text("list_heading", "Step heading", &c.list_heading),
+            Field::html("list_html", "Body (HTML)", &c.list_html, 4),
+        ],
+    ));
+    sections.push(section(
+        "Sidebar",
+        vec![Field::html(
+            "sidebar_html",
+            "Sidebar (HTML, badge rendered separately)",
+            &c.sidebar_html,
+            12,
+        )],
+    ));
+    sections
+}
+
+#[handler]
+async fn k12_edit(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let content = K12Content::current().await;
+    render_edit(
+        user_info,
+        "K-12 Educators Training",
+        "Citizen Science for K-12 Educators",
+        "/-admin/trainings/k12",
+        k12_sections(&content),
+        false,
+    )
+    .await
+}
+
+#[handler]
+async fn k12_save(
+    Form(form): Form<K12Form>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    let content = K12Content {
+        title: form.title,
+        sponsor: form.sponsor,
+        intro: form.intro,
+        estimated_time: form.estimated_time,
+        badge_image: form.badge_image,
+        skills_intro: form.skills_intro,
+        skills: skills_from_text(&form.skills),
+        skills_footnote: form.skills_footnote,
+        account_heading: form.account_heading,
+        prereq_heading: form.prereq_heading,
+        prereq_html: form.prereq_html,
+        tutorial_heading: form.tutorial_heading,
+        tutorial_intro: form.tutorial_intro,
+        articulate_url: form.articulate_url,
+        articulate_image: form.articulate_image,
+        affiliation_heading: form.affiliation_heading,
+        affiliation_html: form.affiliation_html,
+        affiliation_done_html: form.affiliation_done_html,
+        education_heading: form.education_heading,
+        education_html: form.education_html,
+        education_url: form.education_url,
+        claim_heading: form.claim_heading,
+        claim_html: form.claim_html,
+        list_heading: form.list_heading,
+        list_html: form.list_html,
+        sidebar_html: form.sidebar_html,
+    };
+    content.store().await?;
+    log_edit(&user_info, "k12").await;
+    render_edit(
+        user_info,
+        "K-12 Educators Training",
+        "Citizen Science for K-12 Educators",
+        "/-admin/trainings/k12",
+        k12_sections(&content),
+        true,
+    )
+    .await
+}
+
 pub fn routes() -> impl Endpoint {
     Route::new()
         .at("/", get(trainings_list))
@@ -1179,4 +1377,5 @@ pub fn routes() -> impl Endpoint {
         .at("/higher-ed", get(highered_edit).post(highered_save))
         .at("/libraries-hubs", get(libraries_edit).post(libraries_save))
         .at("/champion", get(champion_edit).post(champion_save))
+        .at("/k12", get(k12_edit).post(k12_save))
 }

@@ -47,6 +47,15 @@ async fn cleanup() {
             eprintln!("Error while performing session cleanup: {:?}", err);
         }
 
+        if let Err(err) = sqlx::query!(
+            r#"delete from "pending_signups" where datetime("created") < datetime('now', '-7 days')"#
+        )
+        .execute(db())
+        .await
+        {
+            eprintln!("Error while sweeping expired pending signups: {:?}", err);
+        }
+
         sleep(Duration::from_secs(60 * 60 * 13)).await;
     }
 }
@@ -1010,6 +1019,30 @@ async fn users_synchronize() {
                             }
                         }
                     }
+                    "01KPAY9A4VN929P02MECQ1W90N" => {
+                        // Citizen Science for K-12 Educators
+                        let exists = sqlx::query_scalar::<_, i64>(
+                            "SELECT COUNT(*) FROM k12_progress WHERE user_id = ?",
+                        )
+                        .bind(&user.ulid)
+                        .fetch_one(db)
+                        .await
+                        .unwrap_or(0)
+                            > 0;
+
+                        if !exists {
+                            if let Err(e) = sqlx::query!(
+                                "INSERT INTO k12_progress (user_id, tutorial_completed_at, education_completed_at, badge_granted_at) VALUES (?, ?, ?, ?)",
+                                user.ulid, badge.when, badge.when, badge.when
+                            )
+                            .execute(db)
+                            .await {
+                                eprintln!("Failed to create k12 workflow record during user sync for {}: {}", user.ulid, e);
+                            } else {
+                                println!("Created missing k12 workflow record for user {}", user.ulid);
+                            }
+                        }
+                    }
                     _ => {
                         // Other badges don't have workflow tracking
                     }
@@ -1288,6 +1321,17 @@ async fn userbadges_synchronize() {
                             .execute(db)
                             .await {
                                 eprintln!("Failed to create one_million_2025 workflow record for user {}: {}", badge.user_ulid, e);
+                            }
+                        }
+                        // Citizen Science for K-12 Educators
+                        "01KPAY9A4VN929P02MECQ1W90N" => {
+                            if let Err(e) = sqlx::query!(
+                                "INSERT OR IGNORE INTO k12_progress (user_id, tutorial_completed_at, education_completed_at, badge_granted_at) VALUES (?, ?, ?, ?)",
+                                badge.user_ulid, now_str, now_str, now_str
+                            )
+                            .execute(db)
+                            .await {
+                                eprintln!("Failed to create k12 workflow record for user {}: {}", badge.user_ulid, e);
                             }
                         }
                         _ => {
@@ -1809,6 +1853,7 @@ async fn workflow_states_synchronize() {
                 "ideal" => {
                     apply_simple_tutorial_state(db, "ideal_progress", &ws.ulid, &ws.state, ts).await
                 }
+                "k12" => apply_k12_state(db, &ws.ulid, &ws.state, ts).await,
                 other => {
                     eprintln!("Unknown workflow type: {}", other);
                     Ok(())
@@ -2081,6 +2126,50 @@ async fn apply_higher_ed_state(
     Ok(())
 }
 
+/// K-12 Educators states: initial → tutorial → education
+/// orrery's K12State is sequential, so a later state implies the earlier ones.
+/// Reaching education grants the badge.
+async fn apply_k12_state(
+    db: &sqlx::SqlitePool,
+    user_id: &str,
+    state: &str,
+    ts: &str,
+) -> Result<(), anyhow::Error> {
+    sqlx::query!(
+        "INSERT OR IGNORE INTO k12_progress (user_id) VALUES (?)",
+        user_id
+    )
+    .execute(db)
+    .await?;
+
+    match state {
+        "tutorial" => {
+            sqlx::query!(
+                "UPDATE k12_progress SET tutorial_completed_at = COALESCE(tutorial_completed_at, ?) WHERE user_id = ?",
+                ts, user_id
+            ).execute(db).await?;
+        }
+        "education" => {
+            sqlx::query!(
+                r#"UPDATE k12_progress SET
+                    tutorial_completed_at = COALESCE(tutorial_completed_at, ?),
+                    education_completed_at = COALESCE(education_completed_at, ?),
+                    badge_granted_at = COALESCE(badge_granted_at, ?)
+                   WHERE user_id = ?"#,
+                ts,
+                ts,
+                ts,
+                user_id
+            )
+            .execute(db)
+            .await?;
+        }
+        _ => {}
+    }
+
+    Ok(())
+}
+
 /// Simple tutorial workflows (data_literacy, data_ethics, ideal):
 /// initial → tutorial (terminal, grants badge)
 async fn apply_simple_tutorial_state(
@@ -2336,6 +2425,8 @@ async fn main() {
 
     let auth = service.group("user.auth");
     toplevel.spawn(handler!(auth, "signup", auth::signup));
+    toplevel.spawn(handler!(auth, "defer_signup", auth::defer_signup));
+    toplevel.spawn(handler!(auth, "complete_signup", auth::complete_signup));
     toplevel.spawn(handler!(auth, "login", auth::login));
     toplevel.spawn(handler!(auth, "snm_login", auth::snm_login));
 
@@ -2693,6 +2784,7 @@ async fn main() {
     // iNaturalist endpoints
     let inat = service.group("user.inat");
     toplevel.spawn(handler!(inat, "list_users", inat::list_users));
+    toplevel.spawn(handler!(inat, "username_set", inat::username_set));
     toplevel.spawn(recv_handler!(
         inat,
         "update_last_sync",

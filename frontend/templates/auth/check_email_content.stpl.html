@@ -1,0 +1,15 @@
+<div class="ss-container !pt-8 !pb-12 mx-auto">
+  <div class="ss-small-container">
+    <h1 class="text-center">Check Your Email</h1>
+
+    <div class="bg-white border border-linework rounded-lg shadow-sm p-6 mt-6">
+      <% if !self.email.is_empty() { %>
+        <p>We sent a link to <strong><%= self.email %></strong>.</p>
+      <% } else { %>
+        <p>We sent a link to your email address.</p>
+      <% } %>
+      <p class="mt-2">Click the link in that email to finish creating your SciStarter account. The link is good for 7 days.</p>
+      <p class="mt-2">If the email doesn't arrive within a few minutes, check your spam folder.</p>
+    </div>
+  </div>
+</div>

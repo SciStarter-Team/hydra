@@ -26,6 +26,43 @@ pub struct Login {
     pub password: String,
 }
 
+/// A signup that Turnstile could not vouch for, to be deferred behind an
+/// emailed completion link instead of being rejected. Payload for
+/// `user.auth.defer_signup`.
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct DeferSignup {
+    pub signup: Signup,
+    /// Local path to resume once the account is created.
+    pub next: Option<String>,
+    /// Client IP, used to rate limit the deferred lane.
+    pub ip_address: Option<String>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub enum DeferSignupOutcome {
+    /// The completion email was sent, or one was already sent recently.
+    Deferred,
+    /// The address already belongs to an account; the visitor should log in.
+    AlreadyRegistered,
+    /// Too many deferred signups from this IP address in the last hour.
+    RateLimited,
+}
+
+/// Payload for `user.auth.complete_signup`: redeem an emailed completion
+/// code, creating the deferred account. The response is None when the code
+/// is unknown or expired.
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct CompleteSignup {
+    pub code: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct CompleteSignupResponse {
+    pub basic_info: BasicInfo,
+    /// Local path to resume, captured when the signup was deferred.
+    pub next: Option<String>,
+}
+
 /// Profile fields returned to Science Near Me after a successful credential
 /// check (the encrypted payload of the /api/login-for-snm bridge).
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
@@ -1293,6 +1330,7 @@ pub enum WorkflowType {
     DataEthics,
     Ideal,
     Ambassador,
+    K12,
 }
 
 impl WorkflowType {
@@ -1308,6 +1346,7 @@ impl WorkflowType {
             WorkflowType::DataEthics => "data-ethics",
             WorkflowType::Ideal => "ideal",
             WorkflowType::Ambassador => "ambassador",
+            WorkflowType::K12 => "k12",
         }
     }
 }

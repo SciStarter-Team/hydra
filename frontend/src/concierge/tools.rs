@@ -10,9 +10,7 @@ use std::collections::HashMap;
 use std::sync::LazyLock;
 
 use anyhow::Error;
-use aws_sdk_bedrockruntime::types::{
-    Tool, ToolConfiguration, ToolInputSchema, ToolSpecification,
-};
+use aws_sdk_bedrockruntime::types::{Tool, ToolConfiguration, ToolInputSchema, ToolSpecification};
 use common::shared::db;
 
 use crate::concierge::TOOL_RESULTS_TO_MODEL;
@@ -246,8 +244,7 @@ fn point_to_lat_lng(geojson: &str) -> Option<(f64, f64)> {
 
 /// Run a `search_projects` tool call against the real Finder.
 pub async fn dispatch_search(input: &serde_json::Value) -> Result<ToolCallResult, Error> {
-    let (topics_vocab, audiences_vocab, activities_vocab) =
-        search::load_filter_options().await?;
+    let (topics_vocab, audiences_vocab, activities_vocab) = search::load_filter_options().await?;
 
     let keywords = string_arg(input, "keywords");
     let topics = facet_arg(input, "topics", &topics_vocab);

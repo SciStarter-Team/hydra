@@ -10,6 +10,7 @@ pub mod certificates;
 pub mod channel;
 pub mod communities;
 pub mod component;
+pub mod concierge;
 pub mod contact;
 pub mod csm;
 pub mod dashboard;
@@ -17,7 +18,6 @@ pub mod dev;
 pub mod emailer;
 pub mod entity;
 pub mod entity_list;
-pub mod concierge;
 pub mod event;
 pub mod evolveme;
 pub mod exchange;
@@ -320,6 +320,12 @@ fn user_facing() -> impl Endpoint {
             get(auth::logout_action)
                 .with(middleware::partitioned_session::EnablePartitionedCookies),
         )
+        .at("/check-email", get(auth::check_email_page))
+        .at(
+            "/complete-signup",
+            get(auth::complete_signup_action)
+                .with(middleware::partitioned_session::EnablePartitionedCookies),
+        )
         .at("/add", get(add::add_chooser_page))
         .at(
             "/add-event",
@@ -530,6 +536,10 @@ fn user_facing() -> impl Endpoint {
             "/training-library",
             get(training::libraries::legacy_redirect),
         )
+        .at("/training/k12", get(training::k12::page))
+        .at("/training/k12/-progress", get(training::k12::progress))
+        .at("/training/k12/education", get(training::k12::education))
+        .at("/training-k12", get(training::k12::legacy_redirect))
         .at("/training/champion", get(training::champion::page))
         .at(
             "/training/champion/-progress",

@@ -27,6 +27,7 @@ pub mod dataethics;
 pub mod dataliteracy;
 pub mod foundations;
 pub mod highered;
+pub mod k12;
 pub mod libraries;
 
 /// Display state of a single accordion step, derived from the user's

@@ -333,7 +333,8 @@ impl FinderContent {
 const FINDER_PER_PAGE: u32 = 24;
 
 /// Load available filter options from the database
-pub(crate) async fn load_filter_options() -> Result<(Vec<String>, Vec<String>, Vec<String>), Error> {
+pub(crate) async fn load_filter_options() -> Result<(Vec<String>, Vec<String>, Vec<String>), Error>
+{
     let topics = sqlx::query_scalar!("SELECT DISTINCT topic FROM project_topics ORDER BY topic")
         .fetch_all(db())
         .await?;

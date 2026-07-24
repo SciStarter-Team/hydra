@@ -78,11 +78,7 @@ impl LoadStorePeered for Budget {
         Ok(Budget)
     }
 
-    async fn receive(
-        signal: String,
-        _specific: Option<String>,
-        msg: Message,
-    ) -> Result<(), Error> {
+    async fn receive(signal: String, _specific: Option<String>, msg: Message) -> Result<(), Error> {
         if signal == "usage" {
             let amount: i64 = flexbuffers::from_slice(&msg.payload)?;
             rollover();
