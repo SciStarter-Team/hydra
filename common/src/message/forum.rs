@@ -281,6 +281,11 @@ pub struct SendMessage {
     pub subject: String,
     pub body: String,
     pub reply_ref: Option<String>,
+    /// When true the message is delivered immediately (`approved = 1`) and
+    /// no reviewer is notified — used for trusted, entity-authored messages.
+    /// Defaults false so ordinary sends are held for staff review.
+    #[serde(default)]
+    pub pre_approved: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -289,11 +294,42 @@ pub struct SendMessageResponse {
     pub post_id: Ulid,
 }
 
+/// Send one message to many recipients as a single batch
+/// (`forum.messaging.send_bulk`). Each recipient gets their own private
+/// conversation (topic + post), but every copy shares one `batch` id so
+/// staff can approve or reject them together and reviewers are emailed once.
+/// `pre_approved` delivers immediately without review — used when a
+/// project/event messages its own participants (trusted like any
+/// entity-authored message). The only bulk sender today is pre_approved;
+/// the path is kept general for future non-bypassed bulk senders.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SendBulkMessage {
+    /// Author ULID — a user or an entity (project/event) sending as itself.
+    pub from_id: Ulid,
+    pub to_ids: Vec<Ulid>,
+    pub subject: String,
+    pub body: String,
+    #[serde(default)]
+    pub pre_approved: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SendBulkResponse {
+    /// The shared batch id assigned to every copy.
+    pub batch: Ulid,
+    /// How many recipient copies were actually created.
+    pub sent: i64,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ReplyToMessage {
     pub user_id: Ulid,
     pub topic_id: Ulid,
     pub body: String,
+    /// See `SendMessage::pre_approved`. Set when an entity manager replies
+    /// *as* the entity, so the reply is delivered without staff review.
+    #[serde(default)]
+    pub pre_approved: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -376,6 +412,11 @@ pub struct ReviewMessageRow {
     pub subject: String,
     pub body: String,
     pub when: String,
+    /// Set when this message is one copy of a bulk send. The review page
+    /// groups all rows sharing a `batch` into a single card so staff act on
+    /// the whole batch at once; rows with no batch are reviewed individually.
+    #[serde(default)]
+    pub batch: Option<Ulid>,
 }
 
 /// A staff decision on a pending message (`forum.messaging.review`): accept
@@ -383,5 +424,14 @@ pub struct ReviewMessageRow {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ReviewMessageDecision {
     pub post_id: Ulid,
+    pub accept: bool,
+}
+
+/// A staff decision on a whole batch (`forum.messaging.review_batch`):
+/// applies accept/reject to every still-pending post sharing `batch`, so all
+/// copies of one bulk send are approved or rejected together.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ReviewBatchDecision {
+    pub batch: Ulid,
     pub accept: bool,
 }

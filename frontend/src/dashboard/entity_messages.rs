@@ -7,10 +7,10 @@
 use std::sync::Arc;
 
 use anyhow::{Error, anyhow};
-use common::message::dashboard::EntitySummary;
+use common::message::dashboard::{EntitySummary, EntitySummaryKind};
 use common::message::forum::{
     InboxQuery, InboxResponse, MarkMessageRead, PostInfo, PostListQuery, ReplyToMessage,
-    ReplyToMessageResponse, TopicInfo,
+    ReplyToMessageResponse, SendBulkMessage, SendBulkResponse, TopicInfo,
 };
 use common::message::user::BasicInfo;
 use common::service::{request, send as nats_send};
@@ -100,6 +100,9 @@ pub async fn inbox(
         .map(ConversationModel::from)
         .collect();
 
+    // Only projects have participant data, so only they can broadcast.
+    let can_broadcast = summary.kind == EntitySummaryKind::Project;
+
     let content = EntityInboxContent {
         entity_id,
         entity_name: summary.name,
@@ -107,6 +110,7 @@ pub async fn inbox(
         page,
         has_prev_page: page > 0,
         has_next_page: inbox.has_next_page,
+        can_broadcast,
     };
 
     let layout = StandardLayout::new("/dashboard/owned", content)
@@ -238,19 +242,124 @@ pub async fn reply(
     // forum-service's participant check passes because the entity is the
     // inbox owner (forum_id). This is the entity answering a member, so the
     // one-per-day limit (which governs members contacting entities) does not
-    // apply.
+    // apply. It is a trusted, entity-authored message, so it is delivered
+    // immediately (pre_approved) rather than held for staff review.
     let _: ReplyToMessageResponse = request(
         "forum.messaging.reply",
         ReplyToMessage {
             user_id: entity_ulid,
             topic_id: topic_ulid,
             body: form.body,
+            pre_approved: true,
         },
     )
     .await?;
 
-    // Held for staff review before delivery — tell the sender (renders inline).
-    Ok(crate::dashboard::messages::pending_review_fragment())
+    // Delivered immediately — tell the sender (renders inline via HTMX).
+    Ok(crate::dashboard::messages::sent_fragment(
+        "Your reply has been sent.",
+    ))
+}
+
+/// The participant (joined-member) user ULIDs for a project. Sourced from
+/// user-service's `project_joins`. Ids that don't parse are dropped.
+async fn project_participant_ids(entity_id: Ulid) -> Result<Vec<Ulid>, Error> {
+    let ids: Vec<String> =
+        request("user.joins.list_by_project_id", entity_id.to_string()).await?;
+    Ok(ids.into_iter().filter_map(|s| s.parse().ok()).collect())
+}
+
+/// Confirm the caller manages `entity_id` *and* it is a project (only projects
+/// have participant data today), returning the parsed id and entity summary.
+async fn authorize_project_broadcaster(
+    user_info: Option<Arc<BasicInfo>>,
+    entity_id: &str,
+) -> Result<(Arc<BasicInfo>, EntitySummary, Ulid), Error> {
+    let Some((user, summary)) = authorize_manager(user_info, entity_id).await? else {
+        return Err(forbidden());
+    };
+    if summary.kind != EntitySummaryKind::Project {
+        return Err(anyhow!(
+            "Messaging participants is only available for projects"
+        ));
+    }
+    let entity_ulid: Ulid = entity_id.parse().map_err(|e| anyhow!("Invalid id: {e}"))?;
+    Ok((user, summary, entity_ulid))
+}
+
+#[handler]
+pub async fn broadcast_form(
+    Authenticated(user_info): Authenticated,
+    Path(entity_id): Path<String>,
+) -> Result<Response, Error> {
+    let (user, summary, entity_ulid) =
+        authorize_project_broadcaster(user_info, &entity_id).await?;
+
+    let participant_count = project_participant_ids(entity_ulid).await?.len();
+
+    let content = BroadcastContent {
+        entity_id,
+        entity_name: summary.name,
+        participant_count,
+    };
+
+    let layout = StandardLayout::new("/dashboard/owned", content)
+        .prepare(Some(user))
+        .await?;
+
+    EntityBroadcastPage {
+        head: Head::default().prepare(None).await?,
+        layout,
+    }
+    .into_response(None)
+    .await
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BroadcastForm {
+    pub subject: String,
+    pub body: String,
+}
+
+#[handler]
+pub async fn broadcast(
+    Authenticated(user_info): Authenticated,
+    Path(entity_id): Path<String>,
+    Form(form): Form<BroadcastForm>,
+) -> Result<Response, Error> {
+    let (_user, _summary, entity_ulid) =
+        authorize_project_broadcaster(user_info, &entity_id).await?;
+
+    if form.subject.trim().is_empty() || form.body.trim().is_empty() {
+        return Err(anyhow!("Subject and body are required"));
+    }
+
+    let participants = project_participant_ids(entity_ulid).await?;
+    if participants.is_empty() {
+        return Ok(crate::dashboard::messages::sent_fragment(
+            "This project has no participants to message yet.",
+        ));
+    }
+
+    // Send as the project to every participant. As an entity-authored message
+    // it is delivered immediately (pre_approved); all copies share one batch.
+    let resp: SendBulkResponse = request(
+        "forum.messaging.send_bulk",
+        SendBulkMessage {
+            from_id: entity_ulid,
+            to_ids: participants,
+            subject: form.subject,
+            body: form.body,
+            pre_approved: true,
+        },
+    )
+    .await?;
+
+    Ok(crate::dashboard::messages::sent_fragment(&format!(
+        "Sent to {} participant{}.",
+        resp.sent,
+        if resp.sent == 1 { "" } else { "s" },
+    )))
 }
 
 #[derive(TemplateOnce)]
@@ -269,6 +378,7 @@ struct EntityInboxContent {
     page: i64,
     has_prev_page: bool,
     has_next_page: bool,
+    can_broadcast: bool,
 }
 
 #[derive(TemplateOnce)]
@@ -288,4 +398,19 @@ struct EntityThreadContent {
     other_user_id: Ulid,
     other_user_handle: String,
     posts: Vec<PostModel>,
+}
+
+#[derive(TemplateOnce)]
+#[template(path = "dashboard/entity_broadcast.stpl.html")]
+struct EntityBroadcastPage {
+    head: <Head as Component>::Prepared,
+    layout: <StandardLayout<BroadcastContent> as Component>::Prepared,
+}
+
+#[derive(TemplateOnce)]
+#[template(path = "dashboard/entity_broadcast_content.stpl.html")]
+struct BroadcastContent {
+    entity_id: String,
+    entity_name: String,
+    participant_count: usize,
 }

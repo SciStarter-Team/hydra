@@ -145,6 +145,7 @@ async fn main() {
     // Messaging endpoints (personal forum-based)
     let messaging = service.group("forum.messaging");
     toplevel.spawn(handler!(messaging, "send", messaging::send_message));
+    toplevel.spawn(handler!(messaging, "send_bulk", messaging::send_bulk));
     toplevel.spawn(handler!(messaging, "reply", messaging::reply_to_message));
     toplevel.spawn(handler!(messaging, "inbox", messaging::inbox));
     toplevel.spawn(recv_handler!(messaging, "read", messaging::mark_read));
@@ -157,6 +158,7 @@ async fn main() {
     ));
     toplevel.spawn(handler!(messaging, "pending_list", messaging::pending_list));
     toplevel.spawn(handler!(messaging, "review", messaging::review_message));
+    toplevel.spawn(handler!(messaging, "review_batch", messaging::review_batch));
 
     // Content filtering endpoints
     let filter = service.group("forum.filter");

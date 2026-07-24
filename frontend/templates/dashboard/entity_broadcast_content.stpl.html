@@ -1,0 +1,35 @@
+<div class="ss-container !pt-8 !pb-8 mx-auto">
+    <p class="text-sm">
+        <a href="/dashboard/owned/<%= &self.entity_id %>/messages" class="text-primary-action hover:underline">&larr; Back to messages</a>
+    </p>
+    <h1 class="mt-2">Message participants of "<%= &self.entity_name %>"</h1>
+    <p class="text-sm text-gray-600 mb-6">
+        This message will be sent as <span class="font-semibold"><%= &self.entity_name %></span> to its
+        <span class="font-semibold"><%= self.participant_count %></span>
+        participant<% if self.participant_count != 1 { %>s<% } %>. Each participant receives it as a
+        private message they can reply to. It is delivered immediately.
+    </p>
+
+    <% if self.participant_count == 0 { %>
+    <p class="ss-card !p-6 text-center text-gray-600">
+        This project has no participants to message yet.
+    </p>
+    <% } else { %>
+    <form hx-post="/dashboard/owned/<%= &self.entity_id %>/broadcast"
+          hx-target="#broadcast-result" hx-swap="innerHTML"
+          class="ss-card !p-4 grid grid-cols-1 gap-3">
+        <label class="block">
+            <span class="block text-sm mb-1 font-semibold">Subject</span>
+            <input name="subject" type="text" required class="w-full border rounded px-3 py-2">
+        </label>
+        <label class="block">
+            <span class="block text-sm mb-1 font-semibold">Message</span>
+            <textarea name="body" rows="6" required class="w-full border rounded px-3 py-2"></textarea>
+        </label>
+        <div id="broadcast-result" class="empty:hidden text-sm"></div>
+        <div class="flex justify-end">
+            <button type="submit" class="btn btn-primary">Send to <%= self.participant_count %> participant<% if self.participant_count != 1 { %>s<% } %></button>
+        </div>
+    </form>
+    <% } %>
+</div>

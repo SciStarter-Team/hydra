@@ -7,6 +7,12 @@
         Messages members have sent to this listing. Replies are sent as <span class="font-semibold"><%= &self.entity_name %></span>.
     </p>
 
+    <% if self.can_broadcast { %>
+    <p class="mb-6">
+        <a href="/dashboard/owned/<%= &self.entity_id %>/broadcast" class="btn btn-primary">Message all participants</a>
+    </p>
+    <% } %>
+
     <% if self.conversations.is_empty() && !self.has_prev_page { %>
     <p class="ss-card !p-6 text-center text-gray-600">
         No messages yet.

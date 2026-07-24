@@ -1,0 +1,32 @@
+<tr class="border-t border-gray-100 align-top bg-primary-50/40">
+  <td class="px-2 py-2 whitespace-nowrap text-gray-500"><%= self.batch.when %></td>
+  <td class="px-2 py-2"><%= self.batch.sender %></td>
+  <td class="px-2 py-2">
+    <span class="font-medium"><%= self.batch.count %> recipient<% if self.batch.count != 1 { %>s<% } %></span>
+    <details class="mt-1">
+      <summary class="cursor-pointer text-gray-500">show all</summary>
+      <ul class="list-disc pl-4 mt-1">
+        <% for r in &self.batch.recipients { %><li><%= r %></li><% } %>
+      </ul>
+    </details>
+  </td>
+  <td class="px-2 py-2 max-w-md">
+    <span class="inline-block mb-1 rounded bg-primary-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary-dark">Bulk send</span>
+    <% if !self.batch.subject.trim().is_empty() { %>
+      <div class="font-medium"><%= self.batch.subject %></div>
+    <% } %>
+    <div class="whitespace-pre-line text-gray-700"><%= self.batch.body %></div>
+  </td>
+  <td class="px-2 py-2 whitespace-nowrap">
+    <div class="flex gap-2">
+      <button class="btn btn-accent !py-1 !px-2 text-xs"
+              hx-post="/-admin/messages/review-batch/<%= self.batch.batch |disp %>"
+              hx-vals='{"decision":"accept"}'
+              hx-target="closest tr" hx-swap="outerHTML">Approve all <%= self.batch.count %></button>
+      <button class="btn !py-1 !px-2 text-xs"
+              hx-post="/-admin/messages/review-batch/<%= self.batch.batch |disp %>"
+              hx-vals='{"decision":"reject"}'
+              hx-target="closest tr" hx-swap="outerHTML">Reject all</button>
+    </div>
+  </td>
+</tr>

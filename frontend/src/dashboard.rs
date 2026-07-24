@@ -250,6 +250,10 @@ pub fn routes() -> impl Endpoint {
         .at("/section/:section", get(main::section))
         .at("/profile/section/:section", get(profile::section))
         .at("/owned", get(owned::page))
+        .at(
+            "/owned/:entity_id/broadcast",
+            get(entity_messages::broadcast_form).post(entity_messages::broadcast),
+        )
         .at("/owned/:entity_id/messages", get(entity_messages::inbox))
         .at(
             "/owned/:entity_id/messages/:topic_id",

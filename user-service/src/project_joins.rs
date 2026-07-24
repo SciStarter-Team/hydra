@@ -104,6 +104,23 @@ pub async fn list_by_user_id(req: &Request) -> Result<Vec<String>, Error> {
     Ok(rows)
 }
 
+/// The user_ids of everyone who has joined `project_id` — the project's
+/// participants. Serves the entity broadcast composer, which messages all of
+/// a project's participants at once. The request payload is the project_id
+/// string (mirrors `list_by_user_id`).
+pub async fn list_by_project_id(req: &Request) -> Result<Vec<String>, Error> {
+    let project_id: String = flexbuffers::from_slice(&req.message.payload)?;
+
+    let rows = sqlx::query_scalar!(
+        "SELECT user_id FROM project_joins WHERE project_id = ?",
+        project_id
+    )
+    .fetch_all(db())
+    .await?;
+
+    Ok(rows)
+}
+
 pub async fn list_user_joins(req: &Request) -> Result<UserJoinsListResponse, Error> {
     let message: UserJoinsListRequest = decode_structured_message(req.message.clone())?;
 

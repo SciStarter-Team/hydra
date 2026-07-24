@@ -2536,6 +2536,11 @@ async fn main() {
     ));
     toplevel.spawn(handler!(
         joins,
+        "list_by_project_id",
+        project_joins::list_by_project_id
+    ));
+    toplevel.spawn(handler!(
+        joins,
         "count_by_projects",
         project_joins::count_by_projects
     ));

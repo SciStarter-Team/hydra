@@ -1,4 +1,4 @@
-<% use crate::admin::messages::ReviewRow; %>
+<% use crate::admin::messages::{ReviewGroup, ReviewRow, BatchReviewRow}; %>
 <div class="p-6">
   <div class="flex items-center gap-4 mb-1">
     <h1 class="text-2xl font-bold text-gray-900">Message Review</h1>
@@ -6,6 +6,7 @@
   <p class="text-sm text-gray-500 mb-4 max-w-3xl">
     Direct messages between members (and messages to projects and events), held for review.
     <strong>Approve</strong> delivers the message to its recipient; <strong>Reject</strong> drops it.
+    A message sent to many recipients at once is grouped into a single row you can approve or reject together.
   </p>
   <div class="overflow-x-auto border border-gray-200 rounded-lg">
     <table class="min-w-full text-xs">
@@ -19,11 +20,15 @@
         </tr>
       </thead>
       <tbody>
-        <% if self.rows.is_empty() { %>
+        <% if self.groups.is_empty() { %>
           <tr><td colspan="5" class="px-2 py-8 text-center text-gray-500">No messages pending review.</td></tr>
         <% } %>
-        <% for row in &self.rows { %>
-          <%+ ReviewRow { row: row.clone() } %>
+        <% for group in &self.groups { %>
+          <% match group { ReviewGroup::Single(row) => { %>
+            <%+ ReviewRow { row: row.clone() } %>
+          <% } ReviewGroup::Batch(b) => { %>
+            <%+ BatchReviewRow { batch: b.clone() } %>
+          <% } } %>
         <% } %>
       </tbody>
     </table>

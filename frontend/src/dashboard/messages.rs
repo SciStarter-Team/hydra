@@ -85,6 +85,18 @@ pub fn pending_review_fragment() -> Response {
     .into_response()
 }
 
+/// Confirmation shown when a message is delivered immediately with no review —
+/// used for trusted, entity-authored sends (a manager replying or broadcasting
+/// as the project). `message` is the already-escaped/plain confirmation text.
+pub fn sent_fragment(message: &str) -> Response {
+    Html(format!(
+        "<div class=\"ss-card !p-4 text-sm\">\
+           <p class=\"font-semibold text-primary-dark\">{message}</p>\
+         </div>"
+    ))
+    .into_response()
+}
+
 #[derive(Debug, Deserialize)]
 pub struct InboxPageQuery {
     #[serde(default)]
@@ -228,6 +240,8 @@ pub async fn send(
             subject: form.subject,
             body: form.body,
             reply_ref: None,
+            // A member's message is held for staff review.
+            pre_approved: false,
         },
     )
     .await?;
@@ -404,6 +418,8 @@ pub async fn reply(
             user_id: user_info.user_id,
             topic_id: topic_ulid,
             body: form.body,
+            // A member's reply is held for staff review.
+            pre_approved: false,
         },
     )
     .await?;

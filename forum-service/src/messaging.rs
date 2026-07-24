@@ -54,6 +54,39 @@ async fn notify_reviewers(subject: &str, body: &str, sender_id: &str, recipient_
     }
 }
 
+/// Like `notify_reviewers`, but for a bulk send: one email covering the whole
+/// batch (all `recipient_count` copies) rather than one per recipient.
+async fn notify_reviewers_batch(subject: &str, body: &str, sender_id: &str, recipient_count: i64) {
+    let sender = resolve_participant_name(sender_id)
+        .await
+        .unwrap_or_else(|| sender_id.to_string());
+
+    let html = format!(
+        "<p>A SciStarter message sent to {} recipients is awaiting staff review before it can be delivered.</p>\
+         <p><strong>From:</strong> {}<br><strong>Recipients:</strong> {}<br><strong>Subject:</strong> {}</p>\
+         <blockquote>{}</blockquote>\
+         <p><a href=\"https://scistarter.org/-admin/messages\">Review pending messages (approve or reject in bulk)</a></p>",
+        recipient_count,
+        escape_html(&sender),
+        recipient_count,
+        escape_html(subject),
+        escape_html(body),
+    );
+
+    if let Err(e) = send_email(
+        vec![EmailRecipient::Email("info@scistarter.org".to_string())],
+        format!("Message pending review: {}", subject),
+        html,
+        Vec::<String>::new(),
+        None::<Vec<(String, String)>>,
+        None::<Vec<String>>,
+    )
+    .await
+    {
+        eprintln!("Failed to send batch message-review notification: {}", e);
+    }
+}
+
 /// Resolve a conversation participant ULID (as a string) to a display
 /// name. A participant may be a user (resolved via user-service) or a
 /// project/event (resolved via the frontend's entity endpoint), since
@@ -95,20 +128,33 @@ async fn ensure_personal_forum(user_id: Ulid) -> Result<()> {
     Ok(())
 }
 
-pub async fn send_message(req: &Request) -> Result<SendMessageResponse> {
-    let msg: SendMessage = flexbuffers::from_slice(&req.message.payload)?;
-
-    // Ensure recipient's personal forum exists
-    ensure_personal_forum(msg.to_id).await?;
+/// Create a fresh direct-message conversation: a topic plus its first post in
+/// the recipient's personal inbox, marked seen for the sender. Shared by
+/// `send_message` (single recipient) and `send_bulk` (one call per recipient).
+///
+/// `approved` decides whether the post is delivered immediately (`1`) or held
+/// for staff review (`0`); `batch` ties this copy to the others in a bulk send
+/// (`None` for a single send). This helper never notifies reviewers — the
+/// caller does that once per message, or once per batch. Returns the new
+/// `(topic_id, post_id)`.
+async fn create_conversation(
+    to_id: Ulid,
+    from_id: Ulid,
+    subject: &str,
+    body: &str,
+    reply_ref: Option<&str>,
+    approved: i64,
+    batch: Option<&str>,
+) -> Result<(Ulid, Ulid)> {
+    ensure_personal_forum(to_id).await?;
 
     let topic_id = Ulid::new();
     let post_id = Ulid::new();
-    let now = TimeString::now();
-    let now_str = now.to_string();
+    let now_str = TimeString::now().to_string();
     let topic_id_str = topic_id.to_string();
     let post_id_str = post_id.to_string();
-    let from_str = msg.from_user_id.to_string();
-    let to_str = msg.to_id.to_string();
+    let from_str = from_id.to_string();
+    let to_str = to_id.to_string();
 
     let db = db();
 
@@ -118,8 +164,8 @@ pub async fn send_message(req: &Request) -> Result<SendMessageResponse> {
            VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0)"#,
         topic_id_str,
         to_str,
-        msg.subject,
-        msg.body,
+        subject,
+        body,
         from_str,
         now_str,
         now_str,
@@ -127,21 +173,24 @@ pub async fn send_message(req: &Request) -> Result<SendMessageResponse> {
     .execute(db)
     .await?;
 
-    // Create the first post
+    // Create the first post, pending or approved per the caller, tagged with
+    // the batch id when this is one copy of a bulk send.
     sqlx::query!(
-        r#"INSERT INTO "posts" ("post_id", "topic_id", "content", "author_id", "created_at", "is_deleted", "is_flagged", "approved")
-           VALUES (?, ?, ?, ?, ?, 0, 0, 0)"#,
+        r#"INSERT INTO "posts" ("post_id", "topic_id", "content", "author_id", "created_at", "is_deleted", "is_flagged", "approved", "batch")
+           VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?)"#,
         post_id_str,
         topic_id_str,
-        msg.body,
+        body,
         from_str,
         now_str,
+        approved,
+        batch,
     )
     .execute(db)
     .await?;
 
     // Store reply_ref if provided (for orrery dedup)
-    if let Some(ref reply_ref) = msg.reply_ref {
+    if let Some(reply_ref) = reply_ref {
         sqlx::query!(
             r#"INSERT OR IGNORE INTO "message_reply_refs" ("topic_id", "reply_ref") VALUES (?, ?)"#,
             topic_id_str,
@@ -160,10 +209,78 @@ pub async fn send_message(req: &Request) -> Result<SendMessageResponse> {
     .execute(db)
     .await?;
 
-    // The post was created pending (approved = 0). Ask staff to review it.
-    notify_reviewers(&msg.subject, &msg.body, &from_str, &to_str).await;
+    Ok((topic_id, post_id))
+}
+
+pub async fn send_message(req: &Request) -> Result<SendMessageResponse> {
+    let msg: SendMessage = flexbuffers::from_slice(&req.message.payload)?;
+
+    // Pre-approved messages (trusted, entity-authored) are delivered at once;
+    // everything else is held pending for staff review.
+    let approved = if msg.pre_approved { 1 } else { 0 };
+
+    let (topic_id, post_id) = create_conversation(
+        msg.to_id,
+        msg.from_user_id,
+        &msg.subject,
+        &msg.body,
+        msg.reply_ref.as_deref(),
+        approved,
+        None,
+    )
+    .await?;
+
+    if !msg.pre_approved {
+        notify_reviewers(
+            &msg.subject,
+            &msg.body,
+            &msg.from_user_id.to_string(),
+            &msg.to_id.to_string(),
+        )
+        .await;
+    }
 
     Ok(SendMessageResponse { topic_id, post_id })
+}
+
+/// Send one message to many recipients as a single batch. Each recipient gets
+/// their own private conversation, all sharing one batch id so staff can
+/// approve or reject the whole batch together and reviewers are emailed once.
+/// A recipient that fails to be created is skipped rather than failing the
+/// whole batch. Today the only caller is pre-approved (a project/event
+/// messaging its participants), so nothing is held for review; the path is
+/// kept general for future non-bypassed bulk senders.
+pub async fn send_bulk(req: &Request) -> Result<SendBulkResponse> {
+    let msg: SendBulkMessage = flexbuffers::from_slice(&req.message.payload)?;
+
+    let batch = Ulid::new();
+    let batch_str = batch.to_string();
+    let approved = if msg.pre_approved { 1 } else { 0 };
+
+    let mut sent: i64 = 0;
+    for to_id in &msg.to_ids {
+        match create_conversation(
+            *to_id,
+            msg.from_id,
+            &msg.subject,
+            &msg.body,
+            None,
+            approved,
+            Some(&batch_str),
+        )
+        .await
+        {
+            Ok(_) => sent += 1,
+            Err(e) => eprintln!("send_bulk: failed to deliver to {}: {}", to_id, e),
+        }
+    }
+
+    // One reviewer email for the whole batch, only when it needs review.
+    if !msg.pre_approved && sent > 0 {
+        notify_reviewers_batch(&msg.subject, &msg.body, &msg.from_id.to_string(), sent).await;
+    }
+
+    Ok(SendBulkResponse { batch, sent })
 }
 
 pub async fn reply_to_message(req: &Request) -> Result<ReplyToMessageResponse> {
@@ -206,15 +323,18 @@ pub async fn reply_to_message(req: &Request) -> Result<ReplyToMessageResponse> {
         return Err(anyhow::anyhow!("Not a participant in this conversation"));
     }
 
-    // Create the reply post
+    // Create the reply post. Pre-approved replies (an entity manager replying
+    // *as* the entity) are delivered at once; others are held pending review.
+    let approved = if msg.pre_approved { 1 } else { 0 };
     sqlx::query!(
         r#"INSERT INTO "posts" ("post_id", "topic_id", "content", "author_id", "created_at", "is_deleted", "is_flagged", "approved")
-           VALUES (?, ?, ?, ?, ?, 0, 0, 0)"#,
+           VALUES (?, ?, ?, ?, ?, 0, 0, ?)"#,
         post_id_str,
         topic_id_str,
         msg.body,
         user_id_str,
         now_str,
+        approved,
     )
     .execute(db)
     .await?;
@@ -254,8 +374,9 @@ pub async fn reply_to_message(req: &Request) -> Result<ReplyToMessageResponse> {
     .execute(db)
     .await?;
 
-    // The reply was created pending (approved = 0). Ask staff to review it.
-    notify_reviewers(&topic.title, &msg.body, &user_id_str, &other_user).await;
+    if !msg.pre_approved {
+        notify_reviewers(&topic.title, &msg.body, &user_id_str, &other_user).await;
+    }
 
     Ok(ReplyToMessageResponse { post_id })
 }
@@ -569,6 +690,7 @@ pub async fn pending_list(_req: &Request) -> Result<Vec<ReviewMessageRow>> {
     let rows = sqlx::query!(
         r#"SELECT p.post_id as "post_id!: String", p.content as "content!: String",
                   p.author_id as "author_id!: String", p.created_at as "created_at!: String",
+                  p.batch as "batch?: String",
                   t.title as "title!: String", t.author_id as "topic_author!: String",
                   t.forum_id as "forum_id!: String"
            FROM posts p
@@ -605,6 +727,7 @@ pub async fn pending_list(_req: &Request) -> Result<Vec<ReviewMessageRow>> {
             subject: row.title,
             body: row.content,
             when,
+            batch: row.batch.and_then(|b| b.parse().ok()),
         });
     }
 
@@ -628,6 +751,35 @@ pub async fn review_message(req: &Request) -> Result<()> {
         sqlx::query!(
             r#"UPDATE "posts" SET "is_deleted" = 1 WHERE "post_id" = ?"#,
             post_id_str,
+        )
+        .execute(db())
+        .await?;
+    }
+
+    Ok(())
+}
+
+/// Apply a staff review decision to a whole bulk-send batch: accept delivers
+/// every still-pending copy (approved = 1); reject drops them (is_deleted = 1).
+/// Only pending, non-deleted copies are touched, so a re-submit or a
+/// half-reviewed batch can't un-deliver or resurrect anything.
+pub async fn review_batch(req: &Request) -> Result<()> {
+    let decision: ReviewBatchDecision = flexbuffers::from_slice(&req.message.payload)?;
+    let batch_str = decision.batch.to_string();
+
+    if decision.accept {
+        sqlx::query!(
+            r#"UPDATE "posts" SET "approved" = 1
+               WHERE "batch" = ? AND "approved" = 0 AND "is_deleted" = 0"#,
+            batch_str,
+        )
+        .execute(db())
+        .await?;
+    } else {
+        sqlx::query!(
+            r#"UPDATE "posts" SET "is_deleted" = 1
+               WHERE "batch" = ? AND "approved" = 0 AND "is_deleted" = 0"#,
+            batch_str,
         )
         .execute(db())
         .await?;
