@@ -231,7 +231,7 @@ async fn not_authorized(err: poem::Error) -> Response {
         Redirect::see_other(format!("/login?unauthorized=true&next={}", err.target()))
             .into_response()
     } else {
-        Redirect::see_other("/login&unauthorized=true").into_response()
+        Redirect::see_other("/login?unauthorized=true").into_response()
     }
 }
 

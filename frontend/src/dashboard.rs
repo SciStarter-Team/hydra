@@ -22,6 +22,7 @@ use sailfish::TemplateOnce;
 
 use crate::dashboard::entity_summary::entity_link;
 use crate::local_time::{TimeFormat, local_time};
+use crate::middleware::authorization::AuthOnly;
 use crate::middleware::rate_limit::{RateLimitConfig, RateLimitMiddleware};
 
 /// Items per page in the paginated dashboard/profile entity sections.
@@ -297,4 +298,10 @@ pub fn routes() -> impl Endpoint {
         .at("/settings", get(settings::page))
         .at("/settings/general", post(settings::save_general))
         .at("/settings/ambassador", post(settings::save_ambassador))
+        // Every route here is somebody's own dashboard --- there is nothing
+        // public under /dashboard, and a shared list is read through its own
+        // page rather than the owner's editor. Anonymous requests redirect to
+        // the login page carrying `next`, instead of each handler failing its
+        // own way.
+        .with(AuthOnly)
 }
