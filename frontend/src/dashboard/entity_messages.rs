@@ -264,8 +264,7 @@ pub async fn reply(
 /// The participant (joined-member) user ULIDs for a project. Sourced from
 /// user-service's `project_joins`. Ids that don't parse are dropped.
 async fn project_participant_ids(entity_id: Ulid) -> Result<Vec<Ulid>, Error> {
-    let ids: Vec<String> =
-        request("user.joins.list_by_project_id", entity_id.to_string()).await?;
+    let ids: Vec<String> = request("user.joins.list_by_project_id", entity_id.to_string()).await?;
     Ok(ids.into_iter().filter_map(|s| s.parse().ok()).collect())
 }
 
@@ -292,8 +291,7 @@ pub async fn broadcast_form(
     Authenticated(user_info): Authenticated,
     Path(entity_id): Path<String>,
 ) -> Result<Response, Error> {
-    let (user, summary, entity_ulid) =
-        authorize_project_broadcaster(user_info, &entity_id).await?;
+    let (user, summary, entity_ulid) = authorize_project_broadcaster(user_info, &entity_id).await?;
 
     let participant_count = project_participant_ids(entity_ulid).await?.len();
 

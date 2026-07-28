@@ -131,6 +131,26 @@ impl FtsTermStyle {
     }
 }
 
+/// Which entity kinds a finder search covers. The `/finder` page always
+/// searches both; the concierge narrows to one kind when the visitor asks
+/// specifically for projects or for events.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SearchKinds {
+    Both,
+    ProjectsOnly,
+    EventsOnly,
+}
+
+impl SearchKinds {
+    fn projects(self) -> bool {
+        !matches!(self, SearchKinds::EventsOnly)
+    }
+
+    fn events(self) -> bool {
+        !matches!(self, SearchKinds::ProjectsOnly)
+    }
+}
+
 /// Search published entities using FTS
 pub async fn search_entities(query: &str) -> Result<Vec<SearchResult>, Error> {
     let query = query.trim();
@@ -519,67 +539,85 @@ fn build_event_count_text<'a>(
 }
 
 /// Search all published entities with no text or location filter, just pagination and sidebar filters
-async fn search_all(fq: &FinderQuery, page: u32) -> Result<FinderSearchResult, Error> {
+async fn search_all(
+    fq: &FinderQuery,
+    page: u32,
+    kinds: SearchKinds,
+) -> Result<FinderSearchResult, Error> {
     let limit = FINDER_PER_PAGE as i64;
     let offset = ((page - 1) * FINDER_PER_PAGE) as i64;
 
     // Count
-    let mut proj_qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new(
-        "SELECT COUNT(*) FROM entities e JOIN projects p ON e.target = p.project_id WHERE e.kind = 'Project' AND e.publish = 1",
-    );
-    apply_project_filters(&mut proj_qb, fq);
-    let proj_count: i64 = proj_qb.build_query_scalar().fetch_one(db()).await?;
+    let proj_count: i64 = if kinds.projects() {
+        let mut proj_qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new(
+            "SELECT COUNT(*) FROM entities e JOIN projects p ON e.target = p.project_id WHERE e.kind = 'Project' AND e.publish = 1",
+        );
+        apply_project_filters(&mut proj_qb, fq);
+        proj_qb.build_query_scalar().fetch_one(db()).await?
+    } else {
+        0
+    };
 
-    let mut evt_qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new(
-        "SELECT COUNT(*) FROM entities e JOIN events ev ON e.target = ev.event_id WHERE e.kind = 'Event' AND e.publish = 1",
-    );
-    apply_event_filters(&mut evt_qb, fq);
-    let evt_count: i64 = evt_qb.build_query_scalar().fetch_one(db()).await?;
+    let evt_count: i64 = if kinds.events() {
+        let mut evt_qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new(
+            "SELECT COUNT(*) FROM entities e JOIN events ev ON e.target = ev.event_id WHERE e.kind = 'Event' AND e.publish = 1",
+        );
+        apply_event_filters(&mut evt_qb, fq);
+        evt_qb.build_query_scalar().fetch_one(db()).await?
+    } else {
+        0
+    };
     let total = (proj_count + evt_count) as u32;
 
     // Build UNION ALL query
     let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new("SELECT * FROM (");
 
     // Project subquery
-    qb.push(
-        "SELECT e.slug, 'Project' AS entity_type, p.name AS title, p.description, p.image, \
-         p.goal, p.task, p.status, \
-         CASE WHEN p.entirely_online = 1 THEN 'Online' \
-              WHEN p.city != '' AND p.state != '' THEN p.city || ', ' || p.state \
-              WHEN p.location_name != '' THEN p.location_name \
-              ELSE '' END AS location_display, \
-         NULL AS event_begin, \
-         CASE WHEN p.regions IS NOT NULL THEN AsGeoJSON(p.regions) \
-              WHEN p.point IS NOT NULL THEN AsGeoJSON(p.point) \
-              ELSE NULL END AS geo_json, \
-         0.0 AS comparison_value \
-         FROM entities e JOIN projects p ON e.target = p.project_id \
-         WHERE e.kind = 'Project' AND e.publish = 1",
-    );
-    apply_project_filters(&mut qb, fq);
+    if kinds.projects() {
+        qb.push(
+            "SELECT e.slug, 'Project' AS entity_type, p.name AS title, p.description, p.image, \
+             p.goal, p.task, p.status, \
+             CASE WHEN p.entirely_online = 1 THEN 'Online' \
+                  WHEN p.city != '' AND p.state != '' THEN p.city || ', ' || p.state \
+                  WHEN p.location_name != '' THEN p.location_name \
+                  ELSE '' END AS location_display, \
+             NULL AS event_begin, \
+             CASE WHEN p.regions IS NOT NULL THEN AsGeoJSON(p.regions) \
+                  WHEN p.point IS NOT NULL THEN AsGeoJSON(p.point) \
+                  ELSE NULL END AS geo_json, \
+             0.0 AS comparison_value \
+             FROM entities e JOIN projects p ON e.target = p.project_id \
+             WHERE e.kind = 'Project' AND e.publish = 1",
+        );
+        apply_project_filters(&mut qb, fq);
+    }
 
-    qb.push(" UNION ALL ");
+    if kinds.projects() && kinds.events() {
+        qb.push(" UNION ALL ");
+    }
 
     // Event subquery
-    qb.push(
-        "SELECT e.slug, 'Event' AS entity_type, ev.name AS title, ev.description, ev.image, \
-         '' AS goal, '' AS task, '' AS status, \
-         CASE WHEN ev.entirely_online = 1 THEN 'Online' \
-              WHEN ev.city != '' AND ev.state != '' THEN ev.city || ', ' || ev.state \
-              WHEN ev.location_name != '' THEN ev.location_name \
-              ELSE '' END AS location_display, \
-         (SELECT ei.begin FROM event_instances ei WHERE ei.event_id = ev.event_id \
-          AND ei.begin >= datetime('now') ORDER BY ei.begin LIMIT 1) AS event_begin, \
-         CASE WHEN ev.regions IS NOT NULL THEN AsGeoJSON(ev.regions) \
-              WHEN ev.point IS NOT NULL THEN AsGeoJSON(ev.point) \
-              ELSE NULL END AS geo_json, \
-         COALESCE(MAX(0.0, julianday((SELECT ei2.begin FROM event_instances ei2 \
-          WHERE ei2.event_id = ev.event_id AND ei2.begin >= datetime('now') \
-          ORDER BY ei2.begin LIMIT 1)) - julianday('now')), 0.0) * 10.0 * 1.0 AS comparison_value \
-         FROM entities e JOIN events ev ON e.target = ev.event_id \
-         WHERE e.kind = 'Event' AND e.publish = 1",
-    );
-    apply_event_filters(&mut qb, fq);
+    if kinds.events() {
+        qb.push(
+            "SELECT e.slug, 'Event' AS entity_type, ev.name AS title, ev.description, ev.image, \
+             '' AS goal, '' AS task, '' AS status, \
+             CASE WHEN ev.entirely_online = 1 THEN 'Online' \
+                  WHEN ev.city != '' AND ev.state != '' THEN ev.city || ', ' || ev.state \
+                  WHEN ev.location_name != '' THEN ev.location_name \
+                  ELSE '' END AS location_display, \
+             (SELECT ei.begin FROM event_instances ei WHERE ei.event_id = ev.event_id \
+              AND ei.begin >= datetime('now') ORDER BY ei.begin LIMIT 1) AS event_begin, \
+             CASE WHEN ev.regions IS NOT NULL THEN AsGeoJSON(ev.regions) \
+                  WHEN ev.point IS NOT NULL THEN AsGeoJSON(ev.point) \
+                  ELSE NULL END AS geo_json, \
+             COALESCE(MAX(0.0, julianday((SELECT ei2.begin FROM event_instances ei2 \
+              WHERE ei2.event_id = ev.event_id AND ei2.begin >= datetime('now') \
+              ORDER BY ei2.begin LIMIT 1)) - julianday('now')), 0.0) * 10.0 * 1.0 AS comparison_value \
+             FROM entities e JOIN events ev ON e.target = ev.event_id \
+             WHERE e.kind = 'Event' AND e.publish = 1",
+        );
+        apply_event_filters(&mut qb, fq);
+    }
 
     qb.push(") ORDER BY comparison_value LIMIT ");
     qb.push_bind(limit);
@@ -629,6 +667,7 @@ async fn search_text_only(
     fq: &FinderQuery,
     page: u32,
     style: FtsTermStyle,
+    kinds: SearchKinds,
 ) -> Result<FinderSearchResult, Error> {
     let q = fq.q.as_deref().unwrap_or("");
     let search_term = style.term_for(q);
@@ -636,67 +675,81 @@ async fn search_text_only(
     let offset = ((page - 1) * FINDER_PER_PAGE) as i64;
 
     // Count
-    let proj_count: i64 = build_project_count_text(&search_term, fq)
-        .build_query_scalar()
-        .fetch_one(db())
-        .await?;
-    let evt_count: i64 = build_event_count_text(&search_term, fq)
-        .build_query_scalar()
-        .fetch_one(db())
-        .await?;
+    let proj_count: i64 = if kinds.projects() {
+        build_project_count_text(&search_term, fq)
+            .build_query_scalar()
+            .fetch_one(db())
+            .await?
+    } else {
+        0
+    };
+    let evt_count: i64 = if kinds.events() {
+        build_event_count_text(&search_term, fq)
+            .build_query_scalar()
+            .fetch_one(db())
+            .await?
+    } else {
+        0
+    };
     let total = (proj_count + evt_count) as u32;
 
     // Build UNION ALL query
     let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new("SELECT * FROM (");
 
     // Project subquery
-    qb.push(
-        "SELECT f.slug, 'Project' AS entity_type, f.title, p.description, p.image, \
-         p.goal, p.task, p.status, \
-         CASE WHEN p.entirely_online = 1 THEN 'Online' \
-              WHEN p.city != '' AND p.state != '' THEN p.city || ', ' || p.state \
-              WHEN p.location_name != '' THEN p.location_name \
-              ELSE '' END AS location_display, \
-         NULL AS event_begin, \
-         CASE WHEN p.regions IS NOT NULL THEN AsGeoJSON(p.regions) \
-              WHEN p.point IS NOT NULL THEN AsGeoJSON(p.point) \
-              ELSE NULL END AS geo_json, \
-         0.0 AS comparison_value \
-         FROM entities_fts f \
-         JOIN entities e ON f.slug = e.slug \
-         JOIN projects p ON e.target = p.project_id \
-         WHERE e.kind = 'Project' AND entities_fts MATCH",
-    );
-    qb.push_bind(search_term.clone());
-    qb.push(" AND e.publish = 1");
-    apply_project_filters(&mut qb, fq);
+    if kinds.projects() {
+        qb.push(
+            "SELECT f.slug, 'Project' AS entity_type, f.title, p.description, p.image, \
+             p.goal, p.task, p.status, \
+             CASE WHEN p.entirely_online = 1 THEN 'Online' \
+                  WHEN p.city != '' AND p.state != '' THEN p.city || ', ' || p.state \
+                  WHEN p.location_name != '' THEN p.location_name \
+                  ELSE '' END AS location_display, \
+             NULL AS event_begin, \
+             CASE WHEN p.regions IS NOT NULL THEN AsGeoJSON(p.regions) \
+                  WHEN p.point IS NOT NULL THEN AsGeoJSON(p.point) \
+                  ELSE NULL END AS geo_json, \
+             0.0 AS comparison_value \
+             FROM entities_fts f \
+             JOIN entities e ON f.slug = e.slug \
+             JOIN projects p ON e.target = p.project_id \
+             WHERE e.kind = 'Project' AND entities_fts MATCH",
+        );
+        qb.push_bind(search_term.clone());
+        qb.push(" AND e.publish = 1");
+        apply_project_filters(&mut qb, fq);
+    }
 
-    qb.push(" UNION ALL ");
+    if kinds.projects() && kinds.events() {
+        qb.push(" UNION ALL ");
+    }
 
     // Event subquery
-    qb.push(
-        "SELECT f.slug, 'Event' AS entity_type, f.title, ev.description, ev.image, \
-         '' AS goal, '' AS task, '' AS status, \
-         CASE WHEN ev.entirely_online = 1 THEN 'Online' \
-              WHEN ev.city != '' AND ev.state != '' THEN ev.city || ', ' || ev.state \
-              WHEN ev.location_name != '' THEN ev.location_name \
-              ELSE '' END AS location_display, \
-         (SELECT ei.begin FROM event_instances ei WHERE ei.event_id = ev.event_id \
-          AND ei.begin >= datetime('now') ORDER BY ei.begin LIMIT 1) AS event_begin, \
-         CASE WHEN ev.regions IS NOT NULL THEN AsGeoJSON(ev.regions) \
-              WHEN ev.point IS NOT NULL THEN AsGeoJSON(ev.point) \
-              ELSE NULL END AS geo_json, \
-         COALESCE(MAX(0.0, julianday((SELECT ei2.begin FROM event_instances ei2 \
-          WHERE ei2.event_id = ev.event_id AND ei2.begin >= datetime('now') \
-          ORDER BY ei2.begin LIMIT 1)) - julianday('now')), 0.0) * 10.0 * 1.0 AS comparison_value \
-         FROM entities_fts f \
-         JOIN entities e ON f.slug = e.slug \
-         JOIN events ev ON e.target = ev.event_id \
-         WHERE e.kind = 'Event' AND entities_fts MATCH ",
-    );
-    qb.push_bind(search_term.clone());
-    qb.push(" AND e.publish = 1");
-    apply_event_filters(&mut qb, fq);
+    if kinds.events() {
+        qb.push(
+            "SELECT f.slug, 'Event' AS entity_type, f.title, ev.description, ev.image, \
+             '' AS goal, '' AS task, '' AS status, \
+             CASE WHEN ev.entirely_online = 1 THEN 'Online' \
+                  WHEN ev.city != '' AND ev.state != '' THEN ev.city || ', ' || ev.state \
+                  WHEN ev.location_name != '' THEN ev.location_name \
+                  ELSE '' END AS location_display, \
+             (SELECT ei.begin FROM event_instances ei WHERE ei.event_id = ev.event_id \
+              AND ei.begin >= datetime('now') ORDER BY ei.begin LIMIT 1) AS event_begin, \
+             CASE WHEN ev.regions IS NOT NULL THEN AsGeoJSON(ev.regions) \
+                  WHEN ev.point IS NOT NULL THEN AsGeoJSON(ev.point) \
+                  ELSE NULL END AS geo_json, \
+             COALESCE(MAX(0.0, julianday((SELECT ei2.begin FROM event_instances ei2 \
+              WHERE ei2.event_id = ev.event_id AND ei2.begin >= datetime('now') \
+              ORDER BY ei2.begin LIMIT 1)) - julianday('now')), 0.0) * 10.0 * 1.0 AS comparison_value \
+             FROM entities_fts f \
+             JOIN entities e ON f.slug = e.slug \
+             JOIN events ev ON e.target = ev.event_id \
+             WHERE e.kind = 'Event' AND entities_fts MATCH ",
+        );
+        qb.push_bind(search_term.clone());
+        qb.push(" AND e.publish = 1");
+        apply_event_filters(&mut qb, fq);
+    }
 
     qb.push(") ORDER BY comparison_value LIMIT ");
     qb.push_bind(limit);
@@ -748,19 +801,28 @@ async fn search_with_location(
     lng: f64,
     page: u32,
     style: FtsTermStyle,
+    kinds: SearchKinds,
 ) -> Result<FinderSearchResult, Error> {
     let q = fq.q.as_deref().unwrap_or("");
     let search_term = style.term_for(q);
 
     // Count
-    let proj_count: i64 = build_project_count_text(&search_term, fq)
-        .build_query_scalar()
-        .fetch_one(db())
-        .await?;
-    let evt_count: i64 = build_event_count_text(&search_term, fq)
-        .build_query_scalar()
-        .fetch_one(db())
-        .await?;
+    let proj_count: i64 = if kinds.projects() {
+        build_project_count_text(&search_term, fq)
+            .build_query_scalar()
+            .fetch_one(db())
+            .await?
+    } else {
+        0
+    };
+    let evt_count: i64 = if kinds.events() {
+        build_event_count_text(&search_term, fq)
+            .build_query_scalar()
+            .fetch_one(db())
+            .await?
+    } else {
+        0
+    };
     let total = (proj_count + evt_count) as u32;
 
     let limit = FINDER_PER_PAGE as i64;
@@ -770,8 +832,9 @@ async fn search_with_location(
     let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new("SELECT * FROM (");
 
     // Project subquery
-    qb.push(
-        "SELECT f.slug, 'Project' AS entity_type, f.title, p.description, p.image, \
+    if kinds.projects() {
+        qb.push(
+            "SELECT f.slug, 'Project' AS entity_type, f.title, p.description, p.image, \
          p.goal, p.task, p.status, \
          CASE WHEN p.entirely_online = 1 THEN 'Online' \
               WHEN p.city != '' AND p.state != '' THEN p.city || ', ' || p.state \
@@ -780,15 +843,17 @@ async fn search_with_location(
          NULL AS event_begin, \
          CASE WHEN p.entirely_online = 1 THEN NULL \
               WHEN p.regions IS NOT NULL THEN ST_Distance(ST_MakeValid(p.regions), MakePoint(",
-    );
-    qb.push_bind(lng);
-    qb.push(", ");
-    qb.push_bind(lat);
-    qb.push(", 4326), 1) / 1000.0 WHEN p.point IS NOT NULL THEN ST_Distance(p.point, MakePoint(");
-    qb.push_bind(lng);
-    qb.push(", ");
-    qb.push_bind(lat);
-    qb.push(
+        );
+        qb.push_bind(lng);
+        qb.push(", ");
+        qb.push_bind(lat);
+        qb.push(
+            ", 4326), 1) / 1000.0 WHEN p.point IS NOT NULL THEN ST_Distance(p.point, MakePoint(",
+        );
+        qb.push_bind(lng);
+        qb.push(", ");
+        qb.push_bind(lat);
+        qb.push(
         ", 4326), 1) / 1000.0 \
          ELSE NULL END AS distance_km, \
          CASE WHEN p.regions IS NOT NULL THEN AsGeoJSON(p.regions) \
@@ -797,34 +862,38 @@ async fn search_with_location(
          CASE WHEN p.entirely_online = 1 THEN 200.0 \
               WHEN p.regions IS NOT NULL THEN COALESCE(ST_Distance(ST_MakeValid(p.regions), MakePoint(",
     );
-    qb.push_bind(lng);
-    qb.push(", ");
-    qb.push_bind(lat);
-    qb.push(
+        qb.push_bind(lng);
+        qb.push(", ");
+        qb.push_bind(lat);
+        qb.push(
         ", 4326), 1) / 1000.0, 0) + COALESCE(NULLIF(SQRT(ST_Area(ST_MakeValid(p.regions), 1) / 1000000.0), 0.0), 22583.0) \
               WHEN p.point IS NOT NULL THEN COALESCE(ST_Distance(p.point, MakePoint(",
     );
-    qb.push_bind(lng);
-    qb.push(", ");
-    qb.push_bind(lat);
-    qb.push(
-        ", 4326), 1) / 1000.0, 22583.0) \
+        qb.push_bind(lng);
+        qb.push(", ");
+        qb.push_bind(lat);
+        qb.push(
+            ", 4326), 1) / 1000.0, 22583.0) \
               ELSE 0.0 END * 1.0 AS comparison_value \
          FROM entities_fts f \
          JOIN entities e ON f.slug = e.slug \
          JOIN projects p ON e.target = p.project_id \
          WHERE e.kind = 'Project' AND entities_fts MATCH ",
-    );
-    qb.push_bind(search_term.clone());
-    qb.push(" AND e.publish = 1");
-    apply_project_filters(&mut qb, fq);
-    qb.push(" GROUP BY f.slug");
+        );
+        qb.push_bind(search_term.clone());
+        qb.push(" AND e.publish = 1");
+        apply_project_filters(&mut qb, fq);
+        qb.push(" GROUP BY f.slug");
+    }
 
-    qb.push(" UNION ALL ");
+    if kinds.projects() && kinds.events() {
+        qb.push(" UNION ALL ");
+    }
 
     // Event subquery
-    qb.push(
-        "SELECT f.slug, 'Event' AS entity_type, f.title, ev.description, ev.image, \
+    if kinds.events() {
+        qb.push(
+            "SELECT f.slug, 'Event' AS entity_type, f.title, ev.description, ev.image, \
          '' AS goal, '' AS task, '' AS status, \
          CASE WHEN ev.entirely_online = 1 THEN 'Online' \
               WHEN ev.city != '' AND ev.state != '' THEN ev.city || ', ' || ev.state \
@@ -834,15 +903,17 @@ async fn search_with_location(
           AND ei.begin >= datetime('now') ORDER BY ei.begin LIMIT 1) AS event_begin, \
          CASE WHEN ev.entirely_online = 1 THEN NULL \
               WHEN ev.regions IS NOT NULL THEN ST_Distance(ST_MakeValid(ev.regions), MakePoint(",
-    );
-    qb.push_bind(lng);
-    qb.push(", ");
-    qb.push_bind(lat);
-    qb.push(", 4326), 1) / 1000.0 WHEN ev.point IS NOT NULL THEN ST_Distance(ev.point, MakePoint(");
-    qb.push_bind(lng);
-    qb.push(", ");
-    qb.push_bind(lat);
-    qb.push(
+        );
+        qb.push_bind(lng);
+        qb.push(", ");
+        qb.push_bind(lat);
+        qb.push(
+            ", 4326), 1) / 1000.0 WHEN ev.point IS NOT NULL THEN ST_Distance(ev.point, MakePoint(",
+        );
+        qb.push_bind(lng);
+        qb.push(", ");
+        qb.push_bind(lat);
+        qb.push(
         ", 4326), 1) / 1000.0 \
          ELSE NULL END AS distance_km, \
          CASE WHEN ev.regions IS NOT NULL THEN AsGeoJSON(ev.regions) \
@@ -854,28 +925,29 @@ async fn search_with_location(
          + CASE WHEN ev.entirely_online = 1 THEN 100.0 \
                 WHEN ev.regions IS NOT NULL THEN COALESCE(ST_Distance(ST_MakeValid(ev.regions), MakePoint(",
     );
-    qb.push_bind(lng);
-    qb.push(", ");
-    qb.push_bind(lat);
-    qb.push(
-        ", 4326), 1) / 1000.0, 0) \
+        qb.push_bind(lng);
+        qb.push(", ");
+        qb.push_bind(lat);
+        qb.push(
+            ", 4326), 1) / 1000.0, 0) \
                 WHEN ev.point IS NOT NULL THEN COALESCE(ST_Distance(ev.point, MakePoint(",
-    );
-    qb.push_bind(lng);
-    qb.push(", ");
-    qb.push_bind(lat);
-    qb.push(
-        ", 4326), 1) / 1000.0, 22583.0) \
+        );
+        qb.push_bind(lng);
+        qb.push(", ");
+        qb.push_bind(lat);
+        qb.push(
+            ", 4326), 1) / 1000.0, 22583.0) \
                 ELSE 0.0 END * 1.0 AS comparison_value \
          FROM entities_fts f \
          JOIN entities e ON f.slug = e.slug \
          JOIN events ev ON e.target = ev.event_id \
          WHERE e.kind = 'Event' AND entities_fts MATCH",
-    );
-    qb.push_bind(search_term.clone());
-    qb.push(" AND e.publish = 1");
-    apply_event_filters(&mut qb, fq);
-    qb.push(" GROUP BY f.slug");
+        );
+        qb.push_bind(search_term.clone());
+        qb.push(" AND e.publish = 1");
+        apply_event_filters(&mut qb, fq);
+        qb.push(" GROUP BY f.slug");
+    }
 
     qb.push(") ORDER BY comparison_value LIMIT ");
     qb.push_bind(limit);
@@ -1091,12 +1163,19 @@ fn push_location_union(
     fq: &FinderQuery,
     lat: f64,
     lng: f64,
+    kinds: SearchKinds,
 ) {
-    push_project_location_subquery(qb, lat, lng);
-    apply_project_filters(qb, fq);
-    qb.push(" UNION ALL ");
-    push_event_location_subquery(qb, lat, lng);
-    apply_event_filters(qb, fq);
+    if kinds.projects() {
+        push_project_location_subquery(qb, lat, lng);
+        apply_project_filters(qb, fq);
+    }
+    if kinds.projects() && kinds.events() {
+        qb.push(" UNION ALL ");
+    }
+    if kinds.events() {
+        push_event_location_subquery(qb, lat, lng);
+        apply_event_filters(qb, fq);
+    }
 }
 
 /// The finder query the home page's "see all" link produces: a bare
@@ -1127,7 +1206,7 @@ pub async fn nearby_entities(lat: f64, lng: f64, limit: i64) -> Result<Vec<Finde
     let fq = default_location_query(lat, lng);
 
     let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new("SELECT * FROM (");
-    push_location_union(&mut qb, &fq, lat, lng);
+    push_location_union(&mut qb, &fq, lat, lng, SearchKinds::Both);
     qb.push(") ORDER BY comparison_value LIMIT ");
     qb.push_bind(limit.max(0));
 
@@ -1140,16 +1219,25 @@ async fn search_location_only(
     lat: f64,
     lng: f64,
     page: u32,
+    kinds: SearchKinds,
 ) -> Result<FinderSearchResult, Error> {
     // Count
-    let proj_count: i64 = build_project_count_location(fq)
-        .build_query_scalar()
-        .fetch_one(db())
-        .await?;
-    let evt_count: i64 = build_event_count_location(fq)
-        .build_query_scalar()
-        .fetch_one(db())
-        .await?;
+    let proj_count: i64 = if kinds.projects() {
+        build_project_count_location(fq)
+            .build_query_scalar()
+            .fetch_one(db())
+            .await?
+    } else {
+        0
+    };
+    let evt_count: i64 = if kinds.events() {
+        build_event_count_location(fq)
+            .build_query_scalar()
+            .fetch_one(db())
+            .await?
+    } else {
+        0
+    };
     let total = (proj_count + evt_count) as u32;
 
     let limit = FINDER_PER_PAGE as i64;
@@ -1157,7 +1245,7 @@ async fn search_location_only(
 
     let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new("SELECT * FROM (");
 
-    push_location_union(&mut qb, fq, lat, lng);
+    push_location_union(&mut qb, fq, lat, lng, kinds);
 
     qb.push(") ORDER BY comparison_value LIMIT ");
     qb.push_bind(limit);
@@ -1178,17 +1266,18 @@ pub(crate) async fn run_finder_search(
     query: &FinderQuery,
     page: u32,
     style: FtsTermStyle,
+    kinds: SearchKinds,
 ) -> Result<FinderSearchResult, Error> {
     let q = query.q.as_deref().unwrap_or("").trim();
     let has_query = !q.is_empty();
 
     match (query.lat, query.lng) {
         (Some(lat), Some(lng)) if has_query => {
-            search_with_location(query, lat, lng, page, style).await
+            search_with_location(query, lat, lng, page, style, kinds).await
         }
-        (Some(lat), Some(lng)) => search_location_only(query, lat, lng, page).await,
-        _ if has_query => search_text_only(query, page, style).await,
-        _ => search_all(query, page).await,
+        (Some(lat), Some(lng)) => search_location_only(query, lat, lng, page, kinds).await,
+        _ if has_query => search_text_only(query, page, style, kinds).await,
+        _ => search_all(query, page, kinds).await,
     }
 }
 
@@ -1214,7 +1303,7 @@ pub async fn handle_finder(
             poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
         })?;
 
-    let search_result = run_finder_search(&query, page, FtsTermStyle::Phrase)
+    let search_result = run_finder_search(&query, page, FtsTermStyle::Phrase, SearchKinds::Both)
         .await
         .unwrap_or_else(|e| {
             tracing::error!("Finder search error: {}", e);

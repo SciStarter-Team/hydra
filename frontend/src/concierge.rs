@@ -1,11 +1,15 @@
 //! Flower, the AI concierge: a chat widget on the home page that helps
-//! visitors find citizen-science projects matching their interests.
+//! visitors find citizen-science projects, upcoming events, and public
+//! communities matching their interests, and points them at the right site
+//! pages for who they are (librarians, educators, Girl Scouts, NASA fans,
+//! newcomers looking for a starting place).
 //!
 //! The conversational layer runs on AWS Bedrock (Claude Haiku via the
-//! Converse API); retrieval runs entirely through the existing Finder, via
-//! the `search_projects` tool. Rendered project cards come only from real
-//! search results held server-side, so the model cannot present a project
-//! that does not exist.
+//! Converse API); retrieval runs entirely through the existing Finder and
+//! community list, via the `search_projects` and `list_communities` tools.
+//! Rendered cards come only from real results held server-side, and site
+//! links come only from the curated navigation whitelist, so the model
+//! cannot present a project, community, or page that does not exist.
 
 pub mod budget;
 pub mod convo;
@@ -25,14 +29,14 @@ use sailfish::TemplateOnce;
 use serde::Deserialize;
 use ulid::Ulid;
 
+use crate::component::html_escape;
 use crate::concierge::convo::{Conversation, TranscriptContent, TranscriptMsg, TranscriptRole};
 use crate::concierge::engine::{StopKind, TurnUsage, engine};
-use crate::concierge::tools::ToolCallResult;
+use crate::concierge::tools::{ConciergeCard, ToolCallResult};
 use crate::home::HomeSettings;
 use crate::middleware::authorization::Authenticated;
 use crate::middleware::rate_limit::{RateLimitConfig, RateLimitMiddleware};
 use crate::peering::LoadStorePeered;
-use crate::search::FinderResult;
 
 /// Maximum user-visible turns per conversation.
 pub const MAX_TURNS: u32 = 10;
@@ -103,9 +107,13 @@ impl ConciergeForm {
 #[template(path = "concierge/turn.stpl.html")]
 struct TurnFragment {
     user_text: String,
-    assistant_text: String,
-    cards: Vec<FinderResult>,
-    finder_url: String,
+    /// Sanitized HTML for the assistant reply, produced by
+    /// [`tools::render_assistant_html`] (markdown interpreted, raw HTML
+    /// escaped, links restricted to the destination whitelist). Rendered raw.
+    assistant_html: String,
+    cards: Vec<ConciergeCard>,
+    more_url: String,
+    more_label: String,
     form: ConciergeForm,
 }
 
@@ -201,9 +209,10 @@ fn notice_fragment(
 ) -> Result<Response, poem::Error> {
     fragment(TurnFragment {
         user_text: user_text.to_string(),
-        assistant_text: notice.to_string(),
+        assistant_html: html_escape(notice),
         cards: Vec::new(),
-        finder_url: String::new(),
+        more_url: String::new(),
+        more_label: String::new(),
         form,
     })
 }
@@ -296,12 +305,13 @@ async fn handle_turn(
     };
 
     // Per-request context goes in the first user message, keeping the system
-    // prompt byte-stable for prompt caching.
+    // prompt free of per-user data.
     let user_content = if conversation.transcript.is_empty() {
-        match visitor_context(client_ip, user).await {
-            Some(context) => format!("[{}]\n\n{}", context, message),
-            None => message.clone(),
-        }
+        format!(
+            "[{}]\n\n{}",
+            visitor_context(client_ip, user).await,
+            message
+        )
     } else {
         message.clone()
     };
@@ -359,13 +369,13 @@ async fn handle_turn(
                 }
             });
 
-            let (cards, finder_url) = match outcome.last_result {
+            let (cards, more_url, more_label) = match outcome.last_result {
                 Some(result) => {
-                    let mut cards = result.results;
+                    let mut cards = result.cards;
                     cards.truncate(CARDS_PER_TURN);
-                    (cards, result.finder_url)
+                    (cards, result.more_url, result.more_label)
                 }
-                None => (Vec::new(), String::new()),
+                None => (Vec::new(), String::new(), String::new()),
             };
 
             let form = if conversation.turns >= MAX_TURNS {
@@ -376,11 +386,13 @@ async fn handle_turn(
                 ConciergeForm::active(conversation.conversation_id)
             };
 
+            let paths = tools::linkable_paths().await;
             fragment(TurnFragment {
                 user_text: message,
-                assistant_text: outcome.assistant_text,
+                assistant_html: tools::render_assistant_html(&outcome.assistant_text, &paths),
                 cards,
-                finder_url,
+                more_url,
+                more_label,
                 form,
             })
         }
@@ -457,11 +469,11 @@ async fn run_turn(conversation: &mut Conversation) -> Result<TurnOutcome, Error>
         let mut results = Vec::new();
         for (id, name, input) in tool_uses {
             tool_calls += 1;
-            let result_json = if name == "search_projects" {
-                match tools::dispatch_search(&input).await {
+            let result_json = match name.as_str() {
+                "search_projects" => match tools::dispatch_search(&input).await {
                     Ok(result) => {
                         let json = result.json_for_model.clone();
-                        if result.results.is_empty() {
+                        if result.cards.is_empty() {
                             empty_searches += 1;
                         }
                         last_result = Some(result);
@@ -473,9 +485,21 @@ async fn run_turn(conversation: &mut Conversation) -> Result<TurnOutcome, Error>
                             "error": "search failed; apologize briefly and suggest the project finder page"
                         })
                     }
-                }
-            } else {
-                serde_json::json!({ "error": format!("unknown tool: {}", name) })
+                },
+                "list_communities" => match tools::dispatch_communities(&input).await {
+                    Ok(result) => {
+                        let json = result.json_for_model.clone();
+                        last_result = Some(result);
+                        json
+                    }
+                    Err(e) => {
+                        tracing::warn!("Concierge community dispatch failed: {}", e);
+                        serde_json::json!({
+                            "error": "community list unavailable; apologize briefly and suggest the communities page"
+                        })
+                    }
+                },
+                _ => serde_json::json!({ "error": format!("unknown tool: {}", name) }),
             };
             results.push(TranscriptContent::ToolResult {
                 id,
@@ -510,13 +534,34 @@ async fn run_turn(conversation: &mut Conversation) -> Result<TurnOutcome, Error>
     })
 }
 
-/// Assemble the visitor-context prefix for the first user message:
-/// approximate location from IP, and declared interests for logged-in users.
-async fn visitor_context(
-    client_ip: Option<std::net::IpAddr>,
-    user: Option<&BasicInfo>,
-) -> Option<String> {
+/// Assemble the visitor-context prefix for the first user message: account
+/// status (including Foundations-training completion, which steers the
+/// "where do I start?" guidance), approximate location from IP, and declared
+/// interests for logged-in users.
+async fn visitor_context(client_ip: Option<std::net::IpAddr>, user: Option<&BasicInfo>) -> String {
     let mut parts = Vec::new();
+
+    match user {
+        Some(user) => {
+            // fetch_status returns an empty default on error, which reads as
+            // not-completed — the safe direction, since it only means
+            // Foundations gets suggested.
+            let status = crate::training::fetch_status(
+                common::message::user::WorkflowType::Foundations,
+                &user.user_id.to_string(),
+            )
+            .await;
+            parts.push(format!(
+                "logged in; {} the Foundations training",
+                if status.badge_granted {
+                    "has completed"
+                } else {
+                    "has not completed"
+                }
+            ));
+        }
+        None => parts.push("not logged in".to_string()),
+    }
 
     if let Some(addr) = client_ip {
         let location: common::message::location::LocationInfo =
@@ -543,11 +588,7 @@ async fn visitor_context(
         }
     }
 
-    if parts.is_empty() {
-        None
-    } else {
-        Some(format!("Visitor context: {}", parts.join("; ")))
-    }
+    format!("Visitor context: {}", parts.join("; "))
 }
 
 /// Spawn the concierge's background tasks: peering listeners and the local

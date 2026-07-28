@@ -1,0 +1,39 @@
+/* Flower, the AI concierge chat widget. Assistant bubbles hold sanitized
+   HTML rendered from the model's markdown (concierge/tools.rs
+   render_assistant_html); anchors in it come only from the server-side
+   navigation whitelist. Tailwind's preflight strips paragraph margins and
+   list markers, so restore chat-appropriate versions here. */
+.concierge-msg a {
+    color: var(--color-primary-action);
+    font-weight: 600;
+    text-decoration: underline;
+}
+
+.concierge-msg a:hover {
+    color: var(--color-primary-action-dark);
+}
+
+.concierge-msg p + p,
+.concierge-msg p + ul,
+.concierge-msg p + ol,
+.concierge-msg ul + p,
+.concierge-msg ol + p {
+    margin-top: 0.5rem;
+}
+
+.concierge-msg ul,
+.concierge-msg ol {
+    padding-left: 1.25rem;
+}
+
+.concierge-msg ul {
+    list-style: disc;
+}
+
+.concierge-msg ol {
+    list-style: decimal;
+}
+
+.concierge-msg li + li {
+    margin-top: 0.125rem;
+}

@@ -13,7 +13,7 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::component::{Component, Head, StandardLayout};
+use crate::component::{Component, Head, StandardLayout, html_escape};
 use crate::local_time::{TimeFormat, local_time};
 use crate::middleware::authorization::Authenticated;
 
@@ -1060,13 +1060,6 @@ pub async fn csm_autocomplete_projects(
     Ok(Response::builder()
         .content_type("text/html")
         .body(format!(r#"<datalist id="projects">{}</datalist>"#, options)))
-}
-
-fn html_escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
 }
 
 // ============================================================================

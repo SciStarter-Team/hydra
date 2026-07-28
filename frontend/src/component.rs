@@ -21,6 +21,17 @@ pub use layout::StandardLayout;
 pub use sidebar::Sidebar;
 pub use wordpress::WordPressContent;
 
+/// Escape text for interpolation into HTML built outside the template
+/// system. Templates escape automatically via `<%= %>`; this is for the few
+/// places that assemble markup in Rust.
+pub fn html_escape(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
 /// Wrapper trait for Sailfish's TemplateOnce, enabling an async
 /// preparation phase prior to rendering.
 #[allow(async_fn_in_trait)]

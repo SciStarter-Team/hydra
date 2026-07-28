@@ -11,13 +11,14 @@ To earn the Citizen Science for K–12 Educators badge, participants must:
 ## Learning Outcomes
 Earning the Citizen Science for K–12 Educators badge signifies that the recipient has successfully demonstrated proficiency in the following learning outcomes:
 
-- **Define** citizen science.
-- **Elaborate** on the value of becoming a citizen scientist as an educator.
-- **Explain** how citizen science enriches student learning.
-- **Describe** how citizen science can enhance teaching.
-- **Map** citizen science enhancements across grade levels.
-- **Identify** multidisciplinary connections to citizen science.
-- **Frame** schoolyards as living laboratories.
+- **Explain** the role of citizen science in advancing scientific research and public engagement.
+- **Apply** citizen science practices to strengthen teaching and learning across educational settings.
+- **Use** the SciStarter Project Finder to identify citizen science projects aligned to classroom goals, grade levels, student interests, and local contexts.
+- **Identify** which citizen science experiences are appropriate to different grade levels and developmental stages.
+- **Integrate** citizen science into multidisciplinary learning experiences across content areas.
+- **Create** and organize a classroom-ready collection of citizen science projects using SciStarter Lists to support student participation and investigation.
+- **Facilitate** student participation in citizen science through SciStarter accounts and dashboards to support reflection, documentation, and sustained scientific engagement.
+- **Transform** schoolyards and community spaces into living laboratories for observation, investigation, and discovery.
 - **Participate** in two citizen science projects and reflect on classroom applications.
 
 ****

@@ -17,6 +17,8 @@ use jiff::{Timestamp, ToSpan, civil, tz::TimeZone};
 use poem::{Response, handler, web::Query};
 use serde::Deserialize;
 
+use crate::component::html_escape;
+
 /// All `/staff/` endpoints, gated as a whole by `StaffOnly` (mirrors how the
 /// `/-admin/` tree is protected) — so every staff route, current and future, is
 /// covered by one middleware rather than per-route guards.
@@ -31,14 +33,6 @@ pub fn routes() -> impl poem::Endpoint {
         .at("/site-map", get(site_map))
         .at("/training-analytics", get(training_analytics))
         .with(StaffOnly)
-}
-
-fn html_escape(value: &str) -> String {
-    value
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
 }
 
 #[derive(Debug, Deserialize)]

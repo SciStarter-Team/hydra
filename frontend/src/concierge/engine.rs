@@ -280,9 +280,9 @@ fn converse_stub(transcript: &[TranscriptMsg]) -> ConverseOutcome {
             message: TranscriptMsg {
                 role: TranscriptRole::Assistant,
                 content: vec![TranscriptContent::Text(
-                    "Here are some projects that look like a good match — take a look at \
-                     the cards below. Want me to narrow things down further? \
-                     [stub engine reply]"
+                    "Here are some projects that look like a **good match** — take a \
+                     look at the cards below. Want me to narrow things down further? \
+                     There's always more to sniff out at /finder. [stub engine reply]"
                         .to_string(),
                 )],
             },
@@ -290,7 +290,7 @@ fn converse_stub(transcript: &[TranscriptMsg]) -> ConverseOutcome {
             usage: TurnUsage::default(),
         }
     } else {
-        let keywords = last
+        let text = last
             .map(|msg| {
                 msg.content
                     .iter()
@@ -303,14 +303,45 @@ fn converse_stub(transcript: &[TranscriptMsg]) -> ConverseOutcome {
             })
             .unwrap_or_default();
 
+        // The first user message carries a bracketed visitor-context prefix
+        // on its own lines; a real model composes keywords itself, so the
+        // stub approximates that by searching only the message's last line.
+        let keywords = text
+            .lines()
+            .rev()
+            .find(|l| !l.trim().is_empty())
+            .unwrap_or("");
+
+        // A message mentioning communities exercises the list_communities
+        // path; one mentioning events exercises the events-only search;
+        // anything else exercises the plain search_projects path.
+        let lowered = text.to_lowercase();
+        let tool_use = if lowered.contains("communit") {
+            TranscriptContent::ToolUse {
+                id: format!("stub-{}", ulid::Ulid::new()),
+                name: "list_communities".to_string(),
+                input: serde_json::json!({}),
+            }
+        } else if lowered.contains("event") {
+            // No keywords: browse all upcoming events, so the events-only
+            // restriction is exercised deterministically.
+            TranscriptContent::ToolUse {
+                id: format!("stub-{}", ulid::Ulid::new()),
+                name: "search_projects".to_string(),
+                input: serde_json::json!({ "what": "events" }),
+            }
+        } else {
+            TranscriptContent::ToolUse {
+                id: format!("stub-{}", ulid::Ulid::new()),
+                name: "search_projects".to_string(),
+                input: serde_json::json!({ "keywords": keywords }),
+            }
+        };
+
         ConverseOutcome {
             message: TranscriptMsg {
                 role: TranscriptRole::Assistant,
-                content: vec![TranscriptContent::ToolUse {
-                    id: format!("stub-{}", ulid::Ulid::new()),
-                    name: "search_projects".to_string(),
-                    input: serde_json::json!({ "keywords": keywords }),
-                }],
+                content: vec![tool_use],
             },
             stop_reason: StopKind::ToolUse,
             usage: TurnUsage::default(),
