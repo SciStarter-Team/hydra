@@ -833,7 +833,7 @@ async fn user_profile_page(
 
     let profile = UserProfile {
         user_id: &user_id,
-        user_handle: &target_user.handle,
+        user_handle: target_user.display_handle(),
         is_private: target_user.is_private(),
     };
     Ok(Html(profile.render_once()?).into_response())

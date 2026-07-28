@@ -86,9 +86,10 @@ pub struct UserProfileUpdate {
 /// `user.profile.public_get`.
 ///
 /// The `visibility` field describes whether the viewer is allowed to
-/// see profile content at all. When `Restricted`, the consumer should
-/// render a placeholder using only `handle` and `image` (image may
-/// also be omitted at the consumer's discretion).
+/// see profile content at all. When `Restricted`, every identifying
+/// field has already been emptied — `handle` reads as the private
+/// placeholder and `image` is `None` — so a consumer can render the
+/// whole struct without checking `visibility` first.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PublicProfile {
     pub user_id: Ulid,
@@ -584,4 +585,54 @@ pub struct AmbassadorApplicationForm {
     pub address1: String,
     pub address2: String,
     pub zip: String,
+}
+
+/// A Take Action project logged by a Girl Scout troop at `/girlscouts-action`,
+/// the last step of the Think Like a Citizen Scientist Journey. Sent via
+/// `user.girlscouts.take_action_submit`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TakeActionSubmission {
+    /// The signed-in submitter. Orrery accepted these anonymously and stored
+    /// no timestamp, which left staff with write-ups they could not follow up
+    /// on; the submitter is required here and the handler stamps the time.
+    pub user_id: Ulid,
+    pub troop: String,
+    pub problem: String,
+    pub solution: String,
+    pub sustainable: String,
+    /// URL of the troop photo, empty when none was attached.
+    pub photo: String,
+}
+
+/// One Take Action submission as staff read it, with the submitter resolved.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TakeActionRow {
+    pub submission_id: Ulid,
+    pub user_id: Ulid,
+    pub submitted: String,
+    // Read-only submitter identity, joined from the user record
+    pub name: String,
+    pub handle: String,
+    pub email: String,
+    pub troop: String,
+    pub problem: String,
+    pub solution: String,
+    pub sustainable: String,
+    pub photo: String,
+}
+
+/// One page of the Take Action queue, requested via
+/// `user.girlscouts.take_action_list`. Submissions accumulate indefinitely, so
+/// the queue is paged rather than returned whole.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TakeActionListQuery {
+    pub offset: i64,
+    pub limit: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TakeActionList {
+    pub rows: Vec<TakeActionRow>,
+    /// Total across every page, for the pager.
+    pub total: i64,
 }

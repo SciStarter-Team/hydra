@@ -1284,7 +1284,14 @@ impl DetailPage {
 // Review enrichment helper
 // ---------------------------------------------------------------------------
 
-async fn enrich_reviews(reviews: Vec<ReviewEntry>) -> Result<Vec<ReviewForDisplay>, Error> {
+/// Attach author display identity to reviews, dropping those written by a
+/// private user. Naming the author as "Private" would not be enough: a
+/// review is free text that routinely identifies whoever wrote it, so the
+/// whole entry stays out of the public list — the same rule orrery's
+/// review query applies.
+pub(crate) async fn enrich_reviews(
+    reviews: Vec<ReviewEntry>,
+) -> Result<Vec<ReviewForDisplay>, Error> {
     let user_ids: Vec<Ulid> = reviews
         .iter()
         .filter_map(|r| Ulid::from_string(&r.user_id).ok())
@@ -1300,7 +1307,7 @@ async fn enrich_reviews(reviews: Vec<ReviewEntry>) -> Result<Vec<ReviewForDispla
         response
             .users
             .into_iter()
-            .map(|u| (u.user_id.to_string(), (u.handle, u.image)))
+            .map(|u| (u.user_id.to_string(), u))
             .collect::<HashMap<_, _>>()
     } else {
         HashMap::new()
@@ -1308,19 +1315,22 @@ async fn enrich_reviews(reviews: Vec<ReviewEntry>) -> Result<Vec<ReviewForDispla
 
     Ok(reviews
         .into_iter()
-        .map(|review| {
-            let (user_handle, user_image) = user_info_map
-                .get(&review.user_id)
-                .cloned()
-                .unwrap_or_else(|| (format!("({})", review.user_id), String::new()));
+        .filter_map(|review| {
+            let (user_handle, user_image) = match user_info_map.get(&review.user_id) {
+                Some(info) if info.private => return None,
+                Some(info) => (info.handle.clone(), info.image.clone()),
+                // An author the user service doesn't know (a deleted
+                // account, or an id that never was one).
+                None => (format!("({})", review.user_id), String::new()),
+            };
 
-            ReviewForDisplay {
+            Some(ReviewForDisplay {
                 user_id: review.user_id,
                 user_handle,
                 user_image,
                 text: review.text,
                 when: TimeString::try_from(review.when).unwrap_or_else(|_| TimeString::now()),
-            }
+            })
         })
         .collect())
 }

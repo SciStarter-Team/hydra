@@ -6,7 +6,7 @@ use common::message::forum::{
     MarkMessageRead, PostInfo, PostListQuery, RecipientsSince, ReplyToMessage,
     ReplyToMessageResponse, SendMessage, SendMessageResponse, TopicInfo, is_personal_forum_slug,
 };
-use common::message::user::BasicInfo;
+use common::message::user::{BasicInfo, PROTECTED_SENDER_REFUSAL};
 use common::service::{request, send as nats_send};
 use common::timestring::TimeString;
 use poem::{
@@ -191,7 +191,7 @@ pub async fn compose(
 
     let html = ComposeFragment {
         target_user_id: target_id,
-        target_handle: target.handle,
+        target_handle: target.display_handle().to_string(),
     }
     .render_once()?;
 
@@ -218,6 +218,12 @@ pub async fn send(
 
     if form.subject.trim().is_empty() || form.body.trim().is_empty() {
         return Err(anyhow!("Subject and body are required"));
+    }
+
+    // forum-service refuses this too; saying so here turns a delivery error
+    // into an explanation the sender can read.
+    if !user_info.may_send_messages() {
+        return Ok(limit_error_fragment(PROTECTED_SENDER_REFUSAL));
     }
 
     // Messaging a project/event is subject to the one-per-day limit;
@@ -345,7 +351,7 @@ pub async fn thread(
                 let handle =
                     request::<BasicInfo>("user.basic_info.by_user_id", other_user_id.to_string())
                         .await
-                        .map(|info| info.handle)
+                        .map(|info| info.display_handle().to_string())
                         .unwrap_or_else(|_| "Unknown".to_string());
                 (handle, format!("/profile/{}", other_user_id), false)
             }
@@ -391,6 +397,11 @@ pub async fn reply(
 
     if form.body.trim().is_empty() {
         return Err(anyhow!("Reply body is required"));
+    }
+
+    // Being written to does not lift a protected user's bar on writing back.
+    if !user_info.may_send_messages() {
+        return Ok(limit_error_fragment(PROTECTED_SENDER_REFUSAL));
     }
 
     // A reply a user sends *to* a project/event counts toward the one-per-day

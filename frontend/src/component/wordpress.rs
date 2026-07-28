@@ -18,8 +18,11 @@ pub struct WordPressContentPrepared {
     pub css: String,
     /// The scripts the content's behaviour depends on, in document order.
     pub scripts: Vec<Script>,
-    /// The class the markup, CSS and scripts are confined to.
-    pub container_class: &'static str,
+    /// The classes on the container: the one everything is confined to, plus
+    /// whatever WordPress had on its own root elements.
+    pub container_class: String,
+    /// Just the class the CSS is confined to, for the script that finds it.
+    pub isolation_class: &'static str,
 }
 
 impl super::Component for WordPressContent {
@@ -35,7 +38,11 @@ impl super::Component for WordPressContent {
             excerpt: String::new(),
             css: page.css,
             scripts: page.scripts,
-            container_class: crate::wordpress::CONTAINER_CLASS,
+            isolation_class: crate::wordpress::CONTAINER_CLASS,
+            container_class: match page.root_classes.trim() {
+                "" => crate::wordpress::CONTAINER_CLASS.to_string(),
+                carried => format!("{} {carried}", crate::wordpress::CONTAINER_CLASS),
+            },
         })
     }
 }

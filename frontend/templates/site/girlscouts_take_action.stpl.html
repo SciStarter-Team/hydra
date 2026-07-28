@@ -1,0 +1,56 @@
+<div class="ss-container mx-auto py-8 max-w-3xl ss-text girlscout">
+  <p><a href="/girlscouts-journey">&laquo; back to the Journey</a></p>
+
+  <% if self.recorded { %>
+    <div class="bg-girlscout-alpha rounded-md p-6 text-center">
+      <h1 class="text-girlscout">Congratulations!</h1>
+      <p>Your Take Action project has been recorded.</p>
+      <p class="mb-0"><a href="/girlscouts-action" class="btn bg-girlscout uppercase font-bold w-auto min-w-[165px] text-center text-white hover:bg-girlscout-hover">Add another</a></p>
+    </div>
+
+  <% } else if !self.logged_in { %>
+    <h1 class="text-girlscout">Log a Take Action project</h1>
+    <p>Please <a href="/login?next=/girlscouts-action">log in</a> to your SciStarter account to record your troop&rsquo;s Take Action project. Girl Scouts and volunteers sign up through the links on the <a href="/girlscouts-info">Girl Scouts page</a>.</p>
+
+  <% } else { %>
+    <h1 class="text-girlscout">Log a Take Action project</h1>
+
+    <% if let Some(error) = &self.error { %>
+      <div class="rounded border border-red-300 bg-red-50 text-red-800 p-4 mb-6"><%= error %></div>
+    <% } %>
+
+    <form method="post" action="/girlscouts-action" class="space-y-6">
+      <label class="block">
+        Which troop are you recording a Take Action project for? <span class="text-red-600">*</span>
+        <input type="text" name="troop" value="<%= self.troop %>" required
+               class="w-full border border-gray-300 rounded p-2">
+      </label>
+
+      <label class="block">
+        What problem did you want to solve with your Take Action project? <span class="text-red-600">*</span>
+        <textarea name="problem" required rows="5"
+                  class="w-full border border-gray-300 rounded p-2"><%= self.problem %></textarea>
+      </label>
+
+      <label class="block">
+        What was your solution? <span class="text-red-600">*</span>
+        <textarea name="solution" required rows="5"
+                  class="w-full border border-gray-300 rounded p-2"><%= self.solution %></textarea>
+      </label>
+
+      <label class="block">
+        How did you make your solution sustainable? <span class="text-red-600">*</span>
+        <span class="block text-sm text-neutral-mid">For example: did you educate and inspire others to follow your lead? Did you create something permanent? Did you get a rule or a law changed?</span>
+        <textarea name="sustainable" required rows="5"
+                  class="w-full border border-gray-300 rounded p-2"><%= self.sustainable %></textarea>
+      </label>
+
+      <%+ self.photo %>
+
+      <button type="submit"
+              class="btn bg-girlscout uppercase font-bold w-auto min-w-[165px] text-center text-white hover:bg-girlscout-hover">
+        Submit
+      </button>
+    </form>
+  <% } %>
+</div>

@@ -13,6 +13,7 @@ pub mod email;
 pub mod entities;
 pub mod events;
 pub mod files;
+pub mod girlscouts;
 pub mod integrations;
 pub mod mcp_tokens;
 pub mod messages;
@@ -55,6 +56,8 @@ pub fn routes() -> impl Endpoint {
         .nest("/messages", messages::routes())
         // Ambassador application processing (staff-facing)
         .nest("/ambassadors", ambassadors::routes())
+        // Girl Scouts Take Action submissions (staff-facing)
+        .nest("/girlscouts", girlscouts::routes())
         // Projects
         .nest("/projects", projects::routes())
         // Events

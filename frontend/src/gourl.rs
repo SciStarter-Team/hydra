@@ -139,6 +139,35 @@ impl GoUrl {
         slug.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
     }
 
+    /// Whether a string is usable as a redirect target
+    ///
+    /// A target is either absolute with an explicit scheme (`https://…`,
+    /// `mailto:…`) or a path on this site beginning with a single `/`. Anything
+    /// starting with a bare hostname (`example.com/x`) or a dot is rejected:
+    /// the browser would read it as relative to `/go/`, which is never what was
+    /// meant. A leading `//` is rejected too --- it is protocol-relative to
+    /// another host rather than a path here, and is far more often a typo than
+    /// an intention.
+    pub fn is_valid_target(target: &str) -> bool {
+        let target = target.trim();
+
+        if let Some(path) = target.strip_prefix('/') {
+            return !path.starts_with('/');
+        }
+
+        // A scheme is an ASCII letter followed by letters, digits, `+`, `-` or
+        // `.`, and then a colon.
+        let mut chars = target.chars();
+        if !chars.next().is_some_and(|c| c.is_ascii_alphabetic()) {
+            return false;
+        }
+        let rest = chars.as_str();
+        let scheme_len = rest
+            .find(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.')))
+            .unwrap_or(rest.len());
+        rest[scheme_len..].starts_with(':')
+    }
+
     /// Check if a slug exists in the database (case-insensitive)
     /// More efficient than loading the full object for uniqueness checks
     pub async fn slug_exists(slug: &str) -> Result<bool, anyhow::Error> {
@@ -292,5 +321,44 @@ pub async fn handle_go_url(
                 StatusCode::NOT_FOUND,
             ))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::GoUrl;
+
+    #[test]
+    fn a_target_needs_a_scheme_or_a_leading_slash() {
+        for good in [
+            "https://scistarter.org/finder",
+            "http://example.org",
+            "mailto:info@scistarter.org",
+            "/training/foundations",
+            "/",
+            "/login?next=%2Fgirlscouts-info&tag=girlscout",
+        ] {
+            assert!(GoUrl::is_valid_target(good), "{good:?} should be accepted");
+        }
+
+        for bad in [
+            "example.com/x",   // a browser reads this as relative to /go/
+            "www.example.com", // ditto
+            "./relative",
+            "../up",
+            ".hidden",
+            "",
+            "   ",
+            "//evil.example", // protocol-relative to another host, not a path here
+        ] {
+            assert!(!GoUrl::is_valid_target(bad), "{bad:?} should be rejected");
+        }
+    }
+
+    #[test]
+    fn surrounding_whitespace_does_not_change_the_verdict() {
+        assert!(GoUrl::is_valid_target("  /finder  "));
+        assert!(GoUrl::is_valid_target(" https://example.org "));
+        assert!(!GoUrl::is_valid_target("  example.org  "));
     }
 }

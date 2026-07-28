@@ -55,7 +55,14 @@
                     <% } %>
                 <% }
                 crate::gourl::GoUrlType::Redirect { .. } => { %>
-                    <!-- No actions for redirects yet -->
+                    <!-- Edit target URL -->
+                    <button hx-get="/-admin/files-links/<%= self.go_url.slug %>/edit"
+                            hx-target="#go-url-<%= self.go_url.slug %>"
+                            hx-swap="outerHTML"
+                            title="Edit target URL"
+                            class="text-blue-600 hover:text-blue-900 transition-colors">
+                        <wa-icon name="pencil" class="w-4 h-4"></wa-icon>
+                    </button>
                 <% }
             } %>
 

@@ -57,8 +57,12 @@
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">Target URL</label>
-                    <input id="redirect-target" type="url" name="target_url" required
-                           placeholder="https://example.com"
+                    <%# Not type="url": that would reject /path-on-this-site, which is a
+                        legitimate target. The pattern mirrors GoUrl::is_valid_target. %>
+                    <input id="redirect-target" type="text" name="target_url" required
+                           pattern="/([^/].*)?|[A-Za-z][A-Za-z0-9+.\-]*:.*"
+                           title="Start with a scheme (https://, mailto:) or with / for a path on this site"
+                           placeholder="https://example.com or /finder"
                            class="block w-full rounded-md border border-gray-300 focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2">
                 </div>
                 <div class="md:col-span-2">

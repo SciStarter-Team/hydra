@@ -309,15 +309,9 @@ pub struct ExchangeProjectDetail {
     pub reviews: Vec<ReviewForDisplay>,
 }
 
-/// Review enriched with user display information for template rendering
-#[derive(Debug, Clone)]
-pub struct ReviewForDisplay {
-    pub user_id: String,
-    pub user_handle: String,
-    pub user_image: String,
-    pub text: String,
-    pub when: TimeString,
-}
+/// Reviews are enriched for display by the detail page's shared helper, so
+/// exchange pages render the same struct it produces.
+pub use crate::component::detail_page::ReviewForDisplay;
 
 #[derive(Debug, Clone)]
 pub struct Pagination {
@@ -587,48 +581,9 @@ async fn load_exchange_project_detail(
         crate::component::detail_page::cached_project_reviews(project_ulid).await?;
     let project_reviews: Vec<_> = reviews_response.reviews.into_iter().take(5).collect();
 
-    // Fetch user display info for all reviewers in batch
-    let user_ids: Vec<Ulid> = project_reviews
-        .iter()
-        .filter_map(|r| Ulid::from_string(&r.user_id).ok())
-        .collect();
-    let user_info_map = if !user_ids.is_empty() {
-        use common::message::user::{UserDisplayInfoBatchRequest, UserDisplayInfoBatchResponse};
-        use std::collections::HashMap;
-
-        let response: UserDisplayInfoBatchResponse = request(
-            "user.info.display_info_batch",
-            UserDisplayInfoBatchRequest { user_ids },
-        )
-        .await?;
-
-        response
-            .users
-            .into_iter()
-            .map(|u| (u.user_id.to_string(), (u.handle, u.image)))
-            .collect::<HashMap<_, _>>()
-    } else {
-        std::collections::HashMap::new()
-    };
-
-    // Enrich reviews with user display information
-    let reviews: Vec<ReviewForDisplay> = project_reviews
-        .into_iter()
-        .map(|review| {
-            let (user_handle, user_image) = user_info_map
-                .get(&review.user_id)
-                .cloned()
-                .unwrap_or_else(|| (format!("({})", review.user_id), String::new()));
-
-            ReviewForDisplay {
-                user_id: review.user_id,
-                user_handle,
-                user_image,
-                text: review.text,
-                when: TimeString::try_from(review.when).unwrap_or_else(|_| TimeString::now()),
-            }
-        })
-        .collect();
+    // Attach author identity on the shared path, so an exchange page hides
+    // private users' reviews exactly as the main detail page does.
+    let reviews = crate::component::detail_page::enrich_reviews(project_reviews).await?;
 
     // Convert empty strings to None for optional fields
     let url = if row.url.is_empty() {

@@ -2,6 +2,7 @@ use anyhow::{Error, anyhow};
 use async_nats::service::Request;
 use common::{
     message::dashboard::{PublicProfile, PublicProfileVisibility, UserProfile, UserProfileUpdate},
+    message::user::PRIVATE_DISPLAY_NAME,
     service::decode_structured_message,
     shared::db,
     ulid::AsUlid,
@@ -171,6 +172,17 @@ pub async fn save(req: &Request) -> Result<(), Error> {
     .execute(db())
     .await?;
 
+    // A protected user is never on a mailing list. Enforced as its own
+    // statement, after the fact, so it holds however the account arrived at
+    // being protected — subscribing and protecting in the same save, or
+    // subscribing a profile that was already protected.
+    sqlx::query!(
+        r#"UPDATE "users" SET "newsletter" = 0 WHERE "user_id" = ? AND "protected" = 1"#,
+        user_id_str,
+    )
+    .execute(db())
+    .await?;
+
     Ok(())
 }
 
@@ -237,13 +249,17 @@ pub async fn public_get(req: &Request) -> Result<PublicProfile, Error> {
             ambassador: row.ambassador,
             date_joined: row.date_joined,
         },
+        // The handle and the avatar identify their owner as surely as the
+        // name does, so a restricted profile carries neither: consumers
+        // that title a page or label a list entry with `handle` would
+        // otherwise republish exactly what was withheld below.
         PublicProfileVisibility::Restricted => PublicProfile {
             user_id: row.user_id.as_ulid()?,
-            handle: row.handle,
+            handle: PRIVATE_DISPLAY_NAME.to_string(),
             visibility,
             first_name: String::new(),
             last_name: String::new(),
-            image: row.image,
+            image: None,
             bio: None,
             home_page: None,
             facebook_url: None,

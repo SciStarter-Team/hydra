@@ -1,5 +1,5 @@
 <div>
-  <label for="add-image">Image</label>
+  <label for="add-image"><%= self.label %></label>
   <input type="url" id="add-image" name="image" value="<%= self.value %>" placeholder="https://&hellip;">
   <div class="flex items-center gap-2 mt-1">
     <input type="file" accept="image/*" name="file"
@@ -15,7 +15,9 @@
   </div>
 </div>
 
+<% if let Some(credit) = &self.credit { %>
 <div>
   <label for="add-image-credit">Image credit</label>
-  <input type="text" id="add-image-credit" name="image_credit" value="<%= self.credit %>">
+  <input type="text" id="add-image-credit" name="image_credit" value="<%= credit %>">
 </div>
+<% } %>

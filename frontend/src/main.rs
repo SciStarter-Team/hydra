@@ -24,6 +24,7 @@ pub mod exchange;
 pub mod external_link;
 pub mod form;
 pub mod geocode;
+pub mod girlscouts;
 pub mod gourl;
 pub mod health;
 pub mod home;
@@ -561,6 +562,10 @@ fn user_facing() -> impl Endpoint {
         .at("/ambassadors", get(ambassador::directory))
         .at("/ambassadors/:id", get(ambassador::profile_page))
         .at("/ambassadors/:id/contact", post(ambassador::contact))
+        .at(
+            "/girlscouts-action",
+            get(girlscouts::index).post(girlscouts::submit),
+        )
         .at("/projects/*slug", get(project_page))
         .at("/events/*slug", get(event_page))
         .at("/*slug", get(entity_page))

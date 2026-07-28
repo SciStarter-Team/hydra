@@ -19,7 +19,7 @@ use common::{
 };
 
 use crate::{
-    component::{Component, Head, StandardLayout},
+    component::{Component, Head, StandardLayout, image_field::ImageField},
     contact::{Contact, ContactRole},
     entity::{Entity, EntityKind, EntityTarget},
     event::{EventInstance, EventType, all::EventAll},
@@ -554,15 +554,6 @@ impl LocationPicker {
     }
 }
 
-/// The image URL field with an upload control + credit, posting to
-/// `/add/upload-image`.
-#[derive(sailfish::TemplateOnce)]
-#[template(path = "site/image_field.stpl.html")]
-struct ImageField {
-    value: String,
-    credit: String,
-}
-
 /// The tag-pill widget with HTMX autocomplete, backed by `js/tags-input.js`.
 #[derive(sailfish::TemplateOnce)]
 #[template(path = "site/tag_input.stpl.html")]
@@ -689,8 +680,9 @@ async fn render_event_form(
         &values.regions,
     );
     let image = ImageField {
+        label: "Image".to_string(),
         value: values.image.clone(),
-        credit: values.image_credit.clone(),
+        credit: Some(values.image_credit.clone()),
     };
     let tags = TagInput {
         value: values.tags.clone(),
@@ -1841,8 +1833,9 @@ async fn render_project_form(
         &values.regions,
     );
     let image = ImageField {
+        label: "Image".to_string(),
         value: values.image.clone(),
-        credit: values.image_credit.clone(),
+        credit: Some(values.image_credit.clone()),
     };
     let tags = TagInput {
         value: values.tags.clone(),

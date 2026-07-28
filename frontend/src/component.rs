@@ -5,6 +5,7 @@ pub mod footer;
 pub mod forum;
 pub mod head;
 pub mod header;
+pub mod image_field;
 pub mod layout;
 pub mod sidebar;
 pub mod wordpress;

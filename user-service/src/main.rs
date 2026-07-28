@@ -19,6 +19,7 @@ pub mod bookmarks;
 pub mod certificates;
 pub mod communities;
 pub mod geocode;
+pub mod girlscouts;
 pub mod health;
 pub mod inat;
 pub mod legacy_id;
@@ -2610,6 +2611,24 @@ async fn main() {
     toplevel.spawn(handler!(profile, "get", profile::get));
     toplevel.spawn(handler!(profile, "save", profile::save));
     toplevel.spawn(handler!(profile, "public_get", profile::public_get));
+
+    // Girl Scouts Take Action write-ups
+    let girlscouts_group = service.group("user.girlscouts");
+    toplevel.spawn(handler!(
+        girlscouts_group,
+        "take_action_submit",
+        girlscouts::take_action_submit
+    ));
+    toplevel.spawn(handler!(
+        girlscouts_group,
+        "take_action_list",
+        girlscouts::take_action_list
+    ));
+    toplevel.spawn(handler!(
+        girlscouts_group,
+        "take_action_delete",
+        girlscouts::take_action_delete
+    ));
 
     // Ambassador application
     let ambassador_group = service.group("user.ambassador");

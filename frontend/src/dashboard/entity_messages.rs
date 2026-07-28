@@ -185,7 +185,7 @@ pub async fn thread(
     let other_user_handle =
         request::<BasicInfo>("user.basic_info.by_user_id", other_user_id.to_string())
             .await
-            .map(|info| info.handle)
+            .map(|info| info.display_handle().to_string())
             .unwrap_or_else(|_| "Unknown".to_string());
 
     let content = EntityThreadContent {

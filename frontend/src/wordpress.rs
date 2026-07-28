@@ -52,6 +52,9 @@ pub struct Script {
 pub struct WordPressPage {
     pub title: String,
     pub content: String,
+    /// The classes WordPress had on `<html>` and `<body>`, to be put on the
+    /// container so rules keyed to them keep matching.
+    pub root_classes: String,
     /// Every stylesheet the page pulled in, inlined and confined to the
     /// container. Ready to drop into a single `<style>` element.
     pub css: String,
@@ -139,6 +142,7 @@ pub async fn fetch_page(page_url: &str) -> Result<WordPressPage> {
     let result = WordPressPage {
         title: extracted.title,
         content: extracted.content,
+        root_classes: extracted.root_classes,
         css: confine_css(&sheets.join("\n")),
         scripts: extracted.scripts,
     };
@@ -155,6 +159,8 @@ pub async fn fetch_page(page_url: &str) -> Result<WordPressPage> {
 struct Extracted {
     title: String,
     content: String,
+    /// The classes WordPress put on `<html>` and `<body>`.
+    root_classes: String,
     sheet_urls: Vec<String>,
     inline_styles: Vec<String>,
     scripts: Vec<Script>,
@@ -196,12 +202,33 @@ fn extract(html: &str, page: &Url) -> Result<Extracted> {
         .map(String::from)
         .collect();
 
+    // WordPress emits per-block styles in the body as well as the head, so this
+    // takes every `<style>` on the page rather than only the head's.
     let inline_styles = document
-        .select(&selector("head style")?)
+        .select(&selector("style")?)
         .map(|el| el.text().collect::<String>())
         .filter(|css| !css.trim().is_empty())
         .map(|css| rewrite_css_urls(&css, page))
         .collect();
+
+    // WordPress puts page state on the root elements --- `page-id-32677`, theme
+    // and plugin feature flags --- and its stylesheets key off them. Lifting
+    // only `.entry-content` leaves those ancestors behind, so every rule
+    // written as `body.something .block` quietly stops matching. Carrying the
+    // classes onto the container puts them back within reach, since `body` and
+    // `:root` are retargeted onto that same element.
+    let root_classes = ["html", "body"]
+        .into_iter()
+        .filter_map(|name| selector(name).ok())
+        .filter_map(|s| {
+            document
+                .select(&s)
+                .next()
+                .and_then(|el| el.value().attr("class"))
+                .map(String::from)
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
 
     let scripts = document
         .select(&selector("script")?)
@@ -211,6 +238,7 @@ fn extract(html: &str, page: &Url) -> Result<Extracted> {
     Ok(Extracted {
         title,
         content: rewrite_markup_urls(&content, page),
+        root_classes,
         sheet_urls,
         inline_styles,
         scripts,
@@ -1194,6 +1222,42 @@ mod tests {
             vec!["https://pages.example.org/wp-content/themes/t/style.css"]
         );
         assert_eq!(extracted.inline_styles, vec!["body { color: red }"]);
+    }
+
+    /// WordPress keys stylesheet rules to classes it puts on the root elements
+    /// --- `page-id-32677`, theme and plugin feature flags. Lifting only
+    /// `.entry-content` leaves those ancestors behind, so `body.flag .block`
+    /// stops matching and the block silently loses whatever it declared.
+    #[test]
+    fn the_pages_root_classes_come_across() {
+        let extracted = extract(
+            r#"<html class="no-js"><body class="page-id-7 stk-has-block-style-inheritance">
+               <div class="entry-content"><p>x</p></div></body></html>"#,
+            &Url::parse("https://pages.example.org/p/").unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            extracted.root_classes,
+            "no-js page-id-7 stk-has-block-style-inheritance"
+        );
+    }
+
+    /// Per-block styles are emitted in the body, not only the head.
+    #[test]
+    fn styles_outside_the_head_are_carried_too() {
+        let extracted = extract(
+            r#"<html><head><style>.a { color: red }</style></head>
+               <body><div class="entry-content"><p>x</p></div>
+               <style>.b { color: blue }</style></body></html>"#,
+            &Url::parse("https://pages.example.org/p/").unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            extracted.inline_styles,
+            vec![".a { color: red }", ".b { color: blue }"]
+        );
     }
 
     #[test]

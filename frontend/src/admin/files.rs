@@ -16,6 +16,13 @@ use sailfish::TemplateOnce;
 use serde::{Deserialize, Serialize};
 use sqlx::{QueryBuilder, Row};
 
+/// Shown when a target is neither scheme-qualified nor a path on this site.
+const INVALID_TARGET_MESSAGE: &str = concat!(
+    r#"<div class="text-red-600">"#,
+    "Target must start with a scheme (https://, mailto:) or with / for a path on this site",
+    "</div>",
+);
+
 // Types
 #[derive(Debug, Clone)]
 pub struct GoUrlWithFileInfo {
@@ -62,6 +69,13 @@ pub struct GoUrlRow<'a> {
     pub go_url: &'a GoUrlWithFileInfo,
     pub oob: bool,
     pub oob_swap: String,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/partials/go_url_edit_row.stpl.html")]
+pub struct GoUrlEditRow {
+    pub slug: String,
+    pub target_url: String,
 }
 
 #[derive(Debug, TemplateOnce)]
@@ -115,6 +129,13 @@ struct SearchQuery {
 #[derive(Serialize, Deserialize)]
 struct CreateRedirectRequest {
     slug: String,
+    target_url: String,
+}
+
+/// The slug is not editable: it is the record's database key, so renaming is a
+/// delete and a create rather than an update.
+#[derive(Debug, Clone, Deserialize)]
+struct UpdateRedirectRequest {
     target_url: String,
 }
 
@@ -349,6 +370,13 @@ async fn files_links_create_redirect(
             .body(r#"<div class="text-red-600">Invalid slug format</div>"#));
     }
 
+    if !GoUrl::is_valid_target(&request.target_url) {
+        return Ok(poem::Response::builder()
+            .status(poem::http::StatusCode::BAD_REQUEST)
+            .content_type("text/html")
+            .body(INVALID_TARGET_MESSAGE));
+    }
+
     // Check if slug already exists (case-insensitive)
     match GoUrl::slug_exists(&request.slug).await {
         Ok(true) => {
@@ -411,6 +439,143 @@ async fn files_links_create_redirect(
         .status(poem::http::StatusCode::OK)
         .content_type("text/html")
         .body(rendered))
+}
+
+/// Render one go URL's row, either as the edit form or back as a plain row
+///
+/// Both the edit and cancel paths need the record fetched and rendered the same
+/// way, so they share this.
+async fn go_url_row_response(slug: &str, editing: bool) -> Result<poem::Response, poem::Error> {
+    let go_url = match GoUrl::load(slug.to_string()).await {
+        Ok(go_url) => go_url,
+        Err(e) => {
+            tracing::error!("Failed to load go URL {}: {}", slug, e);
+            return Ok(poem::Response::builder()
+                .status(poem::http::StatusCode::NOT_FOUND)
+                .content_type("text/html")
+                .body(r#"<div class="text-red-600">Go URL not found</div>"#));
+        }
+    };
+
+    // A tracked file's destination is the file itself, changed through the
+    // upload routes; only a redirect has a target to edit here.
+    let target_url = match &go_url.url_type {
+        GoUrlType::Redirect { target_url } => target_url.clone(),
+        GoUrlType::TrackedFile { .. } => {
+            return Ok(poem::Response::builder()
+                .status(poem::http::StatusCode::BAD_REQUEST)
+                .content_type("text/html")
+                .body(
+                    r#"<div class="text-red-600">Only redirects have an editable target</div>"#,
+                ));
+        }
+    };
+
+    let rendered = if editing {
+        GoUrlEditRow {
+            slug: go_url.slug.clone(),
+            target_url,
+        }
+        .render_once()
+    } else {
+        let with_file_info = GoUrlWithFileInfo {
+            slug: go_url.slug.clone(),
+            url_type: go_url.url_type.clone(),
+            file_info: None,
+        };
+        GoUrlRow {
+            go_url: &with_file_info,
+            oob: false,
+            oob_swap: String::new(),
+        }
+        .render_once()
+    };
+
+    let rendered = rendered.map_err(|e| {
+        tracing::error!("Failed to render go URL row: {}", e);
+        poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+
+    Ok(poem::Response::builder()
+        .status(poem::http::StatusCode::OK)
+        .content_type("text/html")
+        .body(rendered))
+}
+
+#[handler]
+async fn files_links_edit_go_url_form(
+    Path(slug): Path<String>,
+) -> Result<poem::Response, poem::Error> {
+    go_url_row_response(&slug, true).await
+}
+
+#[handler]
+async fn files_links_cancel_edit_go_url(
+    Path(slug): Path<String>,
+) -> Result<poem::Response, poem::Error> {
+    go_url_row_response(&slug, false).await
+}
+
+#[handler]
+async fn files_links_update_go_url(
+    Path(slug): Path<String>,
+    Form(request): Form<UpdateRedirectRequest>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, poem::Error> {
+    let target_url = request.target_url.trim();
+    if !GoUrl::is_valid_target(target_url) {
+        return Ok(poem::Response::builder()
+            .status(poem::http::StatusCode::BAD_REQUEST)
+            .content_type("text/html")
+            .body(INVALID_TARGET_MESSAGE));
+    }
+
+    // Load rather than rebuild: the record carries state-machine and session
+    // fields synced from orrery that this form does not show, and constructing
+    // a fresh one would silently discard them. The slug is the database key, so
+    // it stays put --- renaming is a delete and a create.
+    let mut go_url = match GoUrl::load(slug.clone()).await {
+        Ok(go_url) => go_url,
+        Err(e) => {
+            tracing::error!("Failed to load go URL {}: {}", slug, e);
+            return Ok(poem::Response::builder()
+                .status(poem::http::StatusCode::NOT_FOUND)
+                .content_type("text/html")
+                .body(r#"<div class="text-red-600">Go URL not found</div>"#));
+        }
+    };
+
+    if !matches!(go_url.url_type, GoUrlType::Redirect { .. }) {
+        return Ok(poem::Response::builder()
+            .status(poem::http::StatusCode::BAD_REQUEST)
+            .content_type("text/html")
+            .body(r#"<div class="text-red-600">Only redirects have an editable target</div>"#));
+    }
+
+    go_url.url_type = GoUrlType::Redirect {
+        target_url: target_url.to_string(),
+    };
+
+    if let Err(e) = go_url.store().await {
+        tracing::error!("Failed to update go URL {}: {}", slug, e);
+        return Ok(poem::Response::builder()
+            .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+            .content_type("text/html")
+            .body(r#"<div class="text-red-600">Failed to update go URL</div>"#));
+    }
+
+    if let Some(user_info) = &user_info {
+        let _ = common::service::log_activity(
+            None,
+            "gourl-edit",
+            user_info.user_id,
+            None,
+            Some(slug.clone()),
+        )
+        .await;
+    }
+
+    go_url_row_response(&slug, false).await
 }
 
 #[handler]
@@ -522,7 +687,12 @@ pub fn routes() -> impl Endpoint {
     Route::new()
         .at("/", get(files_links).post(files_links_create_redirect))
         .at("/search", get(files_links_search))
-        .at("/:slug", delete(files_links_delete_go_url))
+        .at(
+            "/:slug",
+            delete(files_links_delete_go_url).post(files_links_update_go_url),
+        )
+        .at("/:slug/edit", get(files_links_edit_go_url_form))
+        .at("/:slug/row", get(files_links_cancel_edit_go_url))
         .at(
             "/:slug/stats",
             get(files_links_get_stats).post(files_links_post_stats),

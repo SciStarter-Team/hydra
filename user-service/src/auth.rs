@@ -4,7 +4,7 @@ use common::{
     message::email::{EmailRecipient, SendEmailRequest, SendEmailResponse, noreply_reply_to},
     message::user::{
         BasicInfo, CompleteSignup, CompleteSignupResponse, DeferSignup, DeferSignupOutcome, Login,
-        Signup, SnmProfile,
+        Signup, SnmProfile, signup_needs_protection,
     },
     service::{TriggerEvent, log_activity, request, trigger_email},
     shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower},
@@ -60,10 +60,17 @@ async fn create_account(
     let user_id_str = user_id.to_string();
     let handle = form.handle;
     let email = form.email;
-    let newsletter = form.newsletter;
     let zipcode = form.zipcode;
-    let protected = form.protected;
     let point = form.point;
+
+    // Some signup contexts identify a cohort that needs protecting. The rule
+    // lives here rather than in a frontend handler so that every lane —
+    // immediate, passkey, and email-completion — obeys it, and so the
+    // account is protected from the row that creates it.
+    let protected = form.protected || signup_needs_protection(&form.tags);
+
+    // A protected user is never added to a mailing list.
+    let newsletter = form.newsletter && !protected;
 
     let mut tx = db().begin().await?;
 

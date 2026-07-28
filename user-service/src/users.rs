@@ -4,16 +4,17 @@ use common::{
     badge::Badge,
     message::user::{
         AdminPasswordResetRequest, AdminPasswordResetResponse, BadgeHolderInfo,
-        BadgeHoldersRequest, BadgeHoldersResponse, BasicInfo, PageManagerSyncRequest,
-        PageManagerSyncResponse, PageManagerUpdateRequest, PageManagerUpdateResponse, UserAndBadge,
-        UserBadge, UserDetails, UserDetailsBatchGetRequest, UserDetailsBatchGetResponse,
-        UserDetailsCreateRequest, UserDetailsDeleteRequest, UserDetailsDeleteResponse,
-        UserDetailsExportRequest, UserDetailsExportResponse, UserDetailsGetRequest,
-        UserDetailsListRequest, UserDetailsListResponse, UserDetailsResponse,
-        UserDetailsSearchRequest, UserDetailsUpdateRequest, UserDisplayInfo,
-        UserDisplayInfoBatchRequest, UserDisplayInfoBatchResponse, UserEmail, UserEmailAddRequest,
-        UserEmailDeleteRequest, UserEmailInfo, UserEmailInfoRequest, UserEmailResponse,
-        UserEmailToggleVerifiedRequest, UserEmailUpdateRequest, UserNameMapping,
+        BadgeHoldersRequest, BadgeHoldersResponse, BasicInfo, PRIVATE_DISPLAY_NAME,
+        PageManagerSyncRequest, PageManagerSyncResponse, PageManagerUpdateRequest,
+        PageManagerUpdateResponse, UserAndBadge, UserBadge, UserDetails,
+        UserDetailsBatchGetRequest, UserDetailsBatchGetResponse, UserDetailsCreateRequest,
+        UserDetailsDeleteRequest, UserDetailsDeleteResponse, UserDetailsExportRequest,
+        UserDetailsExportResponse, UserDetailsGetRequest, UserDetailsListRequest,
+        UserDetailsListResponse, UserDetailsResponse, UserDetailsSearchRequest,
+        UserDetailsUpdateRequest, UserDisplayInfo, UserDisplayInfoBatchRequest,
+        UserDisplayInfoBatchResponse, UserEmail, UserEmailAddRequest, UserEmailDeleteRequest,
+        UserEmailInfo, UserEmailInfoRequest, UserEmailResponse, UserEmailToggleVerifiedRequest,
+        UserEmailUpdateRequest, UserNameMapping,
     },
     service::{decode_structured_message, log_activity, send},
     shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower},
@@ -1190,9 +1191,11 @@ pub async fn user_display_info_batch(req: &Request) -> Result<UserDisplayInfoBat
         return Ok(UserDisplayInfoBatchResponse { users: Vec::new() });
     }
 
-    // Build query to get user display info by IDs
+    // Build query to get user display info by IDs. `public` and `protected`
+    // come along because this info is always destined for somebody else's
+    // screen, and a private user must not be named or pictured there.
     let mut query_builder = sqlx::QueryBuilder::new(
-        r#"SELECT "user_id", "handle", "image" FROM "users" WHERE "user_id" IN ("#,
+        r#"SELECT "user_id", "handle", "image", "public", "protected" FROM "users" WHERE "user_id" IN ("#,
     );
     let mut separated = query_builder.separated(", ");
     for user_id in &request.user_ids {
@@ -1201,21 +1204,27 @@ pub async fn user_display_info_batch(req: &Request) -> Result<UserDisplayInfoBat
     separated.push_unseparated(")");
 
     let rows = query_builder
-        .build_query_as::<(String, String, String)>()
+        .build_query_as::<(String, String, String, bool, bool)>()
         .fetch_all(db())
         .await?;
 
     let users: Result<Vec<UserDisplayInfo>, Error> = rows
         .into_iter()
         .map(
-            |(user_id_str, handle, image)| -> Result<UserDisplayInfo, Error> {
+            |(user_id_str, handle, image, public, protected)| -> Result<UserDisplayInfo, Error> {
                 let user_id = user_id_str
                     .as_ulid()
                     .map_err(|e| anyhow::anyhow!("Invalid user ID in database: {}", e))?;
+                let private = !public || protected;
                 Ok(UserDisplayInfo {
                     user_id,
-                    handle,
-                    image,
+                    handle: if private {
+                        PRIVATE_DISPLAY_NAME.to_string()
+                    } else {
+                        handle
+                    },
+                    image: if private { String::new() } else { image },
+                    private,
                 })
             },
         )

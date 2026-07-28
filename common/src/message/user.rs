@@ -155,6 +155,34 @@ impl UserInfo for Unauthenticated {
     }
 }
 
+/// What a private user is called wherever their identity would otherwise
+/// appear. Every surface that names a user to somebody else must render a
+/// private user as this, never as their handle: handles are frequently
+/// district usernames or real names.
+pub const PRIVATE_DISPLAY_NAME: &str = "Private";
+
+/// Why a protected user's message is refused, in the words shown to them.
+/// Shared so the frontend can say it before the send and forum-service can
+/// say it while refusing one that arrives anyway.
+pub const PROTECTED_SENDER_REFUSAL: &str = "As a side effect of protecting your privacy, it is impossible for you to send messages via SciStarter.";
+
+/// Signup-context tags (from a `?tag=` parameter, carried in the session)
+/// that mark the account being created as one whose owner needs protection
+/// — a cohort signing up through a partner that enrolls minors. Kept in
+/// step with orrery's `PROTECTED_SIGNUP_TAGS`.
+pub const PROTECTED_SIGNUP_TAGS: [&str; 2] = ["laplstudent", "girlscout"];
+
+/// Whether an account signing up under `tags` must be protected. Matched
+/// without regard to case: the tag reaches us from URLs typed by partners,
+/// and only some of the paths it travels lowercase it on the way.
+pub fn signup_needs_protection<S: AsRef<str>>(tags: &[S]) -> bool {
+    tags.iter().any(|tag| {
+        PROTECTED_SIGNUP_TAGS
+            .iter()
+            .any(|protected| tag.as_ref().trim().eq_ignore_ascii_case(protected))
+    })
+}
+
 impl BasicInfo {
     pub fn is_private(&self) -> bool {
         !self.public || self.protected
@@ -162,12 +190,24 @@ impl BasicInfo {
 
     pub fn display_handle(&self) -> &str {
         if self.is_private() {
-            "Private"
+            PRIVATE_DISPLAY_NAME
         } else if self.handle.trim().is_empty() {
             "Nemo" // Maybe this should just be "No Handle", "Nemo" is kind of quirky
         } else {
             &self.handle
         }
+    }
+
+    /// Whether this user may originate a message. A protected user may not:
+    /// the message would name them to whoever receives it, which is the one
+    /// thing their protection exists to prevent. Merely non-public users are
+    /// unaffected — they chose a quiet profile, not anonymity.
+    ///
+    /// orrery allows protected users one exception, writing to the
+    /// administrator or manager of an edtech group they belong to; hydra has
+    /// no group membership to hang that exception on, so it refuses outright.
+    pub fn may_send_messages(&self) -> bool {
+        !self.protected
     }
 }
 
@@ -902,11 +942,17 @@ pub struct UserDisplayInfoRequest {
     pub user_id: Ulid,
 }
 
+/// Display identity for a user who is being shown to somebody else. The
+/// producer has already redacted `handle` and `image` for a private user,
+/// so these fields are always safe to render; `private` is there so a
+/// caller can go further and withhold the content itself, the way public
+/// reviews do.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct UserDisplayInfo {
     pub user_id: Ulid,
     pub handle: String,
     pub image: String,
+    pub private: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -1666,4 +1712,74 @@ pub struct UserLegacyIdLookupRequest {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct UserLegacyIdLookupResponse {
     pub user_id: Option<Ulid>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn basic_info(public: bool, protected: bool) -> BasicInfo {
+        BasicInfo {
+            user_id: Ulid::nil(),
+            handle: "ada-district-1234".to_string(),
+            is_staff: false,
+            is_superuser: false,
+            public,
+            protected,
+            needs_point: false,
+        }
+    }
+
+    #[test]
+    fn a_protected_user_is_never_named_to_anybody() {
+        let protected = basic_info(true, true);
+
+        assert!(protected.is_private());
+        assert_eq!(protected.display_handle(), PRIVATE_DISPLAY_NAME);
+    }
+
+    #[test]
+    fn a_quiet_profile_is_also_unnamed() {
+        assert_eq!(
+            basic_info(false, false).display_handle(),
+            PRIVATE_DISPLAY_NAME
+        );
+    }
+
+    #[test]
+    fn a_public_user_is_named_by_their_handle() {
+        let public = basic_info(true, false);
+
+        assert!(!public.is_private());
+        assert_eq!(public.display_handle(), "ada-district-1234");
+    }
+
+    #[test]
+    fn the_protecting_signup_tags_are_recognized() {
+        assert!(signup_needs_protection(&["girlscout".to_string()]));
+        assert!(signup_needs_protection(&["laplstudent".to_string()]));
+        // The tag arrives from partner-authored URLs, in whatever case they
+        // wrote it, and only some paths lowercase it on the way here.
+        assert!(signup_needs_protection(&["LAPLstudent".to_string()]));
+        assert!(signup_needs_protection(&[" GirlScout ".to_string()]));
+        assert!(signup_needs_protection(&[
+            "some-partner".to_string(),
+            "girlscout".to_string(),
+        ]));
+    }
+
+    #[test]
+    fn an_ordinary_signup_is_not_protected() {
+        assert!(!signup_needs_protection(&["some-partner".to_string()]));
+        assert!(!signup_needs_protection(&["girlscouts".to_string()]));
+        assert!(!signup_needs_protection::<String>(&[]));
+    }
+
+    #[test]
+    fn only_protection_bars_sending() {
+        assert!(!basic_info(true, true).may_send_messages());
+        assert!(!basic_info(false, true).may_send_messages());
+        assert!(basic_info(false, false).may_send_messages());
+        assert!(basic_info(true, false).may_send_messages());
+    }
 }

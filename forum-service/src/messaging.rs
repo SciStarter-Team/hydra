@@ -2,7 +2,12 @@ use anyhow::Result;
 use async_nats::service::Request;
 use common::timestring::TimeString;
 use common::{
-    message::{dashboard::EntitySummary, email::EmailRecipient, forum::*, user::BasicInfo},
+    message::{
+        dashboard::EntitySummary,
+        email::EmailRecipient,
+        forum::*,
+        user::{BasicInfo, PROTECTED_SENDER_REFUSAL},
+    },
     service::request as nats_request,
     service::send_email,
     shared::db,
@@ -22,10 +27,10 @@ fn escape_html(s: &str) -> String {
 /// message (a send or a reply); the message is not delivered to its recipient
 /// until staff approve it. Best-effort — a failure is logged, not fatal.
 async fn notify_reviewers(subject: &str, body: &str, sender_id: &str, recipient_id: &str) {
-    let sender = resolve_participant_name(sender_id)
+    let sender = resolve_participant_name(sender_id, NameAudience::Staff)
         .await
         .unwrap_or_else(|| sender_id.to_string());
-    let recipient = resolve_participant_name(recipient_id)
+    let recipient = resolve_participant_name(recipient_id, NameAudience::Staff)
         .await
         .unwrap_or_else(|| recipient_id.to_string());
 
@@ -57,7 +62,7 @@ async fn notify_reviewers(subject: &str, body: &str, sender_id: &str, recipient_
 /// Like `notify_reviewers`, but for a bulk send: one email covering the whole
 /// batch (all `recipient_count` copies) rather than one per recipient.
 async fn notify_reviewers_batch(subject: &str, body: &str, sender_id: &str, recipient_count: i64) {
-    let sender = resolve_participant_name(sender_id)
+    let sender = resolve_participant_name(sender_id, NameAudience::Staff)
         .await
         .unwrap_or_else(|| sender_id.to_string());
 
@@ -87,15 +92,28 @@ async fn notify_reviewers_batch(subject: &str, body: &str, sender_id: &str, reci
     }
 }
 
+/// Who is going to read a resolved participant name. The other party to a
+/// conversation sees a private user as the private placeholder; the staff
+/// review queue sees the real handle, because a moderator cannot judge a
+/// message from an anonymous sender.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum NameAudience {
+    Correspondent,
+    Staff,
+}
+
 /// Resolve a conversation participant ULID (as a string) to a display
 /// name. A participant may be a user (resolved via user-service) or a
 /// project/event (resolved via the frontend's entity endpoint), since
 /// projects and events are addressable message recipients just like
 /// users. Returns `None` only when the ULID is neither — an orphan
 /// (deleted account, or bogus id) that callers drop.
-async fn resolve_participant_name(id_str: &str) -> Option<String> {
+async fn resolve_participant_name(id_str: &str, audience: NameAudience) -> Option<String> {
     if let Ok(info) = nats_request::<BasicInfo>("user.basic_info.by_user_id", id_str).await {
-        return Some(info.handle);
+        return Some(match audience {
+            NameAudience::Correspondent => info.display_handle().to_string(),
+            NameAudience::Staff => info.handle,
+        });
     }
 
     if let Ok(Some(entity)) =
@@ -105,6 +123,21 @@ async fn resolve_participant_name(id_str: &str) -> Option<String> {
     }
 
     None
+}
+
+/// Refuse to originate a message from a protected user, wherever the send
+/// came from. A project or event sending to its participants is not a user
+/// at all, so the lookup fails and the send proceeds — the same reading
+/// orrery gives an entity sender.
+async fn check_sender_may_send(from_id: Ulid) -> Result<()> {
+    if let Ok(info) =
+        nats_request::<BasicInfo>("user.basic_info.by_user_id", from_id.to_string()).await
+        && !info.may_send_messages()
+    {
+        return Err(anyhow::anyhow!(PROTECTED_SENDER_REFUSAL));
+    }
+
+    Ok(())
 }
 
 async fn ensure_personal_forum(user_id: Ulid) -> Result<()> {
@@ -215,6 +248,8 @@ async fn create_conversation(
 pub async fn send_message(req: &Request) -> Result<SendMessageResponse> {
     let msg: SendMessage = flexbuffers::from_slice(&req.message.payload)?;
 
+    check_sender_may_send(msg.from_user_id).await?;
+
     // Pre-approved messages (trusted, entity-authored) are delivered at once;
     // everything else is held pending for staff review.
     let approved = if msg.pre_approved { 1 } else { 0 };
@@ -253,6 +288,8 @@ pub async fn send_message(req: &Request) -> Result<SendMessageResponse> {
 pub async fn send_bulk(req: &Request) -> Result<SendBulkResponse> {
     let msg: SendBulkMessage = flexbuffers::from_slice(&req.message.payload)?;
 
+    check_sender_may_send(msg.from_id).await?;
+
     let batch = Ulid::new();
     let batch_str = batch.to_string();
     let approved = if msg.pre_approved { 1 } else { 0 };
@@ -285,6 +322,10 @@ pub async fn send_bulk(req: &Request) -> Result<SendBulkResponse> {
 
 pub async fn reply_to_message(req: &Request) -> Result<ReplyToMessageResponse> {
     let msg: ReplyToMessage = flexbuffers::from_slice(&req.message.payload)?;
+
+    // A reply is a message too: being written to does not lift the bar on
+    // writing back.
+    check_sender_may_send(msg.user_id).await?;
 
     let post_id = Ulid::new();
     let now = TimeString::now();
@@ -493,7 +534,8 @@ pub async fn inbox(req: &Request) -> Result<InboxResponse> {
         // participant as a user or an entity (deleted account, or bogus
         // author_id left over from spam before the gating fixes) there's
         // nothing useful to show.
-        let Some(other_participant_name) = resolve_participant_name(&other_user_id_str).await
+        let Some(other_participant_name) =
+            resolve_participant_name(&other_user_id_str, NameAudience::Correspondent).await
         else {
             continue;
         };
@@ -614,7 +656,9 @@ pub async fn unread_count(req: &Request) -> Result<UnreadCountResponse> {
     let mut resolved: HashMap<String, bool> = HashMap::new();
     for id in &other_ids {
         // A valid correspondent is either a user or an entity (project/event).
-        let ok = resolve_participant_name(id).await.is_some();
+        let ok = resolve_participant_name(id, NameAudience::Correspondent)
+            .await
+            .is_some();
         resolved.insert(id.clone(), ok);
     }
 
@@ -711,10 +755,10 @@ pub async fn pending_list(_req: &Request) -> Result<Vec<ReviewMessageRow>> {
         } else {
             row.topic_author.clone()
         };
-        let sender = resolve_participant_name(&row.author_id)
+        let sender = resolve_participant_name(&row.author_id, NameAudience::Staff)
             .await
             .unwrap_or_else(|| row.author_id.clone());
-        let recipient = resolve_participant_name(&recipient_id)
+        let recipient = resolve_participant_name(&recipient_id, NameAudience::Staff)
             .await
             .unwrap_or_else(|| recipient_id.clone());
         let when = TimeString::try_from(row.created_at.clone())

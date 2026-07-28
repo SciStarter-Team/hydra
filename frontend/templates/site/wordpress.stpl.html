@@ -13,6 +13,35 @@
 
 <div class="<%= self.container_class %>"><%- self.content %></div>
 
+<%#
+  WordPress stylesheets contain rules rooted at the body --- Stackable gates a
+  whole block of layout on `body.stk--anim-init`, a class its own script adds on
+  the first frame. Because `body` selectors are retargeted onto the container,
+  those rules look for the class *there*, while the script puts it where it
+  always has: on the real body. So whatever the carried scripts add to the body
+  is mirrored across.
+
+  Only additions are copied, measured against a snapshot taken before those
+  scripts run, so this site's own body classes stay out of the container.
+%>
+<script>
+(function() {
+  var container = document.querySelector('.<%= self.isolation_class %>');
+  if (!container) return;
+  var ours = new Set(document.body.classList);
+  function mirror() {
+    document.body.classList.forEach(function(name) {
+      if (!ours.has(name)) container.classList.add(name);
+    });
+  }
+  mirror();
+  new MutationObserver(mirror).observe(document.body, {
+    attributes: true,
+    attributeFilter: ['class'],
+  });
+})();
+</script>
+
 <% for script in &self.scripts { %>
     <% if let Some(src) = &script.src { %>
 <script src="<%= src %>"<% if script.is_module { %> type="module"<% } %><% if script.is_async { %> async<% } %><% if script.is_defer { %> defer<% } %>></script>
