@@ -8,7 +8,7 @@ use ulid::Ulid;
 
 use crate::builder::{
     context::{Context, ContextMode},
-    render::render,
+    render::{CompiledTemplate, render},
 };
 use crate::peering::LoadStorePeered;
 
@@ -135,10 +135,12 @@ pub async fn compose_component_into_slot(
     params: &[(String, String)],
     db: &'static sqlx::SqlitePool,
 ) -> Result<String, Error> {
+    let params = with_declared_defaults(component, params);
+
     // Render the component in place with its params bound. `{$^ slot $}`
     // slots survive this render as real page slots for later composition.
     let ctx = Context::new(db, &None, ContextMode::Presenting)?;
-    for (key, value) in params {
+    for (key, value) in &params {
         ctx.bind_string(key, value)?;
     }
     let body = render(&ctx, &component.source).await?;
@@ -149,7 +151,7 @@ pub async fn compose_component_into_slot(
         .find(|s| s.path == slot_path)
         .ok_or_else(|| slot_not_found(slot_path, &slots))?;
 
-    let new_tag = build_slot_tag(&target.name, Some(&component.component_id), params);
+    let new_tag = build_slot_tag(&target.name, Some(&component.component_id), &params);
     let mut result = String::with_capacity(page_source.len() + body.len());
     result.push_str(&page_source[..target.start]);
     result.push_str(&new_tag);
@@ -157,6 +159,31 @@ pub async fn compose_component_into_slot(
     result.push_str("{$ /slot $}");
     result.push_str(&page_source[target.end..]);
     Ok(result)
+}
+
+/// Fill in the params a caller left out with the defaults the component's own
+/// template declares, so a placement records the same complete set of values no
+/// matter which caller made it.
+fn with_declared_defaults(
+    component: &PageBuilderComponent,
+    params: &[(String, String)],
+) -> Vec<(String, String)> {
+    let mut params = params.to_vec();
+
+    let Ok(compiled) = CompiledTemplate::compile(&component.source) else {
+        return params;
+    };
+
+    for def in compiled.extract_params() {
+        if params.iter().any(|(name, _)| *name == def.name) {
+            continue;
+        }
+        if let Some(default) = def.default {
+            params.push((def.name, default.to_string()));
+        }
+    }
+
+    params
 }
 
 /// Remove a component from a slot, leaving it empty

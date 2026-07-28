@@ -1,54 +1,22 @@
-<div class="ss-container !pt-8 !pb-8 mx-auto">
-    <article class="wordpress-content-wrapper">
-        <!-- WordPress content will be moved into shadow DOM -->
-        <div id="wordpress-shadow-host"></div>
+<%#
+  The WordPress content is rendered into the ordinary document rather than a
+  shadow root or an iframe, so that it is indexable and so that the block
+  plugins' scripts can find their own markup with `document.querySelectorAll`.
 
-        <!-- Template content (hidden until moved to shadow DOM) -->
-        <template id="wordpress-content-template">
-            <% for stylesheet in &self.stylesheets { %>
-            <link rel="stylesheet" href="<%= stylesheet %>" />
-            <% } %>
-            <% for inline_style in &self.inline_styles { %>
-            <style><%- inline_style %></style>
-            <% } %>
-            <div class="wordpress-content">
-                <%- self.content %>
-            </div>
-        </template>
-    </article>
-</div>
+  Isolation comes from the CSS instead: everything below is confined to
+  `.wordpress-content` by an `@scope` block inside the `wordpress` cascade
+  layer, which is declared after the `hydra` layer in static/css/style.css.
+  Nothing here may add a class of ours to the container --- a rule of ours that
+  matched an ancestor could still inherit into it.
+%>
+<style><%- self.css %></style>
 
-<script>
-(function() {
-    const host = document.getElementById('wordpress-shadow-host');
-    const template = document.getElementById('wordpress-content-template');
+<div class="<%= self.container_class %>"><%- self.content %></div>
 
-    if (host && template) {
-        // Create shadow root
-        const shadowRoot = host.attachShadow({ mode: 'open' });
-
-        // Clone and append template content to shadow DOM
-        const content = template.content.cloneNode(true);
-        shadowRoot.appendChild(content);
-
-        // Log for debugging
-        const links = shadowRoot.querySelectorAll('link[rel="stylesheet"]');
-        const styles = shadowRoot.querySelectorAll('style');
-        console.log('WordPress Shadow DOM created with', links.length, 'stylesheets and', styles.length, 'inline styles');
-
-        // Wait for stylesheets to load
-        let loadedCount = 0;
-        links.forEach(link => {
-            link.addEventListener('load', () => {
-                loadedCount++;
-                console.log('Loaded stylesheet', loadedCount, 'of', links.length, ':', link.href);
-            });
-            link.addEventListener('error', (e) => {
-                console.error('Failed to load stylesheet:', link.href, e);
-            });
-        });
-    } else {
-        console.error('WordPress Shadow DOM host or template not found');
-    }
-})();
-</script>
+<% for script in &self.scripts { %>
+    <% if let Some(src) = &script.src { %>
+<script src="<%= src %>"<% if script.is_module { %> type="module"<% } %><% if script.is_async { %> async<% } %><% if script.is_defer { %> defer<% } %>></script>
+    <% } else { %>
+<script<% if script.is_module { %> type="module"<% } %>><%- script.body %></script>
+    <% } %>
+<% } %>

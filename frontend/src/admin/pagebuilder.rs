@@ -925,7 +925,7 @@ async fn pb_slot_insert(
     poem::web::Form(data): poem::web::Form<PbSlotInsertData>,
 ) -> Result<poem::Response, anyhow::Error> {
     use crate::builder::context::{Context, ContextMode};
-    use crate::builder::render::{CompiledTemplate, render};
+    use crate::builder::render::render;
     use crate::peering::LoadStorePeered;
 
     let _user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
@@ -936,24 +936,13 @@ async fn pb_slot_insert(
     let mut page = crate::pagebuilder::PageBuilderPage::load(page_id).await?;
     let component = crate::pagebuilder::PageBuilderComponent::load(component_id).await?;
 
-    // Extract default param values from the component template
-    let default_params: Vec<(String, String)> =
-        if let Ok(compiled) = CompiledTemplate::compile(&component.source) {
-            compiled
-                .extract_params()
-                .into_iter()
-                .filter_map(|p| p.default.map(|v| (p.name, v.to_string())))
-                .collect()
-        } else {
-            vec![]
-        };
-
-    // Insert the component into the slot with default params
+    // A fresh placement supplies no params of its own, so the insertion fills
+    // every one of them in from the component's declared defaults.
     let new_source = crate::pagebuilder::source::insert_component_into_slot(
         &page.source,
         &slot_name,
         &component,
-        &default_params,
+        &[],
         common::shared::db(),
     )
     .await?;

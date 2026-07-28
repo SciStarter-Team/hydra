@@ -112,7 +112,7 @@ impl NewsItem {
     pub async fn render(&self) -> Result<RenderedNewsItem, Error> {
         match self.source_type {
             NewsItemSource::WordPress => {
-                let wp = crate::wordpress::fetch_page_with_styles(&self.content).await?;
+                let wp = crate::wordpress::fetch_page(&self.content).await?;
                 Ok(RenderedNewsItem {
                     news_id: self.news_id,
                     title: if self.title.is_empty() {

@@ -1,4 +1,5 @@
-@custom-variant project-completed (&:is(:where(.ss-project-card.completed) *, .ss-project-card.completed));
+/* The `project-completed` variant this file uses is registered in style.css:
+   `@custom-variant` cannot be nested, and this file is imported into a layer. */
 
 /** TAGS **/
 .ss-pc-tag {

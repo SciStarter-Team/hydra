@@ -1,5 +1,21 @@
-@import "tailwindcss";
+/*
+  Every rule the site owns lives in the `hydra` layer, so that embedded
+  third-party content can be given a later layer whose rules win no matter how
+  specific ours are. Nothing here may be left unlayered: unlayered author rules
+  beat every layer, which would defeat the isolation. See
+  `templates/site/wordpress.stpl.html` for the `wordpress` layer's use.
+*/
+@layer hydra, wordpress;
+
+@import "tailwindcss" layer(hydra);
+
+/* Emits custom property definitions rather than cascading rules, and `@theme`
+   cannot be nested, so this one stays outside the layer. */
 @import "./theme.css";
+
+/* `@custom-variant` registers a build-time variant and cannot be nested inside
+   a layer, so variants declared by layered stylesheets are hoisted here. */
+@custom-variant project-completed (&:is(:where(.ss-project-card.completed) *, .ss-project-card.completed));
 
 /* Classes generated dynamically (e.g., by rich text editor) */
 @source "./safelist.txt";
@@ -15,70 +31,58 @@
   If we ever want to remove these styles, we need to add an explicit border
   color utility to any element that depends on these defaults.
 */
-@layer base {
+@import "./elements/tailwind-v3-compat.css" layer(hydra);
 
-  input[type=text],textarea {
-    background-color: #fff;
-  }
-
-  *,
-  ::after,
-  ::before,
-  ::backdrop,
-  ::file-selector-button {
-    border-color: var(--color-neutral-dark, currentcolor);
-  }
-}
 
 /** Load Elements **/
-@import "./elements/typography.css";
-@import "./elements/btn.css";
-@import "./elements/form-elements.css";
+@import "./elements/typography.css" layer(hydra);
+@import "./elements/btn.css" layer(hydra);
+@import "./elements/form-elements.css" layer(hydra);
 
 
 /** Load Components **/
-@import "./components/mega-menu-accessible.css";
+@import "./components/mega-menu-accessible.css" layer(hydra);
 /* @import "./components/mega-menu.css"; */
-@import "./components/logged-in-nav.css";
-@import "./components/accordion.css";
-@import "./components/ribbons.css";
-@import "./components/glide.core.css";
-@import "./components/like-btn.css";
-@import "./components/project-actions.css";
-@import "./components/tabs.css";
-@import "./components/multiselect.css";
-@import "./components/self-tooltip.css";
-@import "./components/tags.css";
-@import "./components/breadcrumbs.css";
-@import "./components/dialog.css";
-@import "./components/project-card.css";
-@import "./components/event-card.css";
-@import "./components/media-object.css";
-@import "./components/feature-card.css";
-@import "./components/cta.css";
-@import "./components/alert.css";
-@import "./components/add-form.css";
+@import "./components/logged-in-nav.css" layer(hydra);
+@import "./components/accordion.css" layer(hydra);
+@import "./components/ribbons.css" layer(hydra);
+@import "./components/glide.core.css" layer(hydra);
+@import "./components/like-btn.css" layer(hydra);
+@import "./components/project-actions.css" layer(hydra);
+@import "./components/tabs.css" layer(hydra);
+@import "./components/multiselect.css" layer(hydra);
+@import "./components/self-tooltip.css" layer(hydra);
+@import "./components/tags.css" layer(hydra);
+@import "./components/breadcrumbs.css" layer(hydra);
+@import "./components/dialog.css" layer(hydra);
+@import "./components/project-card.css" layer(hydra);
+@import "./components/event-card.css" layer(hydra);
+@import "./components/media-object.css" layer(hydra);
+@import "./components/feature-card.css" layer(hydra);
+@import "./components/cta.css" layer(hydra);
+@import "./components/alert.css" layer(hydra);
+@import "./components/add-form.css" layer(hydra);
 
-@import "./components/flip.css";
-@import "./components/dashboard.css";
-@import "./components/concierge.css";
-@import "./components/web-awesome-overrides.css";
+@import "./components/flip.css" layer(hydra);
+@import "./components/dashboard.css" layer(hydra);
+@import "./components/concierge.css" layer(hydra);
+@import "./components/web-awesome-overrides.css" layer(hydra);
 
 
 /** Load Templates (page patterns) **/
-@import "./pages/communities.css";
-@import "./pages/organization.css";
-@import "./pages/csm.css";
-@import "./pages/project.css";
-@import "./pages/api.css";
+@import "./pages/communities.css" layer(hydra);
+@import "./pages/organization.css" layer(hydra);
+@import "./pages/csm.css" layer(hydra);
+@import "./pages/project.css" layer(hydra);
+@import "./pages/api.css" layer(hydra);
 
 
 /** Load Page Specific **/
  /* @import "./components/home.css"; */
- @import "./components/home-3.css";
+ @import "./components/home-3.css" layer(hydra);
 
 
-@import "./main.css";
+@import "./main.css" layer(hydra);
 
 
 @custom-variant dark (&:is(.dark *));
