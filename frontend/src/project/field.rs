@@ -7,7 +7,8 @@ use ulid::Ulid;
 use crate::{contact::Contact, participant_file::ParticipantFile, peering::LoadStorePeered};
 
 use super::{
-    ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus, field_source::FieldSource,
+    ProjectParticipationDegree, ProjectPromotionTime, ProjectRejectionReason, ProjectStatus,
+    field_source::FieldSource,
 };
 
 // Vocabulary constants for controlled fields
@@ -262,6 +263,9 @@ pub enum ProjectFieldValue {
     ScistarterLastEditor(Option<Ulid>),
     ScistarterLastEdited(Option<TimeString>),
     Reviewed(bool),
+    /// Why a reviewer declined to publish this project. Selecting a reason
+    /// emails the submitter; see `admin::projects::notify_rejection`.
+    RejectionReason(ProjectRejectionReason),
     Draft(bool),
     Name(String),
     Tags(HashSet<InsensitiveString>),
@@ -541,6 +545,7 @@ impl ProjectField {
             ProjectFieldValue::ScistarterLastEditor(_) => ProjectFieldType::ScistarterLastEditor,
             ProjectFieldValue::ScistarterLastEdited(_) => ProjectFieldType::ScistarterLastEdited,
             ProjectFieldValue::Reviewed(_) => ProjectFieldType::Reviewed,
+            ProjectFieldValue::RejectionReason(_) => ProjectFieldType::RejectionReason,
             ProjectFieldValue::Draft(_) => ProjectFieldType::Draft,
             ProjectFieldValue::Name(_) => ProjectFieldType::Name,
             ProjectFieldValue::Tags(_) => ProjectFieldType::Tags,
@@ -1822,6 +1827,21 @@ impl ProjectField {
         Ok(ProjectField::new(
             project_id,
             ProjectFieldValue::Reviewed(reviewed),
+        ))
+    }
+
+    async fn read_rejection_reason(project_id: Ulid) -> Result<Self, Error> {
+        let project_id_str = project_id.to_string();
+        let reason = sqlx::query_scalar!(
+            r#"SELECT rejection_reason as "rejection_reason: ProjectRejectionReason"
+               FROM projects WHERE project_id = ?"#,
+            project_id_str
+        )
+        .fetch_one(db())
+        .await?;
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::RejectionReason(reason),
         ))
     }
 
@@ -3144,6 +3164,18 @@ impl ProjectField {
         Ok(())
     }
 
+    async fn save_rejection_reason(&self, reason: ProjectRejectionReason) -> Result<(), Error> {
+        let project_id_str = self.project_id.to_string();
+        sqlx::query!(
+            "UPDATE projects SET rejection_reason = ? WHERE project_id = ?",
+            reason,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
+        Ok(())
+    }
+
     async fn save_participant_instructions_email(
         &self,
         participant_instructions_email: &str,
@@ -3959,6 +3991,7 @@ impl LoadStorePeered for ProjectField {
             }
             ProjectFieldValue::Extra(extra) => self.save_extra(extra).await,
             ProjectFieldValue::Reviewed(reviewed) => self.save_reviewed(*reviewed).await,
+            ProjectFieldValue::RejectionReason(reason) => self.save_rejection_reason(*reason).await,
             ProjectFieldValue::ParticipantInstructionsEmail(participant_instructions_email) => {
                 self.save_participant_instructions_email(participant_instructions_email)
                     .await
@@ -4219,6 +4252,7 @@ impl LoadStorePeered for ProjectField {
             ProjectFieldType::PageCreatorId => Self::read_page_creator_id(project_id).await,
             ProjectFieldType::Extra => Self::read_extra(project_id).await,
             ProjectFieldType::Reviewed => Self::read_reviewed(project_id).await,
+            ProjectFieldType::RejectionReason => Self::read_rejection_reason(project_id).await,
             ProjectFieldType::ParticipantInstructionsEmail => {
                 Self::read_participant_instructions_email(project_id).await
             }

@@ -5,6 +5,7 @@ use crate::local_time::{TimeFormat, local_time};
 use crate::middleware::authorization::Authenticated;
 use crate::participant_file::ParticipantFile;
 use crate::peering::LoadStorePeered;
+use crate::project::ProjectRejectionReason;
 use crate::project::all::ProjectAll;
 use crate::project::field::{
     ACTIVITIES_VOCABULARY, AUDIENCE_VOCABULARY, DATA_ACCESS_VOCABULARY,
@@ -296,6 +297,11 @@ pub struct AdminProjectFull {
     pub circuit_id: String,
     pub sustainable_development_goals: String,
     pub published: bool,
+    /// Form value of the reviewer's rejection reason, e.g. "science".
+    pub rejection_reason: String,
+    /// The reason the submitter has already been told about, ready to
+    /// display; empty until a notice has gone out.
+    pub rejection_notice: String,
 }
 
 impl AdminProjectFull {
@@ -311,6 +317,18 @@ impl AdminProjectFull {
         .await?
         .map(|r| r.published)
         .unwrap_or(false);
+
+        // Review state is read beside the project record rather than through
+        // ProjectAll, so that syncing a project's content can never overwrite
+        // a reviewer's decision. Same reasoning as `published` above.
+        let rejection = sqlx::query!(
+            r#"SELECT rejection_reason as "reason: ProjectRejectionReason",
+                      rejection_notified as "notified: ProjectRejectionReason"
+               FROM projects WHERE project_id = ?"#,
+            project_id_str
+        )
+        .fetch_one(db())
+        .await?;
 
         Ok(AdminProjectFull {
             id: project.project_id.to_string(),
@@ -454,6 +472,8 @@ impl AdminProjectFull {
             point: project.point,
             regions: project.regions,
             published,
+            rejection_reason: rejection.reason.form_value().to_string(),
+            rejection_notice: rejection.notified.message().to_string(),
         })
     }
 }
@@ -1467,6 +1487,61 @@ async fn projects_edit(
     Ok(edit_project_page.into_response(user_info).await?)
 }
 
+/// Tell a submitter which reason a reviewer picked, once per decision.
+///
+/// `rejection_notified` records the reason the submitter has already been
+/// told about, so re-saving an unchanged reason is silent while correcting a
+/// reason sends an updated notice. Mirrors the orrery side, which does this
+/// from `entity_post_save`.
+async fn notify_rejection(project_id: Ulid) -> Result<(), anyhow::Error> {
+    let project_id_str = project_id.to_string();
+
+    let project = sqlx::query!(
+        r#"SELECT name, page_creator_id,
+                  rejection_reason as "reason: ProjectRejectionReason",
+                  rejection_notified as "notified: ProjectRejectionReason"
+           FROM projects WHERE project_id = ?"#,
+        project_id_str
+    )
+    .fetch_one(db())
+    .await?;
+
+    if project.reason == ProjectRejectionReason::None || project.reason == project.notified {
+        return Ok(());
+    }
+
+    let Ok(creator_id) = project.page_creator_id.parse::<Ulid>() else {
+        eprintln!(
+            "Rejection notice for project {project_id_str} not sent: page_creator_id {:?} is not a user id",
+            project.page_creator_id
+        );
+        return Ok(());
+    };
+
+    trigger_email(
+        TriggerEvent::ProjectRejected,
+        creator_id,
+        Some(&[
+            ("project_name".to_string(), project.name),
+            ("project_id".to_string(), project_id_str.clone()),
+            ("submission_type".to_string(), "project".to_string()),
+            ("reason".to_string(), project.reason.message().to_string()),
+        ]),
+    )
+    .await?;
+
+    let notified = project.reason;
+    sqlx::query!(
+        "UPDATE projects SET rejection_notified = ? WHERE project_id = ?",
+        notified,
+        project_id_str
+    )
+    .execute(db())
+    .await?;
+
+    Ok(())
+}
+
 #[handler]
 async fn projects_publish(
     Path(project_id): Path<String>,
@@ -1727,6 +1802,7 @@ async fn projects_update_field(
         "authoritative" => crate::project::field::ProjectFieldType::Authoritative,
         "flagged" => crate::project::field::ProjectFieldType::Flagged,
         "reviewed" => crate::project::field::ProjectFieldType::Reviewed,
+        "rejection_reason" => crate::project::field::ProjectFieldType::RejectionReason,
         "is_test" => crate::project::field::ProjectFieldType::IsTest,
         "status" => crate::project::field::ProjectFieldType::Status,
         "promotion_time" => crate::project::field::ProjectFieldType::PromotionTime,
@@ -1967,6 +2043,11 @@ async fn projects_update_field(
                         || form_value.to_lowercase() == "on"
                 });
                 crate::project::field::ProjectFieldValue::IsTest(bool_value)
+            }
+            crate::project::field::ProjectFieldType::RejectionReason => {
+                crate::project::field::ProjectFieldValue::RejectionReason(
+                    ProjectRejectionReason::from_form_value(&form_value),
+                )
             }
             crate::project::field::ProjectFieldType::Status => {
                 let status_enum = match form_value.as_str() {
@@ -2749,6 +2830,10 @@ async fn projects_update_field(
                     format!("{:?}", field_type),
                 )
                 .await?;
+            }
+
+            if field_type_enum == ProjectFieldType::RejectionReason {
+                notify_rejection(parsed_project_id).await?;
             }
 
             // If this is from the list view (HX-Target starts with "project-row-"), return the full row

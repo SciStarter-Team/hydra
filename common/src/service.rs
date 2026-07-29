@@ -619,8 +619,9 @@ pub enum TriggerEvent {
     /// Sent when a project is submitted for review
     ProjectSubmitted,
 
-    /// Sent when a project is approved
-    ProjectApproved,
+    /// Sent when a reviewer declines to publish a project, quoting the
+    /// reason they picked
+    ProjectRejected,
 
     /// Sent when the Foundations of Citizen Science badge is earned
     BadgeFoundations,
@@ -728,7 +729,7 @@ impl TriggerEvent {
         match self {
             Self::UserWelcome => "When a new user completes signup",
             Self::ProjectSubmitted => "When a project is submitted for review",
-            Self::ProjectApproved => "When a project is approved",
+            Self::ProjectRejected => "When a project is rejected by a reviewer",
             Self::BadgeFoundations => "When the Foundations of Citizen Science badge is earned",
             Self::BadgeLibrariesHubs => {
                 "When the Libraries as Hubs for Citizen Science badge is earned"
@@ -776,7 +777,7 @@ impl TriggerEvent {
         match self {
             Self::UserWelcome | Self::EmailValidation | Self::FirstContribution => "user",
             Self::ProjectSubmitted
-            | Self::ProjectApproved
+            | Self::ProjectRejected
             | Self::ProjectPublished
             | Self::ProjectCreatedStaff => "project",
             Self::BadgeFoundations

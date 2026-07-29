@@ -228,6 +228,37 @@
         </div>
       </div>
 
+      <div class="mt-4">
+        <label for="project-rejection-reason" class="block text-sm font-medium text-gray-700">Rejection reason</label>
+        <p class="text-xs text-gray-500 mb-1">
+          Saving a reason emails the submitter that their submission was not accepted, quoting that reason.
+          Nothing else about the project changes. Correcting the reason sends an updated notice; clearing it sends nothing.
+        </p>
+        <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/rejection_reason" hx-target="this" hx-swap="none">
+          <select
+              name="value"
+              id="project-rejection-reason"
+              class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+          >
+            <option value="none"<% if self.project.rejection_reason == "none" { %> selected<% } %>>Not rejected</option>
+            <option value="participation"<% if self.project.rejection_reason == "participation" { %> selected<% } %>>The volunteer participation opportunity is missing or unclear.</option>
+            <option value="science"<% if self.project.rejection_reason == "science" { %> selected<% } %>>The scientific component is missing or unclear.</option>
+            <option value="spam"<% if self.project.rejection_reason == "spam" { %> selected<% } %>>Typos or other issues caused the submission to be flagged as possible spam.</option>
+          </select>
+          <button
+              type="submit"
+              class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+          >
+            Save
+          </button>
+        </form>
+        <% if !self.project.rejection_notice.is_empty() { %>
+          <p class="mt-1 text-xs text-gray-600">Notice sent to the submitter: <%= self.project.rejection_notice %></p>
+        <% } else { %>
+          <p class="mt-1 text-xs text-gray-600">No rejection notice has been sent to the submitter.</p>
+        <% } %>
+      </div>
+
       <!-- Note: Publish status is now managed via Entities (/-admin/entities) -->
       <div class="flex flex-wrap gap-6 mt-4">
           <div class="flex items-center">
