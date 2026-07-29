@@ -110,8 +110,7 @@ impl Default for K12Content {
 <p>See video instructions <a href="https://scribehow.com/embed-preview/See_your_iNaturalist_Stats_on_SciStarter__K69rVHEkT3GXzlpK91t5Hg?as=video&size=flexible">here</a>.</p>"#.to_string(),
             affiliation_done_html: "<p>Great work! Your affiliation tracking for iNaturalist is successfully set up.</p>".to_string(),
             education_heading: "Visit the SciStarter Education Hub".to_string(),
-            education_html: r#"<p>Use <a href="/training/k12/education">this link</a> to visit the SciStarter Education Community. There you will find projects arranged by grade level, classroom tools, and more to help you bring real-world science into your learning environment.</p>
-<p>[Optional] Visit the <a href="https://pages.scistarter.org/Education/#resources" target="_blank">Resources tab</a> to learn how to use the <em>SciStarter List</em> tool.</p>"#.to_string(),
+            education_html: r#"<p>Use <a href="/training/k12/education">this link</a> to visit the SciStarter Education Community. There you will find projects arranged by grade level, classroom tools, and more to help you bring real-world science into your learning environment.</p>"#.to_string(),
             education_url: "https://scistarter.org/education".to_string(),
             claim_heading: "Congratulations!".to_string(),
             claim_html: r#"<p>🎉 Congratulations on completing the Citizen Science for K-12 Educators Training. 🎉

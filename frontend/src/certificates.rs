@@ -6,6 +6,10 @@
 //! so) the watermarked background to use. Generation is config-driven, so a new
 //! certificate type is one entry here plus its background asset — no per-mode
 //! branching scattered across functions, and no `__watermarked` twin mode.
+//!
+//! Requires oxidize-pdf 4.x or newer: 2.0's `Image::from_png_data` stored the
+//! PNG container itself as the XObject stream while declaring `/FlateDecode`,
+//! so every background failed to decode and certificates came out blank.
 
 use anyhow::Result;
 use common::message::user::{BasicInfo, CertificateGetRequest, CertificateGetResponse};
@@ -243,7 +247,7 @@ fn config_for_mode(mode: &str) -> CertificateMode {
                 show_issued: true,
                 ..Default::default()
             },
-            title: "SciStarter Champion",
+            title: "Citizen Science Champion",
             projects: Projects::None,
             shareable: true,
             watermark_background: Some("certificates/certificate_bkg_champion_watermarked.png"),
@@ -308,7 +312,7 @@ fn generate_certificate(
 
     // Draw name (centered at name_x)
     let name_font = font_for_name(layout.name_font);
-    let name_width = measure_text(name, name_font.clone(), layout.name_size);
+    let name_width = measure_text(name, &name_font, layout.name_size);
     page.text()
         .set_font(name_font, layout.name_size)
         .set_fill_color(layout.color)
@@ -328,8 +332,7 @@ fn generate_certificate(
                         .write(issued_str)?;
                 }
                 Align::Center => {
-                    let issued_width =
-                        measure_text(issued_str, issued_font.clone(), layout.issued_size);
+                    let issued_width = measure_text(issued_str, &issued_font, layout.issued_size);
                     page.text()
                         .set_font(issued_font, layout.issued_size)
                         .set_fill_color(layout.color)
@@ -416,7 +419,7 @@ mod tests {
     #[test]
     fn champion_is_shareable_with_watermark() {
         let c = config_for_mode("champion");
-        assert_eq!(c.title, "SciStarter Champion");
+        assert_eq!(c.title, "Citizen Science Champion");
         assert!(c.shareable);
         assert!(c.watermark_background.is_some());
         assert!(matches!(c.projects, Projects::None));

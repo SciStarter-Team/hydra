@@ -86,7 +86,7 @@ Your <strong>badge</strong> is now available on your <a href="/dashboard/profile
 <p>This handbook is packed with tips, talking points, free templates, suggested activities, and other resources to help you introduce citizen science and SciStarter to others with confidence!</p>
 <p><strong>What to Do Next:</strong><br>
 ✅ <strong>Join the Library Network Facebook Group</strong> to connect with others and get inspired: <a href="https://www.facebook.com/groups/788879025402547" target="_blank">Library Network group</a><br>
-✅ <strong>Reach out to a <a href="/training/champion">SciStarter Champion</a></strong> for support planning and facilitating programs.<br>
+✅ <strong>Reach out to a <a href="/training/champion">Citizen Science Champion</a></strong> for support planning and facilitating programs.<br>
 ✅ <strong><a href="/add-event">Add your events</a></strong> to the SciStarter Event Calendar to promote and track your impact.<br>
 ✅ These <strong>resources</strong> and more can be found on <a href="https://scistarter.org/library">SciStarter.org/library</a>.<br>
 ✅ Look for more resources and updates in our monthly newsletter!</p>"#.to_string(),

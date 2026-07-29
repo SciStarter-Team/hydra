@@ -5440,9 +5440,9 @@ checksum = "1a80800c0488c3a21695ea981a54918fbb37abf04f4d0720c453632255e2ff0e"
 
 [[package]]
 name = "oxidize-pdf"
-version = "2.0.0"
+version = "4.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1deaacf608ff5925936af55acd32e8692f1dfffffad2ef65915becedac79409a"
+checksum = "86567b4087f875d352ce4eb311df3d95622a51b3698abbf6efb4994ea5f5de5c"
 dependencies = [
  "aes",
  "bitflags 2.9.2",
@@ -5455,10 +5455,9 @@ dependencies = [
  "libc",
  "md5",
  "num_cpus",
- "quick-xml 0.39.2",
+ "quick-xml 0.41.0",
  "rand 0.10.1",
  "regex",
- "rusty-tesseract",
  "serde",
  "sha2 0.10.9",
  "subtle",
@@ -6163,12 +6162,11 @@ dependencies = [
 
 [[package]]
 name = "quick-xml"
-version = "0.39.2"
+version = "0.41.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "958f21e8e7ceb5a1aa7fa87fab28e7c75976e0bfe7e23ff069e0a260f894067d"
+checksum = "e660451e55124f798a69a5af3f49ccfbefbd41910eefd25caf2393e1f3473ec1"
 dependencies = [
  "memchr",
- "serde",
 ]
 
 [[package]]
@@ -6836,19 +6834,6 @@ name = "rustversion"
 version = "1.0.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
-
-[[package]]
-name = "rusty-tesseract"
-version = "1.1.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "781e2d6ed8bb85607de972e6c174902953da1f682b1d43004f0e66bf419b798f"
-dependencies = [
- "image",
- "subprocess",
- "substring",
- "tempfile",
- "thiserror 1.0.69",
-]
 
 [[package]]
 name = "ryu"
@@ -7801,25 +7786,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.106",
-]
-
-[[package]]
-name = "subprocess"
-version = "0.2.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c56e8662b206b9892d7a5a3f2ecdbcb455d3d6b259111373b7e08b8055158a8"
-dependencies = [
- "libc",
- "winapi",
-]
-
-[[package]]
-name = "substring"
-version = "1.4.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42ee6433ecef213b2e72f587ef64a2f5943e7cd16fbd82dbe8bc07486c534c86"
-dependencies = [
- "autocfg",
 ]
 
 [[package]]
