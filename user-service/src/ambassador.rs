@@ -628,6 +628,35 @@ pub async fn review(req: &Request) -> Result<(), Error> {
 ///   `users.ambassador` timestamp.
 ///
 /// Demoting to `Champion` reverts both (orrery's `revert_to_champion`).
+/// The tags granted along the path past Champion, in the order a user walks it.
+///
+/// Orrery's `POST_CHAMPION_TAGS`, and they must stay in step with it: they are
+/// cumulative, so somebody in the directory carries all three, and a demotion
+/// to Champion discards all three (orrery's `revert_to_champion`). States off
+/// that path -- rejected, failed, international -- neither grant nor discard.
+///
+/// Kept written here rather than left to the orrery sync because the Constant
+/// Contact mirror treats these names as ours to manage: a contact holding one
+/// that this service does not know about would have it stripped on the first
+/// push after the sweep changes hands.
+/// The tag granted for completing the Champion training (orrery's
+/// `AmbassadorState.tutorial_enter`).
+///
+/// Its old name, `scistarter-ambassador-training-complete`, predates the
+/// Champion rename. Orrery reads both spellings and writes only this one, so
+/// this one is what we write too. The old name stays in the Constant Contact
+/// mirror, because the several hundred accounts that carry it still should.
+pub const CHAMPION_TRAINING_TAG: &str = "scistarter-champion-training-complete";
+
+/// The old spelling of the above, written by nothing and read by everything.
+pub const LEGACY_CHAMPION_TRAINING_TAG: &str = "scistarter-ambassador-training-complete";
+
+pub const PATH_PAST_CHAMPION: &[&str] = &[
+    "scistarter-ambassador-application-submitted",
+    "scistarter-ambassador-verified",
+    "scistarter-ambassador",
+];
+
 async fn apply_review_effects(
     user_id: Ulid,
     app_status: AmbassadorAppStatus,
@@ -719,6 +748,10 @@ async fn apply_review_effects(
             },
         )
         .await?;
+
+        for tag in PATH_PAST_CHAMPION {
+            send("user.tags.remove", (user_id_str.clone(), tag.to_string())).await?;
+        }
     } else if badge_earned {
         sqlx::query!(
             "UPDATE ambassador_progress SET badge_granted_at = COALESCE(badge_granted_at, ?) WHERE user_id = ?",
@@ -735,6 +768,17 @@ async fn apply_review_effects(
             },
         )
         .await?;
+
+        // Orrery grants the verified tag in `verified_enter`, alongside the
+        // same badge. The application tag goes back on here too: the path is
+        // cumulative, and anybody who earned the badge applied for it, so
+        // re-adding it is what makes a re-promotion after a demotion end up
+        // where orrery's `restore_from_champion` would leave it. Both writes
+        // are idempotent.
+        for tag in ["scistarter-ambassador-application-submitted", "scistarter-ambassador-verified"] {
+            send("user.tags.add", (user_id_str.clone(), tag.to_string())).await?;
+        }
+
         if !had_badge {
             // Native staff action (not a sync), so an email notification is
             // appropriate here.
@@ -752,6 +796,13 @@ async fn apply_review_effects(
             user_id_str
         )
         .execute(db())
+        .await?;
+
+        // Orrery grants this in `passed_enter`, beside the same timestamp.
+        send(
+            "user.tags.add",
+            (user_id_str.clone(), "scistarter-ambassador".to_string()),
+        )
         .await?;
     } else {
         sqlx::query!(

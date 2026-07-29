@@ -568,7 +568,7 @@ async fn update_ambassador_progress(
             "user.tags.add",
             (
                 user_id.to_string(),
-                "scistarter-ambassador-training-complete".to_string(),
+                crate::ambassador::CHAMPION_TRAINING_TAG.to_string(),
             ),
         )
         .await?;

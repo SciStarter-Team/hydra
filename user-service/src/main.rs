@@ -18,6 +18,7 @@ pub mod auth;
 pub mod bookmarks;
 pub mod certificates;
 pub mod communities;
+pub mod constant_contact;
 pub mod geocode;
 pub mod girlscouts;
 pub mod health;
@@ -228,6 +229,7 @@ async fn users_synchronize() {
         inat_username: String,
         inat_last_update: Option<String>,
         zipcode: String,
+        state: String,
         country: String,
         mailing_address: String,
         point: Option<String>,
@@ -269,6 +271,7 @@ async fn users_synchronize() {
         home_page: String,
         newsletter: bool,
         constant_contact_id: Option<String>,
+        constant_contact_digest: String,
         ai_opt_out_at: Option<String>,
         date_unsubscribed: Option<String>,
         ambassador: Option<String>,
@@ -518,7 +521,18 @@ async fn users_synchronize() {
                      "constant_contact_id",
                      "ambassador",
                      "point",
-                     "regions"
+                     "regions",
+                     "state",
+                     -- Carried from orrery rather than recomputed, so that
+                     -- taking over the sweep does not look like 107,000
+                     -- changed accounts and spend three weeks of the daily
+                     -- request allowance re-sending what is already there.
+                     "constant_contact_digest",
+                     -- Named explicitly because this is an INSERT OR
+                     -- REPLACE: a column left out of the list is reset to
+                     -- its default on every pass of the sync, which would
+                     -- silently empty the sweep's work list.
+                     "constant_contact_dirty"
                    )
                    values (
                      ?1,
@@ -590,7 +604,13 @@ async fn users_synchronize() {
                      ?67,
                      ?68,
                      GeomFromEWKT(?69),
-                     GeomFromEWKT(?70)
+                     GeomFromEWKT(?70),
+                     ?71,
+                     ?72,
+                     -- Orrery is doing the pushing for as long as it is the
+                     -- primary and this sync is running, and the digest it
+                     -- sends says the record is current.
+                     0
                    )"#,
                 user.ulid,
                 user.legacy_id,
@@ -662,6 +682,8 @@ async fn users_synchronize() {
                 user.ambassador,
                 user.point,
                 user.regions,
+                user.state,
+                user.constant_contact_digest,
             )
             .execute(db)
             .await
@@ -2353,6 +2375,21 @@ async fn main() {
         .await
         .expect("Unable to run migrations");
 
+    // One-off Constant Contact operations, so that a single account can be
+    // inspected or pushed by hand without standing the whole service up. Gated
+    // on the exact first argument, so nothing else the service is started with
+    // is affected.
+    let mut arguments = std::env::args().skip(1);
+
+    if arguments.next().as_deref() == Some("constant-contact") {
+        let what = arguments.next();
+        let argument = arguments.next();
+
+        constant_contact::command(what.as_deref(), argument.as_deref()).await;
+
+        return;
+    }
+
     let cleanup_task = spawn(cleanup());
 
     let analyze_task = spawn(analyze_tables());
@@ -2372,6 +2409,11 @@ async fn main() {
     let _workflow_states_sync_task = spawn(workflow_states_synchronize());
 
     let _claim_codes_sync_task = spawn(claim_codes_synchronize());
+
+    let _constant_contact_task = spawn(constant_contact::sweep_periodically());
+
+    let _constant_contact_reconcile_task =
+        spawn(constant_contact::reconcile_periodically());
 
     // WebAuthn session cleanup task
     let webauthn_cleanup_task = spawn(async {

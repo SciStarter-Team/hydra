@@ -614,3 +614,42 @@ pub struct EditLogEntry {
 pub struct EditLogResponse {
     pub entries: Vec<EditLogEntry>,
 }
+
+/// The accounts whose last activity has moved since `since`.
+///
+/// Asked by the Constant Contact sweep so it knows whose copy of the
+/// last-active date has gone stale. Activity is this service's concept and
+/// deliberately lives nowhere else, so the sweep polls rather than reading a
+/// column of its own.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UsersActiveSinceRequest {
+    pub since: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UsersActiveSinceResponse {
+    pub user_ids: Vec<String>,
+}
+
+/// When each of `user_ids` was last active.
+///
+/// Batched because the sweep asks once per run for the whole batch it is about
+/// to push, rather than once per account.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LastActiveForRequest {
+    pub user_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LastActiveEntry {
+    pub user_id: String,
+    /// The latest moment the account was seen, as a timestamp. Callers that
+    /// want a date take the date part; the sweep does, which is what keeps a
+    /// day of browsing from looking like a change on every page view.
+    pub when: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LastActiveForResponse {
+    pub entries: Vec<LastActiveEntry>,
+}

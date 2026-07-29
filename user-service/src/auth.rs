@@ -98,7 +98,13 @@ async fn create_account(
           "newsletter",
           "zipcode",
           "protected",
-          "point"
+          "point",
+          -- Flagged for the Constant Contact sweep from the first moment. The
+          -- sweep only considers subscribers, so this is inert for anyone who
+          -- did not ask for the newsletter, and it costs one row update rather
+          -- than a new account sitting unknown to them until something else
+          -- happens to touch it.
+          "constant_contact_dirty"
         )
         values (
           ?1,
@@ -109,7 +115,8 @@ async fn create_account(
           ?5,
           ?6,
           ?7,
-          GeomFromGeoJSON(?8)
+          GeomFromGeoJSON(?8),
+          1
         )"#,
         user_id_str,
         email,
@@ -176,6 +183,20 @@ async fn create_account(
     }
 
     tx.commit().await?;
+
+    if point.is_some() {
+        // Names the state from the location just recorded, which is what lets
+        // staff build a regional segment. Off the response path: it may mean a
+        // geocoding call.
+        crate::constant_contact::derive_state_in_background(user_id_str.clone());
+    }
+
+    if newsletter {
+        // Subscribing is what creates their Constant Contact record; the sweep
+        // fills in the details it holds within twelve hours. Off the response
+        // path, since nobody should wait on that service to finish signing up.
+        crate::constant_contact::subscribe_in_background(user_id_str.clone(), email.clone());
+    }
 
     log_activity(None, "signup", user_id, None, None).await.ok();
 

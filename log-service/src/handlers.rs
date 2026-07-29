@@ -26,8 +26,8 @@ use log_service::{
     analytics::{
         get_clickthrough_analytics_realtime, get_go_url_stats,
         get_participation_analytics_realtime, get_participation_by_email,
-        get_participation_summary, get_recent_activity, get_top_performers,
-        get_user_first_participation,
+        get_last_active_for, get_participation_summary, get_recent_activity,
+        get_top_performers, get_user_first_participation, get_users_active_since,
     },
     cache::{update_user_emails_cache, update_user_tags_cache},
     health::HealthResponse,
@@ -1652,4 +1652,41 @@ pub async fn handle_edit_log(req: &async_nats::service::Request) -> Result<EditL
     }
 
     Ok(EditLogResponse { entries })
+}
+
+/// The accounts seen since a given moment, for the Constant Contact sweep's
+/// work list.
+pub async fn handle_users_active_since(
+    req: &async_nats::service::Request,
+) -> Result<common::message::log::UsersActiveSinceResponse, anyhow::Error> {
+    let request: common::message::log::UsersActiveSinceRequest =
+        decode_structured_message(req.message.clone())?;
+
+    let database = DATABASE
+        .read()
+        .as_ref()
+        .expect("Database not initialized")
+        .clone();
+
+    get_users_active_since(database, request)
+        .await
+        .map_err(Into::into)
+}
+
+/// When each of a batch of accounts was last seen.
+pub async fn handle_last_active_for(
+    req: &async_nats::service::Request,
+) -> Result<common::message::log::LastActiveForResponse, anyhow::Error> {
+    let request: common::message::log::LastActiveForRequest =
+        decode_structured_message(req.message.clone())?;
+
+    let database = DATABASE
+        .read()
+        .as_ref()
+        .expect("Database not initialized")
+        .clone();
+
+    get_last_active_for(database, request)
+        .await
+        .map_err(Into::into)
 }

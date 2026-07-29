@@ -180,14 +180,25 @@ pub async fn resolve(req: &Request) -> Result<GeocodeResolveResponse, Error> {
 pub async fn reverse(req: &Request) -> Result<GeocodeReverseResponse, Error> {
     let message: GeocodeReverseRequest = decode_structured_message(req.message.clone())?;
 
-    if !(-90.0..=90.0).contains(&message.latitude) || !(-180.0..=180.0).contains(&message.longitude)
-    {
+    reverse_lookup(message.latitude, message.longitude).await
+}
+
+/// The body of `reverse`, callable without a NATS request in hand.
+///
+/// Split out so that work inside this service -- naming the state an account
+/// sits in, for one -- can reuse the same lookup and the same cache rather than
+/// asking itself over the network.
+pub async fn reverse_lookup(
+    latitude: f64,
+    longitude: f64,
+) -> Result<GeocodeReverseResponse, Error> {
+    if !(-90.0..=90.0).contains(&latitude) || !(-180.0..=180.0).contains(&longitude) {
         anyhow::bail!("Coordinates out of range");
     }
 
     // Round to 5 decimal places (~1 m) so nearby lookups share a cache entry.
-    let latitude = (message.latitude * 1e5).round() / 1e5;
-    let longitude = (message.longitude * 1e5).round() / 1e5;
+    let latitude = (latitude * 1e5).round() / 1e5;
+    let longitude = (longitude * 1e5).round() / 1e5;
 
     let cached = sqlx::query!(
         r#"SELECT formatted, road, house_number, city, state, postcode, country, country_code

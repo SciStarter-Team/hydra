@@ -248,6 +248,15 @@ pub async fn set_user_tags(req: &Request) -> Result<(), Error> {
 
     tx.commit().await?;
 
+    // Constant Contact holds some of these tags directly, and derives the
+    // "projects participated in" and "library affiliations" fields from others,
+    // so any change here may have made their copy stale. Flagged unconditionally
+    // rather than testing which tags matter: that test already exists, in the
+    // digest the sweep compares before sending, and a second copy of it here
+    // would be one more thing to keep in step. An irrelevant tag costs a
+    // cleared flag and no request at all.
+    crate::constant_contact::mark_dirty(&user_id).await?;
+
     // Notify log service of tag update
     send(
         "log.cache.user_tags_update",
@@ -270,6 +279,15 @@ pub async fn add_user_tag(req: &Request) -> Result<(), Error> {
     )
     .execute(db())
     .await?;
+
+    // Constant Contact holds some of these tags directly, and derives the
+    // "projects participated in" and "library affiliations" fields from others,
+    // so any change here may have made their copy stale. Flagged unconditionally
+    // rather than testing which tags matter: that test already exists, in the
+    // digest the sweep compares before sending, and a second copy of it here
+    // would be one more thing to keep in step. An irrelevant tag costs a
+    // cleared flag and no request at all.
+    crate::constant_contact::mark_dirty(&user_id).await?;
 
     // Get all current tags and notify log service
     let tags = sqlx::query_scalar!(
@@ -296,6 +314,15 @@ pub async fn remove_user_tag(req: &Request) -> Result<(), Error> {
     )
     .execute(db())
     .await?;
+
+    // Constant Contact holds some of these tags directly, and derives the
+    // "projects participated in" and "library affiliations" fields from others,
+    // so any change here may have made their copy stale. Flagged unconditionally
+    // rather than testing which tags matter: that test already exists, in the
+    // digest the sweep compares before sending, and a second copy of it here
+    // would be one more thing to keep in step. An irrelevant tag costs a
+    // cleared flag and no request at all.
+    crate::constant_contact::mark_dirty(&user_id).await?;
 
     // Get all current tags and notify log service
     let tags = sqlx::query_scalar!(

@@ -6,7 +6,9 @@ use common::message::log::{
     ParticipationByEmailResponse, ParticipationSummaryEntry, ParticipationSummaryRequest,
     ParticipationSummaryResponse, RecentActivityItem, RecentActivityRequest,
     RecentActivityResponse, TopItemCount, TopPerformersQuery, UserFirstParticipationEntry,
-    UserFirstParticipationRequest, UserFirstParticipationResponse, WeeklyCount,
+    LastActiveEntry, LastActiveForRequest, LastActiveForResponse,
+    UserFirstParticipationRequest, UserFirstParticipationResponse,
+    UsersActiveSinceRequest, UsersActiveSinceResponse, WeeklyCount,
 };
 use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::functions_aggregate::expr_fn::count;
@@ -1171,4 +1173,124 @@ fn extract_count_value(array: &datafusion::arrow::array::ArrayRef, index: usize)
     }
 
     None
+}
+
+/// A ULID is alphanumeric, so a list of them can be interpolated into SQL once
+/// anything else has been dropped. Anything rejected here simply goes
+/// unanswered, which the caller treats as "no activity recorded".
+fn quoted_ulids(ids: &[String]) -> Vec<String> {
+    ids.iter()
+        .filter(|id| !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric()))
+        .map(|id| format!("'{id}'"))
+        .collect()
+}
+
+/// Read one string column out of a batch, whichever Arrow string flavour it
+/// arrived as.
+fn string_at(array: &dyn datafusion::arrow::array::Array, row: usize) -> Option<String> {
+    use datafusion::arrow::array::{StringArray, StringViewArray};
+
+    if array.is_null(row) {
+        return None;
+    }
+
+    if let Some(values) = array.as_any().downcast_ref::<StringArray>() {
+        return Some(values.value(row).to_string());
+    }
+
+    if let Some(values) = array.as_any().downcast_ref::<StringViewArray>() {
+        return Some(values.value(row).to_string());
+    }
+
+    None
+}
+
+/// Both tables that witness a person being present. Page views land in one and
+/// everything else -- logins, and the `legacy-active` marker seeded from the
+/// account's last-active date when it was imported -- in the other, so a
+/// truthful answer is the later of the two.
+const ACTIVITY_UNION: &str = "SELECT user_id, `when` FROM activity_log WHERE user_id IS NOT NULL \
+     UNION ALL \
+     SELECT user_id, `when` FROM page_views WHERE user_id IS NOT NULL";
+
+/// The accounts seen since `since`.
+///
+/// Powers the Constant Contact sweep's work list: an account whose last-active
+/// date has moved needs its record refreshed over there.
+pub async fn get_users_active_since(
+    database: Arc<Database>,
+    request: UsersActiveSinceRequest,
+) -> Result<UsersActiveSinceResponse> {
+    // A timestamp, not free text; quotes and backslashes have no business in
+    // one and would be the only way out of the literal below.
+    if request.since.contains(['\'', '\\']) {
+        return Ok(UsersActiveSinceResponse {
+            user_ids: Vec::new(),
+        });
+    }
+
+    let since = request.since;
+    let sql = format!(
+        "SELECT DISTINCT user_id FROM ({ACTIVITY_UNION}) WHERE `when` > '{since}'"
+    );
+
+    let batches = database.context().sql(&sql).await?.collect().await?;
+
+    let mut user_ids = Vec::new();
+
+    for batch in batches {
+        let column = batch.column(0);
+
+        for row in 0..batch.num_rows() {
+            if let Some(user_id) = string_at(column, row) {
+                user_ids.push(user_id);
+            }
+        }
+    }
+
+    Ok(UsersActiveSinceResponse { user_ids })
+}
+
+/// When each of the given accounts was last seen.
+///
+/// Accounts with nothing recorded are simply absent from the response rather
+/// than reported as never-active, so the caller can tell "we have no record"
+/// from "the record says a long time ago".
+pub async fn get_last_active_for(
+    database: Arc<Database>,
+    request: LastActiveForRequest,
+) -> Result<LastActiveForResponse> {
+    let ids = quoted_ulids(&request.user_ids);
+
+    if ids.is_empty() {
+        return Ok(LastActiveForResponse {
+            entries: Vec::new(),
+        });
+    }
+
+    let wanted = ids.join(", ");
+    let sql = format!(
+        "SELECT user_id, MAX(`when`) AS last_active FROM ({ACTIVITY_UNION}) \
+         WHERE user_id IN ({wanted}) GROUP BY user_id"
+    );
+
+    let batches = database.context().sql(&sql).await?.collect().await?;
+
+    let mut entries = Vec::new();
+
+    for batch in batches {
+        let ids = batch.column(0);
+        let whens = batch.column(1);
+
+        for row in 0..batch.num_rows() {
+            let (Some(user_id), Some(when)) = (string_at(ids, row), string_at(whens, row))
+            else {
+                continue;
+            };
+
+            entries.push(LastActiveEntry { user_id, when });
+        }
+    }
+
+    Ok(LastActiveForResponse { entries })
 }

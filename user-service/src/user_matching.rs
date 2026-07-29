@@ -271,7 +271,10 @@ pub async fn api_create_user(req: &Request) -> Result<ApiCreateUserResponse, any
         let first_name = request.first_name.unwrap_or_default();
         let last_name = request.last_name.unwrap_or_default();
         sqlx::query!(
-            r#"UPDATE users SET first_name = ?, last_name = ? WHERE user_id = ?"#,
+            r#"UPDATE users SET first_name = ?, last_name = ?,
+               -- Both are sent to Constant Contact, so their copy is now stale.
+               constant_contact_dirty = 1
+           WHERE user_id = ?"#,
             first_name,
             last_name,
             user_id

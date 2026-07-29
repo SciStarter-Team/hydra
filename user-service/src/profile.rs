@@ -134,7 +134,14 @@ pub async fn save(req: &Request) -> Result<(), Error> {
             "ai_opt_out" = COALESCE(?, "ai_opt_out"),
             "extra_skills" = COALESCE(?, "extra_skills"),
             "extra_tools" = COALESCE(?, "extra_tools"),
-            "updated" = current_timestamp
+            "updated" = current_timestamp,
+            -- Handle, name, postal code and newsletter are all things Constant
+            -- Contact holds, so any save here may have made their copy stale.
+            -- Set in the same statement rather than by a call afterwards: the
+            -- flag cannot then be forgotten, and the sweep compares a digest
+            -- before sending, so a save that changed nothing they hold costs
+            -- nothing.
+            "constant_contact_dirty" = 1
         WHERE "user_id" = ?"#,
         update.handle,
         update.first_name,
