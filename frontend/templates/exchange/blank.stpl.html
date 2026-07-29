@@ -19,7 +19,9 @@
     <!-- FOOTER - every page -->
     <footer>
       <a class="btn btn-secondary"  data-custom-open="add-modal"><span>+</span> Add a Project or Event</a>
+      <% if !self.user.is_authenticated() { %>
       <div><a href="/login.html">Log In</a> | <a href="/signup.html">Sign Up</a></div>
+      <% } %>
       <p class="powered-by">powered by <img src="/-static/img/logo/svg/Standard__tagline-dark.svg" alt="SciStarter" /></p>
     </footer>
     <!-- END FOOTER -->

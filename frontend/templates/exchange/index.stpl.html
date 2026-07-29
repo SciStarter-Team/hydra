@@ -120,7 +120,9 @@
       <% if !self.exchange.restricted_add() || self.exchange.user_is_authorized() { %>
       <a class="btn btn-secondary"  data-custom-open="add-modal"><span>+</span> Add a Project or Event</a>
       <% } %>
+      <% if !self.user.is_authenticated() { %>
       <div><a href="/login?next=%2Fexchange%2F<%= self.exchange.exchange_id() %>%2F">Log In</a> | <a href="/login?action=signup&next=%2Fexchange%2F<%= self.exchange.exchange_id() %>%2F">Sign Up</a></div>
+      <% } %>
       <p class="powered-by">powered by <img src="/-static/img/logo/svg/Standard__tagline-dark.svg" alt="SciStarter" /></p>
       <div style="height: 8rem"></div>
     </footer>

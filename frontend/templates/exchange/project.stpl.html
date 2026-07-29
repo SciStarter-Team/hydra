@@ -464,7 +464,9 @@
       <% if !self.exchange.restricted_add() || self.exchange.user_is_authorized() { %>
       <a class="btn btn-secondary"  data-custom-open="add-modal"><span>+</span> Add a Project or Event</a>
       <% } %>
+      <% if !self.user.is_authenticated() { %>
       <div><a href="/login?next=<%= self.encode(&format!("/exchange/{}/{}/project.html", self.exchange.exchange_id(), self.project.id))|disp %>">Log In</a> | <a href="/login?action=signup&next=<%= self.encode(&format!("/exchange/{}/{}/project.html", self.exchange.exchange_id(), self.project.id))|disp %>">Sign Up</a></div>
+      <% } %>
       <p class="powered-by">powered by <img src="/-static/img/logo/svg/Standard__tagline-dark.svg" alt="SciStarter" /></p>
       <div style="height: 8rem"></div>
     </footer>

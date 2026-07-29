@@ -852,17 +852,19 @@ pub async fn project_add(Json(mut data): Json<serde_json::Value>) -> Result<Resp
         }
     }
 
-    // Load existing or create new
+    // Load existing or create new. The update below only assigns the fields
+    // the request actually carries, so an existing project has to be loaded
+    // for real: substituting a default here would save a blank row over
+    // everything the request left out — the exchange it was contributed
+    // through, its tags, its origin. `is_new` is false only because a row was
+    // just found by guid/legacy_id, so a failure to load it is a genuine
+    // error and belongs to the caller.
     let mut proj = if is_new {
         let mut p = ProjectAll::default();
         p.project_id = project_ulid;
         p
     } else {
-        ProjectAll::load(project_ulid).await.unwrap_or_else(|_| {
-            let mut p = ProjectAll::default();
-            p.project_id = project_ulid;
-            p
-        })
+        ProjectAll::load(project_ulid).await?
     };
 
     // Apply fields from request data
