@@ -253,6 +253,7 @@ async fn users_synchronize() {
         site_dressing: i64,
         email: String,
         tags: String,
+        signup_tags: String,
         additional_email: String,
         needs_additional_email: bool,
         country_code: String,
@@ -528,6 +529,13 @@ async fn users_synchronize() {
                      -- changed accounts and spend three weeks of the daily
                      -- request allowance re-sending what is already there.
                      "constant_contact_digest",
+                     -- Which of this account's tags arrived from a signup
+                     -- context. Carried rather than re-derived because it
+                     -- cannot be: nothing about a tag says where it came
+                     -- from, and the mirror on this side needs the same
+                     -- answer orrery reached or the two compute different
+                     -- digests for the same account.
+                     "signup_tags",
                      -- Named explicitly because this is an INSERT OR
                      -- REPLACE: a column left out of the list is reset to
                      -- its default on every pass of the sync, which would
@@ -607,6 +615,7 @@ async fn users_synchronize() {
                      GeomFromEWKT(?70),
                      ?71,
                      ?72,
+                     ?73,
                      -- Orrery is doing the pushing for as long as it is the
                      -- primary and this sync is running, and the digest it
                      -- sends says the record is current.
@@ -684,6 +693,7 @@ async fn users_synchronize() {
                 user.regions,
                 user.state,
                 user.constant_contact_digest,
+                user.signup_tags,
             )
             .execute(db)
             .await
@@ -2477,6 +2487,7 @@ async fn main() {
     toplevel.spawn(handler!(tags, "get", users::get_user_tags));
     toplevel.spawn(recv_handler!(tags, "set", users::set_user_tags));
     toplevel.spawn(recv_handler!(tags, "add", users::add_user_tag));
+    toplevel.spawn(recv_handler!(tags, "add_signup", users::add_signup_tag));
     toplevel.spawn(recv_handler!(tags, "remove", users::remove_user_tag));
 
     let emails = service.group("user.emails");

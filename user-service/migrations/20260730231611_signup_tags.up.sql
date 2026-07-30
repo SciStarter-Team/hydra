@@ -1,0 +1,16 @@
+-- Which of an account's tags arrived from a signup context: the ?tag=
+-- parameter that the login page stashes in the session, and orrery's
+-- equivalent cookie and session key.
+--
+-- Kept apart from `user_tags` because nothing about a tag says where it came
+-- from, and the Constant Contact mirror needs that answer. Its allowlist
+-- cannot name these: the vocabulary is open ended, since a campaign link mints
+-- a tag simply by carrying it. Knowing which of an account's tags arrived with
+-- the person is what lets the mirror carry one without opening the allowlist
+-- to everything the site has ever applied.
+--
+-- Encoded the way orrery encodes its tag columns -- ||one||two|| -- because
+-- the user sync carries this column across verbatim, and the two sides must
+-- reach the same answer or they will compute different digests for the same
+-- account and re-send the whole list.
+ALTER TABLE "users" ADD COLUMN "signup_tags" text NOT NULL DEFAULT '';

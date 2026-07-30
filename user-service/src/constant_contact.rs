@@ -21,7 +21,11 @@
 //! billable record and put an address that has never engaged onto a sending
 //! list.
 
-use std::{collections::HashMap, env::var, time::Duration};
+use std::{
+    collections::{BTreeSet, HashMap},
+    env::var,
+    time::Duration,
+};
 
 use anyhow::{Error, anyhow};
 use common::{
@@ -247,6 +251,40 @@ pub fn mirrored(tag: &str) -> bool {
         || MIRRORED_TAG_PREFIXES
             .iter()
             .any(|prefix| tag.starts_with(prefix))
+}
+
+/// The tags in a column holding orrery's `||one||two||` tag encoding.
+///
+/// Orrery builds that string from a set, so the order it arrives in means
+/// nothing. Everything downstream of here sorts before it matters.
+pub fn decode_tags(raw: &str) -> BTreeSet<String> {
+    raw.split("||")
+        .map(|tag| tag.trim().trim_matches('#').to_lowercase())
+        .filter(|tag| !tag.is_empty())
+        .collect()
+}
+
+/// Write tags back in that same encoding, so that a column this service fills
+/// in reads the same to orrery as one orrery filled in itself.
+///
+/// Empty for no tags rather than the `||||` orrery would write for an empty
+/// set: both decode to nothing, and the empty string is what the column
+/// defaults to.
+pub fn encode_tags<S: AsRef<str>>(tags: impl IntoIterator<Item = S>) -> String {
+    let names: BTreeSet<String> = tags
+        .into_iter()
+        .map(|tag| tag.as_ref().trim().trim_matches('#').to_lowercase())
+        .filter(|tag| !tag.is_empty())
+        .collect();
+
+    if names.is_empty() {
+        return String::new();
+    }
+
+    format!(
+        "||{}||",
+        names.into_iter().collect::<Vec<String>>().join("||")
+    )
 }
 
 /// A bearer token, refreshed and cached until shortly before it expires.
@@ -519,15 +557,22 @@ pub fn digest_of(described: &[(&str, String)]) -> String {
     hex::encode(hasher.finalize())
 }
 
-/// Of the account's tags, the ids of those this mirror is responsible for.
+/// Of the account's tags, the ids of those this mirror is responsible for on
+/// one person's contact.
 ///
 /// Narrower than everything in `known`, which after a listing holds the whole
 /// account: a tag someone made by hand is not ours to take away, so only names
-/// covered by the mirror policy are managed.
-pub fn managed_tag_ids(known: &HashMap<String, String>) -> Vec<&String> {
+/// covered by the mirror policy are managed. Per-person rather than global
+/// because the policy is: this account's own signup context is part of what the
+/// mirror put there, so it is also part of what the mirror may remove, while
+/// the same name on somebody else's contact is none of its business.
+pub fn managed_tag_ids<'a>(
+    known: &'a HashMap<String, String>,
+    signup_tags: &BTreeSet<String>,
+) -> Vec<&'a String> {
     known
         .iter()
-        .filter(|(name, _)| mirrored(name))
+        .filter(|(name, _)| mirrored(name) || signup_tags.contains(name.as_str()))
         .map(|(_, id)| id)
         .collect()
 }
@@ -538,8 +583,9 @@ pub fn merged_taggings(
     theirs: &[String],
     ours: &[String],
     known: &HashMap<String, String>,
+    signup_tags: &BTreeSet<String>,
 ) -> Vec<String> {
-    let managed = managed_tag_ids(known);
+    let managed = managed_tag_ids(known, signup_tags);
 
     let mut mine: Vec<String> = ours
         .iter()
@@ -676,7 +722,7 @@ pub async fn push(account: &Account) -> Result<PushResult, Error> {
 
     contact.insert(
         "taggings".into(),
-        json!(merged_taggings(&theirs, &ours, &known)),
+        json!(merged_taggings(&theirs, &ours, &known, &account.signup_tags)),
     );
 
     if !account.first_name.trim().is_empty() {
@@ -733,6 +779,10 @@ pub struct Account {
     pub contact_id: Option<String>,
     pub digest_sent: String,
     pub tags: Vec<String>,
+    /// Which of `tags` arrived from a signup context. Those travel whatever
+    /// they are called, so a campaign link can put its own name in front of the
+    /// people building the mailings without anyone editing the allowlist.
+    pub signup_tags: BTreeSet<String>,
     pub last_active: String,
 }
 
@@ -761,11 +811,19 @@ impl Account {
     }
 
     /// The tags on this account that Constant Contact is allowed to see.
+    ///
+    /// The allowlist and the prefixed families, plus whatever this account's
+    /// own signup context supplied. That last part is what lets an open-ended
+    /// tag travel without opening the allowlist to everything: a partner who
+    /// sends people in under `?tag=their-campaign` gets that campaign in front
+    /// of the people building the mailings, and it reaches only the accounts
+    /// that actually arrived that way, so the tag Constant Contact gains means
+    /// what the partner meant by it.
     pub fn mirrored_tags(&self) -> Vec<String> {
         let mut mine: Vec<String> = self
             .tags
             .iter()
-            .filter(|tag| mirrored(tag))
+            .filter(|tag| mirrored(tag) || self.signup_tags.contains(tag.as_str()))
             .cloned()
             .collect();
 
@@ -773,6 +831,7 @@ impl Account {
 
         mine
     }
+
 
     /// Values from a prefixed tag family, as one space-separated field.
     ///
@@ -849,7 +908,8 @@ pub async fn pending(limit: i64) -> Result<Vec<Account>, Error> {
              "state" as "state!",
              "date_joined" as "date_joined!",
              "constant_contact_id",
-             "constant_contact_digest" as "constant_contact_digest!"
+             "constant_contact_digest" as "constant_contact_digest!",
+             "signup_tags" as "signup_tags!"
            from "users"
            where "constant_contact_dirty" = 1
              and "newsletter" = 1
@@ -886,7 +946,8 @@ pub async fn account_for_email(email: &str) -> Result<Option<Account>, Error> {
              "users"."state" as "state!",
              "users"."date_joined" as "date_joined!",
              "users"."constant_contact_id",
-             "users"."constant_contact_digest" as "constant_contact_digest!"
+             "users"."constant_contact_digest" as "constant_contact_digest!",
+             "users"."signup_tags" as "signup_tags!"
            from "emails"
            join "users" on "users"."user_id" = "emails"."user_id"
            where "emails"."email" = ?
@@ -916,6 +977,7 @@ struct Stored {
     date_joined: String,
     constant_contact_id: Option<String>,
     constant_contact_digest: String,
+    signup_tags: String,
 }
 
 impl Stored {
@@ -939,6 +1001,7 @@ impl Stored {
             contact_id: self.constant_contact_id,
             digest_sent: self.constant_contact_digest,
             tags,
+            signup_tags: decode_tags(&self.signup_tags),
             // Filled in by the caller from log-service, which is the only place
             // activity is recorded.
             last_active: String::new(),
@@ -1656,6 +1719,7 @@ mod tests {
                 "participated:crowd-the-tap".into(),
                 "library:verizon-index".into(),
             ],
+            signup_tags: BTreeSet::new(),
             last_active: "2026-07-29T08:15:00Z".into(),
         }
     }
@@ -1709,6 +1773,72 @@ mod tests {
         person.tags = vec!["training".into(), "training-old".into()];
 
         assert_eq!(person.mirrored_tags(), vec!["training", "training-old"]);
+    }
+
+    /// A tag from a signup context travels whatever it is called, so that a
+    /// campaign link can put its own name in front of the people building the
+    /// mailings without anyone editing the allowlist first.
+    #[test]
+    fn a_tag_from_the_signup_context_is_carried() {
+        let mut person = account();
+        person.tags = vec!["their-campaign".into()];
+        person.signup_tags = BTreeSet::from(["their-campaign".to_string()]);
+
+        assert_eq!(person.mirrored_tags(), vec!["their-campaign"]);
+    }
+
+    /// The vocabulary is per account, not global: the same name means what the
+    /// partner meant by it only on the accounts that arrived under it.
+    #[test]
+    fn the_same_tag_on_somebody_else_is_still_withheld() {
+        let mut stranger = account();
+        stranger.tags = vec!["their-campaign".into()];
+
+        assert!(stranger.mirrored_tags().is_empty());
+    }
+
+    #[test]
+    fn a_signup_tag_the_account_has_since_lost_is_not_sent() {
+        let mut person = account();
+        person.tags = vec![];
+        person.signup_tags = BTreeSet::from(["their-campaign".to_string()]);
+
+        assert!(person.mirrored_tags().is_empty());
+    }
+
+    #[test]
+    fn the_mirror_may_take_back_a_signup_tag_it_placed() {
+        let known = HashMap::from([
+            ("their-campaign".to_string(), "ours".to_string()),
+            ("hand-made-by-staff".to_string(), "theirs".to_string()),
+        ]);
+
+        let merged = merged_taggings(
+            &["theirs".to_string(), "ours".to_string()],
+            &[],
+            &known,
+            &BTreeSet::from(["their-campaign".to_string()]),
+        );
+
+        assert_eq!(merged, vec!["theirs"]);
+    }
+
+    /// The encoding is a contract with orrery, which writes the same column.
+    #[test]
+    fn tag_columns_round_trip_through_orrerys_encoding() {
+        assert_eq!(
+            decode_tags("||one||two||"),
+            BTreeSet::from(["one".to_string(), "two".to_string()])
+        );
+
+        // What orrery writes for an empty set, and what an untouched column
+        // holds.
+        assert!(decode_tags("||||").is_empty());
+        assert!(decode_tags("").is_empty());
+
+        assert_eq!(encode_tags(["Two", " one ", "#three"]), "||one||three||two||");
+        assert_eq!(encode_tags(["", "   "]), "");
+        assert_eq!(decode_tags(&encode_tags(["A", "b"])), decode_tags("||a||b||"));
     }
 
     /// The ambassador path tags and the mirror have to agree.
@@ -1806,6 +1936,7 @@ mod tests {
             &["theirs".to_string()],
             &["foundations-badge".to_string()],
             &known,
+            &BTreeSet::new(),
         );
 
         assert_eq!(merged, vec!["theirs", "ours"]);
@@ -1819,7 +1950,12 @@ mod tests {
         ]);
 
         let merged =
-            merged_taggings(&["theirs".to_string(), "ours".to_string()], &[], &known);
+            merged_taggings(
+                &["theirs".to_string(), "ours".to_string()],
+                &[],
+                &known,
+                &BTreeSet::new(),
+            );
 
         assert_eq!(merged, vec!["theirs"]);
     }

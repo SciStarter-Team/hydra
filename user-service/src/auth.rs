@@ -72,6 +72,8 @@ async fn create_account(
     // A protected user is never added to a mailing list.
     let newsletter = form.newsletter && !protected;
 
+    let signup_tags = crate::constant_contact::encode_tags(&form.tags);
+
     let mut tx = db().begin().await?;
 
     // We're letting users and emails start as verified, for now,
@@ -99,6 +101,11 @@ async fn create_account(
           "zipcode",
           "protected",
           "point",
+          -- Every tag on a new account arrived with the person, so the whole
+          -- set is recorded as having come from a signup context. That is what
+          -- lets the Constant Contact mirror carry a campaign tag it could not
+          -- have named in advance.
+          "signup_tags",
           -- Flagged for the Constant Contact sweep from the first moment. The
           -- sweep only considers subscribers, so this is inert for anyone who
           -- did not ask for the newsletter, and it costs one row update rather
@@ -116,6 +123,7 @@ async fn create_account(
           ?6,
           ?7,
           GeomFromGeoJSON(?8),
+          ?10,
           1
         )"#,
         user_id_str,
@@ -127,6 +135,7 @@ async fn create_account(
         protected,
         point,
         verified,
+        signup_tags,
     )
     .execute(&mut *tx)
     .await?;

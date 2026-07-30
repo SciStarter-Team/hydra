@@ -639,13 +639,16 @@ pub async fn login_action(session: &Session, Form(form): Form<LoginForm>) -> Res
     // Call user-service's login via NATS
     match request_with_retry::<Option<BasicInfo>>("user.auth.login", login_request).await {
         Ok(Some(basic_info)) => {
-            // Merge session tags with user tags if any exist
+            // Merge session tags with user tags if any exist. Sent as signup
+            // tags rather than ordinary ones: these arrived on the link the
+            // person followed, which is what decides whether Constant Contact
+            // is allowed to see a name no allowlist could have predicted.
             let session_tags = session_tags::clear(session);
             if !session_tags.is_empty() {
                 // Add session tags to the user's account
                 for tag in session_tags {
                     let _ = common::service::send(
-                        "user.tags.add",
+                        "user.tags.add_signup",
                         (basic_info.user_id.to_string(), tag),
                     )
                     .await;

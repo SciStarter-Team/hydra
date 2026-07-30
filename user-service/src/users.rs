@@ -271,6 +271,39 @@ pub async fn set_user_tags(req: &Request) -> Result<(), Error> {
 pub async fn add_user_tag(req: &Request) -> Result<(), Error> {
     let (user_id, tag): (String, String) = flexbuffers::from_slice(&req.message.payload)?;
 
+    apply_tag(&user_id, &tag, TagSource::Site).await
+}
+
+/// Add a tag that arrived with the person rather than from something the site
+/// did: the `?tag=` the login page stashes in the session, landing on an
+/// account that already exists.
+///
+/// A separate endpoint rather than a flag on the existing one because where a
+/// tag came from is not something the receiving end can work out, and it
+/// decides whether Constant Contact is allowed to see a name that no allowlist
+/// could have predicted.
+pub async fn add_signup_tag(req: &Request) -> Result<(), Error> {
+    let (user_id, tag): (String, String) = flexbuffers::from_slice(&req.message.payload)?;
+
+    apply_tag(&user_id, &tag, TagSource::Signup).await
+}
+
+/// Where a tag being applied came from.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TagSource {
+    /// Something the site itself did: a badge earned, a project joined.
+    Site,
+    /// The link the person arrived on.
+    Signup,
+}
+
+async fn apply_tag(user_id: &str, tag: &str, source: TagSource) -> Result<(), Error> {
+    let tag = tag.trim().to_lowercase();
+
+    if tag.is_empty() {
+        return Ok(());
+    }
+
     // Insert the tag (ignore if already exists)
     sqlx::query!(
         r#"INSERT OR IGNORE INTO "user_tags" ("user_id", "tag") VALUES (?, ?)"#,
@@ -280,6 +313,10 @@ pub async fn add_user_tag(req: &Request) -> Result<(), Error> {
     .execute(db())
     .await?;
 
+    if source == TagSource::Signup {
+        remember_signup_tag(user_id, &tag).await?;
+    }
+
     // Constant Contact holds some of these tags directly, and derives the
     // "projects participated in" and "library affiliations" fields from others,
     // so any change here may have made their copy stale. Flagged unconditionally
@@ -287,7 +324,7 @@ pub async fn add_user_tag(req: &Request) -> Result<(), Error> {
     // digest the sweep compares before sending, and a second copy of it here
     // would be one more thing to keep in step. An irrelevant tag costs a
     // cleared flag and no request at all.
-    crate::constant_contact::mark_dirty(&user_id).await?;
+    crate::constant_contact::mark_dirty(user_id).await?;
 
     // Get all current tags and notify log service
     let tags = sqlx::query_scalar!(
@@ -297,7 +334,40 @@ pub async fn add_user_tag(req: &Request) -> Result<(), Error> {
     .fetch_all(db())
     .await?;
 
-    send("log.cache.user_tags_update", (user_id, tags)).await?;
+    send("log.cache.user_tags_update", (user_id.to_string(), tags)).await?;
+
+    Ok(())
+}
+
+/// Note that a tag arrived from a signup context, in the encoding orrery uses
+/// for the same column, so that the two sides describe the account alike.
+async fn remember_signup_tag(user_id: &str, tag: &str) -> Result<(), Error> {
+    let held = sqlx::query_scalar!(
+        r#"SELECT "signup_tags" FROM "users" WHERE "user_id" = ?"#,
+        user_id
+    )
+    .fetch_optional(db())
+    .await?;
+
+    let Some(held) = held else {
+        return Ok(());
+    };
+
+    let mut names = crate::constant_contact::decode_tags(&held);
+
+    if !names.insert(tag.to_string()) {
+        return Ok(());
+    }
+
+    let encoded = crate::constant_contact::encode_tags(&names);
+
+    sqlx::query!(
+        r#"UPDATE "users" SET "signup_tags" = ? WHERE "user_id" = ?"#,
+        encoded,
+        user_id
+    )
+    .execute(db())
+    .await?;
 
     Ok(())
 }
