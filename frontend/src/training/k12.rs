@@ -95,9 +95,9 @@ impl Default for K12Content {
             tutorial_intro: "Complete the Citizen Science for K-12 Educators Training Module."
                 .to_string(),
             // Base URL of the K-12 Rise package. It is wrapped per-user with the
-            // LRS launch parameters at render time (see `build_steps`). "#" until
-            // the module is hosted on media.scistarter.org.
-            articulate_url: "#".to_string(),
+            // LRS launch parameters at render time (see `build_steps`).
+            articulate_url: "https://media.scistarter.org/k12/scormdriver/indexAPI.html"
+                .to_string(),
             articulate_image: "https://orrery-media.s3.amazonaws.com/attr/2026-07/Citizen_Science_in_K-12_Education.png".to_string(),
             affiliation_heading: "Affiliation Tracking Check".to_string(),
             affiliation_html: r#"<p>No action needed—this step will complete itself during the training module in the previous step.
