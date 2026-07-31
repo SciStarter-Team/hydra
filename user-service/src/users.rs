@@ -298,7 +298,7 @@ enum TagSource {
 }
 
 async fn apply_tag(user_id: &str, tag: &str, source: TagSource) -> Result<(), Error> {
-    let tag = tag.trim().to_lowercase();
+    let tag = common::message::user::normalize_tag(tag);
 
     if tag.is_empty() {
         return Ok(());

@@ -20,7 +20,7 @@ use anyhow::Error;
 use common::message::log::{
     UserLastViewRequest, UserLastViewResponse, UserParticipationRequest, UserParticipationResponse,
 };
-use common::message::user::BasicInfo;
+use common::message::user::{BasicInfo, normalize_tag};
 use common::shared::db;
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
@@ -145,10 +145,17 @@ impl ConditionKind {
                     (_, None) => false,
                 }
             }
-            ConditionKind::HasTag { tag } => state
-                .tags
-                .as_ref()
-                .is_some_and(|tags| tags.iter().any(|t| t.eq_ignore_ascii_case(tag))),
+            // Both sides normalized: the condition's tag is typed by whoever
+            // authored the block, who may well write it as a hashtag, and the
+            // account's own tags predate the rule that they are stored one way.
+            ConditionKind::HasTag { tag } => {
+                let wanted = normalize_tag(tag);
+
+                state
+                    .tags
+                    .as_ref()
+                    .is_some_and(|tags| tags.iter().any(|held| normalize_tag(held) == wanted))
+            }
             ConditionKind::DaysSinceLastView { comparison, days } => {
                 compare_days_since(state.last_view, *comparison, *days)
             }

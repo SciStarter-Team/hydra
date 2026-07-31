@@ -33,6 +33,7 @@ use common::{
         LastActiveForRequest, LastActiveForResponse, UsersActiveSinceRequest,
         UsersActiveSinceResponse,
     },
+    message::user::normalize_tag,
     misc,
     service::request,
     shared::db,
@@ -243,8 +244,7 @@ pub const MIRRORED_TAGS: &[&str] = &[
 
 /// Families whose members are all worth mirroring, so that next year's
 /// `1ma-badge-2028` and the next partner embed arrive without an edit here.
-pub const MIRRORED_TAG_PREFIXES: &[&str] =
-    &["1ma-badge-", "signup-surface:", "partner-embed:"];
+pub const MIRRORED_TAG_PREFIXES: &[&str] = &["1ma-badge-", "signup-surface:", "partner-embed:"];
 
 pub fn mirrored(tag: &str) -> bool {
     MIRRORED_TAGS.contains(&tag)
@@ -259,7 +259,7 @@ pub fn mirrored(tag: &str) -> bool {
 /// nothing. Everything downstream of here sorts before it matters.
 pub fn decode_tags(raw: &str) -> BTreeSet<String> {
     raw.split("||")
-        .map(|tag| tag.trim().trim_matches('#').to_lowercase())
+        .map(normalize_tag)
         .filter(|tag| !tag.is_empty())
         .collect()
 }
@@ -273,7 +273,7 @@ pub fn decode_tags(raw: &str) -> BTreeSet<String> {
 pub fn encode_tags<S: AsRef<str>>(tags: impl IntoIterator<Item = S>) -> String {
     let names: BTreeSet<String> = tags
         .into_iter()
-        .map(|tag| tag.as_ref().trim().trim_matches('#').to_lowercase())
+        .map(|tag| normalize_tag(tag.as_ref()))
         .filter(|tag| !tag.is_empty())
         .collect();
 
@@ -293,7 +293,10 @@ async fn token() -> Result<String, Error> {
     let expires: Option<String> = misc::get(TOKEN_EXPIRY_KEY).await?;
 
     if let (Some(held), Some(expires)) = (held, expires) {
-        if expires.parse::<Timestamp>().is_ok_and(|at| at > Timestamp::now()) {
+        if expires
+            .parse::<Timestamp>()
+            .is_ok_and(|at| at > Timestamp::now())
+        {
             return Ok(held);
         }
     }
@@ -305,7 +308,10 @@ async fn token() -> Result<String, Error> {
     let response = reqwest::Client::new()
         .post(TOKEN_ENDPOINT)
         .basic_auth(key, Some(secret))
-        .form(&[("refresh_token", refresh), ("grant_type", "refresh_token".into())])
+        .form(&[
+            ("refresh_token", refresh),
+            ("grant_type", "refresh_token".into()),
+        ])
         .send()
         .await?;
 
@@ -326,7 +332,11 @@ async fn token() -> Result<String, Error> {
 
     // Held a little short of the stated lifetime, so a sweep never picks up a
     // token that expires mid-batch.
-    let seconds = body.get("expires_in").and_then(Value::as_i64).unwrap_or(3600) - 300;
+    let seconds = body
+        .get("expires_in")
+        .and_then(Value::as_i64)
+        .unwrap_or(3600)
+        - 300;
     let until = (Timestamp::now() + Duration::from_secs(seconds.max(60) as u64)).to_string();
 
     misc::set(TOKEN_KEY, granted.clone()).await?;
@@ -722,7 +732,12 @@ pub async fn push(account: &Account) -> Result<PushResult, Error> {
 
     contact.insert(
         "taggings".into(),
-        json!(merged_taggings(&theirs, &ours, &known, &account.signup_tags)),
+        json!(merged_taggings(
+            &theirs,
+            &ours,
+            &known,
+            &account.signup_tags
+        )),
     );
 
     if !account.first_name.trim().is_empty() {
@@ -831,7 +846,6 @@ impl Account {
 
         mine
     }
-
 
     /// Values from a prefixed tag family, as one space-separated field.
     ///
@@ -1732,8 +1746,7 @@ mod tests {
     /// service takes over the sweep -- three weeks of the daily request
     /// allowance spent re-sending what Constant Contact already holds. Fix the
     /// divergence rather than re-recording the constant.
-    const ORRERY_DIGEST: &str =
-        "b4d3216f6e6b763d5739c23b7b476e15e5d164bbac2cb96c766fdf6e3173727a";
+    const ORRERY_DIGEST: &str = "b4d3216f6e6b763d5739c23b7b476e15e5d164bbac2cb96c766fdf6e3173727a";
 
     #[test]
     fn the_digest_matches_the_one_orrery_computes() {
@@ -1764,7 +1777,11 @@ mod tests {
 
     #[test]
     fn staff_tags_are_withheld() {
-        assert!(!account().mirrored_tags().contains(&"scistarter-staff".to_string()));
+        assert!(
+            !account()
+                .mirrored_tags()
+                .contains(&"scistarter-staff".to_string())
+        );
     }
 
     #[test]
@@ -1836,9 +1853,38 @@ mod tests {
         assert!(decode_tags("||||").is_empty());
         assert!(decode_tags("").is_empty());
 
-        assert_eq!(encode_tags(["Two", " one ", "#three"]), "||one||three||two||");
+        assert_eq!(
+            encode_tags(["Two", " one ", "#three"]),
+            "||one||three||two||"
+        );
         assert_eq!(encode_tags(["", "   "]), "");
-        assert_eq!(decode_tags(&encode_tags(["A", "b"])), decode_tags("||a||b||"));
+        assert_eq!(
+            decode_tags(&encode_tags(["A", "b"])),
+            decode_tags("||a||b||")
+        );
+    }
+
+    /// A tag is spelled one way, not two.
+    ///
+    /// `user_tags` and the `signup_tags` column are written by different code,
+    /// and an account's signup tags are recognized by matching the two against
+    /// each other. Were the spellings to drift apart, the tag would simply stay
+    /// out of the mirror, with nothing anywhere looking wrong.
+    #[test]
+    fn a_tag_is_spelled_the_same_in_both_columns() {
+        for raw in [" #Spring-Push ", "GirlScout", "their-campaign", "#a"] {
+            let held = normalize_tag(raw);
+
+            assert_eq!(
+                decode_tags(&encode_tags([raw])),
+                BTreeSet::from([held.clone()]),
+                "{raw:?} reaches signup_tags as something other than {held:?}"
+            );
+        }
+
+        // Punctuation and space is not a tag at all, on either side.
+        assert!(normalize_tag(" ## ").is_empty());
+        assert!(encode_tags([" ## "]).is_empty());
     }
 
     /// The ambassador path tags and the mirror have to agree.
@@ -1949,13 +1995,12 @@ mod tests {
             ("hand-made-by-staff".to_string(), "theirs".to_string()),
         ]);
 
-        let merged =
-            merged_taggings(
-                &["theirs".to_string(), "ours".to_string()],
-                &[],
-                &known,
-                &BTreeSet::new(),
-            );
+        let merged = merged_taggings(
+            &["theirs".to_string(), "ours".to_string()],
+            &[],
+            &known,
+            &BTreeSet::new(),
+        );
 
         assert_eq!(merged, vec!["theirs"]);
     }
@@ -1973,7 +2018,10 @@ mod tests {
     fn a_postal_code_creates_an_address_when_there_is_none() {
         let addresses = with_postal_code(&[], "02139");
 
-        assert_eq!(addresses, vec![json!({"kind": "home", "postal_code": "02139"})]);
+        assert_eq!(
+            addresses,
+            vec![json!({"kind": "home", "postal_code": "02139"})]
+        );
     }
 
     #[test]

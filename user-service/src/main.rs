@@ -2422,8 +2422,7 @@ async fn main() {
 
     let _constant_contact_task = spawn(constant_contact::sweep_periodically());
 
-    let _constant_contact_reconcile_task =
-        spawn(constant_contact::reconcile_periodically());
+    let _constant_contact_reconcile_task = spawn(constant_contact::reconcile_periodically());
 
     // WebAuthn session cleanup task
     let webauthn_cleanup_task = spawn(async {

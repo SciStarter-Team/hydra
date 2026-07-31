@@ -84,13 +84,23 @@ impl SessionStorage for UserServiceSessionStorage {
 
 /// Session tag management helper functions
 pub mod session_tags {
+    use common::message::user::normalize_tag;
     use poem::session::Session;
     use std::collections::BTreeSet;
 
     /// Add a tag to the session
+    ///
+    /// Normalized on the way in, at the door these tags arrive through, so
+    /// that a `?tag=` a partner typed as `#GirlScout` is the same tag from
+    /// here on -- to `remove` below, to the protection rule, and to both
+    /// columns it eventually lands in.
     pub fn add(session: &Session, tag: &str) {
         let mut tags = get_set(session);
-        let tag_lower = tag.to_lowercase();
+        let tag_lower = normalize_tag(tag);
+
+        if tag_lower.is_empty() {
+            return;
+        }
 
         if tags.insert(tag_lower) {
             // Only update session if tag was actually added
@@ -113,7 +123,7 @@ pub mod session_tags {
     /// Remove a specific tag from the session
     pub fn remove(session: &Session, tag: &str) {
         let mut tags = get_set(session);
-        let tag_lower = tag.to_lowercase();
+        let tag_lower = normalize_tag(tag);
 
         if tags.remove(&tag_lower) {
             // Only update session if tag was actually removed

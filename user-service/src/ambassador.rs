@@ -775,7 +775,10 @@ async fn apply_review_effects(
         // re-adding it is what makes a re-promotion after a demotion end up
         // where orrery's `restore_from_champion` would leave it. Both writes
         // are idempotent.
-        for tag in ["scistarter-ambassador-application-submitted", "scistarter-ambassador-verified"] {
+        for tag in [
+            "scistarter-ambassador-application-submitted",
+            "scistarter-ambassador-verified",
+        ] {
             send("user.tags.add", (user_id_str.clone(), tag.to_string())).await?;
         }
 

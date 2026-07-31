@@ -166,20 +166,40 @@ pub const PRIVATE_DISPLAY_NAME: &str = "Private";
 /// say it while refusing one that arrives anyway.
 pub const PROTECTED_SENDER_REFUSAL: &str = "As a side effect of protecting your privacy, it is impossible for you to send messages via SciStarter.";
 
+/// A tag name in the one form both codebases store, matching what orrery's
+/// `Tags` does on the way into its column: stripped of surrounding whitespace
+/// and of the `#` people write when they mean a hashtag, then lowercased.
+///
+/// Every path that writes a tag, and every rule that recognizes one, goes
+/// through here. A tag stored in some other spelling would be a row orrery
+/// could never have produced; a tag *matched* in some other spelling silently
+/// fails to be the tag it plainly is, which is how `#girlscout` once arrived
+/// on an account without protecting it.
+///
+/// Returns the empty string for anything that was only punctuation and space;
+/// callers drop those rather than store a nameless tag.
+pub fn normalize_tag(tag: &str) -> String {
+    tag.trim().trim_matches('#').to_lowercase()
+}
+
 /// Signup-context tags (from a `?tag=` parameter, carried in the session)
 /// that mark the account being created as one whose owner needs protection
 /// — a cohort signing up through a partner that enrolls minors. Kept in
 /// step with orrery's `PROTECTED_SIGNUP_TAGS`.
 pub const PROTECTED_SIGNUP_TAGS: [&str; 2] = ["laplstudent", "girlscout"];
 
-/// Whether an account signing up under `tags` must be protected. Matched
-/// without regard to case: the tag reaches us from URLs typed by partners,
-/// and only some of the paths it travels lowercase it on the way.
+/// Whether an account signing up under `tags` must be protected.
+///
+/// Matched on the normalized name rather than the literal one: the tag reaches
+/// us from URLs typed by partners, and only some of the paths it travels
+/// lowercase it or drop a leading `#` on the way. What is at stake in a missed
+/// match is a minor's account going unprotected, so this is generous about
+/// spelling in the one direction that can only ever protect more people.
 pub fn signup_needs_protection<S: AsRef<str>>(tags: &[S]) -> bool {
     tags.iter().any(|tag| {
-        PROTECTED_SIGNUP_TAGS
-            .iter()
-            .any(|protected| tag.as_ref().trim().eq_ignore_ascii_case(protected))
+        let tag = normalize_tag(tag.as_ref());
+
+        PROTECTED_SIGNUP_TAGS.contains(&tag.as_str())
     })
 }
 
@@ -1762,10 +1782,37 @@ mod tests {
         // wrote it, and only some paths lowercase it on the way here.
         assert!(signup_needs_protection(&["LAPLstudent".to_string()]));
         assert!(signup_needs_protection(&[" GirlScout ".to_string()]));
+        // And in whatever punctuation: a partner writing the tag as a hashtag
+        // is writing the same tag, and a minor's account turning on that is
+        // not a trade worth making.
+        assert!(signup_needs_protection(&["#girlscout".to_string()]));
+        assert!(signup_needs_protection(&[" #GirlScout ".to_string()]));
         assert!(signup_needs_protection(&[
             "some-partner".to_string(),
             "girlscout".to_string(),
         ]));
+    }
+
+    /// The one spelling everything that writes or matches a tag agrees on.
+    ///
+    /// Kept in step with orrery's `normalize_tag`, and depended on by more
+    /// than the mirror: a name written one way and matched another is how a
+    /// protecting tag lands on an account without protecting it.
+    #[test]
+    fn a_tag_has_one_spelling() {
+        assert_eq!(normalize_tag(" #GirlScout "), "girlscout");
+        assert_eq!(normalize_tag("their-campaign"), "their-campaign");
+        assert_eq!(normalize_tag("#a"), "a");
+
+        // Punctuation and space is not a tag at all.
+        assert_eq!(normalize_tag(" ## "), "");
+        assert_eq!(normalize_tag(""), "");
+
+        // Idempotent, so a name that has been through here once can go through
+        // again -- which it does, every time a stored tag is matched.
+        for raw in [" #GirlScout ", "their-campaign", "#a", " ## "] {
+            assert_eq!(normalize_tag(&normalize_tag(raw)), normalize_tag(raw));
+        }
     }
 
     #[test]

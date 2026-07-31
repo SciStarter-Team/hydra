@@ -4,7 +4,7 @@ use common::{
     message::email::{EmailRecipient, SendEmailRequest, SendEmailResponse, noreply_reply_to},
     message::user::{
         BasicInfo, CompleteSignup, CompleteSignupResponse, DeferSignup, DeferSignupOutcome, Login,
-        Signup, SnmProfile, signup_needs_protection,
+        Signup, SnmProfile, normalize_tag, signup_needs_protection,
     },
     service::{TriggerEvent, log_activity, request, trigger_email},
     shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower},
@@ -82,7 +82,7 @@ async fn create_account(
 
     let mut verified = true;
 
-    if form.tags.iter().any(|s| s == "evolveme") {
+    if form.tags.iter().any(|s| normalize_tag(s) == "evolveme") {
         verified = false;
     }
 
@@ -172,7 +172,13 @@ async fn create_account(
     .await?;
 
     for tag in form.tags.iter() {
-        let tag = tag.to_lowercase();
+        // The same spelling the account's `signup_tags` will hold, so that the
+        // two copies of a signup tag are the one string.
+        let tag = normalize_tag(tag);
+
+        if tag.is_empty() {
+            continue;
+        }
 
         sqlx::query!(
             r#"insert into "user_tags" (
