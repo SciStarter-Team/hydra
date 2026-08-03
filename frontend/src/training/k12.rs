@@ -1,21 +1,11 @@
-//! Citizen Science for K-12 Educators training. Seven steps mirroring orrery's
-//! `/training-k12`: account → Foundations prerequisite → tutorial → iNaturalist
-//! affiliation check → visit the Education Hub → build a SciStarter list (which
-//! grants the badge) → congratulations. Tracked state comes from
-//! `k12_progress`; the affiliation check reads the user's iNaturalist username
-//! directly (`user.inat.username_set`) rather than a workflow step, so it stays
-//! live. The "education" step is recorded by the [`education`]
-//! record-and-redirect endpoint — the hydra analogue of orrery's
-//! `/go/k12-education` counted redirect. Lists live on scistarter.org, so the
-//! "list" step only ever arrives through the orrery workflow-state sync.
+//! Citizen Science for K-12 Educators training. Four steps mirroring orrery's
+//! `/training-k12`: account → Foundations prerequisite → tutorial (which grants
+//! the badge) → congratulations. Tracked state comes from `k12_progress`.
 
 use std::sync::Arc;
 
 use anyhow::Error;
-use common::message::user::{
-    BasicInfo, WorkflowProgressRequest, WorkflowProgressResponse, WorkflowStatusResponse,
-    WorkflowType,
-};
+use common::message::user::{BasicInfo, WorkflowStatusResponse, WorkflowType};
 use poem::{Response, handler, web::Redirect};
 use sailfish::TemplateOnce;
 
@@ -29,8 +19,6 @@ use crate::training::{
 
 const BASE_PATH: &str = "/training/k12";
 const PROGRESS_PATH: &str = "/training/k12/-progress";
-/// Records the "education" step then redirects to the Education Hub.
-pub const EDUCATION_PATH: &str = "/training/k12/education";
 const SLUG: &str = "k12";
 
 /// Editable copy for the K-12 Educators training. `#[serde(default)]` required
@@ -53,17 +41,8 @@ pub struct K12Content {
     pub tutorial_intro: String,
     pub articulate_url: String,
     pub articulate_image: String,
-    pub affiliation_heading: String,
-    pub affiliation_html: String,
-    pub affiliation_done_html: String,
-    pub education_heading: String,
-    pub education_html: String,
-    /// Where the education step's record-and-redirect endpoint sends the user.
-    pub education_url: String,
     pub claim_heading: String,
     pub claim_html: String,
-    pub list_heading: String,
-    pub list_html: String,
     pub sidebar_html: String,
 }
 
@@ -99,27 +78,12 @@ impl Default for K12Content {
             articulate_url: "https://media.scistarter.org/k12/scormdriver/indexAPI.html"
                 .to_string(),
             articulate_image: "https://orrery-media.s3.amazonaws.com/attr/2026-07/Citizen_Science_in_K-12_Education.png".to_string(),
-            affiliation_heading: "Affiliation Tracking Check".to_string(),
-            affiliation_html: r#"<p>No action needed—this step will complete itself during the training module in the previous step.
-<br>Still showing as incomplete? Give this a try:</p>
-<ol>
-<li>Log into <a href="https://www.inaturalist.org/">iNaturalist</a> and copy your username.</li>
-<li>Visit your SciStarter <a href="/dashboard/settings">Account Settings</a> and scroll down to “Affiliation Integration”</li>
-<li>Paste your iNaturalist username into the appropriate field.</li>
-</ol>
-<p>See video instructions <a href="https://scribehow.com/embed-preview/See_your_iNaturalist_Stats_on_SciStarter__K69rVHEkT3GXzlpK91t5Hg?as=video&size=flexible">here</a>.</p>"#.to_string(),
-            affiliation_done_html: "<p>Great work! Your affiliation tracking for iNaturalist is successfully set up.</p>".to_string(),
-            education_heading: "Visit the SciStarter Education Hub".to_string(),
-            education_html: r#"<p>Use <a href="/training/k12/education">this link</a> to visit the SciStarter Education Community. There you will find projects arranged by grade level, classroom tools, and more to help you bring real-world science into your learning environment.</p>"#.to_string(),
-            education_url: "https://scistarter.org/education".to_string(),
             claim_heading: "Congratulations!".to_string(),
             claim_html: r#"<p>🎉 Congratulations on completing the Citizen Science for K-12 Educators Training. 🎉
 <br>You’ve taken an exciting step in bringing citizen science into your classroom.
 <br>Your <strong>badge</strong> is now available on your <a href="/dashboard/profile">SciStarter profile</a>.</p>
 <p>You will also receive an email with instructions for sharing the verified badge and metadata on LinkedIn.</p>
 <p><strong>Coming Soon:</strong> Project-specific modules and certificates!</p>"#.to_string(),
-            list_heading: "Create a List on SciStarter".to_string(),
-            list_html: r#"<p>Create a List on SciStarter by visiting <a href="https://scistarter.org/Affiliates">SciStarter.org/Affiliates</a>, selecting a project, and using the "Add to my lists" link. Select the list you want to add the project to from the drop down menu, or create a new list by typing in a new list name then select that list from the drop down menu. Finally, click the "Add to list" button. View the <a href="https://www.youtube.com/watch?v=umVbYNkbq2g" target="_blank">How To Create a SciStarter List video</a>.</p>"#.to_string(),
             sidebar_html: String::new(),
         }
     }
@@ -167,25 +131,6 @@ pub async fn legacy_redirect() -> Redirect {
     Redirect::moved_permanent(BASE_PATH)
 }
 
-/// Records the "education" step (if signed in) and redirects to the Education
-/// Hub — reaching it with the tutorial already done grants the badge.
-#[handler]
-pub async fn education(Authenticated(user_info): Authenticated) -> Redirect {
-    let content = K12Content::current().await;
-    if let Some(user) = user_info {
-        let _: Result<WorkflowProgressResponse, _> = common::service::request(
-            "user.workflow.progress",
-            WorkflowProgressRequest {
-                user_id: user.user_id.to_string(),
-                workflow: WorkflowType::K12,
-                step: "education".to_string(),
-            },
-        )
-        .await;
-    }
-    Redirect::see_other(content.education_url)
-}
-
 async fn build_content(
     content: &K12Content,
     user_info: Option<Arc<BasicInfo>>,
@@ -221,22 +166,16 @@ async fn build_content(
     })
 }
 
-/// Seven linear steps. The affiliation check sits between the tutorial and the
-/// Education Hub visit, exactly as on orrery's page: it is satisfied by the
-/// user's iNaturalist username being set (the tutorial walks them through it),
-/// not by a recorded workflow step. The congratulations step is a celebration
-/// and never completes, so it stays `Current` once the list step is done.
+/// Four linear steps. The congratulations step is a celebration and never
+/// completes, so it stays `Current` once the tutorial is done.
 async fn build_steps(content: &K12Content, user_info: &Option<Arc<BasicInfo>>) -> StepsView {
     let logged_in = user_info.is_some();
-    let (status, foundations_done, inat_set) = match user_info {
+    let (status, foundations_done) = match user_info {
         Some(user) => {
             let id = user.user_id.to_string();
             let status = training::fetch_status(WorkflowType::K12, &id).await;
             let foundations = training::fetch_status(WorkflowType::Foundations, &id).await;
-            let inat_set = common::service::request::<bool>("user.inat.username_set", id)
-                .await
-                .unwrap_or(false);
-            (status, foundations.badge_granted, inat_set)
+            (status, foundations.badge_granted)
         }
         None => (
             WorkflowStatusResponse {
@@ -245,24 +184,12 @@ async fn build_steps(content: &K12Content, user_info: &Option<Arc<BasicInfo>>) -
                 badge_granted: false,
             },
             false,
-            false,
         ),
     };
 
-    let done = |step: &str| status.completed_steps.iter().any(|s| s == step);
-    let tutorial_done = done("tutorial");
-    let education_done = done("education");
-    let list_done = done("list");
+    let tutorial_done = status.completed_steps.iter().any(|s| s == "tutorial");
 
-    let states = linear_states(&[
-        logged_in,
-        foundations_done,
-        tutorial_done,
-        inat_set,
-        education_done,
-        list_done,
-        false,
-    ]);
+    let states = linear_states(&[logged_in, foundations_done, tutorial_done, false]);
     let opens = open_flags(&states);
 
     let account_body = SigninBody {
@@ -300,12 +227,6 @@ async fn build_steps(content: &K12Content, user_info: &Option<Arc<BasicInfo>>) -
     .render_once()
     .unwrap_or_default();
 
-    let affiliation_body = if inat_set {
-        content.affiliation_done_html.clone()
-    } else {
-        content.affiliation_html.clone()
-    };
-
     let steps = vec![
         StepView {
             heading: content.account_heading.clone(),
@@ -326,27 +247,9 @@ async fn build_steps(content: &K12Content, user_info: &Option<Arc<BasicInfo>>) -
             body: tutorial_body,
         },
         StepView {
-            heading: content.affiliation_heading.clone(),
+            heading: content.claim_heading.clone(),
             state: states[3],
             open: opens[3],
-            body: affiliation_body,
-        },
-        StepView {
-            heading: content.education_heading.clone(),
-            state: states[4],
-            open: opens[4],
-            body: content.education_html.clone(),
-        },
-        StepView {
-            heading: content.list_heading.clone(),
-            state: states[5],
-            open: opens[5],
-            body: content.list_html.clone(),
-        },
-        StepView {
-            heading: content.claim_heading.clone(),
-            state: states[6],
-            open: opens[6],
             body: content.claim_html.clone(),
         },
     ];

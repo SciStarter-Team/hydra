@@ -258,6 +258,8 @@ pub async fn api_create_user(req: &Request) -> Result<ApiCreateUserResponse, any
         point: None,
         tags: vec![],
         disabled_password: false,
+        // API-created accounts never followed a tracked go link.
+        badgeclass: None,
     };
 
     let basic_info: Option<common::message::user::BasicInfo> =

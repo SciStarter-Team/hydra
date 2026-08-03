@@ -539,7 +539,6 @@ fn user_facing() -> impl Endpoint {
         )
         .at("/training/k12", get(training::k12::page))
         .at("/training/k12/-progress", get(training::k12::progress))
-        .at("/training/k12/education", get(training::k12::education))
         .at("/training-k12", get(training::k12::legacy_redirect))
         .at("/training/champion", get(training::champion::page))
         .at(

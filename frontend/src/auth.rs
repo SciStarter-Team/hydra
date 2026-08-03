@@ -1,9 +1,10 @@
 use common::{
+    badge::Badge,
     message::{
         location::LocationInfo,
         user::{
             BasicInfo, CompleteSignup, CompleteSignupResponse, DeferSignup, DeferSignupOutcome,
-            Login, Signup,
+            Login, Signup, UserAndBadge,
         },
         webauthn::{
             WebAuthnAuthenticationCompleteRequest, WebAuthnAuthenticationCompleteResponse,
@@ -12,7 +13,7 @@ use common::{
             WebAuthnRegistrationStartRequest, WebAuthnRegistrationStartResponse,
         },
     },
-    service::{log_activity, request, request_with_retry},
+    service::{log_activity, request, request_with_retry, send},
 };
 use poem::{
     Endpoint, EndpointExt, IntoResponse, Response, Route, handler, post,
@@ -31,6 +32,51 @@ use crate::{
     },
     session::session_tags,
 };
+
+/// Look at the badge a tracked go link staked out for this visitor, without
+/// spending it.
+///
+/// Deliberately a peek: a signup that fails because the address already has an
+/// account sends the visitor to log in instead, and the badge has to still be
+/// there when they do. Only [`clear_staked_out_badge`] gives it up, once
+/// something that will see it through is holding it.
+///
+/// A badgeclass this build has never heard of is dropped on sight — that is a
+/// misconfigured link, and keeping it would just log on every later attempt.
+fn staked_out_badge(session: &Session) -> Option<Badge> {
+    let badgeclass: String = session.get("grant-badge")?;
+
+    let badge = Badge::from_badgeclass(&badgeclass);
+
+    if badge.is_none() {
+        tracing::error!("Go link staked out unknown badgeclass {badgeclass:?}");
+        session.remove("grant-badge");
+    }
+
+    badge
+}
+
+/// Give up the staked-out badge, once it has been handed to something that
+/// will see it through: an account that now exists, or a pending row that
+/// outlives this session.
+fn clear_staked_out_badge(session: &Session) {
+    session.remove("grant-badge");
+}
+
+/// Grant a staked-out badge to someone who turned out to already have an
+/// account. The signup lanes hand it to `create_account` instead, which grants
+/// it from the row that creates the user.
+async fn grant_staked_out_badge(session: &Session, user_id: Ulid) {
+    let Some(badge) = staked_out_badge(session) else {
+        return;
+    };
+
+    clear_staked_out_badge(session);
+
+    if let Err(e) = send("user.badges.grant", UserAndBadge { user_id, badge }).await {
+        tracing::error!("Failed to grant staked-out badge to {user_id}: {e}");
+    }
+}
 
 /// Generate a random innocuous display name to avoid exposing email addresses
 fn generate_random_display_name() -> String {
@@ -428,6 +474,7 @@ pub async fn signup_action(
             point,
             tags,
             disabled_password: false, // Regular password account
+            badgeclass: staked_out_badge(session),
         };
 
         if !turnstile_ok {
@@ -445,6 +492,10 @@ pub async fn signup_action(
             return match request::<DeferSignupOutcome>("user.auth.defer_signup", deferral).await {
                 Ok(DeferSignupOutcome::Deferred) => {
                     session.set("pending_signup_email", &email);
+                    // The pending row holds the badge now, and it outlives
+                    // this session — the completion link may be clicked in
+                    // another browser entirely.
+                    clear_staked_out_badge(session);
                     Redirect::see_other("/check-email").into_response()
                 }
                 Ok(DeferSignupOutcome::AlreadyRegistered) => {
@@ -469,6 +520,7 @@ pub async fn signup_action(
                 // Clear signup-specific session data
                 session.remove("signup_protected");
                 session_tags::clear(session);
+                clear_staked_out_badge(session);
 
                 log_activity(None, "user_signup", basic_info.user_id, None, next.clone())
                     .await
@@ -659,6 +711,8 @@ pub async fn login_action(session: &Session, Form(form): Form<LoginForm>) -> Res
             // privilege transition to prevent session fixation.
             session.renew();
             session.set("basic_info", &basic_info);
+
+            grant_staked_out_badge(session, basic_info.user_id).await;
 
             log_activity(None, "user_login", basic_info.user_id, None, next.clone())
                 .await
@@ -890,6 +944,8 @@ pub async fn webauthn_authentication_complete(
                 // Clear signup-specific session data if any
                 session.remove("signup_protected");
                 session_tags::clear(session);
+
+                grant_staked_out_badge(session, basic_info.user_id).await;
 
                 log_activity(
                     None,
@@ -1189,6 +1245,7 @@ pub async fn webauthn_registration_complete(
                         point: point,
                         tags: tags,
                         disabled_password: true, // Mark as disabled password account
+                        badgeclass: staked_out_badge(session),
                     };
 
                     match request_with_retry::<Option<BasicInfo>>(
@@ -1211,6 +1268,7 @@ pub async fn webauthn_registration_complete(
                             // Clear signup-specific session data
                             session.remove("signup_protected");
                             session_tags::clear(session);
+                            clear_staked_out_badge(session);
 
                             log_activity(
                                 None,

@@ -1191,16 +1191,8 @@ struct K12Form {
     tutorial_intro: String,
     articulate_url: String,
     articulate_image: String,
-    affiliation_heading: String,
-    affiliation_html: String,
-    affiliation_done_html: String,
-    education_heading: String,
-    education_html: String,
-    education_url: String,
     claim_heading: String,
     claim_html: String,
-    list_heading: String,
-    list_html: String,
     sidebar_html: String,
 }
 
@@ -1244,48 +1236,7 @@ fn k12_sections(c: &K12Content) -> Vec<Section> {
         ],
     ));
     sections.push(section(
-        "Step 4 — Affiliation tracking check",
-        vec![
-            Field::text(
-                "affiliation_heading",
-                "Step heading",
-                &c.affiliation_heading,
-            ),
-            Field::html(
-                "affiliation_html",
-                "Body while incomplete (HTML)",
-                &c.affiliation_html,
-                8,
-            ),
-            Field::html(
-                "affiliation_done_html",
-                "Body once complete (HTML)",
-                &c.affiliation_done_html,
-                2,
-            ),
-        ],
-    ));
-    sections.push(section(
-        "Step 5 — Education Hub visit",
-        vec![
-            Field::text("education_heading", "Step heading", &c.education_heading),
-            Field::html("education_html", "Body (HTML)", &c.education_html, 4),
-            Field::text(
-                "education_url",
-                "Redirect destination after recording the visit",
-                &c.education_url,
-            ),
-        ],
-    ));
-    sections.push(section(
-        "Step 6 — Create a list",
-        vec![
-            Field::text("list_heading", "Step heading", &c.list_heading),
-            Field::html("list_html", "Body (HTML)", &c.list_html, 4),
-        ],
-    ));
-    sections.push(section(
-        "Step 7 — Congratulations",
+        "Step 4 — Congratulations",
         vec![
             Field::text("claim_heading", "Step heading", &c.claim_heading),
             Field::html("claim_html", "Body (HTML)", &c.claim_html, 5),
@@ -1340,16 +1291,8 @@ async fn k12_save(
         tutorial_intro: form.tutorial_intro,
         articulate_url: form.articulate_url,
         articulate_image: form.articulate_image,
-        affiliation_heading: form.affiliation_heading,
-        affiliation_html: form.affiliation_html,
-        affiliation_done_html: form.affiliation_done_html,
-        education_heading: form.education_heading,
-        education_html: form.education_html,
-        education_url: form.education_url,
         claim_heading: form.claim_heading,
         claim_html: form.claim_html,
-        list_heading: form.list_heading,
-        list_html: form.list_html,
         sidebar_html: form.sidebar_html,
     };
     content.store().await?;

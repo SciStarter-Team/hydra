@@ -4,9 +4,9 @@ use common::{
     message::email::{EmailRecipient, SendEmailRequest, SendEmailResponse, noreply_reply_to},
     message::user::{
         BasicInfo, CompleteSignup, CompleteSignupResponse, DeferSignup, DeferSignupOutcome, Login,
-        Signup, SnmProfile, normalize_tag, signup_needs_protection,
+        Signup, SnmProfile, UserAndBadge, normalize_tag, signup_needs_protection,
     },
-    service::{TriggerEvent, log_activity, request, trigger_email},
+    service::{TriggerEvent, log_activity, request, send, trigger_email},
     shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower},
     timestring::TimeString,
     ulid::AsUlid,
@@ -62,6 +62,7 @@ async fn create_account(
     let email = form.email;
     let zipcode = form.zipcode;
     let point = form.point;
+    let badgeclass = form.badgeclass;
 
     // Some signup contexts identify a cohort that needs protecting. The rule
     // lives here rather than in a frontend handler so that every lane —
@@ -213,6 +214,20 @@ async fn create_account(
         crate::constant_contact::subscribe_in_background(user_id_str.clone(), email.clone());
     }
 
+    // Staked out by the tracked go link the visitor arrived through. Granted
+    // here rather than by the caller so that every lane obeys it — immediate,
+    // passkey, and email-completion — and so it cannot be lost between the
+    // account being created and the caller getting a chance to act.
+    //
+    // Not fatal: the account is committed by this point, so a badge that fails
+    // to send must not turn a completed signup into an error. Same reasoning
+    // as the welcome email below.
+    if let Some(badge) = badgeclass {
+        if let Err(e) = send("user.badges.grant", UserAndBadge { user_id, badge }).await {
+            eprintln!("Failed to grant staked-out badge to {user_id}: {e}");
+        }
+    }
+
     log_activity(None, "signup", user_id, None, None).await.ok();
 
     trigger_email(
@@ -303,6 +318,7 @@ pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
     let email_lower = form.email.to_lowercase();
     let password = djangohashers::make_password(&form.password);
     let tags = form.tags.join(",");
+    let badgeclass = form.badgeclass.map(|badge| badge.badgeclass().to_string());
     let now = TimeString::now().to_string();
 
     let existing_code = sqlx::query_scalar!(
@@ -330,7 +346,7 @@ pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
                     r#"update "pending_signups" set
                        "email" = ?, "handle" = ?, "password" = ?, "newsletter" = ?,
                        "zipcode" = ?, "protected" = ?, "point" = ?, "tags" = ?,
-                       "next" = ?, "ip_address" = ?, "email_sent" = ?
+                       "badgeclass" = ?, "next" = ?, "ip_address" = ?, "email_sent" = ?
                        where "email_lower" = ?"#,
                     form.email,
                     form.handle,
@@ -340,6 +356,7 @@ pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
                     form.protected,
                     form.point,
                     tags,
+                    badgeclass,
                     defer.next,
                     ip_address,
                     now,
@@ -355,7 +372,7 @@ pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
                     r#"update "pending_signups" set
                        "email" = ?, "handle" = ?, "password" = ?, "newsletter" = ?,
                        "zipcode" = ?, "protected" = ?, "point" = ?, "tags" = ?,
-                       "next" = ?, "ip_address" = ?
+                       "badgeclass" = ?, "next" = ?, "ip_address" = ?
                        where "email_lower" = ?"#,
                     form.email,
                     form.handle,
@@ -365,6 +382,7 @@ pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
                     form.protected,
                     form.point,
                     tags,
+                    badgeclass,
                     defer.next,
                     ip_address,
                     email_lower,
@@ -385,8 +403,8 @@ pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
                 r#"insert into "pending_signups" (
                    "code", "email", "email_lower", "handle", "password",
                    "newsletter", "zipcode", "protected", "point", "tags",
-                   "next", "ip_address", "created", "email_sent"
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                   "badgeclass", "next", "ip_address", "created", "email_sent"
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
                 code,
                 form.email,
                 email_lower,
@@ -397,6 +415,7 @@ pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
                 form.protected,
                 form.point,
                 tags,
+                badgeclass,
                 defer.next,
                 ip_address,
                 now,
@@ -421,7 +440,7 @@ pub async fn complete_signup(req: &Request) -> Result<Option<CompleteSignupRespo
 
     let row = sqlx::query!(
         r#"select "email", "handle", "password", "newsletter", "zipcode",
-                  "protected", "point", "tags", "next"
+                  "protected", "point", "tags", "badgeclass", "next"
            from "pending_signups"
            where "code" = ? and datetime("created") >= datetime('now', '-7 days')"#,
         complete.code
@@ -465,6 +484,12 @@ pub async fn complete_signup(req: &Request) -> Result<Option<CompleteSignupRespo
         point: row.point,
         tags,
         disabled_password: false,
+        // Staked out before the completion email was sent; the session that
+        // carried it is long gone by the time the link is clicked.
+        badgeclass: row
+            .badgeclass
+            .as_deref()
+            .and_then(common::badge::Badge::from_badgeclass),
     };
 
     let basic_info = match create_account(form, row.password, true).await {

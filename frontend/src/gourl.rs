@@ -2,14 +2,19 @@ use crate::middleware::analytics::{Device, Interaction};
 use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
 use anyhow::{Context, Result};
+use common::message::user::{
+    BasicInfo, WorkflowProgressRequest, WorkflowProgressResponse, WorkflowType,
+};
 use common::service::log_clickthrough;
 use poem::{
     Body, IntoResponse, Response, handler,
     http::{StatusCode, header::CONTENT_TYPE},
+    session::Session,
     web::{Path, Query, RealIp},
 };
 use serde::{Deserialize, Serialize};
 use std::net::IpAddr;
+use std::sync::Arc;
 use tracing::{error, info};
 use ulid::Ulid;
 
@@ -190,10 +195,84 @@ pub struct ProgramQuery {
     pub program: Option<String>, // ULID as string
 }
 
+/// Advance a training when a signed-in user visits a tracked go link.
+///
+/// Mirrors orrery's `counted_redirect_later`: the link carries the workflow
+/// (`statemachine`) and the step to record (`transition`). Some trainings have
+/// no other completion signal — the K-12 tutorial has no final quiz, so this
+/// visit is the only thing that marks it done. Failures are logged and
+/// swallowed; the user still gets their redirect.
+async fn record_tracked_transition(go_url: &GoUrl, user_info: Option<&Arc<BasicInfo>>) {
+    if go_url.statemachine.is_empty() || go_url.transition.is_empty() {
+        return;
+    }
+
+    let Some(user) = user_info else {
+        return;
+    };
+
+    let Some(workflow) = WorkflowType::from_statemachine(&go_url.statemachine) else {
+        error!(
+            "Go link {} names unknown state machine {:?}",
+            go_url.slug, go_url.statemachine
+        );
+        return;
+    };
+
+    let recorded: Result<WorkflowProgressResponse, _> = common::service::request(
+        "user.workflow.progress",
+        WorkflowProgressRequest {
+            user_id: user.user_id.to_string(),
+            workflow,
+            step: go_url.transition.clone(),
+        },
+    )
+    .await;
+
+    if let Err(e) = recorded {
+        error!(
+            "Failed to record {} step {:?} for {} via go link {}: {}",
+            workflow.slug(),
+            go_url.transition,
+            user.user_id,
+            go_url.slug,
+            e
+        );
+    }
+}
+
+/// Session keys `AuthMiddleware` trusts to establish who the visitor is. A go
+/// link stamping one of these would forge a login, so the passthrough refuses
+/// them however the link was configured.
+const AUTHENTICATION_SESSION_KEYS: [&str; 3] = ["basic_info", "auth_username", "subject"];
+
+/// Stamp a value into the session on visit, mirroring orrery's
+/// `CountedRedirect.session_set_key` / `session_set_value`.
+///
+/// Deliberately generic, as it is in orrery: the key is whatever the link was
+/// configured with. `signup_tags` is the one hydra reads today — see
+/// [`crate::session::session_tags`], which folds it into the canonical tag set.
+fn apply_session_set(go_url: &GoUrl, session: &Session) {
+    if go_url.session_set_key.is_empty() {
+        return;
+    }
+
+    if AUTHENTICATION_SESSION_KEYS.contains(&go_url.session_set_key.as_str()) {
+        error!(
+            "Go link {} tried to set authentication session key {:?}; refusing",
+            go_url.slug, go_url.session_set_key
+        );
+        return;
+    }
+
+    session.set(&go_url.session_set_key, &go_url.session_set_value);
+}
+
 #[handler]
 pub async fn handle_go_url(
     req: &poem::Request,
     Authenticated(user_info): Authenticated,
+    session: &Session,
     RealIp(ip_address): RealIp,
     device: Device,
     interaction: Interaction,
@@ -217,6 +296,9 @@ pub async fn handle_go_url(
     // Look up the GoUrl entry
     match GoUrl::load(slug.clone()).await {
         Ok(go_url) => {
+            record_tracked_transition(&go_url, user_info.as_ref()).await;
+            apply_session_set(&go_url, session);
+
             match go_url.url_type {
                 GoUrlType::TrackedFile { file_id } => {
                     // Handle tracked file

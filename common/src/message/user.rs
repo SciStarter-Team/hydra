@@ -18,6 +18,13 @@ pub struct Signup {
     pub point: Option<String>,
     pub tags: Vec<String>,
     pub disabled_password: bool,
+    /// A badge staked out by the tracked go link the visitor arrived through
+    /// (orrery's `grant-badge` session key). Carried on the signup rather than
+    /// granted by the caller so that both lanes obey it: the immediate one,
+    /// and the deferred one, where it waits on the pending row until the
+    /// emailed link is clicked — possibly in another browser, where no session
+    /// key survives.
+    pub badgeclass: Option<crate::badge::Badge>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
@@ -1412,6 +1419,25 @@ impl WorkflowType {
             WorkflowType::Ideal => "ideal",
             WorkflowType::Ambassador => "ambassador",
             WorkflowType::K12 => "k12",
+        }
+    }
+
+    /// Resolve orrery's `CountedRedirect.statemachine` spelling — the
+    /// lowercased Django model class name — to a workflow. Tracked go links
+    /// carry these, so a visit can advance a training; the accompanying
+    /// `transition` is the step name, which both sides already spell the same
+    /// way ("tutorial", "list", …).
+    pub fn from_statemachine(name: &str) -> Option<WorkflowType> {
+        match name.to_ascii_lowercase().as_str() {
+            "foundationsstate" => Some(WorkflowType::Foundations),
+            "librarieshubsstate" => Some(WorkflowType::LibrariesHubs),
+            "dataliteracystate" => Some(WorkflowType::DataLiteracy),
+            "higheredstate" => Some(WorkflowType::HigherEd),
+            "dataethicsstate" => Some(WorkflowType::DataEthics),
+            "idealstate" => Some(WorkflowType::Ideal),
+            "ambassadorstate" => Some(WorkflowType::Ambassador),
+            "k12state" => Some(WorkflowType::K12),
+            _ => None,
         }
     }
 }

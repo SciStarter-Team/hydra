@@ -5,8 +5,6 @@ To earn the Citizen Science for K-12 Educators badge, participants must:
 - Create or log in to a SciStarter account.
 - Successfully complete the [Foundations of Citizen Science](https://scistarter.org/badges/6Jg_IwmfQTaJ2kUNePsO5Q) training and earn the corresponding badge.
 - Successfully complete the Citizen Science for K-12 Educators training module.
-- Visit and engage with the resources in the SciStarter Education Hub.
-- Build a SciStarter list of citizen science projects for their classroom.
 
 ****
 ## Learning Outcomes

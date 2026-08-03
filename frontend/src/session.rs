@@ -131,10 +131,89 @@ pub mod session_tags {
         }
     }
 
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        /// A go link stamps orrery's comma-separated `signup_tags`; it has to
+        /// reach signup the same way a `?tag=` would.
+        #[test]
+        fn go_link_signup_tags_are_folded_in_and_normalized() {
+            let session = Session::default();
+            session.set("signup_tags", "girlscout, #Library , ,nasa");
+
+            let mut tags = list(&session);
+            tags.sort();
+
+            assert_eq!(tags, vec!["girlscout", "library", "nasa"]);
+        }
+
+        #[test]
+        fn folded_tags_merge_with_tags_added_the_ordinary_way() {
+            let session = Session::default();
+            add(&session, "girlscout");
+            session.set("signup_tags", "nasa,girlscout");
+
+            let mut tags = clear(&session);
+            tags.sort();
+
+            assert_eq!(tags, vec!["girlscout", "nasa"]);
+            assert!(list(&session).is_empty(), "clear must empty both keys");
+        }
+
+        /// `/go/girlscout-signup` carries `signup_tags=girlscout`, and
+        /// `girlscout` is a PROTECTED_SIGNUP_TAG. The tag has to survive the
+        /// fold, because what rides on it is whether a minor's account is
+        /// created protected.
+        #[test]
+        fn a_go_link_protection_tag_reaches_the_protection_decision() {
+            use common::message::user::signup_needs_protection;
+
+            let session = Session::default();
+            session.set("signup_tags", "girlscout");
+
+            assert!(signup_needs_protection(&list(&session)));
+        }
+
+        /// The drain is what makes this true: were `signup_tags` merged on
+        /// every read instead, a removed tag would come back.
+        #[test]
+        fn a_removed_tag_stays_removed() {
+            let session = Session::default();
+            session.set("signup_tags", "girlscout,nasa");
+
+            remove(&session, "girlscout");
+
+            assert_eq!(list(&session), vec!["nasa"]);
+        }
+    }
+
     /// Helper function to get tags as BTreeSet
+    ///
+    /// Also drains `signup_tags`, the comma-separated key a tracked go link
+    /// stamps into the session (orrery's `CountedRedirect.session_set_value`;
+    /// see [`crate::gourl`]). Draining rather than merging on every read keeps
+    /// `remove` and `clear` meaningful — a tag folded in once behaves from
+    /// then on exactly like one added through `add`.
     fn get_set(session: &Session) -> BTreeSet<String> {
-        session
+        let mut tags = session
             .get::<BTreeSet<String>>("session_tags")
-            .unwrap_or_default()
+            .unwrap_or_default();
+
+        if let Some(raw) = session.get::<String>("signup_tags") {
+            session.remove("signup_tags");
+
+            let folded = raw
+                .split(',')
+                .map(normalize_tag)
+                .filter(|tag| !tag.is_empty())
+                .fold(false, |changed, tag| tags.insert(tag) || changed);
+
+            if folded {
+                session.set("session_tags", tags.clone());
+            }
+        }
+
+        tags
     }
 }
