@@ -1,0 +1,346 @@
+//! Library Network signups: the staff browser's queries.
+//!
+//! The rows are mirrored from orrery (see `library_signups_synchronize` in
+//! main.rs), which owns the signup form and stays the system of record. This
+//! service only reads them: a paged, filtered list for the grid, a wide CSV
+//! export, and the narrow deduplicated "Prepare Map" export.
+
+use anyhow::Error;
+use async_nats::service::Request;
+use common::{
+    message::dashboard::{
+        LibraryMapRow, LibrarySignupFilters, LibrarySignupListRequest, LibrarySignupListResponse,
+        LibrarySignupRow, LibrarySignupUpdate,
+    },
+    service::decode_structured_message,
+    shared::db,
+    timestring::TimeString,
+};
+use sqlx::{QueryBuilder, Row, Sqlite};
+use ulid::Ulid;
+
+/// Kept in step with `LibraryNetworkSignup.HAVE_ACCOUNT` in orrery's
+/// frontend/models.py.
+fn have_account_label(value: i64) -> &'static str {
+    match value {
+        0 => "No",
+        1 => "Yes",
+        _ => "I don't know",
+    }
+}
+
+/// Push the browser's filters onto a query already ending in a WHERE clause.
+/// Shared by the list, its count, and the CSV export so the three cannot
+/// disagree about what "matching" means.
+fn push_filters(qb: &mut QueryBuilder<Sqlite>, f: &LibrarySignupFilters) {
+    fn contains(qb: &mut QueryBuilder<Sqlite>, column: &str, needle: &str) {
+        let trimmed = needle.trim();
+        if trimmed.is_empty() {
+            return;
+        }
+        qb.push(" AND \"");
+        qb.push(column);
+        qb.push("\" LIKE ");
+        qb.push_bind(format!("%{}%", trimmed));
+    }
+
+    if let Some(b) = f.add_to_map.as_bool() {
+        qb.push(" AND \"add_to_map\" = ");
+        qb.push_bind(if b { 1_i64 } else { 0_i64 });
+    }
+
+    if !f.have_account.is_empty() {
+        qb.push(" AND \"have_account\" IN (");
+        let mut first = true;
+        for v in &f.have_account {
+            if !first {
+                qb.push(", ");
+            }
+            first = false;
+            qb.push_bind(*v);
+        }
+        qb.push(")");
+    }
+
+    let from = f.recorded_from.trim();
+    if !from.is_empty() {
+        qb.push(" AND \"recorded\" >= ");
+        qb.push_bind(from.to_string());
+    }
+
+    let to = f.recorded_to.trim();
+    if !to.is_empty() {
+        // `recorded` carries a time, so an inclusive end date has to cover the
+        // whole of that day.
+        qb.push(" AND \"recorded\" <= ");
+        qb.push_bind(format!("{to}T23:59:59.999999Z"));
+    }
+
+    contains(qb, "organization_name", &f.organization_name);
+    contains(qb, "organization_type", &f.organization_type);
+    contains(qb, "primary_job_type", &f.primary_job_type);
+    contains(qb, "organization_city", &f.organization_city);
+    contains(qb, "organization_state", &f.organization_state);
+    contains(qb, "organization_zip_code", &f.organization_zip_code);
+    contains(qb, "organization_country", &f.organization_country);
+    contains(qb, "organization_web_page", &f.organization_web_page);
+    contains(qb, "email", &f.email);
+    contains(qb, "job_title", &f.job_title);
+
+    let search = f.search.trim();
+    if !search.is_empty() {
+        let pattern = format!("%{}%", search);
+        qb.push(" AND (\"organization_name\" LIKE ");
+        qb.push_bind(pattern.clone());
+        qb.push(" OR \"email\" LIKE ");
+        qb.push_bind(pattern.clone());
+        qb.push(" OR \"first_name\" LIKE ");
+        qb.push_bind(pattern.clone());
+        qb.push(" OR \"last_name\" LIKE ");
+        qb.push_bind(pattern);
+        qb.push(")");
+    }
+}
+
+const ROW_COLUMNS: &str = r#"
+    "signup_id", "orrery_id", "recorded", "user_id", "email", "first_name", "last_name",
+    "job_title", "have_account", "organization_name", "organization_type",
+    "primary_job_type", "organization_street_address", "organization_city",
+    "organization_state", "organization_zip_code", "organization_country",
+    "organization_web_page", "organization_social_handles", "add_to_map"
+"#;
+
+const FROM_WHERE: &str = r#" FROM "library_network_signups" WHERE 1 = 1"#;
+
+fn signup_row(row: &sqlx::sqlite::SqliteRow) -> LibrarySignupRow {
+    LibrarySignupRow {
+        signup_id: row.get("signup_id"),
+        orrery_id: row.get("orrery_id"),
+        recorded: row.get("recorded"),
+        user_ulid: row.get::<Option<String>, _>("user_id").unwrap_or_default(),
+        email: row.get("email"),
+        first_name: row.get("first_name"),
+        last_name: row.get("last_name"),
+        job_title: row.get("job_title"),
+        have_account: have_account_label(row.get("have_account")).to_string(),
+        organization_name: row.get("organization_name"),
+        organization_type: row.get("organization_type"),
+        primary_job_type: row.get("primary_job_type"),
+        organization_street_address: row.get("organization_street_address"),
+        organization_city: row.get("organization_city"),
+        organization_state: row.get("organization_state"),
+        organization_zip_code: row.get("organization_zip_code"),
+        organization_country: row.get("organization_country"),
+        organization_web_page: row.get("organization_web_page"),
+        organization_social_handles: row.get("organization_social_handles"),
+        add_to_map: row.get::<i64, _>("add_to_map") != 0,
+    }
+}
+
+/// One page of signups for the staff grid (`user.library.list`), plus the
+/// total number of matches so the page can render its pagination.
+pub async fn list(req: &Request) -> Result<LibrarySignupListResponse, Error> {
+    let request: LibrarySignupListRequest =
+        decode_structured_message(req.message.clone()).unwrap_or_default();
+
+    let mut count_qb: QueryBuilder<Sqlite> =
+        QueryBuilder::new(format!("SELECT COUNT(*){FROM_WHERE}"));
+    push_filters(&mut count_qb, &request.filters);
+    let total: i64 = count_qb.build_query_scalar().fetch_one(db()).await?;
+
+    let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new("SELECT ");
+    qb.push(ROW_COLUMNS);
+    qb.push(FROM_WHERE);
+    push_filters(&mut qb, &request.filters);
+    qb.push(" ORDER BY \"recorded\" DESC, \"signup_id\" DESC");
+
+    if request.per_page > 0 {
+        let page = request.page.max(1);
+        qb.push(" LIMIT ");
+        qb.push_bind(request.per_page);
+        qb.push(" OFFSET ");
+        qb.push_bind((page - 1) * request.per_page);
+    }
+
+    let rows = qb.build().fetch_all(db()).await?;
+
+    Ok(LibrarySignupListResponse {
+        rows: rows.iter().map(signup_row).collect(),
+        total,
+    })
+}
+
+/// The columns a mapping tool wants (`user.library.map`), one row per distinct
+/// organization.
+///
+/// Signups are append-only, so two librarians from the same building each
+/// opting in would otherwise stack two pins on the same spot. Rows are
+/// collapsed on name plus address, compared case- and whitespace-insensitively
+/// because these are free-text fields typed by different people, and the
+/// surviving row is the most recent — the freshest description of a library
+/// whose web page or contact may have changed. Values are trimmed on the way
+/// out, since stray padding is noise to whatever geocodes the file.
+///
+/// Deliberately unfiltered: it answers one fixed question — which libraries
+/// asked to appear — so a filter left over from browsing cannot silently
+/// shrink the map.
+pub async fn map(_req: &Request) -> Result<Vec<LibraryMapRow>, Error> {
+    let rows = sqlx::query!(
+        r#"SELECT
+             trim("organization_name") AS "organization_name!: String",
+             trim("organization_street_address") AS "organization_street_address!: String",
+             trim("organization_city") AS "organization_city!: String",
+             trim("organization_state") AS "organization_state!: String",
+             trim("organization_zip_code") AS "organization_zip_code!: String",
+             trim("organization_country") AS "organization_country!: String",
+             trim("organization_web_page") AS "organization_web_page!: String"
+           FROM (
+             SELECT "organization_name", "organization_street_address",
+                    "organization_city", "organization_state",
+                    "organization_zip_code", "organization_country",
+                    "organization_web_page",
+                    ROW_NUMBER() OVER (
+                      PARTITION BY lower(trim("organization_name")),
+                                   lower(trim("organization_street_address")),
+                                   lower(trim("organization_city")),
+                                   lower(trim("organization_state")),
+                                   lower(trim("organization_zip_code"))
+                      ORDER BY "recorded" DESC, "signup_id" DESC
+                    ) AS "rank"
+             FROM "library_network_signups"
+             WHERE "add_to_map" = 1
+           )
+           WHERE "rank" = 1
+           ORDER BY lower(trim("organization_name")), lower(trim("organization_city"))"#
+    )
+    .fetch_all(db())
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| LibraryMapRow {
+            organization_name: row.organization_name,
+            organization_street_address: row.organization_street_address,
+            organization_city: row.organization_city,
+            organization_state: row.organization_state,
+            organization_zip_code: row.organization_zip_code,
+            organization_country: row.organization_country,
+            organization_web_page: row.organization_web_page,
+        })
+        .collect())
+}
+
+/// One signup, for the staff edit form (`user.library.get`).
+pub async fn get(req: &Request) -> Result<Option<LibrarySignupRow>, Error> {
+    let signup_id: String = decode_structured_message(req.message.clone())?;
+
+    let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new("SELECT ");
+    qb.push(ROW_COLUMNS);
+    qb.push(FROM_WHERE);
+    qb.push(" AND \"signup_id\" = ");
+    qb.push_bind(signup_id);
+
+    Ok(qb.build().fetch_optional(db()).await?.map(|r| signup_row(&r)))
+}
+
+/// Apply a staff edit (`user.library.save`).
+///
+/// Identity and provenance columns are not editable: `signup_id` names the
+/// row, `orrery_id` records where it came from, and `recorded` is when the
+/// librarian filled the form in. `updated` moves so the row sorts as recently
+/// touched, matching what orrery's `auto_now` does.
+pub async fn save(req: &Request) -> Result<(), Error> {
+    let update: LibrarySignupUpdate = decode_structured_message(req.message.clone())?;
+    let now = TimeString::now().to_string();
+    let add_to_map = if update.add_to_map { 1_i64 } else { 0_i64 };
+
+    sqlx::query!(
+        r#"UPDATE "library_network_signups" SET
+             "updated" = ?,
+             "email" = ?,
+             "first_name" = ?,
+             "last_name" = ?,
+             "job_title" = ?,
+             "have_account" = ?,
+             "organization_name" = ?,
+             "organization_type" = ?,
+             "primary_job_type" = ?,
+             "organization_street_address" = ?,
+             "organization_city" = ?,
+             "organization_state" = ?,
+             "organization_zip_code" = ?,
+             "organization_country" = ?,
+             "organization_web_page" = ?,
+             "organization_social_handles" = ?,
+             "add_to_map" = ?
+           WHERE "signup_id" = ?"#,
+        now,
+        update.email,
+        update.first_name,
+        update.last_name,
+        update.job_title,
+        update.have_account,
+        update.organization_name,
+        update.organization_type,
+        update.primary_job_type,
+        update.organization_street_address,
+        update.organization_city,
+        update.organization_state,
+        update.organization_zip_code,
+        update.organization_country,
+        update.organization_web_page,
+        update.organization_social_handles,
+        add_to_map,
+        update.signup_id,
+    )
+    .execute(db())
+    .await?;
+
+    Ok(())
+}
+
+/// Record a signup from our own form (`user.library.create`).
+///
+/// `orrery_id` stays null: this row did not come from there, and leaving it
+/// null is what keeps the sync's upsert from ever matching it.
+pub async fn create(req: &Request) -> Result<(), Error> {
+    let signup: LibrarySignupUpdate = decode_structured_message(req.message.clone())?;
+    let signup_id = Ulid::new().to_string();
+    let now = TimeString::now().to_string();
+    let add_to_map = if signup.add_to_map { 1_i64 } else { 0_i64 };
+
+    sqlx::query!(
+        r#"INSERT INTO "library_network_signups" (
+             "signup_id", "recorded", "updated", "user_id", "email", "first_name",
+             "last_name", "job_title", "have_account", "organization_name",
+             "organization_type", "primary_job_type", "organization_street_address",
+             "organization_city", "organization_state", "organization_zip_code",
+             "organization_country", "organization_web_page",
+             "organization_social_handles", "add_to_map"
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        signup_id,
+        now,
+        now,
+        signup.user_ulid,
+        signup.email,
+        signup.first_name,
+        signup.last_name,
+        signup.job_title,
+        signup.have_account,
+        signup.organization_name,
+        signup.organization_type,
+        signup.primary_job_type,
+        signup.organization_street_address,
+        signup.organization_city,
+        signup.organization_state,
+        signup.organization_zip_code,
+        signup.organization_country,
+        signup.organization_web_page,
+        signup.organization_social_handles,
+        add_to_map,
+    )
+    .execute(db())
+    .await?;
+
+    Ok(())
+}

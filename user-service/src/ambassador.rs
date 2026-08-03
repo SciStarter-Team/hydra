@@ -6,8 +6,9 @@ use common::{
         AmbassadorAppStatus, AmbassadorApplication, AmbassadorApplicationForm,
         AmbassadorApplicationRow, AmbassadorApplicationUpdate, AmbassadorDirectoryEntry,
         AmbassadorDirectoryOrder, AmbassadorDirectoryQuery, AmbassadorDirectoryResponse,
-        AmbassadorMessageForm, AmbassadorMessageReview, AmbassadorMessageRow, AmbassadorProfile,
-        AmbassadorReviewUpdate, AmbassadorScreeningStatus,
+        AmbassadorExportRow, AmbassadorFilters, AmbassadorListRequest, AmbassadorListResponse, AmbassadorMessageForm,
+        AmbassadorMessageReview, AmbassadorMessageRow, AmbassadorProfile, AmbassadorReviewUpdate,
+        AmbassadorScreeningStatus, DatePresence, TriState,
     },
     message::email::EmailRecipient,
     message::user::{AmbassadorLocation, AmbassadorPassedLocationsResponse, UserAndBadge},
@@ -16,6 +17,7 @@ use common::{
     timestring::TimeString,
     ulid::AsUlid,
 };
+use sqlx::{QueryBuilder, Row, Sqlite};
 use ulid::Ulid;
 
 /// The current native ambassador state-machine state (orrery's
@@ -482,89 +484,401 @@ pub async fn profile(req: &Request) -> Result<Option<AmbassadorProfile>, Error> 
     }))
 }
 
-/// All ambassador applications, as rows for the staff processing grid
-/// (`user.ambassador.list`). Joined with the user record for identity/handle
-/// and the derived directory state (`users.ambassador`).
-pub async fn list(_req: &Request) -> Result<Vec<AmbassadorApplicationRow>, Error> {
-    let rows = sqlx::query!(
+/// Push the staff grid's filters onto a query already ending in a WHERE
+/// clause. Shared by the paged list, its count, and the CSV export so the
+/// three can never disagree about what "matching" means.
+fn push_filters(qb: &mut QueryBuilder<Sqlite>, f: &AmbassadorFilters) {
+    fn tristate(qb: &mut QueryBuilder<Sqlite>, column: &str, val: TriState) {
+        if let Some(b) = val.as_bool() {
+            qb.push(" AND a.\"");
+            qb.push(column);
+            qb.push("\" = ");
+            qb.push_bind(if b { 1_i64 } else { 0_i64 });
+        }
+    }
+
+    fn presence(qb: &mut QueryBuilder<Sqlite>, column: &str, val: DatePresence) {
+        // A cleared date reaches us as NULL from the orrery sync but as an
+        // empty string from the review form, so both spellings count as absent.
+        match val {
+            DatePresence::Any => {}
+            DatePresence::Present => {
+                qb.push(" AND a.\"");
+                qb.push(column);
+                qb.push("\" IS NOT NULL AND a.\"");
+                qb.push(column);
+                qb.push("\" != ''");
+            }
+            DatePresence::Absent => {
+                qb.push(" AND (a.\"");
+                qb.push(column);
+                qb.push("\" IS NULL OR a.\"");
+                qb.push(column);
+                qb.push("\" = '')");
+            }
+        }
+    }
+
+    fn contains(qb: &mut QueryBuilder<Sqlite>, column: &str, needle: &str) {
+        let trimmed = needle.trim();
+        if trimmed.is_empty() {
+            return;
+        }
+        qb.push(" AND a.\"");
+        qb.push(column);
+        qb.push("\" LIKE ");
+        qb.push_bind(format!("%{}%", trimmed));
+    }
+
+    fn date_from(qb: &mut QueryBuilder<Sqlite>, column: &str, value: &str) {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return;
+        }
+        qb.push(" AND a.\"");
+        qb.push(column);
+        qb.push("\" >= ");
+        qb.push_bind(trimmed.to_string());
+    }
+
+    fn date_to(qb: &mut QueryBuilder<Sqlite>, column: &str, value: &str) {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return;
+        }
+        // Dates are ISO text, and `submitted` carries a time, so an inclusive
+        // end date compares against the end of that day.
+        qb.push(" AND a.\"");
+        qb.push(column);
+        qb.push("\" <= ");
+        qb.push_bind(format!("{trimmed}T23:59:59.999999Z"));
+    }
+
+    fn int_in(qb: &mut QueryBuilder<Sqlite>, column: &str, values: &[i64]) {
+        if values.is_empty() {
+            return;
+        }
+        qb.push(" AND a.\"");
+        qb.push(column);
+        qb.push("\" IN (");
+        let mut first = true;
+        for v in values {
+            if !first {
+                qb.push(", ");
+            }
+            first = false;
+            qb.push_bind(*v);
+        }
+        qb.push(")");
+    }
+
+    if let Some(user_id) = f.user_id {
+        qb.push(" AND a.\"user_id\" = ");
+        qb.push_bind(user_id.to_string());
+    }
+
+    tristate(qb, "archived", f.archived);
+    tristate(qb, "draft", f.draft);
+    tristate(qb, "hidden", f.hidden);
+    tristate(qb, "marked", f.marked);
+    tristate(qb, "welcome_sent", f.welcome_sent);
+    tristate(qb, "rejection_sent", f.rejection_sent);
+    tristate(qb, "survey", f.survey);
+    tristate(qb, "citscimonth", f.citscimonth);
+    tristate(qb, "background_check", f.background_check);
+    tristate(qb, "conduct", f.conduct);
+
+    // Directory membership lives on the user record, not the application.
+    match f.in_directory.as_bool() {
+        Some(true) => qb.push(" AND u.\"ambassador\" IS NOT NULL"),
+        Some(false) => qb.push(" AND u.\"ambassador\" IS NULL"),
+        None => qb,
+    };
+
+    int_in(qb, "cohort", &f.cohort);
+    int_in(qb, "app_status", &f.app_status);
+    int_in(qb, "screening_status", &f.screening_status);
+
+    presence(qb, "verified", f.verified_presence);
+    presence(qb, "orientation", f.orientation_presence);
+    presence(qb, "kit_sent", f.kit_sent_presence);
+    presence(qb, "renewal_date", f.renewal_date_presence);
+
+    date_from(qb, "submitted", &f.submitted_from);
+    date_to(qb, "submitted", &f.submitted_to);
+    date_from(qb, "verified", &f.verified_from);
+    date_to(qb, "verified", &f.verified_to);
+    date_from(qb, "renewal_date", &f.renewal_date_from);
+    date_to(qb, "renewal_date", &f.renewal_date_to);
+
+    contains(qb, "city", &f.city);
+    contains(qb, "state", &f.state);
+    contains(qb, "phone", &f.phone);
+    contains(qb, "tee_size", &f.tee_size);
+    contains(qb, "gender", &f.gender);
+    contains(qb, "ethnicity", &f.ethnicity);
+    contains(qb, "handles", &f.handles);
+    contains(qb, "reviewers", &f.reviewers);
+    contains(qb, "notes", &f.notes);
+
+    let search = f.search.trim();
+    if !search.is_empty() {
+        let pattern = format!("%{}%", search);
+        qb.push(" AND (u.\"first_name\" LIKE ");
+        qb.push_bind(pattern.clone());
+        qb.push(" OR u.\"last_name\" LIKE ");
+        qb.push_bind(pattern.clone());
+        qb.push(" OR u.\"handle\" LIKE ");
+        qb.push_bind(pattern.clone());
+        qb.push(" OR a.\"contact_email\" LIKE ");
+        qb.push_bind(pattern);
+        qb.push(")");
+    }
+}
+
+const GRID_COLUMNS: &str = r#"
+    a."user_id" AS "user_id",
+    u."first_name" AS "first_name",
+    u."last_name" AS "last_name",
+    u."handle" AS "handle",
+    u."ambassador" AS "ambassador",
+    a."contact_email" AS "contact_email",
+    a."city" AS "city",
+    a."state" AS "state",
+    a."phone" AS "phone",
+    a."birthdate" AS "birthdate",
+    a."tee_size" AS "tee_size",
+    a."gender" AS "gender",
+    a."ethnicity" AS "ethnicity",
+    a."marked" AS "marked",
+    a."archived" AS "archived",
+    a."hidden" AS "hidden",
+    a."draft" AS "draft",
+    a."cohort" AS "cohort",
+    a."app_status" AS "app_status",
+    a."screening_status" AS "screening_status",
+    a."verified" AS "verified",
+    a."rejection_sent" AS "rejection_sent",
+    a."welcome_sent" AS "welcome_sent",
+    a."orientation" AS "orientation",
+    a."kit_sent" AS "kit_sent",
+    a."survey" AS "survey",
+    a."handles" AS "handles",
+    a."reviewers" AS "reviewers",
+    a."notes" AS "notes",
+    a."submitted" AS "submitted",
+    a."updated_at" AS "updated_at"
+"#;
+
+const FROM_WHERE: &str = r#" FROM "ambassador_applications" a
+    JOIN "users" u ON u."user_id" = a."user_id"
+    WHERE 1 = 1"#;
+
+fn grid_row(row: &sqlx::sqlite::SqliteRow) -> AmbassadorApplicationRow {
+    let first_name: String = row.get("first_name");
+    let last_name: String = row.get("last_name");
+    let ambassador: Option<String> = row.get("ambassador");
+
+    AmbassadorApplicationRow {
+        user_id: row
+            .get::<String, _>("user_id")
+            .as_ulid()
+            .unwrap_or_default(),
+        name: format!("{} {}", first_name, last_name).trim().to_string(),
+        handle: row.get("handle"),
+        email: row.get("contact_email"),
+        city: row.get("city"),
+        state: row.get("state"),
+        phone: row.get("phone"),
+        birthdate: row.get("birthdate"),
+        tee_size: row.get("tee_size"),
+        gender: row.get("gender"),
+        ethnicity: row.get("ethnicity"),
+        in_directory: ambassador.is_some(),
+        submitted: row.get("submitted"),
+        updated_at: row.get("updated_at"),
+        marked: row.get::<i64, _>("marked") != 0,
+        archived: row.get::<i64, _>("archived") != 0,
+        hidden: row.get::<i64, _>("hidden") != 0,
+        draft: row.get::<i64, _>("draft") != 0,
+        cohort: row.get("cohort"),
+        app_status: AmbassadorAppStatus::from_i64(row.get("app_status")),
+        screening_status: AmbassadorScreeningStatus::from_i64(row.get("screening_status")),
+        verified: row.get("verified"),
+        rejection_sent: row.get::<i64, _>("rejection_sent") != 0,
+        welcome_sent: row.get::<i64, _>("welcome_sent") != 0,
+        orientation: row.get("orientation"),
+        kit_sent: row.get("kit_sent"),
+        survey: row.get::<i64, _>("survey") != 0,
+        handles: row.get("handles"),
+        reviewers: row.get("reviewers"),
+        notes: row.get("notes"),
+    }
+}
+
+/// One page of ambassador applications for the staff processing grid
+/// (`user.ambassador.list`), plus the total number of matches so the page can
+/// render its pagination. Joined with the user record for identity/handle and
+/// the derived directory state (`users.ambassador`).
+pub async fn list(req: &Request) -> Result<AmbassadorListResponse, Error> {
+    // Tolerant of an empty payload so a frontend deployed ahead of this
+    // service still gets an unfiltered first page rather than an error.
+    let request: AmbassadorListRequest =
+        decode_structured_message(req.message.clone()).unwrap_or_default();
+
+    let mut count_qb: QueryBuilder<Sqlite> =
+        QueryBuilder::new(format!("SELECT COUNT(*){FROM_WHERE}"));
+    push_filters(&mut count_qb, &request.filters);
+    let total: i64 = count_qb.build_query_scalar().fetch_one(db()).await?;
+
+    let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new("SELECT ");
+    qb.push(GRID_COLUMNS);
+    qb.push(FROM_WHERE);
+    push_filters(&mut qb, &request.filters);
+    qb.push(" ORDER BY a.\"submitted\" DESC");
+
+    if request.per_page > 0 {
+        let page = request.page.max(1);
+        qb.push(" LIMIT ");
+        qb.push_bind(request.per_page);
+        qb.push(" OFFSET ");
+        qb.push_bind((page - 1) * request.per_page);
+    }
+
+    let rows = qb.build().fetch_all(db()).await?;
+
+    Ok(AmbassadorListResponse {
+        rows: rows.iter().map(grid_row).collect(),
+        total,
+    })
+}
+
+/// Every application matching the grid's filters, with the applicant's
+/// long-form answers, for the staff CSV export (`user.ambassador.export`).
+/// Unpaged by design — the caller asked for the whole result set.
+pub async fn export(req: &Request) -> Result<Vec<AmbassadorExportRow>, Error> {
+    let request: AmbassadorListRequest =
+        decode_structured_message(req.message.clone()).unwrap_or_default();
+
+    let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new(
         r#"SELECT
-            a.user_id AS "user_id!",
-            u.first_name AS "first_name!",
-            u.last_name AS "last_name!",
-            u.handle AS "handle!",
-            u.ambassador AS "ambassador",
-            a.contact_email AS "contact_email!",
-            a.city AS "city!",
-            a.state AS "state!",
-            a.phone AS "phone!",
-            a.birthdate AS "birthdate",
-            a.tee_size AS "tee_size!",
-            a.gender AS "gender!",
-            a.ethnicity AS "ethnicity!",
-            a.marked AS "marked!",
-            a.archived AS "archived!",
-            a.hidden AS "hidden!",
-            a.draft AS "draft!",
-            a.cohort AS "cohort!",
-            a.app_status AS "app_status!",
-            a.screening_status AS "screening_status!",
-            a.verified AS "verified",
-            a.rejection_sent AS "rejection_sent!",
-            a.welcome_sent AS "welcome_sent!",
-            a.orientation AS "orientation",
-            a.kit_sent AS "kit_sent",
-            a.survey AS "survey!",
-            a.handles AS "handles!",
-            a.reviewers AS "reviewers!",
-            a.notes AS "notes!",
-            a.submitted AS "submitted",
-            a.updated_at AS "updated_at!"
-        FROM "ambassador_applications" a
-        JOIN "users" u ON u.user_id = a.user_id
-        ORDER BY a.submitted DESC"#,
-    )
-    .fetch_all(db())
-    .await?;
+             a."user_id" AS "user_id",
+             u."username" AS "username",
+             u."first_name" AS "first_name",
+             u."last_name" AS "last_name",
+             u."handle" AS "handle",
+             u."ambassador" AS "ambassador",
+             a."contact_email" AS "contact_email",
+             a."submitted" AS "submitted",
+             a."updated_at" AS "updated_at",
+             a."draft" AS "draft",
+             a."hidden" AS "hidden",
+             a."marked" AS "marked",
+             a."archived" AS "archived",
+             a."cohort" AS "cohort",
+             a."app_status" AS "app_status",
+             a."screening_status" AS "screening_status",
+             a."verified" AS "verified",
+             a."orientation" AS "orientation",
+             a."kit_sent" AS "kit_sent",
+             a."renewal_date" AS "renewal_date",
+             a."birthdate" AS "birthdate",
+             a."welcome_sent" AS "welcome_sent",
+             a."rejection_sent" AS "rejection_sent",
+             a."survey" AS "survey",
+             a."citscimonth" AS "citscimonth",
+             a."background_check" AS "background_check",
+             a."conduct" AS "conduct",
+             a."phone" AS "phone",
+             a."city" AS "city",
+             a."state" AS "state",
+             a."tee_size" AS "tee_size",
+             a."gender" AS "gender",
+             a."ethnicity" AS "ethnicity",
+             a."self_description" AS "self_description",
+             a."handles" AS "handles",
+             a."introduction" AS "introduction",
+             a."introduction_other" AS "introduction_other",
+             a."experience" AS "experience",
+             a."motivation" AS "motivation",
+             a."related" AS "related",
+             a."vision" AS "vision",
+             a."activities" AS "activities",
+             a."community_access" AS "community_access",
+             a."signature_name" AS "signature_name",
+             a."signature_date" AS "signature_date",
+             a."questions" AS "questions",
+             a."bio" AS "bio",
+             a."notes" AS "notes",
+             a."reviewers" AS "reviewers",
+             a."youtube_video_url" AS "youtube_video_url""#,
+    );
+    qb.push(FROM_WHERE);
+    push_filters(&mut qb, &request.filters);
+    qb.push(" ORDER BY a.\"submitted\" DESC");
 
-    let applications = rows
-        .into_iter()
-        .map(|row| AmbassadorApplicationRow {
-            user_id: row.user_id.as_ulid().unwrap_or_default(),
-            name: format!("{} {}", row.first_name, row.last_name)
-                .trim()
-                .to_string(),
-            handle: row.handle,
-            email: row.contact_email,
-            city: row.city,
-            state: row.state,
-            phone: row.phone,
-            birthdate: row.birthdate,
-            tee_size: row.tee_size,
-            gender: row.gender,
-            ethnicity: row.ethnicity,
-            in_directory: row.ambassador.is_some(),
-            submitted: row.submitted,
-            updated_at: row.updated_at,
-            marked: row.marked != 0,
-            archived: row.archived != 0,
-            hidden: row.hidden != 0,
-            draft: row.draft != 0,
-            cohort: row.cohort,
-            app_status: AmbassadorAppStatus::from_i64(row.app_status),
-            screening_status: AmbassadorScreeningStatus::from_i64(row.screening_status),
-            verified: row.verified,
-            rejection_sent: row.rejection_sent != 0,
-            welcome_sent: row.welcome_sent != 0,
-            orientation: row.orientation,
-            kit_sent: row.kit_sent,
-            survey: row.survey != 0,
-            handles: row.handles,
-            reviewers: row.reviewers,
-            notes: row.notes,
+    let rows = qb.build().fetch_all(db()).await?;
+
+    Ok(rows
+        .iter()
+        .map(|row| {
+            let ambassador: Option<String> = row.get("ambassador");
+            AmbassadorExportRow {
+                user_ulid: row.get("user_id"),
+                username: row.get("username"),
+                first_name: row.get("first_name"),
+                last_name: row.get("last_name"),
+                handle: row.get("handle"),
+                email: row.get("contact_email"),
+                in_directory: ambassador.is_some(),
+                submitted: row.get("submitted"),
+                updated_at: row.get("updated_at"),
+                draft: row.get::<i64, _>("draft") != 0,
+                hidden: row.get::<i64, _>("hidden") != 0,
+                marked: row.get::<i64, _>("marked") != 0,
+                archived: row.get::<i64, _>("archived") != 0,
+                cohort: row.get("cohort"),
+                app_status: AmbassadorAppStatus::from_i64(row.get("app_status")).label().to_string(),
+                screening_status: AmbassadorScreeningStatus::from_i64(row.get("screening_status"))
+                    .label()
+                    .to_string(),
+                verified: row.get("verified"),
+                orientation: row.get("orientation"),
+                kit_sent: row.get("kit_sent"),
+                renewal_date: row.get("renewal_date"),
+                birthdate: row.get("birthdate"),
+                welcome_sent: row.get::<i64, _>("welcome_sent") != 0,
+                rejection_sent: row.get::<i64, _>("rejection_sent") != 0,
+                survey: row.get::<i64, _>("survey") != 0,
+                citscimonth: row.get::<i64, _>("citscimonth") != 0,
+                background_check: row.get::<i64, _>("background_check") != 0,
+                conduct: row.get::<i64, _>("conduct") != 0,
+                phone: row.get("phone"),
+                city: row.get("city"),
+                state: row.get("state"),
+                tee_size: row.get("tee_size"),
+                gender: row.get("gender"),
+                ethnicity: row.get("ethnicity"),
+                self_description: row.get("self_description"),
+                handles: row.get("handles"),
+                introduction: row.get("introduction"),
+                introduction_other: row.get("introduction_other"),
+                experience: row.get("experience"),
+                motivation: row.get("motivation"),
+                related: row.get("related"),
+                vision: row.get("vision"),
+                activities: row.get("activities"),
+                community_access: row.get("community_access"),
+                signature_name: row.get("signature_name"),
+                signature_date: row.get("signature_date"),
+                questions: row.get("questions"),
+                bio: row.get("bio"),
+                notes: row.get("notes"),
+                reviewers: row.get("reviewers"),
+                youtube_video_url: row.get("youtube_video_url"),
+            }
         })
-        .collect();
-
-    Ok(applications)
+        .collect())
 }
 
 /// Apply a staff review edit (`user.ambassador.review`) and drive the native

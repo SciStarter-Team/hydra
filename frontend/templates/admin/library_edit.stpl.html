@@ -1,0 +1,162 @@
+<div class="p-6 max-w-4xl">
+  <div class="flex items-center gap-3 mb-1">
+    <h1 class="text-2xl font-bold text-gray-900">Edit Library Signup</h1>
+    <a href="/-admin/libraries" class="text-sm text-blue-600 hover:underline">&laquo; Back to list</a>
+  </div>
+
+  <% if self.saved { %>
+    <div class="mb-4 rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+      Saved.
+    </div>
+  <% } %>
+
+  <% if self.row.orrery_id.is_some() { %>
+    <div class="mb-4 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+      This signup came from orrery, which is still the system of record for it.
+      Changes made here will be overwritten the next time the sync runs — edit it
+      in orrery's admin instead until the cutover.
+    </div>
+  <% } %>
+
+  <dl class="mb-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-gray-600">
+    <div>
+      <dt class="font-medium">Recorded</dt>
+      <dd><%= self.row.recorded %></dd>
+    </div>
+    <div>
+      <dt class="font-medium">Origin</dt>
+      <dd>
+        <% if let Some(id) = self.row.orrery_id { %>orrery #<%= id %><% } else { %>This site<% } %>
+      </dd>
+    </div>
+    <div>
+      <dt class="font-medium">Account</dt>
+      <dd>
+        <% if self.row.user_ulid.is_empty() { %>
+          Signed up logged out
+        <% } else { %>
+          <a class="text-blue-600 hover:underline" href="/-admin/users?search=<%= self.row.user_ulid %>">
+            <%= self.row.user_ulid %>
+          </a>
+        <% } %>
+      </dd>
+    </div>
+  </dl>
+
+  <form method="post" action="/-admin/libraries/<%= self.row.signup_id %>" class="space-y-4">
+    <fieldset class="border border-gray-200 rounded-lg p-4">
+      <legend class="px-1 text-sm font-medium text-gray-700">Contact</legend>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <% for (name, label, value) in [
+             ("first_name", "First name", &self.row.first_name),
+             ("last_name", "Last name", &self.row.last_name),
+             ("email", "Email", &self.row.email),
+             ("job_title", "Job title", &self.row.job_title),
+           ] { %>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1"><%= label %></label>
+            <input type="text" name="<%= name %>" value="<%= value %>"
+                   class="w-full rounded border border-gray-300 px-2 py-1 text-sm">
+          </div>
+        <% } %>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Primary job type</label>
+          <input type="text" name="primary_job_type" value="<%= self.row.primary_job_type %>"
+                 list="job-types" class="w-full rounded border border-gray-300 px-2 py-1 text-sm">
+          <datalist id="job-types">
+            <% for t in self.job_types.iter() { %><option value="<%= t %>"></option><% } %>
+          </datalist>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Had a SciStarter account</label>
+          <select name="have_account" class="w-full rounded border border-gray-300 px-2 py-1 text-sm">
+            <% for (value, label) in self.have_account_choices.iter() { %>
+              <option value="<%= value %>"
+                      <%- if self.row.have_account == *label { "selected" } else { "" } %>>
+                <%= label %>
+              </option>
+            <% } %>
+          </select>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset class="border border-gray-200 rounded-lg p-4">
+      <legend class="px-1 text-sm font-medium text-gray-700">Organization</legend>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div class="md:col-span-2">
+          <label class="block text-xs font-medium text-gray-600 mb-1">Name</label>
+          <input type="text" name="organization_name" value="<%= self.row.organization_name %>"
+                 class="w-full rounded border border-gray-300 px-2 py-1 text-sm">
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Type</label>
+          <input type="text" name="organization_type" value="<%= self.row.organization_type %>"
+                 list="organization-types" class="w-full rounded border border-gray-300 px-2 py-1 text-sm">
+          <datalist id="organization-types">
+            <% for t in self.organization_types.iter() { %><option value="<%= t %>"></option><% } %>
+          </datalist>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Web page</label>
+          <input type="text" name="organization_web_page" value="<%= self.row.organization_web_page %>"
+                 class="w-full rounded border border-gray-300 px-2 py-1 text-sm">
+        </div>
+
+        <div class="md:col-span-2">
+          <label class="block text-xs font-medium text-gray-600 mb-1">Street address</label>
+          <input type="text" name="organization_street_address"
+                 value="<%= self.row.organization_street_address %>"
+                 class="w-full rounded border border-gray-300 px-2 py-1 text-sm">
+        </div>
+
+        <% for (name, label, value) in [
+             ("organization_city", "City", &self.row.organization_city),
+             ("organization_state", "State", &self.row.organization_state),
+             ("organization_zip_code", "ZIP code", &self.row.organization_zip_code),
+             ("organization_country", "Country", &self.row.organization_country),
+           ] { %>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1"><%= label %></label>
+            <input type="text" name="<%= name %>" value="<%= value %>"
+                   class="w-full rounded border border-gray-300 px-2 py-1 text-sm">
+          </div>
+        <% } %>
+
+        <div class="md:col-span-2">
+          <label class="block text-xs font-medium text-gray-600 mb-1">Social handles</label>
+          <input type="text" name="organization_social_handles"
+                 value="<%= self.row.organization_social_handles %>"
+                 class="w-full rounded border border-gray-300 px-2 py-1 text-sm">
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset class="border border-gray-200 rounded-lg p-4">
+      <legend class="px-1 text-sm font-medium text-gray-700">Map</legend>
+      <label class="flex items-center gap-2 text-sm text-gray-700">
+        <input type="checkbox" name="add_to_map" value="yes"
+               <%- if self.row.add_to_map { "checked" } else { "" } %>>
+        Include this library in the Library Network map
+      </label>
+      <p class="mt-1 text-xs text-gray-500">
+        Drives the Prepare Map export. Unticking removes the library from the map.
+      </p>
+    </fieldset>
+
+    <div class="flex gap-2">
+      <button type="submit"
+              class="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+        Save changes
+      </button>
+      <a href="/-admin/libraries"
+         class="rounded border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+        Cancel
+      </a>
+    </div>
+  </form>
+</div>

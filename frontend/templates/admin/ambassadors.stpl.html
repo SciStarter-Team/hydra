@@ -14,6 +14,165 @@
     screening then adds the user to the public Ambassador directory. Setting the status to
     <strong>Champion</strong> demotes the applicant and revokes the badge.
   </p>
+
+  <form method="get" action="/-admin/ambassadors"
+        class="mb-4 border border-gray-200 rounded-lg bg-gray-50 p-4">
+    <div class="flex items-end justify-between gap-4 mb-3">
+      <div class="flex-1">
+        <label class="block text-xs font-medium text-gray-600 mb-1">
+          Search name, handle or email
+        </label>
+        <input type="text" name="search" value="<%= self.filters.search %>"
+               class="w-full max-w-md rounded border border-gray-300 px-2 py-1 text-sm"
+               placeholder="e.g. Rivera">
+      </div>
+      <div class="flex gap-2">
+        <button type="submit"
+                class="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700">
+          Apply filters
+        </button>
+        <a href="/-admin/ambassadors/export.csv?<%= self.query_string %>"
+           class="rounded bg-gray-800 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-900">
+          Export CSV
+        </a>
+        <a href="/-admin/ambassadors"
+           class="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100">
+          Reset
+        </a>
+      </div>
+    </div>
+
+    <details<% if !self.query_string.is_empty() { %> open<% } %>>
+      <summary class="cursor-pointer text-sm font-medium text-gray-700 mb-2">More filters</summary>
+
+      <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mt-3">
+        <% for (name, label, value) in [
+             ("archived", "Archived", self.filters.archived),
+             ("draft", "Draft", self.filters.draft),
+             ("hidden", "Hidden", self.filters.hidden),
+             ("marked", "Marked", self.filters.marked),
+             ("in_directory", "In directory", self.filters.in_directory),
+             ("welcome_sent", "Welcome sent", self.filters.welcome_sent),
+             ("rejection_sent", "Rejection sent", self.filters.rejection_sent),
+             ("survey", "Survey", self.filters.survey),
+             ("citscimonth", "CitSciMonth", self.filters.citscimonth),
+             ("background_check", "Background check", self.filters.background_check),
+             ("conduct", "Conduct", self.filters.conduct),
+           ] { %>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1"><%= label %></label>
+            <select name="<%= name %>" class="w-full rounded border border-gray-300 px-2 py-1 text-sm">
+              <option value="any" <%- if value.is_any() { "selected" } else { "" } %>>Any</option>
+              <option value="yes" <%- if value.is_yes() { "selected" } else { "" } %>>Yes</option>
+              <option value="no" <%- if value.is_no() { "selected" } else { "" } %>>No</option>
+            </select>
+          </div>
+        <% } %>
+
+        <% for (name, label, value) in [
+             ("verified_presence", "Verified date", self.filters.verified_presence),
+             ("orientation_presence", "Orientation", self.filters.orientation_presence),
+             ("kit_sent_presence", "Kit sent", self.filters.kit_sent_presence),
+             ("renewal_date_presence", "Renewal date", self.filters.renewal_date_presence),
+           ] { %>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1"><%= label %></label>
+            <select name="<%= name %>" class="w-full rounded border border-gray-300 px-2 py-1 text-sm">
+              <option value="any" <%- if value.is_any() { "selected" } else { "" } %>>Any</option>
+              <option value="present" <%- if value.is_present() { "selected" } else { "" } %>>Set</option>
+              <option value="absent" <%- if value.is_absent() { "selected" } else { "" } %>>Not set</option>
+            </select>
+          </div>
+        <% } %>
+      </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
+        <fieldset class="border border-gray-200 rounded p-2">
+          <legend class="text-xs font-medium text-gray-600 px-1">App status</legend>
+          <% for status in self.app_statuses.iter() { %>
+            <label class="block text-xs text-gray-700">
+              <input type="checkbox" name="app_status[]" value="<%= status.as_i64() %>"
+                     <%- if self.filters.app_status.contains(&status.as_i64()) { "checked" } else { "" } %>>
+              <%= status.label() %>
+            </label>
+          <% } %>
+        </fieldset>
+
+        <fieldset class="border border-gray-200 rounded p-2">
+          <legend class="text-xs font-medium text-gray-600 px-1">Screening</legend>
+          <% for status in self.screening_statuses.iter() { %>
+            <label class="block text-xs text-gray-700">
+              <input type="checkbox" name="screening_status[]" value="<%= status.as_i64() %>"
+                     <%- if self.filters.screening_status.contains(&status.as_i64()) { "checked" } else { "" } %>>
+              <%= status.label() %>
+            </label>
+          <% } %>
+        </fieldset>
+
+        <fieldset class="border border-gray-200 rounded p-2">
+          <legend class="text-xs font-medium text-gray-600 px-1">Cohort</legend>
+          <% for cohort in 1..=12_i64 { %>
+            <label class="inline-block w-10 text-xs text-gray-700">
+              <input type="checkbox" name="cohort[]" value="<%= cohort %>"
+                     <%- if self.filters.cohort.contains(&cohort) { "checked" } else { "" } %>>
+              <%= cohort %>
+            </label>
+          <% } %>
+        </fieldset>
+      </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mt-4">
+        <% for (name, label, value) in [
+             ("submitted_from", "Submitted from", &self.filters.submitted_from),
+             ("submitted_to", "Submitted to", &self.filters.submitted_to),
+             ("verified_from", "Verified from", &self.filters.verified_from),
+             ("verified_to", "Verified to", &self.filters.verified_to),
+             ("renewal_date_from", "Renewal from", &self.filters.renewal_date_from),
+             ("renewal_date_to", "Renewal to", &self.filters.renewal_date_to),
+           ] { %>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1"><%= label %></label>
+            <input type="date" name="<%= name %>" value="<%= value %>"
+                   class="w-full rounded border border-gray-300 px-2 py-1 text-sm">
+          </div>
+        <% } %>
+      </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mt-4">
+        <% for (name, label, value) in [
+             ("city", "City", &self.filters.city),
+             ("state", "State", &self.filters.state),
+             ("phone", "Phone", &self.filters.phone),
+             ("tee_size", "Tee size", &self.filters.tee_size),
+             ("gender", "Gender", &self.filters.gender),
+             ("ethnicity", "Ethnicity", &self.filters.ethnicity),
+             ("handles", "Handles", &self.filters.handles),
+             ("reviewers", "Reviewers", &self.filters.reviewers),
+             ("notes", "Notes", &self.filters.notes),
+           ] { %>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1"><%= label %></label>
+            <input type="text" name="<%= name %>" value="<%= value %>"
+                   class="w-full rounded border border-gray-300 px-2 py-1 text-sm">
+          </div>
+        <% } %>
+      </div>
+    </details>
+  </form>
+
+  <div class="flex items-center gap-3 mb-2 text-sm text-gray-600">
+    <span><strong><%= self.total %></strong> matching application<%- if self.total == 1 { "" } else { "s" } %>.
+      Page <%= self.page %> of <%= self.total_pages %>.</span>
+    <% if self.has_prev { %>
+      <a class="rounded border border-gray-300 bg-white px-2 py-1 hover:bg-gray-100"
+         href="/-admin/ambassadors?<%= self.query_string %>&page=<%= self.prev_page %>">&laquo; Previous</a>
+    <% } %>
+    <% if self.has_next { %>
+      <a class="rounded border border-gray-300 bg-white px-2 py-1 hover:bg-gray-100"
+         href="/-admin/ambassadors?<%= self.query_string %>&page=<%= self.next_page %>">Next &raquo;</a>
+    <% } %>
+  </div>
+
   <div class="overflow-x-auto border border-gray-200 rounded-lg">
     <table class="min-w-full text-xs">
       <thead class="bg-gray-50 text-left text-gray-600">
@@ -37,7 +196,7 @@
       </thead>
       <tbody>
         <% if self.rows.is_empty() { %>
-          <tr><td colspan="15" class="px-2 py-8 text-center text-gray-500">No ambassador applications yet.</td></tr>
+          <tr><td colspan="15" class="px-2 py-8 text-center text-gray-500">No applications match these filters.</td></tr>
         <% } %>
         <% for row in &self.rows { %>
           <%+ AmbassadorRow { row: row.clone() } %>

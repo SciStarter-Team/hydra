@@ -1,0 +1,171 @@
+<div class="p-6">
+  <h1 class="text-2xl font-bold text-gray-900 mb-1">Library Network</h1>
+  <p class="text-sm text-gray-500 mb-4 max-w-3xl">
+    Signups from the Library Network form. <strong>Prepare Map</strong> exports the
+    columns a mapping tool needs, one row per library, for every library that asked
+    to appear — it ignores the filters below.
+  </p>
+
+  <form method="get" action="/-admin/libraries"
+        class="mb-4 border border-gray-200 rounded-lg bg-gray-50 p-4">
+    <div class="flex items-end justify-between gap-4 mb-3">
+      <div class="flex-1">
+        <label class="block text-xs font-medium text-gray-600 mb-1">
+          Search organization, contact name or email
+        </label>
+        <input type="text" name="search" value="<%= self.filters.search %>"
+               class="w-full max-w-md rounded border border-gray-300 px-2 py-1 text-sm"
+               placeholder="e.g. Athens">
+      </div>
+      <div class="flex gap-2">
+        <button type="submit"
+                class="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700">
+          Apply filters
+        </button>
+        <a href="/-admin/libraries/export.csv?<%= self.query_string %>"
+           class="rounded bg-gray-800 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-900">
+          Export CSV
+        </a>
+        <a href="/-admin/libraries/map.csv"
+           class="rounded bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-800">
+          Prepare Map
+        </a>
+        <a href="/-admin/libraries"
+           class="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100">
+          Reset
+        </a>
+      </div>
+    </div>
+
+    <details<% if !self.query_string.is_empty() { %> open<% } %>>
+      <summary class="cursor-pointer text-sm font-medium text-gray-700 mb-2">More filters</summary>
+
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Asked to appear on the map</label>
+          <select name="add_to_map" class="w-full rounded border border-gray-300 px-2 py-1 text-sm">
+            <option value="any" <%- if self.filters.add_to_map.is_any() { "selected" } else { "" } %>>Any</option>
+            <option value="yes" <%- if self.filters.add_to_map.is_yes() { "selected" } else { "" } %>>Yes</option>
+            <option value="no" <%- if self.filters.add_to_map.is_no() { "selected" } else { "" } %>>No</option>
+          </select>
+        </div>
+
+        <fieldset class="border border-gray-200 rounded p-2 col-span-2">
+          <legend class="text-xs font-medium text-gray-600 px-1">Had a SciStarter account</legend>
+          <% for (value, label) in self.have_account_choices.iter() { %>
+            <label class="inline-block mr-3 text-xs text-gray-700">
+              <input type="checkbox" name="have_account[]" value="<%= value %>"
+                     <%- if self.filters.have_account.contains(value) { "checked" } else { "" } %>>
+              <%= label %>
+            </label>
+          <% } %>
+        </fieldset>
+      </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mt-4">
+        <% for (name, label, value) in [
+             ("organization_name", "Organization name", &self.filters.organization_name),
+             ("organization_type", "Organization type", &self.filters.organization_type),
+             ("organization_city", "City", &self.filters.organization_city),
+             ("organization_state", "State", &self.filters.organization_state),
+             ("organization_zip_code", "ZIP", &self.filters.organization_zip_code),
+             ("organization_country", "Country", &self.filters.organization_country),
+             ("organization_web_page", "Web page", &self.filters.organization_web_page),
+             ("email", "Email", &self.filters.email),
+             ("job_title", "Job title", &self.filters.job_title),
+             ("primary_job_type", "Primary job type", &self.filters.primary_job_type),
+           ] { %>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1"><%= label %></label>
+            <input type="text" name="<%= name %>" value="<%= value %>"
+                   class="w-full rounded border border-gray-300 px-2 py-1 text-sm">
+          </div>
+        <% } %>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Recorded from</label>
+          <input type="date" name="recorded_from" value="<%= self.filters.recorded_from %>"
+                 class="w-full rounded border border-gray-300 px-2 py-1 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Recorded to</label>
+          <input type="date" name="recorded_to" value="<%= self.filters.recorded_to %>"
+                 class="w-full rounded border border-gray-300 px-2 py-1 text-sm">
+        </div>
+      </div>
+    </details>
+  </form>
+
+  <div class="flex items-center gap-3 mb-2 text-sm text-gray-600">
+    <span><strong><%= self.total %></strong> matching signup<%- if self.total == 1 { "" } else { "s" } %>.
+      Page <%= self.page %> of <%= self.total_pages %>.</span>
+    <% if self.has_prev { %>
+      <a class="rounded border border-gray-300 bg-white px-2 py-1 hover:bg-gray-100"
+         href="/-admin/libraries?<%= self.query_string %>&page=<%= self.prev_page %>">&laquo; Previous</a>
+    <% } %>
+    <% if self.has_next { %>
+      <a class="rounded border border-gray-300 bg-white px-2 py-1 hover:bg-gray-100"
+         href="/-admin/libraries?<%= self.query_string %>&page=<%= self.next_page %>">Next &raquo;</a>
+    <% } %>
+  </div>
+
+  <div class="overflow-x-auto border border-gray-200 rounded-lg">
+    <table class="min-w-full text-xs">
+      <thead class="bg-gray-50 text-left text-gray-600">
+        <tr>
+          <th class="px-2 py-2 font-medium"></th>
+          <th class="px-2 py-2 font-medium">Recorded</th>
+          <th class="px-2 py-2 font-medium">Map</th>
+          <th class="px-2 py-2 font-medium">Organization</th>
+          <th class="px-2 py-2 font-medium">Type</th>
+          <th class="px-2 py-2 font-medium">Address</th>
+          <th class="px-2 py-2 font-medium">City</th>
+          <th class="px-2 py-2 font-medium">State</th>
+          <th class="px-2 py-2 font-medium">ZIP</th>
+          <th class="px-2 py-2 font-medium">Country</th>
+          <th class="px-2 py-2 font-medium">Web page</th>
+          <th class="px-2 py-2 font-medium">Contact</th>
+          <th class="px-2 py-2 font-medium">Email</th>
+          <th class="px-2 py-2 font-medium">Job title</th>
+          <th class="px-2 py-2 font-medium">Account</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% if self.rows.is_empty() { %>
+          <tr><td colspan="15" class="px-2 py-8 text-center text-gray-500">No signups match these filters.</td></tr>
+        <% } %>
+        <% for row in &self.rows { %>
+          <tr class="border-t border-gray-100">
+            <td class="px-2 py-2">
+              <a class="rounded bg-blue-600 px-2 py-0.5 text-white hover:bg-blue-700"
+                 href="/-admin/libraries/<%= row.signup_id %>">Edit</a>
+            </td>
+            <td class="px-2 py-2 whitespace-nowrap"><%= row.recorded %></td>
+            <td class="px-2 py-2">
+              <% if row.add_to_map { %>
+                <span class="rounded bg-emerald-100 px-1.5 py-0.5 text-emerald-800">Yes</span>
+              <% } %>
+            </td>
+            <td class="px-2 py-2"><%= row.organization_name %></td>
+            <td class="px-2 py-2"><%= row.organization_type %></td>
+            <td class="px-2 py-2"><%= row.organization_street_address %></td>
+            <td class="px-2 py-2"><%= row.organization_city %></td>
+            <td class="px-2 py-2"><%= row.organization_state %></td>
+            <td class="px-2 py-2"><%= row.organization_zip_code %></td>
+            <td class="px-2 py-2"><%= row.organization_country %></td>
+            <td class="px-2 py-2">
+              <% if !row.organization_web_page.is_empty() { %>
+                <a class="text-blue-600 hover:underline" target="_blank" rel="noopener"
+                   href="<%= row.organization_web_page %>"><%= row.organization_web_page %></a>
+              <% } %>
+            </td>
+            <td class="px-2 py-2 whitespace-nowrap"><%= row.first_name %> <%= row.last_name %></td>
+            <td class="px-2 py-2"><%= row.email %></td>
+            <td class="px-2 py-2"><%= row.job_title %></td>
+            <td class="px-2 py-2"><%= row.have_account %></td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</div>

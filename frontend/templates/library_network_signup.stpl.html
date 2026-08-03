@@ -1,0 +1,157 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Citizen and Community Science Library Network Sign-Up Form</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/themes/light.css" />
+    <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/shoelace-autoloader.js"></script>
+    <style>
+     :root {
+         --sl-input-required-content-color: red;
+         font-family: var(--sl-font-sans);
+         font-size: var(--sl-font-size-large);
+     }
+
+     ::part(form-control-label) {
+         font-weight: bold;
+     }
+
+     body.loading-phase:has(:not(:defined)) {
+         opacity: 0;
+     }
+    </style>
+    <script>
+     setTimeout(() => {document.body.classList.remove('loading-phase');}, 2000);
+    </script>
+  </head>
+  <body class="loading-phase" style="background-color: #ECF3FF; margin: 0px; padding: 0px; border: 0px">
+    <form method="post">
+      <input type="hidden" name="next" value="<%= self.next %>">
+      <div style="max-width: 960px; margin: 5px auto; display: flex; flex-direction: column; gap: 1rem">
+        <div style="background-color: #fff; border-radius: 1rem; padding: 1rem">
+          <h1>Citizen and Community Science Library Network Sign-Up Form</h1>
+          <p>The Citizen and Community Science Library Network is open to all libraries—and community-based organizations—to support public engagement in real scientific research. Through ready-to-use field-tested professional development, program and event templates, kit-building guides, customizable resources, and a network of peers, members of all capacities are better equipped to create and sustain community hubs for participatory science!</p>
+          <p>As a member of the network, you’ll receive:</p>
+          <ul>
+            <li>Exclusive access to trainings and webinars</li>
+            <li>Newsletters with updates, ideas, and opportunities</li>
+            <li>Access a supportive Facebook group of peers</li>
+            <li>Practical tips, tools, and technical assistance</li>
+            <li>Connections to libraries, volunteers and organizations across the country</li>
+          </ul>
+          <p>Membership is <strong>free</strong>. When you sign up, your library will be added to an interactive map to help others find you and for you to connect with other participating libraries.  Join today and be part of a growing movement connecting science, libraries, and communities!</p>
+        </div>
+
+        <div style="background-color: #fff; border-radius: 1rem; padding: 1rem">
+          <sl-input type=email name=email label="Email" value="<%= self.email %>" placeholder="Your email" required pattern="[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}"></sl-input>
+        </div>
+
+        <div style="background-color: #fff; border-radius: 1rem; padding: 1rem">
+          <sl-input type=text name=first_name label="First Name" required placeholder="Your given name"></sl-input>
+        </div>
+
+        <div style="background-color: #fff; border-radius: 1rem; padding: 1rem">
+          <sl-input type=text name=last_name label="Last Name" required placeholder="Your Surname"></sl-input>
+        </div>
+
+        <div style="background-color: #fff; border-radius: 1rem; padding: 1rem">
+          <sl-input type=text name=job_title label="Job Title" required placeholder="e.g. Science Librarian"></sl-input>
+        </div>
+
+        <div style="background-color: #fff; border-radius: 1rem; padding: 1rem">
+          <sl-radio-group label="Do you already have an account on SciStarter.org?" name="have_account" required>
+            <sl-radio value="1">Yes</sl-radio>
+            <sl-radio value="0">No</sl-radio>
+            <sl-radio value="2">I Don't Know</sl-radio>
+          </sl-radio-group>
+        </div>
+
+        <div style="background-color: #fff; border-radius: 1rem; padding: 1rem">
+          <sl-input type=text name=organization_name label="Organization Name" required placeholder="e.g. South Brineland Public Library"></sl-input>
+        </div>
+
+        <div style="background-color: #fff; border-radius: 1rem; padding: 1rem">
+          <sl-radio-group label="Type of organization" name=organization_type required>
+            <% for choice in self.organization_types.iter() { %>
+              <sl-radio value="<%= choice %>"><%= choice %></sl-radio>
+            <% } %>
+          </sl-radio-group>
+        </div>
+
+        <div style="background-color: #fff; border-radius: 1rem; padding: 1rem">
+          <sl-radio-group label="Primary Job Type" name=primary_job_type required>
+            <% for choice in self.job_types.iter() { %>
+              <sl-radio value="<%= choice %>"><%= choice %><% if *choice == "Other" { %>:<% } %></sl-radio>
+            <% } %>
+          </sl-radio-group>
+          <sl-input type=text style="margin-top: 3px" title="If you select 'other' as the primary job type, please describe your job type here" name=primary_job_type_other></sl-input>
+        </div>
+
+        <div style="background-color: #fff; border-radius: 1rem; padding: 1rem">
+          <sl-textarea name=organization_street_address label="Organization Street Address" required placeholder="e.g. 123 Sesame Street"></sl-textarea>
+        </div>
+
+        <div style="background-color: #fff; border-radius: 1rem; padding: 1rem">
+          <sl-input type=text name=organization_city label="Organization City" required placeholder="e.g. New York"></sl-input>
+        </div>
+
+        <div style="background-color: #fff; border-radius: 1rem; padding: 1rem">
+          <sl-input type=text name=organization_state label="Organization State" required placeholder="e.g. NY"></sl-input>
+        </div>
+
+        <div style="background-color: #fff; border-radius: 1rem; padding: 1rem">
+          <sl-input type=text name=organization_zip_code label="Organization Zip Code" required placeholder="e.g. 10023"></sl-input>
+        </div>
+
+        <div style="background-color: #fff; border-radius: 1rem; padding: 1rem">
+          <sl-radio-group label="Organization Country" name=organization_country required>
+            <sl-radio value="United States of America">United States of America</sl-radio>
+            <sl-radio value="Other">Other:</sl-radio>
+          </sl-radio-group>
+          <sl-input type=text style="margin-top: 3px" title="If you select 'other' as the organization country, please name the country here" name=organization_country_other></sl-input>
+        </div>
+
+        <div style="background-color: #fff; border-radius: 1rem; padding: 1rem">
+          <sl-input type=url name=organization_web_page label="Organization Web Page" required placeholder="e.g. https://example.com/my/library"></sl-input>
+        </div>
+
+        <div style="background-color: #fff; border-radius: 1rem; padding: 1rem">
+          <sl-textarea name=organization_social_handles label="Organization Social Handles" placeholder="e.g. @ExampleLibrary on Pinterest"></sl-textarea>
+        </div>
+
+        <div style="background-color: #fff; border-radius: 1rem; padding: 1rem">
+          <sl-checkbox size=large name=add_to_map value=yes checked>Add my library to the Library Network Map so others know of my library’s interest in Citizen and Community Science!</sl-checkbox>
+        </div>
+
+        <div style="background-color: #fff; border-radius: 1rem; padding: 1rem">
+          <sl-checkbox size=large required>Yes, sign me up for the Citizen and Community Science Library Network newsletter.</sl-checkbox>
+        </div>
+
+        <div style="background-color: #fff; border-radius: 1rem; padding: 1rem">
+          <sl-button variant=primary type=submit>Submit Application</sl-button>
+        </div>
+      </div>
+    </form>
+    <script>
+     // If the Organization Web Page value is rejected (most often a missing
+     // https:// scheme, e.g. "www.mylibrary.org"), show an example of a
+     // correctly-formatted URL so the user knows how to fix it. Shoelace
+     // re-emits the native invalid event as sl-invalid; clear the hint again
+     // once the value becomes valid.
+     (function() {
+       var webPage = document.querySelector('sl-input[name=organization_web_page]');
+       if (!webPage) return;
+       var EXAMPLE_HINT = 'Enter the full web address, including https:// — for example, https://example.com/my/library';
+       webPage.addEventListener('sl-invalid', function() {
+         webPage.setAttribute('help-text', EXAMPLE_HINT);
+       });
+       webPage.addEventListener('sl-input', function() {
+         if (webPage.checkValidity()) {
+           webPage.removeAttribute('help-text');
+         }
+       });
+     })();
+    </script>
+  </body>
+</html>

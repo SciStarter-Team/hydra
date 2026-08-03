@@ -345,6 +345,191 @@ pub struct AmbassadorReviewUpdate {
     pub notes: String,
 }
 
+/// A filter that can require a boolean column to be true, require it to be
+/// false, or not constrain it. Mirrors orrery's staff-browser `TriState`, and
+/// renders as the same three-option select.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TriState {
+    #[default]
+    Any,
+    Yes,
+    No,
+}
+
+impl TriState {
+    pub fn as_bool(self) -> Option<bool> {
+        match self {
+            TriState::Any => None,
+            TriState::Yes => Some(true),
+            TriState::No => Some(false),
+        }
+    }
+
+    pub fn is_any(self) -> bool {
+        matches!(self, TriState::Any)
+    }
+
+    pub fn is_yes(self) -> bool {
+        matches!(self, TriState::Yes)
+    }
+
+    pub fn is_no(self) -> bool {
+        matches!(self, TriState::No)
+    }
+}
+
+/// Whether a nullable date column is set at all, irrespective of its value.
+/// Separate from [`TriState`] because it compiles to `IS NULL` / `IS NOT NULL`
+/// rather than an equality test.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DatePresence {
+    #[default]
+    Any,
+    Present,
+    Absent,
+}
+
+impl DatePresence {
+    pub fn is_any(self) -> bool {
+        matches!(self, DatePresence::Any)
+    }
+
+    pub fn is_present(self) -> bool {
+        matches!(self, DatePresence::Present)
+    }
+
+    pub fn is_absent(self) -> bool {
+        matches!(self, DatePresence::Absent)
+    }
+}
+
+/// Filters for the staff ambassador grid, mirroring orrery's
+/// `/staff/ambassadors/applications`. Applied in SQL by user-service rather
+/// than over the returned rows, so the grid pages rather than shipping the
+/// whole table.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AmbassadorFilters {
+    /// Restricts to a single applicant. Used to re-fetch one row after an
+    /// inline save.
+    pub user_id: Option<Ulid>,
+
+    pub archived: TriState,
+    pub draft: TriState,
+    pub hidden: TriState,
+    pub marked: TriState,
+    pub welcome_sent: TriState,
+    pub rejection_sent: TriState,
+    pub survey: TriState,
+    pub citscimonth: TriState,
+    pub background_check: TriState,
+    pub conduct: TriState,
+    pub in_directory: TriState,
+
+    pub cohort: Vec<i64>,
+    pub app_status: Vec<i64>,
+    pub screening_status: Vec<i64>,
+
+    pub verified_presence: DatePresence,
+    pub orientation_presence: DatePresence,
+    pub kit_sent_presence: DatePresence,
+    pub renewal_date_presence: DatePresence,
+
+    pub submitted_from: String,
+    pub submitted_to: String,
+    pub verified_from: String,
+    pub verified_to: String,
+    pub renewal_date_from: String,
+    pub renewal_date_to: String,
+
+    /// Matched across name, handle and contact email at once.
+    pub search: String,
+    pub city: String,
+    pub state: String,
+    pub phone: String,
+    pub tee_size: String,
+    pub gender: String,
+    pub ethnicity: String,
+    pub handles: String,
+    pub reviewers: String,
+    pub notes: String,
+}
+
+/// Request for `user.ambassador.list`: which applications, and which page.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AmbassadorListRequest {
+    pub filters: AmbassadorFilters,
+    /// 1-based. Zero or absent means the first page.
+    pub page: i64,
+    /// Zero means "every match, unpaged" — used by the CSV export.
+    pub per_page: i64,
+}
+
+/// Response for `user.ambassador.list`: one page plus the total it came from.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AmbassadorListResponse {
+    pub rows: Vec<AmbassadorApplicationRow>,
+    pub total: i64,
+}
+
+/// One row of the staff CSV export (`user.ambassador.export`). Wider than the
+/// grid row: it carries the applicant's long-form answers too, matching what
+/// orrery's export produces.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AmbassadorExportRow {
+    pub user_ulid: String,
+    pub username: String,
+    pub first_name: String,
+    pub last_name: String,
+    pub handle: String,
+    pub email: String,
+    pub in_directory: bool,
+    pub submitted: Option<String>,
+    pub updated_at: String,
+    pub draft: bool,
+    pub hidden: bool,
+    pub marked: bool,
+    pub archived: bool,
+    pub cohort: i64,
+    pub app_status: String,
+    pub screening_status: String,
+    pub verified: Option<String>,
+    pub orientation: Option<String>,
+    pub kit_sent: Option<String>,
+    pub renewal_date: Option<String>,
+    pub birthdate: Option<String>,
+    pub welcome_sent: bool,
+    pub rejection_sent: bool,
+    pub survey: bool,
+    pub citscimonth: bool,
+    pub background_check: bool,
+    pub conduct: bool,
+    pub phone: String,
+    pub city: String,
+    pub state: String,
+    pub tee_size: String,
+    pub gender: String,
+    pub ethnicity: String,
+    pub self_description: String,
+    pub handles: String,
+    pub introduction: String,
+    pub introduction_other: String,
+    pub experience: String,
+    pub motivation: String,
+    pub related: String,
+    pub vision: String,
+    pub activities: String,
+    pub community_access: String,
+    pub signature_name: String,
+    pub signature_date: Option<String>,
+    pub questions: String,
+    pub bio: String,
+    pub notes: String,
+    pub reviewers: String,
+    pub youtube_video_url: String,
+}
+
 /// Query for the public ambassador directory (`user.ambassador.directory`).
 /// `name` matches first/last name or bio; `near` matches city/state/ZIP.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -635,4 +820,113 @@ pub struct TakeActionList {
     pub rows: Vec<TakeActionRow>,
     /// Total across every page, for the pager.
     pub total: i64,
+}
+
+/// Filters for the staff Library Network browser, mirroring orrery's
+/// `/staff/libraries`. Applied in SQL by user-service so the grid pages rather
+/// than shipping every signup.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct LibrarySignupFilters {
+    pub add_to_map: TriState,
+    pub have_account: Vec<i64>,
+
+    pub recorded_from: String,
+    pub recorded_to: String,
+
+    /// Matched across organization name, contact name and email at once.
+    pub search: String,
+    pub organization_name: String,
+    pub organization_type: String,
+    pub primary_job_type: String,
+    pub organization_city: String,
+    pub organization_state: String,
+    pub organization_zip_code: String,
+    pub organization_country: String,
+    pub organization_web_page: String,
+    pub email: String,
+    pub job_title: String,
+}
+
+/// Request for `user.library.list`: which signups, and which page.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct LibrarySignupListRequest {
+    pub filters: LibrarySignupFilters,
+    /// 1-based. Zero or absent means the first page.
+    pub page: i64,
+    /// Zero means "every match, unpaged" — used by the CSV export.
+    pub per_page: i64,
+}
+
+/// One Library Network signup, as the staff grid and CSV export show it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LibrarySignupRow {
+    pub signup_id: String,
+    /// The row's id in orrery, while orrery still owns the sign-up form.
+    /// Absent for signups created here.
+    pub orrery_id: Option<i64>,
+    pub recorded: String,
+    pub user_ulid: String,
+    pub email: String,
+    pub first_name: String,
+    pub last_name: String,
+    pub job_title: String,
+    pub have_account: String,
+    pub organization_name: String,
+    pub organization_type: String,
+    pub primary_job_type: String,
+    pub organization_street_address: String,
+    pub organization_city: String,
+    pub organization_state: String,
+    pub organization_zip_code: String,
+    pub organization_country: String,
+    pub organization_web_page: String,
+    pub organization_social_handles: String,
+    pub add_to_map: bool,
+}
+
+/// Response for `user.library.list`: one page plus the total it came from.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LibrarySignupListResponse {
+    pub rows: Vec<LibrarySignupRow>,
+    pub total: i64,
+}
+
+/// One row of the "Prepare Map" export (`user.library.map`): the columns a
+/// mapping tool wants, one per distinct organization.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LibraryMapRow {
+    pub organization_name: String,
+    pub organization_street_address: String,
+    pub organization_city: String,
+    pub organization_state: String,
+    pub organization_zip_code: String,
+    pub organization_country: String,
+    pub organization_web_page: String,
+}
+
+/// A staff edit of a Library Network signup (`user.library.save`), or a new
+/// signup from the public form (`user.library.create`). Every field the form
+/// collects is present; identity and provenance columns are not editable.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct LibrarySignupUpdate {
+    /// Empty when creating.
+    pub signup_id: String,
+    /// Only set when creating, from the session.
+    pub user_ulid: Option<String>,
+    pub email: String,
+    pub first_name: String,
+    pub last_name: String,
+    pub job_title: String,
+    pub have_account: i64,
+    pub organization_name: String,
+    pub organization_type: String,
+    pub primary_job_type: String,
+    pub organization_street_address: String,
+    pub organization_city: String,
+    pub organization_state: String,
+    pub organization_zip_code: String,
+    pub organization_country: String,
+    pub organization_web_page: String,
+    pub organization_social_handles: String,
+    pub add_to_map: bool,
 }

@@ -24,6 +24,7 @@ pub mod girlscouts;
 pub mod health;
 pub mod inat;
 pub mod legacy_id;
+pub mod library;
 pub mod link_tokens;
 pub mod permissions;
 pub mod places;
@@ -2358,6 +2359,460 @@ async fn claim_codes_synchronize() {
     }
 }
 
+/// Mirror orrery's ambassador applications into our own table.
+///
+/// Orrery is the system of record: every synced column overwrites ours,
+/// review fields included, so a review made in our grid does not survive the
+/// next pass. That is the agreed policy while orrery still owns the process.
+///
+/// The cursor is `(updated, id)`, but orrery's `updated` is a **date**, so a
+/// row edited later on a day we have already passed would hide behind the
+/// cursor. Once caught up (a short batch) we rewind `last_id` to 0, which
+/// re-reads that final day next pass. Re-reading is free because the upsert is
+/// idempotent.
+async fn applications_synchronize() {
+    #[derive(serde::Deserialize)]
+    struct ApplicationDataImport {
+        id: i32,
+        user_ulid: String,
+        updated: String,
+        submitted: String,
+        contact_email: String,
+        phone: String,
+        city: String,
+        state: String,
+        tee_size: String,
+        gender: String,
+        ethnicity: String,
+        handles: String,
+        birthdate: Option<String>,
+        self_description: String,
+        introduction: String,
+        introduction_other: String,
+        experience: String,
+        motivation: String,
+        related: String,
+        vision: String,
+        activities: String,
+        community_access: String,
+        questions: String,
+        bio: String,
+        youtube_video_url: String,
+        citscimonth: bool,
+        background_check: bool,
+        conduct: bool,
+        signature_name: String,
+        signature_date: Option<String>,
+        draft: bool,
+        hidden: bool,
+        marked: bool,
+        archived: bool,
+        cohort: i16,
+        app_status: i16,
+        screening_status: i16,
+        verified: Option<String>,
+        orientation: Option<String>,
+        kit_sent: Option<String>,
+        renewal_date: Option<String>,
+        welcome_sent: bool,
+        rejection_sent: bool,
+        survey: bool,
+        reviewers: String,
+        notes: String,
+    }
+
+    loop {
+        let last = misc::get("application-sync-bookmark")
+            .await
+            .expect("Retrieving sync bookmark failed")
+            .unwrap_or_else(|| String::from("1900-01-01"));
+        let last_id = misc::get("application-sync-last-id")
+            .await
+            .expect("Retrieving sync last_id failed")
+            .unwrap_or(0);
+
+        let client = reqwest::Client::new();
+
+        let applications: Vec<ApplicationDataImport> = match client
+            .get("https://scistarter.org/staff/sync/applications")
+            .bearer_auth(env!("SYNC_TOKEN"))
+            .query(&[("since", &last), ("last_id", &last_id.to_string())])
+            .send()
+            .await
+        {
+            Ok(response) => match response.error_for_status() {
+                Ok(resp) => {
+                    let response_text = match resp.text().await {
+                        Ok(text) => text,
+                        Err(e) => {
+                            eprintln!("Failed to read application response body: {}", e);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    };
+
+                    match serde_json::from_str(&response_text) {
+                        Ok(applications) => applications,
+                        Err(e) => {
+                            eprintln!("Application JSON parsing error: {}", e);
+                            eprintln!("Response body: {}", response_text);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Application HTTP error: {}", e);
+                    sleep(Duration::from_secs(60)).await;
+                    continue;
+                }
+            },
+            Err(e) => {
+                eprintln!("Application request error: {}", e);
+                sleep(Duration::from_secs(60)).await;
+                continue;
+            }
+        };
+
+        let mut bookmark = last.clone();
+        let mut bookmark_id = last_id;
+
+        let got_applications = applications.len();
+        let mut stalled = false;
+
+        for application in applications {
+            // The row references a user, so an application can arrive before
+            // the user sync has caught up. Stopping the bookmark at the last
+            // row that landed means the next pass retries this one rather than
+            // stepping over it and losing the application for good.
+            let saved = sqlx::query!(
+                r#"INSERT INTO "ambassador_applications" (
+                     "user_id", "contact_email", "phone", "city", "state", "tee_size",
+                     "gender", "ethnicity", "handles", "birthdate", "self_description",
+                     "introduction", "introduction_other", "experience", "motivation",
+                     "related", "vision", "activities", "community_access", "questions",
+                     "bio", "youtube_video_url", "citscimonth", "background_check",
+                     "conduct", "signature_name", "signature_date", "draft", "hidden",
+                     "marked", "archived", "cohort", "app_status", "screening_status",
+                     "verified", "orientation", "kit_sent", "renewal_date",
+                     "welcome_sent", "rejection_sent", "survey", "reviewers", "notes",
+                     "submitted", "updated_at"
+                   ) VALUES (
+                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                   )
+                   ON CONFLICT ("user_id") DO UPDATE SET
+                     "contact_email" = excluded."contact_email",
+                     "phone" = excluded."phone",
+                     "city" = excluded."city",
+                     "state" = excluded."state",
+                     "tee_size" = excluded."tee_size",
+                     "gender" = excluded."gender",
+                     "ethnicity" = excluded."ethnicity",
+                     "handles" = excluded."handles",
+                     "birthdate" = excluded."birthdate",
+                     "self_description" = excluded."self_description",
+                     "introduction" = excluded."introduction",
+                     "introduction_other" = excluded."introduction_other",
+                     "experience" = excluded."experience",
+                     "motivation" = excluded."motivation",
+                     "related" = excluded."related",
+                     "vision" = excluded."vision",
+                     "activities" = excluded."activities",
+                     "community_access" = excluded."community_access",
+                     "questions" = excluded."questions",
+                     "bio" = excluded."bio",
+                     "youtube_video_url" = excluded."youtube_video_url",
+                     "citscimonth" = excluded."citscimonth",
+                     "background_check" = excluded."background_check",
+                     "conduct" = excluded."conduct",
+                     "signature_name" = excluded."signature_name",
+                     "signature_date" = excluded."signature_date",
+                     "draft" = excluded."draft",
+                     "hidden" = excluded."hidden",
+                     "marked" = excluded."marked",
+                     "archived" = excluded."archived",
+                     "cohort" = excluded."cohort",
+                     "app_status" = excluded."app_status",
+                     "screening_status" = excluded."screening_status",
+                     "verified" = excluded."verified",
+                     "orientation" = excluded."orientation",
+                     "kit_sent" = excluded."kit_sent",
+                     "renewal_date" = excluded."renewal_date",
+                     "welcome_sent" = excluded."welcome_sent",
+                     "rejection_sent" = excluded."rejection_sent",
+                     "survey" = excluded."survey",
+                     "reviewers" = excluded."reviewers",
+                     "notes" = excluded."notes",
+                     "submitted" = excluded."submitted",
+                     "updated_at" = excluded."updated_at""#,
+                application.user_ulid,
+                application.contact_email,
+                application.phone,
+                application.city,
+                application.state,
+                application.tee_size,
+                application.gender,
+                application.ethnicity,
+                application.handles,
+                application.birthdate,
+                application.self_description,
+                application.introduction,
+                application.introduction_other,
+                application.experience,
+                application.motivation,
+                application.related,
+                application.vision,
+                application.activities,
+                application.community_access,
+                application.questions,
+                application.bio,
+                application.youtube_video_url,
+                application.citscimonth,
+                application.background_check,
+                application.conduct,
+                application.signature_name,
+                application.signature_date,
+                application.draft,
+                application.hidden,
+                application.marked,
+                application.archived,
+                application.cohort,
+                application.app_status,
+                application.screening_status,
+                application.verified,
+                application.orientation,
+                application.kit_sent,
+                application.renewal_date,
+                application.welcome_sent,
+                application.rejection_sent,
+                application.survey,
+                application.reviewers,
+                application.notes,
+                application.submitted,
+                application.updated,
+            )
+            .execute(db())
+            .await;
+
+            if let Err(e) = saved {
+                eprintln!(
+                    "Failed to save ambassador application for user {}: {}",
+                    application.user_ulid, e
+                );
+                stalled = true;
+                break;
+            }
+
+            if application.updated > bookmark
+                || (application.updated == bookmark && application.id > bookmark_id)
+            {
+                bookmark = application.updated.clone();
+                bookmark_id = application.id;
+            }
+        }
+
+        // Caught up: rewind within the final day so that a later edit on that
+        // same date is seen next time. Skipped while a row is failing, so a
+        // stalled sync keeps retrying from where it stopped.
+        if !stalled && got_applications < 500 {
+            bookmark_id = 0;
+        }
+
+        misc::set("application-sync-bookmark", bookmark)
+            .await
+            .expect("Saving sync bookmark failed");
+        misc::set("application-sync-last-id", bookmark_id)
+            .await
+            .expect("Saving sync last_id failed");
+
+        if got_applications == 500 {
+            sleep(Duration::from_secs(60)).await;
+        } else {
+            sleep(Duration::from_secs(60 * 60)).await;
+        }
+    }
+}
+
+/// Mirror orrery's Library Network signups into our own table.
+///
+/// Orrery owns the signup form and remains the system of record, so every
+/// synced column overwrites ours. Keyed on orrery's row id, and ordered on
+/// `COALESCE(updated, recorded)` so that a staff correction made in orrery's
+/// admin — which leaves `recorded` untouched — still comes across.
+async fn library_signups_synchronize() {
+    #[derive(serde::Deserialize)]
+    struct LibrarySignupImport {
+        id: i32,
+        recorded: String,
+        updated: String,
+        user_ulid: Option<String>,
+        email: String,
+        first_name: String,
+        last_name: String,
+        job_title: String,
+        have_account: i16,
+        organization_name: String,
+        organization_type: String,
+        primary_job_type: String,
+        organization_street_address: String,
+        organization_city: String,
+        organization_state: String,
+        organization_zip_code: String,
+        organization_country: String,
+        organization_web_page: String,
+        organization_social_handles: String,
+        add_to_map: bool,
+    }
+
+    loop {
+        let last = misc::get("library-signup-sync-bookmark")
+            .await
+            .expect("Retrieving sync bookmark failed")
+            .unwrap_or_else(|| String::from("1900-01-01T00:00:00Z"));
+        let last_id = misc::get("library-signup-sync-last-id")
+            .await
+            .expect("Retrieving sync last_id failed")
+            .unwrap_or(0);
+
+        let client = reqwest::Client::new();
+
+        let signups: Vec<LibrarySignupImport> = match client
+            .get("https://scistarter.org/staff/sync/library_signups")
+            .bearer_auth(env!("SYNC_TOKEN"))
+            .query(&[("since", &last), ("last_id", &last_id.to_string())])
+            .send()
+            .await
+        {
+            Ok(response) => match response.error_for_status() {
+                Ok(resp) => {
+                    let response_text = match resp.text().await {
+                        Ok(text) => text,
+                        Err(e) => {
+                            eprintln!("Failed to read library signup response body: {}", e);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    };
+
+                    match serde_json::from_str(&response_text) {
+                        Ok(signups) => signups,
+                        Err(e) => {
+                            eprintln!("Library signup JSON parsing error: {}", e);
+                            eprintln!("Response body: {}", response_text);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Library signup HTTP error: {}", e);
+                    sleep(Duration::from_secs(60)).await;
+                    continue;
+                }
+            },
+            Err(e) => {
+                eprintln!("Library signup request error: {}", e);
+                sleep(Duration::from_secs(60)).await;
+                continue;
+            }
+        };
+
+        let mut bookmark = last.clone();
+        let mut bookmark_id = last_id;
+
+        let got_signups = signups.len();
+
+        for signup in signups {
+            let add_to_map = if signup.add_to_map { 1_i64 } else { 0_i64 };
+
+            // Our own key for the row; only used when this signup is new to
+            // us, since the upsert matches on orrery's id.
+            let signup_id = Ulid::new().to_string();
+
+            if let Err(e) = sqlx::query!(
+                r#"INSERT INTO "library_network_signups" (
+                     "signup_id", "orrery_id", "recorded", "updated", "user_id", "email",
+                     "first_name", "last_name", "job_title", "have_account",
+                     "organization_name", "organization_type", "primary_job_type",
+                     "organization_street_address", "organization_city",
+                     "organization_state", "organization_zip_code", "organization_country",
+                     "organization_web_page", "organization_social_handles", "add_to_map"
+                   ) VALUES (
+                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                   )
+                   ON CONFLICT ("orrery_id") DO UPDATE SET
+                     "recorded" = excluded."recorded",
+                     "updated" = excluded."updated",
+                     "user_id" = excluded."user_id",
+                     "email" = excluded."email",
+                     "first_name" = excluded."first_name",
+                     "last_name" = excluded."last_name",
+                     "job_title" = excluded."job_title",
+                     "have_account" = excluded."have_account",
+                     "organization_name" = excluded."organization_name",
+                     "organization_type" = excluded."organization_type",
+                     "primary_job_type" = excluded."primary_job_type",
+                     "organization_street_address" = excluded."organization_street_address",
+                     "organization_city" = excluded."organization_city",
+                     "organization_state" = excluded."organization_state",
+                     "organization_zip_code" = excluded."organization_zip_code",
+                     "organization_country" = excluded."organization_country",
+                     "organization_web_page" = excluded."organization_web_page",
+                     "organization_social_handles" = excluded."organization_social_handles",
+                     "add_to_map" = excluded."add_to_map""#,
+                signup_id,
+                signup.id,
+                signup.recorded,
+                signup.updated,
+                signup.user_ulid,
+                signup.email,
+                signup.first_name,
+                signup.last_name,
+                signup.job_title,
+                signup.have_account,
+                signup.organization_name,
+                signup.organization_type,
+                signup.primary_job_type,
+                signup.organization_street_address,
+                signup.organization_city,
+                signup.organization_state,
+                signup.organization_zip_code,
+                signup.organization_country,
+                signup.organization_web_page,
+                signup.organization_social_handles,
+                add_to_map,
+            )
+            .execute(db())
+            .await
+            {
+                eprintln!("Failed to save library signup {}: {}", signup.id, e);
+                break;
+            }
+
+            if signup.updated > bookmark
+                || (signup.updated == bookmark && signup.id > bookmark_id)
+            {
+                bookmark = signup.updated.clone();
+                bookmark_id = signup.id;
+            }
+        }
+
+        misc::set("library-signup-sync-bookmark", bookmark)
+            .await
+            .expect("Saving sync bookmark failed");
+        misc::set("library-signup-sync-last-id", bookmark_id)
+            .await
+            .expect("Saving sync last_id failed");
+
+        if got_signups == 500 {
+            sleep(Duration::from_secs(60)).await;
+        } else {
+            sleep(Duration::from_secs(60 * 60)).await;
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() {
     common::shared::init("user").await;
@@ -2401,6 +2856,10 @@ async fn main() {
     let _workflow_states_sync_task = spawn(workflow_states_synchronize());
 
     let _claim_codes_sync_task = spawn(claim_codes_synchronize());
+
+    let _applications_sync_task = spawn(applications_synchronize());
+
+    let _library_signups_sync_task = spawn(library_signups_synchronize());
 
     let _constant_contact_task = spawn(constant_contact::sweep_periodically());
 
@@ -2665,6 +3124,13 @@ async fn main() {
     ));
 
     // Ambassador application
+    let library_group = service.group("user.library");
+    toplevel.spawn(handler!(library_group, "list", library::list));
+    toplevel.spawn(handler!(library_group, "map", library::map));
+    toplevel.spawn(handler!(library_group, "get", library::get));
+    toplevel.spawn(handler!(library_group, "save", library::save));
+    toplevel.spawn(handler!(library_group, "create", library::create));
+
     let ambassador_group = service.group("user.ambassador");
     toplevel.spawn(handler!(ambassador_group, "get", ambassador::get));
     toplevel.spawn(handler!(ambassador_group, "update", ambassador::update));
@@ -2675,6 +3141,7 @@ async fn main() {
     ));
     toplevel.spawn(handler!(ambassador_group, "submit", ambassador::submit));
     toplevel.spawn(handler!(ambassador_group, "list", ambassador::list));
+    toplevel.spawn(handler!(ambassador_group, "export", ambassador::export));
     toplevel.spawn(handler!(ambassador_group, "review", ambassador::review));
     toplevel.spawn(handler!(
         ambassador_group,

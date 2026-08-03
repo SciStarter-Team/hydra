@@ -1,6 +1,7 @@
 pub mod add;
 pub mod admin;
 pub mod ambassador;
+pub mod library_signup;
 pub mod api;
 pub mod articulate;
 pub mod auth;
@@ -539,6 +540,10 @@ fn user_facing() -> impl Endpoint {
         )
         .at("/training/k12", get(training::k12::page))
         .at("/training/k12/-progress", get(training::k12::progress))
+        .at(
+            "/l/library-network-signup",
+            get(library_signup::index).post(library_signup::submit),
+        )
         .at("/training-k12", get(training::k12::legacy_redirect))
         .at("/training/champion", get(training::champion::page))
         .at(
