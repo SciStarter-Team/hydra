@@ -1,13 +1,13 @@
-//! Citizen Science for K-12 Educators training. Six steps mirroring orrery's
+//! Citizen Science for K-12 Educators training. Seven steps mirroring orrery's
 //! `/training-k12`: account → Foundations prerequisite → tutorial → iNaturalist
-//! affiliation check → visit the Education Hub (which grants the badge) →
-//! congratulations, plus an optional "create a list" step that opens alongside
-//! the congratulations. Tracked state comes from `k12_progress`; the
-//! affiliation check reads the user's iNaturalist username directly
-//! (`user.inat.username_set`) rather than a workflow step, so it stays live.
-//! The "education" step is recorded by the [`education`] record-and-redirect
-//! endpoint — the hydra analogue of orrery's `/go/k12-education` counted
-//! redirect.
+//! affiliation check → visit the Education Hub → build a SciStarter list (which
+//! grants the badge) → congratulations. Tracked state comes from
+//! `k12_progress`; the affiliation check reads the user's iNaturalist username
+//! directly (`user.inat.username_set`) rather than a workflow step, so it stays
+//! live. The "education" step is recorded by the [`education`]
+//! record-and-redirect endpoint — the hydra analogue of orrery's
+//! `/go/k12-education` counted redirect. Lists live on scistarter.org, so the
+//! "list" step only ever arrives through the orrery workflow-state sync.
 
 use std::sync::Arc;
 
@@ -23,7 +23,7 @@ use crate::articulate::{ArticulateParams, LRS_URL};
 use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
 use crate::training::{
-    self, ArticulateCard, SidebarBody, SigninBody, StepState, StepView, StepsView, TrainingContent,
+    self, ArticulateCard, SidebarBody, SigninBody, StepView, StepsView, TrainingContent,
     TutorialBody, linear_states, open_flags, render_page, render_progress_fragment,
 };
 
@@ -118,7 +118,7 @@ impl Default for K12Content {
 <br>Your <strong>badge</strong> is now available on your <a href="/dashboard/profile">SciStarter profile</a>.</p>
 <p>You will also receive an email with instructions for sharing the verified badge and metadata on LinkedIn.</p>
 <p><strong>Coming Soon:</strong> Project-specific modules and certificates!</p>"#.to_string(),
-            list_heading: "[Optional] Create a List on SciStarter".to_string(),
+            list_heading: "Create a List on SciStarter".to_string(),
             list_html: r#"<p>Create a List on SciStarter by visiting <a href="https://scistarter.org/Affiliates">SciStarter.org/Affiliates</a>, selecting a project, and using the "Add to my lists" link. Select the list you want to add the project to from the drop down menu, or create a new list by typing in a new list name then select that list from the drop down menu. Finally, click the "Add to list" button. View the <a href="https://www.youtube.com/watch?v=umVbYNkbq2g" target="_blank">How To Create a SciStarter List video</a>.</p>"#.to_string(),
             sidebar_html: String::new(),
         }
@@ -221,12 +221,11 @@ async fn build_content(
     })
 }
 
-/// Six linear steps plus the optional list step. The affiliation check sits
-/// between the tutorial and the Education Hub visit, exactly as on orrery's
-/// page: it is satisfied by the user's iNaturalist username being set (the
-/// tutorial walks them through it), not by a recorded workflow step. The
-/// congratulations step is a celebration (never completes); the optional
-/// "create a list" step opens alongside it once the badge is earned.
+/// Seven linear steps. The affiliation check sits between the tutorial and the
+/// Education Hub visit, exactly as on orrery's page: it is satisfied by the
+/// user's iNaturalist username being set (the tutorial walks them through it),
+/// not by a recorded workflow step. The congratulations step is a celebration
+/// and never completes, so it stays `Current` once the list step is done.
 async fn build_steps(content: &K12Content, user_info: &Option<Arc<BasicInfo>>) -> StepsView {
     let logged_in = user_info.is_some();
     let (status, foundations_done, inat_set) = match user_info {
@@ -253,6 +252,7 @@ async fn build_steps(content: &K12Content, user_info: &Option<Arc<BasicInfo>>) -
     let done = |step: &str| status.completed_steps.iter().any(|s| s == step);
     let tutorial_done = done("tutorial");
     let education_done = done("education");
+    let list_done = done("list");
 
     let states = linear_states(&[
         logged_in,
@@ -260,6 +260,7 @@ async fn build_steps(content: &K12Content, user_info: &Option<Arc<BasicInfo>>) -
         tutorial_done,
         inat_set,
         education_done,
+        list_done,
         false,
     ]);
     let opens = open_flags(&states);
@@ -305,7 +306,7 @@ async fn build_steps(content: &K12Content, user_info: &Option<Arc<BasicInfo>>) -
         content.affiliation_html.clone()
     };
 
-    let mut steps = vec![
+    let steps = vec![
         StepView {
             heading: content.account_heading.clone(),
             state: states[0],
@@ -337,25 +338,18 @@ async fn build_steps(content: &K12Content, user_info: &Option<Arc<BasicInfo>>) -
             body: content.education_html.clone(),
         },
         StepView {
-            heading: content.claim_heading.clone(),
+            heading: content.list_heading.clone(),
             state: states[5],
             open: opens[5],
+            body: content.list_html.clone(),
+        },
+        StepView {
+            heading: content.claim_heading.clone(),
+            state: states[6],
+            open: opens[6],
             body: content.claim_html.clone(),
         },
     ];
-
-    // The optional list step mirrors orrery's data-pseudo step: blocked until
-    // the training is complete, then open alongside the congratulations.
-    steps.push(StepView {
-        heading: content.list_heading.clone(),
-        state: if education_done {
-            StepState::Current
-        } else {
-            StepState::Blocked
-        },
-        open: education_done,
-        body: content.list_html.clone(),
-    });
 
     StepsView { steps }
 }

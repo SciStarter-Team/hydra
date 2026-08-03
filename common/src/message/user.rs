@@ -381,7 +381,6 @@ impl UserDisplayStr for Option<Arc<BasicInfo>> {
 pub struct UserBadge {
     pub badge: Badge,
     pub when: TimeString, // Timestamp when badge was earned
-    pub image: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

@@ -1065,8 +1065,8 @@ async fn users_synchronize() {
 
                         if !exists {
                             if let Err(e) = sqlx::query!(
-                                "INSERT INTO k12_progress (user_id, tutorial_completed_at, education_completed_at, badge_granted_at) VALUES (?, ?, ?, ?)",
-                                user.ulid, badge.when, badge.when, badge.when
+                                "INSERT INTO k12_progress (user_id, tutorial_completed_at, education_completed_at, list_completed_at, badge_granted_at) VALUES (?, ?, ?, ?, ?)",
+                                user.ulid, badge.when, badge.when, badge.when, badge.when
                             )
                             .execute(db)
                             .await {
@@ -1123,7 +1123,6 @@ async fn userbadges_synchronize() {
         id: i32,
         badgeclass: String,
         when: String, // ISO 8601 timestamp string
-        image: String,
         user_ulid: String,
         name: String,
     }
@@ -1210,22 +1209,14 @@ async fn userbadges_synchronize() {
                 }
             };
 
-            // Handle empty image as null
-            let image_value = if badge.image.is_empty() {
-                None
-            } else {
-                Some(badge.image.clone())
-            };
-
             // Insert the badge into the database
             let result = sqlx::query!(
-                r#"insert into "user_badges" ("user_id", "badgeclass", "when", "image")
-                   values (?, ?, ?, ?)
+                r#"insert into "user_badges" ("user_id", "badgeclass", "when")
+                   values (?, ?, ?)
                    on conflict ("user_id", "badgeclass") do nothing"#,
                 badge.user_ulid,
                 badge.badgeclass,
                 badge_when,
-                image_value,
             )
             .execute(db)
             .await
@@ -1359,8 +1350,8 @@ async fn userbadges_synchronize() {
                         // Citizen Science for K-12 Educators
                         "01KPAY9A4VN929P02MECQ1W90N" => {
                             if let Err(e) = sqlx::query!(
-                                "INSERT OR IGNORE INTO k12_progress (user_id, tutorial_completed_at, education_completed_at, badge_granted_at) VALUES (?, ?, ?, ?)",
-                                badge.user_ulid, now_str, now_str, now_str
+                                "INSERT OR IGNORE INTO k12_progress (user_id, tutorial_completed_at, education_completed_at, list_completed_at, badge_granted_at) VALUES (?, ?, ?, ?, ?)",
+                                badge.user_ulid, now_str, now_str, now_str, now_str
                             )
                             .execute(db)
                             .await {
@@ -2159,9 +2150,9 @@ async fn apply_higher_ed_state(
     Ok(())
 }
 
-/// K-12 Educators states: initial → tutorial → education
+/// K-12 Educators states: initial → tutorial → education → list
 /// orrery's K12State is sequential, so a later state implies the earlier ones.
-/// Reaching education grants the badge.
+/// Reaching list grants the badge.
 async fn apply_k12_state(
     db: &sqlx::SqlitePool,
     user_id: &str,
@@ -2186,9 +2177,24 @@ async fn apply_k12_state(
             sqlx::query!(
                 r#"UPDATE k12_progress SET
                     tutorial_completed_at = COALESCE(tutorial_completed_at, ?),
+                    education_completed_at = COALESCE(education_completed_at, ?)
+                   WHERE user_id = ?"#,
+                ts,
+                ts,
+                user_id
+            )
+            .execute(db)
+            .await?;
+        }
+        "list" => {
+            sqlx::query!(
+                r#"UPDATE k12_progress SET
+                    tutorial_completed_at = COALESCE(tutorial_completed_at, ?),
                     education_completed_at = COALESCE(education_completed_at, ?),
+                    list_completed_at = COALESCE(list_completed_at, ?),
                     badge_granted_at = COALESCE(badge_granted_at, ?)
                    WHERE user_id = ?"#,
+                ts,
                 ts,
                 ts,
                 ts,

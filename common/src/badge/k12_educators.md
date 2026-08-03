@@ -1,15 +1,16 @@
 # Citizen Science for K-12 Educators
 ## Award Requirements
-To earn the Citizen Science for K–12 Educators badge, participants must:
+To earn the Citizen Science for K-12 Educators badge, participants must:
 
 - Create or log in to a SciStarter account.
-- Successfully complete the [Foundations of Citizen Science](https://scistarter.badgr.com/public/badges/6Jg_IwmfQTaJ2kUNePsO5Q) training and earn the corresponding badge.
-- Successfully complete the Citizen Science for K–12 Educators training module.
+- Successfully complete the [Foundations of Citizen Science](https://scistarter.org/badges/6Jg_IwmfQTaJ2kUNePsO5Q) training and earn the corresponding badge.
+- Successfully complete the Citizen Science for K-12 Educators training module.
 - Visit and engage with the resources in the SciStarter Education Hub.
+- Build a SciStarter list of citizen science projects for their classroom.
 
 ****
 ## Learning Outcomes
-Earning the Citizen Science for K–12 Educators badge signifies that the recipient has successfully demonstrated proficiency in the following learning outcomes:
+Earning the Citizen Science for K-12 Educators badge signifies that the recipient has successfully demonstrated proficiency in the following learning outcomes:
 
 - **Explain** the role of citizen science in advancing scientific research and public engagement.
 - **Apply** citizen science practices to strengthen teaching and learning across educational settings.
@@ -23,7 +24,7 @@ Earning the Citizen Science for K–12 Educators badge signifies that the recipi
 
 ****
 ## Skills and Competencies
-Recipients of the Citizen Science for K–12 Educators badge have developed and applied the following skills, aligned with an open skills taxonomy recognized by employers and educational institutions:
+Recipients of the Citizen Science for K-12 Educators badge have developed and applied the following skills, aligned with an open skills taxonomy recognized by employers and educational institutions:
 
 [**Instructional and Curriculum Design**](https://lightcast.io/open-skills/skills/KS1256C6DBYG39V53J4V/instructional-design), including:
 - [Curriculum Development](https://lightcast.io/open-skills/skills/KS122LF6587VF0NZFZJW/curriculum-development)

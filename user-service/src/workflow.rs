@@ -593,7 +593,7 @@ async fn update_ambassador_progress(
 }
 
 /// Update Citizen Science for K-12 Educators progress
-/// (tutorial → education; reaching education grants the badge)
+/// (tutorial → education → list; reaching list grants the badge)
 async fn update_k12_progress(user_id: &str, step: &str, now: &str) -> Result<bool, anyhow::Error> {
     match step {
         "tutorial" => {
@@ -613,10 +613,22 @@ async fn update_k12_progress(user_id: &str, step: &str, now: &str) -> Result<boo
             Ok(false)
         }
         "education" => {
+            sqlx::query!(
+                "UPDATE k12_progress
+                 SET education_completed_at = ?
+                 WHERE user_id = ? AND tutorial_completed_at IS NOT NULL AND education_completed_at IS NULL",
+                now,
+                user_id
+            )
+            .execute(db())
+            .await?;
+            Ok(false)
+        }
+        "list" => {
             let result = sqlx::query!(
                 "UPDATE k12_progress
-                 SET education_completed_at = ?, badge_granted_at = COALESCE(badge_granted_at, ?)
-                 WHERE user_id = ? AND tutorial_completed_at IS NOT NULL AND education_completed_at IS NULL",
+                 SET list_completed_at = ?, badge_granted_at = COALESCE(badge_granted_at, ?)
+                 WHERE user_id = ? AND education_completed_at IS NOT NULL AND list_completed_at IS NULL",
                 now,
                 now,
                 user_id
@@ -624,7 +636,7 @@ async fn update_k12_progress(user_id: &str, step: &str, now: &str) -> Result<boo
             .execute(db())
             .await?;
 
-            // Visiting the Education Hub (with the tutorial already done) grants the badge.
+            // Building a list (with the earlier steps already done) grants the badge.
             if result.rows_affected() > 0 {
                 send(
                     "user.tags.add",
@@ -949,7 +961,7 @@ async fn get_ambassador_status(user_id: &str) -> Result<WorkflowStatusResponse, 
 
 async fn get_k12_status(user_id: &str) -> Result<WorkflowStatusResponse, anyhow::Error> {
     let row = sqlx::query!(
-        "SELECT tutorial_completed_at, education_completed_at, badge_granted_at
+        "SELECT tutorial_completed_at, education_completed_at, list_completed_at, badge_granted_at
          FROM k12_progress WHERE user_id = ?",
         user_id
     )
@@ -970,6 +982,9 @@ async fn get_k12_status(user_id: &str) -> Result<WorkflowStatusResponse, anyhow:
     }
     if row.education_completed_at.is_some() {
         completed_steps.push("education".to_string());
+    }
+    if row.list_completed_at.is_some() {
+        completed_steps.push("list".to_string());
     }
 
     Ok(WorkflowStatusResponse {
@@ -1199,6 +1214,7 @@ pub async fn funnel(_req: &Request) -> Result<WorkflowFunnelResponse, anyhow::Er
             COUNT(*) AS "started!: i64",
             COUNT(tutorial_completed_at) AS "tutorial!: i64",
             COUNT(education_completed_at) AS "education!: i64",
+            COUNT(list_completed_at) AS "list!: i64",
             COUNT(badge_granted_at) AS "badge!: i64"
            FROM k12_progress"#
     )
@@ -1210,6 +1226,7 @@ pub async fn funnel(_req: &Request) -> Result<WorkflowFunnelResponse, anyhow::Er
             stage("Started", k.started),
             stage("Tutorial", k.tutorial),
             stage("Education Hub", k.education),
+            stage("Create a List", k.list),
             stage("Badge earned", k.badge),
         ],
         note: None,

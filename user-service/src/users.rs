@@ -623,7 +623,7 @@ pub async fn get_user_badges(req: &Request) -> Result<Vec<UserBadge>, Error> {
     let user_id_str = user_id.to_string();
 
     let badges = sqlx::query!(
-        r#"SELECT "badgeclass", "when", "image" FROM "user_badges" WHERE "user_id" = ? ORDER BY "when" DESC"#,
+        r#"SELECT "badgeclass", "when" FROM "user_badges" WHERE "user_id" = ? ORDER BY "when" DESC"#,
         user_id_str
     )
     .fetch_all(db())
@@ -634,11 +634,7 @@ pub async fn get_user_badges(req: &Request) -> Result<Vec<UserBadge>, Error> {
         if let Some(badge) = Badge::from_badgeclass(&row.badgeclass) {
             let timestamp = row.when.clone();
             match TimeString::try_from(row.when) {
-                Ok(when) => result.push(UserBadge {
-                    badge,
-                    when,
-                    image: row.image,
-                }),
+                Ok(when) => result.push(UserBadge { badge, when }),
                 Err(e) => {
                     eprintln!("Failed to parse badge timestamp '{}': {}", timestamp, e);
                     // Skip this badge if timestamp parsing fails
@@ -661,7 +657,7 @@ pub async fn get_user_badge(req: &Request) -> Result<Option<UserBadge>, Error> {
     let badgeclass = params.badge.badgeclass();
 
     let badge_row = sqlx::query!(
-        r#"SELECT "badgeclass", "when", "image" FROM "user_badges" WHERE "user_id" = ? AND "badgeclass" = ?"#,
+        r#"SELECT "badgeclass", "when" FROM "user_badges" WHERE "user_id" = ? AND "badgeclass" = ?"#,
         user_id_str,
         badgeclass
     )
@@ -676,7 +672,6 @@ pub async fn get_user_badge(req: &Request) -> Result<Option<UserBadge>, Error> {
         Ok(when) => Ok(Some(UserBadge {
             badge: params.badge,
             when,
-            image: row.image,
         })),
         Err(e) => {
             eprintln!("Failed to parse badge timestamp '{}': {}", row.when, e);
@@ -693,13 +688,12 @@ pub async fn grant_user_badge(req: &Request) -> Result<(), Error> {
     let user_id_str = params.user_id.to_string();
 
     sqlx::query!(
-        r#"insert into "user_badges" ("user_id", "badgeclass", "when", "image")
-           values (?, ?, ?, ?)
+        r#"insert into "user_badges" ("user_id", "badgeclass", "when")
+           values (?, ?, ?)
            on conflict ("user_id", "badgeclass") do nothing"#,
         user_id_str,
         badgeclass,
         now,
-        None::<String>,
     )
     .execute(db())
     .await?;

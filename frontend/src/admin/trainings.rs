@@ -1278,17 +1278,17 @@ fn k12_sections(c: &K12Content) -> Vec<Section> {
         ],
     ));
     sections.push(section(
-        "Step 6 — Congratulations",
-        vec![
-            Field::text("claim_heading", "Step heading", &c.claim_heading),
-            Field::html("claim_html", "Body (HTML)", &c.claim_html, 5),
-        ],
-    ));
-    sections.push(section(
-        "Optional — Create a list",
+        "Step 6 — Create a list",
         vec![
             Field::text("list_heading", "Step heading", &c.list_heading),
             Field::html("list_html", "Body (HTML)", &c.list_html, 4),
+        ],
+    ));
+    sections.push(section(
+        "Step 7 — Congratulations",
+        vec![
+            Field::text("claim_heading", "Step heading", &c.claim_heading),
+            Field::html("claim_html", "Body (HTML)", &c.claim_html, 5),
         ],
     ));
     sections.push(section(
