@@ -78,12 +78,18 @@
             <label for="signup-zipcode">Zip/Postal Code</label>
             <input type=text name=zipcode id="signup-zipcode">
           </div>
+          <% if self.protected { %>
+          <div class="mb-4">
+            You are signing up for a protected account.
+          </div>
+          <% } else { %>
           <div class="mb-4">
             <label class="flex items-center gap-2">
               <input class="w-auto" type=checkbox name=newsletter value=true checked>
               Sign up for our newsletter
             </label>
           </div>
+          <% } %>
           <div id="signup-turnstile" class="cf-turnstile my-4" data-sitekey="<%= self.turnstile_sitekey %>" data-callback="onSignupTurnstileSuccess" data-expired-callback="onSignupTurnstileReset" data-error-callback="onSignupTurnstileError"></div>
           <div id="signup-turnstile-fallback" class="hidden text-sm text-gray-600 my-4">We couldn't run our automatic spam check on your browser or network. You can still sign up&mdash;we'll email you a link to finish creating your account.</div>
           <input class="btn btn-primary w-full" type=submit value="Sign Up">

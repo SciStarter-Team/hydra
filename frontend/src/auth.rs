@@ -4,7 +4,7 @@ use common::{
         location::LocationInfo,
         user::{
             BasicInfo, CompleteSignup, CompleteSignupResponse, DeferSignup, DeferSignupOutcome,
-            Login, Signup, UserAndBadge,
+            Login, Signup, UserAndBadge, signup_needs_protection,
         },
         webauthn::{
             WebAuthnAuthenticationCompleteRequest, WebAuthnAuthenticationCompleteResponse,
@@ -328,6 +328,18 @@ struct LoginSignupPage {
     layout: <StandardLayout<LoginSignupContent> as Component>::Prepared,
 }
 
+/// Whether an account signing up from this session would be protected.
+///
+/// Both halves of the answer, because the signup form has to show the visitor
+/// what they are actually going to get: the flag a protected signup context
+/// sets directly, and the tag rule that user-service applies to whatever tags
+/// ride along. `signup_action` passes only the flag, leaving the tag half to
+/// user-service's own door, so this is the one place that has to combine them.
+fn signup_will_be_protected(session: &Session) -> bool {
+    session.get::<bool>("signup_protected").unwrap_or(false)
+        || signup_needs_protection(&session_tags::list(session))
+}
+
 #[derive(sailfish::TemplateOnce)]
 #[template(path = "auth/login_signup_content.stpl.html")]
 struct LoginSignupContent {
@@ -337,6 +349,10 @@ struct LoginSignupContent {
     exists: bool,
     ratelimited: bool,
     turnstile_sitekey: String,
+    /// A protected account is never added to a mailing list, so its owner is
+    /// told what they are signing up for rather than offered a newsletter
+    /// opt-in that user-service is going to discard.
+    protected: bool,
 }
 
 #[handler]
@@ -372,6 +388,10 @@ pub async fn login_signup_page(
             exists: params.exists.unwrap_or_default(),
             ratelimited: params.ratelimited.unwrap_or_default(),
             turnstile_sitekey: env!("TURNSTILE_SITEKEY").to_string(),
+            // Read after the `?tag=` above has been stashed, so a link that
+            // both names a protected cohort and lands on this page is
+            // recognized on that first render rather than the next one.
+            protected: signup_will_be_protected(session),
         },
     )
     .prepare(user_info.clone())
@@ -1359,4 +1379,64 @@ pub fn webauthn_routes() -> impl Endpoint {
         .at("/reg-start", post(webauthn_registration_start))
         .at("/reg-complete", post(webauthn_registration_complete))
         .with(RateLimitMiddleware::new(rate_limit_config))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::signup_will_be_protected;
+    use crate::session::session_tags;
+    use poem::session::Session;
+
+    /// The flag a protected signup context sets directly.
+    #[test]
+    fn the_session_flag_protects_the_signup() {
+        let session = Session::default();
+        session.set("signup_protected", true);
+
+        assert!(signup_will_be_protected(&session));
+    }
+
+    /// The other half: a tag that names a cohort needing protection, which
+    /// user-service turns into a protected account whether or not the flag
+    /// was ever set.
+    #[test]
+    fn a_protecting_tag_protects_the_signup() {
+        let session = Session::default();
+        session_tags::add(&session, "girlscout");
+
+        assert!(signup_will_be_protected(&session));
+    }
+
+    /// A `/go/` link carries its tag under `signup_tags` rather than through
+    /// `add`, and that spelling has to reach this decision too.
+    #[test]
+    fn a_go_link_tag_protects_the_signup() {
+        let session = Session::default();
+        session.set("signup_tags", "girlscout");
+
+        assert!(signup_will_be_protected(&session));
+    }
+
+    /// Written however the partner typed it: the form would otherwise offer
+    /// an opt-in that the created account discards.
+    #[test]
+    fn the_tag_is_matched_however_it_is_written() {
+        let session = Session::default();
+        session_tags::add(&session, " #GirlScout ");
+
+        assert!(signup_will_be_protected(&session));
+    }
+
+    #[test]
+    fn an_ordinary_signup_is_not_protected() {
+        let session = Session::default();
+        session_tags::add(&session, "some-partner");
+
+        assert!(!signup_will_be_protected(&session));
+    }
+
+    #[test]
+    fn a_signup_with_no_context_at_all_is_not_protected() {
+        assert!(!signup_will_be_protected(&Session::default()));
+    }
 }
