@@ -17,6 +17,7 @@ pub mod csm;
 pub mod dashboard;
 pub mod dev;
 pub mod emailer;
+pub mod embed;
 pub mod entity;
 pub mod entity_list;
 pub mod event;
@@ -221,6 +222,7 @@ async fn entity_password_verify(
 #[tracing::instrument]
 async fn not_found(_err: poem::Error) -> Response {
     Response::builder()
+        .status(poem::http::StatusCode::NOT_FOUND)
         .content_type("text/html")
         .body("Not Found") // Render 'not found' error page template
 }
@@ -239,6 +241,7 @@ async fn not_authorized(err: poem::Error) -> Response {
 #[tracing::instrument]
 async fn forbidden(_err: poem::Error) -> Response {
     Response::builder()
+        .status(poem::http::StatusCode::FORBIDDEN)
         .content_type("text/html")
         .body("Not Allowed") // Render 'forbidden' error page template
 }
@@ -613,6 +616,7 @@ fn dynamic() -> impl Endpoint {
         .nest("/-upload", upload::authenticated_routes())
         .nest("/-forum", component::forum::forum_routes())
         .nest("/-webauthn", auth::webauthn_routes())
+        .nest("/-embed", embed::routes())
         .nest_no_strip("/", user_facing())
         .catch_all_error(error_dispatch)
         .with(middleware::authorization::AuthMiddleware)

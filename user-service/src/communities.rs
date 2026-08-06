@@ -124,7 +124,12 @@ pub async fn list(req: &Request) -> Result<CommunityListResponse, Error> {
     Ok(CommunityListResponse { communities })
 }
 
-pub async fn get(req: &Request) -> Result<CommunityInfo, Error> {
+/// Look up a community by slug.
+///
+/// Returns `None` when there is no such community, rather than an error, so
+/// that callers can tell a missing community from a lookup that failed. They
+/// are very different things: the first is a 404, the second a 500.
+pub async fn get(req: &Request) -> Result<Option<CommunityInfo>, Error> {
     let message: CommunityGetRequest = decode_structured_message(req.message.clone())?;
 
     let row = sqlx::query_as!(
@@ -141,10 +146,10 @@ pub async fn get(req: &Request) -> Result<CommunityInfo, Error> {
         "#,
         message.slug,
     )
-    .fetch_one(db())
+    .fetch_optional(db())
     .await?;
 
-    row.into_info()
+    row.map(CommunityRow::into_info).transpose()
 }
 
 pub async fn create(req: &Request) -> Result<CommunitySuccessResponse, Error> {

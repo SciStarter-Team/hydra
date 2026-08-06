@@ -1,0 +1,59 @@
+(function () {
+  var HOST = 'pages.scistarter.org';
+
+  var el = document.getElementById('ss-header');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'ss-header';
+    // document.currentScript is null when this is loaded as a module or with
+    // async, so only use it when it is actually there.
+    var script = document.currentScript;
+    if (script && script.parentNode) {
+      script.parentNode.insertBefore(el, script);
+    } else {
+      document.body.appendChild(el);
+    }
+  }
+
+  // Hold the space before anything paints. An inline style beats the host
+  // page's own rule for #ss-header, so the height travels with the header
+  // rather than having to be kept in step by hand over on the blog.
+  el.style.display = 'block';
+  el.style.minHeight = window.matchMedia('(max-width: 815px)').matches
+    ? 'calc(4rem + 4px)'
+    : 'calc(6.75rem + 4px)';
+
+  // attachShadow throws if a root is already there, which happens if the embed
+  // is included twice on one page.
+  var shadow = el.shadowRoot || el.attachShadow({ mode: 'open' });
+  shadow.innerHTML = <%- self.header_html %>;
+
+  var header = shadow.getElementById('ss-embed-header');
+
+  shadow.addEventListener('click', function (e) {
+    if (e.target.closest('[data-menu]')) {
+      e.preventDefault();
+      header.classList.toggle('open');
+    }
+  });
+
+  document.addEventListener('click', function (e) {
+    // A click anywhere outside the header closes the menu. Clicks inside it
+    // are retargeted to the host element, so comparing against el is enough.
+    if (e.target !== el) {
+      header.classList.remove('open');
+    }
+  });
+
+  // Send the visitor back to the page they were on once they have logged in or
+  // out. `page=` carries a path only; scistarter.org supplies the origin, so
+  // this cannot be pointed anywhere else. Only meaningful on the blog itself.
+  if (window.location.hostname === HOST) {
+    var page = window.location.pathname + window.location.search;
+    var links = shadow.querySelectorAll('[data-ss-auth]');
+    for (var i = 0; i < links.length; i++) {
+      var sep = links[i].href.indexOf('?') === -1 ? '?' : '&';
+      links[i].href = links[i].href + sep + 'page=' + encodeURIComponent(page);
+    }
+  }
+})();

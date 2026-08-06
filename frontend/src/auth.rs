@@ -318,7 +318,32 @@ struct LoginPageParameters {
     exists: Option<bool>,
     ratelimited: Option<bool>,
     next: Option<String>,
+    page: Option<String>,
     tag: Option<String>,
+}
+
+/// Whether a `next=` value may be redirected to.
+///
+/// A leading slash is not sufficient: `//evil.example` has one too, and a
+/// browser reads it as a host rather than a path. These values arrive in links
+/// handed out by third parties, and a post-login redirect is a convenient way
+/// to make a phishing page look like ours, so anything that is not
+/// unambiguously a path on this site is refused.
+pub fn is_local_next(next: &str) -> bool {
+    next.starts_with('/') && !next.starts_with("//")
+}
+
+/// The site the `page=` return parameter can send a visitor back to.
+const PAGES_ORIGIN: &str = "https://pages.scistarter.org";
+
+/// Build the post-auth return URL for a `page=` value, or None if unusable.
+///
+/// `page=` is the pages.scistarter.org counterpart to `next=`: the caller
+/// supplies a path only and the origin is supplied here, so the destination
+/// cannot be aimed at another host. Keeping the two parameters separate is
+/// what makes that structural rather than dependent on validation.
+pub fn pages_return_url(page: &str) -> Option<String> {
+    is_local_next(page).then(|| format!("{PAGES_ORIGIN}{page}"))
 }
 
 #[derive(sailfish::TemplateOnce)]
@@ -364,9 +389,20 @@ pub async fn login_signup_page(
 ) -> Result<Response, anyhow::Error> {
     if let Some(next) = params.next {
         // Absolute local paths only for next values. No relative, no off-site
-        if next.starts_with("/") {
+        if is_local_next(&next) {
             session.set("auth_next", next);
         }
+    }
+
+    // The blog embeds our header cross-origin and sends visitors here to log
+    // in; `page=` carries the path to return them to. See [pages_return_url]
+    // for why it is a separate parameter from `next`.
+    match params.page {
+        Some(page) if is_local_next(&page) => session.set("auth_page", page),
+        // Reaching the login page from anywhere else ends any pending return
+        // to the blog, so a later unrelated login does not send the visitor
+        // somewhere they have long since navigated away from.
+        _ => session.remove("auth_page"),
     }
 
     if let Some(tag) = params.tag {
@@ -452,7 +488,7 @@ pub async fn signup_action(
     RealIp(client_ip): RealIp,
     Form(form): Form<SignupForm>,
 ) -> Response {
-    let next: Option<String> = session.get("auth_next");
+    let next: Option<String> = session.get::<String>("auth_next").filter(|n| is_local_next(n));
 
     let use_passkey = form.use_passkey.unwrap_or(false);
 
@@ -547,7 +583,15 @@ pub async fn signup_action(
                     .ok();
 
                 // Redirect to intended page or home
-                if let Some(next) = next {
+                let page_url = session
+                    .get::<String>("auth_page")
+                    .as_deref()
+                    .and_then(pages_return_url);
+                if let Some(page_url) = page_url {
+                    session.remove("auth_page");
+                    session.remove("auth_next");
+                    Redirect::see_other(page_url).into_response()
+                } else if let Some(next) = next {
                     session.remove("auth_next");
                     Redirect::see_other(next).into_response()
                 } else {
@@ -701,7 +745,7 @@ struct LoginForm {
 #[handler]
 #[tracing::instrument]
 pub async fn login_action(session: &Session, Form(form): Form<LoginForm>) -> Response {
-    let next: Option<String> = session.get("auth_next");
+    let next: Option<String> = session.get::<String>("auth_next").filter(|n| is_local_next(n));
 
     let login_request = Login {
         email: form.email.clone(),
@@ -739,7 +783,15 @@ pub async fn login_action(session: &Session, Form(form): Form<LoginForm>) -> Res
                 .ok();
 
             // Redirect to intended page or home
-            if let Some(next) = next {
+            let page_url = session
+                .get::<String>("auth_page")
+                .as_deref()
+                .and_then(pages_return_url);
+            if let Some(page_url) = page_url {
+                session.remove("auth_page");
+                session.remove("auth_next");
+                Redirect::see_other(page_url).into_response()
+            } else if let Some(next) = next {
                 session.remove("auth_next");
                 Redirect::see_other(next).into_response()
             } else {
@@ -769,6 +821,7 @@ pub async fn login_action(session: &Session, Form(form): Form<LoginForm>) -> Res
 #[derive(Debug, serde::Deserialize)]
 struct LogoutQuery {
     next: Option<String>,
+    page: Option<String>,
 }
 
 #[handler]
@@ -789,12 +842,21 @@ pub async fn logout_action(
         .await
         .ok();
 
-    // Validate next parameter - must start with / to prevent open redirect
+    // Someone logging out from the blog's embedded header goes back there;
+    // see [pages_return_url]. Otherwise a path here, else home. Both are
+    // checked by [is_local_next], so neither can be aimed off-site.
     let redirect_to = query
-        .next
+        .page
         .as_deref()
-        .filter(|next| next.starts_with('/'))
-        .unwrap_or("/");
+        .and_then(pages_return_url)
+        .unwrap_or_else(|| {
+            query
+                .next
+                .as_deref()
+                .filter(|next| is_local_next(next))
+                .unwrap_or("/")
+                .to_string()
+        });
 
     Redirect::see_other(redirect_to)
 }
@@ -959,7 +1021,7 @@ pub async fn webauthn_authentication_complete(
                 session.renew();
                 session.set("basic_info", &basic_info);
 
-                let next: Option<String> = session.get("auth_next");
+                let next: Option<String> = session.get::<String>("auth_next").filter(|n| is_local_next(n));
 
                 // Clear signup-specific session data if any
                 session.remove("signup_protected");
@@ -1283,7 +1345,7 @@ pub async fn webauthn_registration_complete(
                             // Clear pending user data
                             session.remove("pending_user_id");
 
-                            let next: Option<String> = session.get("auth_next");
+                            let next: Option<String> = session.get::<String>("auth_next").filter(|n| is_local_next(n));
 
                             // Clear signup-specific session data
                             session.remove("signup_protected");
@@ -1383,7 +1445,7 @@ pub fn webauthn_routes() -> impl Endpoint {
 
 #[cfg(test)]
 mod tests {
-    use super::signup_will_be_protected;
+    use super::{is_local_next, pages_return_url, signup_will_be_protected};
     use crate::session::session_tags;
     use poem::session::Session;
 
@@ -1438,5 +1500,42 @@ mod tests {
     #[test]
     fn a_signup_with_no_context_at_all_is_not_protected() {
         assert!(!signup_will_be_protected(&Session::default()));
+    }
+
+    #[test]
+    fn a_next_is_a_path_here_and_not_another_host() {
+        for good in ["/", "/dashboard", "/finder?q=birds", "/a//b"] {
+            assert!(is_local_next(good), "{good:?} should be accepted");
+        }
+
+        for bad in [
+            "//evil.example",
+            "///evil.example",
+            "//evil.example/x",
+            "https://evil.example/",
+            "evil.example",
+            "",
+        ] {
+            assert!(!is_local_next(bad), "{bad:?} should be refused");
+        }
+    }
+
+    #[test]
+    fn a_page_return_is_built_from_a_path_only() {
+        assert_eq!(
+            pages_return_url("/calendar/").as_deref(),
+            Some("https://pages.scistarter.org/calendar/")
+        );
+
+        // Nothing that could extend the host past pages.scistarter.org.
+        for bad in [
+            "//evil.example",
+            ".evil.example/",
+            "@evil.example/",
+            "https://evil.example/",
+            "",
+        ] {
+            assert!(pages_return_url(bad).is_none(), "{bad:?} should be refused");
+        }
     }
 }

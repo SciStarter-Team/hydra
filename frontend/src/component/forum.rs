@@ -205,7 +205,7 @@ async fn resolve_community_membership(
     let Some(user) = user_info else {
         return CommunityMembership::NotMember;
     };
-    let Ok(community) = crate::communities::get_community(community_slug).await else {
+    let Ok(Some(community)) = crate::communities::get_community(community_slug).await else {
         return CommunityMembership::NotMember;
     };
     if crate::communities::check_membership(community.community_id, user.user_id)
@@ -607,11 +607,16 @@ async fn create_topic_action(
 
     // For community forums, require membership
     if let Some(community_slug) = crate::communities::community_slug_from_forum_slug(&form.slug) {
-        let community = crate::communities::get_community(community_slug).await?;
-        if !crate::communities::check_membership(community.community_id, user_info.user_id)
-            .await
-            .unwrap_or(false)
-        {
+        // Nobody is a member of a community that does not exist.
+        let is_member = match crate::communities::get_community(community_slug).await? {
+            Some(community) => {
+                crate::communities::check_membership(community.community_id, user_info.user_id)
+                    .await
+                    .unwrap_or(false)
+            }
+            None => false,
+        };
+        if !is_member {
             let error_message = ErrorMessage {
                 title: "Join required",
                 message: "Join this community to post a discussion.",
@@ -691,11 +696,16 @@ async fn create_post_action(
     if let Some(community_slug) =
         crate::communities::community_slug_from_forum_slug(&forum_info.slug)
     {
-        let community = crate::communities::get_community(community_slug).await?;
-        if !crate::communities::check_membership(community.community_id, user_info.user_id)
-            .await
-            .unwrap_or(false)
-        {
+        // Nobody is a member of a community that does not exist.
+        let is_member = match crate::communities::get_community(community_slug).await? {
+            Some(community) => {
+                crate::communities::check_membership(community.community_id, user_info.user_id)
+                    .await
+                    .unwrap_or(false)
+            }
+            None => false,
+        };
+        if !is_member {
             let error_message = ErrorMessage {
                 title: "Join required",
                 message: "Join this community to reply.",

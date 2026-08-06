@@ -33,8 +33,12 @@ pub async fn list_communities(
     Ok(response.communities)
 }
 
-pub async fn get_community(slug: &str) -> Result<CommunityInfo, anyhow::Error> {
-    let info: CommunityInfo = common::service::request(
+/// Look up a community by slug, or `None` if there is no such community.
+///
+/// Distinct from an error, which means the lookup itself failed. Collapsing
+/// the two would turn a NATS outage into a cheerful "no such community".
+pub async fn get_community(slug: &str) -> Result<Option<CommunityInfo>, anyhow::Error> {
+    let info: Option<CommunityInfo> = common::service::request(
         "user.communities.get",
         CommunityGetRequest {
             slug: slug.to_string(),
@@ -172,7 +176,9 @@ async fn detail_page(
     RealIp(_client_ip): RealIp,
     Authenticated(user_info): Authenticated,
 ) -> Result<Response, anyhow::Error> {
-    let community = get_community(&slug).await?;
+    let Some(community) = get_community(&slug).await? else {
+        return Ok(not_found_response());
+    };
 
     let description_html = common::quill::delta_to_html(&community.description).unwrap_or_default();
 
@@ -209,7 +215,9 @@ async fn community_forum_fragment(
     Path(slug): Path<String>,
     Authenticated(user_info): Authenticated,
 ) -> Result<Response, anyhow::Error> {
-    let community = get_community(&slug).await?;
+    let Some(community) = get_community(&slug).await? else {
+        return Ok(not_found_response());
+    };
     let forum_info =
         ensure_community_forum(&community, user_info.as_ref().map(|u| u.user_id)).await?;
 
@@ -268,6 +276,15 @@ fn render_join_leave_response(
     Ok(Response::builder().content_type("text/html").body(html))
 }
 
+/// A community named in a request path that does not exist is a missing page,
+/// not a failure.
+fn not_found_response() -> Response {
+    Response::builder()
+        .status(poem::http::StatusCode::NOT_FOUND)
+        .content_type("text/plain")
+        .body("No such community.")
+}
+
 fn forbidden_response() -> Response {
     Response::builder()
         .status(poem::http::StatusCode::FORBIDDEN)
@@ -283,7 +300,9 @@ async fn join_community(
 ) -> Result<Response, anyhow::Error> {
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Login required"))?;
 
-    let community = get_community(&slug).await?;
+    let Some(community) = get_community(&slug).await? else {
+        return Ok(not_found_response());
+    };
 
     if community.exclusive {
         return Ok(forbidden_response());
@@ -299,7 +318,9 @@ async fn join_community(
     .await?;
 
     // Re-fetch to get updated member count
-    let community = get_community(&slug).await?;
+    let Some(community) = get_community(&slug).await? else {
+        return Ok(not_found_response());
+    };
 
     render_join_leave_response(community, true, &query.context)
 }
@@ -312,7 +333,9 @@ async fn leave_community(
 ) -> Result<Response, anyhow::Error> {
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Login required"))?;
 
-    let community = get_community(&slug).await?;
+    let Some(community) = get_community(&slug).await? else {
+        return Ok(not_found_response());
+    };
 
     if community.exclusive {
         return Ok(forbidden_response());
@@ -328,7 +351,9 @@ async fn leave_community(
     .await?;
 
     // Re-fetch to get updated member count
-    let community = get_community(&slug).await?;
+    let Some(community) = get_community(&slug).await? else {
+        return Ok(not_found_response());
+    };
 
     render_join_leave_response(community, false, &query.context)
 }
