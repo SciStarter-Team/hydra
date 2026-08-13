@@ -179,12 +179,15 @@ pub async fn save(req: &Request) -> Result<(), Error> {
     .execute(db())
     .await?;
 
-    // A protected user is never on a mailing list. Enforced as its own
-    // statement, after the fact, so it holds however the account arrived at
-    // being protected — subscribing and protecting in the same save, or
-    // subscribing a profile that was already protected.
+    // A protected user is never on a mailing list, and their profile is never
+    // public. Enforced as its own statement, after the fact, so it holds
+    // however the account arrived at being protected — asking for either in
+    // the same save that protects it, or asking on a profile that was already
+    // protected. Readers report `public && !protected` regardless; this keeps
+    // the stored answer from disagreeing with the shown one, so that lifting
+    // protection cannot open a profile by itself.
     sqlx::query!(
-        r#"UPDATE "users" SET "newsletter" = 0 WHERE "user_id" = ? AND "protected" = 1"#,
+        r#"UPDATE "users" SET "newsletter" = 0, "public" = 0 WHERE "user_id" = ? AND "protected" = 1"#,
         user_id_str,
     )
     .execute(db())
@@ -277,7 +280,12 @@ pub async fn public_get(req: &Request) -> Result<PublicProfile, Error> {
             scientist: false,
             educator: false,
             ambassador: None,
-            date_joined: row.date_joined,
+            // Nothing here varies between accounts except this, and a cohort
+            // enrolled through a school all joins within a day or two, so the
+            // date is the one thing a restricted record could be matched on.
+            // No caller renders it on a restricted profile; it is dropped so
+            // that a new one cannot start.
+            date_joined: String::new(),
         },
     })
 }

@@ -145,6 +145,52 @@ async fn update_foundations_progress(
     Ok(badge_granted)
 }
 
+/// Carry an account to the end of the Foundations module without it doing the
+/// steps, for a cohort that did the work before it ever reached the site.
+///
+/// The tutorial and two of the three projects, which is what the badge rule
+/// asks for -- the same three orrery's `FoundationsState.credit_cohort` sends,
+/// so an account credited on either side arrives at the same place and the
+/// user sync has nothing to reconcile. Every column is COALESCEd, so an
+/// account part way through keeps the dates it earned, and running this twice
+/// changes nothing.
+///
+/// The badge, the `foundations-badge` tag and the badge email are left to
+/// `check_foundations_badge`, along the path an earned badge takes. The
+/// per-step emails are deliberately not sent: nobody is being told they just
+/// finished a step they did off-site weeks ago.
+///
+/// Note what it does not do: no participation is recorded for the two
+/// projects, so they do not join the account's project history and the acts do
+/// not count toward the million. The claim is that the module is complete, not
+/// that the site watched it happen.
+pub async fn credit_foundations_cohort(user_id: &str) -> Result<bool, anyhow::Error> {
+    let now = jiff::Zoned::now().to_string();
+
+    sqlx::query!(
+        "INSERT OR IGNORE INTO foundations_progress (user_id) VALUES (?)",
+        user_id
+    )
+    .execute(db())
+    .await?;
+
+    sqlx::query!(
+        r#"UPDATE foundations_progress SET
+            hour1_completed_at = COALESCE(hour1_completed_at, ?),
+            squirrel_completed_at = COALESCE(squirrel_completed_at, ?),
+            stall_completed_at = COALESCE(stall_completed_at, ?)
+           WHERE user_id = ?"#,
+        now,
+        now,
+        now,
+        user_id
+    )
+    .execute(db())
+    .await?;
+
+    check_foundations_badge(user_id).await
+}
+
 /// Check if Foundations badge should be granted (hour1 + 2 of 3 projects)
 async fn check_foundations_badge(user_id: &str) -> Result<bool, anyhow::Error> {
     let row = sqlx::query!(

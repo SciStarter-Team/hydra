@@ -315,6 +315,20 @@ async fn apply_tag(user_id: &str, tag: &str, source: TagSource) -> Result<(), Er
 
     if source == TagSource::Signup {
         remember_signup_tag(user_id, &tag).await?;
+
+        // A tag that credits its cohort with a training module credits it
+        // here too. The account already exists, so it did not pass the rule
+        // in `create_account`, and a partner hands out one link to a cohort
+        // whose members mostly do already have accounts.
+        //
+        // Decided here rather than at each login seam for the reason the tag
+        // itself is recorded here: this is the one place a signup-context tag
+        // reaches an account that already exists, so every lane that gets a
+        // person signed in -- password, passkey, whatever comes next -- obeys
+        // it without having to remember to.
+        if common::message::user::signup_grants_foundations(&[&tag]) {
+            crate::workflow::credit_foundations_cohort(user_id).await?;
+        }
     }
 
     // Constant Contact holds some of these tags directly, and derives the

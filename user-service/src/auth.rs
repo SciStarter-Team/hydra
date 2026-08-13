@@ -4,7 +4,8 @@ use common::{
     message::email::{EmailRecipient, SendEmailRequest, SendEmailResponse, noreply_reply_to},
     message::user::{
         BasicInfo, CompleteSignup, CompleteSignupResponse, DeferSignup, DeferSignupOutcome, Login,
-        Signup, SnmProfile, UserAndBadge, normalize_tag, signup_needs_protection,
+        Signup, SnmProfile, UserAndBadge, normalize_tag, signup_grants_foundations,
+        signup_needs_protection,
     },
     service::{TriggerEvent, log_activity, request, send, trigger_email},
     shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower},
@@ -73,6 +74,12 @@ async fn create_account(
     // A protected user is never added to a mailing list.
     let newsletter = form.newsletter && !protected;
 
+    // Nor is their profile public. The column defaults to 1, and every reader
+    // reports `public && !protected` anyway, so leaving it to the default
+    // would store a yes that nobody is ever shown -- and that takes effect the
+    // day protection is lifted.
+    let public = !protected;
+
     let signup_tags = crate::constant_contact::encode_tags(&form.tags);
 
     let mut tx = db().begin().await?;
@@ -101,6 +108,7 @@ async fn create_account(
           "newsletter",
           "zipcode",
           "protected",
+          "public",
           "point",
           -- Every tag on a new account arrived with the person, so the whole
           -- set is recorded as having come from a signup context. That is what
@@ -123,6 +131,7 @@ async fn create_account(
           ?5,
           ?6,
           ?7,
+          ?11,
           GeomFromGeoJSON(?8),
           ?10,
           1
@@ -137,6 +146,7 @@ async fn create_account(
         point,
         verified,
         signup_tags,
+        public,
     )
     .execute(&mut *tx)
     .await?;
@@ -225,6 +235,18 @@ async fn create_account(
     if let Some(badge) = badgeclass {
         if let Err(e) = send("user.badges.grant", UserAndBadge { user_id, badge }).await {
             eprintln!("Failed to grant staked-out badge to {user_id}: {e}");
+        }
+    }
+
+    // Some signup contexts identify a cohort that ran the Foundations module
+    // before enrolling. Credited here for the reason protection is decided
+    // here -- every lane obeys it -- and non-fatally for the reason the badge
+    // above is: the account is committed by this point, so a credit that fails
+    // must not turn a completed signup into an error. The cohort backfill
+    // catches whoever it misses.
+    if signup_grants_foundations(&form.tags) {
+        if let Err(e) = crate::workflow::credit_foundations_cohort(&user_id_str).await {
+            eprintln!("Failed to credit the Foundations cohort for {user_id}: {e}");
         }
     }
 

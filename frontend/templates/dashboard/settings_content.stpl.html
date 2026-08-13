@@ -106,14 +106,17 @@
             <fieldset class="ss-card !p-6">
                 <legend class="font-semibold mb-2">Privacy and Preferences</legend>
 
-                <label class="flex items-center gap-2 mb-3">
-                    <input type="checkbox" name="public" value="true"<% if self.profile.public { %> checked<% } %> />
-                    <span>Profile is public</span>
-                </label>
+<% if self.profile.protected { %>
+                <p class="text-sm mb-3">
+                    This account is protected, so some of these choices are
+                    made for you: your profile stays private and you can't be
+                    added to a mailing list.
+                </p>
+<% } %>
 
                 <label class="flex items-center gap-2 mb-3">
-                    <input type="checkbox" name="protected" value="true"<% if self.profile.protected { %> checked<% } %> />
-                    <span>Hide profile details from other users</span>
+                    <input type="checkbox" name="public" value="true"<% if self.profile.public { %> checked<% } %><% if self.profile.protected { %> disabled<% } %> />
+                    <span>Profile is public</span>
                 </label>
 
                 <label class="flex items-center gap-2 mb-3">
@@ -121,10 +124,12 @@
                     <span>Track contributions</span>
                 </label>
 
+<% if !self.profile.protected { %>
                 <label class="flex items-center gap-2 mb-3">
                     <input type="checkbox" name="newsletter" value="true"<% if self.profile.newsletter { %> checked<% } %> />
                     <span>Receive newsletter</span>
                 </label>
+<% } %>
 
                 <label class="flex items-center gap-2 mb-3">
                     <input type="checkbox" name="accept_messages" value="true"<% if self.profile.accept_messages { %> checked<% } %> />

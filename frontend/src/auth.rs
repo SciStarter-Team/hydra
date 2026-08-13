@@ -63,6 +63,25 @@ fn clear_staked_out_badge(session: &Session) {
     session.remove("grant-badge");
 }
 
+/// Hand the session's signup-context tags to an account that already exists.
+///
+/// Sent as signup tags rather than ordinary ones: these arrived on the link
+/// the person followed, which is what decides whether Constant Contact is
+/// allowed to see a name no allowlist could have predicted -- and what a
+/// partner's cohort tag is recognized by on the receiving end, where a tag
+/// that credits its cohort with a training module credits it.
+///
+/// Drained rather than read, so the tags land once. The signup lanes pass the
+/// same list to `create_account` instead, which writes it into the row that
+/// creates the user.
+async fn apply_session_tags(session: &Session, user_id: Ulid) {
+    for tag in session_tags::clear(session) {
+        if let Err(e) = send("user.tags.add_signup", (user_id.to_string(), tag)).await {
+            tracing::error!("Failed to record a signup tag for {user_id}: {e}");
+        }
+    }
+}
+
 /// Grant a staked-out badge to someone who turned out to already have an
 /// account. The signup lanes hand it to `create_account` instead, which grants
 /// it from the row that creates the user.
@@ -408,7 +427,9 @@ pub async fn login_signup_page(
     if let Some(tag) = params.tag {
         // Stash the tag in the session so it is applied to the account on
         // signup (via Signup.tags) or on login into an existing account (via
-        // user.tags.add). Empty values are ignored.
+        // user.tags.add_signup). Either way it reaches the rules a partner's
+        // cohort tag decides -- protection, and the training credit that goes
+        // with a module the cohort ran off-site. Empty values are ignored.
         let tag = tag.trim();
         if !tag.is_empty() {
             session_tags::add(session, tag);
@@ -755,21 +776,7 @@ pub async fn login_action(session: &Session, Form(form): Form<LoginForm>) -> Res
     // Call user-service's login via NATS
     match request_with_retry::<Option<BasicInfo>>("user.auth.login", login_request).await {
         Ok(Some(basic_info)) => {
-            // Merge session tags with user tags if any exist. Sent as signup
-            // tags rather than ordinary ones: these arrived on the link the
-            // person followed, which is what decides whether Constant Contact
-            // is allowed to see a name no allowlist could have predicted.
-            let session_tags = session_tags::clear(session);
-            if !session_tags.is_empty() {
-                // Add session tags to the user's account
-                for tag in session_tags {
-                    let _ = common::service::send(
-                        "user.tags.add_signup",
-                        (basic_info.user_id.to_string(), tag),
-                    )
-                    .await;
-                }
-            }
+            apply_session_tags(session, basic_info.user_id).await;
 
             // Store user info in session. Rotate the session ID on this
             // privilege transition to prevent session fixation.
@@ -1025,7 +1032,12 @@ pub async fn webauthn_authentication_complete(
 
                 // Clear signup-specific session data if any
                 session.remove("signup_protected");
-                session_tags::clear(session);
+
+                // The same context the password lane applies. This used to
+                // drop the tags on the floor, which meant that whether a
+                // partner's cohort tag reached the account depended on which
+                // way its owner happened to sign in.
+                apply_session_tags(session, basic_info.user_id).await;
 
                 grant_staked_out_badge(session, basic_info.user_id).await;
 

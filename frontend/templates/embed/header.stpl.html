@@ -50,7 +50,10 @@ header {
   min-height: 6.75rem;
 }
 
-.logo img { display: block; width: 225px; height: 56px; max-width: 100%; }
+/* Sized by height, with the width left to the SVG's own 289.35 x 103.2
+   viewBox. Giving it both dimensions letterboxes the artwork inside the box
+   and leaves dead space down its left-hand side. */
+.logo img { display: block; height: 56px; width: auto; max-width: 100%; }
 
 /* Everything right of the logo, stacked so the nav sits under the account
    controls on wide screens exactly as it does on the main site. */
@@ -135,10 +138,16 @@ nav a.girlscouts:hover { color: var(--color-girlscout-hover); border-bottom-colo
 
 .menu-trigger { display: none; }
 
-@media (max-width: 815px) {
+/* The hamburger takes over at the same width as scistarter.org's own header,
+   which is also the width the blog's reserved-height CSS is written against.
+   Deliberately not hydra's own 768px `md` breakpoint: this header carries a
+   flat seven-item nav rather than the site header's mega-menu triggers, so it
+   needs ~830px before the nav stops collapsing to three rows. Matching the
+   site here would leave 768-830px rendering that collapsed layout. */
+@media (max-width: 950px) {
   header { min-height: 4rem; padding: 0.5rem 4%; gap: 0.5rem; }
   .logo { flex: 0 0 auto; }
-  .logo img { width: 150px; height: auto; }
+  .logo img { height: 40px; width: auto; }
 
   .menu-trigger {
     display: flex;
@@ -218,7 +227,7 @@ nav a.girlscouts:hover { color: var(--color-girlscout-hover); border-bottom-colo
 <header id="ss-embed-header">
   <a class="logo" href="https://scistarter.org/" target="_top" title="go to the home page">
     <img src="https://scistarter.org/-static/img/logo/svg/Standard__tagline-dark.svg"
-         width="225" height="56" alt="SciStarter, science we can do together.">
+         width="157" height="56" alt="SciStarter, science we can do together.">
   </a>
 
   <button type="button" class="menu-trigger" data-menu>

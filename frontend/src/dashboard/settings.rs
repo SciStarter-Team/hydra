@@ -86,7 +86,6 @@ pub struct GeneralForm {
     pub zooniverse_username: String,
     pub orcid: String,
     pub public: Option<bool>,
-    pub protected: Option<bool>,
     pub track_contributions: Option<bool>,
     pub newsletter: Option<bool>,
     pub accept_messages: Option<bool>,
@@ -122,9 +121,19 @@ pub async fn save_general(
         inat_username: Some(form.inat_username),
         zooniverse_username: Some(form.zooniverse_username),
         orcid: Some(form.orcid),
+        // Rendered disabled for a protected account, so it is not submitted
+        // and reads as unticked here. That is the right answer for them, and
+        // user.profile.save forces it either way.
         public: Some(form.public.unwrap_or(false)),
-        protected: Some(form.protected.unwrap_or(false)),
+        // Not the account owner's to set. It says what the site has decided
+        // about the account -- a cohort signing up through a partner that
+        // enrolls minors -- and it used to ride on this form as a checkbox,
+        // which meant an unticked box cleared it. Left as None so the
+        // COALESCE in user.profile.save keeps whatever is stored.
+        protected: None,
         track_contributions: Some(form.track_contributions.unwrap_or(false)),
+        // Hidden from a protected account rather than disabled, since the
+        // answer is always no; user.profile.save forces it off regardless.
         newsletter: Some(form.newsletter.unwrap_or(false)),
         accept_messages: Some(form.accept_messages.unwrap_or(false)),
         accept_emails: Some(form.accept_emails.unwrap_or(false)),

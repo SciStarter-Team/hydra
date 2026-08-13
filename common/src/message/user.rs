@@ -210,6 +210,29 @@ pub fn signup_needs_protection<S: AsRef<str>>(tags: &[S]) -> bool {
     })
 }
 
+/// Signup-context tags whose cohort is credited with the Foundations of
+/// Citizen Science module rather than working through it on the site. The
+/// library runs the module with its members before enrolling them, so the
+/// grant records something that already happened off-site. Kept in step with
+/// orrery's `FOUNDATIONS_GRANT_SIGNUP_TAGS`.
+///
+/// Kept apart from `PROTECTED_SIGNUP_TAGS` even though the membership
+/// overlaps: protecting an account and crediting it are separate decisions
+/// about the same cohort, and a partner can need one without the other --
+/// girlscout is protected and is not credited, ldpl is credited and is not
+/// protected.
+pub const FOUNDATIONS_GRANT_SIGNUP_TAGS: [&str; 2] = ["laplstudent", "ldpl"];
+
+/// Whether an account carrying `tags` from its signup context is credited
+/// with the Foundations module outright.
+pub fn signup_grants_foundations<S: AsRef<str>>(tags: &[S]) -> bool {
+    tags.iter().any(|tag| {
+        let tag = normalize_tag(tag.as_ref());
+
+        FOUNDATIONS_GRANT_SIGNUP_TAGS.contains(&tag.as_str())
+    })
+}
+
 impl BasicInfo {
     pub fn is_private(&self) -> bool {
         !self.public || self.protected
@@ -1845,6 +1868,40 @@ mod tests {
         assert!(!signup_needs_protection(&["some-partner".to_string()]));
         assert!(!signup_needs_protection(&["girlscouts".to_string()]));
         assert!(!signup_needs_protection::<String>(&[]));
+    }
+
+    #[test]
+    fn the_crediting_signup_tags_are_recognized() {
+        assert!(signup_grants_foundations(&["laplstudent".to_string()]));
+        assert!(signup_grants_foundations(&["ldpl".to_string()]));
+        // Handed out as `/login?tag=LDPL`, and arriving in whatever case and
+        // punctuation the partner wrote it in.
+        assert!(signup_grants_foundations(&["LDPL".to_string()]));
+        assert!(signup_grants_foundations(&[" #LDPL ".to_string()]));
+        assert!(signup_grants_foundations(&[
+            "some-partner".to_string(),
+            "LAPLstudent".to_string(),
+        ]));
+    }
+
+    /// The two rules name overlapping cohorts and decide separate things, in
+    /// both directions. Pinned because the sets are easy to mistake for one
+    /// another, and either confusion is a real harm: crediting a badge to a
+    /// cohort that did not earn it, or leaving a minor's account unprotected.
+    #[test]
+    fn crediting_and_protecting_are_separate_decisions() {
+        assert!(signup_needs_protection(&["girlscout".to_string()]));
+        assert!(!signup_grants_foundations(&["girlscout".to_string()]));
+
+        assert!(signup_grants_foundations(&["ldpl".to_string()]));
+        assert!(!signup_needs_protection(&["ldpl".to_string()]));
+    }
+
+    #[test]
+    fn an_ordinary_signup_is_not_credited() {
+        assert!(!signup_grants_foundations(&["some-partner".to_string()]));
+        assert!(!signup_grants_foundations(&["ldpls".to_string()]));
+        assert!(!signup_grants_foundations::<String>(&[]));
     }
 
     #[test]
