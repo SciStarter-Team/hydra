@@ -19,7 +19,8 @@ use handlers::{
     handle_activity_log, handle_acts_of_science_create, handle_acts_to_date,
     handle_affiliate_participation, handle_articulate_completion,
     handle_articulate_completion_record, handle_clickthrough, handle_clickthrough_analytics,
-    handle_contributors, handle_edit_log, handle_email_event, handle_external_link_clickthrough,
+    handle_contributors, handle_edit_log, handle_email_event, handle_entity_list_stats,
+    handle_external_link_clickthrough,
     handle_external_links, handle_go_url_stats, handle_health_check, handle_join,
     handle_last_active_for, handle_last_edited, handle_page_view,
     handle_participation_analytics,
@@ -258,6 +259,11 @@ async fn main() -> Result<()> {
     ));
     toplevel.spawn(handler!(
         log_group,
+        "entity_list_stats",
+        handle_entity_list_stats
+    ));
+    toplevel.spawn(handler!(
+        log_group,
         "articulate_completion",
         handle_articulate_completion
     ));
@@ -377,6 +383,7 @@ async fn main() -> Result<()> {
     println!("  - log.participation_analytics");
     println!("  - log.recent_activity");
     println!("  - log.affiliate_participants");
+    println!("  - log.entity_list_stats");
     println!("  - log.stats.go_url");
     println!("  - log.acts.contributors");
     println!("  - log.cache.user_tags_update");

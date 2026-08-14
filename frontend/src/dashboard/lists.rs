@@ -418,7 +418,7 @@ impl ListModel {
     }
 }
 
-async fn lookup_handle(user_id: Ulid) -> String {
+pub async fn lookup_handle(user_id: Ulid) -> String {
     use common::message::dashboard::PublicProfile;
 
     let result: Result<PublicProfile, _> =

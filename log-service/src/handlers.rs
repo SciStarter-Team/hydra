@@ -5,7 +5,9 @@ use common::{
         ActsToDateRequest, ActsToDateResponse, AffiliateParticipantsRequest,
         AffiliateParticipantsResponse, AnalyticsQuery, AnalyticsResponse,
         ArticulateCompletionRecord, ArticulateCompletionRequest, ArticulateCompletionResponse,
-        EditLogEntry, EditLogRequest, EditLogResponse, ExternalLinkClickthroughResponse,
+        EditLogEntry, EditLogRequest, EditLogResponse, EntityListContributions,
+        EntityListParticipant, EntityListStatsRequest, EntityListStatsResponse,
+        ExternalLinkClickthroughResponse,
         ExternalLinksResponse, GoUrlStatsRequest, GoUrlStatsResponse, LastEditedRequest,
         LastEditedResponse, ProjectLikesRequest, ProjectLikesResponse, ProjectMemberCountRequest,
         ProjectMemberCountResponse, ProjectParticipationRecord, ProjectParticipationRequest,
@@ -538,6 +540,206 @@ pub async fn handle_affiliate_participation(
     }
 
     Ok(AffiliateParticipantsResponse { user_ids })
+}
+
+/// Answer the owner of a list: who opened it, and what did they contribute
+/// before and after it existed.
+///
+/// Both halves are assembled here because both live here. The views are
+/// `activity_log` rows written by the list page; the contributions are
+/// `participation` rows. Splitting them anywhere else would mean shipping
+/// every raw row to the caller.
+pub async fn handle_entity_list_stats(
+    req: &async_nats::service::Request,
+) -> Result<EntityListStatsResponse, anyhow::Error> {
+    use datafusion::arrow::array::{Array, Int32Array, StringArray};
+    use std::collections::HashMap;
+
+    let request: EntityListStatsRequest = decode_structured_message(req.message.clone())?;
+
+    let database = DATABASE
+        .read()
+        .as_ref()
+        .expect("Database not initialized")
+        .clone();
+
+    let ctx = database.context();
+
+    let list_id_str = request.list_id.to_string();
+
+    // Every view of the list, identified or not. The list page logs one per
+    // page load, so these are visits rather than distinct people.
+    let view_batches = ctx
+        .table("activity_log")
+        .await?
+        .filter(col("action").eq(lit("entity_list_view")))?
+        .filter(col("target").eq(lit(&list_id_str)))?
+        .select(vec![col("user_id"), col("when")])?
+        .collect()
+        .await?;
+
+    let mut identified_views = 0i64;
+    let mut anonymous_views = 0i64;
+    let mut first_views: HashMap<Ulid, String> = HashMap::new();
+
+    for batch in view_batches {
+        let users = batch
+            .column(0)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .expect("user_id column should be StringArray");
+        let whens = batch
+            .column(1)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .expect("when column should be StringArray");
+
+        for i in 0..users.len() {
+            if users.is_null(i) {
+                anonymous_views += 1;
+                continue;
+            }
+
+            identified_views += 1;
+
+            let Ok(user_id) = users.value(i).parse::<Ulid>() else {
+                continue;
+            };
+
+            let when = whens.value(i).to_string();
+
+            first_views
+                .entry(user_id)
+                .and_modify(|earliest| {
+                    if when < *earliest {
+                        *earliest = when.clone();
+                    }
+                })
+                .or_insert(when);
+        }
+    }
+
+    let participants: Vec<EntityListParticipant> = first_views
+        .iter()
+        .map(|(user_id, first_view)| EntityListParticipant {
+            user_id: *user_id,
+            first_view: first_view.clone(),
+        })
+        .collect();
+
+    if participants.is_empty() || request.entity_ids.is_empty() {
+        return Ok(EntityListStatsResponse {
+            identified_views,
+            anonymous_views,
+            participants,
+            contributions: Vec::new(),
+        });
+    }
+
+    // Contributions to the entities on the list, by the people who opened
+    // it. Narrowed to those entities in the query; narrowing to those users
+    // as well happens below, since the participant set is usually the
+    // smaller filter and is already in hand.
+    let entity_ids: Vec<String> = request
+        .entity_ids
+        .iter()
+        .map(|entity_id| entity_id.to_string())
+        .collect();
+
+    let participation_batches = ctx
+        .table("participation")
+        .await?
+        .filter(col("user_id").is_not_null())?
+        .filter(in_list(
+            col("entity_id"),
+            entity_ids.iter().map(lit).collect(),
+            false,
+        ))?
+        .select(vec![
+            col("user_id"),
+            col("entity_id"),
+            col("when"),
+            col("magnitude"),
+        ])?
+        .collect()
+        .await?;
+
+    // magnitude is the multiplier a single record carries, so a record
+    // standing for four contributions counts as four.
+    let mut totals: HashMap<(Ulid, Ulid), EntityListContributions> = HashMap::new();
+
+    for batch in participation_batches {
+        let users = batch
+            .column(0)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .expect("user_id column should be StringArray");
+        let entities = batch
+            .column(1)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .expect("entity_id column should be StringArray");
+        let whens = batch
+            .column(2)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .expect("when column should be StringArray");
+        let magnitudes = batch
+            .column(3)
+            .as_any()
+            .downcast_ref::<Int32Array>()
+            .expect("magnitude column should be Int32Array");
+
+        for i in 0..users.len() {
+            if users.is_null(i) {
+                continue;
+            }
+
+            let (Ok(user_id), Ok(entity_id)) = (
+                users.value(i).parse::<Ulid>(),
+                entities.value(i).parse::<Ulid>(),
+            ) else {
+                continue;
+            };
+
+            let Some(first_view) = first_views.get(&user_id) else {
+                continue;
+            };
+
+            let when = whens.value(i);
+            let magnitude = magnitudes.value(i) as i64;
+
+            let entry = totals.entry((user_id, entity_id)).or_insert_with(|| {
+                EntityListContributions {
+                    user_id,
+                    entity_id,
+                    since_list_creation: 0,
+                    before_list_creation: 0,
+                    since_viewing: 0,
+                }
+            });
+
+            // With no creation date there is nothing to attest that a
+            // contribution came after the list existed, so none of it is
+            // claimed as such.
+            if !request.created_at.is_empty() && when >= request.created_at.as_str() {
+                entry.since_list_creation += magnitude;
+            } else {
+                entry.before_list_creation += magnitude;
+            }
+
+            if when >= first_view.as_str() {
+                entry.since_viewing += magnitude;
+            }
+        }
+    }
+
+    Ok(EntityListStatsResponse {
+        identified_views,
+        anonymous_views,
+        participants,
+        contributions: totals.into_values().collect(),
+    })
 }
 
 pub async fn handle_articulate_completion(

@@ -1166,6 +1166,7 @@ pub struct UserJoinEntry {
     pub project_id: String,
 }
 
+
 // List all users who opted out of AI
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AiOptedOutRequest {}

@@ -27,6 +27,49 @@ pub struct AffiliateParticipantsResponse {
     pub user_ids: Vec<Ulid>,
 }
 
+/// Everything the owner of a list needs to know about activity around it.
+///
+/// The whole aggregate is asked for at once because both halves of it live
+/// here: the views come from `activity_log` and the contributions from
+/// `participation`, and the split between "since the list was created" and
+/// "before" has to be drawn against the same rows.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntityListStatsRequest {
+    pub list_id: Ulid,
+    /// When the list was created. Empty when that is unknown, in which case
+    /// nothing is claimed to have followed it.
+    pub created_at: String,
+    /// The entities on the list, as entity ULIDs.
+    pub entity_ids: Vec<Ulid>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntityListParticipant {
+    pub user_id: Ulid,
+    /// The earliest time this participant opened the list.
+    pub first_view: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntityListContributions {
+    pub user_id: Ulid,
+    pub entity_id: Ulid,
+    /// Contributions on or after the list's creation date.
+    pub since_list_creation: i64,
+    /// Contributions before it. Added to the above, this is the total.
+    pub before_list_creation: i64,
+    /// Contributions on or after this participant's first view of the list.
+    pub since_viewing: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntityListStatsResponse {
+    pub identified_views: i64,
+    pub anonymous_views: i64,
+    pub participants: Vec<EntityListParticipant>,
+    pub contributions: Vec<EntityListContributions>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnalyticsQuery {
     pub start_date: String, // ISO 8601 date (YYYY-MM-DD)

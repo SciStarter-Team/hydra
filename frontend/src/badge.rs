@@ -794,7 +794,7 @@ async fn oembed_xml(Path((badgeclass, user_id)): Path<(String, String)>) -> poem
         .body(xml))
 }
 
-fn markdown_to_html(markdown: &str) -> String {
+pub fn markdown_to_html(markdown: &str) -> String {
     use markdown_ppp::html_printer::config::Config;
     use markdown_ppp::html_printer::render_html;
     use markdown_ppp::parser::{MarkdownParserState, parse_markdown};

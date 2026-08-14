@@ -371,6 +371,7 @@ fn user_facing() -> impl Endpoint {
         .nest("/-concierge", concierge::routes())
         .at("/finder", get(search::handle_finder))
         .at("/-news/:id/content", get(news::news_content))
+        .nest("/list", entity_list::page::routes())
         .nest("/communities", communities::routes())
         .nest("/dashboard/communities", communities::dashboard_routes())
         .nest("/dashboard", dashboard::routes())
@@ -2177,7 +2178,6 @@ mod sync {
 
     #[derive(Debug, serde::Deserialize)]
     struct EntityListEntryData {
-        #[allow(dead_code)]
         id: i32,
         #[allow(dead_code)]
         list_orrery_id: i32,
@@ -2304,9 +2304,13 @@ mod sync {
 
                 let entity_list = EntityList {
                     list_id,
-                    created_at: data
-                        .created
-                        .unwrap_or_else(|| common::timestring::TimeString::now().to_string()),
+                    // An unknown creation date stays empty rather than
+                    // becoming the current time. The bookmark below
+                    // advances to the highest created_at seen, and
+                    // orrery sorts its null dates first, so standing in
+                    // "now" for them would push the bookmark past every
+                    // real list and stall the sync permanently.
+                    created_at: data.created.unwrap_or_default(),
                     private: data.private,
                     owner_id,
                     delegate_id,
@@ -2334,10 +2338,38 @@ mod sync {
                 .await
                 .ok();
 
-                // Save entries for this list
+                // Orrery sends the full entry set for every list it
+                // returns, so anything already here that isn't in this
+                // batch has been removed upstream.
+                let previous_entries: Vec<String> = sqlx::query_scalar!(
+                    "SELECT entry_id FROM entity_list_entries WHERE list_id = ?",
+                    list_id_str,
+                )
+                .fetch_all(db())
+                .await
+                .unwrap_or_default();
+
+                let mut current_entries = std::collections::HashSet::new();
+
                 for entry_data in data.entries {
+                    // Reusing the id orrery's entry mapped to last time
+                    // is what keeps a re-sync from inserting a second
+                    // copy of every entry.
+                    let mapped = sqlx::query_scalar!(
+                        "SELECT entry_id FROM entity_list_entry_id_map WHERE orrery_id = ?",
+                        entry_data.id,
+                    )
+                    .fetch_optional(db())
+                    .await
+                    .ok()
+                    .flatten();
+
+                    let entry_id: Ulid = mapped
+                        .and_then(|id| id.parse().ok())
+                        .unwrap_or_else(Ulid::new);
+
                     let entry = EntityListEntry {
-                        entry_id: Ulid::new(),
+                        entry_id,
                         list_id,
                         priority: entry_data.priority,
                         added_at: entry_data.when,
@@ -2348,6 +2380,39 @@ mod sync {
 
                     if let Err(err) = entry.store().await {
                         tracing::error!("Error saving entity list entry: {}", err);
+                        continue;
+                    }
+
+                    let entry_id_str = entry_id.to_string();
+                    sqlx::query!(
+                        "INSERT OR REPLACE INTO entity_list_entry_id_map (orrery_id, entry_id) VALUES (?, ?)",
+                        entry_data.id,
+                        entry_id_str,
+                    )
+                    .execute(db())
+                    .await
+                    .ok();
+
+                    current_entries.insert(entry_id_str);
+                }
+
+                for stale in previous_entries
+                    .into_iter()
+                    .filter(|entry_id| !current_entries.contains(entry_id))
+                {
+                    match stale.parse::<Ulid>() {
+                        Ok(entry_id) => {
+                            if let Err(err) = EntityListEntry::delete(entry_id).await {
+                                tracing::error!(
+                                    "Error removing withdrawn entity list entry {}: {}",
+                                    stale,
+                                    err
+                                );
+                            }
+                        }
+                        Err(err) => {
+                            tracing::error!("Unparsable entry id {} in list: {}", stale, err)
+                        }
                     }
                 }
 

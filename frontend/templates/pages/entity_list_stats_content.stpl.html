@@ -1,0 +1,77 @@
+<div class="ss-container !pt-8 !pb-8 mx-auto">
+    <h1><%= self.name %></h1>
+    <p class="mb-6">
+        <a href="/list/<%= self.list_id.to_string() %>">Back to the list</a>
+    </p>
+
+    <div class="ss-card !p-6 mb-6">
+        <h2 class="mt-0">About these stats</h2>
+        <p>
+            This page helps you see participant activity related to this
+            List. Activity is separated based on whether it happened before
+            or after this List was created.
+        </p>
+        <p>
+            <strong>Activity since List creation</strong> shows activity that
+            occurred on or after
+            <% if let Some(created) = &self.created_on { %><%= created %><% } else { %>the date this List was created<% } %>.
+            Use this information when determining credit for activities
+            associated with this List.
+        </p>
+        <p class="mb-0">
+            <strong>Prior activity</strong> shows activity that occurred
+            before this List was created and is provided for context.
+        </p>
+    </div>
+
+    <p class="text-sm text-gray-600">
+        As the creator of this list, you have access to these analytics.
+        They are not shared with list viewers.
+    </p>
+    <p class="text-sm text-gray-600 mb-6">
+        <%= self.identified_views %> views from people who were signed in,
+        <%= self.anonymous_views %> from people who were not. Activity can
+        only be credited to someone who was signed in.
+    </p>
+
+    <% if self.rows.is_empty() { %>
+    <p class="ss-card !p-6 text-center text-gray-600">
+        Nobody has opened this list yet, so there is no activity to report.
+    </p>
+    <% } else { %>
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead>
+                <tr class="text-left border-b border-gray-300">
+                    <th class="py-2 pr-4">Participant</th>
+                    <th class="py-2 pr-4">Project / Event</th>
+                    <th class="py-2 pr-4" title="The first time this participant viewed this List.">First viewed this List</th>
+                    <th class="py-2 pr-4" title="Contributions made on or after this List was created. Use this activity when determining whether to give credit for the assignment.">Activity since List creation</th>
+                    <th class="py-2 font-normal text-gray-500" title="Contributions made before this List was created. These contributions are shown for context and are not included in &quot;Activity since List creation.&quot;">Prior activity</th>
+                </tr>
+            </thead>
+            <tbody>
+                <% for row in &self.rows { %>
+                <tr class="border-b border-gray-200 align-top">
+                    <td class="py-3 pr-4"><%= row.participant %></td>
+                    <td class="py-3 pr-4">
+                        <a href="<%= row.entity_link %>"><%= row.entity_name %></a>
+                        <details class="mt-2">
+                            <summary class="text-sm cursor-pointer text-gray-600">Additional details</summary>
+                            <ul class="text-sm text-gray-600 mt-2">
+                                <li>Total contributions: <%= row.total() %></li>
+                                <li>First viewed this List: <%= row.first_viewed %></li>
+                                <li>Contributions since viewing List: <%= row.since_viewing %></li>
+                            </ul>
+                        </details>
+                    </td>
+                    <td class="py-3 pr-4"><%= row.first_viewed %></td>
+                    <td class="py-3 pr-4"><strong class="text-lg"><%= row.since_list_creation %></strong></td>
+                    <td class="py-3 text-gray-500"><%= row.before_list_creation %></td>
+                </tr>
+                <% } %>
+            </tbody>
+        </table>
+    </div>
+    <% } %>
+</div>

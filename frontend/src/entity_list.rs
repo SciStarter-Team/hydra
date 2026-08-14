@@ -4,6 +4,8 @@ use ulid::Ulid;
 
 use crate::peering::LoadStorePeered;
 
+pub mod page;
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct EntityList {
     pub list_id: Ulid,
@@ -395,6 +397,131 @@ impl LoadStorePeered for EntityListViewer {
         let user_id_str = user_id.to_string();
         sqlx::query!(
             r#"DELETE FROM entity_list_viewers WHERE list_id = ? AND user_id = ?"#,
+            list_id_str,
+            user_id_str,
+        )
+        .execute(db())
+        .await?;
+        Ok(())
+    }
+}
+
+/// The name a participant gave when the list asked who they are.
+///
+/// Separate from [`EntityListViewer`], which records who the owner shared
+/// the list with. Naming yourself is not a grant of access, and a
+/// participant who does so must not appear in the owner's share list.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct EntityListIdentity {
+    pub list_id: Ulid,
+    pub user_id: Ulid,
+    pub first_name: String,
+    pub last_name: String,
+    pub given_at: String,
+}
+
+struct EntityListIdentityDB {
+    list_id: String,
+    user_id: String,
+    first_name: String,
+    last_name: String,
+    given_at: String,
+}
+
+impl TryFrom<EntityListIdentityDB> for EntityListIdentity {
+    type Error = anyhow::Error;
+
+    fn try_from(value: EntityListIdentityDB) -> Result<Self, Self::Error> {
+        Ok(EntityListIdentity {
+            list_id: value.list_id.parse()?,
+            user_id: value.user_id.parse()?,
+            first_name: value.first_name,
+            last_name: value.last_name,
+            given_at: value.given_at,
+        })
+    }
+}
+
+impl EntityListIdentity {
+    pub async fn get_for_list(list_id: Ulid) -> Result<Vec<EntityListIdentity>, Error> {
+        let list_id_str = list_id.to_string();
+        let items = sqlx::query_as!(
+            EntityListIdentityDB,
+            r#"SELECT list_id, user_id, first_name, last_name, given_at
+               FROM entity_list_identities
+               WHERE list_id = ?"#,
+            list_id_str,
+        )
+        .fetch_all(db())
+        .await?;
+
+        items
+            .into_iter()
+            .map(|row| row.try_into())
+            .collect::<Result<Vec<_>, _>>()
+    }
+
+    /// The participant's name as one string, empty when they gave neither
+    /// half. Callers fall back to the account handle.
+    pub fn display_name(&self) -> String {
+        format!("{} {}", self.first_name, self.last_name)
+            .trim()
+            .to_string()
+    }
+}
+
+impl LoadStorePeered for EntityListIdentity {
+    type DatabaseKey = (Ulid, Ulid);
+
+    const GROUP: &str = "entity-list-identity";
+
+    #[tracing::instrument]
+    async fn read_from_database(key: Self::DatabaseKey) -> Result<Self, Error> {
+        let (list_id, user_id) = key;
+        let list_id_str = list_id.to_string();
+        let user_id_str = user_id.to_string();
+        Ok(sqlx::query_as!(
+            EntityListIdentityDB,
+            r#"SELECT list_id, user_id, first_name, last_name, given_at
+               FROM entity_list_identities
+               WHERE list_id = ? AND user_id = ?"#,
+            list_id_str,
+            user_id_str,
+        )
+        .fetch_one(db())
+        .await?
+        .try_into()?)
+    }
+
+    #[tracing::instrument]
+    async fn save_to_database(&self) -> Result<(), Error> {
+        let list_id_str = self.list_id.to_string();
+        let user_id_str = self.user_id.to_string();
+
+        sqlx::query!(
+            r#"INSERT OR REPLACE INTO entity_list_identities (
+                 list_id, user_id, first_name, last_name, given_at
+               )
+               VALUES (?, ?, ?, ?, ?)"#,
+            list_id_str,
+            user_id_str,
+            self.first_name,
+            self.last_name,
+            self.given_at,
+        )
+        .execute(db())
+        .await?;
+
+        Ok(())
+    }
+
+    #[tracing::instrument]
+    async fn delete_from_database(key: Self::DatabaseKey) -> Result<(), Error> {
+        let (list_id, user_id) = key;
+        let list_id_str = list_id.to_string();
+        let user_id_str = user_id.to_string();
+        sqlx::query!(
+            r#"DELETE FROM entity_list_identities WHERE list_id = ? AND user_id = ?"#,
             list_id_str,
             user_id_str,
         )
