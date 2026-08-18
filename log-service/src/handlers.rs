@@ -7,14 +7,13 @@ use common::{
         ArticulateCompletionRecord, ArticulateCompletionRequest, ArticulateCompletionResponse,
         EditLogEntry, EditLogRequest, EditLogResponse, EntityListContributions,
         EntityListParticipant, EntityListStatsRequest, EntityListStatsResponse,
-        ExternalLinkClickthroughResponse,
-        ExternalLinksResponse, GoUrlStatsRequest, GoUrlStatsResponse, LastEditedRequest,
-        LastEditedResponse, ProjectLikesRequest, ProjectLikesResponse, ProjectMemberCountRequest,
-        ProjectMemberCountResponse, ProjectParticipationRecord, ProjectParticipationRequest,
-        ProjectParticipationResponse, ProjectReviewsRequest, ProjectReviewsResponse,
-        RatingSetRequest, RecentActivityRequest, RecentActivityResponse, ReviewEntry,
-        ReviewSetRequest, UserLastViewRequest, UserLastViewResponse,
-        UserParticipationBreakdownEntry, UserParticipationBreakdownRequest,
+        ExternalLinkClickthroughResponse, ExternalLinksResponse, GoUrlStatsRequest,
+        GoUrlStatsResponse, LastEditedRequest, LastEditedResponse, ProjectLikesRequest,
+        ProjectLikesResponse, ProjectMemberCountRequest, ProjectMemberCountResponse,
+        ProjectParticipationRecord, ProjectParticipationRequest, ProjectParticipationResponse,
+        ProjectReviewsRequest, ProjectReviewsResponse, RatingSetRequest, RecentActivityRequest,
+        RecentActivityResponse, ReviewEntry, ReviewSetRequest, UserLastViewRequest,
+        UserLastViewResponse, UserParticipationBreakdownEntry, UserParticipationBreakdownRequest,
         UserParticipationBreakdownResponse, UserParticipationEntry, UserParticipationRequest,
         UserParticipationResponse, UserRecentVisit, UserRecentVisitsRequest,
         UserRecentVisitsResponse,
@@ -26,10 +25,10 @@ use ulid::Ulid;
 
 use log_service::{
     analytics::{
-        get_clickthrough_analytics_realtime, get_go_url_stats,
+        get_clickthrough_analytics_realtime, get_go_url_stats, get_last_active_for,
         get_participation_analytics_realtime, get_participation_by_email,
-        get_last_active_for, get_participation_summary, get_recent_activity,
-        get_top_performers, get_user_first_participation, get_users_active_since,
+        get_participation_summary, get_recent_activity, get_top_performers,
+        get_user_first_participation, get_users_active_since,
     },
     cache::{update_user_emails_cache, update_user_tags_cache},
     health::HealthResponse,
@@ -709,15 +708,16 @@ pub async fn handle_entity_list_stats(
             let when = whens.value(i);
             let magnitude = magnitudes.value(i) as i64;
 
-            let entry = totals.entry((user_id, entity_id)).or_insert_with(|| {
-                EntityListContributions {
-                    user_id,
-                    entity_id,
-                    since_list_creation: 0,
-                    before_list_creation: 0,
-                    since_viewing: 0,
-                }
-            });
+            let entry =
+                totals
+                    .entry((user_id, entity_id))
+                    .or_insert_with(|| EntityListContributions {
+                        user_id,
+                        entity_id,
+                        since_list_creation: 0,
+                        before_list_creation: 0,
+                        since_viewing: 0,
+                    });
 
             // With no creation date there is nothing to attest that a
             // contribution came after the list existed, so none of it is

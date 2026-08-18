@@ -10,9 +10,7 @@
 
 use anyhow::Error;
 use common::message::dashboard::LibrarySignupUpdate;
-use common::message::user::{
-    WorkflowProgressRequest, WorkflowProgressResponse, WorkflowType,
-};
+use common::message::user::{WorkflowProgressRequest, WorkflowProgressResponse, WorkflowType};
 use common::service::request;
 use poem::{
     handler,
@@ -217,7 +215,9 @@ mod tests {
 
     #[test]
     fn consent_accepts_every_spelling_orrery_does() {
-        for value in ["y", "Y", "yes", "Yes", "YES", "true", "True", "TRUE", " Yes "] {
+        for value in [
+            "y", "Y", "yes", "Yes", "YES", "true", "True", "TRUE", " Yes ",
+        ] {
             assert!(affirmative(Some(value)), "{value:?}");
         }
     }
@@ -233,7 +233,10 @@ mod tests {
     #[test]
     fn next_only_accepts_local_paths() {
         assert_eq!(safe_next(Some("/library".into())), "/library");
-        assert_eq!(safe_next(Some("/library?joined=1".into())), "/library?joined=1");
+        assert_eq!(
+            safe_next(Some("/library?joined=1".into())),
+            "/library?joined=1"
+        );
         assert_eq!(safe_next(None), "/library");
     }
 

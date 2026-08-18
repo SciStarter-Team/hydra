@@ -274,8 +274,7 @@ async fn render_edit(
     signup_id: &str,
     saved: bool,
 ) -> Result<poem::Response, anyhow::Error> {
-    let row: Option<LibrarySignupRow> =
-        request("user.library.get", signup_id.to_string()).await?;
+    let row: Option<LibrarySignupRow> = request("user.library.get", signup_id.to_string()).await?;
     let row = row.ok_or_else(|| anyhow::anyhow!("Library signup not found"))?;
 
     let page = EditPage {

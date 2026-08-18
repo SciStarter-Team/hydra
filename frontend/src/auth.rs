@@ -509,7 +509,9 @@ pub async fn signup_action(
     RealIp(client_ip): RealIp,
     Form(form): Form<SignupForm>,
 ) -> Response {
-    let next: Option<String> = session.get::<String>("auth_next").filter(|n| is_local_next(n));
+    let next: Option<String> = session
+        .get::<String>("auth_next")
+        .filter(|n| is_local_next(n));
 
     let use_passkey = form.use_passkey.unwrap_or(false);
 
@@ -766,7 +768,9 @@ struct LoginForm {
 #[handler]
 #[tracing::instrument]
 pub async fn login_action(session: &Session, Form(form): Form<LoginForm>) -> Response {
-    let next: Option<String> = session.get::<String>("auth_next").filter(|n| is_local_next(n));
+    let next: Option<String> = session
+        .get::<String>("auth_next")
+        .filter(|n| is_local_next(n));
 
     let login_request = Login {
         email: form.email.clone(),
@@ -1028,7 +1032,9 @@ pub async fn webauthn_authentication_complete(
                 session.renew();
                 session.set("basic_info", &basic_info);
 
-                let next: Option<String> = session.get::<String>("auth_next").filter(|n| is_local_next(n));
+                let next: Option<String> = session
+                    .get::<String>("auth_next")
+                    .filter(|n| is_local_next(n));
 
                 // Clear signup-specific session data if any
                 session.remove("signup_protected");
@@ -1357,7 +1363,9 @@ pub async fn webauthn_registration_complete(
                             // Clear pending user data
                             session.remove("pending_user_id");
 
-                            let next: Option<String> = session.get::<String>("auth_next").filter(|n| is_local_next(n));
+                            let next: Option<String> = session
+                                .get::<String>("auth_next")
+                                .filter(|n| is_local_next(n));
 
                             // Clear signup-specific session data
                             session.remove("signup_protected");

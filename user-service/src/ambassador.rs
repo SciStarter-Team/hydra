@@ -6,9 +6,9 @@ use common::{
         AmbassadorAppStatus, AmbassadorApplication, AmbassadorApplicationForm,
         AmbassadorApplicationRow, AmbassadorApplicationUpdate, AmbassadorDirectoryEntry,
         AmbassadorDirectoryOrder, AmbassadorDirectoryQuery, AmbassadorDirectoryResponse,
-        AmbassadorExportRow, AmbassadorFilters, AmbassadorListRequest, AmbassadorListResponse, AmbassadorMessageForm,
-        AmbassadorMessageReview, AmbassadorMessageRow, AmbassadorProfile, AmbassadorReviewUpdate,
-        AmbassadorScreeningStatus, DatePresence, TriState,
+        AmbassadorExportRow, AmbassadorFilters, AmbassadorListRequest, AmbassadorListResponse,
+        AmbassadorMessageForm, AmbassadorMessageReview, AmbassadorMessageRow, AmbassadorProfile,
+        AmbassadorReviewUpdate, AmbassadorScreeningStatus, DatePresence, TriState,
     },
     message::email::EmailRecipient,
     message::user::{AmbassadorLocation, AmbassadorPassedLocationsResponse, UserAndBadge},
@@ -838,7 +838,9 @@ pub async fn export(req: &Request) -> Result<Vec<AmbassadorExportRow>, Error> {
                 marked: row.get::<i64, _>("marked") != 0,
                 archived: row.get::<i64, _>("archived") != 0,
                 cohort: row.get("cohort"),
-                app_status: AmbassadorAppStatus::from_i64(row.get("app_status")).label().to_string(),
+                app_status: AmbassadorAppStatus::from_i64(row.get("app_status"))
+                    .label()
+                    .to_string(),
                 screening_status: AmbassadorScreeningStatus::from_i64(row.get("screening_status"))
                     .label()
                     .to_string(),

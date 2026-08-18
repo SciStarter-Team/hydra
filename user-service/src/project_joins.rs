@@ -154,4 +154,3 @@ pub async fn list_user_joins(req: &Request) -> Result<UserJoinsListResponse, Err
             .collect(),
     })
 }
-

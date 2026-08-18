@@ -2,13 +2,12 @@ use crate::error::{LogServiceError, Result};
 use common::badge::Badge;
 use common::message::log::{
     AnalyticsQuery, AnalyticsResponse, GoUrlChartPoint, GoUrlStatsRequest, GoUrlStatsResponse,
-    GoUrlViewEntry, ParticipationByEmailEntry, ParticipationByEmailRequest,
-    ParticipationByEmailResponse, ParticipationSummaryEntry, ParticipationSummaryRequest,
-    ParticipationSummaryResponse, RecentActivityItem, RecentActivityRequest,
-    RecentActivityResponse, TopItemCount, TopPerformersQuery, UserFirstParticipationEntry,
-    LastActiveEntry, LastActiveForRequest, LastActiveForResponse,
-    UserFirstParticipationRequest, UserFirstParticipationResponse,
-    UsersActiveSinceRequest, UsersActiveSinceResponse, WeeklyCount,
+    GoUrlViewEntry, LastActiveEntry, LastActiveForRequest, LastActiveForResponse,
+    ParticipationByEmailEntry, ParticipationByEmailRequest, ParticipationByEmailResponse,
+    ParticipationSummaryEntry, ParticipationSummaryRequest, ParticipationSummaryResponse,
+    RecentActivityItem, RecentActivityRequest, RecentActivityResponse, TopItemCount,
+    TopPerformersQuery, UserFirstParticipationEntry, UserFirstParticipationRequest,
+    UserFirstParticipationResponse, UsersActiveSinceRequest, UsersActiveSinceResponse, WeeklyCount,
 };
 use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::functions_aggregate::expr_fn::count;
@@ -1230,9 +1229,7 @@ pub async fn get_users_active_since(
     }
 
     let since = request.since;
-    let sql = format!(
-        "SELECT DISTINCT user_id FROM ({ACTIVITY_UNION}) WHERE `when` > '{since}'"
-    );
+    let sql = format!("SELECT DISTINCT user_id FROM ({ACTIVITY_UNION}) WHERE `when` > '{since}'");
 
     let batches = database.context().sql(&sql).await?.collect().await?;
 
@@ -1283,8 +1280,7 @@ pub async fn get_last_active_for(
         let whens = batch.column(1);
 
         for row in 0..batch.num_rows() {
-            let (Some(user_id), Some(when)) = (string_at(ids, row), string_at(whens, row))
-            else {
+            let (Some(user_id), Some(when)) = (string_at(ids, row), string_at(whens, row)) else {
                 continue;
             };
 

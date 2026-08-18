@@ -1,7 +1,6 @@
 pub mod add;
 pub mod admin;
 pub mod ambassador;
-pub mod library_signup;
 pub mod api;
 pub mod articulate;
 pub mod auth;
@@ -31,6 +30,7 @@ pub mod gourl;
 pub mod health;
 pub mod home;
 pub mod lazy_cache;
+pub mod library_signup;
 pub mod local_time;
 pub mod lru_cache;
 pub mod mcp;

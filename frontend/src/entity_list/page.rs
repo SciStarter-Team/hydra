@@ -123,8 +123,7 @@ pub async fn page(
 
     // Only worth asking someone who is signed in: a name with no account
     // behind it cannot be matched to the activity it is meant to explain.
-    let ask_identity =
-        user_info.is_some() && !list.hide_identity_form && identity.is_none();
+    let ask_identity = user_info.is_some() && !list.hide_identity_form && identity.is_none();
 
     let entries = EntityListEntry::get_entries(list.list_id).await?;
     let slugs: Vec<String> = entries.iter().map(|e| e.entity_slug.clone()).collect();
@@ -142,9 +141,9 @@ pub async fn page(
         })
         .collect();
 
-    let is_owner = user_info
-        .as_ref()
-        .is_some_and(|user| list.owner_id == user.user_id || list.delegate_id == Some(user.user_id));
+    let is_owner = user_info.as_ref().is_some_and(|user| {
+        list.owner_id == user.user_id || list.delegate_id == Some(user.user_id)
+    });
 
     let title = list.name.clone();
 

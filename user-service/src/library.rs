@@ -240,7 +240,11 @@ pub async fn get(req: &Request) -> Result<Option<LibrarySignupRow>, Error> {
     qb.push(" AND \"signup_id\" = ");
     qb.push_bind(signup_id);
 
-    Ok(qb.build().fetch_optional(db()).await?.map(|r| signup_row(&r)))
+    Ok(qb
+        .build()
+        .fetch_optional(db())
+        .await?
+        .map(|r| signup_row(&r)))
 }
 
 /// Apply a staff edit (`user.library.save`).
