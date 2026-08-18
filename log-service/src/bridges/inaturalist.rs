@@ -1,7 +1,10 @@
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
+use common::linked_platform;
 use common::message::user::{InatListUsersRequest, InatUpdateLastSync, InatUser};
+use jiff::Timestamp;
 use serde::Deserialize;
 use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
@@ -37,13 +40,24 @@ async fn process_user(
     client: &reqwest::Client,
     cancellation_token: &CancellationToken,
 ) {
+    // Walk newest-first and stop at whichever is later: how far the last
+    // sweep reached, or the moment the account was connected. The connection
+    // is a floor because SciStarter stopped backfilling what happened on a
+    // platform before it was linked here -- so an account connected today
+    // starts today, however far back iNaturalist is willing to go.
+    //
+    // Compared as instants rather than as strings: iNaturalist reports an
+    // offset and the stored connection time a Z, and "+00:00" sorts before
+    // "Z" whatever the instants are.
+    let floor = linked_platform::import_floor(user.inat_linked_at.as_deref());
     let since = user
         .inat_last_update
         .as_deref()
-        .unwrap_or("1970-01-01T00:00:00Z");
+        .and_then(|w| Timestamp::from_str(w).ok())
+        .map_or(floor, |watermark| watermark.max(floor));
 
     let mut page = 1;
-    let mut max_time = since.to_string();
+    let mut max_time = since;
     let mut going = true;
     let user_id_str = user.user_id.to_string();
 
@@ -102,13 +116,24 @@ async fn process_user(
         }
 
         for obs in &data.results {
-            if obs.created_at.as_str() < since {
+            let observed = match Timestamp::from_str(&obs.created_at) {
+                Ok(observed) => observed,
+                Err(e) => {
+                    eprintln!(
+                        "Unparseable iNat observation time {:?} for {}: {}",
+                        obs.created_at, user.inat_username, e
+                    );
+                    continue;
+                }
+            };
+
+            if observed < since {
                 going = false;
                 break;
             }
 
-            if obs.created_at > max_time {
-                max_time = obs.created_at.clone();
+            if observed > max_time {
+                max_time = observed;
             }
 
             // Resolve iNat project IDs to entity IDs
@@ -160,12 +185,12 @@ async fn process_user(
     }
 
     // Update the user's inat_last_update timestamp
-    if max_time.as_str() > since {
+    if max_time > since {
         if let Err(e) = common::service::send(
             "user.inat.update_last_sync",
             InatUpdateLastSync {
                 user_id: user.user_id,
-                inat_last_update: max_time,
+                inat_last_update: max_time.to_string(),
             },
         )
         .await

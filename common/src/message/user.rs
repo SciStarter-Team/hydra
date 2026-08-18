@@ -1166,7 +1166,6 @@ pub struct UserJoinEntry {
     pub project_id: String,
 }
 
-
 // List all users who opted out of AI
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AiOptedOutRequest {}
@@ -1757,12 +1756,39 @@ pub struct InatUser {
     pub user_id: Ulid,
     pub inat_username: String,
     pub inat_last_update: Option<String>,
+    /// When this account named that iNaturalist username, and so the earliest
+    /// observation the importer will credit. `None` means the connection
+    /// predates the August 2026 policy; see `common::linked_platform`.
+    pub inat_linked_at: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct InatUpdateLastSync {
     pub user_id: Ulid,
     pub inat_last_update: String,
+}
+
+// ============================================================================
+// Zooniverse
+// ============================================================================
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ZooniverseListLinksRequest {
+    pub offset: i64,
+    pub limit: i64,
+}
+
+/// One account's Zooniverse connection.
+///
+/// The classification importer works from a project's whole history and has
+/// no `users` table of its own to consult, so it asks for these once per
+/// sweep and floors each credit against the matching entry.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ZooniverseLink {
+    pub user_id: Ulid,
+    /// `None` means the connection predates the August 2026 policy; see
+    /// `common::linked_platform`.
+    pub zooniverse_linked_at: Option<String>,
 }
 
 // ============================================================================

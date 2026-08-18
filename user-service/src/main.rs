@@ -39,6 +39,7 @@ pub mod user_sets;
 pub mod users;
 pub mod webauthn;
 pub mod workflow;
+pub mod zooniverse;
 
 async fn cleanup() {
     loop {
@@ -229,6 +230,14 @@ async fn users_synchronize() {
         twitter_profile: String,
         inat_username: String,
         inat_last_update: Option<String>,
+        // Absent from a payload orrery sent before it learned to report the
+        // connection time. Read as "connected, when unknown", which is the
+        // same thing null means for an account connected before the August
+        // 2026 policy: common::linked_platform floors both at the cutover.
+        // So this sync survives orrery deploying second, rather than halting
+        // the whole account mirror over a field.
+        #[serde(default)]
+        inat_linked_at: Option<String>,
         zipcode: String,
         state: String,
         country: String,
@@ -262,6 +271,8 @@ async fn users_synchronize() {
         opaque_id: Option<String>,
         legacy_userdata_id: Option<i32>,
         zooniverse_username: String,
+        #[serde(default)]
+        zooniverse_linked_at: Option<String>,
         degree: Option<String>,
         ethnicity: Option<String>,
         income: Option<String>,
@@ -488,6 +499,7 @@ async fn users_synchronize() {
                      "twitter_profile",
                      "inat_username",
                      "inat_last_update",
+                     "inat_linked_at",
                      "zipcode",
                      "country",
                      "mailing_address",
@@ -511,6 +523,7 @@ async fn users_synchronize() {
                      "needs_inat_username",
                      "opaque_id",
                      "zooniverse_username",
+                     "zooniverse_linked_at",
                      "degree",
                      "ethnicity",
                      "income",
@@ -612,11 +625,13 @@ async fn users_synchronize() {
                      ?66,
                      ?67,
                      ?68,
-                     GeomFromEWKT(?69),
-                     GeomFromEWKT(?70),
-                     ?71,
-                     ?72,
+                     ?69,
+                     ?70,
+                     GeomFromEWKT(?71),
+                     GeomFromEWKT(?72),
                      ?73,
+                     ?74,
+                     ?75,
                      -- Orrery is doing the pushing for as long as it is the
                      -- primary and this sync is running, and the digest it
                      -- sends says the record is current.
@@ -656,6 +671,7 @@ async fn users_synchronize() {
                 user.twitter_profile,
                 user.inat_username,
                 user.inat_last_update,
+                user.inat_linked_at,
                 user.zipcode,
                 user.country,
                 user.mailing_address,
@@ -679,6 +695,7 @@ async fn users_synchronize() {
                 user_needs_inat_username,
                 user.opaque_id,
                 user.zooniverse_username,
+                user.zooniverse_linked_at,
                 user.degree,
                 user.ethnicity,
                 user.income,
@@ -2790,8 +2807,7 @@ async fn library_signups_synchronize() {
                 break;
             }
 
-            if signup.updated > bookmark
-                || (signup.updated == bookmark && signup.id > bookmark_id)
+            if signup.updated > bookmark || (signup.updated == bookmark && signup.id > bookmark_id)
             {
                 bookmark = signup.updated.clone();
                 bookmark_id = signup.id;
@@ -3315,6 +3331,10 @@ async fn main() {
         "update_last_sync",
         inat::update_last_sync
     ));
+
+    // Zooniverse endpoints
+    let zooniverse = service.group("user.zooniverse");
+    toplevel.spawn(handler!(zooniverse, "list_links", zooniverse::list_links));
 
     // Set up graceful shutdown
     use tokio::signal::unix::{SignalKind, signal};

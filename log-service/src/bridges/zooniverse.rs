@@ -1,7 +1,10 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
+use common::linked_platform;
+use common::message::user::{ZooniverseLink, ZooniverseListLinksRequest};
 use serde::Deserialize;
 use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
@@ -10,9 +13,57 @@ use log_service::database::{
     Database, get_sync_last_id, set_sync_last_id, tables::ParticipationRow,
 };
 
-const ZOONIVERSE_ORIGIN: i16 = 10;
+/// "Import" -- how the contribution reached us, which for a classification is
+/// a scheduled pull against the Panoptes API. Deliberately the same value as
+/// `INATURALIST_ORIGIN` in the sibling bridge, because it is the same kind of
+/// arrival; the platform is told apart by the entity.
+const ZOONIVERSE_ORIGIN: i16 = 5;
 const PAGE_SIZE: u32 = 200;
 const REQUEST_DELAY: Duration = Duration::from_millis(500);
+const LINK_PAGE_SIZE: i64 = 500;
+
+/// When each account connected its Zooniverse username, keyed by user id.
+///
+/// A missing key means we could not learn a time for an account the mapping
+/// table says claimed the Zooniverse account -- the two are synced
+/// separately and can disagree for a pass. That is "connected, when
+/// unknown", which floors at the cutover rather than dropping the credit.
+type LinkTimes = HashMap<String, Option<String>>;
+
+/// Every account's Zooniverse connection time.
+///
+/// A project's classification history is walked whole, and a project newly
+/// joining the affiliate program starts from classification zero -- so
+/// without this its entire back catalogue would land on everybody already
+/// connected. The importer has no `users` table of its own, so it takes the
+/// list from user-service once per sweep.
+async fn load_link_times() -> Result<LinkTimes> {
+    let mut links = LinkTimes::new();
+    let mut offset: i64 = 0;
+
+    loop {
+        let page: Vec<ZooniverseLink> = common::service::request(
+            "user.zooniverse.list_links",
+            ZooniverseListLinksRequest {
+                offset,
+                limit: LINK_PAGE_SIZE,
+            },
+        )
+        .await?;
+
+        let page_len = page.len() as i64;
+
+        for link in page {
+            links.insert(link.user_id.to_string(), link.zooniverse_linked_at);
+        }
+
+        if page_len < LINK_PAGE_SIZE {
+            return Ok(links);
+        }
+
+        offset += LINK_PAGE_SIZE;
+    }
+}
 
 #[derive(Debug, Deserialize)]
 struct OAuthTokenResponse {
@@ -374,12 +425,32 @@ pub async fn zooniverse_synchronize(
             }
         };
 
+        // Without the connection times there is no way to tell which
+        // classifications predate a connection, so sit the sweep out rather
+        // than credit the lot.
+        let link_times = match load_link_times().await {
+            Ok(links) => links,
+            Err(e) => {
+                eprintln!("Error loading Zooniverse connection times: {}", e);
+                sleep(Duration::from_secs(60 * 5)).await;
+                continue;
+            }
+        };
+
         for project in projects {
             if cancellation_token.is_cancelled() {
                 return;
             }
 
-            sync_project(&database, &client, &token, project, &cancellation_token).await;
+            sync_project(
+                &database,
+                &client,
+                &token,
+                project,
+                &link_times,
+                &cancellation_token,
+            )
+            .await;
         }
 
         tokio::select! {
@@ -400,6 +471,7 @@ async fn sync_project(
     client: &reqwest::Client,
     token: &str,
     project: ProjectRow,
+    link_times: &LinkTimes,
     cancellation_token: &CancellationToken,
 ) {
     let ProjectRow {
@@ -516,6 +588,18 @@ async fn sync_project(
             }
 
             for user_id in scistarter_users {
+                // A classification made before the account was connected here
+                // is not backfilled. The project watermark does not settle
+                // this on its own: it is per project, and a project joining
+                // the affiliate program starts at zero.
+                let linked_at = link_times
+                    .get(&user_id)
+                    .and_then(|linked_at| linked_at.as_deref());
+
+                if !linked_platform::credits_activity(linked_at, &classification.created_at) {
+                    continue;
+                }
+
                 let row = ParticipationRow {
                     origin: ZOONIVERSE_ORIGIN,
                     when: classification.created_at.clone(),

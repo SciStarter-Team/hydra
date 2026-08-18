@@ -2,6 +2,7 @@ pub mod badge;
 pub mod channel;
 pub mod elect;
 pub mod insensitivestring;
+pub mod linked_platform;
 pub mod message;
 #[cfg(feature = "database")]
 pub mod misc;

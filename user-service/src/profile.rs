@@ -5,6 +5,7 @@ use common::{
     message::user::PRIVATE_DISPLAY_NAME,
     service::decode_structured_message,
     shared::db,
+    timestring::TimeString,
     ulid::AsUlid,
 };
 
@@ -97,9 +98,66 @@ pub async fn get(req: &Request) -> Result<UserProfile, Error> {
     })
 }
 
+/// Record when a linked platform account was connected, before the save that
+/// names it.
+///
+/// The connection time is the floor for importing that platform's activity,
+/// so it has to move whenever the username does: naming a different account
+/// is a new connection, and that account's history is no more ours to
+/// backfill than the last one's was. Clearing the username unsets the time,
+/// so reconnecting later starts from later.
+///
+/// Run first, while the stored username is still the old one, and written as
+/// its own statement per platform rather than a CASE inside the save: sqlx
+/// checks these at compile time and cannot take a column name as a
+/// parameter, and a CASE here is what once turned a four-second build into a
+/// thirty-minute one.
+async fn stamp_platform_links(
+    user_id: &str,
+    inat_username: Option<&str>,
+    zooniverse_username: Option<&str>,
+) -> Result<(), Error> {
+    if let Some(username) = inat_username {
+        let linked_at = (!username.is_empty()).then(TimeString::now);
+
+        sqlx::query!(
+            r#"UPDATE "users" SET "inat_linked_at" = ?
+               WHERE "user_id" = ? AND COALESCE("inat_username", '') != ?"#,
+            linked_at,
+            user_id,
+            username,
+        )
+        .execute(db())
+        .await?;
+    }
+
+    if let Some(username) = zooniverse_username {
+        let linked_at = (!username.is_empty()).then(TimeString::now);
+
+        sqlx::query!(
+            r#"UPDATE "users" SET "zooniverse_linked_at" = ?
+               WHERE "user_id" = ? AND COALESCE("zooniverse_username", '') != ?"#,
+            linked_at,
+            user_id,
+            username,
+        )
+        .execute(db())
+        .await?;
+    }
+
+    Ok(())
+}
+
 pub async fn save(req: &Request) -> Result<(), Error> {
     let update: UserProfileUpdate = decode_structured_message(req.message.clone())?;
     let user_id_str = update.user_id.to_string();
+
+    stamp_platform_links(
+        &user_id_str,
+        update.inat_username.as_deref(),
+        update.zooniverse_username.as_deref(),
+    )
+    .await?;
 
     sqlx::query!(
         r#"UPDATE "users" SET
