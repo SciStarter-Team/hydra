@@ -15,7 +15,10 @@
 
 use anyhow::{Error, anyhow};
 use common::{
-    query::{ColumnInfo, DEFAULT_MAX_ROWS, QueryRequest, QueryResponse, ROW_LIMIT, Truncation},
+    query::{
+        BYTE_BUDGET, ColumnInfo, DEFAULT_MAX_ROWS, QueryRequest, QueryResponse, ROW_LIMIT,
+        Truncation,
+    },
     service::request_timeout,
 };
 use futures::future::join_all;
@@ -78,6 +81,55 @@ impl Dialect {
                  WHERE table_schema = 'public' ORDER BY table_name",
                 "table_name",
             ),
+        }
+    }
+
+    /// Whether a listed name is SpatiaLite's bookkeeping rather than
+    /// anything the application put there.
+    ///
+    /// `InitSpatialMetaData()` leaves sixty-odd tables and views behind,
+    /// which in the spatially enabled databases outnumber the
+    /// application's own — and none of them answer the question someone
+    /// calling `list_databases` is asking. They have to be recognised by
+    /// name, because nothing distinguishes them structurally: they are
+    /// ordinary tables. These are SpatiaLite 5's names; a later release
+    /// adding to the set costs a stray line in a listing rather than a
+    /// wrong answer, and nothing here is hidden from a query, only from
+    /// the summary.
+    fn is_metadata(self, table: &str) -> bool {
+        const PREFIXES: &[&str] = &[
+            "ISO_metadata",
+            "SE_",
+            "geometry_columns",
+            "raster_coverages",
+            "rl2map_",
+            "spatial_ref_sys",
+            "vector_coverages",
+            "vector_layers",
+            "views_geometry_columns",
+            "virts_geometry_columns",
+            "wms_",
+        ];
+
+        const NAMES: &[&str] = &[
+            "ElementaryGeometries",
+            "KNN2",
+            "SpatialIndex",
+            "data_licenses",
+            "geom_cols_ref_sys",
+            "networks",
+            "spatialite_history",
+            "sql_statements_log",
+            "stored_procedures",
+            "stored_variables",
+            "topologies",
+        ];
+
+        match self {
+            Dialect::Sqlite => {
+                PREFIXES.iter().any(|prefix| table.starts_with(prefix)) || NAMES.contains(&table)
+            }
+            Dialect::DataFusion => false,
         }
     }
 }
@@ -150,7 +202,7 @@ impl Target {
             .run(QueryRequest::new(sql, Some(SCHEMA_MAX_ROWS)))
             .await?;
 
-        response
+        let mut tables = response
             .rows
             .iter()
             .map(|row| {
@@ -161,7 +213,11 @@ impl Target {
                     .map(str::to_string)
                     .ok_or_else(|| anyhow!("table listing has no '{column}' column"))
             })
-            .collect()
+            .collect::<Result<Vec<String>, Error>>()?;
+
+        tables.retain(|table| !self.dialect.is_metadata(table));
+
+        Ok(tables)
     }
 }
 
@@ -174,8 +230,9 @@ const TARGETS: &[Target] = &[
              content and page-builder pages and components, projects and events with their many \
              detail tables, entity lists, exchanges, go URLs, news, HTML blocks, OAuth2 clients \
              and tokens, and concierge conversations. Spatially enabled, so project, event and \
-             region geometry lives in SpatiaLite columns and the SpatiaLite metadata tables are \
-             present alongside the application's own. Every frontend instance keeps its own copy \
+             region geometry lives in SpatiaLite columns; SpatiaLite's own metadata tables are \
+             present too, and queryable, but are left out of the listing below. Every frontend \
+             instance keeps its own copy \
              of this database, kept in step by peer messages rather than shared, so the copies \
              are only eventually consistent: a query answers from the instance serving this \
              request — reported as `answered_by` — and a write made moments ago on another \
@@ -249,8 +306,9 @@ pub fn tool_definitions() -> Vec<Value> {
             "description": "\
         List the SciStarter databases the run_select_query tool can reach, with what each one holds and \
         what tables it has. Call this first when you do not already know which database a piece of data \
-        lives in. Shadow tables belonging to full-text or spatial indexes are left out of the listing; \
-        so are databases whose service is not answering, which are reported with an error instead.",
+        lives in. The listing covers the application's own tables: SpatiaLite's metadata and the shadow \
+        tables belonging to full-text and spatial indexes are left out, though they remain queryable. \
+        Databases whose service is not answering are reported with an error in place of their tables.",
             "inputSchema": {
                 "type": "object",
                 "properties": {}
@@ -266,13 +324,15 @@ SciStarter's data is split across one database per service ({databases}); use li
         correlating data from two services means running one query against each and joining the results \
 yourself.
 
-The query is evaluated as a sub-select of a wrapper query, on a connection that cannot write, so \
-        only query expressions are accepted: INSERT/UPDATE/DELETE/DDL, PRAGMA, ATTACH, and extra \
-statements after a semicolon are all rejected. There is no way to modify data with this tool.
+Only query expressions are accepted: INSERT/UPDATE/DELETE/DDL, PRAGMA, ATTACH, COPY, and extra \
+        statements after a semicolon are all rejected, by how the query is run rather than by \
+        anything reading the SQL. There is no way to modify data with this tool.
 
 Write the query as a bare SELECT (or a WITH ... SELECT), with no trailing semicolon and no bind \
-        parameters — write literal values inline. Column order is preserved. Results are capped at \
-max_rows and at roughly 700KB; a `truncated` field says whether, and why, a result stopped short.
+        parameters — write literal values inline. Column order and ORDER BY are both preserved, so \
+        max_rows takes the first rows of the ordering you asked for. Results are capped at max_rows \
+        and at {BYTE_BUDGET} bytes of rows; a `truncated` field says whether, and why, a result \
+        stopped short.
 
 All targets except 'analytics' are SQLite. To explore one: \
         SELECT name, sql FROM sqlite_master WHERE type = 'table' ORDER BY name, or \

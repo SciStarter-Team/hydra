@@ -44,12 +44,20 @@ pub const DEFAULT_MAX_ROWS: u32 = 100;
 /// cannot pull a whole table through the tool result.
 pub const ROW_LIMIT: u32 = 1000;
 
-/// Ceiling on the total size of the returned rows. A response that
-/// crosses NATS has to fit in one message, and `max_payload` is 1MB by
-/// default, so a query over wide rows has to stop well before the row
-/// limit does. The same ceiling keeps a result readable as a tool
-/// result when it does not cross NATS at all.
-pub const BYTE_BUDGET: usize = 700_000;
+/// Ceiling on the total size of the returned rows, so that a query over
+/// wide rows stops well before the row limit does.
+///
+/// Two things bound this, and the smaller one wins by a wide margin. A
+/// response that crosses NATS has to fit in one message, where
+/// `max_payload` is 1MB by default. But every response is also a tool
+/// result being read by a model, and that budget is counted in tokens,
+/// not bytes: measured against the live tool, a 100KB result was refused
+/// outright, 50KB was accepted only by being spilled to a file, and 25KB
+/// was returned intact. Thirty kilobytes stays inside that ceiling even
+/// for text that tokenizes badly, while still carrying a hundred rows of
+/// prose or many hundreds of narrow ones — and a result that does hit
+/// the budget says so, rather than failing.
+pub const BYTE_BUDGET: usize = 30_000;
 
 /// Blobs at or under this size are returned base64-encoded; larger ones
 /// are summarized, since an encoded megabyte of geometry helps nobody.

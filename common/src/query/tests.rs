@@ -187,6 +187,32 @@ async fn query_expressions_are_evaluated_as_written() {
     assert_eq!(row(&response, 0)["name"], "zebra");
 }
 
+/// The caller's `ORDER BY` has to survive the sub-select wrapper, with
+/// the row cap applied on top of it rather than to an arbitrary slice.
+///
+/// SQLite honours a subquery's ordering; DataFusion does not, which is
+/// why the analytics side cannot use a wrapper at all. This pins the
+/// behaviour the wrapper depends on here.
+#[tokio::test]
+async fn the_row_cap_applies_to_the_ordering_the_caller_asked_for() {
+    let fixture = Fixture::new().await;
+
+    let response = fixture
+        .run(QueryRequest::new(
+            "SELECT id FROM animals ORDER BY id DESC",
+            Some(2),
+        ))
+        .await
+        .expect("query should succeed");
+
+    let ids: Vec<i64> = (0..response.rows.len())
+        .map(|index| row(&response, index)["id"].as_i64().expect("an id"))
+        .collect();
+
+    assert_eq!(ids, [3, 2]);
+    assert_eq!(response.truncated, Truncation::RowLimit);
+}
+
 #[tokio::test]
 async fn columns_are_reported_in_the_order_they_were_selected() {
     let fixture = Fixture::new().await;
@@ -360,7 +386,7 @@ async fn wide_rows_stop_at_the_byte_budget() {
             "WITH RECURSIVE counter(i) AS (
                SELECT 1 UNION ALL SELECT i + 1 FROM counter WHERE i < 50
              )
-             SELECT i, printf('%.*c', 100000, 'x') AS padding FROM counter",
+             SELECT i, printf('%.*c', 10000, 'x') AS padding FROM counter",
         )
         .await
         .expect("query should succeed");

@@ -188,6 +188,62 @@ fn the_tools_are_offered_to_authenticated_callers() {
     }
 }
 
+/// A spatially enabled database holds more of SpatiaLite's bookkeeping
+/// than of its own tables, and listing all of it buries the answer to
+/// the question `list_databases` was asked.
+#[test]
+fn spatialite_bookkeeping_is_left_out_of_a_listing() {
+    // Every one of these was in the live listing for the frontend and
+    // user databases, and none of them is created by a migration.
+    for table in [
+        "ElementaryGeometries",
+        "ISO_metadata_view",
+        "KNN2",
+        "SE_vector_styles",
+        "SpatialIndex",
+        "data_licenses",
+        "geom_cols_ref_sys",
+        "geometry_columns_field_infos",
+        "networks",
+        "raster_coverages_srid",
+        "rl2map_configurations",
+        "spatial_ref_sys_aux",
+        "spatialite_history",
+        "sql_statements_log",
+        "stored_variables",
+        "topologies",
+        "vector_layers_statistics",
+        "views_geometry_columns_auth",
+        "virts_geometry_columns",
+        "wms_getcapabilities",
+    ] {
+        assert!(Dialect::Sqlite.is_metadata(table), "{table} was listed");
+    }
+}
+
+/// ...and the filter must not swallow the tables it sits next to.
+#[test]
+fn application_tables_survive_the_listing_filter() {
+    for table in [
+        "_sqlx_migrations",
+        "entities",
+        "events",
+        "geocode_cache",
+        "misc",
+        "project_topics",
+        "projects",
+        "site_settings",
+        "users",
+        "webinars",
+    ] {
+        assert!(!Dialect::Sqlite.is_metadata(table), "{table} was hidden");
+    }
+
+    // The analytics context has no SpatiaLite in it, and its table names
+    // are the caller's whole map of what is there.
+    assert!(!Dialect::DataFusion.is_metadata("spatial_ref_sys"));
+}
+
 /// The caller must not give up before the endpoint it is waiting on
 /// does, or a query that ran its full time would have its answer thrown
 /// away by the one who asked for it.

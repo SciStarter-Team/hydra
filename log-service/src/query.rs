@@ -7,16 +7,27 @@
 //! tool rather than as two tools.
 //!
 //! As with the SQLite side, modifying data through this is impossible by
-//! structure rather than by inspection of the SQL: the caller's query is
-//! interpolated as a sub-select of a wrapper query, and nothing that is
-//! not a query expression parses in that position. `INSERT`, `COPY ...
-//! TO`, `CREATE EXTERNAL TABLE` and the rest are statements, and
-//! DataFusion plans exactly one statement per `sql` call.
+//! structure rather than by inspection of the SQL. Here the structure is
+//! DataFusion's own: [`SQLOptions`] plans the caller's SQL, walks the
+//! resulting plan tree — subqueries included — for `Ddl`, `Dml`, `Copy`
+//! and `Statement` nodes, and refuses the whole plan before any of it
+//! runs. `INSERT`, `COPY ... TO`, `CREATE EXTERNAL TABLE` and `SET` are
+//! rejected as plan node kinds rather than as text, and DataFusion plans
+//! exactly one statement per `sql` call.
+//!
+//! The SQLite side wraps the caller's query in a sub-select to reach the
+//! same end. That is deliberately *not* done here: DataFusion is free to
+//! discard a sort it does not have to honour, and a subquery's ordering
+//! is not one it has to honour, so wrapping silently threw away the
+//! caller's `ORDER BY` and returned an arbitrary slice of the result.
+//! Leaving the caller's query as the outermost plan keeps the ordering
+//! meaningful, and the row cap goes on top of it as a `LIMIT`, which
+//! does force the sort beneath to be honoured.
 
 use common::query::{ColumnInfo, QueryRequest, QueryResponse, Truncation};
 use datafusion::arrow::json::writer::{LineDelimited, WriterBuilder};
 use datafusion::arrow::record_batch::RecordBatch;
-use datafusion::prelude::SessionContext;
+use datafusion::prelude::{SQLOptions, SessionContext};
 use futures::StreamExt;
 
 use crate::error::{LogServiceError, Result};
@@ -36,14 +47,7 @@ pub async fn execute(ctx: &SessionContext, request: &QueryRequest) -> Result<Que
 
     let max_rows = request.max_rows.clamp(1, common::query::ROW_LIMIT);
 
-    // One row past the limit, so that truncation can be reported for
-    // what it is rather than guessed at from a full result.
-    let wrapped = format!(
-        "SELECT * FROM (\n{sql}\n) AS \"__mcp_query\" LIMIT {}",
-        max_rows as u64 + 1
-    );
-
-    let df = ctx.sql(&wrapped).await?;
+    let df = ctx.sql_with_options(sql, read_only()).await?;
 
     let columns = df
         .schema()
@@ -54,6 +58,10 @@ pub async fn execute(ctx: &SessionContext, request: &QueryRequest) -> Result<Que
             declared_type: field.data_type().to_string(),
         })
         .collect();
+
+    // One row past the limit, so that truncation can be reported for
+    // what it is rather than guessed at from a full result.
+    let df = df.limit(0, Some(max_rows as usize + 1))?;
 
     let mut rows: Vec<String> = Vec::new();
     let mut truncated = Truncation::None;
@@ -85,6 +93,19 @@ pub async fn execute(ctx: &SessionContext, request: &QueryRequest) -> Result<Que
         rows,
         truncated,
     })
+}
+
+/// Plan verification that refuses everything which is not a query.
+///
+/// Deny-by-default over the plan node kinds, so a node kind added by a
+/// later DataFusion release is refused until someone decides otherwise,
+/// rather than being allowed through by an allowlist that has not caught
+/// up with it.
+fn read_only() -> SQLOptions {
+    SQLOptions::new()
+        .with_allow_ddl(false)
+        .with_allow_dml(false)
+        .with_allow_statements(false)
 }
 
 /// Serialize each row of a batch as its own JSON object, with the fields

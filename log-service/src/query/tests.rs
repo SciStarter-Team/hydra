@@ -107,6 +107,33 @@ async fn query_expressions_are_evaluated_as_written() {
     assert_eq!(row(&response, 0)["name"], "zebra");
 }
 
+/// The caller's `ORDER BY` has to survive, with the row cap applied on
+/// top of it rather than to some arbitrary slice of the result.
+///
+/// Wrapping the query in a sub-select used to lose this: a subquery's
+/// ordering is not one DataFusion has to honour, so it discarded the
+/// sort and the cap then took whichever rows came first. A query for the
+/// most recent page views came back oldest-first, which is wrong in the
+/// way that looks right.
+#[tokio::test]
+async fn the_row_cap_applies_to_the_ordering_the_caller_asked_for() {
+    let ctx = wide_fixture();
+
+    let response = run(
+        &ctx,
+        QueryRequest::new("SELECT id FROM counter ORDER BY id DESC", Some(3)),
+    )
+    .await
+    .expect("query should succeed");
+
+    let ids: Vec<i64> = (0..response.rows.len())
+        .map(|index| row(&response, index)["id"].as_i64().expect("an id"))
+        .collect();
+
+    assert_eq!(ids, [50, 49, 48]);
+    assert_eq!(response.truncated, Truncation::RowLimit);
+}
+
 #[tokio::test]
 async fn columns_are_reported_in_the_order_they_were_selected() {
     let ctx = fixture();
@@ -205,7 +232,7 @@ async fn wide_rows_stop_at_the_byte_budget() {
 
     let response = query(
         &ctx,
-        "SELECT id, repeat('x', 100000) AS padding FROM counter ORDER BY id",
+        "SELECT id, repeat('x', 10000) AS padding FROM counter ORDER BY id",
     )
     .await
     .expect("query should succeed");
