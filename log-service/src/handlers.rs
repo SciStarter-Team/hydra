@@ -18,6 +18,7 @@ use common::{
         UserParticipationResponse, UserRecentVisit, UserRecentVisitsRequest,
         UserRecentVisitsResponse,
     },
+    query::{QUERY_TIMEOUT, QueryRequest, QueryResponse},
     service::{TriggerEvent, decode_structured_message, trigger_email},
 };
 use datafusion::prelude::*;
@@ -250,6 +251,29 @@ pub async fn handle_clickthrough_analytics(
     get_clickthrough_analytics_realtime(database, query)
         .await
         .map_err(Into::into)
+}
+
+/// Ad-hoc read-only SQL over the DataFusion analytics context, the
+/// Parquet-side counterpart to the `log.query.select` endpoint that
+/// [`common::query`] serves over the SQLite cache.
+pub async fn handle_analytics_query(
+    req: &async_nats::service::Request,
+) -> Result<QueryResponse, anyhow::Error> {
+    let request: QueryRequest = decode_structured_message(req.message.clone())?;
+
+    let database = DATABASE
+        .read()
+        .as_ref()
+        .expect("Database not initialized")
+        .clone();
+
+    tokio::time::timeout(
+        QUERY_TIMEOUT,
+        log_service::query::execute(database.context(), &request),
+    )
+    .await
+    .map_err(|_| anyhow::anyhow!("query timed out after {} seconds", QUERY_TIMEOUT.as_secs()))?
+    .map_err(Into::into)
 }
 
 pub async fn handle_participation_analytics(

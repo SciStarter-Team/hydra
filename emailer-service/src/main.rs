@@ -260,6 +260,10 @@ async fn main() {
     let health_group = service.group("emailer.health");
     toplevel.spawn(handler!(health_group, "check", health::health_check));
 
+    // Ad-hoc read-only SQL over this service's database, for the staff
+    // query tool in the frontend's MCP endpoint.
+    toplevel.spawn(common::query::serve(service.group("emailer.query")));
+
     // Spawn queue processor background task
     toplevel.spawn(async move {
         processor::run_queue_processor(ses_client).await;

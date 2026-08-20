@@ -47,11 +47,13 @@ pub fn hash_identifier_capfirst(ident: impl AsRef<str>) -> String {
 
 #[cfg(feature = "database")]
 mod database {
+    use anyhow::Error;
     use sqlx::{
         SqlitePool,
         sqlite::{SqliteConnectOptions, SqlitePoolOptions},
     };
-    use std::{sync::OnceLock, time::Duration};
+    use std::{path::PathBuf, sync::OnceLock, time::Duration};
+    use tokio::sync::OnceCell;
 
     #[cfg(debug_assertions)]
     const STORAGE_PATH: &'static str = env!("LOCAL_STORAGE_PATH");
@@ -62,14 +64,85 @@ mod database {
     const MAX_CONNECTION_LIFETIME: u64 = 60 * 60 * 4;
     const MAX_CONNECTION_IDLE_TIME: u64 = 60;
 
+    /// Connections held open for read-only queries. Small: these serve
+    /// occasional staff queries, not production traffic.
+    const READ_ONLY_MAX_CONNECTIONS: u32 = 2;
+
     static DB: OnceLock<SqlitePool> = OnceLock::new();
+
+    /// The file [`init`] opened, remembered so that [`read_only_db`] can
+    /// open a second pool over the same database.
+    static DB_PATH: OnceLock<PathBuf> = OnceLock::new();
+
+    static READ_ONLY_DB: OnceCell<SqlitePool> = OnceCell::const_new();
 
     pub fn db() -> &'static SqlitePool {
         DB.get().expect("Shared connection pool is not initialized")
     }
 
+    /// A second pool over this service's own database, opened on first
+    /// use, on which writing is impossible.
+    ///
+    /// The connections are opened with `SQLITE_OPEN_READONLY` and put
+    /// into `query_only` mode, so SQLite itself refuses every attempt to
+    /// change the database, whatever statement asks for it. The pool is
+    /// separate from [`db`] so that those settings can never leak onto a
+    /// connection the rest of the service uses.
+    ///
+    /// This backs the ad-hoc query endpoint in [`crate::query`].
+    pub async fn read_only_db() -> Result<&'static SqlitePool, Error> {
+        READ_ONLY_DB
+            .get_or_try_init(|| async {
+                let path = DB_PATH
+                    .get()
+                    .ok_or_else(|| anyhow::anyhow!("Shared connection pool is not initialized"))?;
+
+                read_only_pool(path).await
+            })
+            .await
+    }
+
+    /// Open a pool over `path` on which writing is impossible. This is
+    /// how [`read_only_db`] opens the service's own database, and how a
+    /// test gets the same guarantee over a database of its own.
+    pub async fn read_only_pool(path: impl AsRef<std::path::Path>) -> Result<SqlitePool, Error> {
+        Ok(SqlitePoolOptions::new()
+            .max_connections(READ_ONLY_MAX_CONNECTIONS)
+            .idle_timeout(Duration::from_secs(MAX_CONNECTION_IDLE_TIME))
+            .connect_with(read_only_options(path))
+            .await?)
+    }
+
+    /// Connection settings that make writing impossible.
+    ///
+    /// `read_only` opens the file with `SQLITE_OPEN_READONLY`, and
+    /// `query_only` makes SQLite reject any statement that would change
+    /// the database even if the file could be written. Neither depends
+    /// on the shape of the statement being run.
+    fn read_only_options(path: impl AsRef<std::path::Path>) -> SqliteConnectOptions {
+        // SAFETY: mod_spatialite is a trusted extension shipped with the
+        // deployment; loading it is required for spatial query support.
+        unsafe {
+            SqliteConnectOptions::new()
+                .filename(path)
+                .read_only(true)
+                .pragma("query_only", "ON")
+                .busy_timeout(Duration::from_secs(30))
+                .extension("mod_spatialite")
+        }
+    }
+
     pub async fn init(db_name: impl AsRef<str>) {
         println!("Storage directory: {}", STORAGE_PATH);
+
+        let path = std::path::Path::join(
+            STORAGE_PATH.as_ref(),
+            format!("{}.sqlite", db_name.as_ref()),
+        );
+
+        DB_PATH
+            .set(path.clone())
+            .expect("Unable to set shared database path");
 
         let conx = SqlitePoolOptions::new()
             .max_connections(100)
@@ -80,10 +153,7 @@ mod database {
                 // deployment; loading it is required for spatial query support.
                 unsafe {
                     SqliteConnectOptions::new()
-                        .filename(std::path::Path::join(
-                            STORAGE_PATH.as_ref(),
-                            format!("{}.sqlite", db_name.as_ref()),
-                        ))
+                        .filename(path)
                         .create_if_missing(true)
                         .busy_timeout(std::time::Duration::from_secs(300))
                         .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
@@ -148,7 +218,7 @@ mod database {
 }
 
 #[cfg(feature = "database")]
-pub use database::{db, extra_db, init};
+pub use database::{db, extra_db, init, read_only_db, read_only_pool};
 
 #[cfg(not(feature = "database"))]
 pub async fn init() {

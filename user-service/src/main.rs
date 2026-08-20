@@ -3230,6 +3230,10 @@ async fn main() {
     let health = service.group("user.health");
     toplevel.spawn(handler!(health, "check", health::health_check));
 
+    // Ad-hoc read-only SQL over this service's database, for the staff
+    // query tool in the frontend's MCP endpoint.
+    toplevel.spawn(common::query::serve(service.group("user.query")));
+
     // Sync endpoints
     let sync = service.group("sync.sequence");
     toplevel.spawn(handler!(sync, "next_project_id", sync::next_project_id));

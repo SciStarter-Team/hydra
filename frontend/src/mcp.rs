@@ -5,10 +5,12 @@
 //!
 //! The handler in this file (`mcp_handler`, mounted at `/-mcp`) is
 //! public and read-only. The [`content`] submodule provides a separate,
-//! token-authenticated endpoint for viewing and editing site content. It
-//! reuses the JSON-RPC scaffolding defined here.
+//! token-authenticated endpoint for staff, serving both its own content
+//! editing tools and the database query tools in [`query`]. It reuses
+//! the JSON-RPC scaffolding defined here.
 
 pub mod content;
+pub mod query;
 
 use anyhow::Error;
 use common::shared::db;
@@ -87,7 +89,7 @@ const SERVER_NAME: &str = "SciStarter MCP";
 pub(crate) const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Tool definitions for MCP
-fn get_tools() -> Value {
+pub(crate) fn get_tools() -> Value {
     json!([
         {
             "name": "search_projects",

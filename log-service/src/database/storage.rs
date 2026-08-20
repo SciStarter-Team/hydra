@@ -407,7 +407,11 @@ impl Database {
         let session_config = SessionConfig::new()
             .with_batch_size(batch_size)
             .with_coalesce_batches(true)
-            .with_target_partitions(2); // Limit parallelism to reduce memory
+            .with_target_partitions(2) // Limit parallelism to reduce memory
+            // Makes the registered tables and their columns discoverable
+            // through `information_schema`, which is how the analytics
+            // shell and the staff query tool explore the catalog.
+            .with_information_schema(true);
 
         // Create session context with configured runtime and config
         let session_context = SessionContext::new_with_config_rt(session_config, runtime_env);

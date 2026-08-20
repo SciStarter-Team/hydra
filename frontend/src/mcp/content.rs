@@ -155,7 +155,10 @@ async fn handle_tools_call(id: Option<Value>, params: Option<Value>) -> JsonRpcR
         "get_entity" => tool_get_entity(arguments).await,
         "create_entity" => tool_create_entity(arguments).await,
         "update_entity" => tool_update_entity(arguments).await,
-        _ => Err(anyhow!("Unknown tool: {}", name)),
+        other => match super::query::dispatch(other, arguments).await {
+            Some(result) => result,
+            None => Err(anyhow!("Unknown tool: {other}")),
+        },
     };
 
     tool_result(id, result)
@@ -1029,8 +1032,8 @@ fn parse_entity_kind(kind: &str) -> Result<EntityKind, Error> {
 
 // ==================== Tool schemas ====================
 
-fn get_tools() -> Value {
-    json!([
+pub(crate) fn get_tools() -> Value {
+    let mut tools = json!([
         {
             "name": "list_content",
             "description": "List page content of a given type. Returns id, name, and (where applicable) description/category for each item.",
@@ -1234,7 +1237,14 @@ fn get_tools() -> Value {
                 "required": ["slug"]
             }
         }
-    ])
+    ]);
+
+    tools
+        .as_array_mut()
+        .expect("the tool list is an array literal")
+        .extend(super::query::tool_definitions());
+
+    tools
 }
 
 fn content_type_schema() -> Value {

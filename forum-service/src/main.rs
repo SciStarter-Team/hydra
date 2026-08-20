@@ -179,6 +179,10 @@ async fn main() {
     let health = service.group("forum.health");
     toplevel.spawn(handler!(health, "check", health::health_check));
 
+    // Ad-hoc read-only SQL over this service's database, for the staff
+    // query tool in the frontend's MCP endpoint.
+    toplevel.spawn(common::query::serve(service.group("forum.query")));
+
     // Background sync task
     toplevel.spawn(sync::synchronize_messages());
 

@@ -3,6 +3,7 @@ pub mod cache;
 pub mod database;
 pub mod error;
 pub mod health;
+pub mod query;
 
 // Re-export commonly used types and functions for convenience
 pub use analytics::*;

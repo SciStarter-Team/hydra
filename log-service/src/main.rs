@@ -17,7 +17,7 @@ use bridges::{
 };
 use handlers::{
     handle_activity_log, handle_acts_of_science_create, handle_acts_to_date,
-    handle_affiliate_participation, handle_articulate_completion,
+    handle_affiliate_participation, handle_analytics_query, handle_articulate_completion,
     handle_articulate_completion_record, handle_clickthrough, handle_clickthrough_analytics,
     handle_contributors, handle_edit_log, handle_email_event, handle_entity_list_stats,
     handle_external_link_clickthrough, handle_external_links, handle_go_url_stats,
@@ -365,6 +365,17 @@ async fn main() -> Result<()> {
     // Health endpoint
     let health_group = svc.group("log.health");
     toplevel.spawn(handler!(health_group, "check", handle_health_check));
+
+    // Ad-hoc read-only SQL for the staff query tool in the frontend's MCP
+    // endpoint. The log service has two query surfaces: `select` covers
+    // the SQLite cache, `analytics` the DataFusion context over Parquet.
+    toplevel.spawn(common::query::serve(svc.group("log.query")));
+    let analytics_query = svc.group("log.query");
+    toplevel.spawn(handler!(
+        analytics_query,
+        "analytics",
+        handle_analytics_query
+    ));
 
     println!("Log service started and listening for messages on:");
     println!("  - log.activity");

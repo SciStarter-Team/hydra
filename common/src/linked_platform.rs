@@ -8,7 +8,7 @@
 
 use std::str::FromStr;
 
-use jiff::Timestamp;
+use jiff::{Span, Timestamp};
 
 /// The date the policy took effect.
 ///
@@ -17,12 +17,29 @@ use jiff::Timestamp;
 /// them before the cutover stays; nothing older arrives after it.
 pub const RETROACTIVE_IMPORT_CUTOVER: &str = "2026-08-01T00:00:00Z";
 
+/// How far below its connection time a newly linked account still counts.
+///
+/// iNaturalist stamps an observation with the observer's own reading of the
+/// clock rather than with a UTC instant -- orrery keeps it that way on
+/// purpose, in `bridge/platforms.py::parse_inat_timestamp` -- while the
+/// connection time is a real instant. For somebody west of UTC the two
+/// disagree by their offset, so a participant who connects their account and
+/// then spends the day recording would find that day falling below the
+/// floor. Twelve hours is the westmost offset there is, which makes this
+/// wide enough to cover the discrepancy rather than a guess at it.
+///
+/// Only a recorded connection time is given the allowance. The cutover is a
+/// whole-day boundary picked months after the fact, and nothing is measured
+/// against it closely enough to need one.
+pub const RETROACTIVE_IMPORT_GRACE_HOURS: i64 = 12;
+
 /// The earliest activity on a linked platform that counts toward an account.
 ///
-/// `linked_at` is when the account named its username on that platform.
-/// `None` means the connection predates the policy, which is also where an
-/// unparseable stored value lands: the cutover is the documented answer for
-/// "we do not know when this was connected".
+/// `linked_at` is when the account named its username on that platform,
+/// less `RETROACTIVE_IMPORT_GRACE_HOURS`. `None` means the connection
+/// predates the policy, which is also where an unparseable stored value
+/// lands: the cutover is the documented answer for "we do not know when this
+/// was connected", and it stands exactly where it is written.
 pub fn import_floor(linked_at: Option<&str>) -> Timestamp {
     let cutover = Timestamp::from_str(RETROACTIVE_IMPORT_CUTOVER)
         .expect("RETROACTIVE_IMPORT_CUTOVER is a valid timestamp");
@@ -32,7 +49,9 @@ pub fn import_floor(linked_at: Option<&str>) -> Timestamp {
     };
 
     match Timestamp::from_str(linked_at) {
-        Ok(floor) => floor,
+        Ok(linked) => linked
+            .checked_sub(Span::new().hours(RETROACTIVE_IMPORT_GRACE_HOURS))
+            .unwrap_or(linked),
         Err(e) => {
             eprintln!("Unparseable platform connection time {linked_at:?}: {e}");
             cutover
@@ -64,9 +83,18 @@ mod tests {
     const LINKED: &str = "2027-03-01T12:00:00Z";
 
     #[test]
-    fn activity_before_the_connection_does_not_count() {
+    fn activity_well_before_the_connection_does_not_count() {
         assert!(!credits_activity(Some(LINKED), "2027-02-28T12:00:00Z"));
         assert!(credits_activity(Some(LINKED), "2027-03-02T12:00:00Z"));
+    }
+
+    #[test]
+    fn a_newly_linked_account_is_given_grace_below_the_connection() {
+        // Twelve hours below the connection, to the second: the allowance is
+        // for a platform reporting a contribution in a frame we did not
+        // stamp the connection in, not an open edge.
+        assert!(credits_activity(Some(LINKED), "2027-03-01T00:00:01Z"));
+        assert!(!credits_activity(Some(LINKED), "2027-02-28T23:59:59Z"));
     }
 
     #[test]
@@ -76,9 +104,10 @@ mod tests {
 
     #[test]
     fn a_connection_predating_the_policy_floors_at_the_cutover() {
+        // Exactly at the cutover, with no grace subtracted from it.
         assert_eq!(
             import_floor(None),
-            import_floor(Some(RETROACTIVE_IMPORT_CUTOVER))
+            Timestamp::from_str(RETROACTIVE_IMPORT_CUTOVER).unwrap()
         );
 
         assert!(!credits_activity(None, "2026-07-31T23:59:59Z"));
@@ -88,15 +117,16 @@ mod tests {
     #[test]
     fn offset_and_zulu_spellings_compare_alike() {
         // The platforms disagree about this: iNaturalist reports an offset,
-        // Zooniverse a Z. Comparing the strings would put "+00:00" before
-        // "Z" whatever the instants are.
+        // Zooniverse a Z. One instant spelled both ways is what a string
+        // comparison gets wrong -- '+' sorts before 'Z', so the activity
+        // would read as earlier than the connection it is equal to.
         assert!(credits_activity(
-            Some("2027-03-01T12:00:00+00:00"),
-            "2027-03-01T12:00:01Z"
+            Some("2027-03-01T12:00:00Z"),
+            "2027-03-01T12:00:00+00:00"
         ));
         assert!(!credits_activity(
-            Some("2027-03-01T12:00:00Z"),
-            "2027-03-01T11:59:59+00:00"
+            Some("2027-03-01T12:00:00+00:00"),
+            "2027-02-28T12:00:00Z"
         ));
     }
 

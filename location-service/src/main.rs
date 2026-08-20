@@ -29,6 +29,10 @@ async fn main() {
     let health = service.group("location.health");
     toplevel.spawn(handler!(health, "check", health::health_check));
 
+    // Ad-hoc read-only SQL over this service's database, for the staff
+    // query tool in the frontend's MCP endpoint.
+    toplevel.spawn(common::query::serve(service.group("location.query")));
+
     // Set up graceful shutdown
     use tokio::signal::unix::{SignalKind, signal};
 

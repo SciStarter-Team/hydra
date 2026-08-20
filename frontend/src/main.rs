@@ -783,6 +783,10 @@ async fn main() -> Result<(), Error> {
 
     println!("Listening on {}", env!("LISTEN_ON"));
     println!("Frontend NATS service started: frontend.health.check, frontend.entity.summary_by_id");
+    // The id peer messages are tagged with, and the one the staff query
+    // tool reports as having answered a query against this instance's
+    // copy of the frontend database.
+    println!("Frontend instance id: {}", *peering::SERVER_ID_STR);
 
     // Set up graceful shutdown
     let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel::<()>();
