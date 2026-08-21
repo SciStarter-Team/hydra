@@ -23,7 +23,10 @@ use crate::middleware::analytics::{Device, Interaction};
 use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
 
-use super::{Exchange, ExchangeInfo, SearchParams, TemplateExchange, TemplateUser};
+use super::{
+    Exchange, ExchangeInfo, ExchangeSettings, SearchParams, TemplateExchange, TemplateUser,
+};
+use crate::project::location::Where;
 
 // Cache for filter options (loaded once on first use)
 static FILTER_CACHE: OnceLock<FilterOptions> = OnceLock::new();
@@ -87,13 +90,81 @@ async fn get_filter_options() -> Result<FilterOptions, Error> {
 // Helper functions
 
 /// Build base query with common WHERE clause (with or without FTS)
+/// Exclude the projects this exchange has hidden, unless the viewer runs it.
+///
+/// An exchange's staff are shown their own hidden projects so that moderation
+/// decisions stay visible to the people who made them; everybody else sees
+/// the exchange as it is meant to read.
+fn push_hidden_exclusion(
+    query_builder: &mut sqlx::QueryBuilder<sqlx::Sqlite>,
+    exchange_id: i64,
+    scope: &SearchScope,
+) {
+    if scope.include_hidden {
+        return;
+    }
+
+    query_builder.push(
+        r#" AND p.project_id NOT IN (
+                SELECT project_id FROM exchange_hidden_projects
+                WHERE exchange_id = "#,
+    );
+    query_builder.push_bind(exchange_id);
+    query_builder.push(")");
+}
+
+/// What a search is actually asking for, once its phrases have been read.
+///
+/// Region tick-boxes arrive as phrases carrying a region's name, so the
+/// phrase list has to be split before any of it becomes SQL: the names
+/// become a region filter, and only what is left is text to match. A phrase
+/// naming no region stays text, which is what a typed search term is.
+///
+/// `include_hidden` carries the viewer's standing, since an exchange's own
+/// staff are shown the projects they have hidden from everybody else.
+struct SearchScope {
+    regions: Vec<i64>,
+    phrases: Vec<String>,
+    include_hidden: bool,
+
+    /// Stamped once per search so every query in it -- results and count
+    /// alike -- draws the line between running and finished at the same
+    /// instant.
+    now: String,
+}
+
+impl SearchScope {
+    async fn resolve(params: &SearchParams, include_hidden: bool) -> Result<Self, Error> {
+        let named = crate::region::ids_for_names(&params.phrase).await?;
+
+        let phrases = params
+            .phrase
+            .iter()
+            .filter(|phrase| !phrase.trim().is_empty())
+            .filter(|phrase| !named.iter().any(|(_, name)| name == *phrase))
+            .cloned()
+            .collect();
+
+        Ok(SearchScope {
+            regions: named.into_iter().map(|(id, _)| id).collect(),
+            phrases,
+            include_hidden,
+            now: TimeString::now().to_string(),
+        })
+    }
+
+    fn has_text_search(&self) -> bool {
+        !self.phrases.is_empty()
+    }
+}
+
 fn build_base_where_clause<'a>(
     query_builder: &mut sqlx::QueryBuilder<sqlx::Sqlite>,
     exchange_id: i64,
-    params: &'a SearchParams,
+    scope: &'a SearchScope,
     for_count: bool,
 ) {
-    let has_text_search = !params.phrase.is_empty() && params.phrase.iter().any(|p| !p.is_empty());
+    let has_text_search = scope.has_text_search();
 
     if has_text_search {
         // Use FTS5 for text search
@@ -124,10 +195,9 @@ fn build_base_where_clause<'a>(
         );
 
         // Combine phrases with OR for FTS5
-        let search_query = params
-            .phrase
+        let search_query = scope
+            .phrases
             .iter()
-            .filter(|p| !p.is_empty())
             .map(|p| p.as_str())
             .collect::<Vec<_>>()
             .join(" OR ");
@@ -139,12 +209,10 @@ fn build_base_where_clause<'a>(
             AND p.flagged = false
             AND p.duplicate = false
             AND p.is_test = false
-            AND p.project_id NOT IN (
-                SELECT project_id FROM exchange_hidden_projects
-                WHERE exchange_id = "#,
+            "#,
         );
-        query_builder.push_bind(exchange_id);
-        query_builder.push(")");
+
+        push_hidden_exclusion(query_builder, exchange_id, scope);
     } else {
         // No text search, use regular query
         if for_count {
@@ -173,21 +241,120 @@ fn build_base_where_clause<'a>(
             AND p.flagged = false
             AND p.duplicate = false
             AND p.is_test = false
-            AND p.project_id NOT IN (
-                SELECT project_id FROM exchange_hidden_projects
-                WHERE exchange_id = "#,
+            "#,
         );
-        query_builder.push_bind(exchange_id);
+
+        push_hidden_exclusion(query_builder, exchange_id, scope);
+    }
+}
+
+/// The `location_type` a project that can be done anywhere carries.
+///
+/// Spelled out rather than coded, because that is how orrery's sync sends it
+/// and therefore how hydra stores it.
+const GLOBAL_LOCATION_TYPE: &str = "Global, anywhere on the planet";
+
+/// The `status` a project that is currently running carries.
+const ACTIVE_STATUS: &str = "Active";
+
+/// Narrow a query to the projects this exchange is a view of.
+///
+/// An exchange with a region shows the projects that reach it plus the ones
+/// that can be done anywhere, which is how "available in Australia" is
+/// expressed; an exchange without one is a view of the whole catalogue.
+/// Excluded origins come off the top either way.
+///
+/// The region test reads the cached matches rather than measuring polygons
+/// per query, so it agrees with the region tick-boxes by construction.
+///
+/// Orrery has further levers here that this does not, deferred rather than
+/// dropped. As of Aug 2026 only the `Test` exchange uses any of them, which
+/// is why they are not here yet -- not because they are unwanted.
+///
+/// They do not all stand alone. `exclude_scistarter` is not a fourth filter
+/// alongside the rest: it inverts the rule, turning an exchange from "the
+/// catalogue, narrowed" into "nothing, plus whatever its include-tags and
+/// include-origins name". Those two include levers do nothing at all without
+/// it, and orrery has a standing demonstration of that -- SciStarter
+/// Australia carries an `australia` include-tag that has never had any
+/// effect, because its `exclude_scistarter` is false. So port
+/// `exclude_scistarter` together with the include levers, or the tag lever
+/// will arrive looking broken. A `search` regex over name and tags is
+/// independent of all three and can come on its own.
+///
+/// Whichever arrives, it means a field on [`ExchangeSettings`] and a clause
+/// here; the settings are stored as JSON with serde defaults, so it costs no
+/// migration and leaves existing exchanges reading as they do now.
+fn push_membership(
+    query_builder: &mut sqlx::QueryBuilder<sqlx::Sqlite>,
+    settings: &ExchangeSettings,
+) {
+    if let Some(region_id) = settings.region_id {
+        query_builder.push(
+            " AND (p.project_id IN (SELECT project_id FROM project_regions WHERE region_id = ",
+        );
+        query_builder.push_bind(region_id);
+        query_builder.push(") OR p.location_type = ");
+        query_builder.push_bind(GLOBAL_LOCATION_TYPE);
         query_builder.push(")");
     }
+
+    if !settings.excluded_origins.is_empty() {
+        query_builder.push(" AND p.origin NOT IN (");
+
+        let mut separated = query_builder.separated(", ");
+        for origin in settings.excluded_origins.iter() {
+            separated.push_bind(origin.clone());
+        }
+
+        query_builder.push(")");
+    }
+}
+
+/// Leave out the projects that are no longer running, unless asked not to.
+///
+/// "Inactive" covers both a status that is not Active and an end date that
+/// has passed, which are different ways for a project to have finished.
+fn push_status(
+    query_builder: &mut sqlx::QueryBuilder<sqlx::Sqlite>,
+    params: &SearchParams,
+    now: &str,
+) {
+    if params.inactive {
+        return;
+    }
+
+    query_builder.push(" AND p.status = ");
+    query_builder.push_bind(ACTIVE_STATUS);
+    query_builder.push(" AND (p.\"end\" IS NULL OR p.\"end\" = '' OR p.\"end\" > ");
+    query_builder.push_bind(now.to_owned());
+    query_builder.push(")");
 }
 
 /// Apply common search filters to a query builder
 fn apply_search_filters<'a>(
     query_builder: &mut sqlx::QueryBuilder<sqlx::Sqlite>,
-    _exchange_id: i64,
+    exchange: &'a ExchangeInfo,
     params: &'a SearchParams,
+    scope: &'a SearchScope,
 ) {
+    push_membership(query_builder, &exchange.settings);
+    push_status(query_builder, params, &scope.now);
+
+    // Several regions read as "any of these", the way several tick-boxes do.
+    if !scope.regions.is_empty() {
+        query_builder.push(
+            " AND p.project_id IN (SELECT project_id FROM project_regions WHERE region_id IN (",
+        );
+
+        let mut separated = query_builder.separated(", ");
+        for region_id in scope.regions.iter() {
+            separated.push_bind(*region_id);
+        }
+
+        query_builder.push("))");
+    }
+
     // Add activity filter
     if let Some(ref activity) = params.activity {
         if !activity.is_empty() {
@@ -264,12 +431,106 @@ async fn create_template_exchange(
 
 #[derive(Debug, Clone)]
 pub struct ProjectSummary {
+    pub project_id: String,
     pub slug: String,
     pub name: String,
     pub image: String,
     pub image_credit: String,
     pub goal: String,
     pub task: String,
+
+    /// Filled in by [`ProjectSummary::attach_locations`], which the search
+    /// handlers call once per page of results.
+    pub location: Where,
+}
+
+impl ProjectSummary {
+    /// Fill in `location` for a page of results in one query.
+    ///
+    /// A card shows a project's location as text, never as a map, so this
+    /// reads the columns the wording needs and whether a polygon exists --
+    /// not the polygon itself, which on a page of twenty cards would be
+    /// megabytes nobody looks at.
+    async fn attach_locations(projects: &mut [ProjectSummary]) -> Result<(), Error> {
+        if projects.is_empty() {
+            return Ok(());
+        }
+
+        let mut query_builder = sqlx::QueryBuilder::new(
+            r#"select
+                 "project_id",
+                 "location_type",
+                 "location_landuse",
+                 "location_description",
+                 ("regions" is not null),
+                 "city",
+                 "state",
+                 "country",
+                 "address"
+               from projects
+               where "project_id" in ("#,
+        );
+
+        let mut separated = query_builder.separated(", ");
+        for project in projects.iter() {
+            separated.push_bind(project.project_id.clone());
+        }
+        query_builder.push(")");
+
+        let rows = query_builder
+            .build_query_as::<(
+                String,
+                String,
+                String,
+                String,
+                bool,
+                String,
+                String,
+                String,
+                String,
+            )>()
+            .fetch_all(common::shared::db())
+            .await?;
+
+        let locations: std::collections::HashMap<String, Where> = rows
+            .into_iter()
+            .map(
+                |(
+                    project_id,
+                    location_type,
+                    landuse,
+                    description,
+                    coverage,
+                    city,
+                    state,
+                    country,
+                    address,
+                )| {
+                    (
+                        project_id,
+                        Where::new(
+                            &location_type,
+                            &landuse,
+                            &description,
+                            coverage,
+                            &city,
+                            &state,
+                            &country,
+                            &address,
+                        ),
+                    )
+                },
+            )
+            .collect();
+
+        for project in projects.iter_mut() {
+            if let Some(location) = locations.get(&project.project_id) {
+                project.location = location.clone();
+            }
+        }
+
+        Ok(())
+    }
 }
 
 /// Full project detail for exchange project pages
@@ -298,6 +559,12 @@ pub struct ExchangeProjectDetail {
     pub activities: Vec<(String, String)>,
     pub topics: Vec<(String, String)>,
     pub audience: Vec<(String, String)>,
+
+    pub location: Where,
+
+    /// The coverage polygon as GeoJSON, present only when `location` reports
+    /// a map to draw.
+    pub coverage: Option<String>,
 
     // User-specific data
     pub user_is_authorized: bool,
@@ -465,7 +732,23 @@ async fn load_exchange_project_detail(
         SELECT
             name, image, image_credit, goal, task, description,
             how_to_join, presenter, url, twitter_name, facebook_page,
-            total_expense, indoors, outdoors, created
+            total_expense, indoors, outdoors, created,
+            location_type, location_landuse, location_description,
+            city, state, country, address,
+            -- Simplified proportionally to its own extent, so a
+            -- continent-sized coverage sheds vertices it could not show at
+            -- display scale while a single valley keeps its shape.
+            AsGeoJSON(
+              SimplifyPreserveTopology(
+                regions,
+                max(
+                  max(MbrMaxX(regions) - MbrMinX(regions),
+                      MbrMaxY(regions) - MbrMinY(regions)) / 500.0,
+                  0.000001
+                )
+              ),
+              6
+            ) as "coverage: Option<String>"
         FROM projects
         WHERE project_id = ?
         "#,
@@ -602,6 +885,24 @@ async fn load_exchange_project_detail(
         Some(row.facebook_page)
     };
 
+    let coverage = row.coverage.flatten();
+
+    let location = Where::new(
+        &row.location_type,
+        &row.location_landuse,
+        &row.location_description,
+        coverage.is_some(),
+        &row.city,
+        &row.state,
+        &row.country,
+        &row.address,
+    );
+
+    // Only offer the polygon where the location actually calls for a map, so
+    // an area polygon left behind on a project that has since gone global
+    // does not reappear as one.
+    let coverage = if location.has_map() { coverage } else { None };
+
     Ok(ExchangeProjectDetail {
         id: project_slug.to_string(),
         slug: project_slug.to_string(),
@@ -631,6 +932,8 @@ async fn load_exchange_project_detail(
         activities,
         topics,
         audience,
+        location,
+        coverage,
         user_is_authorized,
         liked,
         likes,
@@ -686,14 +989,15 @@ pub async fn exchange_home(
 
     // Load initial project results (first page, no filters)
     let params = SearchParams::default();
+    let scope = SearchScope::resolve(&params, exchange.user_is_authorized).await?;
     let page = 1;
     let page_size = 20;
     let offset = 0;
 
     // Build query for initial projects
     let mut query_builder = sqlx::QueryBuilder::new("");
-    build_base_where_clause(&mut query_builder, exchange.info.path_id, &params, false);
-    apply_search_filters(&mut query_builder, exchange.info.path_id, &params);
+    build_base_where_clause(&mut query_builder, exchange.info.path_id, &scope, false);
+    apply_search_filters(&mut query_builder, &exchange.info, &params, &scope);
 
     // Add ordering and pagination
     query_builder.push(" ORDER BY p.created DESC LIMIT ");
@@ -716,24 +1020,28 @@ pub async fn exchange_home(
         .fetch_all(common::shared::db())
         .await?;
 
-    let projects: Vec<ProjectSummary> = rows
+    let mut projects: Vec<ProjectSummary> = rows
         .into_iter()
         .map(
-            |(_, slug, name, image, image_credit, goal, task, _, _)| ProjectSummary {
+            |(project_id, slug, name, image, image_credit, goal, task, _, _)| ProjectSummary {
+                project_id,
                 slug,
                 name,
                 image,
                 image_credit,
                 goal,
                 task,
+                location: Where::default(),
             },
         )
         .collect();
 
+    ProjectSummary::attach_locations(&mut projects).await?;
+
     // Get total count
     let mut count_builder = sqlx::QueryBuilder::new("");
-    build_base_where_clause(&mut count_builder, exchange.info.path_id, &params, true);
-    apply_search_filters(&mut count_builder, exchange.info.path_id, &params);
+    build_base_where_clause(&mut count_builder, exchange.info.path_id, &scope, true);
+    apply_search_filters(&mut count_builder, &exchange.info, &params, &scope);
 
     let (total_count,) = count_builder
         .build_query_as::<(i64,)>()
@@ -792,14 +1100,15 @@ pub async fn exchange_results(
     let offset = (page - 1) * page_size;
 
     // Build base query using QueryBuilder
-    let has_text_search = !params.phrase.is_empty() && params.phrase.iter().any(|p| !p.is_empty());
+    let scope = SearchScope::resolve(&params, exchange.user_is_authorized).await?;
+    let has_text_search = scope.has_text_search();
     let mut query_builder = sqlx::QueryBuilder::new("");
 
     // Build base WHERE clause
-    build_base_where_clause(&mut query_builder, exchange.info.path_id, &params, false);
+    build_base_where_clause(&mut query_builder, exchange.info.path_id, &scope, false);
 
     // Apply common search filters
-    apply_search_filters(&mut query_builder, exchange.info.path_id, &params);
+    apply_search_filters(&mut query_builder, &exchange.info, &params, &scope);
 
     // Add ordering - use bm25() relevance for text search, otherwise creation date
     if has_text_search {
@@ -830,28 +1139,32 @@ pub async fn exchange_results(
         .fetch_all(common::shared::db())
         .await?;
 
-    let projects: Vec<ProjectSummary> = rows
+    let mut projects: Vec<ProjectSummary> = rows
         .into_iter()
         .map(
-            |(_, slug, name, image, image_credit, goal, task, _, _)| ProjectSummary {
+            |(project_id, slug, name, image, image_credit, goal, task, _, _)| ProjectSummary {
+                project_id,
                 slug,
                 name,
                 image,
                 image_credit,
                 goal,
                 task,
+                location: Where::default(),
             },
         )
         .collect();
+
+    ProjectSummary::attach_locations(&mut projects).await?;
 
     // Build count query with same filters
     let mut count_builder = sqlx::QueryBuilder::new("");
 
     // Build base WHERE clause for count
-    build_base_where_clause(&mut count_builder, exchange.info.path_id, &params, true);
+    build_base_where_clause(&mut count_builder, exchange.info.path_id, &scope, true);
 
     // Add same filters as main query
-    apply_search_filters(&mut count_builder, exchange.info.path_id, &params);
+    apply_search_filters(&mut count_builder, &exchange.info, &params, &scope);
 
     let (total_count,) = count_builder
         .build_query_as::<(i64,)>()
@@ -905,13 +1218,17 @@ pub async fn exchange_csv(
             .body("Forbidden"));
     }
 
+    // Only the exchange's own people reach this export, so it carries the
+    // hidden projects along with the rest.
+    let scope = SearchScope::resolve(&params, true).await?;
+
     // Build query for ALL projects (no pagination) with same filters as search
-    let has_text_search = !params.phrase.is_empty() && params.phrase.iter().any(|p| !p.is_empty());
+    let has_text_search = scope.has_text_search();
     let mut query_builder = sqlx::QueryBuilder::new("");
 
     // Build base WHERE clause (no pagination - get all results)
-    build_base_where_clause(&mut query_builder, exchange.path_id, &params, false);
-    apply_search_filters(&mut query_builder, exchange.path_id, &params);
+    build_base_where_clause(&mut query_builder, exchange.path_id, &scope, false);
+    apply_search_filters(&mut query_builder, &exchange, &params, &scope);
 
     // Add ordering (same as search results)
     if has_text_search {
@@ -1372,8 +1689,9 @@ pub async fn exchange_admin(
         .get::<String>("csrftoken")
         .unwrap_or_else(|| "".to_string());
 
-    // Load regions (simplified - would load from database in full implementation)
-    let regions = vec![]; // TODO: load actual regions
+    // Offered as the exchange's own scope: the areas a search can be limited
+    // to are the same list a project's coverage is measured against.
+    let regions = crate::region::all().await?;
 
     // Load full exchange for editing
     let exchange_full = Exchange::load(exchange.exchange_id).await?;
@@ -1482,6 +1800,9 @@ struct ExchangeSettingsForm {
     restricted_add: bool,
     #[serde(default)]
     custom_css: String,
+    /// Empty means "no region": a view of the whole catalogue.
+    #[serde(default)]
+    region_id: String,
 }
 
 /// Update exchange settings (uses LoadStorePeered for write)
@@ -1533,6 +1854,7 @@ pub async fn exchange_update_settings(
     exchange.settings.allow_project_reviews = form.allow_project_reviews;
     exchange.settings.require_approval = form.require_approval;
     exchange.settings.restricted_add = form.restricted_add;
+    exchange.settings.region_id = form.region_id.trim().parse().ok();
     exchange.settings.custom_css = if form.custom_css.is_empty() {
         None
     } else {

@@ -260,6 +260,9 @@ async fn exchange_create(
             require_approval: false,
             restricted_add: false,
             custom_css: None,
+            // A new exchange is a view of the whole catalogue until somebody
+            // gives it a region to be a view of.
+            ..Default::default()
         },
         predefined_searches: Vec::new(),
         hidden_projects: std::collections::HashSet::new(),

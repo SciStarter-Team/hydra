@@ -54,6 +54,10 @@ pub async fn geocode_and_update_project_point(project_id: Ulid) -> Result<(), Er
         )
         .execute(db())
         .await?;
+
+        // A derived point still moves the footprint, and this writes it
+        // straight to the column rather than through the project save.
+        crate::region::refresh_project(&project_id_str).await?;
     }
 
     Ok(())

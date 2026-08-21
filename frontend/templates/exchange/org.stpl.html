@@ -111,16 +111,15 @@
                   enter bird|fish|reptile into the field.
                 </small>
               </div> -->
-              <!-- TODO: Implement region_id field -->
-              <!-- <div class="org-item oi-line">
+              <div class="org-item oi-line">
                 <span class="label">Only show projects available in region</span>
                 <select hx-on:input="document.querySelector('#settings-feedback').textContent=''" name="region_id">
                   <option value="">---</option>
                   <% for (region, name) in self.regions.iter() { %>
-                  <option value="<%= region %>"><%= name %></option>
+                  <option value="<%= region %>" <% if self.exchange.settings.region_id == Some(*region) { %>selected<% } %>><%= name %></option>
                   <% } %>
                 </select>
-              </div> -->
+              </div>
               <div class="org-item oi-line">
                 <span class="label">Only staff can add projects</span>
                 <input hx-on:input="document.querySelector('#settings-feedback').textContent=''" type="checkbox" name="restricted_add" value="true" <% if self.exchange.settings.restricted_add { %>checked<% } %> />

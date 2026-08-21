@@ -48,6 +48,7 @@ pub mod peering;
 pub mod profile;
 pub mod profile_card;
 pub mod project;
+pub mod region;
 pub mod schedule;
 pub mod search;
 pub mod session;
@@ -747,6 +748,7 @@ async fn main() -> Result<(), Error> {
     let _synchronize_investigators = tokio::spawn(sync::synchronize_investigators());
     let _synchronize_entity_lists = tokio::spawn(sync::synchronize_entity_lists());
     let _synchronize_go_urls = tokio::spawn(sync::synchronize_go_urls());
+    let _synchronize_regions = tokio::spawn(sync::synchronize_regions());
     let _update_expired_statuses = tokio::spawn(sync::update_expired_statuses());
     let _periodic_maintenance = tokio::spawn(periodic_maintenance());
 
@@ -2453,6 +2455,173 @@ mod sync {
         transition: String,
         session_set_key: String,
         session_set_value: String,
+    }
+
+    #[derive(Debug, serde::Deserialize)]
+    struct RegionIndexEntry {
+        id: i64,
+        name: String,
+        digest: String,
+    }
+
+    #[derive(Debug, serde::Deserialize)]
+    struct RegionShape {
+        id: i64,
+        name: String,
+        digest: String,
+        value: String,
+    }
+
+    /// Keep the region vocabulary and its polygons in step with orrery.
+    ///
+    /// Regions change perhaps once a year and run to about ten megabytes of
+    /// geometry, so this reads an index of digests and fetches only the
+    /// shapes that actually moved. When any of them does, every project's
+    /// cached matches are suspect, so the whole cache is rebuilt -- a few
+    /// seconds, against a change that rare.
+    #[tracing::instrument]
+    pub async fn synchronize_regions() -> Result<(), anyhow::Error> {
+        loop {
+            let client = reqwest::Client::new();
+
+            tracing::info!("Retrieving region index...");
+
+            let index: Vec<RegionIndexEntry> = match client
+                .get("https://scistarter.org/staff/sync/regions")
+                .bearer_auth(env!("SYNC_TOKEN"))
+                .send()
+                .await
+            {
+                Ok(response) => match response.error_for_status() {
+                    Ok(resp) => match resp.text().await {
+                        Ok(text) => match serde_json::from_str(&text) {
+                            Ok(index) => index,
+                            Err(e) => {
+                                eprintln!("Region index JSON parsing error: {}", e);
+                                eprintln!("Response body: {}", text);
+                                sleep(Duration::from_secs(60)).await;
+                                continue;
+                            }
+                        },
+                        Err(e) => {
+                            eprintln!("Failed to read region index body: {}", e);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    },
+                    Err(e) => {
+                        eprintln!("Region index HTTP error: {}", e);
+                        sleep(Duration::from_secs(60)).await;
+                        continue;
+                    }
+                },
+                Err(e) => {
+                    eprintln!("Region index request error: {}", e);
+                    sleep(Duration::from_secs(60)).await;
+                    continue;
+                }
+            };
+
+            let mut moved = 0;
+
+            // A change to the matching rule itself moves no polygon, so
+            // nothing above would notice it. The rule the cache was last
+            // built under is recorded alongside the bookmarks, and a
+            // mismatch is as good a reason to rebuild as a moved boundary.
+            let built_under: Option<String> = misc::get("region-match-rule").await.ok().flatten();
+            let rule = crate::region::MIN_OVERLAP.to_string();
+
+            if built_under.as_deref() != Some(rule.as_str()) {
+                tracing::info!(
+                    "Region matching rule is now {rule} (cache built under {built_under:?}); \
+                     rebuilding project matches"
+                );
+
+                match crate::region::rebuild_all().await {
+                    Ok(_) => {
+                        if let Err(e) = misc::set("region-match-rule", rule).await {
+                            eprintln!("Could not record the region matching rule: {}", e);
+                        }
+                    }
+                    Err(e) => eprintln!("Region match rebuild failed: {}", e),
+                }
+            }
+
+            for entry in index.iter() {
+                match crate::region::digest_of(entry.id).await {
+                    Ok(Some(held)) if held == entry.digest => continue,
+                    Ok(_) => {}
+                    Err(e) => {
+                        eprintln!("Could not read held digest for region {}: {}", entry.id, e);
+                        continue;
+                    }
+                }
+
+                tracing::info!("Region {} ({}) has moved; fetching", entry.id, entry.name);
+
+                let shape: RegionShape = match client
+                    .get(format!(
+                        "https://scistarter.org/staff/sync/regions/{}",
+                        entry.id
+                    ))
+                    .bearer_auth(env!("SYNC_TOKEN"))
+                    .send()
+                    .await
+                {
+                    Ok(response) => match response.error_for_status() {
+                        Ok(resp) => match resp.text().await {
+                            Ok(text) => match serde_json::from_str(&text) {
+                                Ok(shape) => shape,
+                                Err(e) => {
+                                    eprintln!("Region {} JSON parsing error: {}", entry.id, e);
+                                    continue;
+                                }
+                            },
+                            Err(e) => {
+                                eprintln!("Failed to read region {} body: {}", entry.id, e);
+                                continue;
+                            }
+                        },
+                        Err(e) => {
+                            eprintln!("Region {} HTTP error: {}", entry.id, e);
+                            continue;
+                        }
+                    },
+                    Err(e) => {
+                        eprintln!("Region {} request error: {}", entry.id, e);
+                        continue;
+                    }
+                };
+
+                match crate::region::store(shape.id, &shape.name, &shape.digest, &shape.value).await
+                {
+                    Ok(true) => moved += 1,
+                    Ok(false) => {}
+                    Err(e) => eprintln!("Could not store region {}: {}", shape.id, e),
+                }
+            }
+
+            let ids: Vec<i64> = index.iter().map(|entry| entry.id).collect();
+
+            match crate::region::retain_only(&ids).await {
+                Ok(0) => {}
+                Ok(dropped) => {
+                    tracing::info!("Dropped {} region(s) orrery no longer has", dropped);
+                    moved += dropped;
+                }
+                Err(e) => eprintln!("Could not drop stale regions: {}", e),
+            }
+
+            if moved > 0 {
+                tracing::info!("{} region(s) changed; rebuilding project matches", moved);
+
+                if let Err(e) = crate::region::rebuild_all().await {
+                    eprintln!("Region match rebuild failed: {}", e);
+                }
+            }
+
+            sleep(Duration::from_secs(60 * 60)).await;
+        }
     }
 
     #[tracing::instrument]

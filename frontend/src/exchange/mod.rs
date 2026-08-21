@@ -101,6 +101,26 @@ pub struct ExchangeSettings {
     pub require_approval: bool,
     pub restricted_add: bool,
     pub custom_css: Option<String>,
+
+    /// Limit the exchange to projects that reach this region, plus the ones
+    /// that can be done anywhere. `None` means the whole catalogue.
+    ///
+    /// This is what makes SciStarter Australia a view of Australia rather
+    /// than a copy of SciStarter: without it every exchange shows every
+    /// project.
+    #[serde(default)]
+    pub region_id: Option<i64>,
+
+    /// Origins whose projects this exchange does not want, whatever else
+    /// would have let them in -- a bulk import that duplicates what the
+    /// exchange already lists, most often.
+    ///
+    /// Orrery carries further inclusion levers that have no field here yet;
+    /// `push_membership` in `handlers.rs` says which, and why. Every field
+    /// in this struct is serde-defaulted precisely so the next one can be
+    /// added without touching stored settings.
+    #[serde(default)]
+    pub excluded_origins: Vec<String>,
 }
 
 impl Default for ExchangeSettings {
@@ -111,6 +131,8 @@ impl Default for ExchangeSettings {
             require_approval: false,
             restricted_add: false,
             custom_css: None,
+            region_id: None,
+            excluded_origins: Vec::new(),
         }
     }
 }

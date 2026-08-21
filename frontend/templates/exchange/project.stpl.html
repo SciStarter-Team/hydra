@@ -8,6 +8,14 @@
     <script src="/-static/js/social_share.js" defer></script>
     <script src="/-static/js/clickthrough.js" defer></script>
     <link href="/-static/exchange/css/styles.css" rel="stylesheet">
+    <style>
+      /* Scoped to the coverage map's own ids and kept here rather than in
+         exchange/css/styles.css, which is a minified bundle with no source
+         alongside it in this repo. */
+      #coverage-map { margin-top: 0.5rem; }
+      #coverage-map[hidden] { display: none; }
+      #coverage-map .display { height: 40vh; min-height: 240px; }
+    </style>
   </head>
   <body hx-headers='{"X-CSRFToken": "<%= self.csrftoken %>"}'>
 
@@ -108,66 +116,26 @@
                   </td>
                 </tr>
                 <% } %>
-                <!-- <tr> -->
-                <!--   <th scope="row">Where</th> -->
-                <!--   <td class="b"> -->
-                <!--     <div class="ss-project-location"> -->
-                <!--       <span> -->
-                <!--         <div role="tooltip" id="el-popover-2330" aria-hidden="true" class="el-popover el-popper" tabindex="0" style="width: 300px; display: none;"> -->
-                <!--           <div class="ss-map reset-exempt"> -->
-                <!--             <div class="el-row"> -->
-                <!--               <div class="el-col el-col-24"></div> -->
-                <!--             </div> -->
-                <!--             <div class="display leaflet-container leaflet-touch leaflet-retina leaflet-fade-anim leaflet-grab leaflet-touch-drag leaflet-touch-zoom" tabindex="0" style="position: relative;"> -->
-                <!--               <a href="http://mapbox.com/about/maps" target="_blank" class="mapbox-logo">Mapbox</a> -->
-                <!--               <div class="leaflet-pane leaflet-map-pane" style="transform: translate3d(0px, 0px, 0px);"> -->
-                <!--                 <div class="leaflet-pane leaflet-tile-pane"> -->
-                <!--                   <div class="leaflet-gl-layer mapboxgl-map" style="width: 0px; height: 0px; transform: translate3d(0px, 0px, 0px);"> -->
-                <!--                     <div class="mapboxgl-canary" style="visibility: hidden;"></div> -->
-                <!--                     <div class="mapboxgl-canvas-container"> -->
-                <!--                       <canvas class="mapboxgl-canvas leaflet-image-layer leaflet-zoom-animated" tabindex="0" aria-label="Map" width="800" height="600" style="position: absolute; width: 400px; height: 300px; transform: translate3d(0px, 0px, 0px) scale(1);"></canvas> -->
-                <!--                     </div> -->
-                <!--                     <div class="mapboxgl-control-container"> -->
-                <!--                       <div class="mapboxgl-ctrl-top-left"></div> -->
-                <!--                       <div class="mapboxgl-ctrl-top-right"></div> -->
-                <!--                       <div class="mapboxgl-ctrl-bottom-left"> -->
-                <!--                         <div class="mapboxgl-ctrl" style="display: block;"><a class="mapboxgl-ctrl-logo mapboxgl-compact" target="_blank" rel="noopener nofollow" href="https://www.mapbox.com/" aria-label="Mapbox logo"></a></div> -->
-                <!--                       </div> -->
-                <!--                       <div class="mapboxgl-ctrl-bottom-right"></div> -->
-                <!--                     </div> -->
-                <!--                   </div> -->
-                <!--                 </div> -->
-                <!--                 <div class="leaflet-pane leaflet-shadow-pane"></div> -->
-                <!--                 <div class="leaflet-pane leaflet-overlay-pane"> -->
-                <!--                   <svg pointer-events="none" class="leaflet-zoom-animated" width="0" height="0" viewBox="0 0 0 0" style="transform: translate3d(0px, 0px, 0px) scale(1);"> -->
-                <!--                     <g> -->
-                <!--                       <path class="leaflet-interactive" stroke="#3388ff" stroke-opacity="1" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="#3388ff" fill-opacity="0.2" fill-rule="evenodd" d="M-3 -1L1 0L-3 0z"></path> -->
-                <!--                     </g> -->
-                <!--                   </svg> -->
-                <!--                 </div> -->
-                <!--                 <div class="leaflet-pane leaflet-marker-pane"></div> -->
-                <!--                 <div class="leaflet-pane leaflet-tooltip-pane"></div> -->
-                <!--                 <div class="leaflet-pane leaflet-popup-pane"></div> -->
-                <!--                 <div class="leaflet-proxy leaflet-zoom-animated" style="transform: translate3d(62.9056px, 95.3553px, 0px) scale(0.5);"></div> -->
-                <!--               </div> -->
-                <!--               <div class="leaflet-control-container"> -->
-                <!--                 <div class="leaflet-top leaflet-left"> -->
-                <!--                   <div class="leaflet-control-zoom leaflet-bar leaflet-control"><a class="leaflet-control-zoom-in" href="#" title="Zoom in" role="button" aria-label="Zoom in">+</a><a class="leaflet-control-zoom-out leaflet-disabled" href="#" title="Zoom out" role="button" aria-label="Zoom out">−</a></div> -->
-                <!--                 </div> -->
-                <!--                 <div class="leaflet-top leaflet-right"></div> -->
-                <!--                 <div class="leaflet-bottom leaflet-left"></div> -->
-                <!--                 <div class="leaflet-bottom leaflet-right"> -->
-                <!--                   <div class="leaflet-control-attribution leaflet-control"><a href="http://leafletjs.com" title="A JS library for interactive maps">Leaflet</a> | © <a href="https://www.mapbox.com/about/maps/">Mapbox</a> © <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> <strong><a href="https://www.mapbox.com/map-feedback/" target="_blank">Improve this map</a></strong></div> -->
-                <!--                 </div> -->
-                <!--               </div> -->
-                <!--             </div> -->
-                <!--           </div> -->
-                <!--         </div> -->
-                <!--         <span class="el-popover__reference-wrapper"><a class="el-popover__reference" aria-describedby="el-popover-2330" tabindex="0">View map...</a></span> -->
-                <!--       </span> -->
-                <!--     </div> -->
-                <!--   </td> -->
-                <!-- </tr> -->
+                <% let location = self.project.location.label(); %>
+                <% if !location.is_empty() { %>
+                <tr>
+                  <th scope="row">Where</th>
+                  <td class="b">
+                    <div class="ss-project-location">
+                      <span><%= location %></span>
+                      <% if let Some(coverage) = self.project.coverage.as_deref() { %>
+                      <p>
+                        <a href="#coverage-map" id="coverage-map-toggle" role="button" aria-expanded="false" aria-controls="coverage-map">View map&hellip;</a>
+                      </p>
+                      <div class="ss-map reset-exempt" id="coverage-map" hidden>
+                        <div class="display" id="coverage-map-display"></div>
+                      </div>
+                      <script id="coverage-geojson" type="application/json"><%- coverage %></script>
+                      <% } %>
+                    </div>
+                  </td>
+                </tr>
+                <% } %>
                 <% if !self.project.description.is_empty() { %>
                 <tr>
                   <th scope="row">Description</th>
@@ -641,6 +609,110 @@
             }
         }
     })
+    </script>
+
+    <script>
+    /* The coverage map is worth about a megabyte of Leaflet, MapLibre and the
+       adapter between them, on a page where fewer than one project in ten has
+       a polygon to show. Nothing is fetched until a reader asks for the map,
+       and the assets load once per page view. */
+    (function() {
+        const toggle = document.getElementById('coverage-map-toggle');
+        const container = document.getElementById('coverage-map');
+        const payload = document.getElementById('coverage-geojson');
+
+        if (!toggle || !container || !payload) { return; }
+
+        const STYLESHEETS = [
+            '/-static/css/leaflet.css',
+            '/-static/css/maplibre-gl.css'
+        ];
+
+        /* Ordered: the adapter needs both libraries already defined. */
+        const SCRIPTS = [
+            '/-static/js/leaflet.js',
+            '/-static/js/maplibre-gl.js',
+            '/-static/js/leaflet-maplibre-gl.js'
+        ];
+
+        function loadStylesheet(href) {
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = href;
+            document.head.appendChild(link);
+        }
+
+        function loadScript(src) {
+            return new Promise(function(resolve, reject) {
+                const script = document.createElement('script');
+                script.src = src;
+                script.onload = resolve;
+                script.onerror = function() { reject(new Error('failed to load ' + src)); };
+                document.body.appendChild(script);
+            });
+        }
+
+        async function loadAssets() {
+            STYLESHEETS.forEach(loadStylesheet);
+            for (const src of SCRIPTS) { await loadScript(src); }
+        }
+
+        let assets = null;
+        let map = null;
+
+        function draw() {
+            const coverage = JSON.parse(payload.textContent);
+            map = L.map('coverage-map-display', { attributionControl: false, minZoom: 1, maxZoom: 20 });
+
+            L.control.attribution().addTo(map).addAttribution(
+                '\u00a9 <a href="https://openfreemap.org" target="_blank">OpenFreeMap</a> ' +
+                '\u00a9 <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors'
+            );
+
+            map.addLayer(L.maplibreGL({ style: 'https://tiles.openfreemap.org/styles/liberty' }));
+
+            const shape = L.geoJSON(coverage, { style: { color: '#47a8d4', weight: 2, fillOpacity: 0.2 } });
+            shape.addTo(map);
+            map.fitBounds(shape.getBounds(), { padding: [20, 20] });
+        }
+
+        toggle.addEventListener('click', async function(event) {
+            event.preventDefault();
+
+            if (!container.hidden) {
+                container.hidden = true;
+                toggle.setAttribute('aria-expanded', 'false');
+                toggle.textContent = 'View map\u2026';
+                return;
+            }
+
+            container.hidden = false;
+            toggle.setAttribute('aria-expanded', 'true');
+            toggle.textContent = 'Hide map';
+
+            if (!assets) { assets = loadAssets(); }
+
+            try {
+                await assets;
+            } catch (err) {
+                /* Leave the reader with the location text rather than an empty
+                   box, and let the next click try again. */
+                assets = null;
+                container.hidden = true;
+                toggle.setAttribute('aria-expanded', 'false');
+                toggle.textContent = 'View map\u2026';
+                console.error('coverage map assets failed to load', err);
+                return;
+            }
+
+            if (!map) {
+                draw();
+            } else {
+                /* Leaflet measures a hidden container as zero-sized. */
+                map.invalidateSize();
+            }
+        });
+    })();
     </script>
   </body>
 </html>

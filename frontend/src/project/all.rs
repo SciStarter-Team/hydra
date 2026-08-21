@@ -1427,6 +1427,14 @@ impl LoadStorePeered for ProjectAll {
             }
         }
 
+        // Refreshed unconditionally rather than only when the footprint
+        // moved: measuring one project against the region list costs a
+        // couple of milliseconds here, and a save that quietly left the
+        // cache behind would take a region search with it.
+        if let Err(e) = crate::region::refresh_project(&data.project_id.to_string()).await {
+            eprintln!("Region refresh for project {} failed: {e}", data.project_id);
+        }
+
         Ok(())
     }
 

@@ -2,6 +2,7 @@ pub mod all;
 pub mod field;
 pub mod field_source;
 pub mod investigator;
+pub mod location;
 pub mod reference;
 
 /// Tags whose name begins with `_` (e.g. `_nasa`) are internal/system tags used

@@ -2853,6 +2853,9 @@ impl ProjectField {
         )
         .execute(db())
         .await?;
+
+        crate::region::refresh_project(&project_id_str).await?;
+
         Ok(())
     }
 
@@ -2869,6 +2872,9 @@ impl ProjectField {
         )
         .execute(db())
         .await?;
+
+        crate::region::refresh_project(&project_id_str).await?;
+
         Ok(())
     }
 

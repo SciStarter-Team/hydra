@@ -34,6 +34,22 @@
           <% } %>
         </td>
       </tr>
+      <% let location = self.project.location.label(); %>
+      <% if !location.is_empty() { %>
+      <tr>
+        <th scope="row">Where</th>
+        <td>
+          <% if location.len() > 35 { %>
+          <details>
+            <summary><%= location.chars().take(30).collect::<String>() %>...</summary>
+            <%= location %>
+          </details>
+          <% } else { %>
+          <%= location %>
+          <% } %>
+        </td>
+      </tr>
+      <% } %>
     </tbody>
   </table>
 </article>
