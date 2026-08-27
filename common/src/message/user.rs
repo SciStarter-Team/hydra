@@ -212,7 +212,7 @@ pub fn signup_needs_protection<S: AsRef<str>>(tags: &[S]) -> bool {
 
 /// Signup-context tags whose cohort is credited with the Foundations of
 /// Citizen Science module rather than working through it on the site. The
-/// library runs the module with its members before enrolling them, so the
+/// partner runs the module with its cohort before enrolling them, so the
 /// grant records something that already happened off-site. Kept in step with
 /// orrery's `FOUNDATIONS_GRANT_SIGNUP_TAGS`.
 ///
@@ -221,7 +221,8 @@ pub fn signup_needs_protection<S: AsRef<str>>(tags: &[S]) -> bool {
 /// about the same cohort, and a partner can need one without the other --
 /// girlscout is protected and is not credited, ldpl is credited and is not
 /// protected.
-pub const FOUNDATIONS_GRANT_SIGNUP_TAGS: [&str; 2] = ["laplstudent", "ldpl"];
+pub const FOUNDATIONS_GRANT_SIGNUP_TAGS: [&str; 4] =
+    ["laplstudent", "ldpl", "signup-noyce", "osher-asu"];
 
 /// Whether an account carrying `tags` from its signup context is credited
 /// with the Foundations module outright.
