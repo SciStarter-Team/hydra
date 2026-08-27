@@ -37,3 +37,20 @@
 .concierge-msg li + li {
     margin-top: 0.125rem;
 }
+
+/* The prompt asks for no headings, but the model emits one occasionally.
+   Preflight resets them to inherit, which would make one read as an ordinary
+   sentence; a chat bubble is no place for document headings, so they read as
+   emphasis instead. */
+.concierge-msg :is(h1, h2, h3, h4, h5, h6) {
+    font-weight: 700;
+}
+
+.concierge-msg :is(h1, h2, h3, h4, h5, h6) + * {
+    margin-top: 0.25rem;
+}
+
+.concierge-msg blockquote {
+    padding-left: 0.625rem;
+    border-left: 2px solid var(--color-gray-300);
+}

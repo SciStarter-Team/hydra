@@ -386,10 +386,10 @@ async fn handle_turn(
                 ConciergeForm::active(conversation.conversation_id)
             };
 
-            let paths = tools::linkable_paths().await;
+            let urls = tools::linkable_urls().await;
             fragment(TurnFragment {
                 user_text: message,
-                assistant_html: tools::render_assistant_html(&outcome.assistant_text, &paths),
+                assistant_html: tools::render_assistant_html(&outcome.assistant_text, &urls),
                 cards,
                 more_url,
                 more_label,

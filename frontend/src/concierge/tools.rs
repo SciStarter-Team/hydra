@@ -9,9 +9,17 @@
 //! structurally impossible.
 //!
 //! Site navigation works the same way: the system prompt lists a curated set
-//! of destination paths, and [`render_assistant_html`] turns exactly those
-//! paths — nothing else — into anchors while interpreting the model's light
+//! of destination URLs, and [`render_assistant_html`] turns exactly those
+//! URLs — nothing else — into anchors while interpreting the model's light
 //! markdown with raw HTML escaped and foreign link targets stripped.
+//!
+//! What Flower may say about SciStarter *itself* is curated on the same
+//! terms. Destinations are grouped into [`ProgramArea`]s, each carrying a
+//! staff-written note on SciStarter's role in that area, and the model is
+//! told to reproduce the note rather than compose one — so the partners,
+//! programs, and numbers in a "how this relates to SciStarter" line come
+//! from this file, not from what a general-purpose model believes about the
+//! organization.
 
 use std::collections::HashMap;
 use std::sync::LazyLock;
@@ -62,88 +70,259 @@ enum DestinationSource {
     Native,
     /// A content-managed page: available once a published entity exists at
     /// this slug. Pages still being ported from the old site stay out of the
-    /// prompt until their content arrives, so Flower never offers a path
+    /// prompt until their content arrives, so Flower never offers a page
     /// that would 404.
     Entity(&'static str),
+    /// A page that lives on the WordPress site and has no page here yet.
+    /// Always available, since its availability is not ours to gate. When one
+    /// of these is ported, it becomes an `Entity` with a relative URL.
+    External,
 }
 
-/// A site page Flower may direct visitors to.
+/// A body of SciStarter's own work that the site has curated pages for.
+///
+/// Each area carries a staff-written note on SciStarter's role in it. That
+/// note is the only thing Flower may say about SciStarter's programs,
+/// partners, or numbers: the model quotes it rather than composing from what
+/// it happens to believe about the organization, which keeps organizational
+/// claims as un-inventable as project and event details are.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ProgramArea {
+    Libraries,
+    Education,
+    GirlScouts,
+    Nasa,
+    Ambassadors,
+    Training,
+}
+
+impl ProgramArea {
+    /// The area's heading in the prompt.
+    fn name(self) -> &'static str {
+        match self {
+            ProgramArea::Libraries => "Libraries",
+            ProgramArea::Education => "Educators and students",
+            ProgramArea::GirlScouts => "Girl Scouts",
+            ProgramArea::Nasa => "NASA",
+            ProgramArea::Ambassadors => "Ambassadors",
+            ProgramArea::Training => "Trainings and badges",
+        }
+    }
+
+    /// How SciStarter's work relates to the area. Reproduced in replies
+    /// nearly verbatim, so it is written as visitor-facing copy.
+    fn relates(self) -> &'static str {
+        match self {
+            ProgramArea::Libraries => {
+                "SciStarter and Arizona State University run the Citizen and \
+                 Community Science Library Network, which helps libraries and \
+                 community organizations become community hubs for citizen \
+                 science. It began in 2017 with six pilot libraries in Arizona \
+                 and support from the Institute for Museum and Library \
+                 Services, and now connects more than 1,200 libraries \
+                 nationwide — with professional development, program and event \
+                 resources, ready-to-circulate kits, and projects."
+            }
+            ProgramArea::Education => {
+                "SciStarter supports parents, guardians, and both formal and \
+                 informal educators with classroom and at-home STEM \
+                 resources: projects sorted by grade level, free self-guided \
+                 training modules, and lists teachers can use to share \
+                 projects with a class and track participation."
+            }
+            ProgramArea::GirlScouts => {
+                "SciStarter works with Girl Scouts on the Think Like a \
+                 Citizen Scientist Journey, the Girl Scout Tree Promise, and \
+                 the Climate Challenge, with meeting-by-meeting guidance for \
+                 volunteers and curated projects Girl Scouts can complete to \
+                 earn their awards."
+            }
+            ProgramArea::Nasa => {
+                "SciStarter presents Do NASA Science LIVE! in partnership \
+                 with NASA Citizen Science — a free series of virtual events \
+                 featuring NASA citizen-science projects, live Q&As with \
+                 scientists, and step-by-step instructions for joining in as \
+                 the event happens."
+            }
+            ProgramArea::Ambassadors => {
+                "As libraries and community organizations become hubs for \
+                 citizen science, they need volunteers to help sustain the \
+                 work. The SciStarter Ambassador Program gives those \
+                 volunteers the knowledge, skills, and professionally \
+                 designed resources to support citizen science where they \
+                 live. Certified Ambassadors have earned the Foundations and \
+                 Ambassador badges, been independently screened, and appear \
+                 in a searchable directory that event hosts can invite from."
+            }
+            ProgramArea::Training => {
+                "SciStarter's trainings are free and self-guided, built by \
+                 the instructional designers at Arizona State University with \
+                 SciStarter's own experts, and each one earns a digital badge \
+                 that can go on a LinkedIn or professional profile. 94% of \
+                 the people who finished Foundations of Citizen Science \
+                 reported more confidence taking part in projects and working \
+                 with data."
+            }
+        }
+    }
+}
+
+/// A page Flower may direct visitors to. `url` is relative for pages on this
+/// site and absolute for [`DestinationSource::External`] ones; either way it
+/// is the exact text the model writes to produce a link.
 struct Destination {
-    path: &'static str,
+    url: &'static str,
     purpose: &'static str,
+    /// The program area this page belongs to, if any. Pages with no area are
+    /// general navigation, and carry no claim about SciStarter's work.
+    area: Option<ProgramArea>,
     source: DestinationSource,
 }
 
 /// The curated navigation whitelist. These are the only paths that render as
-/// links in assistant replies.
+/// links in assistant replies, and their order is the order the program areas
+/// appear in the prompt.
 const DESTINATIONS: &[Destination] = &[
     Destination {
-        path: "/training/foundations",
+        url: "/training/foundations",
         purpose: "the Foundations of Citizen Science training — the best \
                   first step for anyone new to citizen science",
+        area: Some(ProgramArea::Training),
         source: DestinationSource::Native,
     },
     Destination {
-        path: "/training",
+        url: "/training",
         purpose: "free trainings that earn badges and certificates",
+        area: Some(ProgramArea::Training),
         source: DestinationSource::Entity("training"),
     },
     Destination {
-        path: "/dashboard",
+        url: "/dashboard",
         purpose: "personalized project recommendations for logged-in visitors",
+        area: None,
         source: DestinationSource::Native,
     },
     Destination {
-        path: "/signup",
+        url: "/signup",
         purpose: "creating a free SciStarter account",
+        area: None,
         source: DestinationSource::Native,
     },
     Destination {
-        path: "/education",
+        url: "/education",
         purpose: "students and teachers",
+        area: Some(ProgramArea::Education),
         source: DestinationSource::Entity("education"),
     },
     Destination {
-        path: "/library",
-        purpose: "librarians and library staff",
+        url: "/library",
+        purpose: "the program overview for librarians and library staff",
+        area: Some(ProgramArea::Libraries),
         source: DestinationSource::Entity("library"),
     },
     Destination {
-        path: "/nasa",
+        url: "/library-kits",
+        purpose: "for the public: what a citizen-science kit holds, and the \
+                  projects the kits support",
+        area: Some(ProgramArea::Libraries),
+        source: DestinationSource::Entity("library-kits"),
+    },
+    Destination {
+        url: "/library-build-a-kit",
+        purpose: "step-by-step guides for building and promoting citizen \
+                  science kits in a library",
+        area: Some(ProgramArea::Libraries),
+        source: DestinationSource::Entity("library-build-a-kit"),
+    },
+    Destination {
+        url: "https://pages.scistarter.org/library-network-about/",
+        purpose: "what the Citizen and Community Science Library Network is, \
+                  what it offers members, and how a library joins",
+        area: Some(ProgramArea::Libraries),
+        source: DestinationSource::External,
+    },
+    Destination {
+        url: "https://pages.scistarter.org/library-network-locations/",
+        purpose: "a map for finding a participating library nearby",
+        area: Some(ProgramArea::Libraries),
+        source: DestinationSource::External,
+    },
+    Destination {
+        url: "https://pages.scistarter.org/library-program-resources/",
+        purpose: "resources for library staff: webinars, self-guided \
+                  trainings, and the Library & Community Guide to Citizen \
+                  Science",
+        area: Some(ProgramArea::Libraries),
+        source: DestinationSource::External,
+    },
+    Destination {
+        url: "/nasa",
         purpose: "NASA fans and space enthusiasts",
+        area: Some(ProgramArea::Nasa),
         source: DestinationSource::Entity("nasa"),
     },
     Destination {
-        path: "/girlscouts-info",
+        url: "/girlscouts-info",
         purpose: "Girl Scouts and their leaders",
+        area: Some(ProgramArea::GirlScouts),
         source: DestinationSource::Entity("girlscouts-info"),
     },
     Destination {
-        path: "/ambassadors",
+        url: "/girlscouts-journey",
+        purpose: "the Think Like a Citizen Scientist Journey, meeting by \
+                  meeting",
+        area: Some(ProgramArea::GirlScouts),
+        source: DestinationSource::Entity("girlscouts-journey"),
+    },
+    Destination {
+        url: "/girlscouts-treepromise",
+        purpose: "the Girl Scout Tree Promise and the projects that count \
+                  toward it",
+        area: Some(ProgramArea::GirlScouts),
+        source: DestinationSource::Entity("girlscouts-treepromise"),
+    },
+    Destination {
+        url: "/girlscouts-climate",
+        purpose: "the Girl Scout Climate Challenge and its projects",
+        area: Some(ProgramArea::GirlScouts),
+        source: DestinationSource::Entity("girlscouts-climate"),
+    },
+    Destination {
+        url: "/girlscouts-faq",
+        purpose: "answers to common Girl Scout questions about SciStarter \
+                  accounts and awards",
+        area: Some(ProgramArea::GirlScouts),
+        source: DestinationSource::Entity("girlscouts-faq"),
+    },
+    Destination {
+        url: "/ambassadors",
         purpose: "the SciStarter Ambassador program",
+        area: Some(ProgramArea::Ambassadors),
         source: DestinationSource::Native,
     },
     Destination {
-        path: "/communities",
+        url: "/communities",
         purpose: "browsing all public communities",
+        area: None,
         source: DestinationSource::Native,
     },
     Destination {
-        path: "/finder",
+        url: "/finder",
         purpose: "the full project finder",
+        area: None,
         source: DestinationSource::Native,
     },
 ];
 
-/// The destinations currently reachable on this site: native routes plus any
-/// entity-backed pages whose content has been published. Degrades to native
-/// routes only if the entity lookup fails.
+/// The destinations currently reachable: native routes and WordPress pages,
+/// plus any entity-backed pages whose content has been published here.
+/// Degrades to the ungated ones only if the entity lookup fails.
 async fn available_destinations() -> Vec<&'static Destination> {
     let slugs: Vec<&'static str> = DESTINATIONS
         .iter()
         .filter_map(|d| match d.source {
             DestinationSource::Entity(slug) => Some(slug),
-            DestinationSource::Native => None,
+            DestinationSource::Native | DestinationSource::External => None,
         })
         .collect();
 
@@ -173,60 +352,155 @@ async fn available_destinations() -> Vec<&'static Destination> {
     DESTINATIONS
         .iter()
         .filter(|d| match d.source {
-            DestinationSource::Native => true,
+            DestinationSource::Native | DestinationSource::External => true,
             DestinationSource::Entity(slug) => published.iter().any(|p| p == slug),
         })
         .collect()
 }
 
-/// The paths eligible for linkification in assistant replies.
-pub async fn linkable_paths() -> Vec<&'static str> {
+/// The URLs eligible for linkification in assistant replies.
+pub async fn linkable_urls() -> Vec<&'static str> {
     available_destinations()
         .await
         .iter()
-        .map(|d| d.path)
+        .map(|d| d.url)
         .collect()
 }
 
-/// A piece of assistant text after path matching: literal text, or a
-/// whitelisted destination path.
-enum Segment {
-    Text(String),
-    Path(&'static str),
-}
+/// Split available destinations into the program areas that still have at
+/// least one reachable page — in whitelist order, so the prompt is stable —
+/// and the general-navigation pages that belong to no area. An area whose
+/// pages are all unpublished simply doesn't appear, taking its note with it.
+fn group_by_area(
+    destinations: &[&'static Destination],
+) -> (
+    Vec<(ProgramArea, Vec<&'static Destination>)>,
+    Vec<&'static Destination>,
+) {
+    let mut areas: Vec<(ProgramArea, Vec<&'static Destination>)> = Vec::new();
+    let mut general = Vec::new();
 
-/// Split `text` on occurrences of the whitelisted `paths`. A path match must
-/// stand alone: the characters on either side may not be word- or path-like,
-/// so "/training" never matches inside "/training/foundations" or
-/// "foo/training". Longest path wins at any position.
-fn split_paths(text: &str, paths: &[&'static str]) -> Vec<Segment> {
-    fn word_like(byte: u8) -> bool {
-        byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'/')
+    for destination in destinations {
+        match destination.area {
+            Some(area) => match areas.iter_mut().find(|(known, _)| *known == area) {
+                Some((_, pages)) => pages.push(destination),
+                None => areas.push((area, vec![destination])),
+            },
+            None => general.push(*destination),
+        }
     }
 
-    let mut ordered: Vec<&'static str> = paths.to_vec();
-    ordered.sort_by_key(|path| std::cmp::Reverse(path.len()));
+    (areas, general)
+}
 
-    // Paths are ASCII, so byte offsets used for matching always land on
-    // character boundaries.
+/// Render the destination half of the system prompt: one block per program
+/// area — its name, its "how this relates to SciStarter" note, and its pages
+/// — followed by the general-navigation pages.
+fn destination_sections(destinations: &[&'static Destination]) -> String {
+    fn page_line(destination: &Destination) -> String {
+        format!("- {} — {}\n", destination.url, destination.purpose)
+    }
+
+    let (areas, general) = group_by_area(destinations);
+    let mut sections = String::new();
+
+    for (area, pages) in &areas {
+        sections.push_str(&format!(
+            "{}\nHow this relates to SciStarter: {}\nPages:\n{}\n",
+            area.name(),
+            area.relates(),
+            pages.iter().map(|page| page_line(page)).collect::<String>(),
+        ));
+    }
+
+    sections.push_str("General site pages:\n");
+    for destination in &general {
+        sections.push_str(&page_line(destination));
+    }
+
+    sections
+}
+
+/// Whether a byte continues a word or a URL path, and so may not sit
+/// against either end of a match.
+fn word_like(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'/')
+}
+
+/// A URL without its trailing slash, for comparisons that treat one as
+/// optional. The WordPress destinations are canonically written with a
+/// trailing slash and the model drops it about as often as it keeps it;
+/// losing the link over that helps nobody, and both forms reach the same
+/// page.
+fn without_trailing_slash(url: &str) -> &str {
+    url.strip_suffix('/').unwrap_or(url)
+}
+
+/// The whitelisted URL a link destination refers to, if any, treating a
+/// trailing slash as optional.
+fn whitelisted(destination: &str, urls: &[&'static str]) -> Option<&'static str> {
+    let destination = without_trailing_slash(destination);
+    urls.iter()
+        .copied()
+        .find(|url| without_trailing_slash(url) == destination)
+}
+
+/// A piece of assistant text after URL matching: literal text, or a
+/// whitelisted destination URL.
+enum Segment {
+    Text(String),
+    Url(&'static str),
+}
+
+/// Split `text` on occurrences of the whitelisted `urls`. A match must stand
+/// alone: the characters on either side may not be word- or path-like,
+/// so "/training" never matches inside "/training/foundations" or
+/// "foo/training". Longest path wins at any position.
+fn split_urls(text: &str, urls: &[&'static str]) -> Vec<Segment> {
+    /// The bytes of `rest` that `url` matches, or `None` if it doesn't
+    /// stand alone there. The trailing slash is optional on both sides.
+    fn match_len(rest: &str, url: &str) -> Option<usize> {
+        let bare = without_trailing_slash(url);
+        if !rest.starts_with(bare) {
+            return None;
+        }
+        let len = match rest.as_bytes().get(bare.len()) {
+            Some(b'/') => bare.len() + 1,
+            _ => bare.len(),
+        };
+        match rest.as_bytes().get(len) {
+            Some(&next) if word_like(next) => None,
+            _ => Some(len),
+        }
+    }
+
+    let mut ordered: Vec<&'static str> = urls.to_vec();
+    ordered.sort_by_key(|url| std::cmp::Reverse(url.len()));
+
+    // Destination URLs are ASCII, so byte offsets used for matching always
+    // land on character boundaries.
     let mut segments = Vec::new();
     let mut literal = String::new();
     let mut at = 0;
     while at < text.len() {
         let rest = &text[at..];
         let preceded_by_word = at > 0 && word_like(text.as_bytes()[at - 1]);
-        let hit = ordered.iter().find(|path| {
-            !preceded_by_word
-                && rest.starts_with(**path)
-                && !matches!(rest.as_bytes().get(path.len()), Some(&next) if word_like(next))
-        });
+        let hit = (!preceded_by_word)
+            .then(|| {
+                ordered
+                    .iter()
+                    .find_map(|url| match_len(rest, url).map(|len| (*url, len)))
+            })
+            .flatten();
         match hit {
-            Some(path) => {
+            // The canonical whitelist form is what gets linked, whichever
+            // form the model wrote.
+            Some((url, len)) => {
                 if !literal.is_empty() {
                     segments.push(Segment::Text(std::mem::take(&mut literal)));
                 }
-                segments.push(Segment::Path(path));
-                at += path.len();
+                segments.push(Segment::Url(url));
+                at += len;
             }
             None => {
                 let ch = rest.chars().next().expect("non-empty remainder");
@@ -241,9 +515,9 @@ fn split_paths(text: &str, paths: &[&'static str]) -> Vec<Segment> {
     segments
 }
 
-/// The anchor markup for a whitelisted destination path.
-fn path_anchor(path: &str) -> String {
-    format!(r#"<a href="{path}">{path}</a>"#)
+/// The anchor markup for a whitelisted destination URL.
+fn url_anchor(url: &str) -> String {
+    format!(r#"<a href="{url}">{url}</a>"#)
 }
 
 /// Render assistant output as sanitized HTML. Haiku emits light markdown
@@ -252,15 +526,15 @@ fn path_anchor(path: &str) -> String {
 /// terms:
 ///
 /// - raw HTML becomes escaped text (`push_html` escapes `Text` events);
-/// - markdown links are honored only when the destination is exactly a
-///   whitelisted path — any other link is unwrapped to its inner text, and
-///   images are dropped;
-/// - bare whitelisted paths in ordinary text become anchors;
+/// - markdown links are honored only when the destination is a whitelisted
+///   URL, up to a trailing slash — any other link is unwrapped to its inner
+///   text, and images are dropped;
+/// - bare whitelisted URLs in ordinary text become anchors;
 /// - soft line breaks render as real breaks, chat-style.
 ///
 /// This remains the only route from model output to markup, and it can only
 /// produce links to the curated destinations.
-pub fn render_assistant_html(text: &str, paths: &[&'static str]) -> String {
+pub fn render_assistant_html(text: &str, urls: &[&'static str]) -> String {
     use pulldown_cmark::{Event, LinkType, Parser, Tag, TagEnd};
 
     let mut events: Vec<Event> = Vec::new();
@@ -277,16 +551,16 @@ pub fn render_assistant_html(text: &str, paths: &[&'static str]) -> String {
             // Drop images entirely, alt text included.
             _ if image_depth > 0 => {}
             Event::Start(Tag::Link { dest_url, .. }) => {
-                let keep = paths.contains(&dest_url.as_ref());
-                if keep {
+                let target = whitelisted(&dest_url, urls);
+                if let Some(url) = target {
                     events.push(Event::Start(Tag::Link {
                         link_type: LinkType::Inline,
-                        dest_url,
+                        dest_url: url.into(),
                         title: "".into(),
                         id: "".into(),
                     }));
                 }
-                link_kept.push(keep);
+                link_kept.push(target.is_some());
             }
             Event::End(TagEnd::Link) => {
                 if link_kept.pop().unwrap_or(false) {
@@ -301,13 +575,13 @@ pub fn render_assistant_html(text: &str, paths: &[&'static str]) -> String {
                 code_depth -= 1;
                 events.push(Event::End(TagEnd::CodeBlock));
             }
-            // Linkify bare paths in ordinary text — not inside an existing
+            // Linkify bare URLs in ordinary text — not inside an existing
             // link or a code block.
             Event::Text(text) if link_kept.is_empty() && code_depth == 0 => {
-                for segment in split_paths(&text, paths) {
+                for segment in split_urls(&text, urls) {
                     match segment {
                         Segment::Text(literal) => events.push(Event::Text(literal.into())),
-                        Segment::Path(path) => events.push(Event::Html(path_anchor(path).into())),
+                        Segment::Url(url) => events.push(Event::Html(url_anchor(url).into())),
                     }
                 }
             }
@@ -332,12 +606,7 @@ pub fn render_assistant_html(text: &str, paths: &[&'static str]) -> String {
 pub async fn system_prompt() -> Result<String, Error> {
     let (topics, audiences, activities) = search::load_filter_options().await?;
     let common_tags = load_common_tags(&topics, &audiences, &activities).await?;
-    let destinations = available_destinations().await;
-
-    let destination_lines: String = destinations
-        .iter()
-        .map(|d| format!("- {} — {}\n", d.path, d.purpose))
-        .collect();
+    let sections = destination_sections(&available_destinations().await);
 
     Ok(format!(
         "You are Flower, the SciStarter concierge — a smart, loyal, playful, \
@@ -362,14 +631,29 @@ pub async fn system_prompt() -> Result<String, Error> {
          - Keywords should be one to three short words (every word must \
          match). If a search returns nothing, search again with different \
          or fewer keywords, or fewer filters.\n\
-         - Keep replies under 120 words, warm and encouraging.\n\
+         - Keep replies under 120 words — up to 180 when the reply includes \
+         a program-area note — warm and encouraging.\n\
          - Keep formatting simple: plain sentences, at most occasional bold \
          or a short bulleted list. No headings, tables, images, or links \
          other than the site paths below.\n\
          - Only use topics, audiences, and activities from the lists below.\n\
-         - When one of the site pages below fits the visitor — who they are \
-         or what they ask for — mention its path, exactly as written, and it \
-         will be shown as a clickable link.\n\
+         - When one of the pages below fits the visitor — who they are or \
+         what they ask for — write its address exactly as listed and it \
+         becomes a clickable link. A short site path like /finder reads fine \
+         on its own; write a longer https:// address as a markdown link with \
+         a few words of link text, [like this](https://example.org/page), so \
+         the reply stays readable.\n\
+         - When the visitor's interest falls in one of the program areas \
+         below, build the reply in this order: first a sentence or two of \
+         plain context about the subject itself (what is happening in it, \
+         why people care); then a sentence starting \"How this relates to \
+         SciStarter:\"; and only then the area's pages, each with a few \
+         words on what it offers.\n\
+         - That \"How this relates to SciStarter\" sentence must come from \
+         the area's note below and nothing else. Shorten it or reword it to \
+         fit, but never add, change, or guess at a partner, program, place, \
+         or number, and never write such a sentence for a subject with no \
+         note below.\n\
          - If the visitor asks where to begin: recommend the Foundations \
          training at /training/foundations unless their visitor context says \
          they completed it. If they completed it, point them to /dashboard \
@@ -379,14 +663,15 @@ pub async fn system_prompt() -> Result<String, Error> {
          - For anything unrelated to citizen science, gently point the \
          visitor to the project finder page instead.\n\
          \n\
-         Site pages:\n\
+         Program areas — SciStarter's own work, and the pages covering it:\n\
+         \n\
          {}\
          \n\
          Topics: {}\n\
          Audiences: {}\n\
          Activities: {}\n\
          Common project tags (these all work well as search keywords): {}\n",
-        destination_lines,
+        sections,
         topics.join(", "),
         audiences.join(", "),
         activities.join(", "),
@@ -827,14 +1112,63 @@ fn finder_url_for(query: &FinderQuery) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::render_assistant_html;
+    use super::{
+        DESTINATIONS, Destination, ProgramArea, destination_sections, render_assistant_html,
+    };
 
-    const PATHS: &[&str] = &["/finder", "/training", "/training/foundations"];
+    /// Every page in the whitelist reaches the prompt exactly once, under its
+    /// own area or under the general pages — a page that fell out of both
+    /// would silently stop being offered.
+    #[test]
+    fn every_destination_reaches_the_prompt() {
+        let all: Vec<&'static Destination> = DESTINATIONS.iter().collect();
+        let sections = destination_sections(&all);
+        for destination in DESTINATIONS {
+            assert_eq!(
+                sections
+                    .matches(&format!("- {} —", destination.url))
+                    .count(),
+                1,
+                "{} is missing from, or duplicated in, the prompt",
+                destination.url
+            );
+        }
+    }
+
+    /// An area's note is introduced once, above that area's pages.
+    #[test]
+    fn area_note_precedes_its_pages() {
+        let libraries: Vec<&'static Destination> = DESTINATIONS
+            .iter()
+            .filter(|d| d.area == Some(ProgramArea::Libraries))
+            .collect();
+        let sections = destination_sections(&libraries);
+        let note = sections
+            .find("How this relates to SciStarter:")
+            .expect("the area note");
+        assert!(sections[..note].starts_with("Libraries\n"));
+        assert!(sections[note..].contains("Pages:\n- /library —"));
+        assert_eq!(
+            sections.matches("How this relates to SciStarter:").count(),
+            1
+        );
+    }
+
+    /// An area with no reachable page takes its note out of the prompt with
+    /// it, so Flower never offers a claim it has nowhere to send anyone.
+    #[test]
+    fn unavailable_area_drops_its_note() {
+        let sections = destination_sections(&[]);
+        assert!(!sections.contains("How this relates to SciStarter:"));
+        assert_eq!(sections, "General site pages:\n");
+    }
+
+    const URLS: &[&str] = &["/finder", "/training", "/training/foundations"];
 
     #[test]
     fn wraps_whitelisted_path() {
         assert_eq!(
-            render_assistant_html("Try /finder for more.", PATHS),
+            render_assistant_html("Try /finder for more.", URLS),
             "<p>Try <a href=\"/finder\">/finder</a> for more.</p>\n"
         );
     }
@@ -842,7 +1176,7 @@ mod tests {
     #[test]
     fn matches_at_sentence_end() {
         assert_eq!(
-            render_assistant_html("Start at /finder.", PATHS),
+            render_assistant_html("Start at /finder.", URLS),
             "<p>Start at <a href=\"/finder\">/finder</a>.</p>\n"
         );
     }
@@ -850,15 +1184,93 @@ mod tests {
     #[test]
     fn longest_path_wins() {
         assert_eq!(
-            render_assistant_html("Go to /training/foundations first.", PATHS),
+            render_assistant_html("Go to /training/foundations first.", URLS),
             "<p>Go to <a href=\"/training/foundations\">/training/foundations</a> first.</p>\n"
+        );
+    }
+
+    /// An external destination is a whole absolute URL, and a shorter
+    /// whitelisted path inside it — "/library" within the host's own path —
+    /// must not be linkified separately.
+    #[test]
+    fn absolute_url_links_whole_and_not_in_pieces() {
+        const MIXED: &[&str] = &[
+            "/library",
+            "https://pages.scistarter.org/library-network-about/",
+        ];
+        assert_eq!(
+            render_assistant_html(
+                "See https://pages.scistarter.org/library-network-about/ for the network.",
+                MIXED
+            ),
+            "<p>See <a href=\"https://pages.scistarter.org/library-network-about/\">\
+             https://pages.scistarter.org/library-network-about/</a> for the network.</p>\n"
+        );
+    }
+
+    /// The WordPress destinations are canonically slash-terminated and the
+    /// model drops the slash freely; either form links, to the canonical URL.
+    #[test]
+    fn trailing_slash_is_optional_in_a_markdown_link() {
+        const WP: &[&str] = &["https://pages.scistarter.org/library-network-about/"];
+        let with_slash = render_assistant_html(
+            "[the network](https://pages.scistarter.org/library-network-about/)",
+            WP,
+        );
+        let without = render_assistant_html(
+            "[the network](https://pages.scistarter.org/library-network-about)",
+            WP,
+        );
+        assert_eq!(with_slash, without);
+        assert!(
+            with_slash.contains(
+                "<a href=\"https://pages.scistarter.org/library-network-about/\">the network</a>"
+            ),
+            "{with_slash}"
+        );
+    }
+
+    #[test]
+    fn trailing_slash_is_optional_in_bare_text() {
+        const URLS_WITH_SLASH: &[&str] = &["/training/"];
+        assert_eq!(
+            render_assistant_html("Start at /training today.", URLS_WITH_SLASH),
+            "<p>Start at <a href=\"/training/\">/training/</a> today.</p>\n"
+        );
+        assert_eq!(
+            render_assistant_html("Start at /training/ today.", URLS),
+            "<p>Start at <a href=\"/training\">/training</a> today.</p>\n"
+        );
+    }
+
+    /// An optional trailing slash must not let a URL swallow a longer
+    /// sibling's path segment.
+    #[test]
+    fn optional_slash_does_not_match_a_longer_path() {
+        assert_eq!(
+            render_assistant_html("See /training/foundations now.", URLS),
+            "<p>See <a href=\"/training/foundations\">/training/foundations</a> now.</p>\n"
+        );
+        const SHORT: &[&str] = &["/training"];
+        assert_eq!(
+            render_assistant_html("See /training/foundations now.", SHORT),
+            "<p>See /training/foundations now.</p>\n"
+        );
+    }
+
+    #[test]
+    fn hyphenated_sibling_wins_over_its_prefix() {
+        const SIBLINGS: &[&str] = &["/library", "/library-kits"];
+        assert_eq!(
+            render_assistant_html("Browse /library-kits today.", SIBLINGS),
+            "<p>Browse <a href=\"/library-kits\">/library-kits</a> today.</p>\n"
         );
     }
 
     #[test]
     fn shorter_prefix_still_matches_alone() {
         assert_eq!(
-            render_assistant_html("See /training today", PATHS),
+            render_assistant_html("See /training today", URLS),
             "<p>See <a href=\"/training\">/training</a> today</p>\n"
         );
     }
@@ -866,11 +1278,11 @@ mod tests {
     #[test]
     fn ignores_path_inside_longer_word() {
         assert_eq!(
-            render_assistant_html("visit foo/finder now", PATHS),
+            render_assistant_html("visit foo/finder now", URLS),
             "<p>visit foo/finder now</p>\n"
         );
         assert_eq!(
-            render_assistant_html("visit /finderama now", PATHS),
+            render_assistant_html("visit /finderama now", URLS),
             "<p>visit /finderama now</p>\n"
         );
     }
@@ -878,7 +1290,7 @@ mod tests {
     #[test]
     fn ignores_unlisted_paths() {
         assert_eq!(
-            render_assistant_html("go to /secret-admin", PATHS),
+            render_assistant_html("go to /secret-admin", URLS),
             "<p>go to /secret-admin</p>\n"
         );
     }
@@ -886,7 +1298,7 @@ mod tests {
     #[test]
     fn escapes_raw_html() {
         assert_eq!(
-            render_assistant_html("<b>bold</b> & /finder", PATHS),
+            render_assistant_html("<b>bold</b> & /finder", URLS),
             "<p>&lt;b&gt;bold&lt;/b&gt; &amp; <a href=\"/finder\">/finder</a></p>\n"
         );
     }
@@ -894,7 +1306,7 @@ mod tests {
     #[test]
     fn handles_multibyte_text() {
         assert_eq!(
-            render_assistant_html("🐾 /finder — allons-y!", PATHS),
+            render_assistant_html("🐾 /finder — allons-y!", URLS),
             "<p>🐾 <a href=\"/finder\">/finder</a> — allons-y!</p>\n"
         );
     }
@@ -902,28 +1314,28 @@ mod tests {
     #[test]
     fn renders_markdown_emphasis() {
         assert_eq!(
-            render_assistant_html("a **great** fit", PATHS),
+            render_assistant_html("a **great** fit", URLS),
             "<p>a <strong>great</strong> fit</p>\n"
         );
     }
 
     #[test]
     fn renders_markdown_list() {
-        let html = render_assistant_html("Ideas:\n- one\n- two", PATHS);
+        let html = render_assistant_html("Ideas:\n- one\n- two", URLS);
         assert!(html.contains("<ul>"), "{html}");
         assert!(html.contains("<li>one</li>"), "{html}");
     }
 
     #[test]
     fn soft_newline_becomes_break() {
-        let html = render_assistant_html("line one\nline two", PATHS);
+        let html = render_assistant_html("line one\nline two", URLS);
         assert!(html.contains("<br"), "{html}");
     }
 
     #[test]
     fn keeps_markdown_link_to_whitelisted_path() {
         assert_eq!(
-            render_assistant_html("Browse [the finder](/finder) now.", PATHS),
+            render_assistant_html("Browse [the finder](/finder) now.", URLS),
             "<p>Browse <a href=\"/finder\">the finder</a> now.</p>\n"
         );
     }
@@ -931,7 +1343,7 @@ mod tests {
     #[test]
     fn unwraps_markdown_link_to_foreign_target() {
         assert_eq!(
-            render_assistant_html("Never [click here](https://evil.example.com).", PATHS),
+            render_assistant_html("Never [click here](https://evil.example.com).", URLS),
             "<p>Never click here.</p>\n"
         );
     }
@@ -941,7 +1353,7 @@ mod tests {
         assert_eq!(
             render_assistant_html(
                 "look ![alt text](https://evil.example.com/x.png) here",
-                PATHS
+                URLS
             ),
             "<p>look  here</p>\n"
         );
@@ -949,7 +1361,7 @@ mod tests {
 
     #[test]
     fn leaves_code_spans_and_blocks_alone() {
-        let html = render_assistant_html("run `/finder` or:\n\n    /finder\n", PATHS);
+        let html = render_assistant_html("run `/finder` or:\n\n    /finder\n", URLS);
         assert!(!html.contains("<a "), "{html}");
     }
 }
