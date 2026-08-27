@@ -37,6 +37,14 @@ pub struct RequestUrl {
 
 pub struct Context {
     mode: ContextMode,
+    /// Whether this render is baking a component into a target's source
+    /// rather than serving a page to a reader.
+    ///
+    /// Deliberately not a third [`ContextMode`]: composing is not another
+    /// kind of presentation, and making it a variant would change what every
+    /// existing `mode()` comparison means. Only a `{$! ... $}` directive asks
+    /// this question, and everything else renders exactly as it always did.
+    composing: bool,
     parent: Option<Arc<Context>>,
     db: &'static SqlitePool,
     user: Option<Arc<BasicInfo>>,
@@ -53,6 +61,7 @@ impl Context {
     ) -> Result<Arc<Context>, Error> {
         let ctx = Context {
             mode,
+            composing: false,
             parent: None,
             db,
             user: user.clone(),
@@ -73,6 +82,7 @@ impl Context {
     pub fn from_parent(parent: &Arc<Context>) -> Result<Arc<Context>, Error> {
         let ctx = Context {
             mode: parent.mode,
+            composing: parent.composing,
             parent: Some(parent.clone()),
             db: parent.db,
             user: parent.user.clone(),
@@ -83,8 +93,32 @@ impl Context {
         Ok(Arc::new(ctx))
     }
 
+    /// A context for composing a component into a target's source.
+    ///
+    /// Renders as `Presenting` does in every respect but one: a `{$! ... $}`
+    /// directive writes itself back out instead of running, so it survives
+    /// this placement and every later one, and runs when a reader is served.
+    pub fn composing(db: &'static SqlitePool) -> Result<Arc<Context>, Error> {
+        let ctx = Context::new(db, &None, ContextMode::Presenting)?;
+
+        // Safe to reach through the Arc: it was made here and has not been
+        // handed to anyone yet.
+        Arc::into_inner(ctx)
+            .map(|mut ctx| {
+                ctx.composing = true;
+                Arc::new(ctx)
+            })
+            .ok_or_else(|| anyhow::anyhow!("composing context was shared before it was configured"))
+    }
+
     pub fn mode(&self) -> ContextMode {
         self.mode
+    }
+
+    /// Whether a `{$! ... $}` directive should write itself back out rather
+    /// than run. See the field, and [`Context::composing`].
+    pub fn is_composing(&self) -> bool {
+        self.composing
     }
 
     pub fn db(&self) -> &'static SqlitePool {

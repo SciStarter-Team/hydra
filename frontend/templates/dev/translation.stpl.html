@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="<%= self.lang.code() %>">
+  <head>
+    <%+ Head::default() %>
+    <title>Translation</title>
+  </head>
+  <body>
+    <%+ self.header %>
+
+    <main style="max-width: 40rem; margin: 2rem auto; padding: 0 1rem">
+      <h1>Translation</h1>
+
+      <p>
+        Every phrase below is translated by the template itself, at render
+        time, with no database access and nothing threaded in from the
+        handler. Anything without a translation shows its English, and has
+        added itself to
+        <a href="/-admin/translations">the admin list</a>.
+      </p>
+
+      <p>Serving this page in: <b><%= self.lang.endonym() %></b>
+        (<%= self.lang.code() %>).
+        <% for lang in crate::i18n::Lang::ALL { %>
+          <a href="?lang=<%= lang.code() %>"><%= lang.endonym() %></a>
+        <% } %>
+        <a href="?lang=<%= crate::middleware::language::LANG_DEFAULT %>"><%= crate::i18n::tr("Use my browser's setting") %></a>
+      </p>
+
+      <hr>
+
+      <p><%= crate::i18n::tr("Find a project that needs your help.") %></p>
+
+      <p><%= crate::i18n::tr("Science needs more eyes, ears, and perspectives than any group of scientists could ever have. Volunteers like you make research possible.") %></p>
+
+      <p>
+        <%= crate::i18n::tr("Welcome back, {name}.").replace("{name}", &self.name) %>
+        <br>
+        <small>One phrase however many people read it: the name is substituted after translating.</small>
+      </p>
+
+      <p>
+        <b><%= crate::i18n::tr_ctx("verb", "Open") %></b> and
+        <b><%= crate::i18n::tr_ctx("adjective", "Open") %></b>
+        are the same English word kept apart by context, so they can be
+        translated differently.
+      </p>
+    </main>
+
+    <%+ self.footer %>
+  </body>
+</html>

@@ -110,6 +110,43 @@ enum Node {
         name: String,
         params: SmallVec<[(String, String); 4]>,
     },
+    /// Authored copy, translated into the language of the request
+    ///
+    /// The page-builder counterpart of Sailfish's `crate::i18n::tr`: the
+    /// phrase is written here, in the template, and translated where every
+    /// other phrase is, in the admin.
+    ///
+    /// Like a widget, this has to run per request rather than once, so in a
+    /// **component** it wants the `^` escape --  `{$^ tr "..." $}` -- which
+    /// bakes down to `{$ tr "..." $}` in the page source and translates
+    /// afresh for each reader. Written without the escape it would be
+    /// translated into whatever language the person placing the component
+    /// happened to be reading, and frozen there. A page's own source is not
+    /// baked, so it can say `{$ tr "..." $}` directly.
+    Tr {
+        /// Empty unless these words need a different translation here than
+        /// they get elsewhere.
+        context: String,
+        source: String,
+    },
+    /// A directive that runs when the page is viewed, whatever placements the
+    /// source holding it passes through first
+    ///
+    /// `tr` and `widget` have to run per reader, but a component's source is
+    /// rendered every time the component is placed. The `^` escape can carry
+    /// a directive through a placement, but it counts down, so an author
+    /// would have to know how deeply their component will be nested -- which,
+    /// for a reusable component, is not knowable, and is not a choice they
+    /// have. `{$! ... $}` means the same thing at every depth: while a
+    /// component is being composed it writes itself back out unchanged, and
+    /// it runs only once a reader is being served.
+    Deferred {
+        /// The directive exactly as written, re-emitted byte for byte during
+        /// composition, so surviving a placement needs no serializer and
+        /// cannot mangle what the author typed.
+        raw: Vec<u8>,
+        node: Box<Node>,
+    },
 }
 
 impl CompiledTemplate {
@@ -150,6 +187,24 @@ impl CompiledTemplate {
         result
     }
 
+    /// Every phrase this template translates as it renders.
+    ///
+    /// A page wants exactly that. A component does not: placing a component
+    /// renders it once and splices the result into the page source, so a
+    /// phrase translated there is frozen in whatever language the person
+    /// placing it was reading. A component writes `{$^ tr "..." $}` instead,
+    /// which survives placement as a directive and so is not reported here.
+    ///
+    /// See [`crate::pagebuilder::PageBuilderComponent::check_source`], which
+    /// is what turns a non-empty answer into a refusal.
+    pub fn translated_phrases(&self) -> Vec<&str> {
+        let mut phrases = Vec::new();
+
+        collect_translated_phrases(&self.nodes, &mut phrases);
+
+        phrases
+    }
+
     /// Extract all parameter definitions from the template
     /// Parameters must appear at the start of the template before any other content
     pub fn extract_params(&self) -> Vec<ParamDef> {
@@ -165,6 +220,37 @@ impl CompiledTemplate {
             }
         }
         params
+    }
+}
+
+/// Recursively collect what [`Node::Tr`] nodes would translate.
+///
+/// Every variant is named rather than swept up by a wildcard, so a node type
+/// that gains a body has to say here whether phrases can hide inside it.
+fn collect_translated_phrases<'a>(nodes: &'a [Node], phrases: &mut Vec<&'a str>) {
+    for node in nodes {
+        match node {
+            Node::Tr { source, .. } => phrases.push(source),
+            Node::If { branches } => {
+                for (_condition, body) in branches {
+                    collect_translated_phrases(body, phrases);
+                }
+            }
+            Node::Each { body, .. } | Node::Times { body, .. } | Node::Slot { body, .. } => {
+                collect_translated_phrases(body, phrases);
+            }
+            // Deliberately not followed: a deferred phrase survives
+            // placement and translates for each reader, which is exactly
+            // what a component should be doing.
+            Node::Deferred { .. } => {}
+            Node::Text(_)
+            | Node::Literal(_)
+            | Node::RenderEscaped(_)
+            | Node::RenderRaw(_)
+            | Node::Use { .. }
+            | Node::Widget { .. }
+            | Node::Param(_) => {}
+        }
     }
 }
 
@@ -231,6 +317,12 @@ fn extract_vars_from_nodes(
             // this node — anything variable about them was interpolated when
             // the component was placed — so it references no variables.
             Node::Widget { .. } => {}
+            // A phrase is a literal, so it references no variables either.
+            Node::Tr { .. } => {}
+            // Deferring changes when a directive runs, not what it names.
+            Node::Deferred { node, .. } => {
+                extract_vars_from_nodes(std::slice::from_ref(&**node), vars, bound_vars);
+            }
             Node::Param(_) => {
                 // Param declarations don't reference variables
             }
@@ -294,6 +386,17 @@ enum Item<'a> {
         name: &'a str,
         params: Vec<(&'a str, String)>,
     },
+    /// {$ tr "phrase" [context="..."] $} - authored copy to translate
+    Tr {
+        context: Option<String>,
+        source: String,
+    },
+    /// {$! ... $} - a directive to run when the page is viewed
+    Deferred {
+        /// The whole token, `{$!` and `$}` included.
+        raw: &'a [u8],
+        item: Box<Item<'a>>,
+    },
     /// {$ param name [label="Label" default="value" description="Help" type="textarea"] $}
     /// The default is an Expression (variable lookups are rejected during parsing)
     Param {
@@ -303,6 +406,38 @@ enum Item<'a> {
         description: Option<&'a str>,
         input_type: ParamInputType,
     },
+}
+
+/// The node an item that stands on its own becomes.
+///
+/// Only these can be deferred. A block construct's body lives in the tokens
+/// that follow it, which the `{$! ... $}` token does not take in, so deferring
+/// one would preserve the opener and leave the body to be baked -- which is
+/// worse than refusing.
+fn self_contained_node(item: Item<'_>) -> Result<Node, Error> {
+    match item {
+        Item::Tr { context, source } => Ok(Node::Tr {
+            context: context.unwrap_or_default(),
+            source,
+        }),
+        Item::Widget { name, params } => Ok(Node::Widget {
+            name: name.to_string(),
+            params: params
+                .into_iter()
+                .map(|(key, value)| (key.to_string(), value))
+                .collect(),
+        }),
+        Item::Use { name, args } => Ok(Node::Use {
+            name: name.to_string(),
+            args: args.iter().map(|s| s.to_string()).collect(),
+        }),
+        Item::RenderEscaped(expr) => Ok(Node::RenderEscaped(expr)),
+        Item::RenderRaw(expr) => Ok(Node::RenderRaw(expr)),
+        _ => Err(anyhow!(
+            "{{$! ... $}} can only defer a directive that stands on its own: \
+             tr, widget, use, {{$= $}} or {{$- $}}"
+        )),
+    }
 }
 
 /// Parse the content of an item token (between {$ and $})
@@ -320,8 +455,26 @@ fn parse_item(raw: &[u8]) -> Result<Item<'_>, Error> {
         return Ok(Item::Literal(&raw[3..raw.len()]));
     }
 
+    // `!` defers a directive to view time. Unlike `^` it does not count down
+    // -- it means the same thing however many placements the source it sits
+    // in goes through -- so the whole token is kept to re-emit verbatim.
+    if !inner.is_empty() && inner[0] == b'!' {
+        let deferred = std::str::from_utf8(&inner[1..])?.trim();
+
+        return Ok(Item::Deferred {
+            raw,
+            item: Box::new(parse_directive(deferred)?),
+        });
+    }
+
     let inner_str = std::str::from_utf8(inner)?.trim();
 
+    parse_directive(inner_str)
+}
+
+/// Parse a directive, which is an item with its `{$`, `$}` and any `^` or `!`
+/// prefix already taken off.
+fn parse_directive(inner_str: &str) -> Result<Item<'_>, Error> {
     // Check for value rendering
     if let Some(expr_str) = inner_str.strip_prefix('=') {
         let expr = Expression::parse(expr_str.trim())?;
@@ -407,6 +560,14 @@ fn parse_item(raw: &[u8]) -> Result<Item<'_>, Error> {
         return Err(anyhow!("widget requires a name"));
     }
 
+    if let Some(rest) = inner_str.strip_prefix("tr ") {
+        return parse_tr_item(rest.trim());
+    }
+
+    if inner_str == "tr" {
+        return Err(anyhow!("tr requires a phrase"));
+    }
+
     if let Some(rest) = inner_str.strip_prefix("param ") {
         return parse_param_item(rest.trim());
     }
@@ -463,6 +624,30 @@ fn parse_widget_item(rest: &str) -> Result<Item<'_>, Error> {
         .collect();
 
     Ok(Item::Widget { name, params })
+}
+
+/// Parse tr item: `"phrase" [context="..."]`
+///
+/// The phrase is quoted because it is a whole sentence far more often than a
+/// word, and an unquoted one would end at the first space.
+fn parse_tr_item(rest: &str) -> Result<Item<'_>, Error> {
+    use super::parse::{parse_attributes_only, parse_quoted, unescape_value};
+
+    let (source, rest) = parse_quoted(rest)
+        .ok_or_else(|| anyhow!(r#"tr requires a quoted phrase, as {{$ tr "Some text" $}}"#))?;
+
+    let mut context = None;
+
+    for attr in parse_attributes_only(rest) {
+        match attr.key {
+            "context" => context = Some(unescape_value(attr.value)),
+            // Not silently ignored: a misspelled `context` would quietly
+            // become a different phrase from the one being translated.
+            other => return Err(anyhow!("Unknown tr attribute: {}", other)),
+        }
+    }
+
+    Ok(Item::Tr { context, source })
 }
 
 /// Parsed param attribute value
@@ -698,6 +883,20 @@ fn parse_nodes(
                                 .into_iter()
                                 .map(|(key, value)| (key.to_string(), value))
                                 .collect(),
+                        });
+                        i += 1;
+                    }
+                    Item::Tr { context, source } => {
+                        nodes.push(Node::Tr {
+                            context: context.unwrap_or_default(),
+                            source,
+                        });
+                        i += 1;
+                    }
+                    Item::Deferred { raw, item } => {
+                        nodes.push(Node::Deferred {
+                            raw: raw.to_vec(),
+                            node: Box::new(self_contained_node(*item)?),
                         });
                         i += 1;
                     }
@@ -1233,6 +1432,27 @@ fn render_nodes<'a>(
 
                     buffer.extend_from_slice(html.as_bytes());
                 }
+                Node::Deferred { raw, node } => {
+                    if ctx.is_composing() {
+                        // Being baked into a target's source. Write the
+                        // directive back out as the author wrote it, so it
+                        // survives this placement and every later one.
+                        buffer.extend_from_slice(raw);
+                    } else {
+                        render_nodes(ctx, std::slice::from_ref(&**node), buffer).await?;
+                    }
+                }
+                Node::Tr { context, source } => {
+                    // Written out raw, like the markup it sits among. Both
+                    // the phrase and its translation are staff-authored --
+                    // one here, one in the admin -- so this is the same
+                    // trust as the rest of the template, and escaping would
+                    // break the inline links and emphasis that authored copy
+                    // routinely carries.
+                    let translated = crate::i18n::tr_content(context, source);
+
+                    buffer.extend_from_slice(translated.as_bytes());
+                }
             }
         }
         Ok(())
@@ -1280,6 +1500,12 @@ mod tests {
     }
 
     /// Create a test context in editing mode
+    /// A context that bakes a component into a target's source, which is
+    /// what `{$! ... $}` exists to survive.
+    async fn test_ctx_composing() -> Arc<Context> {
+        Context::composing(test_db().await).unwrap()
+    }
+
     async fn test_ctx_editing() -> Arc<Context> {
         Context::new(test_db().await, &None, ContextMode::Editing).unwrap()
     }
@@ -1384,6 +1610,240 @@ mod tests {
     #[test]
     fn a_widget_needs_a_name() {
         check!(CompiledTemplate::compile("{$ widget $}").is_err());
+    }
+
+    /// Spelled out here and nowhere else, because installing it puts it in
+    /// the process-wide catalog where every other test can see it.
+    const PHRASE: &str = "A phrase belonging to the page-builder tr tests.";
+
+    /// The same phrase in Spanish, and again under a context, ready to be
+    /// looked up by a template.
+    fn install_translations() {
+        let mut plain = crate::i18n::Phrase::new("", PHRASE, crate::i18n::Origin::Content);
+        plain
+            .translations
+            .insert(String::from("es"), String::from("Sin contexto."));
+        crate::i18n::install_for_test(&plain);
+
+        let mut shouted = crate::i18n::Phrase::new("shouted", PHRASE, crate::i18n::Origin::Content);
+        shouted
+            .translations
+            .insert(String::from("es"), String::from("¡CON CONTEXTO!"));
+        crate::i18n::install_for_test(&shouted);
+    }
+
+    /// Nothing to translate into has to leave the page saying something, in
+    /// the language the phrase was written in.
+    #[tokio::test]
+    async fn an_untranslated_phrase_renders_as_written() {
+        let ctx = test_ctx().await;
+        let template =
+            CompiledTemplate::compile(r#"{$ tr "No translation exists for this." $}"#).unwrap();
+
+        let rendered = crate::i18n::with_lang(crate::i18n::Lang::Es, template.render(&ctx)).await;
+
+        check!(rendered.unwrap() == "No translation exists for this.");
+    }
+
+    #[tokio::test]
+    async fn a_translated_phrase_renders_in_the_reader_s_language() {
+        install_translations();
+
+        let ctx = test_ctx().await;
+        let template = CompiledTemplate::compile(&format!(r#"{{$ tr "{PHRASE}" $}}"#)).unwrap();
+
+        let rendered = crate::i18n::with_lang(crate::i18n::Lang::Es, template.render(&ctx)).await;
+
+        check!(rendered.unwrap() == "Sin contexto.");
+    }
+
+    /// English is what the phrase is already written in, so a reader of it
+    /// sees the template's own words even when translations exist.
+    #[tokio::test]
+    async fn an_english_reader_sees_the_phrase_as_written() {
+        install_translations();
+
+        let ctx = test_ctx().await;
+        let template = CompiledTemplate::compile(&format!(r#"{{$ tr "{PHRASE}" $}}"#)).unwrap();
+
+        let rendered = crate::i18n::with_lang(crate::i18n::Lang::En, template.render(&ctx)).await;
+
+        check!(rendered.unwrap() == PHRASE);
+    }
+
+    #[tokio::test]
+    async fn a_context_selects_its_own_translation() {
+        install_translations();
+
+        let ctx = test_ctx().await;
+        let template =
+            CompiledTemplate::compile(&format!(r#"{{$ tr "{PHRASE}" context="shouted" $}}"#))
+                .unwrap();
+
+        let rendered = crate::i18n::with_lang(crate::i18n::Lang::Es, template.render(&ctx)).await;
+
+        check!(rendered.unwrap() == "¡CON CONTEXTO!");
+    }
+
+    /// Authored copy carries links and emphasis, and a translation of it is
+    /// written by the same staff who wrote the phrase, so it goes out as
+    /// markup rather than as escaped text. Delimiting the phrase with single
+    /// quotes keeps the attribute quotes inside it readable.
+    #[tokio::test]
+    async fn a_phrase_is_rendered_as_markup() {
+        let ctx = test_ctx().await;
+        let template =
+            CompiledTemplate::compile(r#"{$ tr 'Read <a href="/about">about us</a>.' $}"#).unwrap();
+
+        check!(template.render(&ctx).await.unwrap() == r#"Read <a href="/about">about us</a>."#);
+    }
+
+    /// The other way round: a phrase delimited by the quote it contains has
+    /// to escape it, exactly as an attribute value does.
+    #[tokio::test]
+    async fn a_phrase_may_escape_its_own_delimiter() {
+        let ctx = test_ctx().await;
+        let template =
+            CompiledTemplate::compile(r#"{$ tr "They call it \"citizen science\"." $}"#).unwrap();
+
+        check!(template.render(&ctx).await.unwrap() == r#"They call it "citizen science"."#);
+    }
+
+    #[test]
+    fn a_phrase_has_to_be_quoted() {
+        // Unquoted, the phrase would end at the first space.
+        check!(CompiledTemplate::compile("{$ tr Some text $}").is_err());
+        check!(CompiledTemplate::compile("{$ tr $}").is_err());
+        check!(CompiledTemplate::compile(r#"{$ tr "never closed $}"#).is_err());
+    }
+
+    /// A misspelled `context` would silently translate a different phrase
+    /// than the one the author meant, so it is refused instead.
+    #[test]
+    fn an_unknown_attribute_is_refused() {
+        check!(CompiledTemplate::compile(r#"{$ tr "Hello" contxt="verb" $}"#).is_err());
+    }
+
+    /// Composition writes the directive back out exactly as written, so what
+    /// lands in the target is still a directive rather than one language's
+    /// worth of frozen text.
+    #[tokio::test]
+    async fn a_deferred_phrase_is_written_back_out_while_composing() {
+        install_translations();
+
+        let ctx = test_ctx_composing().await;
+        let source = format!(r#"<p>{{$! tr "{PHRASE}" $}}</p>"#);
+
+        let composed = crate::i18n::with_lang(
+            crate::i18n::Lang::Es,
+            CompiledTemplate::compile(&source).unwrap().render(&ctx),
+        )
+        .await
+        .unwrap();
+
+        check!(composed == source);
+    }
+
+    /// The whole point of `!` over `^`: it does not count down, so it means
+    /// the same thing however deeply a component ends up nested -- which its
+    /// author cannot know and does not get to choose.
+    #[tokio::test]
+    async fn a_deferred_phrase_survives_placement_at_any_depth() {
+        let ctx = test_ctx_composing().await;
+        let source = format!(r#"{{$! tr "{PHRASE}" $}}"#);
+        let mut carried = source.clone();
+
+        // Placed into a component, that component into another, and so on.
+        for _ in 0..4 {
+            carried = CompiledTemplate::compile(&carried)
+                .unwrap()
+                .render(&ctx)
+                .await
+                .unwrap();
+
+            check!(carried == source);
+            // And a component is entitled to hold it at every step.
+            check!(crate::pagebuilder::PageBuilderComponent::check_source(&carried).is_ok());
+        }
+    }
+
+    /// Having survived all of that, it still has to translate for a reader.
+    #[tokio::test]
+    async fn a_deferred_phrase_translates_when_a_reader_is_served() {
+        install_translations();
+
+        let composing = test_ctx_composing().await;
+        let placed = CompiledTemplate::compile(&format!(r#"{{$! tr "{PHRASE}" $}}"#))
+            .unwrap()
+            .render(&composing)
+            .await
+            .unwrap();
+
+        let viewing = test_ctx().await;
+        let rendered = crate::i18n::with_lang(
+            crate::i18n::Lang::Es,
+            CompiledTemplate::compile(&placed).unwrap().render(&viewing),
+        )
+        .await
+        .unwrap();
+
+        check!(rendered == "Sin contexto.");
+    }
+
+    /// A widget defers for the same reason a phrase does, and `!` says so
+    /// without the author counting placements.
+    #[tokio::test]
+    async fn a_deferred_widget_survives_composition_and_then_runs() {
+        let composing = test_ctx_composing().await;
+        let source = r#"{$! widget test_echo greeting="hello" $}"#;
+
+        let placed = CompiledTemplate::compile(source)
+            .unwrap()
+            .render(&composing)
+            .await
+            .unwrap();
+
+        check!(placed == source);
+
+        let viewing = test_ctx().await;
+        let rendered = CompiledTemplate::compile(&placed)
+            .unwrap()
+            .render(&viewing)
+            .await
+            .unwrap();
+
+        check!(rendered == "[hello]");
+    }
+
+    /// Deferring only makes sense for a directive that stands on its own: a
+    /// block's body is in the tokens after it, which this token does not take
+    /// in, so the opener would survive and the body would be baked anyway.
+    #[test]
+    fn only_a_self_contained_directive_can_be_deferred() {
+        for source in [
+            r#"{$! if flag $}x{$ /if $}"#,
+            r#"{$! each item in items $}x{$ /each $}"#,
+            r#"{$! slot main $}{$ /slot $}"#,
+            r#"{$! times 3 $}x{$ /times $}"#,
+        ] {
+            let refused = CompiledTemplate::compile(source).is_err();
+
+            check!(refused, "should have been refused: {source}");
+        }
+    }
+
+    /// Nothing about `!` changes what happens when a reader is served
+    /// directly, which is what a page's own source always is.
+    #[tokio::test]
+    async fn a_deferred_phrase_in_a_page_translates_straight_away() {
+        install_translations();
+
+        let ctx = test_ctx().await;
+        let template = CompiledTemplate::compile(&format!(r#"{{$! tr "{PHRASE}" $}}"#)).unwrap();
+
+        let rendered = crate::i18n::with_lang(crate::i18n::Lang::Es, template.render(&ctx)).await;
+
+        check!(rendered.unwrap() == "Sin contexto.");
     }
 
     #[test]

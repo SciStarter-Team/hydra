@@ -237,13 +237,12 @@ async fn pb_components_create(
     Authenticated(user_info): Authenticated,
     poem::web::Form(form_data): poem::web::Form<PbComponentFormData>,
 ) -> Result<poem::Response, anyhow::Error> {
-    use crate::builder::render::CompiledTemplate;
     use crate::peering::LoadStorePeered;
 
     let _user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
 
-    // Validate template syntax before saving
-    if let Err(e) = CompiledTemplate::compile(&form_data.source) {
+    // Syntax, and the rules a component in particular has to keep.
+    if let Err(e) = crate::pagebuilder::PageBuilderComponent::check_source(&form_data.source) {
         let error = PbFormError {
             message: e.to_string(),
         };
@@ -315,13 +314,12 @@ async fn pb_components_update(
     Path(id): Path<String>,
     poem::web::Form(form_data): poem::web::Form<PbComponentFormData>,
 ) -> Result<poem::Response, anyhow::Error> {
-    use crate::builder::render::CompiledTemplate;
     use crate::peering::LoadStorePeered;
 
     let _user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
 
-    // Validate template syntax before saving
-    if let Err(e) = CompiledTemplate::compile(&form_data.source) {
+    // Syntax, and the rules a component in particular has to keep.
+    if let Err(e) = crate::pagebuilder::PageBuilderComponent::check_source(&form_data.source) {
         let error = PbFormError {
             message: e.to_string(),
         };

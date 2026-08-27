@@ -1,8 +1,8 @@
 <!doctype html>
-<html>
+<html lang="<%= crate::i18n::current_lang().code() %>">
   <head>
     <%+ self.head %>
-    <title>Log In or Sign Up</title>
+    <title><%= crate::i18n::tr("Log In or Sign Up") %></title>
   </head>
   <%+ self.layout %>
 </html>

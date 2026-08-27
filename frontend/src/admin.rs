@@ -25,6 +25,7 @@ pub mod schedules;
 pub mod sets;
 pub mod staff_picks;
 pub mod trainings;
+pub mod translations;
 pub mod types;
 pub mod users;
 pub mod webinars;
@@ -104,6 +105,8 @@ pub fn routes() -> impl Endpoint {
         .nest("/mcp-tokens", mcp_tokens::routes())
         // Training-page text content (shown under Engine Room in the sidebar)
         .nest("/trainings", trainings::routes())
+        // Translations of displayed text
+        .nest("/translations", translations::routes())
         // API endpoints for recipient search (used by badge granting)
         .at("/api/recipient-search", get(api_recipient_search))
         .at("/api/recipient-select", post(api_recipient_select))

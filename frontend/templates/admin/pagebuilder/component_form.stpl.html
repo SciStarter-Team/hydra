@@ -120,6 +120,27 @@
 {$ /times $}</pre>
                             <p class="mt-2 text-xs text-gray-500">The number of <code class="bg-gray-100 px-1 rounded">*</code> must match the number of <code class="bg-gray-100 px-1 rounded">^</code> for interpolation.</p>
                         </div>
+
+                        <div>
+                            <h4 class="font-medium text-gray-900 mb-1">Translation</h4>
+                            <p class="text-gray-600 mb-2">Wrap wording in <code class="bg-gray-100 px-1 rounded">tr</code> and it appears under <a href="/-admin/translations" class="text-indigo-600 hover:text-indigo-900">Translations</a> to be translated. Until someone translates it, readers see it exactly as written here. The phrase must be quoted, and it goes out as markup, so a link inside it can stay part of the sentence.</p>
+                            <pre class="bg-gray-800 text-gray-100 p-3 rounded text-xs overflow-x-auto">{$! tr "Find a project that needs your help." $}
+
+<%# Single quotes, so the markup inside keeps its own: %>
+{$! tr 'Read &lt;a href="/about"&gt;about us&lt;/a&gt;.' $}
+
+<%# Same words, different meaning somewhere else: %>
+{$! tr "Open" context="verb" $}</pre>
+                            <p class="mt-2 text-xs text-gray-500">Note the <code class="bg-gray-100 px-1 rounded">!</code>, which means &ldquo;run this when the page is viewed.&rdquo; Placing a component renders it, so without the <code class="bg-gray-100 px-1 rounded">!</code> the phrase would be translated once and frozen into whichever language <em>you</em> were reading. Unlike <code class="bg-gray-100 px-1 rounded">^</code>, it does not need counting: it means the same thing however deeply this component is placed inside others. Saving a component that leaves it out is refused. <code class="bg-gray-100 px-1 rounded">{$! widget ... $}</code> works the same way, and for the same reason.</p>
+                        </div>
+
+                        <div>
+                            <h4 class="font-medium text-gray-900 mb-1">Run At View Time</h4>
+                            <p class="text-gray-600 mb-2">Some directives have to run for each reader rather than once, when the component is placed. Mark those with <code class="bg-gray-100 px-1 rounded">!</code>.</p>
+                            <pre class="bg-gray-800 text-gray-100 p-3 rounded text-xs overflow-x-auto">{$! tr "Translated for whoever is reading." $}
+{$! widget webinar_list groups="upcoming" $}</pre>
+                            <p class="mt-2 text-xs text-gray-500">This is not the same as <code class="bg-gray-100 px-1 rounded">^</code>. <code class="bg-gray-100 px-1 rounded">^</code> is a choice about <em>when</em> to run something that could legitimately run at either time, and it counts down by one for each placement. <code class="bg-gray-100 px-1 rounded">!</code> is for things with only one right answer, so it never counts down and never needs adjusting for how a component is used. It applies to a directive that stands on its own, not to a block like <code class="bg-gray-100 px-1 rounded">if</code> or <code class="bg-gray-100 px-1 rounded">each</code>.</p>
+                        </div>
                     </div>
                 </details>
                 <textarea id="source"

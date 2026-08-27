@@ -1,0 +1,109 @@
+<div class="bg-white rounded-lg shadow border border-gray-200">
+    <div class="px-6 py-4 border-b border-gray-200 flex items-start justify-between gap-4">
+        <div>
+            <h3 class="text-lg font-medium text-gray-900">Translations</h3>
+            <p class="mt-1 text-sm text-gray-500">
+                Phrases add themselves here the first time the site displays them. Anything
+                left untranslated is shown in English, so nothing breaks while the work is
+                outstanding.
+            </p>
+        </div>
+        <a href="/-admin/translations/new"
+           class="shrink-0 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700">
+            Add Phrase
+        </a>
+    </div>
+
+    <div class="px-6 py-4 border-b border-gray-200 flex flex-wrap items-end gap-4">
+        <form method="get" action="/-admin/translations" class="flex flex-wrap items-end gap-3">
+            <div>
+                <label for="search" class="block text-sm font-medium text-gray-700 mb-1">Search</label>
+                <input type="text" name="search" id="search" value="<%= self.search %>"
+                       placeholder="phrase text or context"
+                       class="px-3 py-2 border border-gray-300 rounded-md text-sm w-72">
+            </div>
+            <div>
+                <label for="show" class="block text-sm font-medium text-gray-700 mb-1">Show</label>
+                <select name="show" id="show"
+                        class="px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    <option value="outstanding"<% if self.show == crate::admin::translations::Show::Outstanding { %> selected<% } %>>Needs translation</option>
+                    <option value="all"<% if self.show == crate::admin::translations::Show::All { %> selected<% } %>>All phrases</option>
+                </select>
+            </div>
+            <button type="submit"
+                    class="px-4 py-2 bg-gray-800 text-white text-sm font-medium rounded-md hover:bg-gray-900">
+                Filter
+            </button>
+        </form>
+
+        <p class="ml-auto text-sm text-gray-500">
+            <strong><%= self.outstanding_total %></strong> phrase<% if self.outstanding_total != 1 { %>s<% } %>
+            still need work
+        </p>
+    </div>
+
+    <% if self.rows.is_empty() { %>
+        <p class="px-6 py-10 text-center text-sm text-gray-500">
+            Nothing here. Phrases appear as the site displays them.
+        </p>
+    <% } else { %>
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phrase</th>
+                    <% for lang in crate::i18n::Lang::TRANSLATABLE { %>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"><%= lang.endonym() %></th>
+                    <% } %>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Source</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                <% for row in self.rows.iter() { %>
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 align-top">
+                            <a href="/-admin/translations/<%= row.phrase_id %>"
+                               class="text-sm text-indigo-600 hover:text-indigo-900 line-clamp-3">
+                                <%= row.source %>
+                            </a>
+                            <% if !row.context.is_empty() { %>
+                                <span class="mt-1 inline-block px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-600">
+                                    <%= row.context %>
+                                </span>
+                            <% } %>
+                        </td>
+                        <% for (_lang, translated) in row.translations.iter() { %>
+                            <td class="px-6 py-4 align-top text-sm text-gray-700">
+                                <% if translated.is_empty() { %>
+                                    <span class="text-amber-600">not translated</span>
+                                <% } else { %>
+                                    <span class="line-clamp-3"><%= translated %></span>
+                                <% } %>
+                            </td>
+                        <% } %>
+                        <td class="px-6 py-4 align-top text-sm text-gray-500">
+                            <%= row.origin.as_str() %>
+                            <div class="text-xs text-gray-400">last shown <%= row.last_seen %></div>
+                        </td>
+                    </tr>
+                <% } %>
+            </tbody>
+        </table>
+
+        <div class="px-6 py-4 border-t border-gray-200 flex items-center justify-between text-sm text-gray-600">
+            <span>
+                <%= (self.page - 1) * self.per_page + 1 %>–<%= std::cmp::min(self.page * self.per_page, self.total) %>
+                of <%= self.total %>
+            </span>
+            <span class="flex gap-2">
+                <% if self.page > 1 { %>
+                    <a href="/-admin/translations?search=<%= urlencoding::encode(&self.search) %>&show=<%= self.show.as_str() %>&page=<%= self.page - 1 %>"
+                       class="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50">Previous</a>
+                <% } %>
+                <% if self.page * self.per_page < self.total { %>
+                    <a href="/-admin/translations?search=<%= urlencoding::encode(&self.search) %>&show=<%= self.show.as_str() %>&page=<%= self.page + 1 %>"
+                       class="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50">Next</a>
+                <% } %>
+            </span>
+        </div>
+    <% } %>
+</div>

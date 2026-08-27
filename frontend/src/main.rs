@@ -29,6 +29,7 @@ pub mod girlscouts;
 pub mod gourl;
 pub mod health;
 pub mod home;
+pub mod i18n;
 pub mod lazy_cache;
 pub mod library_signup;
 pub mod local_time;
@@ -621,6 +622,11 @@ fn dynamic() -> impl Endpoint {
         .nest("/-embed", embed::routes())
         .nest_no_strip("/", user_facing())
         .catch_all_error(error_dispatch)
+        // Wraps the whole dynamic tree rather than just the user-facing
+        // branch, so that `?lang=` means the same thing everywhere it can be
+        // written. Applied inside the session middleware, because a language
+        // chosen once has to be remembered for the requests that follow.
+        .with(middleware::language::LanguageMiddleware)
         .with(middleware::authorization::AuthMiddleware)
         .with(server_session())
         .with(middleware::partitioned_session::PartitionedSessionMiddleware)
@@ -707,6 +713,7 @@ async fn main() -> Result<(), Error> {
     let _wiki_page_updates = tokio::spawn(wiki::WikiPage::peering_task());
     let _news_item_updates = tokio::spawn(news::NewsItem::peering_task());
     let _staff_pick_updates = tokio::spawn(staff_pick::StaffPick::peering_task());
+    let _translation_updates = tokio::spawn(i18n::Phrase::peering_task());
     let _webinar_updates = tokio::spawn(webinar::Webinar::peering_task());
     concierge::spawn_background_tasks();
     let _pagebuilder_component_updates =
@@ -741,6 +748,13 @@ async fn main() -> Result<(), Error> {
         tokio::spawn(training::champion::ChampionContent::peering_task());
     let _archive_entry_updates = tokio::spawn(admin::archive::ArchiveEntry::peering_task());
     let _file_metadata_updates = tokio::spawn(upload::storage::FileMetadata::peering_task());
+
+    // Loads the translation catalog into memory and starts the writer that
+    // records newly displayed phrases. Awaited rather than spawned so the
+    // first page served is already translated.
+    if let Err(err) = i18n::start().await {
+        tracing::error!("unable to start translation: {err}");
+    }
 
     let _synchronize_projects = tokio::spawn(sync::synchronize_projects());
     let _synchronize_events = tokio::spawn(sync::synchronize_events());

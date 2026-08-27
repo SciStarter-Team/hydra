@@ -352,7 +352,7 @@ async fn tool_create_content(args: Value) -> Result<String, Error> {
             page.page_id
         }
         ContentType::Component => {
-            validate_template_source(&body)?;
+            validate_source_for(content_type, &body)?;
 
             let mut component = PageBuilderComponent::new(name, body);
             if let Some(description) = optional_str(&args, "description") {
@@ -422,7 +422,7 @@ async fn tool_update_content(args: Value) -> Result<String, Error> {
                 component.category = category.to_string();
             }
             if let Some(body) = optional_str(&args, "body") {
-                validate_template_source(body)?;
+                validate_source_for(content_type, body)?;
                 component.set_source(body);
             }
             component.updated = TimeString::now();
@@ -469,7 +469,7 @@ async fn tool_patch_content(args: Value) -> Result<String, Error> {
         ContentType::Component => {
             let mut component = PageBuilderComponent::load(id).await?;
             let result = patch_text(&component.source, old_string, new_string, replace_all)?;
-            validate_template_source(&result.0)?;
+            validate_source_for(content_type, &result.0)?;
             component.set_source(&result.0);
             component.store().await?;
             result
@@ -570,7 +570,7 @@ async fn place_in_slot(
             let new_source =
                 compose_component_into_slot(&page.source, slot_path, component, params, db())
                     .await?;
-            validate_template_source(&new_source)?;
+            validate_source_for(content_type, &new_source)?;
             page.set_source(&new_source);
             page.store().await?;
         }
@@ -579,7 +579,7 @@ async fn place_in_slot(
             let new_source =
                 compose_component_into_slot(&target.source, slot_path, component, params, db())
                     .await?;
-            validate_template_source(&new_source)?;
+            validate_source_for(content_type, &new_source)?;
             target.set_source(&new_source);
             target.store().await?;
         }
@@ -632,7 +632,7 @@ async fn tool_replace_component(args: Value) -> Result<String, Error> {
                 db(),
             )
             .await?;
-            validate_template_source(&new_source)?;
+            validate_source_for(content_type, &new_source)?;
             page.set_source(&new_source);
             page.store().await?;
         }
@@ -647,7 +647,7 @@ async fn tool_replace_component(args: Value) -> Result<String, Error> {
                 db(),
             )
             .await?;
-            validate_template_source(&new_source)?;
+            validate_source_for(content_type, &new_source)?;
             target.set_source(&new_source);
             target.store().await?;
         }
@@ -673,14 +673,14 @@ where
         ContentType::ComponentPage => {
             let mut page = PageBuilderPage::load(id).await?;
             let new_source = edit(&page.source)?;
-            validate_template_source(&new_source)?;
+            validate_source_for(content_type, &new_source)?;
             page.set_source(&new_source);
             page.store().await?;
         }
         ContentType::Component => {
             let mut component = PageBuilderComponent::load(id).await?;
             let new_source = edit(&component.source)?;
-            validate_template_source(&new_source)?;
+            validate_source_for(content_type, &new_source)?;
             component.set_source(&new_source);
             component.store().await?;
         }
@@ -746,14 +746,14 @@ async fn tool_resize_container(args: Value) -> Result<String, Error> {
         ContentType::ComponentPage => {
             let mut page = PageBuilderPage::load(id).await?;
             let new_source = resize_container(&page.source, &slot_path, count, db()).await?;
-            validate_template_source(&new_source)?;
+            validate_source_for(content_type, &new_source)?;
             page.set_source(&new_source);
             page.store().await?;
         }
         ContentType::Component => {
             let mut component = PageBuilderComponent::load(id).await?;
             let new_source = resize_container(&component.source, &slot_path, count, db()).await?;
-            validate_template_source(&new_source)?;
+            validate_source_for(content_type, &new_source)?;
             component.set_source(&new_source);
             component.store().await?;
         }
@@ -1014,12 +1014,29 @@ fn parse_ulid(args: &Value, key: &str) -> Result<Ulid, Error> {
         .map_err(|_| anyhow!("Invalid {key} (expected a ULID): {value}"))
 }
 
-/// Validate that page-builder template source compiles, mirroring the
-/// check the admin editor performs before saving a component or page.
+/// Validate that page-builder template source compiles, mirroring the check
+/// the admin editor performs before saving a component or page.
 fn validate_template_source(source: &str) -> Result<(), Error> {
     crate::builder::render::CompiledTemplate::compile(source)
         .map_err(|e| anyhow!("Invalid template source: {e}"))?;
     Ok(())
+}
+
+/// Validate source about to be written back to content of `content_type`.
+///
+/// A page only has to compile. A component is held to
+/// [`PageBuilderComponent::check_source`] as well -- and is held to it
+/// whether the source was typed or composed, because a component's source is
+/// rendered every time the component is placed, so a `{$ tr $}` sitting in it
+/// freezes the phrase however it got there. Composing a component that says
+/// `{$^ tr "..." $}` into another *component* bakes exactly that, and the
+/// result really is broken rather than merely looking it: nesting a level
+/// deeper wants one more `^`, the way `{$^ slot $}` does.
+fn validate_source_for(content_type: ContentType, source: &str) -> Result<(), Error> {
+    match content_type {
+        ContentType::Component => PageBuilderComponent::check_source(source),
+        _ => validate_template_source(source),
+    }
 }
 
 fn parse_entity_kind(kind: &str) -> Result<EntityKind, Error> {

@@ -7,7 +7,7 @@ use anyhow::{Error, anyhow, bail};
 use ulid::Ulid;
 
 use crate::builder::{
-    context::{Context, ContextMode},
+    context::Context,
     render::{CompiledTemplate, render},
 };
 use crate::peering::LoadStorePeered;
@@ -138,8 +138,9 @@ pub async fn compose_component_into_slot(
     let params = with_declared_defaults(component, params);
 
     // Render the component in place with its params bound. `{$^ slot $}`
-    // slots survive this render as real page slots for later composition.
-    let ctx = Context::new(db, &None, ContextMode::Presenting)?;
+    // slots survive this render as real page slots for later composition,
+    // and `{$! ... $}` directives survive it as themselves.
+    let ctx = Context::composing(db)?;
     for (key, value) in &params {
         ctx.bind_string(key, value)?;
     }
@@ -248,7 +249,7 @@ pub async fn update_slot_params(
     }
 
     // Create context with params as bindings
-    let ctx = Context::new(db, &None, ContextMode::Presenting)?;
+    let ctx = Context::composing(db)?;
     for (key, value) in params {
         ctx.bind_string(key, value)?;
     }

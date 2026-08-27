@@ -25,6 +25,51 @@ pub fn parse_attributes(input: &str) -> AttributeParser<'_> {
     }
 }
 
+/// Parse key=value attributes from a string with no leading name token.
+///
+/// [`parse_attributes`] reserves the first token for a name, which is what a
+/// slot or a widget directive starts with. Where the caller has already taken
+/// whatever precedes the attributes, this reads what is left without eating a
+/// key=value pair to do it.
+pub fn parse_attributes_only(input: &str) -> AttributeParser<'_> {
+    AttributeParser {
+        input,
+        bytes: input.as_bytes(),
+        pos: 0,
+        first_token_consumed: true,
+    }
+}
+
+/// Read a leading quoted string, returning it unescaped along with whatever
+/// follows the closing quote.
+///
+/// The quoting rules are an attribute value's: either quote character
+/// delimits, and a backslash escapes the character after it. `None` means the
+/// input did not start with a quote, or the quote was never closed.
+pub fn parse_quoted(input: &str) -> Option<(String, &str)> {
+    let input = input.trim_start();
+    let mut chars = input.char_indices();
+    let (_, quote) = chars.next()?;
+
+    if quote != '"' && quote != '\'' {
+        return None;
+    }
+
+    while let Some((index, c)) = chars.next() {
+        if c == '\\' {
+            // Skips the escaped character whole, so a multi-byte one after a
+            // backslash cannot leave the scan inside a character.
+            chars.next();
+        } else if c == quote {
+            // Both quote characters are one byte, so the arithmetic here
+            // stays on character boundaries.
+            return Some((unescape_value(&input[1..index]), &input[index + 1..]));
+        }
+    }
+
+    None
+}
+
 pub struct AttributeParser<'a> {
     input: &'a str,
     bytes: &'a [u8],
@@ -114,10 +159,21 @@ impl<'a> Iterator for AttributeParser<'a> {
                 self.pos += 1; // Skip opening quote
                 let value_start = self.pos;
 
-                // Find closing quote, handling escapes
+                // Find the closing quote, stepping over escape sequences.
+                //
+                // This scans bytes rather than characters, and skipping an
+                // escape two bytes at a time can land in the middle of a
+                // multi-byte one. That is safe, but only because of a
+                // property of UTF-8 worth writing down: every byte of a
+                // multi-byte character is 0x80 or above, so none of them can
+                // be mistaken for a quote or a backslash. A scan that lands
+                // inside a character therefore walks back out of it without
+                // matching anything, and `value_end` is only ever set at a
+                // quote or at the end of the input -- both of which are
+                // character boundaries, so the slice below cannot split one.
                 while self.pos < self.bytes.len() {
                     if self.bytes[self.pos] == b'\\' && self.pos + 1 < self.bytes.len() {
-                        self.pos += 2; // Skip escape sequence
+                        self.pos += 2;
                         continue;
                     }
                     if self.bytes[self.pos] == quote {
@@ -260,6 +316,92 @@ mod tests {
         );
         // A trailing lone backslash is preserved.
         assert_eq!(unescape_value(r#"ends with\"#), r#"ends with\"#);
+    }
+
+    /// The escape skip moves two bytes, so an escaped multi-byte character
+    /// leaves it part-way into one. Nothing may be mangled or split by that.
+    #[test]
+    fn an_escape_before_a_multibyte_character_parses_intact() {
+        let attrs: Vec<_> = parse_attributes(r#"hero text="Se llama \María" count=5"#).collect();
+
+        assert_eq!(attrs.len(), 2);
+        assert_eq!(unescape_value(attrs[0].value), "Se llama María");
+        assert_eq!(attrs[1].value, "5");
+    }
+
+    /// The same, for a character wide enough to leave two bytes behind.
+    #[test]
+    fn an_escape_before_a_four_byte_character_parses_intact() {
+        let attrs: Vec<_> = parse_attributes(r#"hero text="party \🎉 time" count=5"#).collect();
+
+        assert_eq!(attrs.len(), 2);
+        assert_eq!(unescape_value(attrs[0].value), "party 🎉 time");
+        assert_eq!(attrs[1].value, "5");
+    }
+
+    /// A value ending in a backslash has nothing to escape, so the scan must
+    /// not read past the end looking for it.
+    #[test]
+    fn a_value_may_end_in_a_backslash() {
+        let attrs: Vec<_> = parse_attributes(r#"hero text="ends with\"#).collect();
+
+        assert_eq!(attrs.len(), 1);
+        assert_eq!(attrs[0].value, r#"ends with\"#);
+    }
+
+    #[test]
+    fn attributes_only_keeps_the_first_pair() {
+        let attrs: Vec<_> = parse_attributes_only(r#"context="verb" other=1"#).collect();
+
+        assert_eq!(attrs.len(), 2);
+        assert_eq!(
+            attrs[0],
+            ParsedAttr {
+                key: "context",
+                value: "verb"
+            }
+        );
+    }
+
+    #[test]
+    fn quoted_prefix_is_taken_and_the_rest_left() {
+        assert_eq!(
+            parse_quoted(r#""Log In or Sign Up" context="verb""#),
+            Some((String::from("Log In or Sign Up"), r#" context="verb""#))
+        );
+    }
+
+    #[test]
+    fn a_quoted_prefix_may_contain_its_own_quote() {
+        assert_eq!(
+            parse_quoted(r#""She said \"hi\"" rest"#),
+            Some((String::from(r#"She said "hi""#), " rest"))
+        );
+    }
+
+    #[test]
+    fn single_quotes_delimit_too() {
+        assert_eq!(
+            parse_quoted("'Sign Up' rest"),
+            Some((String::from("Sign Up"), " rest"))
+        );
+    }
+
+    /// An escaped multi-byte character must not leave the scan part-way into
+    /// a character, which would panic on the slice that follows.
+    #[test]
+    fn an_escape_before_a_multibyte_character_is_survivable() {
+        assert_eq!(
+            parse_quoted(r#""Se llama \María" rest"#),
+            Some((String::from("Se llama María"), " rest"))
+        );
+    }
+
+    #[test]
+    fn unquoted_or_unterminated_input_is_not_a_quoted_string() {
+        assert_eq!(parse_quoted("bare words"), None);
+        assert_eq!(parse_quoted(r#""never closed"#), None);
+        assert_eq!(parse_quoted(""), None);
     }
 
     #[test]

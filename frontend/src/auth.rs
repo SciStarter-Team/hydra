@@ -393,6 +393,9 @@ struct LoginSignupContent {
     exists: bool,
     ratelimited: bool,
     turnstile_sitekey: String,
+    /// Cloudflare's own language tag, which is not always ours: Brazilian
+    /// Portuguese is the only Portuguese Turnstile offers.
+    turnstile_language: &'static str,
     /// A protected account is never added to a mailing list, so its owner is
     /// told what they are signing up for rather than offered a newsletter
     /// opt-in that user-service is going to discard.
@@ -445,6 +448,11 @@ pub async fn login_signup_page(
             exists: params.exists.unwrap_or_default(),
             ratelimited: params.ratelimited.unwrap_or_default(),
             turnstile_sitekey: env!("TURNSTILE_SITEKEY").to_string(),
+            turnstile_language: match crate::i18n::current_lang() {
+                crate::i18n::Lang::Es => "es",
+                crate::i18n::Lang::Pt => "pt-BR",
+                crate::i18n::Lang::En => "en",
+            },
             // Read after the `?tag=` above has been stashed, so a link that
             // both names a protected cohort and lands on this page is
             // recognized on that first render rather than the next one.

@@ -75,6 +75,14 @@ pub async fn import_from_zip(bytes: Vec<u8>) -> Result<ImportReport, Error> {
         match serde_json::from_str::<PageBuilderComponent>(&contents) {
             Ok(component) => {
                 let component_name = component.name.clone();
+
+                // Held to the same rules as a component authored by hand, so
+                // a restore cannot reintroduce what the editor would refuse.
+                if let Err(e) = PageBuilderComponent::check_source(&component.source) {
+                    report.failed.push((name, format!("invalid source: {e}")));
+                    continue;
+                }
+
                 match component.store().await {
                     Ok(()) => report.imported.push(component_name),
                     Err(e) => report.failed.push((name, format!("store error: {e}"))),
@@ -121,9 +129,10 @@ mod tests {
         assert_eq!(slugify("MixedCase_123"), "mixedcase-123");
     }
 
+    /// The shipped library has to satisfy the same rules an import enforces,
+    /// or a restore would reject the very components it is restoring.
     #[test]
     fn foundation_library_files_valid() {
-        use crate::builder::render::CompiledTemplate;
         use std::fs;
         use std::path::PathBuf;
 
@@ -139,7 +148,11 @@ mod tests {
             let comp = serde_json::from_str::<PageBuilderComponent>(&text);
             check!(let Ok(_) = &comp, "parse {}", path.display());
             if let Ok(comp) = comp {
-                check!(let Ok(_) = CompiledTemplate::compile(&comp.source), "compile {}", path.display());
+                check!(
+                    let Ok(_) = PageBuilderComponent::check_source(&comp.source),
+                    "check {}",
+                    path.display()
+                );
             }
         }
     }

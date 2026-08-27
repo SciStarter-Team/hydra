@@ -66,5 +66,7 @@ walkdir = "2"
 
 [dev-dependencies]
 assert2 = "0.3.16"
+poem = { version = "3.1.12", features = ["test"] }
+tempfile = "3"
 tokio = { version = "1.47.1", features = ["rt", "macros"] }
 
