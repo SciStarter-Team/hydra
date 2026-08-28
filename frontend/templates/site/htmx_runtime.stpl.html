@@ -13,6 +13,9 @@
 <%# Nothing on the site loads Alpine, so the `:attr` short form stays enabled; %>
 <%# hx-live turns it off if it finds Alpine on the page at init. %>
 <script src="/-static/hx-live.js"></script>
+<%# Decides where a response marked X-Notification is placed. Not deferred: it %>
+<%# must be listening before the first request can come back. %>
+<script src="/-static/js/notifications.js"></script>
 <% if self.enable_sse { %>
   <%# https://four.htmx.org/extensions/hx-sse %>
   <script src="/-static/hx-sse.js"></script>

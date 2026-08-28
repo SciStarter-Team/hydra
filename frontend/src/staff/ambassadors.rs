@@ -10,7 +10,7 @@
 //! is where orrery's `/staff/ambassadors/applications` went.
 
 use common::{
-    message::dashboard::{AmbassadorStageRow, AmbassadorStagesRequest},
+    message::dashboard::{AmbassadorStage, AmbassadorStageRow, AmbassadorStagesRequest},
     service::request,
 };
 use poem::{Response, handler, web::Query};
@@ -18,72 +18,25 @@ use serde::Deserialize;
 
 use super::csv_field;
 
-/// A stage of the Ambassador funnel.
+/// Stages where Champion training is done and the person could still become an
+/// Ambassador.
 ///
-/// The state machine's own names, paired with what staff call them. Everything
-/// below the tutorial stage has finished Champion training; `Passed` is the
-/// only stage that means "is an Ambassador".
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Stage {
-    Tutorial,
-    Application,
-    Verified,
-    Passed,
-    International,
-    Rejected,
-    Failed,
-}
+/// The stages themselves are [`AmbassadorStage`], shared with the user service
+/// that derives them; what belongs here is only which of them each CSV covers.
+const OPEN: &[AmbassadorStage] = &[
+    AmbassadorStage::Tutorial,
+    AmbassadorStage::Application,
+    AmbassadorStage::Verified,
+];
 
-impl Stage {
-    /// Stages where Champion training is done and the person could still
-    /// become an Ambassador.
-    const OPEN: &'static [Stage] = &[Stage::Tutorial, Stage::Application, Stage::Verified];
-
-    /// Stages where Champion training is done but the route to Ambassador has
-    /// closed. Kept out of the default export: these are people who were turned
-    /// down, and a recruiting list should not reach them by accident.
-    const CLOSED: &'static [Stage] = &[Stage::International, Stage::Rejected, Stage::Failed];
-
-    const ALL: &'static [Stage] = &[
-        Stage::Tutorial,
-        Stage::Application,
-        Stage::Verified,
-        Stage::Passed,
-        Stage::International,
-        Stage::Rejected,
-        Stage::Failed,
-    ];
-
-    /// The name this stage carries in `ambassador_progress.state`.
-    fn state(self) -> &'static str {
-        match self {
-            Stage::Tutorial => "tutorial",
-            Stage::Application => "application",
-            Stage::Verified => "verified",
-            Stage::Passed => "passed",
-            Stage::International => "international",
-            Stage::Rejected => "rejected",
-            Stage::Failed => "failed",
-        }
-    }
-
-    /// What staff call this stage.
-    fn label(self) -> &'static str {
-        match self {
-            Stage::Tutorial => "Champion training complete",
-            Stage::Application => "Application submitted",
-            Stage::Verified => "Application verified",
-            Stage::Passed => "Ambassador",
-            Stage::International => "International",
-            Stage::Rejected => "Rejected",
-            Stage::Failed => "Screening failed",
-        }
-    }
-
-    fn from_state(state: &str) -> Option<Stage> {
-        Stage::ALL.iter().copied().find(|s| s.state() == state)
-    }
-}
+/// Stages where Champion training is done but the route to Ambassador has
+/// closed. Kept out of the default export: these are people who were turned
+/// down, and a recruiting list should not reach them by accident.
+const CLOSED: &[AmbassadorStage] = &[
+    AmbassadorStage::International,
+    AmbassadorStage::Rejected,
+    AmbassadorStage::Failed,
+];
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
@@ -94,11 +47,11 @@ pub struct ChampionsQuery {
 }
 
 /// Fetch everyone at `stages` and render the export.
-async fn export(stages: &[Stage], filename: &str) -> Result<Response, anyhow::Error> {
+async fn export(stages: &[AmbassadorStage], filename: &str) -> Result<Response, anyhow::Error> {
     let rows: Vec<AmbassadorStageRow> = request(
         "user.ambassador.stages",
         AmbassadorStagesRequest {
-            states: stages.iter().map(|s| s.state().to_owned()).collect(),
+            stages: stages.to_vec(),
         },
     )
     .await?;
@@ -106,21 +59,13 @@ async fn export(stages: &[Stage], filename: &str) -> Result<Response, anyhow::Er
     let mut csv = String::from("first_name,last_name,handle,email,status,since\n");
 
     for row in rows {
-        // An unrecognized state is reported as it is stored rather than
-        // dropped, so a stage added to the state machine and not yet to this
-        // list still shows up in the export.
-        let status = Stage::from_state(&row.state)
-            .map(Stage::label)
-            .unwrap_or(&row.state)
-            .to_string();
-
         csv.push_str(&format!(
             "{},{},{},{},{},{}\n",
             csv_field(&row.first_name),
             csv_field(&row.last_name),
             csv_field(&row.handle),
             csv_field(&row.email),
-            csv_field(&status),
+            csv_field(row.stage.label()),
             csv_field(&row.since),
         ));
     }
@@ -139,7 +84,7 @@ async fn export(stages: &[Stage], filename: &str) -> Result<Response, anyhow::Er
 #[handler]
 #[tracing::instrument]
 pub async fn tutorial() -> Result<Response, anyhow::Error> {
-    export(&[Stage::Tutorial], "ambassador_tutorial.csv").await
+    export(&[AmbassadorStage::Tutorial], "ambassador_tutorial.csv").await
 }
 
 /// GET `/staff/ambassadors/ambassador_application.csv` — applied, not yet
@@ -147,7 +92,11 @@ pub async fn tutorial() -> Result<Response, anyhow::Error> {
 #[handler]
 #[tracing::instrument]
 pub async fn application() -> Result<Response, anyhow::Error> {
-    export(&[Stage::Application], "ambassador_application.csv").await
+    export(
+        &[AmbassadorStage::Application],
+        "ambassador_application.csv",
+    )
+    .await
 }
 
 /// GET `/staff/ambassadors/ambassador_verified.csv` — application verified,
@@ -155,14 +104,14 @@ pub async fn application() -> Result<Response, anyhow::Error> {
 #[handler]
 #[tracing::instrument]
 pub async fn verified() -> Result<Response, anyhow::Error> {
-    export(&[Stage::Verified], "ambassador_verified.csv").await
+    export(&[AmbassadorStage::Verified], "ambassador_verified.csv").await
 }
 
 /// GET `/staff/ambassadors/ambassador_certified.csv` — the Ambassadors.
 #[handler]
 #[tracing::instrument]
 pub async fn certified() -> Result<Response, anyhow::Error> {
-    export(&[Stage::Passed], "ambassador_certified.csv").await
+    export(&[AmbassadorStage::Passed], "ambassador_certified.csv").await
 }
 
 /// GET `/staff/ambassadors/champions_not_yet_ambassadors.csv` — everyone who
@@ -173,10 +122,10 @@ pub async fn certified() -> Result<Response, anyhow::Error> {
 #[handler]
 #[tracing::instrument]
 pub async fn champions(Query(query): Query<ChampionsQuery>) -> Result<Response, anyhow::Error> {
-    let mut stages = Stage::OPEN.to_vec();
+    let mut stages = OPEN.to_vec();
 
     if query.include_closed {
-        stages.extend_from_slice(Stage::CLOSED);
+        stages.extend_from_slice(CLOSED);
     }
 
     export(&stages, "champions_not_yet_ambassadors.csv").await
@@ -187,38 +136,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn every_stage_round_trips_through_its_state_name() {
-        for stage in Stage::ALL {
-            assert_eq!(Stage::from_state(stage.state()), Some(*stage));
-        }
-    }
-
-    #[test]
     fn open_and_closed_are_disjoint_and_exclude_ambassadors() {
-        for stage in Stage::OPEN {
-            assert!(!Stage::CLOSED.contains(stage), "{stage:?} is in both");
-            assert_ne!(*stage, Stage::Passed, "an Ambassador is not a prospect");
+        for stage in OPEN {
+            assert!(!CLOSED.contains(stage), "{stage:?} is in both");
+            assert_ne!(
+                *stage,
+                AmbassadorStage::Passed,
+                "an Ambassador is not a prospect"
+            );
         }
-        for stage in Stage::CLOSED {
-            assert_ne!(*stage, Stage::Passed);
+        for stage in CLOSED {
+            assert_ne!(*stage, AmbassadorStage::Passed);
         }
     }
 
     #[test]
     fn champions_covers_every_non_ambassador_stage_when_closed_is_included() {
-        let mut covered: Vec<Stage> = Stage::OPEN.to_vec();
-        covered.extend_from_slice(Stage::CLOSED);
+        let mut covered: Vec<AmbassadorStage> = OPEN.to_vec();
+        covered.extend_from_slice(CLOSED);
 
-        for stage in Stage::ALL {
-            if *stage == Stage::Passed {
+        for stage in AmbassadorStage::ALL {
+            if *stage == AmbassadorStage::Passed {
                 continue;
             }
             assert!(covered.contains(stage), "{stage:?} is in no Champions list");
         }
-    }
-
-    #[test]
-    fn an_unknown_state_has_no_stage() {
-        assert!(Stage::from_state("initial").is_none());
     }
 }

@@ -38,12 +38,16 @@ pub fn routes() -> Route {
         )
         .at("/:id/send-password-reset", post(users_password_reset))
         .at("/:id/emails", post(users_emails_add))
+        // Addressed by the row's own id, not by the address. An address is a
+        // natural key rather than an identity: it changes when edited, and it
+        // is not reliably a URL path segment -- an empty one is no segment at
+        // all, which once left a row impossible to name and so to delete.
         .at(
-            "/:id/emails/:email",
+            "/:id/emails/:email_id",
             put(users_emails_update).delete(users_emails_delete),
         )
         .at(
-            "/:id/emails/:email/toggle-verified",
+            "/:id/emails/:email_id/toggle-verified",
             post(users_emails_toggle_verified),
         )
 }
@@ -502,7 +506,6 @@ struct AddEmailForm {
 
 #[derive(Debug, Deserialize)]
 struct UpdateEmailForm {
-    old_email: String,
     new_email: String,
 }
 
@@ -542,21 +545,18 @@ async fn users_password_reset(
                     .body(success_message))
             } else {
                 // Return error message
-                Ok(poem::Response::builder()
-                    .status(poem::http::StatusCode::BAD_REQUEST)
-                    .content_type("text/html")
-                    .body(format!(
-                        "Failed to send password reset email: {}",
-                        response.message
-                    )))
+                Ok(error_response(
+                    poem::http::StatusCode::BAD_REQUEST,
+                    &format!("Failed to send password reset email: {}", response.message),
+                ))
             }
         }
         Err(e) => {
             // Return error response
-            Ok(poem::Response::builder()
-                .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-                .content_type("text/html")
-                .body(format!("Error: {}", e)))
+            Ok(error_response(
+                poem::http::StatusCode::INTERNAL_SERVER_ERROR,
+                &e.to_string(),
+            ))
         }
     }
 }
@@ -781,7 +781,6 @@ async fn users_update(
 struct EmailRow {
     user_id: String,
     email: UserEmail,
-    index: usize,
 }
 
 #[derive(Debug, TemplateOnce)]
@@ -829,16 +828,11 @@ async fn users_emails_add(
                 }
 
                 // Find the newly added email by matching the address
-                if let Some((new_index, new_email)) = response
-                    .emails
-                    .iter()
-                    .enumerate()
-                    .find(|(_, e)| e.email == form.new_email)
+                if let Some(new_email) = response.emails.iter().find(|e| e.email == form.new_email)
                 {
                     let new_email_html = EmailRow {
                         user_id: user_id.clone(),
                         email: new_email.clone(),
-                        index: new_index,
                     }
                     .render_once()
                     .unwrap_or_default();
@@ -887,7 +881,7 @@ async fn users_emails_add(
 
 #[handler]
 async fn users_emails_update(
-    Path((user_id, _email)): Path<(String, String)>,
+    Path((user_id, email_id)): Path<(String, i64)>,
     Form(form): Form<UpdateEmailForm>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
@@ -896,10 +890,9 @@ async fn users_emails_update(
         .map_err(|_| anyhow::anyhow!("Invalid user ID format"))?;
 
     let new_email_clone = form.new_email.clone();
-    let old_email_clone = form.old_email.clone();
     let email_request = UserEmailUpdateRequest {
         user_id: parsed_user_id,
-        old_email: form.old_email,
+        email_id,
         new_email: form.new_email,
     };
 
@@ -913,21 +906,19 @@ async fn users_emails_update(
                         "user-email-update",
                         user_info.user_id,
                         parsed_user_id,
-                        format!("old={} new={}", old_email_clone, new_email_clone),
+                        format!("email_id={email_id} new={new_email_clone}"),
                     )
                     .await?;
                 }
                 // Find the updated email and render just that row
-                if let Some((index, updated_email)) = response
+                if let Some(updated_email) = response
                     .emails
                     .into_iter()
-                    .enumerate()
-                    .find(|(_, email)| email.email == new_email_clone)
+                    .find(|email| email.email == new_email_clone)
                 {
                     let row_html = EmailRow {
                         user_id: user_id.clone(),
                         email: updated_email,
-                        index,
                     }
                     .render_once()
                     .unwrap_or_default();
@@ -936,28 +927,28 @@ async fn users_emails_update(
                         .content_type("text/html")
                         .body(row_html))
                 } else {
-                    Ok(poem::Response::builder()
-                        .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-                        .content_type("text/html")
-                        .body("Error: Updated email not found in response".to_string()))
+                    Ok(error_response(
+                        poem::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        "",
+                    ))
                 }
             } else {
-                Ok(poem::Response::builder()
-                    .status(poem::http::StatusCode::BAD_REQUEST)
-                    .content_type("text/html")
-                    .body(format!("Error: {}", response.message)))
+                Ok(error_response(
+                    poem::http::StatusCode::BAD_REQUEST,
+                    &response.message,
+                ))
             }
         }
-        Err(e) => Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-            .content_type("text/html")
-            .body(format!("Error: {}", e))),
+        Err(e) => Ok(error_response(
+            poem::http::StatusCode::INTERNAL_SERVER_ERROR,
+            &e.to_string(),
+        )),
     }
 }
 
 #[handler]
 async fn users_emails_delete(
-    Path((user_id, email)): Path<(String, String)>,
+    Path((user_id, email_id)): Path<(String, i64)>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     let parsed_user_id = user_id
@@ -966,7 +957,7 @@ async fn users_emails_delete(
 
     let email_request = UserEmailDeleteRequest {
         user_id: parsed_user_id,
-        email: email.clone(),
+        email_id,
     };
 
     match request_with_retry::<UserEmailResponse>("user.admin.email_delete", email_request).await {
@@ -979,7 +970,7 @@ async fn users_emails_delete(
                         "user-email-delete",
                         user_info.user_id,
                         parsed_user_id,
-                        format!("email={}", email),
+                        format!("email_id={email_id}"),
                     )
                     .await?;
                 }
@@ -988,22 +979,22 @@ async fn users_emails_delete(
                     .content_type("text/html")
                     .body("".to_string()))
             } else {
-                Ok(poem::Response::builder()
-                    .status(poem::http::StatusCode::BAD_REQUEST)
-                    .content_type("text/html")
-                    .body(format!("Error: {}", response.message)))
+                Ok(error_response(
+                    poem::http::StatusCode::BAD_REQUEST,
+                    &response.message,
+                ))
             }
         }
-        Err(e) => Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-            .content_type("text/html")
-            .body(format!("Error: {}", e))),
+        Err(e) => Ok(error_response(
+            poem::http::StatusCode::INTERNAL_SERVER_ERROR,
+            &e.to_string(),
+        )),
     }
 }
 
 #[handler]
 async fn users_emails_toggle_verified(
-    Path((user_id, email)): Path<(String, String)>,
+    Path((user_id, email_id)): Path<(String, i64)>,
     Authenticated(_user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     let parsed_user_id = user_id
@@ -1012,7 +1003,7 @@ async fn users_emails_toggle_verified(
 
     let email_request = UserEmailToggleVerifiedRequest {
         user_id: parsed_user_id,
-        email: email.clone(),
+        email_id,
     };
 
     match request_with_retry::<UserDetailsResponse>(
@@ -1023,17 +1014,12 @@ async fn users_emails_toggle_verified(
     {
         Ok(response) => {
             // Find the toggled email and render just that row
-            if let Some((index, updated_email)) = response
-                .user
-                .emails
-                .iter()
-                .enumerate()
-                .find(|(_, e)| e.email == email)
+            if let Some(updated_email) =
+                response.user.emails.iter().find(|e| e.email_id == email_id)
             {
                 let email_row_html = EmailRow {
                     user_id: user_id.clone(),
                     email: updated_email.clone(),
-                    index,
                 }
                 .render_once()
                 .unwrap_or_default();
@@ -1054,16 +1040,16 @@ async fn users_emails_toggle_verified(
                     .content_type("text/html")
                     .body(combined_html))
             } else {
-                Ok(poem::Response::builder()
-                    .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-                    .content_type("text/html")
-                    .body("Error: Toggled email not found in response".to_string()))
+                Ok(error_response(
+                    poem::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    "",
+                ))
             }
         }
-        Err(e) => Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-            .content_type("text/html")
-            .body(format!("Error: {}", e))),
+        Err(e) => Ok(error_response(
+            poem::http::StatusCode::INTERNAL_SERVER_ERROR,
+            &e.to_string(),
+        )),
     }
 }
 
@@ -1072,7 +1058,6 @@ mod route_tests {
     use poem::{EndpointExt, http::StatusCode, middleware::CatchPanic, test::TestClient};
 
     const USER: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
-    const EMAIL: &str = "someone@example.com";
 
     /// Routing happens before a handler runs, so METHOD_NOT_ALLOWED here is the
     /// route table's doing and nothing else's. The handlers themselves need a
@@ -1100,12 +1085,31 @@ mod route_tests {
         );
     }
 
+    /// Emails are addressed by their row's id, not by the address itself. An
+    /// address is a natural key rather than an identity: it changes when
+    /// edited, and it is not reliably a URL path segment -- an empty one is no
+    /// segment at all, which once left a row that could not be named, and so
+    /// could not be deleted.
     #[tokio::test]
-    async fn email_addresses_can_be_added_updated_and_deleted() {
+    async fn email_addresses_are_addressed_by_id() {
         assert_routed("POST", format!("/{USER}/emails")).await;
-        assert_routed("PUT", format!("/{USER}/emails/{EMAIL}")).await;
-        assert_routed("DELETE", format!("/{USER}/emails/{EMAIL}")).await;
-        assert_routed("POST", format!("/{USER}/emails/{EMAIL}/toggle-verified")).await;
+        assert_routed("PUT", format!("/{USER}/emails/1")).await;
+        assert_routed("DELETE", format!("/{USER}/emails/1")).await;
+        assert_routed("POST", format!("/{USER}/emails/1/toggle-verified")).await;
+    }
+
+    /// The shape that produced the bug: with the address in the path, an empty
+    /// address left no segment at all, so the URL collapsed onto the collection
+    /// and the delete never reached a handler. Whether that surfaces as 404 or
+    /// 405 depends on where the tree is mounted; what matters is that it is not
+    /// treated as a deletion.
+    #[tokio::test]
+    async fn a_member_url_with_no_identifier_does_not_delete() {
+        let status = status_of("DELETE", format!("/{USER}/emails/")).await;
+        assert!(
+            status.is_client_error(),
+            "expected a client error, got {status}"
+        );
     }
 
     /// Updating a user is a PUT, which is what the edit-user modal sends. POST

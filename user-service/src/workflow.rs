@@ -614,7 +614,7 @@ async fn update_ambassador_progress(
             "user.tags.add",
             (
                 user_id.to_string(),
-                crate::ambassador::CHAMPION_TRAINING_TAG.to_string(),
+                common::tag::CHAMPION_TRAINING.to_string(),
             ),
         )
         .await?;
@@ -628,10 +628,6 @@ async fn update_ambassador_progress(
         trigger_email(TriggerEvent::AmbassadorTrainingComplete, user_ulid, None).await?;
         crate::certificates::create_certificate(user_ulid, String::new(), "champion".to_string())
             .await?;
-
-        // Advance the native state machine to `tutorial` (Champion) so a later
-        // application/verification transition is detected correctly.
-        crate::ambassador::advance_state_if(user_id, &["initial"], "tutorial").await?;
     }
 
     // The tutorial grants a certificate, not a badge.

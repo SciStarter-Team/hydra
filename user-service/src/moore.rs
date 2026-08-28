@@ -11,9 +11,9 @@
 //! it dates people by the earliest immutable evidence it can find (a badge, a
 //! certificate, a recorded training event) and falls back to the mutable field.
 //! hydra's progress tables stamp each step as it completes and never rewrite
-//! those columns, so the immutable evidence is in the progress row itself.
-//! `state_changed` is still consulted for the ambassador funnel, where the
-//! state machine has stages no column records.
+//! those columns, so the immutable evidence is in the progress row itself —
+//! for the ambassador funnel too, whose every stage is dated by a milestone
+//! rather than by a state machine's last move.
 
 use anyhow::Error;
 use async_nats::service::Request;
@@ -93,11 +93,13 @@ pub async fn buckets(_req: &Request) -> Result<MooreBucketsResponse, Error> {
                   FROM "ambassador_progress"
                  WHERE "tutorial_completed_at" IS NOT NULL
                 UNION ALL
-                -- The funnel has stages no column records, so a state past
-                -- the start counts even without a stamped step.
-                SELECT "user_id", "state_changed"
+                -- Reaching the end of the route means having walked it, so a
+                -- closure dates the training even where no step was stamped.
+                SELECT "user_id", COALESCE("rejected_at", "international_at", "screening_failed_at")
                   FROM "ambassador_progress"
-                 WHERE "state" <> 'initial' AND "state_changed" <> ''
+                 WHERE "rejected_at" IS NOT NULL
+                    OR "international_at" IS NOT NULL
+                    OR "screening_failed_at" IS NOT NULL
                 UNION ALL
                 SELECT "user_id", "created_at"
                   FROM "certificates"

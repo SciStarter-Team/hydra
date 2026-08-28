@@ -121,6 +121,13 @@ pub enum PublicProfileVisibility {
 /// match orrery's `APP_STATUS_CHOICES` for cross-system consistency.
 /// (orrery's retired `Withdrawn = 9999` is intentionally omitted —
 /// withdrawal is now handled by demoting the application to `Champion`.)
+///
+/// `Champion` and `Ambassador` are levers rather than notes: staff demote for a
+/// hiatus and promote again on return, and orrery's state machine sets them
+/// back when it moves of its own accord. They are each other's inverse, so
+/// every variant here has to exist for the two systems to read the same row the
+/// same way — an unlisted value decodes as `UnderReview`, which would read a
+/// serving Ambassador as an unexamined applicant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(i64)]
 pub enum AmbassadorAppStatus {
@@ -130,6 +137,7 @@ pub enum AmbassadorAppStatus {
     Flagged = 3,
     Ineligible = 4,
     Champion = 5,
+    Ambassador = 6,
 }
 
 impl AmbassadorAppStatus {
@@ -140,6 +148,7 @@ impl AmbassadorAppStatus {
             3 => AmbassadorAppStatus::Flagged,
             4 => AmbassadorAppStatus::Ineligible,
             5 => AmbassadorAppStatus::Champion,
+            6 => AmbassadorAppStatus::Ambassador,
             _ => AmbassadorAppStatus::UnderReview,
         }
     }
@@ -157,6 +166,7 @@ impl AmbassadorAppStatus {
             AmbassadorAppStatus::Flagged => "Flagged",
             AmbassadorAppStatus::Ineligible => "Ineligible",
             AmbassadorAppStatus::Champion => "Champion",
+            AmbassadorAppStatus::Ambassador => "Ambassador",
         }
     }
 
@@ -169,6 +179,7 @@ impl AmbassadorAppStatus {
             AmbassadorAppStatus::Flagged,
             AmbassadorAppStatus::Ineligible,
             AmbassadorAppStatus::Champion,
+            AmbassadorAppStatus::Ambassador,
         ]
     }
 }
@@ -579,6 +590,137 @@ pub struct ActsConnectedSignup {
     pub request_grant: String,
 }
 
+/// A stage of the Ambassador funnel.
+///
+/// Derived from the milestones a person has reached rather than stored: see
+/// [`AmbassadorStage::derive`]. There is no `Initial` variant, because "has
+/// reached no stage" is the absence of a stage — [`AmbassadorStage::derive`]
+/// returns `None` for it, and no funnel export has a row to show.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AmbassadorStage {
+    /// Champion training finished.
+    Tutorial,
+    Application,
+    Verified,
+    /// An Ambassador: in the public directory.
+    Passed,
+    International,
+    Rejected,
+    Failed,
+}
+
+/// The milestones an Ambassador funnel stage is derived from.
+///
+/// Each field is a fact recorded somewhere in its own right — a timestamp on
+/// the progress row, a date or a verdict on the application, the directory
+/// date on the user — so that the stage stays a view of them and cannot
+/// contradict them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AmbassadorMilestones {
+    /// `ambassador_progress.tutorial_completed_at` is set.
+    pub tutorial_completed: bool,
+    /// A non-draft application with a `submitted` date exists.
+    pub application_submitted: bool,
+    /// The application carries a `verified` date.
+    pub verified: bool,
+    /// `users.ambassador` is set: the person is in the public directory.
+    pub in_directory: bool,
+    pub app_status: AmbassadorAppStatus,
+    pub screening_status: AmbassadorScreeningStatus,
+}
+
+impl AmbassadorStage {
+    /// The stage these milestones add up to, or `None` for somebody who has
+    /// not started.
+    ///
+    /// The precedence is orrery's `ambassador_application_pre_save`: the two
+    /// levers first — demotion to Champion, then promotion to Ambassador — then
+    /// the ways the route can close, then how far along the open route the
+    /// person got. Staff's verdict on the application therefore wins over the
+    /// milestones it supersedes — demoting an Ambassador makes them a Champion
+    /// again on the strength of the verdict alone, without disturbing the dates
+    /// that record how they got there.
+    pub fn derive(milestones: &AmbassadorMilestones) -> Option<AmbassadorStage> {
+        if milestones.app_status == AmbassadorAppStatus::Champion {
+            // The demotion lever, and it reaches back to Champion from any
+            // later stage. Somebody demoted before ever finishing the training
+            // is nowhere in the funnel rather than a Champion.
+            return milestones
+                .tutorial_completed
+                .then_some(AmbassadorStage::Tutorial);
+        }
+
+        if milestones.app_status == AmbassadorAppStatus::Ambassador {
+            // The promotion lever, and orrery checks it before the ways the
+            // route can close: staff promoting somebody is the most recent word
+            // on them, and orrery does not make the promotion wait on screening.
+            return Some(AmbassadorStage::Passed);
+        }
+
+        if let Some(closed) =
+            AmbassadorStage::closed_by(milestones.app_status, milestones.screening_status)
+        {
+            return Some(closed);
+        }
+
+        if milestones.in_directory {
+            Some(AmbassadorStage::Passed)
+        } else if milestones.verified {
+            Some(AmbassadorStage::Verified)
+        } else if milestones.application_submitted {
+            Some(AmbassadorStage::Application)
+        } else if milestones.tutorial_completed {
+            Some(AmbassadorStage::Tutorial)
+        } else {
+            None
+        }
+    }
+
+    /// The stage at which a verdict closes the route past Champion, if it
+    /// closes it at all.
+    ///
+    /// Separate from [`AmbassadorStage::derive`], which calls it, because the
+    /// caller recording that the route closed has to agree with the caller
+    /// reporting where somebody stands about which verdicts close it.
+    pub fn closed_by(
+        app_status: AmbassadorAppStatus,
+        screening_status: AmbassadorScreeningStatus,
+    ) -> Option<AmbassadorStage> {
+        if app_status == AmbassadorAppStatus::Rejected {
+            return Some(AmbassadorStage::Rejected);
+        }
+
+        match screening_status {
+            AmbassadorScreeningStatus::International => Some(AmbassadorStage::International),
+            AmbassadorScreeningStatus::Failed => Some(AmbassadorStage::Failed),
+            _ => None,
+        }
+    }
+
+    pub const ALL: &'static [AmbassadorStage] = &[
+        AmbassadorStage::Tutorial,
+        AmbassadorStage::Application,
+        AmbassadorStage::Verified,
+        AmbassadorStage::Passed,
+        AmbassadorStage::International,
+        AmbassadorStage::Rejected,
+        AmbassadorStage::Failed,
+    ];
+
+    /// What staff call this stage.
+    pub fn label(self) -> &'static str {
+        match self {
+            AmbassadorStage::Tutorial => "Champion training complete",
+            AmbassadorStage::Application => "Application submitted",
+            AmbassadorStage::Verified => "Application verified",
+            AmbassadorStage::Passed => "Ambassador",
+            AmbassadorStage::International => "International",
+            AmbassadorStage::Rejected => "Rejected",
+            AmbassadorStage::Failed => "Screening failed",
+        }
+    }
+}
+
 /// Which stages of the Ambassador funnel to export (`user.ambassador.stages`).
 ///
 /// The five staff funnel exports — one per stage, plus the Champions list that
@@ -586,9 +728,9 @@ pub struct ActsConnectedSignup {
 /// one request rather than one endpoint each.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct AmbassadorStagesRequest {
-    /// The `ambassador_progress.state` values to include. An empty list
-    /// matches nothing, so a caller cannot accidentally export everyone.
-    pub states: Vec<String>,
+    /// The stages to include. An empty list matches nothing, so a caller
+    /// cannot accidentally export everyone.
+    pub stages: Vec<AmbassadorStage>,
 }
 
 /// One person at one stage of the Ambassador funnel.
@@ -598,10 +740,9 @@ pub struct AmbassadorStageRow {
     pub last_name: String,
     pub handle: String,
     pub email: String,
-    /// The raw state name; the caller maps it to the label staff use.
-    pub state: String,
-    /// When the person last moved through the funnel, as `YYYY-MM-DD`, or
-    /// empty for a row that predates the column.
+    pub stage: AmbassadorStage,
+    /// The date the person reached that stage, as `YYYY-MM-DD`, or empty when
+    /// the milestone it is derived from carries no date.
     pub since: String,
 }
 
@@ -1061,4 +1202,206 @@ pub struct LibrarySignupUpdate {
     pub organization_web_page: String,
     pub organization_social_handles: String,
     pub add_to_map: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Somebody who has reached nothing at all.
+    fn nobody() -> AmbassadorMilestones {
+        AmbassadorMilestones {
+            tutorial_completed: false,
+            application_submitted: false,
+            verified: false,
+            in_directory: false,
+            app_status: AmbassadorAppStatus::UnderReview,
+            screening_status: AmbassadorScreeningStatus::ToVerify,
+        }
+    }
+
+    /// An Ambassador: every milestone along the open route reached.
+    fn ambassador() -> AmbassadorMilestones {
+        AmbassadorMilestones {
+            tutorial_completed: true,
+            application_submitted: true,
+            verified: true,
+            in_directory: true,
+            app_status: AmbassadorAppStatus::Accepted,
+            screening_status: AmbassadorScreeningStatus::Verified,
+        }
+    }
+
+    #[test]
+    fn no_milestone_is_no_stage() {
+        assert_eq!(AmbassadorStage::derive(&nobody()), None);
+    }
+
+    /// The open route, walked one milestone at a time.
+    #[test]
+    fn each_milestone_advances_the_stage() {
+        let mut person = nobody();
+        assert_eq!(AmbassadorStage::derive(&person), None);
+
+        person.tutorial_completed = true;
+        assert_eq!(
+            AmbassadorStage::derive(&person),
+            Some(AmbassadorStage::Tutorial)
+        );
+
+        person.application_submitted = true;
+        assert_eq!(
+            AmbassadorStage::derive(&person),
+            Some(AmbassadorStage::Application)
+        );
+
+        person.verified = true;
+        assert_eq!(
+            AmbassadorStage::derive(&person),
+            Some(AmbassadorStage::Verified)
+        );
+
+        person.in_directory = true;
+        assert_eq!(
+            AmbassadorStage::derive(&person),
+            Some(AmbassadorStage::Passed)
+        );
+    }
+
+    /// Demotion is a verdict, not an erasure.
+    ///
+    /// Staff demote an Ambassador for a hiatus and promote them again on
+    /// return, so the demotion has to read as Champion while the milestones
+    /// that got them there stay exactly as they were.
+    #[test]
+    fn demotion_returns_an_ambassador_to_champion() {
+        let mut person = ambassador();
+        person.app_status = AmbassadorAppStatus::Champion;
+        // The caller clears the directory date in the same edit; the verdict
+        // has to hold even before it does.
+        assert_eq!(
+            AmbassadorStage::derive(&person),
+            Some(AmbassadorStage::Tutorial)
+        );
+
+        person.app_status = AmbassadorAppStatus::Accepted;
+        assert_eq!(
+            AmbassadorStage::derive(&person),
+            Some(AmbassadorStage::Passed),
+            "promoting again should restore the stage the milestones support"
+        );
+    }
+
+    /// A demotion cannot invent a Champion out of somebody who never trained.
+    #[test]
+    fn demoting_an_untrained_person_is_no_stage() {
+        let mut person = nobody();
+        person.app_status = AmbassadorAppStatus::Champion;
+        assert_eq!(AmbassadorStage::derive(&person), None);
+    }
+
+    /// Each way the route can close outranks how far along it the person got.
+    #[test]
+    fn a_closed_route_outranks_progress_along_it() {
+        for (person, expected) in [
+            (
+                AmbassadorMilestones {
+                    app_status: AmbassadorAppStatus::Rejected,
+                    ..ambassador()
+                },
+                AmbassadorStage::Rejected,
+            ),
+            (
+                AmbassadorMilestones {
+                    screening_status: AmbassadorScreeningStatus::International,
+                    ..ambassador()
+                },
+                AmbassadorStage::International,
+            ),
+            (
+                AmbassadorMilestones {
+                    screening_status: AmbassadorScreeningStatus::Failed,
+                    ..ambassador()
+                },
+                AmbassadorStage::Failed,
+            ),
+        ] {
+            assert_eq!(AmbassadorStage::derive(&person), Some(expected));
+        }
+    }
+
+    /// The promotion lever reaches past a closed route, and past screening.
+    ///
+    /// orrery promotes on the verdict alone — its `promote_to_ambassador` says
+    /// in as many words that screening is a prerequisite staff are trusted to
+    /// have checked, not one the code enforces — so a promoted Ambassador whose
+    /// screening row still says otherwise is an Ambassador.
+    #[test]
+    fn promotion_outranks_a_closed_route() {
+        let person = AmbassadorMilestones {
+            app_status: AmbassadorAppStatus::Ambassador,
+            screening_status: AmbassadorScreeningStatus::Failed,
+            in_directory: false,
+            ..ambassador()
+        };
+
+        assert_eq!(
+            AmbassadorStage::derive(&person),
+            Some(AmbassadorStage::Passed)
+        );
+    }
+
+    /// ...but demotion outranks promotion, because it is its inverse and comes
+    /// first in orrery's precedence.
+    #[test]
+    fn demotion_outranks_promotion() {
+        let person = AmbassadorMilestones {
+            app_status: AmbassadorAppStatus::Champion,
+            ..ambassador()
+        };
+
+        assert_eq!(
+            AmbassadorStage::derive(&person),
+            Some(AmbassadorStage::Tutorial)
+        );
+    }
+
+    /// Every value orrery can store has to decode to its own variant.
+    ///
+    /// An unlisted one decodes as `UnderReview`, which would read a serving
+    /// Ambassador as an unexamined applicant — and did, for the 120 accounts
+    /// carrying orrery's `AMBASSADOR` verdict before it had a variant here.
+    #[test]
+    fn every_app_status_orrery_writes_round_trips() {
+        for status in AmbassadorAppStatus::all() {
+            assert_eq!(
+                AmbassadorAppStatus::from_i64(status.as_i64()),
+                *status,
+                "{status:?} does not survive the database"
+            );
+        }
+    }
+
+    /// Champion outranks a closed route, matching orrery's precedence: a
+    /// demotion is staff's most recent word on the application.
+    #[test]
+    fn demotion_outranks_a_closed_screening() {
+        let person = AmbassadorMilestones {
+            app_status: AmbassadorAppStatus::Champion,
+            screening_status: AmbassadorScreeningStatus::International,
+            ..ambassador()
+        };
+
+        assert_eq!(
+            AmbassadorStage::derive(&person),
+            Some(AmbassadorStage::Tutorial)
+        );
+    }
+
+    #[test]
+    fn every_stage_is_reachable_and_labelled() {
+        for stage in AmbassadorStage::ALL {
+            assert!(!stage.label().is_empty());
+        }
+    }
 }

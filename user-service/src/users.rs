@@ -1636,11 +1636,9 @@ pub async fn user_details_create(req: &Request) -> Result<UserDetailsResponse, E
         }
     }
 
-    // Fetch user emails for the response
-    let emails = vec![UserEmail {
-        email: request.primary_email.clone(),
-        verified: request.verified,
-    }];
+    // Read the row back rather than describing it, so the response carries the
+    // address's real id.
+    let emails = fetch_user_emails(&user_id_str).await?;
 
     let user = UserDetails {
         user_id,
@@ -1835,6 +1833,17 @@ pub async fn admin_password_reset(req: &Request) -> Result<AdminPasswordResetRes
 pub async fn admin_email_add(req: &Request) -> Result<UserEmailResponse, Error> {
     let request: UserEmailAddRequest = decode_structured_message(req.message.clone())?;
 
+    // An address that is not usable must never be stored. An empty one in
+    // particular cannot be named in a URL, so the row it creates could not be
+    // addressed again to correct or remove it.
+    if !common::email::valid(&request.email) {
+        return Ok(UserEmailResponse {
+            success: false,
+            message: "That is not a valid email address".to_string(),
+            emails: vec![],
+        });
+    }
+
     let user_id_str = request.user_id.to_string();
 
     // Check if user exists
@@ -1916,10 +1925,41 @@ pub async fn admin_email_add(req: &Request) -> Result<UserEmailResponse, Error> 
     }
 }
 
+/// The address stored at `email_id` for this user, if the row is theirs.
+///
+/// Handlers key their writes on the id, but still need the address itself for
+/// the audit log and for the primary-address guard. Scoping the lookup by
+/// user_id also stops one user's id from naming another's row.
+async fn email_address(user_id_str: &str, email_id: i64) -> Result<Option<String>, Error> {
+    Ok(sqlx::query_scalar!(
+        r#"SELECT "email" FROM "emails" WHERE "user_id" = ? AND "rowid" = ?"#,
+        user_id_str,
+        email_id
+    )
+    .fetch_optional(db())
+    .await?)
+}
+
 pub async fn admin_email_update(req: &Request) -> Result<UserEmailResponse, Error> {
     let request: UserEmailUpdateRequest = decode_structured_message(req.message.clone())?;
 
+    if !common::email::valid(&request.new_email) {
+        return Ok(UserEmailResponse {
+            success: false,
+            message: "That is not a valid email address".to_string(),
+            emails: vec![],
+        });
+    }
+
     let user_id_str = request.user_id.to_string();
+
+    let Some(old_email) = email_address(&user_id_str, request.email_id).await? else {
+        return Ok(UserEmailResponse {
+            success: false,
+            message: "Email not found".to_string(),
+            emails: vec![],
+        });
+    };
 
     // Check if new email is already in use by someone else
     let email_exists = sqlx::query!(
@@ -1946,14 +1986,14 @@ pub async fn admin_email_update(req: &Request) -> Result<UserEmailResponse, Erro
     let result = sqlx::query!(
         r#"UPDATE "emails" SET
             "email" = ?, "hash" = ?, "hash_lower" = ?, "hash_capfirst" = ?, "verified" = ?
-        WHERE "user_id" = ? AND "email" = ?"#,
+        WHERE "user_id" = ? AND "rowid" = ?"#,
         request.new_email,
         hashed,
         hashed_lower,
         hashed_capfirst,
         false, // Reset verified status when email changes
         user_id_str,
-        request.old_email
+        request.email_id
     )
     .execute(db())
     .await;
@@ -1975,17 +2015,14 @@ pub async fn admin_email_update(req: &Request) -> Result<UserEmailResponse, Erro
                 "email-updated",
                 request.user_id,
                 None,
-                format!("old={}, new={}", request.old_email, request.new_email),
+                format!("old={}, new={}", old_email, request.new_email),
             )
             .await
             .ok();
 
             Ok(UserEmailResponse {
                 success: true,
-                message: format!(
-                    "Email updated from {} to {}",
-                    request.old_email, request.new_email
-                ),
+                message: format!("Email updated from {} to {}", old_email, request.new_email),
                 emails,
             })
         }
@@ -2018,6 +2055,14 @@ pub async fn admin_email_delete(req: &Request) -> Result<UserEmailResponse, Erro
         });
     }
 
+    let Some(email) = email_address(&user_id_str, request.email_id).await? else {
+        return Ok(UserEmailResponse {
+            success: false,
+            message: "Email not found".to_string(),
+            emails: vec![],
+        });
+    };
+
     // Check if this is the primary email
     let is_primary = sqlx::query!(
         r#"SELECT "primary_email" FROM "users" WHERE "user_id" = ?"#,
@@ -2027,7 +2072,7 @@ pub async fn admin_email_delete(req: &Request) -> Result<UserEmailResponse, Erro
     .await?;
 
     if let Some(user) = is_primary {
-        if user.primary_email == request.email {
+        if user.primary_email == email {
             return Ok(UserEmailResponse {
                 success: false,
                 message: "Cannot delete the user's primary email address".to_string(),
@@ -2038,9 +2083,9 @@ pub async fn admin_email_delete(req: &Request) -> Result<UserEmailResponse, Erro
 
     // Delete the email
     let result = sqlx::query!(
-        r#"DELETE FROM "emails" WHERE "user_id" = ? AND "email" = ?"#,
+        r#"DELETE FROM "emails" WHERE "user_id" = ? AND "rowid" = ?"#,
         user_id_str,
-        request.email
+        request.email_id
     )
     .execute(db())
     .await;
@@ -2065,14 +2110,14 @@ pub async fn admin_email_delete(req: &Request) -> Result<UserEmailResponse, Erro
                 "email-deleted",
                 request.user_id,
                 None,
-                format!("email={}", request.email),
+                format!("email={}", email),
             )
             .await
             .ok();
 
             Ok(UserEmailResponse {
                 success: true,
-                message: format!("Email {} deleted successfully", request.email),
+                message: format!("Email {} deleted successfully", email),
                 emails,
             })
         }
@@ -2091,9 +2136,9 @@ pub async fn admin_email_toggle_verified(req: &Request) -> Result<UserDetailsRes
 
     // Get current verified status
     let current_status = sqlx::query!(
-        r#"SELECT "verified" FROM "emails" WHERE "user_id" = ? AND "email" = ?"#,
+        r#"SELECT "email", "verified" FROM "emails" WHERE "user_id" = ? AND "rowid" = ?"#,
         user_id_str,
-        request.email
+        request.email_id
     )
     .fetch_optional(db())
     .await?;
@@ -2104,10 +2149,10 @@ pub async fn admin_email_toggle_verified(req: &Request) -> Result<UserDetailsRes
 
             // Update verified status
             let result = sqlx::query!(
-                r#"UPDATE "emails" SET "verified" = ? WHERE "user_id" = ? AND "email" = ?"#,
+                r#"UPDATE "emails" SET "verified" = ? WHERE "user_id" = ? AND "rowid" = ?"#,
                 new_status,
                 user_id_str,
-                request.email
+                request.email_id
             )
             .execute(db())
             .await;
@@ -2122,7 +2167,7 @@ pub async fn admin_email_toggle_verified(req: &Request) -> Result<UserDetailsRes
                         "email-verification-toggled",
                         request.user_id,
                         None,
-                        format!("email={}, verified={}", request.email, new_status),
+                        format!("email={}, verified={}", row.email, new_status),
                     )
                     .await
                     .ok();
@@ -2187,7 +2232,7 @@ pub async fn admin_email_toggle_verified(req: &Request) -> Result<UserDetailsRes
 // Helper function to fetch user emails
 async fn fetch_user_emails(user_id_str: &str) -> Result<Vec<UserEmail>, Error> {
     let emails_result = sqlx::query!(
-        r#"SELECT "email", "verified" FROM "emails" WHERE "user_id" = ? ORDER BY "email""#,
+        r#"SELECT "rowid" AS "email_id!", "email", "verified" FROM "emails" WHERE "user_id" = ? ORDER BY "email""#,
         user_id_str
     )
     .fetch_all(db())
@@ -2196,6 +2241,7 @@ async fn fetch_user_emails(user_id_str: &str) -> Result<Vec<UserEmail>, Error> {
     Ok(emails_result
         .into_iter()
         .map(|row| UserEmail {
+            email_id: row.email_id,
             email: row.email,
             verified: row.verified,
         })

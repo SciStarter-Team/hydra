@@ -5,6 +5,7 @@ extern crate self as common;
 pub mod badge;
 pub mod channel;
 pub mod elect;
+pub mod email;
 pub mod insensitivestring;
 pub mod linked_platform;
 pub mod message;
@@ -16,6 +17,7 @@ pub mod quill;
 pub mod serde_utils;
 pub mod service;
 pub mod shared;
+pub mod tag;
 pub mod timestring;
 #[cfg(feature = "database")]
 pub mod transaction;

@@ -1,5 +1,5 @@
 <!-- New News Item Modal -->
-<dialog class="rounded-lg shadow-xl w-11/12 md:w-3/4 max-h-[90vh] overflow-y-auto p-5 backdrop:bg-gray-500 backdrop:opacity-75 m-auto"
+<dialog data-notifications class="rounded-lg shadow-xl w-11/12 md:w-3/4 max-h-[90vh] overflow-y-auto p-5 backdrop:bg-gray-500 backdrop:opacity-75 m-auto"
         hx-on::after:init="this.showModal()"
         hx-on:click="if (event.target.tagName === 'DIALOG') this.remove()">
     <div hx-on:click="event.stopPropagation()">
@@ -145,7 +145,7 @@
                                 name="active"
                                 value="1"
                                 checked
-                                class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                                class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200/50"
                             >
                             <span class="ml-2 text-sm text-gray-700">Active</span>
                         </label>

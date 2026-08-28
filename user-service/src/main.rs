@@ -2084,27 +2084,21 @@ async fn apply_ambassador_state(
         _ => {}
     }
 
-    // Keep the native state-machine column in step with orrery so a later native
-    // staff review sees the correct prior state and does not re-fire an entry
-    // email for a transition orrery already handled. The orrery state strings map
-    // one-to-one onto the native states. This is a sync, so it never emails.
-    if matches!(
-        state,
-        "tutorial"
-            | "application"
-            | "verified"
-            | "passed"
-            | "rejected"
-            | "international"
-            | "failed"
-    ) {
-        sqlx::query!(
-            "UPDATE ambassador_progress SET state = ? WHERE user_id = ?",
-            state,
-            user_id
-        )
-        .execute(db)
-        .await?;
+    // Date the ways the route can close. hydra derives the funnel stage from
+    // these milestones, so recording orrery's closure here is what keeps a
+    // later native staff review from reading the same verdict as fresh and
+    // re-sending the entry email orrery already sent. This is a sync, so the
+    // stamp is all it does: `close_route` reports whether it landed, and here
+    // that answer is deliberately discarded.
+    let closed = match state {
+        "rejected" => Some(crate::ambassador::ClosedRoute::Rejected),
+        "international" => Some(crate::ambassador::ClosedRoute::International),
+        "failed" => Some(crate::ambassador::ClosedRoute::ScreeningFailed),
+        _ => None,
+    };
+
+    if let Some(closed) = closed {
+        crate::ambassador::close_route(user_id, closed, ts).await?;
     }
 
     Ok(())

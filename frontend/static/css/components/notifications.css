@@ -11,18 +11,49 @@
 
 .ss-notifications {
     position: fixed;
-    top: 1rem;
-    right: 1rem;
-    z-index: 100;
+    /* Insets rather than a vw calculation: 100vw includes the scrollbar, so
+       width math against it overflows by the scrollbar's width on narrow
+       screens. `margin-left: auto` keeps the column right-aligned. */
+    top: max(1rem, env(safe-area-inset-top));
+    left: max(1rem, env(safe-area-inset-left));
+    right: max(1rem, env(safe-area-inset-right));
+    max-width: 24rem;
+    margin-left: auto;
+
+    /* Above the site menu (9999) and the map controls (99999), which would
+       otherwise cover a message. A modal <dialog> still wins: it is in the top
+       layer, which no z-index can reach. */
+    z-index: 100000;
+
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    width: min(24rem, calc(100vw - 2rem));
 
-    /* The region spans a corner of the viewport whether or not it holds
-       anything, so it must never intercept clicks meant for the page. Each
-       message takes its own clicks back. */
+    /* Enough failures in a row would otherwise run off the bottom of the
+       screen, putting the newest message out of reach. */
+    max-height: calc(100dvh - 2rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+
+    /* An empty region is zero-tall and cannot intercept anything on its own,
+       but once it scrolls it needs to take the pointer to be scrollable at
+       all -- so interactivity is switched on only when it holds something. */
     pointer-events: none;
+}
+
+.ss-notifications:has(.ss-notification) {
+    pointer-events: auto;
+}
+
+/* On a phone the top-right corner belongs to the header -- a message there
+   covers the nav and its menu button. Bottom is also where a thumb already
+   is. */
+@media (max-width: 40rem) {
+    .ss-notifications {
+        top: auto;
+        bottom: max(1rem, env(safe-area-inset-bottom));
+        max-height: calc(100dvh - 2rem);
+    }
 }
 
 .ss-notification {
@@ -40,6 +71,12 @@
 .ss-notification__title {
     font-weight: 700;
     line-height: 1.3;
+}
+
+/* Error text often carries a URL or an identifier with nothing to break on. */
+.ss-notification__title,
+.ss-notification__message {
+    overflow-wrap: anywhere;
 }
 
 /* A title is optional; when there is one, the message sits under it. */
@@ -73,6 +110,19 @@
 .ss-notification__dismiss:hover,
 .ss-notification__dismiss:focus-visible {
     opacity: 1;
+}
+
+/* 28px suits a pointer; a finger needs the ~44px the platform guidelines ask
+   for, so the target grows where the input is coarse. */
+@media (pointer: coarse) {
+    .ss-notification__dismiss {
+        width: 2.75rem;
+        height: 2.75rem;
+    }
+
+    .ss-notification {
+        padding-right: 3rem;
+    }
 }
 
 .ss-notification--error {

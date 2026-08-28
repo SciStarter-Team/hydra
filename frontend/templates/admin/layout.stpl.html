@@ -23,7 +23,7 @@
         <!-- Mobile backdrop -->
         <%# Faded rather than hidden, so the transition is the stylesheet's job %>
         <%# and there is no display flip to cloak on first paint. %>
-        <div class="fixed inset-0 bg-gray-600 bg-opacity-75 z-40 lg:hidden transition-opacity duration-300 ease-in-out"
+        <div class="fixed inset-0 bg-gray-600/75 z-40 lg:hidden transition-opacity duration-300 ease-in-out"
              :class="{'opacity-0': data.sidebarCollapsed, 'pointer-events-none': data.sidebarCollapsed, 'opacity-100': !data.sidebarCollapsed}"
              hx-on:click="data.sidebarCollapsed = true"></div>
 
@@ -226,12 +226,14 @@
         </div>
         
         <!-- Main Content -->
-        <div class="flex-1 flex flex-col lg:ml-64">
+        <%# min-w-0: a flex item will not shrink below its content's minimum %>
+        <%# width without it, which made narrow screens scroll sideways. %>
+        <div class="flex-1 min-w-0 flex flex-col lg:ml-64">
             <!-- Top Bar -->
             <div class="sticky top-0 z-10 bg-white shadow-sm border-b border-gray-200 px-3 sm:px-6 py-4 h-16">
                 <div class="flex items-center justify-between h-full">
                     <!-- Breadcrumbs with mobile button -->
-                    <div class="flex items-center flex-1 min-w-0">
+                    <div class="flex items-center flex-1 min-w-0 overflow-hidden">
                         <!-- Mobile menu button -->
                         <button hx-on:click="data.sidebarCollapsed = !data.sidebarCollapsed" class="lg:hidden mr-4 p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 flex-shrink-0">
                             <wa-icon name="bars" class="w-6 h-6"></wa-icon>
@@ -289,7 +291,7 @@
 
     <!-- Global HTMX loading indicator -->
     <div id="global-loading-indicator" class="htmx-indicator fixed inset-0 flex items-center justify-center z-[100] pointer-events-none">
-        <div class="bg-gray-400 bg-opacity-75 text-white rounded-lg p-8 shadow-lg">
+        <div class="bg-gray-400/75 text-white rounded-lg p-8 shadow-lg">
             <wa-spinner style="font-size: 3rem;"></wa-spinner>
         </div>
     </div>

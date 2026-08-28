@@ -1,5 +1,5 @@
 <!-- Edit Trigger Modal -->
-<dialog id="edit-trigger-dialog" class="rounded-lg shadow-xl w-11/12 md:w-2/3 max-h-[90vh] overflow-y-auto p-5 backdrop:bg-gray-500 backdrop:opacity-75 m-auto"
+<dialog data-notifications id="edit-trigger-dialog" class="rounded-lg shadow-xl w-11/12 md:w-2/3 max-h-[90vh] overflow-y-auto p-5 backdrop:bg-gray-500 backdrop:opacity-75 m-auto"
         hx-on::after:init="if (event.target === this) this.showModal()"
         hx-on:click="if (event.target === this) this.remove()">
     <div hx-on:click="event.stopPropagation()">

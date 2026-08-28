@@ -240,7 +240,9 @@
             <% if !self.recent_signups_chart.is_empty() { %>
                 <% let max_new_users = self.recent_signups_chart.iter().map(|s| s.new_users).max().unwrap_or(1); %>
                 <% let chart_stats: Vec<_> = self.recent_signups_chart.iter().rev().collect(); %>
-                <div class="h-64 flex items-end justify-between gap-px sm:gap-1">
+                <%# A bar per day does not fit a phone; let the chart scroll %>
+                <%# sideways rather than the page. %>
+                <div class="h-64 flex items-end justify-between gap-px sm:gap-1 overflow-x-auto">
                     <% for stat in &chart_stats { %>
                         <div class="w-[6px] sm:flex-1 flex flex-col items-center group">
                             <div class="w-full bg-indigo-600 rounded-t transition-all group-hover:bg-indigo-700"

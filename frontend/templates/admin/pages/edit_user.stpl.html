@@ -188,18 +188,18 @@
                 </div>
                 <div id="modal-message-container"></div>
                 <div id="emails-list" class="space-y-2">
-                    <% for (index, email) in self.emails.iter().enumerate() { %>
-                        <%+ EmailRow { user_id: self.user_id.clone(), email: email.clone(), index } %>
+                    <% for email in self.emails.iter() { %>
+                        <%+ EmailRow { user_id: self.user_id.clone(), email: email.clone() } %>
                     <% } %>
 
                     <!-- Add New Email Row -->
-                    <div class="flex items-center space-x-2 p-2 border border-dashed border-gray-300 rounded-md">
+                    <div class="flex flex-wrap items-center gap-2 p-2 border border-dashed border-gray-300 rounded-md">
                         <input
                             type="email"
                             placeholder="Enter new email address"
                             id="new-email-input"
                             name="new_email"
-                            class="flex-1 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            class="grow basis-full sm:basis-0 min-w-0 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                         >
                         <button
                             type="button"

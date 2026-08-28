@@ -631,6 +631,12 @@ pub struct UserEmailsRequest {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct UserEmail {
+    /// The row's own identifier, stable across edits to the address.
+    ///
+    /// The address itself is a natural key, not an identity: it changes when
+    /// edited, and it is not reliably a URL path segment. Callers that need to
+    /// name one of a user's addresses use this.
+    pub email_id: i64,
     pub email: String,
     pub verified: bool,
 }
@@ -649,20 +655,20 @@ pub struct UserEmailAddRequest {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct UserEmailUpdateRequest {
     pub user_id: Ulid,
-    pub old_email: String,
+    pub email_id: i64,
     pub new_email: String,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct UserEmailDeleteRequest {
     pub user_id: Ulid,
-    pub email: String,
+    pub email_id: i64,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct UserEmailToggleVerifiedRequest {
     pub user_id: Ulid,
-    pub email: String,
+    pub email_id: i64,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

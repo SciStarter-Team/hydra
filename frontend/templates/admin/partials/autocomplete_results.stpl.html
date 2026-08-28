@@ -1,4 +1,4 @@
-<div data-part=display class="absolute z-10 mt-1 w-full bg-white shadow-lg max-h-60 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none"
+<div data-part=display class="absolute z-10 mt-1 w-full bg-white shadow-lg max-h-60 rounded-md py-1 text-base ring-1 ring-black/5 overflow-auto focus:outline-none"
      hx-on:click="
        let widget = this.closest('[data-part=widget]');
        htmx.find(widget, '[data-part=display]').classList.add('hidden');

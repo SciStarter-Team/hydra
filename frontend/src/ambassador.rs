@@ -454,7 +454,7 @@ pub async fn submit(
         return err(user_info, form, gate, &msg).await;
     }
 
-    if !valid_email(&form.email) {
+    if !common::email::valid(&form.email) {
         return err(user_info, form, gate, "Please enter a valid email address.").await;
     }
 
@@ -700,20 +700,6 @@ pub async fn contact(
         "<p class=\"text-green-700\">Your message has been received. \
          It will be reviewed by SciStarter staff before being forwarded to the ambassador.</p>",
     ))
-}
-
-fn valid_email(email: &str) -> bool {
-    let mut parts = email.trim().splitn(2, '@');
-    match (parts.next(), parts.next()) {
-        (Some(local), Some(domain)) => {
-            !local.is_empty()
-                && domain.contains('.')
-                && !domain.starts_with('.')
-                && !domain.ends_with('.')
-                && !domain.contains(char::is_whitespace)
-        }
-        _ => false,
-    }
 }
 
 fn parse_ymd(s: &str) -> Option<(i32, u32, u32)> {

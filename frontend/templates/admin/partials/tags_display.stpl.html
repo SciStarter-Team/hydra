@@ -13,7 +13,7 @@
                       style="background-color: hsl(<%= hue %>, 70%, 45%);">
                     <%= tag %>
                     <button type="button"
-                            class="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full hover:bg-black hover:bg-opacity-20 focus:outline-none focus:bg-black focus:bg-opacity-20"
+                            class="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full hover:bg-black/20 focus:outline-none focus:bg-black/20"
                             hx-delete="/-admin/projects/<%= self.project_id %>/tags/<%= tag %>"
                             hx-target="closest div.tags-container"
                             hx-swap="outerHTML"

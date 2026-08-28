@@ -20,15 +20,6 @@ const SOLAR_SYSTEM_AMBASSADOR: &str = "solar-system-ambassador";
 /// The tag awarded for finishing Foundations.
 const FOUNDATIONS_BADGE: &str = "foundations-badge";
 
-/// The tags that mean Champion training is complete.
-///
-/// The training was called "ambassador" before the Champion revision, and
-/// accounts tagged then were never re-tagged, so both spellings count.
-const CHAMPION_TAGS: &[&str] = &[
-    "scistarter-champion-training-complete",
-    "scistarter-ambassador-training-complete",
-];
-
 /// GET `/staff/solar-system-ambassadors` — the CSV.
 #[handler]
 #[tracing::instrument]
@@ -47,7 +38,9 @@ pub async fn solar_system_ambassadors() -> Result<Response, anyhow::Error> {
     for member in &members {
         let has = |tag: &str| member.tags.iter().any(|t| t == tag);
         let foundations = has(FOUNDATIONS_BADGE);
-        let champion = CHAMPION_TAGS.iter().any(|tag| has(tag));
+        let champion = common::tag::CHAMPION_TRAINING_ANY
+            .iter()
+            .any(|tag| has(tag));
 
         csv.push_str(&format!(
             "{},{},{},{}\n",

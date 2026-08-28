@@ -1898,7 +1898,7 @@ mod tests {
     fn every_ambassador_tag_we_write_is_mirrored() {
         for tag in crate::ambassador::PATH_PAST_CHAMPION
             .iter()
-            .chain(&[crate::ambassador::CHAMPION_TRAINING_TAG])
+            .chain(&[common::tag::CHAMPION_TRAINING])
         {
             assert!(mirrored(tag), "{tag} is written but not mirrored");
         }
@@ -1917,10 +1917,7 @@ mod tests {
         let written: Vec<&str> = crate::ambassador::PATH_PAST_CHAMPION
             .iter()
             .copied()
-            .chain([
-                crate::ambassador::CHAMPION_TRAINING_TAG,
-                crate::ambassador::LEGACY_CHAMPION_TRAINING_TAG,
-            ])
+            .chain(common::tag::CHAMPION_TRAINING_ANY.iter().copied())
             .collect();
 
         for tag in MIRRORED_TAGS {

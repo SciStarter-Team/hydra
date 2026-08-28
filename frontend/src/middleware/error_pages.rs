@@ -3,8 +3,7 @@
 //! This lives in a middleware rather than in [`poem::EndpointExt::catch_all_error`]
 //! because the shape of the response depends on the request: htmx 4 swaps error
 //! responses like any other, so a failed htmx request needs a body that belongs
-//! in whatever target the request named, while a plain navigation needs a whole
-//! page.
+//! somewhere on the page, while a plain navigation needs a whole page.
 
 use poem::{Endpoint, IntoResponse, Middleware, Response, web::Redirect};
 
@@ -79,14 +78,22 @@ async fn dispatch(from_htmx: bool, err: poem::Error) -> Response {
     }
 }
 
-/// Renders an error as a message for the page's notification region.
+/// Marks a response as a message to be placed rather than swapped in situ.
+///
+/// Deliberately not in htmx's `HX-` namespace: that belongs to htmx, which
+/// gives its own meanings to headers there. The header is read by
+/// static/js/notifications.js, which decides where the message goes: the nearest enclosing container that asked for one, or the
+/// page-wide region when nothing did. Handlers do not choose -- they cannot
+/// know which part of the page the request came from.
+pub const NOTIFICATION_HEADER: &str = "X-Notification";
+
+/// Renders an error as a message for the reader.
 ///
 /// htmx 4 swaps error responses like any other, so a failed htmx request would
 /// otherwise drop whatever came back into the element the request targeted --
 /// replacing the very content the reader was working on with an apology. The
-/// response is instead nothing but an `<hx-partial>` aimed at the notification
-/// region, which htmx routes there and, because the response carries no main
-/// content, leaves the request's own target untouched.
+/// response is marked [`NOTIFICATION_HEADER`] instead, and placed by the
+/// client.
 ///
 /// Handlers that answer an htmx request with an error status call this rather
 /// than writing a body of their own, so that every such error is delivered the
@@ -127,7 +134,9 @@ pub fn notification_response(
     status: poem::http::StatusCode,
     notification: Notification,
 ) -> Response {
-    let body = notification.into_partial().unwrap_or_else(|err| {
+    use sailfish::TemplateOnce;
+
+    let body = notification.render_once().unwrap_or_else(|err| {
         tracing::error!(?err, "failed to render notification");
         String::new()
     });
@@ -135,6 +144,7 @@ pub fn notification_response(
     Response::builder()
         .status(status)
         .content_type("text/html; charset=utf-8")
+        .header(NOTIFICATION_HEADER, "true")
         .body(body)
 }
 
@@ -160,7 +170,6 @@ fn not_authorized(err: poem::Error) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::component::notification::NOTIFICATIONS_TARGET;
     use poem::http::StatusCode;
 
     /// The dispatcher only recognises "no message" if a message-less poem error
@@ -201,30 +210,26 @@ mod tests {
         assert!(body.contains("could not be completed"), "{body}");
     }
 
-    /// The whole point of the partial: the response carries no main content, so
-    /// htmx leaves the element the request targeted exactly as it was.
+    /// The response says only "this is a message". Where it goes is the
+    /// client's call, because only the client can see which part of the page
+    /// the request came from.
     #[test]
-    fn the_response_is_nothing_but_a_partial() {
-        let body = body_of(error_response(StatusCode::FORBIDDEN, ""));
-        assert!(body.starts_with("<hx-partial "), "{body}");
-        assert!(body.ends_with("</hx-partial>"), "{body}");
-    }
-
-    #[test]
-    fn the_partial_is_aimed_at_the_notification_region() {
-        let body = body_of(error_response(StatusCode::NOT_FOUND, ""));
-        assert!(
-            body.contains(&format!(r#"hx-target="{NOTIFICATIONS_TARGET}""#)),
-            "{body}"
+    fn the_response_is_marked_for_placement() {
+        let resp = error_response(StatusCode::FORBIDDEN, "");
+        assert_eq!(
+            resp.headers()
+                .get(NOTIFICATION_HEADER)
+                .and_then(|v| v.to_str().ok()),
+            Some("true")
         );
     }
 
-    /// Messages accumulate rather than replacing one another, so a second
-    /// failure cannot hide the first.
     #[test]
-    fn messages_append_to_the_region() {
+    fn the_response_names_no_destination() {
         let body = body_of(error_response(StatusCode::NOT_FOUND, ""));
-        assert!(body.contains(r#"hx-swap="beforeend""#), "{body}");
+        assert!(!body.contains("hx-target"), "{body}");
+        assert!(!body.contains("hx-partial"), "{body}");
+        assert!(body.contains("ss-notification"), "{body}");
     }
 
     #[test]

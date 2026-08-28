@@ -17,6 +17,19 @@
         
         <!-- MAIN NAVIGATION ELEMENTS -->
         <div id="menu" class="off-canvas absolute transition-all flex flex-col bg-primary-dark text-white p-4 md:py-0 md:flex-row md:w-full  md:static md:bg-white md:text-primary-action md:text-lg md:gap-6 md:p-4 md:items-center md:justify-end md:relative md:z-50 md:mr-[-1.6rem]">
+          <%#
+            The open menu is fixed at z-9999 and covers the hamburger that
+            opened it, so it has to carry its own way out. `off-canvas` is the
+            closed state, and the same class the header's toggle reads, so
+            setting it here leaves the two in step.
+          %>
+          <button type="button" class="md:hidden self-end -mt-2 -mr-2 p-2 text-white"
+                  aria-label="Close menu"
+                  hx-on:click="q('#menu').classList.add('off-canvas')">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
           
 
           <!-- Participate, Media, More-->
@@ -280,6 +293,19 @@
         
         <!-- MAIN NAVIGATION ELEMENTS -->
         <div id="menu" class="off-canvas absolute transition-all flex flex-col bg-primary-dark text-white p-4 md:flex-row md:w-full  md:bg-white md:text-primary-action md:text-lg md:gap-6 md:p-0 md:items-center md:justify-end md:relative md:z-50">
+          <%#
+            The open menu is fixed at z-9999 and covers the hamburger that
+            opened it, so it has to carry its own way out. `off-canvas` is the
+            closed state, and the same class the header's toggle reads, so
+            setting it here leaves the two in step.
+          %>
+          <button type="button" class="md:hidden self-end -mt-2 -mr-2 p-2 text-white"
+                  aria-label="Close menu"
+                  hx-on:click="q('#menu').classList.add('off-canvas')">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
           
 
           <!-- Participate, Media, More-->

@@ -7,9 +7,9 @@ use common::{
         AmbassadorApplicationRow, AmbassadorApplicationUpdate, AmbassadorDirectoryEntry,
         AmbassadorDirectoryOrder, AmbassadorDirectoryQuery, AmbassadorDirectoryResponse,
         AmbassadorExportRow, AmbassadorFilters, AmbassadorListRequest, AmbassadorListResponse,
-        AmbassadorMessageForm, AmbassadorMessageReview, AmbassadorMessageRow, AmbassadorProfile,
-        AmbassadorReviewUpdate, AmbassadorScreeningStatus, AmbassadorStageRow,
-        AmbassadorStagesRequest, DatePresence, TriState,
+        AmbassadorMessageForm, AmbassadorMessageReview, AmbassadorMessageRow, AmbassadorMilestones,
+        AmbassadorProfile, AmbassadorReviewUpdate, AmbassadorScreeningStatus, AmbassadorStage,
+        AmbassadorStageRow, AmbassadorStagesRequest, DatePresence, TriState,
     },
     message::email::EmailRecipient,
     message::user::{AmbassadorLocation, AmbassadorPassedLocationsResponse, UserAndBadge},
@@ -21,55 +21,80 @@ use common::{
 use sqlx::{QueryBuilder, Row, Sqlite};
 use ulid::Ulid;
 
-/// The current native ambassador state-machine state (orrery's
-/// `AmbassadorState.state`), defaulting to `initial` for users with no record.
-async fn current_state(user_id: &str) -> Result<String, Error> {
-    Ok(sqlx::query_scalar!(
-        "SELECT state FROM ambassador_progress WHERE user_id = ?",
-        user_id
-    )
-    .fetch_optional(db())
-    .await?
-    .unwrap_or_else(|| "initial".to_string()))
+/// A way the route past Champion can close, and the milestone that dates it.
+///
+/// These three are the funnel stages no other table records: an application
+/// carries the verdict that produced them, but not when it was reached, and
+/// orrery's own state machine dates only its latest move.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClosedRoute {
+    Rejected,
+    International,
+    ScreeningFailed,
 }
 
-/// Set the native ambassador state, creating the progress row if needed.
-///
-/// `state_changed` is stamped with every write, matching the `auto_now` field
-/// orrery's state machine carries. The staff funnel exports report it as the
-/// person's "since" date, so a transition that did not record its date would
-/// leave a hole in those reports.
-async fn set_state(user_id: &str, state: &str) -> Result<(), Error> {
-    let now = TimeString::now();
+impl ClosedRoute {
+    /// The closure this stage is, if it is one.
+    pub fn of(stage: AmbassadorStage) -> Option<ClosedRoute> {
+        match stage {
+            AmbassadorStage::Rejected => Some(ClosedRoute::Rejected),
+            AmbassadorStage::International => Some(ClosedRoute::International),
+            AmbassadorStage::Failed => Some(ClosedRoute::ScreeningFailed),
+            AmbassadorStage::Tutorial
+            | AmbassadorStage::Application
+            | AmbassadorStage::Verified
+            | AmbassadorStage::Passed => None,
+        }
+    }
+}
 
+/// Record that the route closed, and say whether this write is what closed it.
+///
+/// The stamp is the guard as well as the date. An entry email is sent only on
+/// the write that first sets it, so a second staff review of the same verdict —
+/// or the orrery sync having recorded it first — cannot send the mail twice.
+/// This is the same shape the tutorial milestone uses in
+/// [`crate::workflow`], and it replaces the stored state machine that used to
+/// answer "is this a genuine transition?".
+pub async fn close_route(user_id: &str, closed: ClosedRoute, when: &str) -> Result<bool, Error> {
     sqlx::query!(
         "INSERT OR IGNORE INTO ambassador_progress (user_id) VALUES (?)",
         user_id
     )
     .execute(db())
     .await?;
-    sqlx::query!(
-        "UPDATE ambassador_progress SET state = ?, state_changed = ? WHERE user_id = ?",
-        state,
-        now,
-        user_id
-    )
-    .execute(db())
-    .await?;
-    Ok(())
-}
 
-/// Advance the native ambassador state to `to`, but only when the user is
-/// currently in one of the `from` states. Returns whether the state changed —
-/// the caller uses this to fire an entry email exactly once per real transition.
-pub async fn advance_state_if(user_id: &str, from: &[&str], to: &str) -> Result<bool, Error> {
-    let current = current_state(user_id).await?;
-    if from.contains(&current.as_str()) {
-        set_state(user_id, to).await?;
-        Ok(true)
-    } else {
-        Ok(false)
-    }
+    let result = match closed {
+        ClosedRoute::Rejected => {
+            sqlx::query!(
+                "UPDATE ambassador_progress SET rejected_at = ? WHERE user_id = ? AND rejected_at IS NULL",
+                when,
+                user_id
+            )
+            .execute(db())
+            .await?
+        }
+        ClosedRoute::International => {
+            sqlx::query!(
+                "UPDATE ambassador_progress SET international_at = ? WHERE user_id = ? AND international_at IS NULL",
+                when,
+                user_id
+            )
+            .execute(db())
+            .await?
+        }
+        ClosedRoute::ScreeningFailed => {
+            sqlx::query!(
+                "UPDATE ambassador_progress SET screening_failed_at = ? WHERE user_id = ? AND screening_failed_at IS NULL",
+                when,
+                user_id
+            )
+            .execute(db())
+            .await?
+        }
+    };
+
+    Ok(result.rows_affected() > 0)
 }
 
 /// Minimal HTML escaping for user-supplied text interpolated into email bodies.
@@ -79,16 +104,15 @@ fn escape_html(s: &str) -> String {
         .replace('>', "&gt;")
 }
 
-/// Distinct city/state locations of ambassadors in the public directory (i.e.
-/// who reached the "passed" state, recorded as a non-null `users.ambassador`
-/// timestamp). Backs /api/ambassador_map.geojson; the frontend geocodes each
-/// location for the map.
+/// Distinct city/state locations of ambassadors in the public directory
+/// (the `ambassador_directory_members` view). Backs /api/ambassador_map.geojson;
+/// the frontend geocodes each location for the map.
 pub async fn passed_locations(_req: &Request) -> Result<AmbassadorPassedLocationsResponse, Error> {
     let rows = sqlx::query!(
         r#"SELECT DISTINCT a.city AS "city!", a.state AS "state!"
            FROM ambassador_applications a
-           JOIN users u ON u.user_id = a.user_id
-           WHERE u.ambassador IS NOT NULL AND a.city != ''
+           JOIN ambassador_directory_members m ON m.user_id = a.user_id
+           WHERE a.city != ''
            ORDER BY a.city, a.state"#,
     )
     .fetch_all(db())
@@ -288,13 +312,25 @@ pub async fn save_draft(req: &Request) -> Result<(), Error> {
 
 /// Final submission of the apply form (`user.ambassador.submit`). Persists with
 /// `draft = false`, stamps `submitted`, tags the user, and — mirroring orrery's
-/// `AmbassadorState.application_enter` — advances the native state to
-/// `application` and sends the confirmation email exactly once. Validation
-/// happens in the frontend handler before this call.
+/// `AmbassadorState.application_enter` — sends the confirmation email exactly
+/// once. Validation happens in the frontend handler before this call.
 pub async fn submit(req: &Request) -> Result<(), Error> {
     let form: AmbassadorApplicationForm = decode_structured_message(req.message.clone())?;
     let user_id = form.user_id;
     let user_id_str = user_id.to_string();
+
+    // `submitted` is stamped by the first non-draft write and kept thereafter,
+    // so its absence beforehand is what makes this a genuine first submission.
+    // A resubmission finds it already set and does not re-fire the email.
+    let first_submission = sqlx::query_scalar!(
+        r#"SELECT "submitted" FROM "ambassador_applications" WHERE "user_id" = ?"#,
+        user_id_str
+    )
+    .fetch_optional(db())
+    .await?
+    .flatten()
+    .is_none();
+
     write_application(&form, false).await?;
     send(
         "user.tags.add",
@@ -305,10 +341,7 @@ pub async fn submit(req: &Request) -> Result<(), Error> {
     )
     .await?;
 
-    // Entering the `application` state from Champion/initial is a genuine
-    // first-time submission — send the confirmation email once. A resubmission
-    // (already in `application` or later) does not re-fire it.
-    if advance_state_if(&user_id_str, &["initial", "tutorial"], "application").await? {
+    if first_submission {
         trigger_email(TriggerEvent::AmbassadorApplicationSubmitted, user_id, None).await?;
     }
     Ok(())
@@ -389,7 +422,8 @@ pub async fn directory(req: &Request) -> Result<AmbassadorDirectoryResponse, Err
     let total = sqlx::query_scalar!(
         r#"SELECT COUNT(*) FROM ambassador_applications a
            JOIN users u ON u.user_id = a.user_id
-           WHERE u.ambassador IS NOT NULL AND a.hidden = 0
+           JOIN ambassador_directory_members m ON m.user_id = a.user_id
+           WHERE a.hidden = 0
            AND (? = 1 OR u.first_name LIKE ? OR u.last_name LIKE ? OR a.bio LIKE ?)
            AND (? = 1 OR a.city LIKE ? OR a.state LIKE ? OR u.zipcode LIKE ?)"#,
         name_empty,
@@ -414,7 +448,8 @@ pub async fn directory(req: &Request) -> Result<AmbassadorDirectoryResponse, Err
                   a.city AS "city!", a.state AS "state!"
            FROM ambassador_applications a
            JOIN users u ON u.user_id = a.user_id
-           WHERE u.ambassador IS NOT NULL AND a.hidden = 0
+           JOIN ambassador_directory_members m ON m.user_id = a.user_id
+           WHERE a.hidden = 0
            AND (? = 1 OR u.first_name LIKE ? OR u.last_name LIKE ? OR a.bio LIKE ?)
            AND (? = 1 OR a.city LIKE ? OR a.state LIKE ? OR u.zipcode LIKE ?)
            ORDER BY (CASE WHEN ? = 'time' THEN u.ambassador END) DESC,
@@ -456,7 +491,8 @@ pub async fn profile(req: &Request) -> Result<Option<AmbassadorProfile>, Error> 
                   u.image AS "image", a.bio AS "bio!", a.city AS "city!",
                   a.state AS "state!", a.youtube_video_url AS "youtube_video_url!"
            FROM users u JOIN ambassador_applications a ON a.user_id = u.user_id
-           WHERE u.user_id = ? AND u.ambassador IS NOT NULL AND a.hidden = 0"#,
+           JOIN ambassador_directory_members m ON m.user_id = u.user_id
+           WHERE u.user_id = ? AND a.hidden = 0"#,
         user_id
     )
     .fetch_optional(db())
@@ -472,7 +508,8 @@ pub async fn profile(req: &Request) -> Result<Option<AmbassadorProfile>, Error> 
                   u.last_name AS "last_name!", u.image AS "image",
                   a.city AS "city!", a.state AS "state!"
            FROM ambassador_applications a JOIN users u ON u.user_id = a.user_id
-           WHERE u.ambassador IS NOT NULL AND a.hidden = 0 AND a.user_id != ?
+           JOIN ambassador_directory_members m ON m.user_id = a.user_id
+           WHERE a.hidden = 0 AND a.user_id != ?
            ORDER BY u.ambassador DESC LIMIT 5"#,
         user_id,
     )
@@ -946,36 +983,28 @@ pub async fn review(req: &Request) -> Result<(), Error> {
 /// ([`crate::apply_ambassador_state`]).
 ///
 /// Two distinct outcomes, matching orrery:
-/// - **badge** (Certified Ambassador) is earned once the application is
-///   `Accepted` and a `verified` date is set (orrery's `verified_enter`);
+/// - **badge** (Certified Ambassador) is earned once a `verified` date is set
+///   and no earlier branch of the precedence has fired (orrery's
+///   `verified_enter`);
 /// - **directory** membership (orrery's `passed`) additionally requires the
-///   background screening to be `Verified`, and is recorded as a non-null
-///   `users.ambassador` timestamp.
+///   `Accepted` verdict and a `Verified` background screening, and is recorded
+///   as a non-null `users.ambassador` timestamp.
 ///
 /// Demoting to `Champion` reverts both (orrery's `revert_to_champion`).
+///
+/// The stage this leaves the person at is not recorded anywhere: it is derived
+/// from these outcomes by [`AmbassadorStage::derive`].
 /// The tags granted along the path past Champion, in the order a user walks it.
 ///
 /// Orrery's `POST_CHAMPION_TAGS`, and they must stay in step with it: they are
 /// cumulative, so somebody in the directory carries all three, and a demotion
-/// to Champion discards all three (orrery's `revert_to_champion`). States off
+/// to Champion discards all three (orrery's `revert_to_champion`). Stages off
 /// that path -- rejected, failed, international -- neither grant nor discard.
 ///
 /// Kept written here rather than left to the orrery sync because the Constant
 /// Contact mirror treats these names as ours to manage: a contact holding one
 /// that this service does not know about would have it stripped on the first
 /// push after the sweep changes hands.
-/// The tag granted for completing the Champion training (orrery's
-/// `AmbassadorState.tutorial_enter`).
-///
-/// Its old name, `scistarter-ambassador-training-complete`, predates the
-/// Champion rename. Orrery reads both spellings and writes only this one, so
-/// this one is what we write too. The old name stays in the Constant Contact
-/// mirror, because the several hundred accounts that carry it still should.
-pub const CHAMPION_TRAINING_TAG: &str = "scistarter-champion-training-complete";
-
-/// The old spelling of the above, written by nothing and read by everything.
-pub const LEGACY_CHAMPION_TRAINING_TAG: &str = "scistarter-ambassador-training-complete";
-
 pub const PATH_PAST_CHAMPION: &[&str] = &[
     "scistarter-ambassador-application-submitted",
     "scistarter-ambassador-verified",
@@ -997,46 +1026,48 @@ async fn apply_review_effects(
             screening,
             AmbassadorScreeningStatus::Failed | AmbassadorScreeningStatus::International
         );
-    let badge_earned =
-        !demote && !blocked && app_status == AmbassadorAppStatus::Accepted && verified;
-    let in_directory = badge_earned && screening == AmbassadorScreeningStatus::Verified;
+    // orrery grants the badge in `verified_enter`, which a `verified` date alone
+    // reaches once the earlier branches of its precedence have not fired: the
+    // verdict on the application is not consulted. A staff member who dates the
+    // verification has accepted the applicant, whatever the verdict field still
+    // says.
+    let badge_earned = !demote && !blocked && verified;
 
-    // Derive the native state-machine target from this review, mirroring orrery's
-    // `ambassador_application_pre_save` precedence. `None` means "no terminal
-    // transition" — leave the state as it is (e.g. a still-pending application).
-    let target_state: Option<&str> = if demote {
-        Some("tutorial")
-    } else if app_status == AmbassadorAppStatus::Rejected {
-        Some("rejected")
-    } else if screening == AmbassadorScreeningStatus::International {
-        Some("international")
-    } else if screening == AmbassadorScreeningStatus::Failed {
-        Some("failed")
-    } else if in_directory {
-        Some("passed")
-    } else if verified {
-        Some("verified")
-    } else {
-        None
-    };
+    // The directory is orrery's `passed`, which only `promote_to_ambassador`
+    // reaches — a verdict, not the verification date. `Ambassador` is that
+    // verdict; `Accepted` is kept beside it because hydra used to stand in for
+    // the missing variant with it, and the applications staff accepted without
+    // ever promoting are in the directory on its strength.
+    let promoted = matches!(
+        app_status,
+        AmbassadorAppStatus::Accepted | AmbassadorAppStatus::Ambassador
+    );
+    let in_directory = badge_earned && promoted && screening == AmbassadorScreeningStatus::Verified;
 
-    // Fire the entry email for a genuine transition into a rejection state, once.
-    // The `verified`/`passed` (accepted) email is the Certified Ambassador badge
-    // notification, handled below by the `had_badge` guard; `failed` and the
-    // Champion demote have no email, matching orrery.
-    if let Some(new_state) = target_state {
-        let old_state = current_state(&user_id_str).await?;
-        if new_state != old_state {
-            set_state(&user_id_str, new_state).await?;
-            match new_state {
-                "rejected" => {
-                    trigger_email(TriggerEvent::AmbassadorRejected, user_id, None).await?;
-                }
-                "international" => {
-                    trigger_email(TriggerEvent::AmbassadorInternational, user_id, None).await?;
-                }
-                _ => {}
+    // Date the way the route closed, if this review closed it, and fire the
+    // matching entry email on that write alone. Which verdicts close the route
+    // is asked of the same place the funnel asks it, so that what gets dated
+    // here and what gets reported there cannot come apart. A demotion to
+    // Champion is the one verdict that reaches back past a closure, so it
+    // records nothing. The `verified`/`passed` (accepted) email is the
+    // Certified Ambassador badge notification, handled below by the `had_badge`
+    // guard; `failed` has no email, matching orrery.
+    let closed = (!demote)
+        .then(|| AmbassadorStage::closed_by(app_status, screening))
+        .flatten()
+        .and_then(ClosedRoute::of);
+
+    if let Some(closed) = closed
+        && close_route(&user_id_str, closed, &now).await?
+    {
+        match closed {
+            ClosedRoute::Rejected => {
+                trigger_email(TriggerEvent::AmbassadorRejected, user_id, None).await?;
             }
+            ClosedRoute::International => {
+                trigger_email(TriggerEvent::AmbassadorInternational, user_id, None).await?;
+            }
+            ClosedRoute::ScreeningFailed => {}
         }
     }
 
@@ -1181,7 +1212,7 @@ pub async fn message_send(req: &Request) -> Result<(), Error> {
 
     // Only directory ambassadors are contactable.
     let is_ambassador = sqlx::query_scalar!(
-        "SELECT COUNT(*) FROM users WHERE user_id = ? AND ambassador IS NOT NULL",
+        "SELECT COUNT(*) FROM ambassador_directory_members WHERE user_id = ?",
         recipient_str
     )
     .fetch_one(db())
@@ -1423,54 +1454,119 @@ pub async fn message_review(req: &Request) -> Result<(), Error> {
 }
 
 /// Everyone currently at one of the requested funnel stages
-/// (`user.ambassador.stages`), newest transition first.
+/// (`user.ambassador.stages`), newest arrival first.
 ///
-/// Backs the staff funnel exports. Test accounts are left out; staff accounts
-/// are not, because a staff member who took the training is a real person who
-/// took the training — the same rule orrery applies.
+/// Backs the staff funnel exports. The stage is derived per person by
+/// [`AmbassadorStage::derive`] rather than read from a column, so it cannot
+/// disagree with the milestones it is made of; the "since" date is the date of
+/// the milestone that decided the stage. Test accounts are left out; staff
+/// accounts are not, because a staff member who took the training is a real
+/// person who took the training — the same rule orrery applies.
 pub async fn stages(req: &Request) -> Result<Vec<AmbassadorStageRow>, Error> {
     let request: AmbassadorStagesRequest =
         decode_structured_message(req.message.clone()).unwrap_or_default();
 
-    if request.states.is_empty() {
+    if request.stages.is_empty() {
         return Ok(Vec::new());
     }
 
-    let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new(
-        r#"SELECT u."first_name" AS "first_name",
-                  u."last_name" AS "last_name",
-                  u."handle" AS "handle",
-                  u."primary_email" AS "primary_email",
-                  p."state" AS "state",
-                  p."state_changed" AS "state_changed"
+    // Everybody who has reached any milestone at all. Those who have reached
+    // none are at no stage, so they cannot match whatever was asked for.
+    let rows = sqlx::query!(
+        r#"SELECT u."first_name" AS "first_name!",
+                  u."last_name" AS "last_name!",
+                  u."handle" AS "handle!",
+                  u."primary_email" AS "primary_email!",
+                  u."ambassador" AS "ambassador?",
+                  p."tutorial_completed_at" AS "tutorial_completed_at?",
+                  p."rejected_at" AS "rejected_at?",
+                  p."international_at" AS "international_at?",
+                  p."screening_failed_at" AS "screening_failed_at?",
+                  a."app_status" AS "app_status?",
+                  a."screening_status" AS "screening_status?",
+                  a."verified" AS "verified?",
+                  a."submitted" AS "submitted?",
+                  a."draft" AS "draft?"
              FROM "ambassador_progress" p
              JOIN "users" u ON u."user_id" = p."user_id"
+             LEFT JOIN "ambassador_applications" a ON a."user_id" = p."user_id"
             WHERE u."is_test" = 0
-              AND p."state" IN ("#,
-    );
+              AND (p."tutorial_completed_at" IS NOT NULL
+                   OR p."rejected_at" IS NOT NULL
+                   OR p."international_at" IS NOT NULL
+                   OR p."screening_failed_at" IS NOT NULL
+                   OR u."ambassador" IS NOT NULL
+                   OR a."user_id" IS NOT NULL)"#
+    )
+    .fetch_all(db())
+    .await?;
 
-    let mut separated = qb.separated(", ");
-    for state in &request.states {
-        separated.push_bind(state);
-    }
-    qb.push(r#") ORDER BY p."state_changed" DESC, u."user_id" DESC"#);
-
-    let rows = qb.build().fetch_all(db()).await?;
-
-    Ok(rows
+    let mut stages: Vec<AmbassadorStageRow> = rows
         .into_iter()
-        .map(|row| {
-            let state_changed: String = row.get("state_changed");
+        .filter_map(|row| {
+            let submitted = row.submitted.filter(|_| row.draft == Some(0));
 
-            AmbassadorStageRow {
-                first_name: row.get("first_name"),
-                last_name: row.get("last_name"),
-                handle: row.get("handle"),
-                email: row.get("primary_email"),
-                state: row.get("state"),
-                // Stored as a full timestamp; the export wants the date.
-                since: state_changed.get(0..10).unwrap_or_default().to_string(),
+            let milestones = AmbassadorMilestones {
+                tutorial_completed: row.tutorial_completed_at.is_some(),
+                application_submitted: submitted.is_some(),
+                verified: row.verified.is_some(),
+                in_directory: row.ambassador.is_some(),
+                app_status: AmbassadorAppStatus::from_i64(row.app_status.unwrap_or_default()),
+                screening_status: AmbassadorScreeningStatus::from_i64(
+                    row.screening_status.unwrap_or_default(),
+                ),
+            };
+
+            let stage = AmbassadorStage::derive(&milestones)?;
+
+            if !request.stages.contains(&stage) {
+                return None;
             }
+
+            // The date of the milestone that decided the stage, so that the
+            // export reports when the person arrived where they are rather
+            // than when their record was last touched.
+            let since = match stage {
+                AmbassadorStage::Tutorial => row.tutorial_completed_at,
+                AmbassadorStage::Application => submitted,
+                AmbassadorStage::Verified => row.verified,
+                AmbassadorStage::Passed => row.ambassador,
+                AmbassadorStage::Rejected => row.rejected_at,
+                AmbassadorStage::International => row.international_at,
+                AmbassadorStage::Failed => row.screening_failed_at,
+            }
+            .unwrap_or_default();
+
+            Some(AmbassadorStageRow {
+                first_name: row.first_name,
+                last_name: row.last_name,
+                handle: row.handle,
+                email: row.primary_email,
+                stage,
+                // Stored as a full timestamp; the export wants the date.
+                since: since.get(0..10).unwrap_or_default().to_string(),
+            })
         })
-        .collect())
+        .collect();
+
+    stages.sort_by(|a, b| b.since.cmp(&a.since).then_with(|| b.email.cmp(&a.email)));
+
+    Ok(stages)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The directory view names the Champion verdict by its number.
+    ///
+    /// `ambassador_directory_members` excludes `app_status = 5` to keep a
+    /// demoted Ambassador out of the public directory, and SQL cannot import
+    /// the enum to say so. Renumbering the variant without editing the view
+    /// would quietly re-list everybody on a hiatus, so the number is pinned
+    /// here instead.
+    #[test]
+    fn champion_is_the_verdict_the_directory_view_excludes() {
+        assert_eq!(AmbassadorAppStatus::Champion.as_i64(), 5);
+    }
 }
