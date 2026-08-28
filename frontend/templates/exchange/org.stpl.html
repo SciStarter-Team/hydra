@@ -6,7 +6,6 @@
     <title>Exchange</title>
     <%+ crate::component::HtmxRuntime::default() %>
     <script src="/-static/js/clickthrough.js" defer></script>
-    <script src="/-static/alpine.js" defer></script>
     <link href="/-static/exchange/css/styles.css" rel="stylesheet">
   </head>
   <body hx-headers:inherited='{"X-CSRFToken": "<%= self.csrftoken %>"}'>

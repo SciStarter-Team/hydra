@@ -19,7 +19,6 @@
             hx-patch="/-admin/email/triggers/<%= self.trigger.trigger_id|disp %>"
             hx-swap:inherited="none"
             class="mt-4 space-y-4"
-            x-data="{ actionType: '<%= self.trigger.action_type.as_str() %>' }"
         >
             <div id="edit-trigger-error" class="hidden"></div>
             <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -80,7 +79,6 @@
                     <select
                         name="action_type"
                         required
-                        x-model="actionType"
                         class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
                     >
                         <option value="immediate">Send Immediately</option>
@@ -89,12 +87,12 @@
                 </div>
 
                 <!-- Delay Duration (shown only for delayed) -->
-                <div x-show="actionType === 'delayed'">
+                <div :hidden="q('previous select[name=action_type]').value !== 'delayed'">
                     <label class="block text-sm font-medium text-gray-700">Delay Duration</label>
                     <select
                         name="delay_seconds"
                         class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
-                        x-bind:required="actionType === 'delayed'"
+                        :required="q('previous select[name=action_type]').value === 'delayed'"
                     >
                         <option value="">Select delay...</option>
                         <option value="3600" <% if self.trigger.delay_seconds == Some(3600) { %>selected<% } %>>1 hour</option>
@@ -109,7 +107,7 @@
                 </div>
 
                 <!-- Cancellation Trigger (optional, only for delayed) -->
-                <div class="md:col-span-2" x-show="actionType === 'delayed'">
+                <div class="md:col-span-2" :hidden="q('previous select[name=action_type]').value !== 'delayed'">
                     <label class="block text-sm font-medium text-gray-700">Cancellation Trigger (Optional)</label>
                     <select
                         name="cancellation_trigger_name"

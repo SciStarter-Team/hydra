@@ -1,8 +1,7 @@
 <!-- New Schedule Modal -->
 <dialog class="rounded-lg shadow-xl w-11/12 md:w-3/4 max-h-[90vh] overflow-y-auto p-5 backdrop:bg-gray-500 backdrop:opacity-75 m-auto"
         hx-on::after:init="this.showModal()"
-        hx-on:click="if (event.target.tagName === 'DIALOG') this.remove()"
-        x-data="{ scheduleType: 'featured' }">
+        hx-on:click="if (event.target.tagName === 'DIALOG') this.remove()">
     <div hx-on:click="event.stopPropagation()">
         <!-- Modal Header -->
         <div class="flex items-center justify-between pb-3">
@@ -54,7 +53,6 @@
                             id="schedule_type"
                             name="schedule_type"
                             required
-                            x-model="scheduleType"
                             class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                         >
                             <option value="featured">Featured</option>
@@ -64,7 +62,7 @@
                     </div>
 
                     <!-- Target Type -->
-                    <div x-show="scheduleType !== 'featured'">
+                    <div :hidden="q('previous select[name=schedule_type]').value === 'featured'">
                         <label for="target_type" class="block text-sm font-medium text-gray-700 mb-2">
                             Target Type
                         </label>
@@ -80,7 +78,7 @@
                     </div>
 
                     <!-- Target -->
-                    <div x-show="scheduleType !== 'featured'">
+                    <div :hidden="q('previous select[name=schedule_type]').value === 'featured'">
                         <%+ crate::admin::autocomplete::SlugAutocomplete::new(
                             "target",
                             "Target (where to display)",
@@ -90,7 +88,7 @@
                     </div>
 
                     <!-- Featured Entity -->
-                    <div x-show="scheduleType === 'featured'">
+                    <div :hidden="q('previous select[name=schedule_type]').value !== 'featured'">
                         <%+ crate::admin::autocomplete::SlugAutocomplete::new(
                             "featured_entity",
                             "Featured Entity (what to feature)",

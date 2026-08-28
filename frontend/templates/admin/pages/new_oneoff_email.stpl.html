@@ -96,7 +96,7 @@
                     </div>
 
                     <!-- Merge Fields -->
-                    <div x-data="mergeFieldInserter()" x-init="init()">
+                    <div>
                         <label class="block text-sm font-medium text-gray-700 mb-2">
                             Available Merge Fields
                         </label>
@@ -128,70 +128,4 @@
 </div>
 
 <script>
-function mergeFieldInserter() {
-    return {
-        lastFocusedField: 'body', // Default to body
-        init() {
-            // Track focus on subject field
-            const subject = document.getElementById('subject');
-            if (subject) {
-                subject.addEventListener('focus', () => {
-                    this.lastFocusedField = 'subject';
-                });
-            }
-
-            // Track when Quill editor is focused
-            const quillElement = document.querySelector('ss-rich-text');
-            if (quillElement) {
-                // Wait for Quill to initialize
-                const checkQuill = setInterval(() => {
-                    const quill = quillElement.quill;
-                    if (quill) {
-                        clearInterval(checkQuill);
-                        quill.on('selection-change', (range) => {
-                            if (range) {
-                                // Quill has focus
-                                this.lastFocusedField = 'body';
-                            }
-                        });
-                    }
-                }, 100);
-            }
-        },
-        insertMergeField(fieldName, event) {
-            // Prevent double-firing
-            if (event) {
-                event.preventDefault();
-                event.stopPropagation();
-            }
-
-            const mergeTag = `{{${fieldName}}}`;
-
-            if (this.lastFocusedField === 'subject') {
-                // Insert into subject field at cursor position
-                const subject = document.getElementById('subject');
-                if (subject) {
-                    // Focus to ensure we have current cursor position
-                    subject.focus();
-                    const start = subject.selectionStart;
-                    const end = subject.selectionEnd;
-                    const value = subject.value;
-                    subject.value = value.substring(0, start) + mergeTag + value.substring(end);
-                    subject.selectionStart = subject.selectionEnd = start + mergeTag.length;
-                }
-            } else {
-                // Insert into Quill editor (body)
-                const quill = document.querySelector('ss-rich-text')?.quill;
-                if (quill) {
-                    // Focus the editor to establish cursor position if needed
-                    quill.focus();
-                    const selection = quill.getSelection();
-                    const index = selection ? selection.index : 0;
-                    quill.insertText(index, mergeTag);
-                    quill.setSelection(index + mergeTag.length);
-                }
-            }
-        }
-    };
-}
 </script>

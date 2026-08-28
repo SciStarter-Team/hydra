@@ -1114,7 +1114,7 @@ pub fn pagecontent_routes() -> impl Endpoint {
         .at(
             "/DressedHtml/:id",
             get(dressed_html_edit)
-                .post(dressed_html_update)
+                .put(dressed_html_update)
                 .delete(dressed_html_delete),
         )
         .at("/RawHtml", get(raw_html_list))
@@ -1123,13 +1123,13 @@ pub fn pagecontent_routes() -> impl Endpoint {
         .at(
             "/RawHtml/:id",
             get(raw_html_edit)
-                .post(raw_html_update)
+                .put(raw_html_update)
                 .delete(raw_html_delete),
         )
         .at(
             "/:kind/:id",
             get(pagecontent_edit)
-                .post(pagecontent_update)
+                .put(pagecontent_update)
                 .delete(pagecontent_delete),
         )
 }

@@ -1,5 +1,5 @@
 <!-- Edit Schedule Form Content -->
-<div class="bg-white rounded-lg shadow border border-gray-200" x-data="{ scheduleType: '<%= self.schedule.schedule_type|disp %>' }">
+<div class="bg-white rounded-lg shadow border border-gray-200">
     <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
         <h3 class="text-lg font-medium text-gray-900">Edit Schedule</h3>
         <a
@@ -48,7 +48,6 @@
                         id="schedule_type"
                         name="schedule_type"
                         required
-                        x-model="scheduleType"
                         class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                     >
                         <option value="featured" <% if matches!(&self.schedule.schedule_type, crate::schedule::ScheduleType::Featured) { %>selected<% } %>>Featured</option>
@@ -58,7 +57,7 @@
                 </div>
 
                 <!-- Target Type -->
-                <div x-show="scheduleType !== 'featured'">
+                <div :hidden="q('previous select[name=schedule_type]').value === 'featured'">
                     <label for="target_type" class="block text-sm font-medium text-gray-700 mb-2">
                         Target Type
                     </label>
@@ -74,7 +73,7 @@
                 </div>
 
                 <!-- Target -->
-                <div x-show="scheduleType !== 'featured'">
+                <div :hidden="q('previous select[name=schedule_type]').value === 'featured'">
                     <% if let Some(ref target_slug) = self.schedule.target { %>
                         <%+ crate::admin::autocomplete::SlugAutocomplete::new(
                             "target",
@@ -92,7 +91,7 @@
                 </div>
 
                 <!-- Featured Entity -->
-                <div x-show="scheduleType === 'featured'">
+                <div :hidden="q('previous select[name=schedule_type]').value !== 'featured'">
                     <% if let Some(ref featured_slug) = self.schedule.featured_entity { %>
                         <%+ crate::admin::autocomplete::SlugAutocomplete::new(
                             "featured_entity",

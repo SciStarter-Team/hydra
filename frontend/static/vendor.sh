@@ -15,13 +15,7 @@ curl -L https://cdn.jsdelivr.net/npm/htmx.org@$HTMX/dist/ext/hx-sse.min.js -o hx
 curl -L https://cdn.jsdelivr.net/npm/htmx.org@$HTMX/dist/ext/hx-live.js -o hx-live.js
 curl -L https://cdn.jsdelivr.net/npm/htmx.org@$HTMX/dist/ext/hx-live.min.js -o hx-live.min.js
 
-# HTMX extension smoothing over corner cases when Alpine is on the page
-curl -L https://cdn.jsdelivr.net/npm/htmx.org@$HTMX/dist/ext/hx-alpine-compat.js -o hx-alpine-compat.js
-curl -L https://cdn.jsdelivr.net/npm/htmx.org@$HTMX/dist/ext/hx-alpine-compat.min.js -o hx-alpine-compat.min.js
 
-# Alpine in both readable and minified forms
-curl -L https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.js -o alpine.js
-curl -L https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js -o alpine.min.js
 
 
 # Official ulid implementation for JS

@@ -87,7 +87,7 @@ impl<C: TemplateOnce> Component for AdminLayout<C> {
     async fn prepare(self, param: Self::Param) -> Result<Self::Prepared, anyhow::Error> {
         let user_info = param.clone();
 
-        let mut head = Head::default().with_alpine().with_webawesome();
+        let mut head = Head::default().with_webawesome();
         if self.enable_quill {
             head = head.with_quill();
         }

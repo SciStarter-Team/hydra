@@ -28,7 +28,13 @@ pub fn routes() -> Route {
         .at("/new", get(users_new).post(users_create))
         .at(
             "/:id",
-            get(users_edit).post(users_update).delete(users_delete),
+            // Updating a user is a PUT. POST is also accepted because the edit
+            // page submits as a plain <form>, and HTML forms can only issue GET
+            // or POST; the modal, which goes through htmx, uses PUT.
+            get(users_edit)
+                .put(users_update)
+                .post(users_update)
+                .delete(users_delete),
         )
         .at("/:id/send-password-reset", post(users_password_reset))
         .at("/:id/emails", post(users_emails_add))
@@ -1058,5 +1064,66 @@ async fn users_emails_toggle_verified(
             .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
             .content_type("text/html")
             .body(format!("Error: {}", e))),
+    }
+}
+
+#[cfg(test)]
+mod route_tests {
+    use poem::{EndpointExt, http::StatusCode, middleware::CatchPanic, test::TestClient};
+
+    const USER: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+    const EMAIL: &str = "someone@example.com";
+
+    /// Routing happens before a handler runs, so METHOD_NOT_ALLOWED here is the
+    /// route table's doing and nothing else's. The handlers themselves need a
+    /// database and the auth middleware, so they panic under test; CatchPanic
+    /// turns that into a 500, which still tells us the request was dispatched.
+    async fn status_of(method: &str, path: String) -> StatusCode {
+        let cli = TestClient::new(super::routes().with(CatchPanic::new()));
+        let resp = match method {
+            "GET" => cli.get(path).send().await,
+            "POST" => cli.post(path).send().await,
+            "PUT" => cli.put(path).send().await,
+            "DELETE" => cli.delete(path).send().await,
+            "PATCH" => cli.patch(path).send().await,
+            other => panic!("unsupported method {other}"),
+        };
+        resp.0.status()
+    }
+
+    async fn assert_routed(method: &str, path: String) {
+        let status = status_of(method, path.clone()).await;
+        assert_ne!(
+            status,
+            StatusCode::METHOD_NOT_ALLOWED,
+            "{method} {path} is not routed"
+        );
+    }
+
+    #[tokio::test]
+    async fn email_addresses_can_be_added_updated_and_deleted() {
+        assert_routed("POST", format!("/{USER}/emails")).await;
+        assert_routed("PUT", format!("/{USER}/emails/{EMAIL}")).await;
+        assert_routed("DELETE", format!("/{USER}/emails/{EMAIL}")).await;
+        assert_routed("POST", format!("/{USER}/emails/{EMAIL}/toggle-verified")).await;
+    }
+
+    /// Updating a user is a PUT, which is what the edit-user modal sends. POST
+    /// is accepted alongside it only because the edit *page* submits as a plain
+    /// <form>, which a browser can only send as GET or POST.
+    #[tokio::test]
+    async fn a_user_is_updated_with_put_or_post() {
+        assert_routed("PUT", format!("/{USER}")).await;
+        assert_routed("POST", format!("/{USER}")).await;
+    }
+
+    /// The route table answers 405 rather than 404 for a method it does not
+    /// have, which is what makes the assertions above meaningful.
+    #[tokio::test]
+    async fn an_unregistered_method_is_rejected_as_such() {
+        assert_eq!(
+            status_of("PATCH", format!("/{USER}")).await,
+            StatusCode::METHOD_NOT_ALLOWED
+        );
     }
 }

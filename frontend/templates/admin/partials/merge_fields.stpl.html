@@ -18,7 +18,7 @@
             type="button"
             class="merge-field-btn text-left px-3 py-2 bg-gray-50 hover:bg-indigo-50 border border-gray-300 hover:border-indigo-400 rounded text-sm transition-colors"
             data-field-name="<%= field.name %>"
-            @click="insertMergeField('<%= field.name %>', $event)"
+            hx-on:click="insertMergeField('<%= field.name %>', event)"
             title="<%= field.description %>"
         >
             <div class="font-mono text-indigo-600">{{<%= field.name %>}}</div>

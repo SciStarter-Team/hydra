@@ -7,14 +7,6 @@
 <%# https://tailwindcss.com/docs/styling-with-utility-classes %>
 <link rel=stylesheet href="/-static/css/style.css"/>
 <%+ crate::component::HtmxRuntime { enable_sse: self.enable_sse } %>
-<% if self.enable_alpine { %>
-  <%# https://alpinejs.dev/start-here %>
-  <%# Don't use Alpine's AJAX tools, HTMX does it better. Alpine is great for client-side logic and state, though. %>
-  <%# While Alpine is on the page hx-live disables its `:attr` short form, so
-      live bindings here must be spelled `hx-live:attr`. %>
-  <script src="/-static/hx-alpine-compat.js"></script>
-  <script src="/-static/alpine.js" defer></script>
-<% } %>
 <% if self.enable_webawesome { %>
   <%# https://webawesome.com/docs/components/ %>
   <link rel="stylesheet" href="/-static/webawesome/styles/utilities.css" />
@@ -34,6 +26,8 @@
   <script src="/-static/js/region-editor.js" defer></script>
 <% } %>
 <% if self.enable_quill { %>
+  <%# Merge-field insertion drives the Quill editor, so it ships with it. %>
+  <script src="/-static/js/merge-fields.js" defer></script>
   <%# https://quilljs.com/docs/quickstart %>
   <link href="/-static/quill.snow.css" rel="stylesheet" />
   <script src="/-static/quill.js"></script>

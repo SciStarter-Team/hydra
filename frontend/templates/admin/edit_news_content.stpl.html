@@ -1,5 +1,5 @@
 <!-- Edit News Item Form Content -->
-<div class="bg-white rounded-lg shadow border border-gray-200" x-data="{ sourceType: '<%= self.item.source_type|disp %>' }">
+<div class="bg-white rounded-lg shadow border border-gray-200">
     <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
         <h3 class="text-lg font-medium text-gray-900">Edit News Item</h3>
         <a
@@ -31,7 +31,6 @@
                         id="source_type"
                         name="source_type"
                         required
-                        x-model="sourceType"
                         class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                     >
                         <option value="wordpress" <% if matches!(&self.item.source_type, crate::news::NewsItemSource::WordPress) { %>selected<% } %>>WordPress</option>
@@ -40,7 +39,7 @@
                 </div>
 
                 <!-- WordPress URL (shown when sourceType=wordpress) -->
-                <div x-show="sourceType === 'wordpress'">
+                <div :hidden="q('previous select[name=source_type]').value !== 'wordpress'">
                     <label for="wp_url" class="block text-sm font-medium text-gray-700 mb-2">
                         WordPress URL <span class="text-red-500">*</span>
                     </label>
@@ -56,7 +55,7 @@
                 </div>
 
                 <!-- Tag (shown when sourceType=custom) -->
-                <div x-show="sourceType === 'custom'">
+                <div :hidden="q('previous select[name=source_type]').value !== 'custom'">
                     <label for="tag" class="block text-sm font-medium text-gray-700 mb-2">
                         Tag
                     </label>
@@ -73,7 +72,7 @@
                 <!-- Title -->
                 <div>
                     <label for="title" class="block text-sm font-medium text-gray-700 mb-2">
-                        Title <span x-show="sourceType === 'custom'" class="text-red-500">*</span>
+                        Title <span :hidden="q('previous select[name=source_type]').value !== 'custom'" class="text-red-500">*</span>
                     </label>
                     <input
                         type="text"
@@ -83,11 +82,11 @@
                         class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                         placeholder="Enter title..."
                     >
-                    <p x-show="sourceType === 'wordpress'" class="mt-1 text-sm text-gray-500">Leave blank to auto-fetch from WordPress.</p>
+                    <p :hidden="q('previous select[name=source_type]').value !== 'wordpress'" class="mt-1 text-sm text-gray-500">Leave blank to auto-fetch from WordPress.</p>
                 </div>
 
                 <!-- Content (shown when sourceType=custom) -->
-                <div x-show="sourceType === 'custom'">
+                <div :hidden="q('previous select[name=source_type]').value !== 'custom'">
                     <label for="content" class="block text-sm font-medium text-gray-700 mb-2">
                         Content
                     </label>

@@ -1,19 +1,7 @@
 <!-- Edit One-off Email -->
-<div class="max-w-4xl mx-auto" x-data="{ isDirty: false, showNotification: false, notificationMessage: '' }" @email-sent.window="notificationMessage = 'Email queued for sending'; showNotification = true; setTimeout(() => showNotification = false, 5000)">
-    <!-- Success Notification Toast -->
-    <div
-        x-show="showNotification"
-        x-transition
-        @click="showNotification = false"
-        class="fixed top-4 right-4 z-50 bg-green-600 text-white px-6 py-4 rounded-lg shadow-lg cursor-pointer"
-    >
-        <div class="flex items-center space-x-2">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-            </svg>
-            <span x-text="notificationMessage"></span>
-        </div>
-    </div>
+<%# data-dirty records whether the form has unsaved edits; the Send %>
+<%# button reads it to decide whether it must save first. %>
+<div class="max-w-4xl mx-auto" data-dirty="false">
 
     <div class="bg-white rounded-lg shadow border border-gray-200">
         <!-- Page Header -->
@@ -59,7 +47,7 @@
                             name="subject"
                             value="<%= self.subject %>"
                             required
-                            @input="isDirty = true"
+                            hx-on:input="data.dirty = true"
                             class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                             placeholder="Enter email subject..."
                         >
@@ -73,7 +61,7 @@
                                 name="reply_to_noreply"
                                 value="true"
                                 <% if self.reply_to_noreply { %>checked<% } %>
-                                @input="isDirty = true"
+                                hx-on:input="data.dirty = true"
                                 class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 mt-1"
                             >
                             <span class="ml-2">
@@ -92,7 +80,7 @@
                             name="body_delta"
                             value='<%= self.body_delta %>'
                             placeholder="Compose your email..."
-                            @input="isDirty = true">
+                            hx-on:input="data.dirty = true">
                         </ss-rich-text>
                     </div>
 
@@ -131,7 +119,7 @@
                     </div>
 
                     <!-- Merge Fields -->
-                    <div x-data="mergeFieldInserter()" x-init="init()">
+                    <div>
                         <label class="block text-sm font-medium text-gray-700 mb-2">
                             Available Merge Fields
                         </label>
@@ -200,17 +188,17 @@
                             type="submit"
                             name="action"
                             value="save"
-                            @click="isDirty = false"
+                            hx-on:click="data.dirty = false"
                             class="relative px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         >
                             <span>Save Changes</span>
                         </button>
                         <button
                             type="button"
-                            @click="if (isDirty) { document.getElementById('edit-email-form').dataset.openModal = 'true'; htmx.trigger('#edit-email-form', 'saveAndSend'); isDirty = false; } else { document.getElementById('send-dialog').showModal(); }"
+                            hx-on:click="if (data.dirty) { document.getElementById('edit-email-form').dataset.openModal = 'true'; htmx.trigger('#edit-email-form', 'saveAndSend'); data.dirty = false; } else { document.getElementById('send-dialog').showModal(); }"
                             class="relative px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
                         >
-                            <span x-text="isDirty ? 'Save and Send' : 'Send'">Send</span>
+                            <span :text="data.dirty ? 'Save and Send' : 'Send'">Send</span>
                         </button>
                     </div>
                 </div>
@@ -222,14 +210,14 @@
     <dialog
         id="send-dialog"
         class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] p-0 backdrop:bg-black backdrop:opacity-50 m-0"
-        @click.self="this.close()"
+        hx-on:click="if (event.target === this) this.close()"
     >
         <div class="bg-white rounded-lg flex flex-col max-h-[80vh]">
             <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
                 <h3 class="text-lg font-bold text-gray-900">Send Email</h3>
                 <button
                     type="button"
-                    @click="document.getElementById('send-dialog').close()"
+                    hx-on:click="document.getElementById('send-dialog').close()"
                     class="text-gray-400 hover:text-gray-600"
                 >
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -240,7 +228,7 @@
             <form
                 hx-post="/-admin/email/oneoff/<%= self.oneoff_email_id|disp %>/send"
                 hx-swap="none"
-                hx-on:htmx:after:request="if(event.detail.ctx.response.status < 400 && event.target === this) { document.getElementById('send-dialog').close(); window.dispatchEvent(new CustomEvent('email-sent')); }"
+                hx-on:htmx:after:request="if(event.detail.ctx.response.status < 400 && event.target === this) { document.getElementById('send-dialog').close(); showToast('Email queued for sending'); }"
                 class="flex flex-col flex-1 min-h-0"
             >
                 <div class="p-6 overflow-y-auto flex-1 min-h-96">
@@ -252,7 +240,7 @@
                     <div class="flex items-center justify-end space-x-2">
                         <button
                             type="button"
-                            @click="document.getElementById('send-dialog').close()"
+                            hx-on:click="document.getElementById('send-dialog').close()"
                             class="px-4 py-2 bg-gray-300 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300"
                         >
                             Cancel
@@ -271,70 +259,4 @@
 </div>
 
 <script>
-function mergeFieldInserter() {
-    return {
-        lastFocusedField: 'body', // Default to body
-        init() {
-            // Track focus on subject field
-            const subject = document.getElementById('subject');
-            if (subject) {
-                subject.addEventListener('focus', () => {
-                    this.lastFocusedField = 'subject';
-                });
-            }
-
-            // Track when Quill editor is focused
-            const quillElement = document.querySelector('ss-rich-text');
-            if (quillElement) {
-                // Wait for Quill to initialize
-                const checkQuill = setInterval(() => {
-                    const quill = quillElement.quill;
-                    if (quill) {
-                        clearInterval(checkQuill);
-                        quill.on('selection-change', (range) => {
-                            if (range) {
-                                // Quill has focus
-                                this.lastFocusedField = 'body';
-                            }
-                        });
-                    }
-                }, 100);
-            }
-        },
-        insertMergeField(fieldName, event) {
-            // Prevent double-firing
-            if (event) {
-                event.preventDefault();
-                event.stopPropagation();
-            }
-
-            const mergeTag = `{{${fieldName}}}`;
-
-            if (this.lastFocusedField === 'subject') {
-                // Insert into subject field at cursor position
-                const subject = document.getElementById('subject');
-                if (subject) {
-                    // Focus to ensure we have current cursor position
-                    subject.focus();
-                    const start = subject.selectionStart;
-                    const end = subject.selectionEnd;
-                    const value = subject.value;
-                    subject.value = value.substring(0, start) + mergeTag + value.substring(end);
-                    subject.selectionStart = subject.selectionEnd = start + mergeTag.length;
-                }
-            } else {
-                // Insert into Quill editor (body)
-                const quill = document.querySelector('ss-rich-text')?.quill;
-                if (quill) {
-                    // Focus the editor to establish cursor position if needed
-                    quill.focus();
-                    const selection = quill.getSelection();
-                    const index = selection ? selection.index : 0;
-                    quill.insertText(index, mergeTag);
-                    quill.setSelection(index + mergeTag.length);
-                }
-            }
-        }
-    };
-}
 </script>

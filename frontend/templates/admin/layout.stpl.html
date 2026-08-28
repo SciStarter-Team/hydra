@@ -4,7 +4,11 @@
     <%+ self.head %>
     <title><%= self.title %> - Admin</title>
 </head>
-<body class="min-h-screen" x-data="adminApp()" hx-indicator:inherited="#global-loading-indicator"
+<%# The sidebar's collapsed state lives here as a data attribute rather than %>
+<%# in a variable: everything below reads it through hx-live's DOM-scoped data %>
+<%# bag. Collapsed is the mobile default; at lg and up the `lg:` utilities show %>
+<%# the sidebar regardless, so the value only matters on small screens. %>
+<body class="min-h-screen" data-sidebar-collapsed="true" hx-indicator:inherited="#global-loading-indicator"
       hx-on:field-updated="
         const detail = event.detail;
         if (detail.success) {
@@ -17,26 +21,20 @@
     
     <div class="flex min-h-screen">
         <!-- Mobile backdrop -->
-        <div class="fixed inset-0 bg-gray-600 bg-opacity-75 z-40 lg:hidden"
-             x-show="!sidebarCollapsed"
-             x-transition:enter="ease-in-out duration-300"
-             x-transition:enter-start="opacity-0"
-             x-transition:enter-end="opacity-100"
-             x-transition:leave="ease-in-out duration-300"
-             x-transition:leave-start="opacity-100"
-             x-transition:leave-end="opacity-0"
-             @click="sidebarCollapsed = true"
-             style="display: none;"
-             x-cloak></div>
+        <%# Faded rather than hidden, so the transition is the stylesheet's job %>
+        <%# and there is no display flip to cloak on first paint. %>
+        <div class="fixed inset-0 bg-gray-600 bg-opacity-75 z-40 lg:hidden transition-opacity duration-300 ease-in-out"
+             :class="{'opacity-0': data.sidebarCollapsed, 'pointer-events-none': data.sidebarCollapsed, 'opacity-100': !data.sidebarCollapsed}"
+             hx-on:click="data.sidebarCollapsed = true"></div>
 
         <!-- Sidebar -->
         <div class="fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-xl border-r border-gray-200 transform transition-transform duration-300 lg:translate-x-0 lg:shadow-sm"
-             :class="{'translate-x-0': !sidebarCollapsed, '-translate-x-full': sidebarCollapsed}">
+             :class="{'translate-x-0': !data.sidebarCollapsed, '-translate-x-full': data.sidebarCollapsed}">
             <div class="flex flex-col h-full">
                 <!-- Sidebar Header -->
                 <div class="flex items-center justify-between px-6 border-b border-gray-200 h-16">
                     <h2 class="text-base font-semibold text-gray-900 flex-1 text-center lg:text-left mb-0">Admin Dashboard</h2>
-                    <button @click="sidebarCollapsed = true" class="lg:hidden text-gray-400 hover:text-gray-500 w-5 h-5 flex items-center justify-center leading-none">
+                    <button hx-on:click="data.sidebarCollapsed = true" class="lg:hidden text-gray-400 hover:text-gray-500 w-5 h-5 flex items-center justify-center leading-none">
                         <wa-icon name="xmark" class="w-5 h-5"></wa-icon>
                         <span class="sr-only">Close sidebar</span>
                     </button>
@@ -235,7 +233,7 @@
                     <!-- Breadcrumbs with mobile button -->
                     <div class="flex items-center flex-1 min-w-0">
                         <!-- Mobile menu button -->
-                        <button @click="sidebarCollapsed = !sidebarCollapsed" class="lg:hidden mr-4 p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 flex-shrink-0">
+                        <button hx-on:click="data.sidebarCollapsed = !data.sidebarCollapsed" class="lg:hidden mr-4 p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 flex-shrink-0">
                             <wa-icon name="bars" class="w-6 h-6"></wa-icon>
                         </button>
 
@@ -327,25 +325,12 @@
             setTimeout(() => note.remove(), 5000);
         }
 
-        function adminApp() {
-            return {
-                sidebarCollapsed: window.innerWidth < 1024,
-
-                init() {
-                    // Ensure sidebar starts collapsed on mobile
-                    this.sidebarCollapsed = window.innerWidth < 1024;
-
-                    // Handle window resize
-                    window.addEventListener('resize', () => {
-                        if (window.innerWidth >= 1024) {
-                            this.sidebarCollapsed = false;
-                        } else {
-                            this.sidebarCollapsed = true;
-                        }
-                    });
-                }
-            }
-        }
+        // The only imperative writer of the sidebar state. Everything that
+        // renders from it is a live binding on the elements themselves, and
+        // setting the attribute is what tells them to recompute.
+        addEventListener('resize', () => {
+            document.body.dataset.sidebarCollapsed = String(window.innerWidth < 1024);
+        });
     </script>
 </body>
 </html>

@@ -1,0 +1,62 @@
+<%#
+  One condition inside a welcome rule.
+
+  `name` is the concrete, submittable field name; `data-name` is the same name
+  with `__RI__`/`__CI__` left in place. rule-builder.js rewrites `name` from
+  `data-name` whenever rows are added, removed or reordered, so the indices the
+  server parses stay contiguous without anything having to parse the old name.
+%>
+<div class="welcome-condition flex flex-wrap items-center gap-2 rounded bg-white border border-gray-200 px-2 py-2">
+    <label class="flex items-center gap-1 text-xs text-gray-600">
+        <input type="checkbox" value="1"
+               name="rules[<%= self.rule_index %>][conditions][<%= self.index %>][negate]"
+               data-name="rules[__RI__][conditions][__CI__][negate]"
+               <% if self.condition.negate { %>checked<% } %>
+               class="rounded border-gray-300" />
+        NOT
+    </label>
+
+    <select class="condition-kind rounded-md border-gray-300 text-sm"
+            name="rules[<%= self.rule_index %>][conditions][<%= self.index %>][kind]"
+            data-name="rules[__RI__][conditions][__CI__][kind]">
+        <% for (value, label) in crate::admin::dashboard_settings::CONDITION_KINDS { %>
+        <option value="<%= value %>" <% if self.condition.kind == *value { %>selected<% } %>><%= label %></option>
+        <% } %>
+    </select>
+
+    <%# Which extra inputs a condition needs is decided by its own kind select. %>
+    <input type="text" placeholder="tag"
+           class="rounded-md border-gray-300 text-sm"
+           name="rules[<%= self.rule_index %>][conditions][<%= self.index %>][tag]"
+           data-name="rules[__RI__][conditions][__CI__][tag]"
+           value="<%= self.condition.tag %>"
+           :hidden="closest('.welcome-condition').q('.condition-kind').value !== 'HasTag'" />
+
+    <select class="rounded-md border-gray-300 text-sm"
+            name="rules[<%= self.rule_index %>][conditions][<%= self.index %>][community_id]"
+            data-name="rules[__RI__][conditions][__CI__][community_id]"
+            :hidden="closest('.welcome-condition').q('.condition-kind').value !== 'MemberOfCommunity'">
+        <option value="">any community</option>
+        <% for community in self.communities { %>
+        <option value="<%= community.id %>" <% if self.condition.community_id == community.id { %>selected<% } %>><%= community.name %></option>
+        <% } %>
+    </select>
+
+    <span class="flex items-center gap-2"
+          :hidden="!['DaysSinceLastParticipation','DaysSinceLastView','AccountAgeDays'].includes(closest('.welcome-condition').q('.condition-kind').value)">
+        <select class="rounded-md border-gray-300 text-sm"
+                name="rules[<%= self.rule_index %>][conditions][<%= self.index %>][comparison]"
+                data-name="rules[__RI__][conditions][__CI__][comparison]">
+            <option value="Within" <% if self.condition.comparison == "Within" { %>selected<% } %>>within</option>
+            <option value="MoreThan" <% if self.condition.comparison == "MoreThan" { %>selected<% } %>>more than</option>
+        </select>
+        <input type="number" min="0" class="w-20 rounded-md border-gray-300 text-sm"
+               name="rules[<%= self.rule_index %>][conditions][<%= self.index %>][days]"
+               data-name="rules[__RI__][conditions][__CI__][days]"
+               value="<%= self.condition.days %>" />
+        <span class="text-sm text-gray-500">days</span>
+    </span>
+
+    <button type="button" class="ml-auto text-red-500 hover:text-red-700" title="Remove condition"
+            hx-on:click="ruleBuilder.removeCondition(this)">&times;</button>
+</div>

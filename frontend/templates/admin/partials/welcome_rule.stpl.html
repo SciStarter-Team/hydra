@@ -1,0 +1,46 @@
+<%# One welcome rule. See welcome_condition.stpl.html for the name/data-name pair. %>
+<div class="welcome-rule rounded-md border border-gray-200 bg-gray-50 p-4 space-y-3">
+    <div class="flex items-center justify-between">
+        <span class="text-xs font-semibold uppercase tracking-wide text-gray-500">Rule <span class="rule-number"><%= self.number %></span></span>
+        <div class="flex items-center gap-2">
+            <button type="button" class="text-gray-400 hover:text-gray-700" title="Move up"
+                    hx-on:click="ruleBuilder.moveRule(this, -1)">&uarr;</button>
+            <button type="button" class="text-gray-400 hover:text-gray-700" title="Move down"
+                    hx-on:click="ruleBuilder.moveRule(this, 1)">&darr;</button>
+            <button type="button" class="text-red-500 hover:text-red-700 text-sm"
+                    hx-on:click="ruleBuilder.removeRule(this)">Remove rule</button>
+        </div>
+    </div>
+
+    <div class="space-y-2">
+        <p class="text-xs font-medium text-gray-500">Show this message when <em>all</em> of:</p>
+        <div class="welcome-conditions space-y-2">
+            <% for (ci, condition) in self.rule.conditions.iter().enumerate() { %>
+            <%+ crate::admin::dashboard_settings::ConditionRow {
+                    rule_index: self.index,
+                    index: &ci.to_string(),
+                    condition,
+                    communities: self.communities,
+                } %>
+            <% } %>
+        </div>
+        <button type="button" class="text-sm text-indigo-600 hover:text-indigo-800"
+                hx-on:click="ruleBuilder.addCondition(this)">+ Add condition</button>
+    </div>
+
+    <div class="grid grid-cols-1 gap-2 pt-2 border-t border-gray-200">
+        <input type="text" placeholder="Title" class="rounded-md border-gray-300 text-sm"
+               name="rules[<%= self.index %>][title]" data-name="rules[__RI__][title]"
+               value="<%= self.rule.title %>" />
+        <textarea rows="2" placeholder="Body (optional)" class="rounded-md border-gray-300 text-sm"
+                  name="rules[<%= self.index %>][body]" data-name="rules[__RI__][body]"><%= self.rule.body %></textarea>
+        <div class="grid grid-cols-2 gap-2">
+            <input type="text" placeholder="Button label (optional)" class="rounded-md border-gray-300 text-sm"
+                   name="rules[<%= self.index %>][cta_label]" data-name="rules[__RI__][cta_label]"
+                   value="<%= self.rule.cta_label %>" />
+            <input type="text" placeholder="Button URL (optional)" class="rounded-md border-gray-300 text-sm"
+                   name="rules[<%= self.index %>][cta_url]" data-name="rules[__RI__][cta_url]"
+                   value="<%= self.rule.cta_url %>" />
+        </div>
+    </div>
+</div>

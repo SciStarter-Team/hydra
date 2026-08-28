@@ -29,22 +29,91 @@ use crate::peering::LoadStorePeered;
 /// field is always present so the editor's data model is uniform regardless of
 /// which `kind` is selected.
 #[derive(Serialize)]
-struct ConditionView {
-    kind: String,
-    negate: bool,
-    tag: String,
-    community_id: String,
-    comparison: String,
-    days: i64,
+pub struct ConditionView {
+    pub kind: String,
+    pub negate: bool,
+    pub tag: String,
+    pub community_id: String,
+    pub comparison: String,
+    pub days: i64,
 }
 
+impl RuleView {
+    /// An empty rule, for the editor's blank template.
+    pub fn blank() -> Self {
+        RuleView {
+            title: String::new(),
+            body: String::new(),
+            cta_label: String::new(),
+            cta_url: String::new(),
+            conditions: Vec::new(),
+        }
+    }
+}
+
+impl ConditionView {
+    /// A new condition, defaulting to the first selectable kind.
+    pub fn blank() -> Self {
+        ConditionView {
+            kind: CONDITION_KINDS[0].0.to_string(),
+            negate: false,
+            tag: String::new(),
+            community_id: String::new(),
+            comparison: "Within".to_string(),
+            days: 0,
+        }
+    }
+}
+
+/// One condition row in the welcome-rule editor.
+///
+/// Rendered both for the rules that exist and, with placeholder indices, into a
+/// `<template>` that rule-builder.js clones when a condition is added -- so the
+/// two can never drift.
+#[derive(TemplateOnce)]
+#[template(path = "admin/partials/welcome_condition.stpl.html")]
+pub struct ConditionRow<'a> {
+    pub rule_index: &'a str,
+    pub index: &'a str,
+    pub condition: &'a ConditionView,
+    pub communities: &'a [CommunityOption],
+}
+
+/// One rule in the welcome-rule editor. See [`ConditionRow`].
+#[derive(TemplateOnce)]
+#[template(path = "admin/partials/welcome_rule.stpl.html")]
+pub struct RuleRow<'a> {
+    pub index: &'a str,
+    /// What the heading shows. A real rule shows its position; the blank
+    /// template carries a placeholder the script replaces.
+    pub number: &'a str,
+    pub rule: &'a RuleView,
+    pub communities: &'a [CommunityOption],
+}
+
+/// The selectable condition kinds, paired with what the editor calls them.
+/// The `value` must match the `kind` tag [`ConditionKind`] serializes to.
+pub const CONDITION_KINDS: &[(&str, &str)] = &[
+    ("HasParticipation", "has joined a project"),
+    (
+        "DaysSinceLastParticipation",
+        "days since last participation",
+    ),
+    ("MemberOfCommunity", "member of community"),
+    ("HasTag", "has interest tag"),
+    ("DaysSinceLastView", "days since last visit"),
+    ("LocationKnown", "location is known"),
+    ("IsStaff", "is staff"),
+    ("AccountAgeDays", "account age (days)"),
+];
+
 #[derive(Serialize)]
-struct RuleView {
-    title: String,
-    body: String,
-    cta_label: String,
-    cta_url: String,
-    conditions: Vec<ConditionView>,
+pub struct RuleView {
+    pub title: String,
+    pub body: String,
+    pub cta_label: String,
+    pub cta_url: String,
+    pub conditions: Vec<ConditionView>,
 }
 
 fn comparison_str(comparison: DayComparison) -> String {
@@ -95,10 +164,9 @@ fn condition_view(condition: &Condition) -> ConditionView {
     view
 }
 
-/// Serialize the current rules to JSON for the client-side editor, escaping
-/// `</` so the payload is safe to embed in a `<script>` block.
-fn rules_json(settings: &HomeSettings) -> String {
-    let views: Vec<RuleView> = settings
+/// The current rules, flattened into the shape the editor's fields use.
+fn rule_views(settings: &HomeSettings) -> Vec<RuleView> {
+    settings
         .welcome_rules
         .iter()
         .map(|rule| RuleView {
@@ -108,10 +176,7 @@ fn rules_json(settings: &HomeSettings) -> String {
             cta_url: rule.message.cta_url.clone(),
             conditions: rule.conditions.iter().map(condition_view).collect(),
         })
-        .collect();
-    serde_json::to_string(&views)
-        .unwrap_or_else(|_| "[]".to_string())
-        .replace("</", "<\\/")
+        .collect()
 }
 
 // ==================== Rule editor: submitted form (form -> Rust) ====================
@@ -388,16 +453,16 @@ async fn build_managed_sections() -> Vec<ManagedSection> {
 // ==================== Page ====================
 
 /// A community option for the "member of community" condition dropdown.
-struct CommunityOption {
-    id: String,
-    name: String,
+pub struct CommunityOption {
+    pub id: String,
+    pub name: String,
 }
 
 #[derive(TemplateOnce)]
 #[template(path = "admin/dashboard_settings.stpl.html")]
 struct DashboardSettingsPage {
     saved: bool,
-    rules_json: String,
+    rules: Vec<RuleView>,
     default_title: String,
     default_body: String,
     default_cta_label: String,
@@ -428,7 +493,7 @@ async fn render_page(
 
     let page = DashboardSettingsPage {
         saved,
-        rules_json: rules_json(settings),
+        rules: rule_views(settings),
         default_title: settings.welcome_default.title.clone(),
         default_body: settings.welcome_default.body.clone(),
         default_cta_label: settings.welcome_default.cta_label.clone(),

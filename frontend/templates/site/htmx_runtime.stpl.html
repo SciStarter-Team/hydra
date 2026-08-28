@@ -9,6 +9,10 @@
     target, built by crate::middleware::error_pages::error_response.
 %>
 <script src="/-static/htmx.js"></script>
+<%# https://four.htmx.org/extensions/hx-live -- DOM-oriented reactive bindings. %>
+<%# Nothing on the site loads Alpine, so the `:attr` short form stays enabled; %>
+<%# hx-live turns it off if it finds Alpine on the page at init. %>
+<script src="/-static/hx-live.js"></script>
 <% if self.enable_sse { %>
   <%# https://four.htmx.org/extensions/hx-sse %>
   <script src="/-static/hx-sse.js"></script>

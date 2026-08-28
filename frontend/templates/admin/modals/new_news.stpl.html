@@ -1,8 +1,7 @@
 <!-- New News Item Modal -->
 <dialog class="rounded-lg shadow-xl w-11/12 md:w-3/4 max-h-[90vh] overflow-y-auto p-5 backdrop:bg-gray-500 backdrop:opacity-75 m-auto"
         hx-on::after:init="this.showModal()"
-        hx-on:click="if (event.target.tagName === 'DIALOG') this.remove()"
-        x-data="{ sourceType: 'wordpress' }">
+        hx-on:click="if (event.target.tagName === 'DIALOG') this.remove()">
     <div hx-on:click="event.stopPropagation()">
         <!-- Modal Header -->
         <div class="flex items-center justify-between pb-3">
@@ -39,7 +38,6 @@
                             id="source_type"
                             name="source_type"
                             required
-                            x-model="sourceType"
                             class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                         >
                             <option value="wordpress">WordPress</option>
@@ -48,7 +46,7 @@
                     </div>
 
                     <!-- WordPress URL (shown when sourceType=wordpress) -->
-                    <div x-show="sourceType === 'wordpress'">
+                    <div :hidden="q('previous select[name=source_type]').value !== 'wordpress'">
                         <label for="wp_url" class="block text-sm font-medium text-gray-700 mb-2">
                             WordPress URL <span class="text-red-500">*</span>
                         </label>
@@ -63,7 +61,7 @@
                     </div>
 
                     <!-- Tag (shown when sourceType=custom) -->
-                    <div x-show="sourceType === 'custom'">
+                    <div :hidden="q('previous select[name=source_type]').value !== 'custom'">
                         <label for="tag" class="block text-sm font-medium text-gray-700 mb-2">
                             Tag
                         </label>
@@ -79,7 +77,7 @@
                     <!-- Title -->
                     <div>
                         <label for="title" class="block text-sm font-medium text-gray-700 mb-2">
-                            Title <span x-show="sourceType === 'custom'" class="text-red-500">*</span>
+                            Title <span :hidden="q('previous select[name=source_type]').value !== 'custom'" class="text-red-500">*</span>
                         </label>
                         <input
                             type="text"
@@ -88,11 +86,11 @@
                             class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                             placeholder="Enter title..."
                         >
-                        <p x-show="sourceType === 'wordpress'" class="mt-1 text-sm text-gray-500">Leave blank to auto-fetch from WordPress.</p>
+                        <p :hidden="q('previous select[name=source_type]').value !== 'wordpress'" class="mt-1 text-sm text-gray-500">Leave blank to auto-fetch from WordPress.</p>
                     </div>
 
                     <!-- Content (shown when sourceType=custom) - plain textarea for create modal -->
-                    <div x-show="sourceType === 'custom'">
+                    <div :hidden="q('previous select[name=source_type]').value !== 'custom'">
                         <label for="content" class="block text-sm font-medium text-gray-700 mb-2">
                             Content
                         </label>

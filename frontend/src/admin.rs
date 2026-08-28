@@ -41,7 +41,7 @@ pub use projects::{ContactWidget, ParticipantFileWidget, TagsDisplay};
 use crate::middleware::authorization::{Authenticated, StaffOnly};
 use crate::middleware::error_pages::error_response;
 use poem::{
-    Endpoint, EndpointExt, Route, delete, get, handler, post,
+    Endpoint, EndpointExt, Route, get, handler, post,
     web::{Form, Query},
 };
 use sailfish::TemplateOnce;
@@ -111,7 +111,11 @@ pub fn routes() -> impl Endpoint {
         // API endpoints for recipient search (used by badge granting)
         .at("/api/recipient-search", get(api_recipient_search))
         .at("/api/recipient-select", post(api_recipient_select))
-        .at("/api/recipient-remove", delete(api_recipient_remove))
+        // POST, not DELETE: nothing is deleted at this URL. The handler is
+        // handed the whole in-progress recipient list and returns the form
+        // re-rendered without one entry, which is form processing rather than
+        // a resource deletion -- the same shape as recipient-select above.
+        .at("/api/recipient-remove", post(api_recipient_remove))
         // Autocomplete
         .nest("/autocomplete", autocomplete::routes())
         .with(StaffOnly)

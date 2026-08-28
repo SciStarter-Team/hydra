@@ -71,15 +71,21 @@
     </div>
   </div>
 </div>
-<div class="border top-10" x-data="{ activeTab: 'views' }">
+<div class="border top-10">
   <div class="flex flex-select">
     <div>
       <h1>Popular Projects For Your Visitors</h1>
-      <ul class="data-nav not-d2t">
-        <li><a :class="activeTab === 'views' ? 'selected' : ''"
-              @click="activeTab = 'views'">Views</a></li>
-        <li><a :class="activeTab === 'saves' ? 'selected' : ''"
-              @click="activeTab = 'saves'">Saves</a></li>
+      <%# Which tab is current lives on the tabs themselves, as the ARIA state %>
+      <%# that already has to be there; the panels below read it. %>
+      <ul class="data-nav not-d2t" role="tablist">
+        <%# aria-selected is the state; the `selected` class the stylesheet %>
+        <%# already keys off is derived from it rather than tracked separately. %>
+        <li><a role="tab" data-tab="views" aria-selected="true" class="selected"
+               :.selected="aria.selected"
+               hx-on:click="q('.data-nav a').aria.selected = false; aria.selected = true">Views</a></li>
+        <li><a role="tab" data-tab="saves" aria-selected="false"
+               :.selected="aria.selected"
+               hx-on:click="q('.data-nav a').aria.selected = false; aria.selected = true">Saves</a></li>
       </ul>
     </div>
     <select name="year" class="el-select" hx-get="/exchange/<%= self.exchange_id %>/engagement">
@@ -90,7 +96,7 @@
     </select>
   </div>
 
-  <div x-show="activeTab === 'views'">
+  <div role="tabpanel" :hidden="!q('.data-nav a[data-tab=views]').aria.selected">
     <h2>Top 10 Projects by Views</h2>
 
     <table>
@@ -112,7 +118,7 @@
     </table>
   </div>
 
-  <div x-show="activeTab === 'saves'">
+  <div role="tabpanel" :hidden="!q('.data-nav a[data-tab=saves]').aria.selected">
     <h2>Top 10 Projects by Saves</h2>
 
     <table>

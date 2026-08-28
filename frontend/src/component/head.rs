@@ -5,7 +5,6 @@ use sailfish::TemplateOnce;
 pub struct Head {
     enable_webawesome: bool,
     enable_sse: bool,
-    enable_alpine: bool,
     enable_quill: bool,
     enable_maplibre: bool,
     enable_region_editor: bool,
@@ -19,7 +18,6 @@ impl Default for Head {
         Head {
             enable_webawesome: true,
             enable_sse: false,
-            enable_alpine: false,
             enable_quill: false,
             enable_maplibre: false,
             enable_region_editor: false,
@@ -40,12 +38,6 @@ impl Head {
     #[tracing::instrument]
     pub fn with_sse(mut self) -> Self {
         self.enable_sse = true;
-        self
-    }
-
-    #[tracing::instrument]
-    pub fn with_alpine(mut self) -> Self {
-        self.enable_alpine = true;
         self
     }
 
@@ -96,12 +88,6 @@ impl Head {
     #[tracing::instrument]
     pub fn without_sse(mut self) -> Self {
         self.enable_sse = false;
-        self
-    }
-
-    #[tracing::instrument]
-    pub fn without_alpine(mut self) -> Self {
-        self.enable_alpine = false;
         self
     }
 
