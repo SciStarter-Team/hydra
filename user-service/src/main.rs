@@ -12,8 +12,9 @@ use futures::StreamExt;
 use tokio::{spawn, task::JoinSet, time::sleep};
 use ulid::Ulid;
 
+pub mod acts_connected;
 pub mod address_sets;
-pub mod ambassador;
+mod ambassador;
 pub mod auth;
 pub mod bookmarks;
 pub mod certificates;
@@ -26,6 +27,7 @@ pub mod inat;
 pub mod legacy_id;
 pub mod library;
 pub mod link_tokens;
+pub mod moore;
 pub mod permissions;
 pub mod places;
 pub mod profile;
@@ -2945,6 +2947,19 @@ async fn main() {
     toplevel.spawn(recv_handler!(tags, "add", users::add_user_tag));
     toplevel.spawn(recv_handler!(tags, "add_signup", users::add_signup_tag));
     toplevel.spawn(recv_handler!(tags, "remove", users::remove_user_tag));
+    toplevel.spawn(handler!(tags, "cohort", users::tag_cohort));
+
+    // Who has joined, bookmarked or reviewed a set of projects.
+    let interest = service.group("user.interest");
+    toplevel.spawn(handler!(
+        interest,
+        "by_projects",
+        users::interested_by_projects
+    ));
+
+    // Anonymous user locations for the staff map.
+    let points = service.group("user.points");
+    toplevel.spawn(handler!(points, "page", users::points_page));
 
     let emails = service.group("user.emails");
     toplevel.spawn(handler!(emails, "get", users::get_user_emails));
@@ -2985,6 +3000,7 @@ async fn main() {
         users::admin_password_reset
     ));
     toplevel.spawn(handler!(admin, "email_add", users::admin_email_add));
+    toplevel.spawn(handler!(admin, "masquerade", users::masquerade));
     toplevel.spawn(handler!(admin, "email_update", users::admin_email_update));
     toplevel.spawn(handler!(admin, "email_delete", users::admin_email_delete));
     toplevel.spawn(handler!(
@@ -3048,6 +3064,11 @@ async fn main() {
         joins,
         "list_by_project_id",
         project_joins::list_by_project_id
+    ));
+    toplevel.spawn(handler!(
+        joins,
+        "count_by_users",
+        project_joins::count_by_users
     ));
     toplevel.spawn(handler!(
         joins,
@@ -3140,7 +3161,30 @@ async fn main() {
     ));
 
     // Ambassador application
+    // The Moore Foundation grant ledger.
+    let moore_group = service.group("user.moore");
+    toplevel.spawn(handler!(moore_group, "buckets", moore::buckets));
+
+    // Acts of Science Connected hosting applications.
+    let acts_connected_group = service.group("user.acts_connected");
+    toplevel.spawn(handler!(
+        acts_connected_group,
+        "record",
+        acts_connected::record
+    ));
+    toplevel.spawn(handler!(acts_connected_group, "list", acts_connected::list));
+
     let library_group = service.group("user.library");
+    toplevel.spawn(handler!(
+        library_group,
+        "directory_record",
+        library::directory_record
+    ));
+    toplevel.spawn(handler!(
+        library_group,
+        "directory_list",
+        library::directory_list
+    ));
     toplevel.spawn(handler!(library_group, "list", library::list));
     toplevel.spawn(handler!(library_group, "map", library::map));
     toplevel.spawn(handler!(library_group, "get", library::get));
@@ -3185,6 +3229,7 @@ async fn main() {
         "passed_locations",
         ambassador::passed_locations
     ));
+    toplevel.spawn(handler!(ambassador_group, "stages", ambassador::stages));
 
     // Legacy user-id lookup (User-level legacy ids only — distinct from
     // user.profile.lookup which handles Profile-level legacy ids).

@@ -187,6 +187,10 @@ pub struct EntityListEntry {
     pub entity_slug: String,
     pub note: String,
     pub link: String,
+    /// Whether the entry is shown on the list's page. An unpublished entry is
+    /// a draft placement: it keeps its note, link and position, and simply is
+    /// not rendered.
+    pub published: bool,
 }
 
 struct EntityListEntryDB {
@@ -197,6 +201,7 @@ struct EntityListEntryDB {
     entity_slug: String,
     note: String,
     link: String,
+    published: i64,
 }
 
 impl TryFrom<EntityListEntryDB> for EntityListEntry {
@@ -211,6 +216,7 @@ impl TryFrom<EntityListEntryDB> for EntityListEntry {
             entity_slug: value.entity_slug,
             note: value.note,
             link: value.link,
+            published: value.published != 0,
         })
     }
 }
@@ -220,7 +226,7 @@ impl EntityListEntry {
         let list_id_str = list_id.to_string();
         let items = sqlx::query_as!(
             EntityListEntryDB,
-            r#"SELECT entry_id, list_id, priority, added_at, entity_slug, note, link
+            r#"SELECT entry_id, list_id, priority, added_at, entity_slug, note, link, published
                FROM entity_list_entries
                WHERE list_id = ?
                ORDER BY priority ASC, added_at ASC"#,
@@ -234,6 +240,20 @@ impl EntityListEntry {
             .map(|row| row.try_into())
             .collect::<Result<Vec<_>, _>>()
     }
+
+    /// The entries a visitor to the list's page should see.
+    ///
+    /// Named rather than left to each caller to remember, because the
+    /// difference between this and [`get_entries`](Self::get_entries) is the
+    /// difference between what the curator is working on and what the world
+    /// has been shown.
+    pub async fn get_published_entries(list_id: Ulid) -> Result<Vec<EntityListEntry>, Error> {
+        Ok(Self::get_entries(list_id)
+            .await?
+            .into_iter()
+            .filter(|entry| entry.published)
+            .collect())
+    }
 }
 
 impl LoadStorePeered for EntityListEntry {
@@ -246,7 +266,7 @@ impl LoadStorePeered for EntityListEntry {
         let entry_id_str = entry_id.to_string();
         Ok(sqlx::query_as!(
             EntityListEntryDB,
-            r#"SELECT entry_id, list_id, priority, added_at, entity_slug, note, link
+            r#"SELECT entry_id, list_id, priority, added_at, entity_slug, note, link, published
                FROM entity_list_entries
                WHERE entry_id = ?"#,
             entry_id_str,
@@ -261,12 +281,13 @@ impl LoadStorePeered for EntityListEntry {
         let entry_id_str = self.entry_id.to_string();
         let list_id_str = self.list_id.to_string();
         let priority_i64 = self.priority as i64;
+        let published_i64 = i64::from(self.published);
 
         sqlx::query!(
             r#"INSERT OR REPLACE INTO entity_list_entries (
-                 entry_id, list_id, priority, added_at, entity_slug, note, link
+                 entry_id, list_id, priority, added_at, entity_slug, note, link, published
                )
-               VALUES (?, ?, ?, ?, ?, ?, ?)"#,
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
             entry_id_str,
             list_id_str,
             priority_i64,
@@ -274,6 +295,7 @@ impl LoadStorePeered for EntityListEntry {
             self.entity_slug,
             self.note,
             self.link,
+            published_i64,
         )
         .execute(db())
         .await?;

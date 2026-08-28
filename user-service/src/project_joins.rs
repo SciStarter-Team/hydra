@@ -2,9 +2,10 @@ use anyhow::Error;
 use async_nats::service::Request;
 use common::{
     message::user::{
-        EntityCountsRequest, EntityCountsResponse, ProjectJoinCheckRequest,
-        ProjectJoinCheckResponse, ProjectJoinRequest, ProjectJoinResponse, UserJoinEntry,
-        UserJoinsListRequest, UserJoinsListResponse,
+        EntityCountsRequest, EntityCountsResponse, JoinCountsByUsersRequest,
+        JoinCountsByUsersResponse, ProjectJoinCheckRequest, ProjectJoinCheckResponse,
+        ProjectJoinRequest, ProjectJoinResponse, UserJoinEntry, UserJoinsListRequest,
+        UserJoinsListResponse,
     },
     service::{decode_structured_message, log_activity},
     shared::db,
@@ -89,6 +90,42 @@ pub async fn count_by_projects(req: &Request) -> Result<EntityCountsResponse, Er
     }
 
     Ok(EntityCountsResponse { counts })
+}
+
+/// How many projects each of these people has joined
+/// (`user.joins.count_by_users`).
+///
+/// One grouped query rather than a count per person: the curated-page staff
+/// report asks about everyone on a page at once, which can be thousands of
+/// people.
+pub async fn count_by_users(req: &Request) -> Result<JoinCountsByUsersResponse, Error> {
+    use sqlx::{QueryBuilder, Row, Sqlite};
+
+    let message: JoinCountsByUsersRequest = decode_structured_message(req.message.clone())?;
+
+    if message.user_ids.is_empty() {
+        return Ok(JoinCountsByUsersResponse::default());
+    }
+
+    let mut counts = Vec::new();
+
+    // SQLite caps a statement at 999 bound parameters by default.
+    for chunk in message.user_ids.chunks(900) {
+        let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new(
+            r#"SELECT "user_id", COUNT(*) AS "count" FROM "project_joins" WHERE "user_id" IN ("#,
+        );
+        let mut separated = qb.separated(", ");
+        for user_id in chunk {
+            separated.push_bind(user_id.clone());
+        }
+        qb.push(r#") GROUP BY "user_id""#);
+
+        for row in qb.build().fetch_all(db()).await? {
+            counts.push((row.get::<String, _>("user_id"), row.get::<i64, _>("count")));
+        }
+    }
+
+    Ok(JoinCountsByUsersResponse { counts })
 }
 
 pub async fn list_by_user_id(req: &Request) -> Result<Vec<String>, Error> {

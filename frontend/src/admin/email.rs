@@ -1411,6 +1411,8 @@ async fn email_queue(
             page: 1,
             per_page: 20,
             min_queued: Some(2),
+            created_from: None,
+            created_to: None,
         },
     )
     .await?;
@@ -1445,6 +1447,8 @@ async fn email_queue_content(
             page: 1,
             per_page: 20,
             min_queued: Some(2),
+            created_from: None,
+            created_to: None,
         },
     )
     .await?;

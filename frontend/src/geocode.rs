@@ -7,8 +7,21 @@ use ulid::Ulid;
 
 /// Geocode address components to a GeoJSON point string.
 pub async fn geocode_address_to_point(city: &str, state: &str, country: &str) -> Option<String> {
-    let parts: Vec<&str> = [city, state, country]
-        .into_iter()
+    geocode_parts(&[city, state, country]).await
+}
+
+/// Geocode however many address components are to hand, in the order they
+/// would be written on an envelope.
+///
+/// Empty components are dropped, so a caller can pass a fixed set of fields
+/// without first working out which of them were filled in, and callers with
+/// more to offer than a city and a state — a street address and a postal code,
+/// say — can pass those too.
+pub async fn geocode_parts(parts: &[&str]) -> Option<String> {
+    let parts: Vec<&str> = parts
+        .iter()
+        .copied()
+        .map(str::trim)
         .filter(|s| !s.is_empty())
         .collect();
 

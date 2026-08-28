@@ -1505,6 +1505,105 @@ pub struct WorkflowFunnel {
     pub note: Option<String>,
 }
 
+/// Everyone carrying a given tag (`user.tags.cohort`).
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
+pub struct TagCohortRequest {
+    /// The tag that defines the cohort. An empty tag matches nobody, so a
+    /// caller cannot accidentally ask for every account on the site.
+    pub tag: String,
+}
+
+/// One member of a tag cohort, with every tag they carry.
+///
+/// The whole tag set travels rather than a handful of pre-computed flags,
+/// because what a report wants to know about a cohort ("did they finish
+/// Foundations?", "are they a Champion?") is a question about tags, and
+/// answering it here would put one report's definitions inside the user
+/// service.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct TagCohortMember {
+    pub user_id: Ulid,
+    pub email: String,
+    pub first_name: String,
+    pub last_name: String,
+    /// When the account was created.
+    pub date_joined: String,
+    pub tags: Vec<String>,
+}
+
+/// A page of user locations for the staff user map (`user.points.page`).
+///
+/// Paged because the map covers every account that has a location, which is
+/// far more than fits in one NATS message.
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserPointsRequest {
+    pub offset: i64,
+    pub limit: i64,
+}
+
+/// A page of user locations, each already rendered as a GeoJSON geometry.
+///
+/// A short page means the end of the data: the caller stops when it gets fewer
+/// points than it asked for.
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserPointsResponse {
+    pub points: Vec<String>,
+}
+
+/// How many projects each of these people has joined
+/// (`user.joins.count_by_users`).
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
+pub struct JoinCountsByUsersRequest {
+    pub user_ids: Vec<String>,
+}
+
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
+pub struct JoinCountsByUsersResponse {
+    /// `(user_id, joins)`. People with no joins are absent.
+    pub counts: Vec<(String, i64)>,
+}
+
+/// A staff member asking to take on another user's identity
+/// (`user.admin.masquerade`).
+///
+/// The staff member's own id travels with the request because the audit row is
+/// written by the same call that hands over the identity — there is no way to
+/// obtain the session without leaving the record.
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
+pub struct MasqueradeRequest {
+    /// The staff member doing it.
+    pub staff_user_id: String,
+    /// Any email address belonging to the account to become.
+    pub email: String,
+}
+
+/// Who has shown interest in any of a set of projects
+/// (`user.interest.by_projects`).
+///
+/// Interest means having joined a project, bookmarked it, or reviewed it.
+/// Reviews live in the log service, so the caller looks those reviewers up
+/// first and passes them in; this endpoint unions all three sources and
+/// resolves everyone's details in one pass, so the report never has to
+/// deduplicate people itself.
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
+pub struct InterestedRequest {
+    pub project_ids: Vec<String>,
+    /// Users the caller already knows reviewed one of the projects.
+    pub reviewer_ids: Vec<String>,
+}
+
+/// One interested person, and how their interest showed.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct InterestedUser {
+    pub user_id: Ulid,
+    pub first_name: String,
+    pub last_name: String,
+    pub email: String,
+    pub joined: bool,
+    pub bookmarked: bool,
+    pub reviewed: bool,
+}
+
 /// Platform-wide engagement funnel for every training workflow (the
 /// training-analytics staff report).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

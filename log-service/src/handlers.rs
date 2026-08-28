@@ -12,8 +12,9 @@ use common::{
         ProjectLikesResponse, ProjectMemberCountRequest, ProjectMemberCountResponse,
         ProjectParticipationRecord, ProjectParticipationRequest, ProjectParticipationResponse,
         ProjectReviewsRequest, ProjectReviewsResponse, RatingSetRequest, RecentActivityRequest,
-        RecentActivityResponse, ReviewEntry, ReviewSetRequest, UserLastViewRequest,
-        UserLastViewResponse, UserParticipationBreakdownEntry, UserParticipationBreakdownRequest,
+        RecentActivityResponse, ReviewEntry, ReviewSetRequest, ReviewersByProjectsRequest,
+        ReviewersByProjectsResponse, UserLastViewRequest, UserLastViewResponse,
+        UserParticipationBreakdownEntry, UserParticipationBreakdownRequest,
         UserParticipationBreakdownResponse, UserParticipationEntry, UserParticipationRequest,
         UserParticipationResponse, UserRecentVisit, UserRecentVisitsRequest,
         UserRecentVisitsResponse,
@@ -26,10 +27,10 @@ use ulid::Ulid;
 
 use log_service::{
     analytics::{
-        get_clickthrough_analytics_realtime, get_go_url_stats, get_last_active_for,
-        get_participation_analytics_realtime, get_participation_by_email,
-        get_participation_summary, get_recent_activity, get_top_performers,
-        get_user_first_participation, get_users_active_since,
+        get_clickthrough_analytics_realtime, get_go_url_stats, get_go_url_totals,
+        get_last_active_for, get_participation_analytics_realtime, get_participation_by_email,
+        get_participation_by_users, get_participation_summary, get_recent_activity,
+        get_top_performers, get_user_first_participation, get_users_active_since,
     },
     cache::{update_user_emails_cache, update_user_tags_cache},
     health::HealthResponse,
@@ -304,6 +305,41 @@ pub async fn handle_participation_summary(
         .expect("Database not initialized")
         .clone();
     get_participation_summary(database, request)
+        .await
+        .map_err(Into::into)
+}
+
+/// All-time clicks across a set of go-links (`log.gourl_totals`).
+pub async fn handle_gourl_totals(
+    req: &async_nats::service::Request,
+) -> Result<common::message::log::GoUrlTotalsResponse, anyhow::Error> {
+    let request: common::message::log::GoUrlTotalsRequest =
+        decode_structured_message(req.message.clone())?;
+
+    let database = DATABASE
+        .read()
+        .as_ref()
+        .expect("Database not initialized")
+        .clone();
+    get_go_url_totals(database, request)
+        .await
+        .map_err(Into::into)
+}
+
+/// Per-person, per-project participation counts for the curated-page staff
+/// report (`log.participation_by_users`).
+pub async fn handle_participation_by_users(
+    req: &async_nats::service::Request,
+) -> Result<common::message::log::ParticipationByUsersResponse, anyhow::Error> {
+    let request: common::message::log::ParticipationByUsersRequest =
+        decode_structured_message(req.message.clone())?;
+
+    let database = DATABASE
+        .read()
+        .as_ref()
+        .expect("Database not initialized")
+        .clone();
+    get_participation_by_users(database, request)
         .await
         .map_err(Into::into)
 }
@@ -1457,6 +1493,48 @@ pub async fn handle_project_reviews(
     .await?;
 
     Ok(ProjectReviewsResponse { reviews, count })
+}
+
+/// Everyone who has reviewed any of the named projects
+/// (`log.reviewers_by_projects`).
+///
+/// Private reviews are included: the staff report this backs asks who cared
+/// about a project, not what a visitor can read.
+pub async fn handle_reviewers_by_projects(
+    req: &async_nats::service::Request,
+) -> Result<ReviewersByProjectsResponse> {
+    use sqlx::QueryBuilder;
+
+    let request: ReviewersByProjectsRequest = decode_structured_message(req.message.clone())?;
+
+    if request.project_ids.is_empty() {
+        return Ok(ReviewersByProjectsResponse::default());
+    }
+
+    let mut user_ids = std::collections::BTreeSet::new();
+
+    // SQLite caps a statement at 999 bound parameters by default.
+    for chunk in request.project_ids.chunks(900) {
+        let mut builder = QueryBuilder::new(
+            "SELECT DISTINCT user_id FROM project_reviews_cache WHERE project_id IN (",
+        );
+        let mut separated = builder.separated(", ");
+        for id in chunk {
+            separated.push_bind(id);
+        }
+        builder.push(")");
+
+        let rows: Vec<String> = builder
+            .build_query_scalar()
+            .fetch_all(common::shared::db())
+            .await?;
+
+        user_ids.extend(rows);
+    }
+
+    Ok(ReviewersByProjectsResponse {
+        user_ids: user_ids.into_iter().collect(),
+    })
 }
 
 pub async fn handle_review_set(req: &async_nats::service::Request) -> Result<ReviewEntry> {

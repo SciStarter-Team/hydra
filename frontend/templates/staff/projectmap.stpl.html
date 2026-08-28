@@ -1,0 +1,149 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>SciStarter Project Coverage Map</title>
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+    <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@7/turf.min.js"></script>
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <style>
+     body { margin: 0; padding: 0; font-family: sans-serif; }
+     #map { width: 100%; aspect-ratio: 3/1; }
+     #data-specific { height: 3em; }
+     #data-dump, #data-all, #data-specific { padding: 0 1rem; }
+    </style>
+  </head>
+  <body>
+    <div id="data-dump"></div>
+
+    <div id="data-specific"></div>
+
+    <div id="map"></div>
+
+    <div id="data-all"></div>
+
+    <script type="module">
+     let data_dump = document.getElementById('data-dump');
+     let data_all = document.getElementById('data-all');
+
+     data_dump.innerHTML = '<strong>Loading data sets...</strong>';
+
+     let projects_json = await fetch('/staff/projectmap/projects.geojson<% if let Some(mode) = &self.mode { %>?mode=<%= mode %><% } %>').then((resp) => resp.json());
+     let countries_json = await fetch('https://static.scistarter.org/countries.geojson').then((resp) => resp.json());
+
+     let countries_covered = 0;
+     let top_five = [];
+     let bottom_five = [];
+
+     function process_country(index, countries) {
+         let country = countries[index];
+         if(country === undefined) {
+             return build_map();
+         }
+
+         data_dump.innerHTML = `<strong>Calculating intersections...</strong><br>${index + 1}/${countries.length} ${country.properties.name}`;
+
+         let projects = [];
+         let num_projects = 0;
+
+         for(let project of projects_json.features) {
+             if(turf.booleanIntersects(country, project)) {
+                 projects.push(project.properties.name);
+                 num_projects += 1;
+             }
+         }
+
+         country.properties.projects = projects;
+         country.properties.num_projects = num_projects;
+         country.properties.color = `rgba(<%= self.red %>, <%= self.green %>, <%= self.blue %>, ${Math.max(Math.min(<%= self.opacity %> * Math.sqrt(num_projects), 1.0), 0.0)})`;
+
+         if(num_projects > 0) {
+             countries_covered += 1;
+         }
+
+         top_five.push(country);
+         top_five.sort((a, b) => b.properties.num_projects - a.properties.num_projects);
+         top_five.splice(5);
+
+         bottom_five.push(country);
+         bottom_five.sort((a, b) => a.properties.num_projects - b.properties.num_projects);
+         bottom_five.splice(5);
+
+         data_all.innerHTML += `<p><strong>${country.properties.name}:</strong><br>${projects.join('<br>')}</p>`;
+
+         setTimeout(process_country, 20, index + 1, countries);
+     }
+
+     function name_and_count(country) {
+         if(country === undefined) {
+             return '—';
+         }
+         return `${country.properties.name} (${country.properties.num_projects})`;
+     }
+
+     function build_map() {
+         data_dump.innerHTML = `
+           <strong>General Overview</strong>
+           <p>${countries_covered} countries have <%= self.subject %> citizen science projects featured on SciStarter.</p>
+           <p>The countries with the highest number of <%= self.subject %> projects are ${top_five.map(name_and_count).join(', ')}.</p>
+           <p>The countries with the lowest number of <%= self.subject %> projects are ${bottom_five.map(name_and_count).join(', ')}.</p>
+           <p>These statistics are based on entries where the project team provided geometry for a region or regions where the project could be participated in. Projects listed as global are not shown here, however projects which provided a geometry covering most or all of the Earth are.</p>
+         `;
+
+         const map = new maplibregl.Map({
+             container: 'map',
+             style: 'https://tiles.openfreemap.org/styles/positron',
+             center: [0.0, 0.0],
+             zoom: 1,
+         });
+
+         map.on('load', () => {
+             map.addSource('countries', {
+                 type: 'geojson',
+                 data: countries_json,
+                 cluster: false,
+             });
+
+             map.addLayer({
+                 'id': 'filled-countries',
+                 'type': 'fill',
+                 'source': 'countries',
+                 'layout': {},
+                 'paint': {
+                     'fill-color': ['get', "color"],
+                 }
+             });
+
+             <% if self.borders { %>
+             map.addLayer({
+                 'id': 'stroked-countries',
+                 'type': 'line',
+                 'source': 'countries',
+                 'layout': {},
+                 'paint': {
+                     'line-color': "#611FFB",
+                     'line-width': 2
+                 }
+             });
+             <% } %>
+
+             const specific = document.getElementById('data-specific');
+
+             map.on('mousemove', 'filled-countries', (e) => {
+                 const country_name = e.features[0].properties.name;
+                 const num_projects = e.features[0].properties.num_projects;
+
+                 specific.innerHTML = `<strong>${country_name}</strong><br><span>${num_projects} available</span>`;
+             });
+
+             map.on('mouseleave', 'filled-countries', () => {
+                 specific.innerHTML = '';
+             });
+         });
+     }
+
+     process_country(0, countries_json.features);
+    </script>
+  </body>
+</html>

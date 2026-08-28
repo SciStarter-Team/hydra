@@ -2,12 +2,14 @@ use crate::error::{LogServiceError, Result};
 use common::badge::Badge;
 use common::message::log::{
     AnalyticsQuery, AnalyticsResponse, GoUrlChartPoint, GoUrlStatsRequest, GoUrlStatsResponse,
-    GoUrlViewEntry, LastActiveEntry, LastActiveForRequest, LastActiveForResponse,
-    ParticipationByEmailEntry, ParticipationByEmailRequest, ParticipationByEmailResponse,
-    ParticipationSummaryEntry, ParticipationSummaryRequest, ParticipationSummaryResponse,
-    RecentActivityItem, RecentActivityRequest, RecentActivityResponse, TopItemCount,
-    TopPerformersQuery, UserFirstParticipationEntry, UserFirstParticipationRequest,
-    UserFirstParticipationResponse, UsersActiveSinceRequest, UsersActiveSinceResponse, WeeklyCount,
+    GoUrlTotalsRequest, GoUrlTotalsResponse, GoUrlViewEntry, LastActiveEntry, LastActiveForRequest,
+    LastActiveForResponse, ParticipationByEmailEntry, ParticipationByEmailRequest,
+    ParticipationByEmailResponse, ParticipationByUsersEntry, ParticipationByUsersRequest,
+    ParticipationByUsersResponse, ParticipationSummaryEntry, ParticipationSummaryRequest,
+    ParticipationSummaryResponse, RecentActivityItem, RecentActivityRequest,
+    RecentActivityResponse, TopItemCount, TopPerformersQuery, UserFirstParticipationEntry,
+    UserFirstParticipationRequest, UserFirstParticipationResponse, UsersActiveSinceRequest,
+    UsersActiveSinceResponse, WeeklyCount,
 };
 use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::functions_aggregate::expr_fn::count;
@@ -306,6 +308,92 @@ pub async fn get_participation_summary(
     }
 
     Ok(ParticipationSummaryResponse { entries })
+}
+
+/// Participation counts for each (person, project) pair in the two lists
+/// (`log.participation_by_users`).
+///
+/// Each participation record is one repetition, so the count is `COUNT(*)` —
+/// the same unit the affiliate activity report uses.
+pub async fn get_participation_by_users(
+    database: Arc<Database>,
+    request: ParticipationByUsersRequest,
+) -> Result<ParticipationByUsersResponse> {
+    use datafusion::arrow::array::{Array, Int64Array, StringArray, StringViewArray};
+
+    // Both id kinds are ULIDs; keep only alphanumeric ones so they are safe to
+    // interpolate into the IN lists, as the other summaries here do.
+    let clean = |ids: Vec<String>| -> Vec<String> {
+        ids.into_iter()
+            .filter(|id| !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric()))
+            .collect()
+    };
+
+    let user_ids = clean(request.user_ids);
+    let project_ids = clean(request.project_ids);
+
+    if user_ids.is_empty() || project_ids.is_empty() {
+        return Ok(ParticipationByUsersResponse::default());
+    }
+
+    let in_list = |ids: &[String]| {
+        ids.iter()
+            .map(|id| format!("'{id}'"))
+            .collect::<Vec<_>>()
+            .join(",")
+    };
+
+    let ctx = database.context();
+    let sql = format!(
+        "SELECT user_id, entity_id, COUNT(*) AS count \
+         FROM participation_realtime \
+         WHERE user_id IN ({users}) AND entity_id IN ({projects}) \
+         GROUP BY user_id, entity_id",
+        users = in_list(&user_ids),
+        projects = in_list(&project_ids),
+    );
+
+    let batches = ctx.sql(&sql).await?.collect().await?;
+
+    fn str_at(arr: &dyn Array, i: usize) -> Option<String> {
+        if arr.is_null(i) {
+            return None;
+        }
+        if let Some(a) = arr.as_any().downcast_ref::<StringArray>() {
+            return Some(a.value(i).to_string());
+        }
+        if let Some(a) = arr.as_any().downcast_ref::<StringViewArray>() {
+            return Some(a.value(i).to_string());
+        }
+        None
+    }
+
+    let mut entries = Vec::new();
+    for batch in batches {
+        let user_col = batch.column(0);
+        let project_col = batch.column(1);
+        let count_col = batch.column(2).as_any().downcast_ref::<Int64Array>();
+
+        for i in 0..batch.num_rows() {
+            let (Some(user_id), Some(project_id)) = (str_at(user_col, i), str_at(project_col, i))
+            else {
+                continue;
+            };
+            let count = count_col
+                .map(|a| if a.is_null(i) { 0 } else { a.value(i) })
+                .unwrap_or(0);
+
+            if count > 0 {
+                entries.push(ParticipationByUsersEntry {
+                    user_id,
+                    project_id,
+                    count,
+                });
+            }
+        }
+    }
+
+    Ok(ParticipationByUsersResponse { entries })
 }
 
 /// For a single user, the earliest participation timestamp in each project they
@@ -878,6 +966,48 @@ fn format_time_ago(when: &str) -> String {
 }
 
 /// Get go URL statistics including view counts and chart data
+/// All-time clicks across a set of go-links (`log.gourl_totals`).
+///
+/// One aggregate over the whole set rather than a query per slug: the ledger
+/// asks about seventeen kit links at once, and their individual counts are not
+/// what it reports.
+pub async fn get_go_url_totals(
+    database: Arc<Database>,
+    request: GoUrlTotalsRequest,
+) -> Result<GoUrlTotalsResponse> {
+    use datafusion::arrow::array::Int64Array;
+
+    let paths: Vec<Expr> = request
+        .slugs
+        .iter()
+        .filter(|slug| !slug.is_empty())
+        .map(|slug| lit(format!("/go/{slug}")))
+        .collect();
+
+    if paths.is_empty() {
+        return Ok(GoUrlTotalsResponse::default());
+    }
+
+    let batches = database
+        .context()
+        .table("clickthroughs_realtime")
+        .await?
+        .filter(col("link_type").eq(lit("golink")))?
+        .filter(col("from_path").in_list(paths, false))?
+        .aggregate(vec![], vec![count(lit(1)).alias("total")])?
+        .collect()
+        .await?;
+
+    let total = batches
+        .first()
+        .filter(|batch| batch.num_rows() > 0)
+        .and_then(|batch| batch.column(0).as_any().downcast_ref::<Int64Array>())
+        .map(|column| column.value(0))
+        .unwrap_or(0);
+
+    Ok(GoUrlTotalsResponse { total })
+}
+
 pub async fn get_go_url_stats(
     database: Arc<Database>,
     request: GoUrlStatsRequest,

@@ -75,60 +75,49 @@ pub async fn handle_list_sendings(req: &Request) -> Result<ListSendingsResponse,
     // Calculate offset
     let offset = (request.page.saturating_sub(1)) * request.per_page;
 
-    // Get total count with optional min_queued filter
-    let total = if let Some(min_queued) = request.min_queued {
-        let count_result = sqlx::query!(
-            r#"SELECT COUNT(*) as count FROM sendings WHERE total_queued >= ?"#,
-            min_queued
-        )
-        .fetch_one(db())
-        .await?;
-        count_result.count as u32
-    } else {
-        let count_result = sqlx::query!(r#"SELECT COUNT(*) as count FROM sendings"#)
-            .fetch_one(db())
-            .await?;
-        count_result.count as u32
-    };
+    // Each filter is expressed as "unset, or matching", so one query serves
+    // every combination the callers ask for — the admin queue page (a page of
+    // mass sendings), the staff email report (a whole date range), and any
+    // future pairing of the two.
+    let min_queued = request.min_queued.unwrap_or(0);
+    let created_from = request.created_from.as_deref();
+    let created_to = request.created_to.as_deref();
 
-    // Fetch sendings with optional min_queued filter
-    let rows: Vec<SendingRow> = if let Some(min_queued) = request.min_queued {
-        sqlx::query_as!(
-            SendingRow,
-            r#"SELECT sending_id, created_at, subject, total_queued,
-                      messages_sent, messages_skipped, messages_opened,
-                      messages_bounced, unsubscribes, complaints,
-                      skipped_unsubscribed, skipped_bounced, skipped_complained,
-                      skipped_unverified, skipped_opted_out, skipped_invalid,
-                      send_failed
-               FROM sendings
-               WHERE total_queued >= ?
-               ORDER BY created_at DESC
-               LIMIT ? OFFSET ?"#,
-            min_queued,
-            request.per_page,
-            offset
-        )
-        .fetch_all(db())
-        .await?
-    } else {
-        sqlx::query_as!(
-            SendingRow,
-            r#"SELECT sending_id, created_at, subject, total_queued,
-                      messages_sent, messages_skipped, messages_opened,
-                      messages_bounced, unsubscribes, complaints,
-                      skipped_unsubscribed, skipped_bounced, skipped_complained,
-                      skipped_unverified, skipped_opted_out, skipped_invalid,
-                      send_failed
-               FROM sendings
-               ORDER BY created_at DESC
-               LIMIT ? OFFSET ?"#,
-            request.per_page,
-            offset
-        )
-        .fetch_all(db())
-        .await?
-    };
+    let total = sqlx::query!(
+        r#"SELECT COUNT(*) AS count FROM sendings
+           WHERE total_queued >= ?1
+             AND (?2 IS NULL OR created_at >= ?2)
+             AND (?3 IS NULL OR created_at < ?3)"#,
+        min_queued,
+        created_from,
+        created_to,
+    )
+    .fetch_one(db())
+    .await?
+    .count as u32;
+
+    let rows: Vec<SendingRow> = sqlx::query_as!(
+        SendingRow,
+        r#"SELECT sending_id, created_at, subject, total_queued,
+                  messages_sent, messages_skipped, messages_opened,
+                  messages_bounced, unsubscribes, complaints,
+                  skipped_unsubscribed, skipped_bounced, skipped_complained,
+                  skipped_unverified, skipped_opted_out, skipped_invalid,
+                  send_failed
+           FROM sendings
+           WHERE total_queued >= ?1
+             AND (?2 IS NULL OR created_at >= ?2)
+             AND (?3 IS NULL OR created_at < ?3)
+           ORDER BY created_at DESC
+           LIMIT ?4 OFFSET ?5"#,
+        min_queued,
+        created_from,
+        created_to,
+        request.per_page,
+        offset,
+    )
+    .fetch_all(db())
+    .await?;
 
     let mut sendings = Vec::new();
     for row in rows {

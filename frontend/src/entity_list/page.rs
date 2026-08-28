@@ -125,7 +125,7 @@ pub async fn page(
     // behind it cannot be matched to the activity it is meant to explain.
     let ask_identity = user_info.is_some() && !list.hide_identity_form && identity.is_none();
 
-    let entries = EntityListEntry::get_entries(list.list_id).await?;
+    let entries = EntityListEntry::get_published_entries(list.list_id).await?;
     let slugs: Vec<String> = entries.iter().map(|e| e.entity_slug.clone()).collect();
     let summaries = entity_summary::lookup_batch_by_slug(&slugs).await?;
 

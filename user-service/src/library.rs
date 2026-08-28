@@ -1,16 +1,23 @@
-//! Library Network signups: the staff browser's queries.
+//! The Library Network: who signed up, and which libraries are in it.
 //!
-//! The rows are mirrored from orrery (see `library_signups_synchronize` in
-//! main.rs), which owns the signup form and stays the system of record. This
-//! service only reads them: a paged, filtered list for the grid, a wide CSV
-//! export, and the narrow deduplicated "Prepare Map" export.
+//! Two separate things live here, both belonging to the same programme.
+//!
+//! The **signups** are the people who filled in the sign-up form. Those rows
+//! are mirrored from orrery (see `library_signups_synchronize` in main.rs),
+//! which owns the form and stays the system of record; this service only reads
+//! them: a paged, filtered list for the grid, a wide CSV export, and the narrow
+//! deduplicated "Prepare Map" export.
+//!
+//! The **directory** is the list of libraries themselves, maintained by staff
+//! in a Google Sheet and imported through `/staff/google-authorize`. Unlike the
+//! signups, this service owns it.
 
 use anyhow::Error;
 use async_nats::service::Request;
 use common::{
     message::dashboard::{
-        LibraryMapRow, LibrarySignupFilters, LibrarySignupListRequest, LibrarySignupListResponse,
-        LibrarySignupRow, LibrarySignupUpdate,
+        LibraryDirectoryEntry, LibraryDirectoryRecordResponse, LibraryMapRow, LibrarySignupFilters,
+        LibrarySignupListRequest, LibrarySignupListResponse, LibrarySignupRow, LibrarySignupUpdate,
     },
     service::decode_structured_message,
     shared::db,
@@ -347,4 +354,81 @@ pub async fn create(req: &Request) -> Result<(), Error> {
     .await?;
 
     Ok(())
+}
+
+/// Add one library to the directory (`user.library.directory_record`), unless
+/// a library of that name is already there.
+///
+/// Insert-only by design, matching orrery's import: the sheet is the place to
+/// correct a library's details, but a row already imported may since have been
+/// fixed by hand here, and a re-import must not undo that. `INSERT OR IGNORE`
+/// makes "already known" the normal outcome rather than an error, so the
+/// import can run repeatedly and only pick up what is new.
+pub async fn directory_record(req: &Request) -> Result<LibraryDirectoryRecordResponse, Error> {
+    let entry: LibraryDirectoryEntry =
+        decode_structured_message(req.message.clone()).unwrap_or_default();
+
+    if entry.name.trim().is_empty() {
+        return Ok(LibraryDirectoryRecordResponse { added: false });
+    }
+
+    let recorded = TimeString::now();
+
+    // An empty point stores as NULL rather than as an unparseable geometry, so
+    // "no location" is one thing in the column rather than two.
+    let point = (!entry.point.trim().is_empty()).then_some(entry.point.as_str());
+
+    let result = sqlx::query!(
+        r#"INSERT OR IGNORE INTO "libraries"
+             ("name", "recorded", "address", "city", "state", "zipcode", "org_type", "url", "point")
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, GeomFromGeoJSON(?))"#,
+        entry.name,
+        recorded,
+        entry.address,
+        entry.city,
+        entry.state,
+        entry.zipcode,
+        entry.org_type,
+        entry.url,
+        point,
+    )
+    .execute(db())
+    .await?;
+
+    Ok(LibraryDirectoryRecordResponse {
+        added: result.rows_affected() > 0,
+    })
+}
+
+/// The whole directory (`user.library.directory_list`), by name.
+///
+/// Unpaginated: the directory is a few thousand libraries at most, and both
+/// callers — the import, which needs to know what it already has, and the
+/// staff listing — want all of it.
+pub async fn directory_list(_req: &Request) -> Result<Vec<LibraryDirectoryEntry>, Error> {
+    let rows = sqlx::query!(
+        r#"SELECT "name" AS "name!", "recorded" AS "recorded!", "address" AS "address!",
+                  "city" AS "city!", "state" AS "state!", "zipcode" AS "zipcode!",
+                  "org_type" AS "org_type!", "url" AS "url!",
+                  AsGeoJSON("point") AS "point?: String"
+             FROM "libraries"
+            ORDER BY "name""#
+    )
+    .fetch_all(db())
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| LibraryDirectoryEntry {
+            name: row.name,
+            address: row.address,
+            city: row.city,
+            state: row.state,
+            zipcode: row.zipcode,
+            org_type: row.org_type,
+            url: row.url,
+            point: row.point.unwrap_or_default(),
+            recorded: row.recorded,
+        })
+        .collect())
 }

@@ -276,6 +276,10 @@ pub fn routes() -> impl Endpoint {
             "/lists/:list_id/entries/:entry_id/note",
             post(lists::set_entry_note),
         )
+        .at(
+            "/lists/:list_id/entries/:entry_id/published",
+            post(lists::set_entry_published),
+        )
         .at("/lists/:list_id/share", post(lists::share))
         .at("/lists/:list_id/unshare", post(lists::unshare))
         .at("/bookmarks", get(bookmarks::page))

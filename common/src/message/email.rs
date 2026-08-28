@@ -109,6 +109,18 @@ pub struct ListSendingsRequest {
     pub page: u32,
     pub per_page: u32,
     pub min_queued: Option<u32>,
+    /// Only sendings created at or after this instant. `None` sets no lower
+    /// bound.
+    ///
+    /// Defaulted rather than required so a peer running older code, whose
+    /// payload carries neither bound, still deserializes during a rolling
+    /// deploy.
+    #[serde(default)]
+    pub created_from: Option<String>,
+    /// Only sendings created strictly before this instant. `None` sets no
+    /// upper bound.
+    #[serde(default)]
+    pub created_to: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

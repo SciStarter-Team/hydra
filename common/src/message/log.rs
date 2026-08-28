@@ -617,6 +617,66 @@ pub struct ProjectReviewsResponse {
     pub count: i64,
 }
 
+/// All-time click totals for a set of go-links (`log.gourl_totals`).
+///
+/// One request for the whole set, because the callers that want this — the
+/// grant ledger's "kit downloads" indicator, for one — care about the sum
+/// across a named group of links, not about any one of them.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct GoUrlTotalsRequest {
+    pub slugs: Vec<String>,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct GoUrlTotalsResponse {
+    /// Clicks across every named link. Links with no clicks contribute zero.
+    pub total: i64,
+}
+
+/// Per-person, per-project participation counts (`log.participation_by_users`).
+///
+/// Backs the curated-page staff report, which is a grid of people against the
+/// projects on one page. Both lists are supplied because that grid is the
+/// question: counts for every project a person ever touched would be a much
+/// larger answer to a question nobody asked.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct ParticipationByUsersRequest {
+    pub user_ids: Vec<String>,
+    pub project_ids: Vec<String>,
+}
+
+/// One person's participation in one project.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParticipationByUsersEntry {
+    pub user_id: String,
+    pub project_id: String,
+    /// Participation records, one per repetition — the same unit the affiliate
+    /// activity report counts.
+    pub count: i64,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct ParticipationByUsersResponse {
+    /// Only non-zero pairs; a person who did nothing in a project is absent.
+    pub entries: Vec<ParticipationByUsersEntry>,
+}
+
+/// Who has reviewed any of these projects (`log.reviewers_by_projects`).
+///
+/// Backs the staff "interested people" report. Private reviews count: the
+/// report is about who cared enough to write about a project, not about what
+/// the public can read.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct ReviewersByProjectsRequest {
+    pub project_ids: Vec<String>,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct ReviewersByProjectsResponse {
+    /// Distinct user ids, in no particular order.
+    pub user_ids: Vec<String>,
+}
+
 /// Create or update a user's review of a project. Returns the stored entry.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReviewSetRequest {

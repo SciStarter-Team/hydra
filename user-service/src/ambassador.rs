@@ -8,7 +8,8 @@ use common::{
         AmbassadorDirectoryOrder, AmbassadorDirectoryQuery, AmbassadorDirectoryResponse,
         AmbassadorExportRow, AmbassadorFilters, AmbassadorListRequest, AmbassadorListResponse,
         AmbassadorMessageForm, AmbassadorMessageReview, AmbassadorMessageRow, AmbassadorProfile,
-        AmbassadorReviewUpdate, AmbassadorScreeningStatus, DatePresence, TriState,
+        AmbassadorReviewUpdate, AmbassadorScreeningStatus, AmbassadorStageRow,
+        AmbassadorStagesRequest, DatePresence, TriState,
     },
     message::email::EmailRecipient,
     message::user::{AmbassadorLocation, AmbassadorPassedLocationsResponse, UserAndBadge},
@@ -33,7 +34,14 @@ async fn current_state(user_id: &str) -> Result<String, Error> {
 }
 
 /// Set the native ambassador state, creating the progress row if needed.
+///
+/// `state_changed` is stamped with every write, matching the `auto_now` field
+/// orrery's state machine carries. The staff funnel exports report it as the
+/// person's "since" date, so a transition that did not record its date would
+/// leave a hole in those reports.
 async fn set_state(user_id: &str, state: &str) -> Result<(), Error> {
+    let now = TimeString::now();
+
     sqlx::query!(
         "INSERT OR IGNORE INTO ambassador_progress (user_id) VALUES (?)",
         user_id
@@ -41,8 +49,9 @@ async fn set_state(user_id: &str, state: &str) -> Result<(), Error> {
     .execute(db())
     .await?;
     sqlx::query!(
-        "UPDATE ambassador_progress SET state = ? WHERE user_id = ?",
+        "UPDATE ambassador_progress SET state = ?, state_changed = ? WHERE user_id = ?",
         state,
+        now,
         user_id
     )
     .execute(db())
@@ -1411,4 +1420,57 @@ pub async fn message_review(req: &Request) -> Result<(), Error> {
     .await?;
 
     Ok(())
+}
+
+/// Everyone currently at one of the requested funnel stages
+/// (`user.ambassador.stages`), newest transition first.
+///
+/// Backs the staff funnel exports. Test accounts are left out; staff accounts
+/// are not, because a staff member who took the training is a real person who
+/// took the training — the same rule orrery applies.
+pub async fn stages(req: &Request) -> Result<Vec<AmbassadorStageRow>, Error> {
+    let request: AmbassadorStagesRequest =
+        decode_structured_message(req.message.clone()).unwrap_or_default();
+
+    if request.states.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new(
+        r#"SELECT u."first_name" AS "first_name",
+                  u."last_name" AS "last_name",
+                  u."handle" AS "handle",
+                  u."primary_email" AS "primary_email",
+                  p."state" AS "state",
+                  p."state_changed" AS "state_changed"
+             FROM "ambassador_progress" p
+             JOIN "users" u ON u."user_id" = p."user_id"
+            WHERE u."is_test" = 0
+              AND p."state" IN ("#,
+    );
+
+    let mut separated = qb.separated(", ");
+    for state in &request.states {
+        separated.push_bind(state);
+    }
+    qb.push(r#") ORDER BY p."state_changed" DESC, u."user_id" DESC"#);
+
+    let rows = qb.build().fetch_all(db()).await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            let state_changed: String = row.get("state_changed");
+
+            AmbassadorStageRow {
+                first_name: row.get("first_name"),
+                last_name: row.get("last_name"),
+                handle: row.get("handle"),
+                email: row.get("primary_email"),
+                state: row.get("state"),
+                // Stored as a full timestamp; the export wants the date.
+                since: state_changed.get(0..10).unwrap_or_default().to_string(),
+            }
+        })
+        .collect())
 }

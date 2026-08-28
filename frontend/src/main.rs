@@ -1,3 +1,4 @@
+pub mod acts_connected;
 pub mod add;
 pub mod admin;
 pub mod ambassador;
@@ -549,6 +550,10 @@ fn user_facing() -> impl Endpoint {
         .at(
             "/l/library-network-signup",
             get(library_signup::index).post(library_signup::submit),
+        )
+        .at(
+            "/l/acts-of-science-connected-apply",
+            post(acts_connected::submit),
         )
         .at("/training-k12", get(training::k12::legacy_redirect))
         .at("/training/champion", get(training::champion::page))
@@ -2396,6 +2401,9 @@ mod sync {
                         entity_slug: entry_data.entity_slug,
                         note: entry_data.note,
                         link: entry_data.link,
+                        // orrery's entity lists have no per-entry draft state,
+                        // so everything it sends is on the page.
+                        published: true,
                     };
 
                     if let Err(err) = entry.store().await {

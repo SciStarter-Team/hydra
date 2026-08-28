@@ -21,14 +21,16 @@ use handlers::{
     handle_articulate_completion_record, handle_clickthrough, handle_clickthrough_analytics,
     handle_contributors, handle_edit_log, handle_email_event, handle_entity_list_stats,
     handle_external_link_clickthrough, handle_external_links, handle_go_url_stats,
-    handle_health_check, handle_join, handle_last_active_for, handle_last_edited, handle_page_view,
-    handle_participation_analytics, handle_participation_by_email, handle_participation_summary,
+    handle_gourl_totals, handle_health_check, handle_join, handle_last_active_for,
+    handle_last_edited, handle_page_view, handle_participation_analytics,
+    handle_participation_by_email, handle_participation_by_users, handle_participation_summary,
     handle_project_likes, handle_project_member_count, handle_project_participation,
     handle_project_participation_record, handle_project_reviews, handle_rating_set,
-    handle_recent_activity, handle_review_set, handle_search_event, handle_share,
-    handle_top_performers_analytics, handle_user_emails_update, handle_user_first_participation,
-    handle_user_last_view, handle_user_participation, handle_user_participation_breakdown,
-    handle_user_recent_visits, handle_user_tags_update, handle_users_active_since,
+    handle_recent_activity, handle_review_set, handle_reviewers_by_projects, handle_search_event,
+    handle_share, handle_top_performers_analytics, handle_user_emails_update,
+    handle_user_first_participation, handle_user_last_view, handle_user_participation,
+    handle_user_participation_breakdown, handle_user_recent_visits, handle_user_tags_update,
+    handle_users_active_since,
 };
 use log_service::{Database, run_compactor_service};
 use parking_lot::RwLock;
@@ -232,6 +234,12 @@ async fn main() -> Result<()> {
     ));
     toplevel.spawn(handler!(
         log_group,
+        "participation_by_users",
+        handle_participation_by_users
+    ));
+    toplevel.spawn(handler!(log_group, "gourl_totals", handle_gourl_totals));
+    toplevel.spawn(handler!(
+        log_group,
         "user_first_participation",
         handle_user_first_participation
     ));
@@ -301,6 +309,11 @@ async fn main() -> Result<()> {
         log_group,
         "project_reviews",
         handle_project_reviews
+    ));
+    toplevel.spawn(handler!(
+        log_group,
+        "reviewers_by_projects",
+        handle_reviewers_by_projects
     ));
     toplevel.spawn(handler!(log_group, "review_set", handle_review_set));
     toplevel.spawn(handler!(log_group, "last_edited", handle_last_edited));
@@ -401,6 +414,9 @@ async fn main() -> Result<()> {
     println!("  - log.project_likes");
     println!("  - log.rating_set");
     println!("  - log.project_reviews");
+    println!("  - log.reviewers_by_projects");
+    println!("  - log.participation_by_users");
+    println!("  - log.gourl_totals");
     println!("  - log.review_set");
     println!("  - participation sync running in background");
     println!("  - bookmark sync running in background");

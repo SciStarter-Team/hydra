@@ -473,6 +473,138 @@ pub struct AmbassadorListResponse {
     pub total: i64,
 }
 
+/// One month's arrivals at one milestone, for the Moore Foundation ledger
+/// (`user.moore.buckets`).
+///
+/// Arrivals rather than running totals: accumulating in the caller keeps this
+/// to one pass over each table, and a month with nobody in it simply has no
+/// bucket.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MooreBucket {
+    /// Which milestone, as one of the ledger's metric tags.
+    pub metric: String,
+    /// The month, as `YYYY-MM`.
+    pub month: String,
+    /// How many people first reached the milestone that month.
+    pub count: i64,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct MooreBucketsResponse {
+    pub buckets: Vec<MooreBucket>,
+}
+
+/// One library in the network directory (`user.library.directory_record` to
+/// add, `user.library.directory_list` to read).
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct LibraryDirectoryEntry {
+    pub name: String,
+    pub address: String,
+    pub city: String,
+    pub state: String,
+    pub zipcode: String,
+    pub org_type: String,
+    pub url: String,
+    /// The library's location as a GeoJSON `Point`, or empty when the address
+    /// could not be resolved. A directory row without one is still a library;
+    /// it just cannot be mapped.
+    pub point: String,
+    /// Empty on the way in; stamped by the service.
+    pub recorded: String,
+}
+
+/// The result of adding one directory entry.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct LibraryDirectoryRecordResponse {
+    /// False when a library of that name was already in the directory, so the
+    /// entry was left alone. The import reports these as "already known"
+    /// rather than as failures.
+    pub added: bool,
+}
+
+/// An application to host an Acts of Science Connected event
+/// (`user.acts_connected.record` to store, `user.acts_connected.list` to read
+/// them all back).
+///
+/// One struct serves both directions: the form fills in everything but
+/// `signup_id` and `recorded`, which the service stamps, and the staff export
+/// reads the whole thing back. A separate "stored" type would be the same
+/// fields twice.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct ActsConnectedSignup {
+    /// Empty on the way in; filled in by the service.
+    pub signup_id: String,
+    /// Empty on the way in; stamped by the service.
+    pub recorded: String,
+
+    pub library_name: String,
+    pub address1: String,
+    pub address2: String,
+    pub city: String,
+    pub state: String,
+    pub zip: String,
+    pub country: String,
+
+    pub contact_first: String,
+    pub contact_last: String,
+    pub contact_email: String,
+    pub contact_phone: String,
+
+    pub service_area: String,
+    pub seating_capacity: String,
+    pub tech_support: String,
+
+    /// Which of the offered date-and-time slots the applicant can host, as
+    /// free text — the form lets people qualify an answer, and staff read that
+    /// text when scheduling.
+    pub event1aft: String,
+    pub event1eve: String,
+    pub event2aft: String,
+    pub event2eve: String,
+    pub event3aft: String,
+    pub event3mid: String,
+    pub event3eve: String,
+    pub event4aft: String,
+    pub event4eve: String,
+    pub event5aft: String,
+    pub event5eve: String,
+    pub eventpromote: String,
+
+    pub additional_programming: String,
+    pub why_interested: String,
+    pub requirements: String,
+    pub wired_ethernet: String,
+    pub available_devices: String,
+    pub comments: String,
+    pub request_grant: String,
+}
+
+/// Which stages of the Ambassador funnel to export (`user.ambassador.stages`).
+///
+/// The five staff funnel exports — one per stage, plus the Champions list that
+/// spans three — are the same question asked of different stages, so they share
+/// one request rather than one endpoint each.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct AmbassadorStagesRequest {
+    /// The `ambassador_progress.state` values to include. An empty list
+    /// matches nothing, so a caller cannot accidentally export everyone.
+    pub states: Vec<String>,
+}
+
+/// One person at one stage of the Ambassador funnel.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AmbassadorStageRow {
+    pub first_name: String,
+    pub last_name: String,
+    pub handle: String,
+    pub email: String,
+    /// The raw state name; the caller maps it to the label staff use.
+    pub state: String,
+    /// When the person last moved through the funnel, as `YYYY-MM-DD`, or
+    /// empty for a row that predates the column.
+    pub since: String,
+}
+
 /// One row of the staff CSV export (`user.ambassador.export`). Wider than the
 /// grid row: it carries the applicant's long-form answers too, matching what
 /// orrery's export produces.

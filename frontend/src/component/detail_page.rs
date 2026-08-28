@@ -1807,6 +1807,9 @@ pub async fn add_to_list(
         entity_slug: slug,
         note: String::new(),
         link: String::new(),
+        // Adding a project to a list is the act of putting it there; drafting
+        // is a curation feature, reached from the list's own editor.
+        published: true,
     };
     entry.store().await.map_err(|e| {
         poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)

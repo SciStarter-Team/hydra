@@ -4,17 +4,18 @@ use common::{
     badge::Badge,
     message::user::{
         AdminPasswordResetRequest, AdminPasswordResetResponse, BadgeHolderInfo,
-        BadgeHoldersRequest, BadgeHoldersResponse, BasicInfo, PRIVATE_DISPLAY_NAME,
-        PageManagerSyncRequest, PageManagerSyncResponse, PageManagerUpdateRequest,
-        PageManagerUpdateResponse, UserAndBadge, UserBadge, UserDetails,
-        UserDetailsBatchGetRequest, UserDetailsBatchGetResponse, UserDetailsCreateRequest,
-        UserDetailsDeleteRequest, UserDetailsDeleteResponse, UserDetailsExportRequest,
-        UserDetailsExportResponse, UserDetailsGetRequest, UserDetailsListRequest,
-        UserDetailsListResponse, UserDetailsResponse, UserDetailsSearchRequest,
-        UserDetailsUpdateRequest, UserDisplayInfo, UserDisplayInfoBatchRequest,
-        UserDisplayInfoBatchResponse, UserEmail, UserEmailAddRequest, UserEmailDeleteRequest,
-        UserEmailInfo, UserEmailInfoRequest, UserEmailResponse, UserEmailToggleVerifiedRequest,
-        UserEmailUpdateRequest, UserNameMapping,
+        BadgeHoldersRequest, BadgeHoldersResponse, BasicInfo, InterestedRequest, InterestedUser,
+        MasqueradeRequest, PRIVATE_DISPLAY_NAME, PageManagerSyncRequest, PageManagerSyncResponse,
+        PageManagerUpdateRequest, PageManagerUpdateResponse, TagCohortMember, TagCohortRequest,
+        UserAndBadge, UserBadge, UserDetails, UserDetailsBatchGetRequest,
+        UserDetailsBatchGetResponse, UserDetailsCreateRequest, UserDetailsDeleteRequest,
+        UserDetailsDeleteResponse, UserDetailsExportRequest, UserDetailsExportResponse,
+        UserDetailsGetRequest, UserDetailsListRequest, UserDetailsListResponse,
+        UserDetailsResponse, UserDetailsSearchRequest, UserDetailsUpdateRequest, UserDisplayInfo,
+        UserDisplayInfoBatchRequest, UserDisplayInfoBatchResponse, UserEmail, UserEmailAddRequest,
+        UserEmailDeleteRequest, UserEmailInfo, UserEmailInfoRequest, UserEmailResponse,
+        UserEmailToggleVerifiedRequest, UserEmailUpdateRequest, UserNameMapping, UserPointsRequest,
+        UserPointsResponse,
     },
     service::{decode_structured_message, log_activity, send},
     shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower},
@@ -222,6 +223,232 @@ pub async fn get_user_tags(req: &Request) -> Result<Vec<String>, Error> {
     .await?;
 
     Ok(tags)
+}
+
+/// Everyone carrying `tag`, with every tag each of them holds
+/// (`user.tags.cohort`).
+///
+/// Backs staff cohort reports, which ask "who is in this group, and what else
+/// is true of them". Test accounts are excluded: they are in the tag tables for
+/// the same reasons real users are, and would otherwise inflate every count.
+pub async fn tag_cohort(req: &Request) -> Result<Vec<TagCohortMember>, Error> {
+    let request: TagCohortRequest =
+        decode_structured_message(req.message.clone()).unwrap_or_default();
+
+    if request.tag.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // One query for the cohort and one for their tags, rather than one tag
+    // query per member: `group_concat` keeps it to two round trips without
+    // materializing a row per (user, tag) pair for the whole table.
+    let rows = sqlx::query!(
+        r#"SELECT u."user_id" AS "user_id!",
+                  u."primary_email" AS "primary_email!",
+                  u."first_name" AS "first_name!",
+                  u."last_name" AS "last_name!",
+                  u."date_joined" AS "date_joined!",
+                  (SELECT group_concat(t2."tag", char(10))
+                     FROM "user_tags" t2
+                    WHERE t2."user_id" = u."user_id") AS "tags?"
+             FROM "user_tags" t
+             JOIN "users" u ON u."user_id" = t."user_id"
+            WHERE t."tag" = ? AND u."is_test" = 0
+            ORDER BY u."date_joined""#,
+        request.tag,
+    )
+    .fetch_all(db())
+    .await?;
+
+    let mut members = Vec::with_capacity(rows.len());
+
+    for row in rows {
+        members.push(TagCohortMember {
+            user_id: row.user_id.as_ulid()?,
+            email: row.primary_email,
+            first_name: row.first_name,
+            last_name: row.last_name,
+            date_joined: row.date_joined,
+            // Tags cannot contain a newline, so it is safe as a separator.
+            tags: row
+                .tags
+                .unwrap_or_default()
+                .split('\n')
+                .filter(|t| !t.is_empty())
+                .map(str::to_owned)
+                .collect(),
+        });
+    }
+
+    Ok(members)
+}
+
+/// Hand a staff member the identity of the account owning `email`
+/// (`user.admin.masquerade`), recording that it happened.
+///
+/// Returns `None` when no account has that address, so the caller can say so
+/// rather than reporting a failure.
+///
+/// The audit row is written before the identity is returned, and by this call
+/// rather than the caller's, so a masquerade cannot happen without a record of
+/// it. Authorization is the caller's to enforce — the whole `/staff/` tree it
+/// is reached from is behind the staff gate — but the record is not.
+pub async fn masquerade(req: &Request) -> Result<Option<BasicInfo>, Error> {
+    let request: MasqueradeRequest =
+        decode_structured_message(req.message.clone()).unwrap_or_default();
+
+    let result = sqlx::query_as!(
+        BasicInfoDb,
+        r#"select
+          u."user_id",
+          u."handle",
+          u."is_staff" as "is_staff: bool",
+          u."is_superuser" as "is_superuser: bool",
+          u."public" as "public: bool",
+          u."protected" as "protected: bool",
+          AsText(u."point") as "point: String"
+        from "users" u
+        join "emails" e on u."user_id" = e."user_id"
+        where e."email" = ?"#,
+        request.email,
+    )
+    .fetch_optional(db())
+    .await?;
+
+    let Some(db_info) = result else {
+        return Ok(None);
+    };
+
+    let masquerade_id = Ulid::new().to_string();
+    let now = TimeString::now();
+
+    sqlx::query!(
+        r#"INSERT INTO "masquerades" ("masquerade_id", "when", "staff_user_id", "target_user_id")
+           VALUES (?, ?, ?, ?)"#,
+        masquerade_id,
+        now,
+        request.staff_user_id,
+        db_info.user_id,
+    )
+    .execute(db())
+    .await?;
+
+    eprintln!(
+        "Staff masquerade: {} is now acting as {}",
+        request.staff_user_id, db_info.user_id
+    );
+
+    Ok(Some(db_info.try_into()?))
+}
+
+/// Everyone who has shown interest in any of a set of projects
+/// (`user.interest.by_projects`).
+///
+/// Joins and bookmarks are read here; reviewers are supplied by the caller,
+/// which asks the log service for them. The three sources are unioned so each
+/// person appears once, with a flag per source saying how their interest
+/// showed.
+///
+/// A reviewer whose account has since been deleted simply drops out, because
+/// the join against `users` is what produces the row.
+pub async fn interested_by_projects(req: &Request) -> Result<Vec<InterestedUser>, Error> {
+    use sqlx::{QueryBuilder, Row as _, Sqlite};
+
+    let request: InterestedRequest =
+        decode_structured_message(req.message.clone()).unwrap_or_default();
+
+    if request.project_ids.is_empty() && request.reviewer_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // One query, with the three sources as correlated existence tests. Doing
+    // it as three queries and merging in Rust would need the same three index
+    // lookups and then a merge that could disagree with itself about who is
+    // who.
+    let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new(
+        r#"SELECT u."user_id" AS "user_id",
+                  u."first_name" AS "first_name",
+                  u."last_name" AS "last_name",
+                  u."primary_email" AS "primary_email",
+                  EXISTS (SELECT 1 FROM "project_joins" j
+                           WHERE j."user_id" = u."user_id" AND j."project_id" IN ("#,
+    );
+
+    // An empty list is spelled as a bound NULL rather than an empty `IN ()`,
+    // which SQLite will not parse.
+    let push_ids = |qb: &mut QueryBuilder<Sqlite>, ids: &[String]| {
+        if ids.is_empty() {
+            qb.push("NULL");
+        } else {
+            let mut separated = qb.separated(", ");
+            for id in ids {
+                separated.push_bind(id.clone());
+            }
+        }
+    };
+
+    push_ids(&mut qb, &request.project_ids);
+    qb.push(
+        r#")) AS "joined",
+                  EXISTS (SELECT 1 FROM "bookmarks" b
+                           WHERE b."user_id" = u."user_id" AND b."project_id" IN ("#,
+    );
+    push_ids(&mut qb, &request.project_ids);
+    // COALESCE, because an empty reviewer list is spelled `IN (NULL)`, whose
+    // result is NULL rather than false — and a NULL here would both drop out
+    // of the WHERE and fail to decode as a boolean.
+    qb.push(r#")) AS "bookmarked", COALESCE(u."user_id" IN ("#);
+    push_ids(&mut qb, &request.reviewer_ids);
+    qb.push(
+        r#"), 0) AS "reviewed"
+             FROM "users" u
+            WHERE "joined" OR "bookmarked" OR "reviewed"
+            ORDER BY u."user_id""#,
+    );
+
+    let rows = qb.build().fetch_all(db()).await?;
+
+    let mut users = Vec::with_capacity(rows.len());
+
+    for row in rows {
+        let user_id: String = row.get("user_id");
+
+        users.push(InterestedUser {
+            user_id: user_id.as_ulid()?,
+            first_name: row.get("first_name"),
+            last_name: row.get("last_name"),
+            email: row.get("primary_email"),
+            joined: row.get::<i64, _>("joined") != 0,
+            bookmarked: row.get::<i64, _>("bookmarked") != 0,
+            reviewed: row.get::<i64, _>("reviewed") != 0,
+        });
+    }
+
+    Ok(users)
+}
+
+/// One page of user locations for the staff user map (`user.points.page`).
+///
+/// Only accounts that have a location appear, and only the geometry travels:
+/// the map plots anonymous dots, so sending anything identifying with them
+/// would be handing out more than the map draws.
+pub async fn points_page(req: &Request) -> Result<UserPointsResponse, Error> {
+    let request: UserPointsRequest =
+        decode_structured_message(req.message.clone()).unwrap_or_default();
+
+    let points = sqlx::query_scalar!(
+        r#"SELECT AsGeoJSON("point") AS "point!: String"
+             FROM "users"
+            WHERE "point" IS NOT NULL AND "is_test" = 0
+            ORDER BY "user_id"
+            LIMIT ? OFFSET ?"#,
+        request.limit,
+        request.offset,
+    )
+    .fetch_all(db())
+    .await?;
+
+    Ok(UserPointsResponse { points })
 }
 
 /// Set user tags (replaces all existing tags)

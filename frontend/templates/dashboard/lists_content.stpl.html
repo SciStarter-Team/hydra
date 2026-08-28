@@ -62,8 +62,19 @@
                             <% } else { %>
                             <span class="text-gray-500 text-sm">unknown entity (<%= entry.entity_slug %>)</span>
                             <% } %>
+                            <% if !entry.published { %>
+                            <span class="ml-2 text-xs text-gray-500 border rounded px-1">draft</span>
+                            <% } %>
                         </div>
                         <% if list.role.can_edit() { %>
+                        <form method="post" action="/dashboard/lists/<%= list.list_id |disp %>/entries/<%= entry.entry_id |disp %>/published">
+                            <% if entry.published { %>
+                            <button type="submit" class="btn btn-secondary text-xs">Unpublish</button>
+                            <% } else { %>
+                            <input type="hidden" name="published" value="true" />
+                            <button type="submit" class="btn btn-secondary text-xs">Publish</button>
+                            <% } %>
+                        </form>
                         <form method="post" action="/dashboard/lists/<%= list.list_id |disp %>/entries/<%= entry.entry_id |disp %>/remove"
                               hx-on:submit="if (!confirm('Remove this entry?')) event.preventDefault()">
                             <button type="submit" class="btn btn-secondary text-xs">Remove</button>

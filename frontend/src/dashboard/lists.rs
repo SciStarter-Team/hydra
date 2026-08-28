@@ -210,6 +210,7 @@ pub async fn add_entry(
                 entity_slug: slug.to_string(),
                 note: form.note,
                 link: String::new(),
+                published: true,
             };
             entry.store().await?;
             // Adding to a list completes the Higher Education "list" step (no-op
@@ -272,6 +273,45 @@ pub async fn set_entry_note(
         return Err(anyhow!("Entry does not belong to this list"));
     }
     entry.note = form.note;
+    entry.store().await?;
+
+    Ok(Redirect::see_other("/dashboard/lists").into_response())
+}
+
+/// Whether the entry should appear on the list's page.
+#[derive(Debug, Deserialize)]
+pub struct SetEntryPublishedForm {
+    /// A checkbox: present when publishing, absent when drafting.
+    pub published: Option<bool>,
+}
+
+/// Publish or unpublish one entry.
+///
+/// Unpublishing is not deletion: the entry keeps its note, link and position,
+/// and the list's page simply stops showing it. That is what lets a curator
+/// stage a page before it goes out, and take an item down without losing the
+/// work that went into it.
+#[handler]
+pub async fn set_entry_published(
+    _session: &Session,
+    Authenticated(user_info): Authenticated,
+    Path((list_id, entry_id)): Path<(String, String)>,
+    Form(form): Form<SetEntryPublishedForm>,
+) -> Result<Response, Error> {
+    let user_info = user_info.ok_or_else(|| anyhow!("Login required"))?;
+    let list_ulid = parse_ulid(&list_id, "list id")?;
+    let entry_ulid = parse_ulid(&entry_id, "entry id")?;
+
+    let role = role_for(&list_ulid, user_info.user_id).await?;
+    if !role.can_edit() {
+        return Err(anyhow!("You do not have edit access to this list"));
+    }
+
+    let mut entry = EntityListEntry::load(entry_ulid).await?;
+    if entry.list_id != list_ulid {
+        return Err(anyhow!("Entry does not belong to this list"));
+    }
+    entry.published = form.published.unwrap_or(false);
     entry.store().await?;
 
     Ok(Redirect::see_other("/dashboard/lists").into_response())
@@ -392,6 +432,7 @@ impl ListModel {
                     entity_slug: entry.entity_slug,
                     note: entry.note,
                     card: summary.map(EntityCardModel::from_summary),
+                    published: entry.published,
                 }
             })
             .collect();
@@ -434,6 +475,9 @@ pub struct ListEntryModel {
     pub entity_slug: String,
     pub note: String,
     pub card: Option<EntityCardModel>,
+    /// Whether visitors to the list's page see this entry. Editors see every
+    /// entry either way, marked.
+    pub published: bool,
 }
 
 pub struct ViewerModel {
