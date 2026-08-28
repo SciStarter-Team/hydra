@@ -1,0 +1,15 @@
+<%# https://four.htmx.org/docs %>
+<%#
+  No compatibility shims: this runs on htmx 4 defaults.
+
+  - Attribute inheritance is explicit. Every attribute meant to reach
+    descendants carries the `:inherited` modifier.
+  - Error responses swap like any other response. Handlers that answer an
+    htmx request with an error status return markup that belongs in the
+    target, built by crate::middleware::error_pages::error_response.
+%>
+<script src="/-static/htmx.js"></script>
+<% if self.enable_sse { %>
+  <%# https://four.htmx.org/extensions/hx-sse %>
+  <script src="/-static/hx-sse.js"></script>
+<% } %>

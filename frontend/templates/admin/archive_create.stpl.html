@@ -74,10 +74,10 @@
             <p class="mt-1 text-sm text-gray-500">Upload a file to attach to this archive entry</p>
             <script>
                 // Handle file upload response
-                document.body.addEventListener('htmx:afterRequest', function(evt) {
-                    if (evt.detail.target.id === 'file-upload-result' && evt.detail.successful) {
+                document.body.addEventListener('htmx:after:request', function(evt) {
+                    if (evt.detail.ctx.target.id === 'file-upload-result' && evt.detail.ctx.response.status < 400) {
                         try {
-                            const response = JSON.parse(evt.detail.xhr.responseText);
+                            const response = JSON.parse(evt.detail.ctx.text);
                             if (response.file_id) {
                                 document.getElementById('file_id').value = response.file_id;
                                 document.getElementById('file-upload-result').innerHTML =

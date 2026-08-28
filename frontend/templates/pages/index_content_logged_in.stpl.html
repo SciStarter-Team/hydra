@@ -162,7 +162,7 @@
        hx-get="/-news/<%= item.news_id|disp %>/content"
        hx-target="#news-content-<%= item.news_id|disp %>"
        hx-swap="innerHTML"
-       hx-on::after-request="this.replaceWith(this.textContent)"
+       hx-on::after:request="this.replaceWith(this.textContent)"
        ><%= item.title %></a><% } else { %><%= item.title %><% } %></h3>
     <% if !item.display_date.is_empty() || !item.author.is_empty() { %>
     <span><%= item.display_date %><% if !item.display_date.is_empty() && !item.author.is_empty() { %> | <% } %><% if !item.author.is_empty() { %>By <%= item.author %><% } %></span>
@@ -171,7 +171,7 @@
     <a hx-get="/-news/<%= item.news_id|disp %>/content"
        hx-target="#news-content-<%= item.news_id|disp %>"
        hx-swap="innerHTML"
-       hx-on::after-request="this.remove()"
+       hx-on::after:request="this.remove()"
        class="text-sm">Read more</a>
     <div id="news-content-<%= item.news_id|disp %>"></div>
     <% } else if matches!(item.source_type, crate::news::NewsItemSource::WordPress) && !item.url.is_empty() { %>

@@ -72,11 +72,11 @@ use component::Component;
 use entity::Entity;
 use event::{all::EventAll, field::EventField};
 use futures::StreamExt;
-use middleware::authorization::{Authenticated, NotAuthorized};
+use middleware::authorization::Authenticated;
 use pages::index::index_page_pseudo_handler;
 use peering::LoadStorePeered;
 use poem::{
-    Endpoint, EndpointExt, IntoResponse, Response, Route, Server,
+    Endpoint, EndpointExt, IntoResponse, Route, Server,
     endpoint::{EmbeddedFileEndpoint, EmbeddedFilesEndpoint},
     get, handler,
     listener::TcpListener,
@@ -220,53 +220,6 @@ async fn entity_password_verify(
 
     // Password incorrect - show error
     entity.password_prompt_response(user_info, true).await
-}
-
-#[tracing::instrument]
-async fn not_found(_err: poem::Error) -> Response {
-    Response::builder()
-        .status(poem::http::StatusCode::NOT_FOUND)
-        .content_type("text/html")
-        .body("Not Found") // Render 'not found' error page template
-}
-
-#[tracing::instrument]
-async fn not_authorized(err: poem::Error) -> Response {
-    if let Ok(err) = err.downcast::<NotAuthorized>() {
-        // The NotAuthorized type handles URL-encoding the target
-        Redirect::see_other(format!("/login?unauthorized=true&next={}", err.target()))
-            .into_response()
-    } else {
-        Redirect::see_other("/login?unauthorized=true").into_response()
-    }
-}
-
-#[tracing::instrument]
-async fn forbidden(_err: poem::Error) -> Response {
-    Response::builder()
-        .status(poem::http::StatusCode::FORBIDDEN)
-        .content_type("text/html")
-        .body("Not Allowed") // Render 'forbidden' error page template
-}
-
-#[tracing::instrument]
-async fn internal_server_error(err: poem::Error) -> Response {
-    tracing::error!(?err);
-
-    Response::builder()
-        .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-        .body("Internal Server Error") // Render error page template
-}
-
-#[tracing::instrument]
-async fn error_dispatch(err: poem::Error) -> Response {
-    match err.status() {
-        poem::http::StatusCode::NOT_FOUND => not_found(err).await,
-        poem::http::StatusCode::UNAUTHORIZED => not_authorized(err).await,
-        poem::http::StatusCode::FORBIDDEN => forbidden(err).await,
-        poem::http::StatusCode::INTERNAL_SERVER_ERROR => internal_server_error(err).await,
-        _ => err.into_response(),
-    }
 }
 
 #[derive(sailfish::TemplateOnce)]
@@ -614,7 +567,10 @@ fn dynamic() -> impl Endpoint {
 
     Route::new()
         .nest("/-dev", dev::routes())
-        .nest("/-admin", admin::routes().catch_all_error(error_dispatch))
+        .nest(
+            "/-admin",
+            admin::routes().with(middleware::error_pages::ErrorPages),
+        )
         .nest("/-channel", channel::routes())
         .nest("/-ui", ui::routes())
         .at(
@@ -626,7 +582,7 @@ fn dynamic() -> impl Endpoint {
         .nest("/-webauthn", auth::webauthn_routes())
         .nest("/-embed", embed::routes())
         .nest_no_strip("/", user_facing())
-        .catch_all_error(error_dispatch)
+        .with(middleware::error_pages::ErrorPages)
         // Wraps the whole dynamic tree rather than just the user-facing
         // branch, so that `?lang=` means the same thing everywhere it can be
         // written. Applied inside the session middleware, because a language

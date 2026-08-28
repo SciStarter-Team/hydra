@@ -1,4 +1,4 @@
-<div class="ss-project-vote" hx-get="/exchange/<%= self.exchange_id %>/<%= &self.project_id %>/votes" hx-trigger="update-likes from:body" hx-swap="outerHTML">
+<div class="ss-project-vote" hx-get="/exchange/<%= self.exchange_id %>/<%= &self.project_id %>/votes" hx-trigger="update-likes from:body" hx-swap:inherited="outerHTML">
   <button type="button" <% if self.user_id.is_some() { %>hx-post="/exchange/<%= self.exchange_id %>/<%= &self.project_id %>/vote" hx-swap="none"<% } else { %>disabled<% } %>class="el-button btn-subdued ss-project-thumbs el-button--default">
     <span>
       <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon icon--heart" style="fill: currentcolor;">

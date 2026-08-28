@@ -7,8 +7,8 @@
         <li>
           <form class="flex gap-2 items-end flex-wrap"
                 hx-put="/-detail/<%= &self.target_id %>/participant-files/<%= i %>"
-                hx-target="#participant-files"
-                hx-swap="outerHTML">
+                hx-target:inherited="#participant-files"
+                hx-swap:inherited="outerHTML">
             <div>
               <label class="block text-xs font-semibold mb-1">Name</label>
               <input type="text" name="name" value="<%= file.name %>" class="input input-sm">

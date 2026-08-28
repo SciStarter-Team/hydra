@@ -44,8 +44,10 @@
             <% if self.live_updates { %>
             <%# Signed-in: subscribe to the user's SSE channel; when this %>
             <%# training's progress event fires, re-fetch the steps fragment. %>
-            <div hx-ext="sse" sse-connect="/-channel/me/<%= self.sse_channel %>">
-                <div id="training-steps" hx-get="<%= self.progress_path %>" hx-trigger="sse:<%= self.sse_event %>" hx-target="#training-steps" hx-swap="innerHTML"><%+ self.steps %></div>
+            <div hx-sse:connect="/-channel/me/<%= self.sse_channel %>">
+                <%# The named event is dispatched on the element above and %>
+                <%# bubbles, so the steps listen for it from:body. %>
+                <div id="training-steps" hx-get="<%= self.progress_path %>" hx-trigger="<%= self.sse_event %> from:body" hx-target="#training-steps" hx-swap="innerHTML"><%+ self.steps %></div>
             </div>
             <% } else { %>
             <div id="training-steps"><%+ self.steps %></div>
@@ -60,9 +62,10 @@
 <%# The shared accordion JS binds toggles on initial load; rebind the steps %>
 <%# that HTMX swaps in when the user refreshes their progress. %>
 <script>
-  document.body.addEventListener('htmx:afterSwap', function (event) {
-    if (!event.target || event.target.id !== 'training-steps') return;
-    event.target.querySelectorAll('.accordion-toggle').forEach(function (button) {
+  document.body.addEventListener('htmx:after:swap', function (event) {
+    var swapped = event.detail.ctx.target;
+    if (!swapped || swapped.id !== 'training-steps') return;
+    swapped.querySelectorAll('.accordion-toggle').forEach(function (button) {
       button.addEventListener('click', function () {
         var item = this.parentElement;
         if (item.classList.contains('disabled')) return;

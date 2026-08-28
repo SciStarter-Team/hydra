@@ -52,5 +52,5 @@
   } else {
     convertTimes();
   }
-  document.addEventListener('htmx:afterSettle', function (e) { convertTimes(e.target); });
+  document.addEventListener('htmx:after:settle', function (e) { convertTimes(e.target); });
 })();

@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Exchange</title>
-    <script src="/-static/htmx.js"></script>
+    <%+ crate::component::HtmxRuntime::default() %>
     <link href="/-static/exchange/css/styles.css" rel="stylesheet">
   </head>
-  <body hx-headers='{"X-CSRFToken": "<%= csrftoken %>"}'>
+  <body hx-headers:inherited='{"X-CSRFToken": "<%= csrftoken %>"}'>
     
     <%+ NavigationBar {exchange: &exchange, user: &user} %>
     
@@ -74,5 +74,6 @@
           debugMode: true // [10]
       });
     </script>
+      <%+ crate::component::Notifications %>
   </body>
 </html>

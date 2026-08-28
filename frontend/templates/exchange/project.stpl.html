@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Exchange</title>
-    <script src="/-static/htmx.js"></script>
+    <%+ crate::component::HtmxRuntime::default() %>
     <script src="/-static/js/social_share.js" defer></script>
     <script src="/-static/js/clickthrough.js" defer></script>
     <link href="/-static/exchange/css/styles.css" rel="stylesheet">
@@ -17,7 +17,7 @@
       #coverage-map .display { height: 40vh; min-height: 240px; }
     </style>
   </head>
-  <body hx-headers='{"X-CSRFToken": "<%= self.csrftoken %>"}'>
+  <body hx-headers:inherited='{"X-CSRFToken": "<%= self.csrftoken %>"}'>
 
     <%+ NavigationBar {exchange: &self.exchange, user: &self.user} %>
 
@@ -714,5 +714,6 @@
         });
     })();
     </script>
+      <%+ crate::component::Notifications %>
   </body>
 </html>

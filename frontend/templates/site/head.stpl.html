@@ -6,17 +6,13 @@
 <link rel="stylesheet" type="text/css" href="/-static/css/style.css" />
 <%# https://tailwindcss.com/docs/styling-with-utility-classes %>
 <link rel=stylesheet href="/-static/css/style.css"/>
-<%# https://htmx.org/docs/ %>
-<script src="/-static/htmx.js"></script>
-<% if self.enable_sse { %>
-  <%# https://htmx.org/extensions/sse/ %>
-  <script src="/-static/hx-sse.js"></script>
-<% } %>
+<%+ crate::component::HtmxRuntime { enable_sse: self.enable_sse } %>
 <% if self.enable_alpine { %>
   <%# https://alpinejs.dev/start-here %>
   <%# Don't use Alpine's AJAX tools, HTMX does it better. Alpine is great for client-side logic and state, though. %>
-  <script src="/-static/hx-alpine-morph.js"></script>
-  <script src="/-static/alpine-morph.js" defer></script>
+  <%# While Alpine is on the page hx-live disables its `:attr` short form, so
+      live bindings here must be spelled `hx-live:attr`. %>
+  <script src="/-static/hx-alpine-compat.js"></script>
   <script src="/-static/alpine.js" defer></script>
 <% } %>
 <% if self.enable_webawesome { %>

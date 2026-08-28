@@ -1,4 +1,4 @@
-<div hx-target=this hx-swap=outerHTML class=predef-search-item>
+<div hx-target:inherited=this hx-swap:inherited=outerHTML class=predef-search-item>
   <% if edit { %>
   <button class=predef-delete type=button hx-delete="/exchange/<%= exchange %>/predef/<%= id %>" hx-include="#csrftoken">&#10006;</button>
   <input type=text name=label value="<%= label %>">

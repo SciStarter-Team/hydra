@@ -61,6 +61,7 @@
 @import "./components/feature-card.css" layer(hydra);
 @import "./components/cta.css" layer(hydra);
 @import "./components/alert.css" layer(hydra);
+@import "./components/notifications.css" layer(hydra);
 @import "./components/add-form.css" layer(hydra);
 
 @import "./components/flip.css" layer(hydra);

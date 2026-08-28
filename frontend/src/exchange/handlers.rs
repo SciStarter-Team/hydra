@@ -26,6 +26,7 @@ use crate::peering::LoadStorePeered;
 use super::{
     Exchange, ExchangeInfo, ExchangeSettings, SearchParams, TemplateExchange, TemplateUser,
 };
+use crate::middleware::error_pages::error_response;
 use crate::project::location::Where;
 
 // Cache for filter options (loaded once on first use)
@@ -1213,9 +1214,7 @@ pub async fn exchange_csv(
     };
 
     if !has_permission {
-        return Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::FORBIDDEN)
-            .body("Forbidden"));
+        return Ok(error_response(poem::http::StatusCode::FORBIDDEN, ""));
     }
 
     // Only the exchange's own people reach this export, so it carries the
@@ -1679,9 +1678,7 @@ pub async fn exchange_admin(
     };
 
     if !has_permission {
-        return Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::FORBIDDEN)
-            .body("Forbidden"));
+        return Ok(error_response(poem::http::StatusCode::FORBIDDEN, ""));
     }
 
     // Get CSRF token
@@ -1844,9 +1841,7 @@ pub async fn exchange_update_settings(
     };
 
     if !has_permission {
-        return Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::FORBIDDEN)
-            .body("Forbidden"));
+        return Ok(error_response(poem::http::StatusCode::FORBIDDEN, ""));
     }
 
     // Update settings from form data
@@ -1905,9 +1900,7 @@ pub async fn get_predefined_search_form(
     };
 
     if !has_permission {
-        return Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::FORBIDDEN)
-            .body("Forbidden"));
+        return Ok(error_response(poem::http::StatusCode::FORBIDDEN, ""));
     }
 
     // Return an editable form row
@@ -1962,9 +1955,7 @@ pub async fn create_predefined_search(
     };
 
     if !has_permission {
-        return Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::FORBIDDEN)
-            .body("Forbidden"));
+        return Ok(error_response(poem::http::StatusCode::FORBIDDEN, ""));
     }
 
     // Parse form data and create predefined search
@@ -2076,9 +2067,7 @@ pub async fn delete_predefined_search(
     };
 
     if !has_permission {
-        return Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::FORBIDDEN)
-            .body("Forbidden"));
+        return Ok(error_response(poem::http::StatusCode::FORBIDDEN, ""));
     }
 
     // Remove the predefined search
@@ -2123,9 +2112,7 @@ pub async fn add_exchange_staff(
     };
 
     if !has_permission {
-        return Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::FORBIDDEN)
-            .body("Forbidden"));
+        return Ok(error_response(poem::http::StatusCode::FORBIDDEN, ""));
     }
 
     // Parse emails from comma-separated list
@@ -2230,9 +2217,7 @@ pub async fn remove_exchange_staff(
     };
 
     if !has_permission {
-        return Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::FORBIDDEN)
-            .body("Forbidden"));
+        return Ok(error_response(poem::http::StatusCode::FORBIDDEN, ""));
     }
 
     // Revoke permission
@@ -2275,9 +2260,7 @@ pub async fn approve_exchange_project(
     };
 
     if !has_permission {
-        return Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::FORBIDDEN)
-            .body("Forbidden"));
+        return Ok(error_response(poem::http::StatusCode::FORBIDDEN, ""));
     }
 
     let project_id = Ulid::from_string(&project_id_str)?;
@@ -2295,9 +2278,10 @@ pub async fn approve_exchange_project(
             // Project belongs to this exchange, proceed with approval
         }
         _ => {
-            return Ok(poem::Response::builder()
-                .status(poem::http::StatusCode::BAD_REQUEST)
-                .body("Project does not belong to this exchange"));
+            return Ok(error_response(
+                poem::http::StatusCode::BAD_REQUEST,
+                "Project does not belong to this exchange",
+            ));
         }
     }
 
@@ -2388,9 +2372,7 @@ pub async fn reject_exchange_project(
     };
 
     if !has_permission {
-        return Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::FORBIDDEN)
-            .body("Forbidden"));
+        return Ok(error_response(poem::http::StatusCode::FORBIDDEN, ""));
     }
 
     let project_id = Ulid::from_string(&project_id_str)?;
@@ -2408,9 +2390,10 @@ pub async fn reject_exchange_project(
             // Project belongs to this exchange, proceed with rejection
         }
         _ => {
-            return Ok(poem::Response::builder()
-                .status(poem::http::StatusCode::BAD_REQUEST)
-                .body("Project does not belong to this exchange"));
+            return Ok(error_response(
+                poem::http::StatusCode::BAD_REQUEST,
+                "Project does not belong to this exchange",
+            ));
         }
     }
 
@@ -2650,9 +2633,7 @@ pub async fn hide_project(
     .has_permission;
 
     if !has_permission {
-        return Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::FORBIDDEN)
-            .body("Forbidden"));
+        return Ok(error_response(poem::http::StatusCode::FORBIDDEN, ""));
     }
 
     // Look up project_id by slug
@@ -2675,9 +2656,10 @@ pub async fn hide_project(
 
         Ok(Html("Project hidden").into_response())
     } else {
-        Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::NOT_FOUND)
-            .body("Project not found"))
+        Ok(error_response(
+            poem::http::StatusCode::NOT_FOUND,
+            "Project not found",
+        ))
     }
 }
 

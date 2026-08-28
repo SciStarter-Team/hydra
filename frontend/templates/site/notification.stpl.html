@@ -1,0 +1,11 @@
+<%# One message in the notification region. Rendered by Notification. %>
+<div class="ss-notification ss-notification--<%= self.level.class_suffix() %>">
+    <% if !self.title.is_empty() { %>
+        <p class="ss-notification__title"><%= self.title %></p>
+    <% } %>
+    <p class="ss-notification__message"><%= self.message %></p>
+    <button type="button"
+            class="ss-notification__dismiss"
+            aria-label="Dismiss"
+            hx-on:click="this.closest('.ss-notification').remove()">&times;</button>
+</div>

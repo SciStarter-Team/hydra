@@ -1,0 +1,8 @@
+<%# The single destination for transient messages on this page. Styled by %>
+<%# static/css/components/notifications.css. %>
+<%#
+  aria-live announces whatever the server appends here without moving focus,
+  which is what we want: the message reports on an action the user already
+  took, and stealing focus would lose their place.
+%>
+<div id="notifications" class="ss-notifications" role="status" aria-live="polite"></div>

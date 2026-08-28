@@ -1,0 +1,105 @@
+/*
+  The one surface for transient messages: an action failed, or an action
+  succeeded and changed something the user cannot see from here.
+
+  There is exactly one region per page, rendered by the Notifications
+  component. The server puts a message into it by answering an htmx request
+  with an <hx-partial> aimed at `#notifications`, which leaves whatever the
+  request was actually targeting untouched. See
+  `crate::middleware::error_pages::error_response`.
+*/
+
+.ss-notifications {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: min(24rem, calc(100vw - 2rem));
+
+    /* The region spans a corner of the viewport whether or not it holds
+       anything, so it must never intercept clicks meant for the page. Each
+       message takes its own clicks back. */
+    pointer-events: none;
+}
+
+.ss-notification {
+    pointer-events: auto;
+    position: relative;
+    padding: 0.75rem 2.25rem 0.75rem 1rem;
+    border: 1px solid;
+    border-radius: 0.5rem;
+    box-shadow:
+        0 4px 6px -1px rgb(0 0 0 / 0.1),
+        0 2px 4px -2px rgb(0 0 0 / 0.1);
+    animation: ss-notification-in 0.3s ease-out;
+}
+
+.ss-notification__title {
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+/* A title is optional; when there is one, the message sits under it. */
+.ss-notification__title + .ss-notification__message {
+    margin-top: 0.125rem;
+}
+
+.ss-notification__message {
+    line-height: 1.4;
+}
+
+/* Sized and positioned to give the pointer a target of its own rather than
+   overlapping the first line of text. */
+.ss-notification__dismiss {
+    position: absolute;
+    top: 0.25rem;
+    right: 0.25rem;
+    width: 1.75rem;
+    height: 1.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.25rem;
+    font-size: 1.25rem;
+    line-height: 1;
+    color: inherit;
+    opacity: 0.6;
+    cursor: pointer;
+}
+
+.ss-notification__dismiss:hover,
+.ss-notification__dismiss:focus-visible {
+    opacity: 1;
+}
+
+.ss-notification--error {
+    background-color: #fee2e2;
+    border-color: #fca5a5;
+    color: var(--color-alert, #991b1b);
+}
+
+.ss-notification--success {
+    background-color: #d1fae5;
+    border-color: #a7f3d0;
+    color: #065f46;
+}
+
+@keyframes ss-notification-in {
+    from {
+        opacity: 0;
+        transform: translateX(1rem);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ss-notification {
+        animation: none;
+    }
+}

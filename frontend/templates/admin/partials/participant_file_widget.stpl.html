@@ -1,7 +1,7 @@
 <div class="border border-gray-200 rounded-lg p-4 bg-white">
     <% if let Some(file) = &self.file { %>
         <!-- Existing resource form -->
-        <form class="space-y-3" hx-put="/-admin/projects/<%= self.project_id|disp %>/participant_files/items/<%= self.index|disp %>" hx-target="#participant-file-items-<%= self.project_id|disp %>" hx-swap="outerHTML">
+        <form class="space-y-3" hx-put="/-admin/projects/<%= self.project_id|disp %>/participant_files/items/<%= self.index|disp %>" hx-target:inherited="#participant-file-items-<%= self.project_id|disp %>" hx-swap:inherited="outerHTML">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Name</label>

@@ -1947,10 +1947,10 @@ async fn projects_update_field(
             crate::project::field::ProjectFieldType::SustainableDevelopmentGoals
         }
         _ => {
-            return Ok(poem::Response::builder()
-                .status(poem::http::StatusCode::BAD_REQUEST)
-                .content_type("text/html")
-                .body("Invalid field type"));
+            return Ok(crate::middleware::error_pages::error_response(
+                poem::http::StatusCode::BAD_REQUEST,
+                "Invalid field type",
+            ));
         }
     };
 

@@ -24,7 +24,6 @@ use common::service::request;
 use common::timestring::TimeString;
 use poem::{
     IntoResponse, Response, handler,
-    http::StatusCode,
     web::{Form, Path, Query, Redirect},
 };
 use sailfish::TemplateOnce;
@@ -590,9 +589,10 @@ pub async fn profile_page(
     Authenticated(user_info): Authenticated,
 ) -> Result<Response, Error> {
     let not_found = || {
-        Response::builder()
-            .status(StatusCode::NOT_FOUND)
-            .body("Ambassador not found")
+        crate::middleware::error_pages::error_response(
+            poem::http::StatusCode::NOT_FOUND,
+            "Ambassador not found",
+        )
     };
     let Ok(user_id) = Ulid::from_string(&id) else {
         return Ok(not_found());

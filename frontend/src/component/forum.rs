@@ -14,13 +14,22 @@ use serde::Deserialize;
 use ulid::Ulid;
 
 use crate::{
-    component::Component,
+    component::{Component, Notification},
     local_time::{TimeFormat, local_time},
     middleware::{
         authorization::Authenticated,
         rate_limit::{RateLimitConfig, RateLimitMiddleware},
     },
 };
+
+/// Answers an htmx request with a message for the page's notification region.
+///
+/// The response carries nothing but the message, so htmx puts it in the region
+/// and leaves the element the request targeted exactly as it was -- the form
+/// the reader was filling in is still there, still holding what they typed.
+fn notify(notification: Notification) -> poem::Response {
+    crate::middleware::error_pages::notification_response(poem::http::StatusCode::OK, notification)
+}
 
 pub fn forum_routes() -> impl poem::Endpoint {
     // Per-IP write limits. Generous for legitimate use but tight enough to
@@ -418,15 +427,6 @@ pub struct HtmxReload<'a> {
 }
 
 #[derive(TemplateOnce)]
-#[template(path = "forum/error_message.stpl.html")]
-pub struct ErrorMessage<'a> {
-    pub title: &'a str,
-    pub message: &'a str,
-    pub button_text: Option<&'a str>,
-    pub button_action: Option<&'a str>,
-}
-
-#[derive(TemplateOnce)]
 #[template(path = "forum/moderator_list.stpl.html")]
 pub struct ModeratorList<'a> {
     pub slug: &'a str,
@@ -596,13 +596,10 @@ async fn create_topic_action(
     // Personal forums are the DM inbox backing store; the only legitimate
     // write path is forum.messaging.send via /dashboard/messages/send.
     if common::message::forum::is_personal_forum_slug(&form.slug) {
-        let error_message = ErrorMessage {
-            title: "Not allowed",
-            message: "Personal forums can only be written to via direct messages.",
-            button_text: None,
-            button_action: None,
-        };
-        return Ok(Html(error_message.render_once()?).into_response());
+        return Ok(notify(Notification::error(
+            "Not allowed",
+            "Personal forums can only be written to via direct messages.",
+        )));
     }
 
     // For community forums, require membership
@@ -617,13 +614,10 @@ async fn create_topic_action(
             None => false,
         };
         if !is_member {
-            let error_message = ErrorMessage {
-                title: "Join required",
-                message: "Join this community to post a discussion.",
-                button_text: None,
-                button_action: None,
-            };
-            return Ok(Html(error_message.render_once()?).into_response());
+            return Ok(notify(Notification::error(
+                "Join required",
+                "Join this community to post a discussion.",
+            )));
         }
     }
 
@@ -659,16 +653,11 @@ async fn create_topic_action(
         }
         Err(error) => {
             // Show error message for any other issues (content filter, etc.)
-            let message = error.to_string().replace('"', "&quot;");
-            let button_action =
-                "document.getElementById('create-topic-form').style.display='block'";
-            let error_message = ErrorMessage {
-                title: "Error creating topic",
-                message: &message,
-                button_text: Some("Try Again"),
-                button_action: Some(button_action),
-            };
-            Ok(Html(error_message.render_once()?).into_response())
+            let message = error.to_string();
+            Ok(notify(Notification::error(
+                "Error creating topic",
+                &message,
+            )))
         }
     }
 }
@@ -706,13 +695,10 @@ async fn create_post_action(
             None => false,
         };
         if !is_member {
-            let error_message = ErrorMessage {
-                title: "Join required",
-                message: "Join this community to reply.",
-                button_text: None,
-                button_action: None,
-            };
-            return Ok(Html(error_message.render_once()?).into_response());
+            return Ok(notify(Notification::error(
+                "Join required",
+                "Join this community to reply.",
+            )));
         }
     }
 
@@ -756,53 +742,7 @@ async fn create_post_action(
                 error_str
             };
 
-            // Use htmx utilities to find and restore the reply form
-            let form_id = if let Some(parent_id) = parent_post_id {
-                format!("reply-form-{}", parent_id)
-            } else {
-                "reply-form-topic".to_string()
-            };
-
-            let button_action = format!(
-                "let form = htmx.find('#{}'); \
-                 if (form) {{ \
-                     form.style.display = 'block'; \
-                     let textarea = htmx.find(form, 'textarea'); \
-                     if (textarea) {{ \
-                         textarea.focus(); \
-                         textarea.value = '{}'; \
-                     }} \
-                 }}",
-                form_id,
-                form.content
-                    .replace('\'', "\\'")
-                    .replace('\n', "\\n")
-                    .replace('\r', "")
-            );
-
-            let error_message = ErrorMessage {
-                title: "Error creating post",
-                message: &message,
-                button_text: Some("Try Again"),
-                button_action: Some(&button_action),
-            };
-
-            // Use HTMX headers to show error after the form instead of replacing content
-            let mut response = Html(error_message.render_once()?).into_response();
-            response
-                .headers_mut()
-                .insert("HX-Reswap", "afterend".parse().unwrap());
-            response.headers_mut().insert(
-                "HX-Retarget",
-                if let Some(_) = parent_post_id {
-                    format!("#reply-form-{}", parent_post_id.unwrap())
-                        .parse()
-                        .unwrap()
-                } else {
-                    "#reply-form-topic".parse().unwrap()
-                },
-            );
-            Ok(response)
+            Ok(notify(Notification::error("Error creating post", &message)))
         }
     }
 }
@@ -940,21 +880,10 @@ async fn add_forum_moderator_action(
 
     // Validate that a user was selected
     if form.user_id.trim().is_empty() {
-        let error_message = ErrorMessage {
-            title: "No User Selected",
-            message: "Please select a user from the search results before adding them as a moderator.",
-            button_text: None,
-            button_action: None,
-        };
-
-        let mut response = Html(error_message.render_once()?).into_response();
-        response.headers_mut().insert(
-            "HX-Retarget",
-            format!("#forum-{} .moderator-errors", slug)
-                .parse()
-                .unwrap(),
-        );
-        return Ok(response);
+        return Ok(notify(Notification::error(
+            "No User Selected",
+            "Please select a user from the search results before adding them as a moderator.",
+        )));
     }
 
     // Get forum by slug to get forum_id
@@ -973,21 +902,10 @@ async fn add_forum_moderator_action(
     let target_user_id = match form.user_id.parse::<Ulid>() {
         Ok(id) => id,
         Err(_) => {
-            let error_message = ErrorMessage {
-                title: "Invalid User Selection",
-                message: "Please select a valid user from the search results.",
-                button_text: None,
-                button_action: None,
-            };
-
-            let mut response = Html(error_message.render_once()?).into_response();
-            response.headers_mut().insert(
-                "HX-Retarget",
-                format!("#forum-{} .moderator-errors", slug)
-                    .parse()
-                    .unwrap(),
-            );
-            return Ok(response);
+            return Ok(notify(Notification::error(
+                "Invalid User Selection",
+                "Please select a valid user from the search results.",
+            )));
         }
     };
 
@@ -1029,22 +947,7 @@ async fn add_forum_moderator_action(
                 }
             };
 
-            let error_message = ErrorMessage {
-                title: "Cannot Add Moderator",
-                message,
-                button_text: None,
-                button_action: None,
-            };
-
-            // Use HX-Retarget to target the specific forum's moderator error container
-            let mut response = Html(error_message.render_once()?).into_response();
-            response.headers_mut().insert(
-                "HX-Retarget",
-                format!("#forum-{} .moderator-errors", slug)
-                    .parse()
-                    .unwrap(),
-            );
-            Ok(response)
+            Ok(notify(Notification::error("Cannot Add Moderator", message)))
         }
     }
 }
@@ -1274,22 +1177,10 @@ async fn create_forum_category_action(
                 }
             };
 
-            let error_message = ErrorMessage {
-                title: "Cannot Create Category",
+            Ok(notify(Notification::error(
+                "Cannot Create Category",
                 message,
-                button_text: None,
-                button_action: None,
-            };
-
-            // Use HX-Retarget to target the specific forum's category error container
-            let mut response = Html(error_message.render_once()?).into_response();
-            response.headers_mut().insert(
-                "HX-Retarget",
-                format!("#forum-{} .category-errors", form.slug)
-                    .parse()
-                    .unwrap(),
-            );
-            Ok(response)
+            )))
         }
     }
 }
@@ -1344,20 +1235,10 @@ async fn update_forum_category_action(
                 _ => "Failed to update category. Please try again.",
             };
 
-            let error_message = ErrorMessage {
-                title: "Cannot Update Category",
+            Ok(notify(Notification::error(
+                "Cannot Update Category",
                 message,
-                button_text: None,
-                button_action: None,
-            };
-
-            // Use HX-Retarget to target the specific forum's error container
-            let mut response = Html(error_message.render_once()?).into_response();
-            response.headers_mut().insert(
-                "HX-Retarget",
-                format!("#forum-{} .category-errors", slug).parse().unwrap(),
-            );
-            Ok(response)
+            )))
         }
     }
 }
@@ -1398,20 +1279,10 @@ async fn delete_forum_category_action(
                 _ => "Failed to delete category. Please try again.",
             };
 
-            let error_message = ErrorMessage {
-                title: "Cannot Delete Category",
+            Ok(notify(Notification::error(
+                "Cannot Delete Category",
                 message,
-                button_text: None,
-                button_action: None,
-            };
-
-            // Use HX-Retarget to target the specific forum's error container
-            let mut response = Html(error_message.render_once()?).into_response();
-            response.headers_mut().insert(
-                "HX-Retarget",
-                format!("#forum-{} .category-errors", slug).parse().unwrap(),
-            );
-            Ok(response)
+            )))
         }
     }
 }
@@ -1472,14 +1343,8 @@ async fn moderate_content_action(
             Ok(Html(prepared.render_once()?).into_response())
         }
         Err(error) => {
-            let message = error.to_string().replace('"', "&quot;");
-            let error_message = ErrorMessage {
-                title: "Moderation Error",
-                message: &message,
-                button_text: Some("OK"),
-                button_action: None,
-            };
-            Ok(Html(error_message.render_once()?).into_response())
+            let message = error.to_string();
+            Ok(notify(Notification::error("Moderation Error", &message)))
         }
     }
 }

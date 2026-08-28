@@ -39,6 +39,7 @@ pub use files::{GoUrlRow, GoUrlWithFileInfo, UploadSuccessResponse, get_go_urls_
 pub use projects::{ContactWidget, ParticipantFileWidget, TagsDisplay};
 
 use crate::middleware::authorization::{Authenticated, StaffOnly};
+use crate::middleware::error_pages::error_response;
 use poem::{
     Endpoint, EndpointExt, Route, delete, get, handler, post,
     web::{Form, Query},
@@ -267,15 +268,17 @@ async fn api_recipient_select(
                 (display_name, "User", user_id.to_string())
             }
             Err(_) => {
-                return Ok(poem::Response::builder()
-                    .status(poem::http::StatusCode::BAD_REQUEST)
-                    .body("User not found"));
+                return Ok(error_response(
+                    poem::http::StatusCode::BAD_REQUEST,
+                    "User not found",
+                ));
             }
         }
     } else {
-        return Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::BAD_REQUEST)
-            .body("Invalid user ID"));
+        return Ok(error_response(
+            poem::http::StatusCode::BAD_REQUEST,
+            "Invalid user ID",
+        ));
     };
 
     recipients.push(RecipientInfo {

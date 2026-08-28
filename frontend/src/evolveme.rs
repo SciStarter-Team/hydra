@@ -9,10 +9,19 @@
 //!
 //! To enable SSE on EvolveMe pages:
 //! 1. Include SSE support in the page head: `Head::default().with_sse()`
-//! 2. Connect to the channel using HTMX SSE extension in templates:
+//! 2. Connect to the channel in the template. A named event dispatches a DOM
+//!    event of that name on the connecting element, for `hx-on:` or
+//!    `hx-trigger` to react to:
 //!    ```html
-//!    <div hx-ext="sse" sse-connect="/channel/evolveme" sse-swap="event-name">
-//!      Content to update
+//!    <div hx-sse:connect="/channel/evolveme"
+//!         hx-on:step_complete="window.location.reload()">
+//!    </div>
+//!    ```
+//!    An event sent with no name is swapped into the element's target instead,
+//!    so it carries content rather than a signal:
+//!    ```html
+//!    <div hx-sse:connect="/channel/evolveme" hx-target="find p" hx-swap="outerMorph">
+//!      <p>Content to update</p>
 //!    </div>
 //!    ```
 //!

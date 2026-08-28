@@ -1,8 +1,8 @@
 <div id="manager-row-<%= &self.user_id %>">
   <form class="p-3 border border-indigo-300 rounded-sm bg-white flex gap-2 items-end flex-wrap"
         hx-put="/-detail/<%= &self.target_id %>/managers/<%= &self.user_id %>"
-        hx-target="#event-managers"
-        hx-swap="outerHTML">
+        hx-target:inherited="#event-managers"
+        hx-swap:inherited="outerHTML">
     <div class="grow">
       <label class="block text-xs font-semibold mb-1">Account email</label>
       <input type="email" name="email" value="<%= &self.email %>" required>

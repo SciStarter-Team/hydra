@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Exchange</title>
-    <script src="/-static/htmx.js"></script>
+    <%+ crate::component::HtmxRuntime::default() %>
     <link href="/-static/exchange/css/styles.css" rel="stylesheet">
   </head>
-  <body hx-headers='{"X-CSRFToken": "<%= csrftoken %>"}'>
+  <body hx-headers:inherited='{"X-CSRFToken": "<%= csrftoken %>"}'>
     <div class="login-wrapper back-wrapper">
       <a href="javascript:void(0)" onclick="history.back()">&laquo; back</a>
     </div>
@@ -85,5 +85,6 @@
         </div>
       </form>
 
+      <%+ crate::component::Notifications %>
   </body>
 </html>

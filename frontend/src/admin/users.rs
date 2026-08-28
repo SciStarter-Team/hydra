@@ -5,6 +5,7 @@
 
 use crate::component::{AdminLayout, Component, admin_layout::AdminLayoutPrepared};
 use crate::middleware::authorization::Authenticated;
+use crate::middleware::error_pages::error_response;
 use common::message::user::{
     AdminPasswordResetRequest, AdminPasswordResetResponse, UserDetails, UserDetailsCreateRequest,
     UserDetailsDeleteRequest, UserDetailsDeleteResponse, UserDetailsGetRequest,
@@ -466,19 +467,19 @@ async fn users_delete(
                 Ok(poem::Response::builder().content_type("text/html").body(""))
             } else {
                 // Return error message
-                Ok(poem::Response::builder()
-                    .status(poem::http::StatusCode::BAD_REQUEST)
-                    .content_type("text/html")
-                    .body("Failed to delete user"))
+                Ok(error_response(
+                    poem::http::StatusCode::BAD_REQUEST,
+                    "Failed to delete user",
+                ))
             }
         }
         Err(_) => {
             // This should never happen since request_with_retry retries indefinitely
             // But we include it for completeness
-            Ok(poem::Response::builder()
-                .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-                .content_type("text/html")
-                .body("Service error"))
+            Ok(error_response(
+                poem::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Service error",
+            ))
         }
     }
 }

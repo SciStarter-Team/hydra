@@ -34,9 +34,9 @@
                 id="edit-email-form"
                 hx-post="/-admin/email/stored/<%= self.stored_email_id|disp %>"
                 hx-trigger="submit, saveAndSend from:body"
-                hx-vals='{"action": "save"}'
-                hx-swap="none"
-                hx-on:htmx:after-request="if(event.detail.successful && event.detail.elt.dataset.openModal) { document.getElementById('send-dialog').showModal(); delete event.detail.elt.dataset.openModal; }"
+                hx-vals:inherited='{"action": "save"}'
+                hx-swap:inherited="none"
+                hx-on:htmx:after:request="if(event.detail.ctx.response.status < 400 && event.target.dataset.openModal) { document.getElementById('send-dialog').showModal(); delete event.target.dataset.openModal; }"
             >
                 <div class="grid grid-cols-1 gap-6">
                     <!-- Slug -->
@@ -226,7 +226,7 @@
             <form
                 hx-post="/-admin/email/stored/<%= self.stored_email_id|disp %>/send"
                 hx-swap="none"
-                hx-on:htmx:after-request="if(event.detail.successful && event.detail.elt === this) { document.getElementById('send-dialog').close(); window.dispatchEvent(new CustomEvent('email-sent')); }"
+                hx-on:htmx:after:request="if(event.detail.ctx.response.status < 400 && event.target === this) { document.getElementById('send-dialog').close(); window.dispatchEvent(new CustomEvent('email-sent')); }"
                 class="flex flex-col flex-1 min-h-0"
             >
                 <div class="p-6 overflow-y-auto flex-1 min-h-96">

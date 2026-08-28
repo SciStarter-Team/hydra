@@ -6,7 +6,7 @@
         <% for result in &self.results { %>
         <li class="px-3 py-2 hover:bg-gray-100 cursor-pointer"
             hx-on:click="
-                let widget = htmx.closest(this, '[data-part=widget]');
+                let widget = this.closest('[data-part=widget]');
                 htmx.find(widget, '[data-part=storage]').value = '<%= result.slug %>';
                 htmx.find(widget, '[data-part=input]').value = '<%= result.name %>';
                 htmx.find(widget, '[data-part=display]').classList.add('hidden');

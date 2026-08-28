@@ -67,7 +67,7 @@
             hx-post="/-admin/email/address-sets/<%= self.slug %>/members"
             hx-target="#members-list"
             hx-swap="beforeend"
-            hx-on::after-request="this.reset()"
+            hx-on::after:request="this.reset()"
             class="flex gap-3"
         >
             <input

@@ -48,7 +48,7 @@
                   <span class="htmx-indicator ml-1">…</span>
                 </button>
                 <button type="button" class="px-3 py-1 text-sm text-primary hover:underline"
-                        hx-on:click="let container = htmx.closest(this, '.threaded-post'); let form = htmx.find(container, '#reply-form-<%= self.post.post.post_id|disp %>'); form.style.display='none'; htmx.find(container, '.reply-btn').style.display='inline'">
+                        hx-on:click="let container = this.closest('.threaded-post'); let form = htmx.find(container, '#reply-form-<%= self.post.post.post_id|disp %>'); form.style.display='none'; htmx.find(container, '.reply-btn').style.display='inline'">
                   Cancel
                 </button>
               </div>

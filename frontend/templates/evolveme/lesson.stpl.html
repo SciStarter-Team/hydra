@@ -1,13 +1,11 @@
 <%+ Header %>
 
 <!-- Wrapper -->
+<%# A named SSE event dispatches a DOM event of that name on this element, %>
+<%# so the reload hangs off it directly. %>
 <div class="o-wrapper"
-     hx-ext="sse"
-     sse-connect="/-channel/me/completion">
-
-  <div sse-swap="articulate_complete"
-       hx-on::before-swap="window.location.reload(); event.preventDefault()">
-  </div>
+     hx-sse:connect="/-channel/me/completion"
+     hx-on:articulate_complete="window.location.reload()">
 
   <div class="em-welcome">
     <img src='/-static/evolveme/img/evolve-robot.svg' alt="SciStarter Robot welcoming you" />

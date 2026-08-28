@@ -1,8 +1,8 @@
 <div id="contact-row-<%= &self.contact_id %>">
   <form class="p-3 border border-amber-300 rounded-sm bg-white space-y-2"
         hx-put="/-detail/<%= &self.target_id %>/contacts/<%= &self.contact_id %>"
-        hx-target="#event-contacts"
-        hx-swap="outerHTML">
+        hx-target:inherited="#event-contacts"
+        hx-swap:inherited="outerHTML">
     <div>
       <label class="block text-xs font-semibold mb-1">Role</label>
       <select name="role">

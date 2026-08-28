@@ -7,7 +7,9 @@
   <body>
     <%+ self.header %>
 
-    <div hx-ext=sse sse-connect="/-channel/moocow" sse-swap=test sse-close=shutdown hx-target="find p" hx-swap=morph>
+    <%# Unnamed events on this channel are swapped into the <p> below; a %>
+    <%# named "shutdown" event closes the connection. %>
+    <div hx-sse:connect="/-channel/moocow" hx-sse:close="shutdown" hx-target="find p" hx-swap="outerMorph">
       <p>No events yet</p>
     </div>
 

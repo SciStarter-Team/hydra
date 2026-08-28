@@ -5,8 +5,10 @@ pub mod footer;
 pub mod forum;
 pub mod head;
 pub mod header;
+pub mod htmx_runtime;
 pub mod image_field;
 pub mod layout;
+pub mod notification;
 pub mod sidebar;
 pub mod wordpress;
 
@@ -18,7 +20,9 @@ pub use footer::Footer;
 pub use forum::{Forum, TopicDetail};
 pub use head::Head;
 pub use header::Header;
+pub use htmx_runtime::HtmxRuntime;
 pub use layout::StandardLayout;
+pub use notification::{Notification, Notifications};
 pub use sidebar::Sidebar;
 pub use wordpress::WordPressContent;
 

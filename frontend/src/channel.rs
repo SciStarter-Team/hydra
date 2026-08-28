@@ -76,6 +76,19 @@ pub async fn listen_by_user(
     .keep_alive(std::time::Duration::from_secs(300)))
 }
 
+/// Converts a channel event into the SSE event htmx will act on.
+///
+/// The two shapes mean different things to the client. An unnamed SSE event is
+/// swapped into the subscribing element's target, so it carries content. A
+/// named one dispatches a DOM event of that name instead, so it carries a
+/// signal that `hx-trigger` or `hx-on:` can react to. A caller picks by whether
+/// it sets [`Event::event`].
 fn event_to_sse(evt: Event) -> sse::Event {
-    sse::Event::message(evt.data).event_type(evt.event)
+    let event = sse::Event::message(evt.data);
+
+    if evt.event.is_empty() {
+        event
+    } else {
+        event.event_type(evt.event)
+    }
 }

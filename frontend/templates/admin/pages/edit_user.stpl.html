@@ -208,7 +208,7 @@
                             hx-include="#new-email-input"
                             hx-target="closest div"
                             hx-swap="beforebegin"
-                            hx-on:htmx:after-request="if(event.detail.successful) this.parentElement.querySelector('input[type=email]').value = ''"
+                            hx-on:htmx:after:request="if(event.detail.ctx.response.status < 400) this.parentElement.querySelector('input[type=email]').value = ''"
                         >
                             <span>Add Email</span>
                         </button>

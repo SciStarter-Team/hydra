@@ -1,6 +1,6 @@
 <!-- Add Project Modal -->
 <dialog class="rounded-lg shadow-xl max-w-6xl w-full max-h-screen overflow-y-auto backdrop:bg-gray-500 backdrop:opacity-75 m-auto"
-        hx-on::load="this.showModal()"
+        hx-on::after:init="this.showModal()"
         hx-on:click="if (event.target.tagName === 'DIALOG') this.remove()">
         <div hx-on:click="event.stopPropagation()">
         <!-- Modal Header -->

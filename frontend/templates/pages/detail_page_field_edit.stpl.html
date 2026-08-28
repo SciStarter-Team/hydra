@@ -1,7 +1,7 @@
 <div id="field-<%= &self.field_type %>" class="p-3 border border-blue-300 rounded-sm bg-blue-50 mb-2<% if self.field_type == "image" { %> flex flex-col max-w-full md:w-[425px]<% } %>">
   <form hx-put="/-detail/<%= &self.target_id %>/field/<%= &self.field_type %>"
-        hx-target="#field-<%= &self.field_type %>"
-        hx-swap="outerHTML"
+        hx-target:inherited="#field-<%= &self.field_type %>"
+        hx-swap:inherited="outerHTML"
 >
     <label class="block text-xs font-semibold mb-1"><%= &self.label %></label>
     <% match &self.input_kind { crate::component::detail_page_edit::FieldInputKind::Text => { %>

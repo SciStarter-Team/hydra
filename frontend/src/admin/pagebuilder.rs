@@ -367,10 +367,10 @@ async fn pb_components_export(
     let _user_info = user_info.ok_or_else(|| anyhow::anyhow!("User not authenticated"))?;
 
     if form.ids.is_empty() {
-        return Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::BAD_REQUEST)
-            .content_type("text/plain")
-            .body("No components selected for export"));
+        return Ok(crate::middleware::error_pages::error_response(
+            poem::http::StatusCode::BAD_REQUEST,
+            "No components selected for export",
+        ));
     }
 
     let mut components = Vec::with_capacity(form.ids.len());

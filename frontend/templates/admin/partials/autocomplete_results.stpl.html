@@ -1,6 +1,6 @@
 <div data-part=display class="absolute z-10 mt-1 w-full bg-white shadow-lg max-h-60 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none"
      hx-on:click="
-       let widget = htmx.closest(this, '[data-part=widget]');
+       let widget = this.closest('[data-part=widget]');
        htmx.find(widget, '[data-part=display]').classList.add('hidden');
        if(event.target.dataset.id) {
          htmx.find(widget, '[data-part=storage]').value = event.target.dataset.id;

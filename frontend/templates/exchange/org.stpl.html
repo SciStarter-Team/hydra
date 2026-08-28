@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Exchange</title>
-    <script src="/-static/htmx.js"></script>
+    <%+ crate::component::HtmxRuntime::default() %>
     <script src="/-static/js/clickthrough.js" defer></script>
     <script src="/-static/alpine.js" defer></script>
     <link href="/-static/exchange/css/styles.css" rel="stylesheet">
   </head>
-  <body hx-headers='{"X-CSRFToken": "<%= self.csrftoken %>"}'>
+  <body hx-headers:inherited='{"X-CSRFToken": "<%= self.csrftoken %>"}'>
 
     <%+ NavigationBar {exchange: &self.template_exchange, user: &self.user} %>
 
@@ -281,8 +281,8 @@
                 hx-include="#email-list"
                 hx-target="#current-staff"
                 hx-swap="beforeend"
-                hx-disabled-elt="this"
-                hx-on::after-request="if(event.detail.successful) { document.getElementById('email-list').value = ''; MicroModal.close('add-manager'); }"
+                hx-disable="this"
+                hx-on::after:request="if(event.detail.ctx.response.status < 400) { document.getElementById('email-list').value = ''; MicroModal.close('add-manager'); }"
                 class="modal__btn modal__btn-primary">Add SciStarter Members</button>
           </main>
         </div>
@@ -307,5 +307,6 @@
     </script>
 
     <script src="/-static/exchange/js/d2t.js"></script>
+      <%+ crate::component::Notifications %>
   </body>
 </html>

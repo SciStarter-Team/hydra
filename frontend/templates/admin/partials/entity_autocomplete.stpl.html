@@ -29,7 +29,7 @@
              hx-target=next
              hx-swap=outerHTML<% } %>
              <% if !self.read_only { %>hx-on:input="if (this.value === '') {
-                   let widget = htmx.closest(this, '[data-part=widget]');
+                   let widget = this.closest('[data-part=widget]');
                    htmx.find(widget, '[data-part=storage]').value = '';
                    htmx.find(widget, '[data-part=display]').classList.add('hidden');
                }"<% } %>

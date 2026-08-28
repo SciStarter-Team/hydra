@@ -1,6 +1,6 @@
 <!-- Edit Trigger Modal -->
 <dialog id="edit-trigger-dialog" class="rounded-lg shadow-xl w-11/12 md:w-2/3 max-h-[90vh] overflow-y-auto p-5 backdrop:bg-gray-500 backdrop:opacity-75 m-auto"
-        hx-on::load="if (event.target === this) this.showModal()"
+        hx-on::after:init="if (event.target === this) this.showModal()"
         hx-on:click="if (event.target === this) this.remove()">
     <div hx-on:click="event.stopPropagation()">
         <!-- Modal Header -->
@@ -17,7 +17,7 @@
         <!-- Modal Body -->
         <form
             hx-patch="/-admin/email/triggers/<%= self.trigger.trigger_id|disp %>"
-            hx-swap="none"
+            hx-swap:inherited="none"
             class="mt-4 space-y-4"
             x-data="{ actionType: '<%= self.trigger.action_type.as_str() %>' }"
         >
@@ -61,12 +61,12 @@
                             hx-vals='js:{"q": this.value}'
                             data-part="stored-email-search"
                             hx-on:input="if (this.value === '') {
-                                let widget = htmx.closest(this, '[data-widget=stored-email-autocomplete]');
+                                let widget = this.closest('[data-widget=stored-email-autocomplete]');
                                 htmx.find(widget, '[data-part=stored-email-id]').value = '';
                                 htmx.find(widget, '[data-part=results]').classList.add('hidden');
                             }"
-                            hx-on::after-request="
-                                let widget = htmx.closest(this, '[data-widget=stored-email-autocomplete]');
+                            hx-on::after:request="
+                                let widget = this.closest('[data-widget=stored-email-autocomplete]');
                                 htmx.find(widget, '[data-part=stored-email-id]').value = '';
                             "
                         />

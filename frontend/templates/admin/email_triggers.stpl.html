@@ -10,9 +10,9 @@
     <div class="px-6 py-4 bg-gray-50 border-b border-gray-200">
         <form
             hx-post="/-admin/email/triggers"
-            hx-target="#trigger-list-container"
-            hx-swap="innerHTML"
-            hx-on::after-request="if(event.detail.successful) this.reset(); actionType = 'immediate';"
+            hx-target:inherited="#trigger-list-container"
+            hx-swap:inherited="innerHTML"
+            hx-on::after:request="if(event.detail.ctx.response.status < 400) this.reset(); actionType = 'immediate';"
             class="space-y-4"
             x-data="{ actionType: 'immediate' }"
         >
@@ -54,12 +54,12 @@
                             hx-vals='js:{"q": this.value}'
                             data-part="stored-email-search"
                             hx-on:input="if (this.value === '') {
-                                let widget = htmx.closest(this, '[data-widget=stored-email-autocomplete]');
+                                let widget = this.closest('[data-widget=stored-email-autocomplete]');
                                 htmx.find(widget, '[data-part=stored-email-id]').value = '';
                                 htmx.find(widget, '[data-part=results]').classList.add('hidden');
                             }"
-                            hx-on::after-request="
-                                let widget = htmx.closest(this, '[data-widget=stored-email-autocomplete]');
+                            hx-on::after:request="
+                                let widget = this.closest('[data-widget=stored-email-autocomplete]');
                                 htmx.find(widget, '[data-part=stored-email-id]').value = '';
                             "
                         />

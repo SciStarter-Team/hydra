@@ -3,7 +3,7 @@
         <div class="user-search-result" 
              data-user-id="<%= user.user_id|disp %>"
              data-user-handle="<%= user.handle %>"
-             hx-on:click="let form = htmx.closest(this, 'form');
+             hx-on:click="let form = this.closest('form');
                           htmx.find(form, '.selected-user-id').value = '<%= user.user_id|disp %>';
                           htmx.find(form, '.user-search').value = '<%= user.display_handle() %>';
                           htmx.find(form, '.user-search-results').replaceChildren();"

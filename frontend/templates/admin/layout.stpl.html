@@ -4,7 +4,7 @@
     <%+ self.head %>
     <title><%= self.title %> - Admin</title>
 </head>
-<body class="min-h-screen" x-data="adminApp()" hx-indicator="#global-loading-indicator"
+<body class="min-h-screen" x-data="adminApp()" hx-indicator:inherited="#global-loading-indicator"
       hx-on:field-updated="
         const detail = event.detail;
         if (detail.success) {
@@ -287,8 +287,7 @@
     
     <%+ self.footer %>
 
-    <!-- Toast notification container -->
-    <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
+    <%+ crate::component::Notifications %>
 
     <!-- Global HTMX loading indicator -->
     <div id="global-loading-indicator" class="htmx-indicator fixed inset-0 flex items-center justify-center z-[100] pointer-events-none">
@@ -297,71 +296,35 @@
         </div>
     </div>
 
-    <style>
-        .toast {
-            max-width: 400px;
-            padding: 12px 16px;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-            animation: slideIn 0.3s ease-out;
-            position: relative;
-        }
-
-        .toast.success {
-            background-color: #d1fae5;
-            border: 1px solid #a7f3d0;
-            color: #065f46;
-        }
-
-        .toast.error {
-            background-color: #fee2e2;
-            border: 1px solid #fca5a5;
-            color: #991b1b;
-        }
-
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateX(100%);
-            }
-            to {
-                opacity: 1;
-                transform: translateX(0);
-            }
-        }
-
-        .toast-close {
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            cursor: pointer;
-            font-weight: bold;
-            opacity: 0.7;
-        }
-
-        .toast-close:hover {
-            opacity: 1;
-        }
-    </style>
 
     <script>
         // Global toast notification functionality
+        // Puts a message in the same notification region the server writes to,
+        // so a message raised on the client and one raised by a handler look
+        // and behave alike. The markup mirrors templates/site/notification.stpl.html.
         function showToast(message, type = 'success') {
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-            toast.innerHTML = `
-                <div style="padding-right: 20px;">${message}</div>
-                <span class="toast-close" onclick="this.parentElement.remove()">&times;</span>
-            `;
+            const note = document.createElement('div');
+            note.className = `ss-notification ss-notification--${type}`;
 
-            document.getElementById('toast-container').appendChild(toast);
+            const text = document.createElement('p');
+            text.className = 'ss-notification__message';
+            text.textContent = message;
 
-            // Auto-remove after 5 seconds
-            setTimeout(() => {
-                if (toast.parentElement) {
-                    toast.remove();
-                }
-            }, 5000);
+            const dismiss = document.createElement('button');
+            dismiss.type = 'button';
+            dismiss.className = 'ss-notification__dismiss';
+            dismiss.setAttribute('aria-label', 'Dismiss');
+            dismiss.innerHTML = '&times;';
+            dismiss.addEventListener('click', () => note.remove());
+
+            note.append(text, dismiss);
+            document.getElementById('notifications').appendChild(note);
+
+            // Client-raised messages report on something the user just did and
+            // can see the result of, so they retire themselves. A message from
+            // the server stays until dismissed: it reports a failure, and the
+            // reader may need it while they work out what to do.
+            setTimeout(() => note.remove(), 5000);
         }
 
         function adminApp() {

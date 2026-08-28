@@ -22,7 +22,7 @@
       <div class="grid grid-cols-1 lg:grid-cols-[25%_75%] gap-6">
         <!-- SIDEBAR: search form -->
         <div>
-          <form class="csm-events-form" hx-get="/-csm/events" hx-target="#csm-events-container" hx-swap="outerHTML">
+          <form class="csm-events-form" hx-get="/-csm/events" hx-target:inherited="#csm-events-container" hx-swap:inherited="outerHTML">
             <div class="csm-events-input-group">
               <label>Location</label>
               <div id="csm-geosearch-location"></div>

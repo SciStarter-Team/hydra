@@ -444,8 +444,8 @@ for(let btn of document.querySelectorAll(".ss-accordion2 > button:first-child"))
 
 <!-- Events time formatting after HTMX swap -->
 <script>
-document.addEventListener('htmx:afterSwap', function(evt) {
-  if (evt.detail.elt.classList && evt.detail.elt.classList.contains('csm-events')) {
+document.addEventListener('htmx:after:swap', function(evt) {
+  if (evt.target.classList && evt.target.classList.contains('csm-events')) {
     document.querySelectorAll('.featured-event-time[data-begin]').forEach(function(el) {
       var beginStr = el.getAttribute('data-begin');
       var endStr = el.getAttribute('data-end');

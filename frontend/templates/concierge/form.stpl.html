@@ -6,8 +6,8 @@
   <a href="/finder" class="text-primary-action font-bold">Browse the project finder &rarr;</a>
   <% } else { %>
   <form hx-post="/-concierge/turn" hx-target="#concierge-log" hx-swap="beforeend"
-        hx-disabled-elt="find textarea, find button" hx-indicator="#concierge-spinner"
-        hx-on::response-error="this.parentElement.querySelector('.concierge-rate-note').classList.remove('hidden')"
+        hx-disable="find textarea, find button" hx-indicator="#concierge-spinner"
+        hx-on::response:error="this.parentElement.querySelector('.concierge-rate-note').classList.remove('hidden')"
         class="flex gap-2 items-end">
     <input type="hidden" name="conversation_id" value="<%= self.conversation_id %>">
     <textarea name="message" maxlength="500" required rows="2"

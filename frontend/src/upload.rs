@@ -20,6 +20,7 @@ use sailfish::TemplateOnce;
 pub mod processing;
 pub mod storage;
 
+use crate::middleware::error_pages::error_response;
 use storage::{FileAccess, FileMetadata, StorageManager};
 
 type SharedStorage = Arc<StorageManager>;
@@ -518,10 +519,10 @@ async fn set_download_mode(
                     let go_url = GoUrl::new_file_url(request.slug.clone(), file_id);
                     if let Err(e) = go_url.store().await {
                         tracing::error!("Failed to create go URL: {}", e);
-                        return Ok(poem::Response::builder()
-                            .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-                            .content_type("text/html")
-                            .body("Failed to create go URL"));
+                        return Ok(error_response(
+                            poem::http::StatusCode::INTERNAL_SERVER_ERROR,
+                            "Failed to create go URL",
+                        ));
                     }
                 }
                 Ok(true) => {
@@ -529,10 +530,10 @@ async fn set_download_mode(
                 }
                 Err(e) => {
                     tracing::error!("Failed to check slug existence: {}", e);
-                    return Ok(poem::Response::builder()
-                        .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-                        .content_type("text/html")
-                        .body("Database error"));
+                    return Ok(error_response(
+                        poem::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        "Database error",
+                    ));
                 }
             }
 

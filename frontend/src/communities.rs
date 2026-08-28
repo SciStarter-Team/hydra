@@ -15,6 +15,7 @@ use ulid::Ulid;
 
 use crate::component::{Component, Forum, Head, StandardLayout};
 use crate::middleware::authorization::Authenticated;
+use crate::middleware::error_pages::error_response;
 
 // Helper functions wrapping NATS calls
 
@@ -279,17 +280,14 @@ fn render_join_leave_response(
 /// A community named in a request path that does not exist is a missing page,
 /// not a failure.
 fn not_found_response() -> Response {
-    Response::builder()
-        .status(poem::http::StatusCode::NOT_FOUND)
-        .content_type("text/plain")
-        .body("No such community.")
+    error_response(poem::http::StatusCode::NOT_FOUND, "No such community.")
 }
 
 fn forbidden_response() -> Response {
-    Response::builder()
-        .status(poem::http::StatusCode::FORBIDDEN)
-        .content_type("text/plain")
-        .body("This community is exclusive; membership is managed by administrators.")
+    error_response(
+        poem::http::StatusCode::FORBIDDEN,
+        "This community is exclusive; membership is managed by administrators.",
+    )
 }
 
 #[handler]

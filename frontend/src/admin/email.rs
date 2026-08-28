@@ -962,7 +962,7 @@ async fn email_stored_autocomplete(
             format!(
                 r#"<div class="cursor-pointer px-3 py-2 hover:bg-gray-100 border-b border-gray-100 last:border-b-0"
                      hx-on:click="
-                         let widget = htmx.closest(this, '[data-widget=stored-email-autocomplete]');
+                         let widget = this.closest('[data-widget=stored-email-autocomplete]');
                          htmx.find(widget, '[data-part=stored-email-id]').value = '{}';
                          htmx.find(widget, '[data-part=stored-email-search]').value = '{} - {}';
                          htmx.find(widget, '[data-part=results]').classList.add('hidden');

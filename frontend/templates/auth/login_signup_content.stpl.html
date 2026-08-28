@@ -40,7 +40,7 @@
             <label for="login-password"><%= crate::i18n::tr("Password") %></label>
             <input class="disabled:opacity-50" type=password name=password id="login-password">
           </div>
-          <div class="mb-4" hx-on::load="hide_if_no_webauthn(this)">
+          <div class="mb-4" hx-on::after:init="hide_if_no_webauthn(this)">
             <label class="flex items-center gap-2">
               <input class="w-auto" type=checkbox id="use-passkey-login" name=use_passkey value=true hx-on:change="let el = htmx.find('#login-password'); el.required = !this.checked; el.disabled=this.checked;">
               <%= crate::i18n::tr("Use passkey instead of password") %>
@@ -68,7 +68,7 @@
             <label for="signup-password2"><%= crate::i18n::tr("Re-type Password") %></label>
             <input class="disabled:opacity-50" type=password name=password2 id="signup-password2">
           </div>
-          <div class="mb-4" hx-on::load="hide_if_no_webauthn(this)">
+          <div class="mb-4" hx-on::after:init="hide_if_no_webauthn(this)">
             <label class="flex items-center gap-2">
               <input class="w-auto" type=checkbox id="use-passkey" name=use_passkey value=true hx-on:change="let el1 = htmx.find('#signup-password1'); let el2 = htmx.find('#signup-password2'); el1.required = !this.checked; el1.disabled=this.checked; el2.required = !this.checked; el2.disabled=this.checked;">
               <%= crate::i18n::tr("Use passkey instead of password") %>
@@ -122,7 +122,7 @@
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer onerror="onSignupTurnstileError()"></script>
 
 <script>
- // htmx.logAll();
+ // htmx.config.logAll = true;
 
  // WebAuthn JavaScript functionality
 
@@ -218,7 +218,7 @@
 
  function hide_if_no_webauthn(el) {
     if(!window.PublicKeyCredential) {
-        htmx.addClass(el, 'hidden');
+        el.classList.add('hidden');
     }
  }
 
@@ -388,15 +388,16 @@
      }
  }
 
- // HTMX doesn't send the htmx:load event on page load, except to the
- // <body>, so we do it ourselves. If we ever decide to use HTMX to swap
- // out one of these elements, HTMX will take care of firing the
- // additional load events at that time.
+ // HTMX only initializes -- and so only fires htmx:after:init on -- elements
+ // that carry a request attribute. An element whose sole htmx attribute is
+ // hx-on::after:init never gets one, so we fire it ourselves. If we ever
+ // decide to use HTMX to swap out one of these elements, HTMX will take care
+ // of firing the additional init events at that time.
  function load_events_for_individual_elements() {
-     htmx.off('htmx:load', load_events_for_individual_elements);
-     for(let el of document.querySelectorAll('[hx-on\\:\\:load]')) {
-         htmx.trigger(el, 'htmx:load', {});
+     document.removeEventListener('htmx:after:init', load_events_for_individual_elements);
+     for(let el of document.querySelectorAll('[hx-on\\:\\:after\\:init]')) {
+         htmx.trigger(el, 'htmx:after:init', {});
      }
  }
- htmx.on('htmx:load', load_events_for_individual_elements);
+ htmx.on('htmx:after:init', load_events_for_individual_elements);
 </script>

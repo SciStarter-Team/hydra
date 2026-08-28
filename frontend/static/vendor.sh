@@ -1,24 +1,28 @@
 #!/bin/bash
 
 # HTMX in both readable and minified forms
-curl -L https://cdn.jsdelivr.net/npm/htmx.org@2/dist/htmx.js -o htmx.js
-curl -L https://cdn.jsdelivr.net/npm/htmx.org@2/dist/htmx.min.js -o htmx.min.js
+# 4.0.0 is published under the "next" dist-tag, so it must be pinned exactly;
+# "@4" would resolve to the 2.x "latest" tag.
+HTMX=4.0.0
+curl -L https://cdn.jsdelivr.net/npm/htmx.org@$HTMX/dist/htmx.js -o htmx.js
+curl -L https://cdn.jsdelivr.net/npm/htmx.org@$HTMX/dist/htmx.min.js -o htmx.min.js
 
 # HTMX extension to enable Server-Sent Events handling
-curl -L https://cdn.jsdelivr.net/npm/htmx-ext-sse@2/sse.js -o hx-sse.js
-curl -L https://cdn.jsdelivr.net/npm/htmx-ext-sse@2/sse.min.js -o hx-sse.js
+curl -L https://cdn.jsdelivr.net/npm/htmx.org@$HTMX/dist/ext/hx-sse.js -o hx-sse.js
+curl -L https://cdn.jsdelivr.net/npm/htmx.org@$HTMX/dist/ext/hx-sse.min.js -o hx-sse.min.js
 
-# HTMX extension to enable using the Alpine morph plugin
-curl -L https://cdn.jsdelivr.net/npm/htmx-ext-alpine-morph@2/alpine-morph.js -o hx-alpine-morph.js
-curl -L https://cdn.jsdelivr.net/npm/htmx-ext-alpine-morph@2/alpine-morph.min.js -o hx-alpine-morph.min.js
+# HTMX extension providing DOM-oriented reactive client-side scripting
+curl -L https://cdn.jsdelivr.net/npm/htmx.org@$HTMX/dist/ext/hx-live.js -o hx-live.js
+curl -L https://cdn.jsdelivr.net/npm/htmx.org@$HTMX/dist/ext/hx-live.min.js -o hx-live.min.js
+
+# HTMX extension smoothing over corner cases when Alpine is on the page
+curl -L https://cdn.jsdelivr.net/npm/htmx.org@$HTMX/dist/ext/hx-alpine-compat.js -o hx-alpine-compat.js
+curl -L https://cdn.jsdelivr.net/npm/htmx.org@$HTMX/dist/ext/hx-alpine-compat.min.js -o hx-alpine-compat.min.js
 
 # Alpine in both readable and minified forms
 curl -L https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.js -o alpine.js
 curl -L https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js -o alpine.min.js
 
-# Alpine morph plugin in both readable and minified forms
-curl -L https://cdn.jsdelivr.net/npm/@alpinejs/morph@3/dist/cdn.js -o alpine-morph.js
-curl -L https://cdn.jsdelivr.net/npm/@alpinejs/morph@3/dist/cdn.min.js -o alpine-morph.min.js
 
 # Official ulid implementation for JS
 curl -L https://cdn.jsdelivr.net/npm/ulid@3/dist/browser/index.js -o ulid.js

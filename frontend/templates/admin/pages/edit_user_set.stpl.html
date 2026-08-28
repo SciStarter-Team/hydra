@@ -66,8 +66,8 @@
     <div class="p-6 space-y-6">
         <form
             hx-post="/-admin/email/user-sets/<%= self.slug %>/criteria"
-            hx-target="#criteria-list"
-            hx-swap="innerHTML"
+            hx-target:inherited="#criteria-list"
+            hx-swap:inherited="innerHTML"
             class="space-y-4"
         >
             <div>
