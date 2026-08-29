@@ -657,16 +657,13 @@ async fn users_create(
             }
         }
         Err(e) => {
-            // Show error in modal
-            let error_html = format!(
-                r#"<div class="p-4 mb-4 text-sm text-red-700 bg-red-100 rounded-lg border border-red-200">
-                    <strong>Error:</strong> Failed to create user: {}
-                </div>"#,
-                e
-            );
-            Ok(poem::Response::builder()
-                .content_type("text/html")
-                .body(error_html))
+            // The service's own words -- "Email address is already in use" and
+            // the like -- are what the reader needs, so they are passed through
+            // rather than replaced with a generic failure.
+            Ok(error_response(
+                poem::http::StatusCode::BAD_REQUEST,
+                &e.to_string(),
+            ))
         }
     }
 }

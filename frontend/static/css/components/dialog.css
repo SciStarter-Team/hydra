@@ -105,3 +105,53 @@ dialog.ss-dialog::backdrop {
 .ss-dialog__img-none .ss-dialog__content {
     flex-basis: 100%;
 }
+
+/*
+  Progress for a request made from inside a modal.
+
+  A modal <dialog> renders in the browser's top layer, above every z-index, so
+  the page-wide indicator is painted behind it -- a request from a modal used to
+  show no sign of life at all, and a slow one looked like nothing had happened.
+  Each dialog names itself as its own `hx-indicator`, so htmx puts the request
+  class here, and the overlay below is drawn inside the dialog where it can be
+  seen.
+*/
+dialog.htmx-request {
+    position: relative;
+}
+
+dialog.htmx-request::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: rgb(255 255 255 / 0.6);
+}
+
+/* The spinner is the border itself: one side transparent, the rest inheriting
+   the text colour, spun. No extra element and no image to load. */
+dialog.htmx-request::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    z-index: 2;
+    width: 2.5rem;
+    height: 2.5rem;
+    margin: -1.25rem 0 0 -1.25rem;
+    border: 3px solid currentcolor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    opacity: 0.7;
+    animation: ss-dialog-spin 0.7s linear infinite;
+}
+
+@keyframes ss-dialog-spin {
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    dialog.htmx-request::before {
+        animation-duration: 2.4s;
+    }
+}

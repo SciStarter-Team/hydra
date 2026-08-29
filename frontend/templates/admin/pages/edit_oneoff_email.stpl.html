@@ -207,7 +207,7 @@
     </div>
 
     <!-- Send Email Modal -->
-    <dialog data-notifications
+    <dialog hx-indicator:inherited="closest dialog" data-notifications
         id="send-dialog"
         class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] p-0 backdrop:bg-black backdrop:opacity-50 m-0"
         hx-on:click="if (event.target === this) this.close()"

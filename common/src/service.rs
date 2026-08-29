@@ -158,6 +158,66 @@ where
     decode_structured_message(msg)
 }
 
+/// Why a request failed.
+///
+/// The distinction that matters to a caller is whether trying again could
+/// possibly help. A service that answered and said "no" will say "no" again;
+/// a message that never reached anyone might get through next time.
+#[derive(Debug)]
+pub enum RequestError {
+    /// The service answered, and the answer was a failure. Deterministic: a
+    /// retry sends the same message to the same handler and gets the same reply.
+    Answered(async_nats::service::error::Error),
+    /// Nobody answered -- no responders on the subject, a dropped connection, a
+    /// reply that never arrived. Worth another attempt.
+    Unanswered(Error),
+    /// The message could not be encoded, or its reply could not be decoded.
+    /// Retrying changes neither.
+    Malformed(Error),
+}
+
+impl RequestError {
+    /// Whether trying the same request again could give a different result.
+    pub fn retryable(&self) -> bool {
+        matches!(self, RequestError::Unanswered(_))
+    }
+}
+
+impl std::fmt::Display for RequestError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RequestError::Answered(e) => write!(f, "{}", e.status),
+            RequestError::Unanswered(e) | RequestError::Malformed(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl std::error::Error for RequestError {}
+
+/// Publish a structured data message through NATS, wait for a reply, and decode
+/// it into structured data, keeping the reason for any failure.
+///
+/// [`request`] is this with the reason flattened away; [`request_with_retry`]
+/// needs the reason, because it decides whether to try again.
+pub async fn request_typed<R>(
+    subject: impl ToSubject,
+    message: impl serde::Serialize,
+) -> Result<R, RequestError>
+where
+    R: DeserializeOwned,
+{
+    let payload = flexbuffers::to_vec(message).map_err(|e| RequestError::Malformed(e.into()))?;
+
+    let reply = nats()
+        .request(subject, payload.into())
+        .await
+        .map_err(|e| RequestError::Unanswered(anyhow!("NATS request failed: {e}")))?;
+
+    let msg = reply.decode_error().map_err(RequestError::Answered)?;
+
+    decode_structured_message(msg).map_err(RequestError::Malformed)
+}
+
 /// Publish a structured data message through NATS, wait for a reply,
 /// and decode it into structured data.
 ///
@@ -172,14 +232,7 @@ pub async fn request<R>(
 where
     R: DeserializeOwned,
 {
-    let payload = flexbuffers::to_vec(message)?;
-
-    let msg = nats()
-        .request(subject, payload.into())
-        .await?
-        .decode_error()?;
-
-    decode_structured_message(msg)
+    Ok(request_typed(subject, message).await?)
 }
 
 /// Publish a structured data message through NATS, wait for a reply with timeout,
@@ -209,19 +262,19 @@ where
     decode_structured_message(msg)
 }
 
-/// Publish a structured data message through NATS, wait for a reply,
-/// and decode it into structured data with infinite retry on failure.
+/// Publish a structured data message through NATS, wait for a reply, and decode
+/// it into structured data, retrying while it is worth retrying.
 ///
-/// This function will retry indefinitely with exponential backoff when requests fail.
-/// It's useful for critical operations that must eventually succeed, especially during
-/// service startup when dependencies may not be immediately available.
+/// Only a request that went **unanswered** is tried again -- no responders on
+/// the subject, a dropped connection, a reply that never arrived. Those can
+/// succeed on a later attempt, so the wait between attempts grows to
+/// [`RETRY_MAX_DELAY`] and the whole run gives up at [`RETRY_DEADLINE`].
 ///
-/// The retry delay starts at 100ms and doubles on each failure, up to a maximum
-/// of 30 seconds between attempts.
-///
-/// Note: This function will never return an Err - it retries indefinitely until success.
-/// However, it returns Result<R, anyhow::Error> for API compatibility with the regular
-/// request function.
+/// A request the service *answered* is not retried. The handler ran and
+/// reported failure; sending the same message to the same handler will fail the
+/// same way. Retrying it turns a fast, legible error into a caller that hangs
+/// until something upstream times out -- which is how a duplicate email address
+/// once became a request that never returned.
 pub async fn request_with_retry<R>(
     subject: impl ToSubject,
     message: impl serde::Serialize + Clone,
@@ -232,9 +285,10 @@ where
     let mut retry_count = 0u64;
     let mut delay = Duration::from_millis(100);
     let subject_str = subject.to_subject();
+    let started = std::time::Instant::now();
 
     loop {
-        match request(subject_str.clone(), message.clone()).await {
+        match request_typed(subject_str.clone(), message.clone()).await {
             Ok(response) => {
                 if retry_count > 0 {
                     debug!(
@@ -245,44 +299,74 @@ where
                 }
                 return Ok(response);
             }
-            Err(e) => {
-                retry_count += 1;
 
-                // Log first few attempts as warnings, then reduce to debug to avoid spam
+            // The service answered. Whatever it said, it will say again.
+            Err(err) if !err.retryable() => {
+                debug!(subject = %subject_str, error = %err, "Request failed, not retryable");
+                return Err(err.into());
+            }
+
+            Err(err) => {
+                retry_count += 1;
+                let elapsed = started.elapsed();
+
+                if elapsed + delay > RETRY_DEADLINE {
+                    warn!(
+                        subject = %subject_str,
+                        retry_count,
+                        elapsed_ms = elapsed.as_millis(),
+                        error = %err,
+                        "Giving up: no answer within the retry deadline"
+                    );
+                    return Err(anyhow!(
+                        "no answer from {subject_str} after {retry_count} attempts over {:?}: {err}",
+                        elapsed
+                    ));
+                }
+
+                // Log the first few attempts loudly, then only occasionally.
                 if retry_count <= 3 {
                     warn!(
                         subject = %subject_str,
                         retry_count,
                         delay_ms = delay.as_millis(),
-                        error = %e,
-                        "Request failed, retrying"
+                        error = %err,
+                        "Request unanswered, retrying"
                     );
                 } else if retry_count % 10 == 0 {
-                    // Log every 10th attempt to show we're still trying
                     warn!(
                         subject = %subject_str,
                         retry_count,
                         delay_ms = delay.as_millis(),
-                        "Request still failing after {} attempts",
+                        "Request still unanswered after {} attempts",
                         retry_count
                     );
                 } else {
                     debug!(
                         subject = %subject_str,
                         retry_count,
-                        error = %e,
-                        "Request failed, retrying"
+                        error = %err,
+                        "Request unanswered, retrying"
                     );
                 }
 
                 tokio::time::sleep(delay).await;
-
-                // Exponential backoff, capped at 30 seconds
-                delay = std::cmp::min(delay * 2, Duration::from_secs(30));
+                delay = std::cmp::min(delay * 2, RETRY_MAX_DELAY);
             }
         }
     }
 }
+
+/// Longest wait between attempts at an unanswered request.
+pub const RETRY_MAX_DELAY: Duration = Duration::from_secs(5);
+
+/// How long [`request_with_retry`] keeps trying before giving up.
+///
+/// Every caller is serving a request of its own, so retrying past the point
+/// where anyone is still waiting only holds a connection open. This is well
+/// inside htmx's 60s default timeout, so the browser sees our error rather than
+/// an aborted request.
+pub const RETRY_DEADLINE: Duration = Duration::from_secs(20);
 
 /// A convenience wrapper around [`common::service::send`] for sending
 /// activity logging messages.
@@ -848,4 +932,55 @@ pub async fn trigger_email(
         },
     )
     .await
+}
+
+#[cfg(test)]
+mod request_error_tests {
+    use super::*;
+    use crate::service::errors::{ErrorCode, service_error};
+
+    /// The whole point: a service that answered and said no is not a transport
+    /// failure, and must not be retried. A duplicate email address once became
+    /// a request that never returned because these were treated alike.
+    #[test]
+    fn an_answered_failure_is_not_retried() {
+        let err = RequestError::Answered(service_error(
+            "Email address is already in use",
+            ErrorCode::HandlerError,
+        ));
+        assert!(!err.retryable());
+    }
+
+    #[test]
+    fn an_unanswered_request_is_retried() {
+        assert!(RequestError::Unanswered(anyhow!("no responders")).retryable());
+    }
+
+    /// Neither encoding nor decoding gets better on a second attempt.
+    #[test]
+    fn a_malformed_message_is_not_retried() {
+        assert!(!RequestError::Malformed(anyhow!("bad payload")).retryable());
+    }
+
+    /// The service's own words are what reach the caller, so the reason for a
+    /// refusal survives the trip.
+    #[test]
+    fn an_answered_failure_carries_the_services_message() {
+        let err = RequestError::Answered(service_error(
+            "Email address is already in use",
+            ErrorCode::HandlerError,
+        ));
+        assert_eq!(err.to_string(), "Email address is already in use");
+        assert_eq!(
+            Error::from(err).to_string(),
+            "Email address is already in use"
+        );
+    }
+
+    /// Retrying must not outlast the caller that is waiting on it.
+    #[test]
+    fn the_deadline_leaves_room_before_a_browser_gives_up() {
+        assert!(RETRY_DEADLINE < Duration::from_secs(60));
+        assert!(RETRY_MAX_DELAY < RETRY_DEADLINE);
+    }
 }

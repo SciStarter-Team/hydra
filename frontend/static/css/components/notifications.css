@@ -153,3 +153,27 @@
         animation: none;
     }
 }
+
+/*
+  Messages inside a container that asked for them but named no particular place
+  (a <dialog>, mostly). The slot is created by static/js/notifications.js as the
+  container's first child; sticky keeps the message in view when the container
+  scrolls, which a dialog with a long form does.
+*/
+.ss-notification-slot {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+/* Until something arrives it must take up no room at all. */
+.ss-notification-slot:empty {
+    display: none;
+}
+
+.ss-notification-slot:not(:empty) {
+    margin-bottom: 0.75rem;
+}

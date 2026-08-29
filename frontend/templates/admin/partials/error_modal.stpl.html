@@ -1,5 +1,5 @@
 <!-- Error Modal -->
-<dialog data-notifications class="rounded-lg shadow-xl max-w-lg w-full p-6 backdrop:bg-gray-500 backdrop:opacity-75 m-auto"
+<dialog hx-indicator:inherited="closest dialog" data-notifications class="rounded-lg shadow-xl max-w-lg w-full p-6 backdrop:bg-gray-500 backdrop:opacity-75 m-auto"
         hx-on::after:init="this.showModal()"
         onclick="if (event.target === this) this.remove()">
     <div class="text-center">

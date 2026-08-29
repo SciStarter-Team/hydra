@@ -1568,6 +1568,24 @@ pub async fn user_display_info_batch(req: &Request) -> Result<UserDisplayInfoBat
 pub async fn user_details_create(req: &Request) -> Result<UserDetailsResponse, Error> {
     let request: UserDetailsCreateRequest = decode_structured_message(req.message.clone())?;
 
+    // Refuse what cannot work before writing anything. The email column is
+    // unique, so a duplicate would fail the INSERT halfway through and surface
+    // as "Failed to create user email record", which tells the reader nothing.
+    if !common::email::valid(&request.primary_email) {
+        return Err(anyhow::anyhow!("That is not a valid email address"));
+    }
+
+    let taken = sqlx::query!(
+        r#"SELECT "user_id" FROM "emails" WHERE "email" = ?"#,
+        request.primary_email
+    )
+    .fetch_optional(db())
+    .await?;
+
+    if taken.is_some() {
+        return Err(anyhow::anyhow!("Email address is already in use"));
+    }
+
     let user_id = ulid::Ulid::new();
 
     let (is_staff, is_page_manager) = match request.role.as_str() {
