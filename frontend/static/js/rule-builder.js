@@ -20,11 +20,16 @@ window.ruleBuilder = (function () {
         return document.getElementById('welcome-rules');
     }
 
-    function clone(templateId) {
+    /* Clones a blank row into `parent`.
+     *
+     * The order matters: htmx.process() returns immediately for anything not
+     * in the document, so a row processed before it is appended keeps none of
+     * its hx-on handlers or live bindings -- its buttons look right and do
+     * nothing at all. Append first, then process. */
+    function addRow(parent, templateId) {
         var template = document.getElementById(templateId);
-        var fragment = template.content.cloneNode(true);
-        var element = fragment.firstElementChild;
-        // The row arrives with hx-on / live bindings that htmx has never seen.
+        var element = template.content.cloneNode(true).firstElementChild;
+        parent.appendChild(element);
         htmx.process(element);
         return element;
     }
@@ -58,7 +63,7 @@ window.ruleBuilder = (function () {
 
     return {
         addRule: function () {
-            container().appendChild(clone('welcome-rule-blank'));
+            addRow(container(), 'welcome-rule-blank');
             renumber();
         },
 
@@ -80,7 +85,7 @@ window.ruleBuilder = (function () {
 
         addCondition: function (button) {
             var list = button.closest('.welcome-rule').querySelector('.welcome-conditions');
-            list.appendChild(clone('welcome-condition-blank'));
+            addRow(list, 'welcome-condition-blank');
             renumber();
         },
 
