@@ -15,17 +15,24 @@ use common::service::request;
 use poem::{Response, handler, web::Redirect};
 use sailfish::TemplateOnce;
 
-use crate::articulate::{ArticulateParams, LRS_URL};
 use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
 use crate::training::{
-    self, ArticulateCard, SidebarBody, SigninBody, StepState, StepView, StepsView, TrainingContent,
-    TutorialBody, linear_states, open_flags, render_page, render_progress_fragment,
+    self, ArticulateCard, SidebarBody, SigninBody, StepState, StepView, StepsView, TrainingChrome,
+    TrainingContent, TutorialBody, linear_states, module_url, open_flags, render_page,
+    render_progress_fragment, tutorial_launch_url,
 };
 
 const BASE_PATH: &str = "/training/champion";
 const PROGRESS_PATH: &str = "/training/champion/-progress";
 const SLUG: &str = "champion";
+
+const CHAMPION_URL: &str =
+    "https://media.scistarter.org/champion-training/scormdriver/indexAPI.html";
+
+/// The Storyline package's own xAPI activity id, as its `tincan.xml` spells
+/// it. A SCORM Driver export reports no result without it.
+const CHAMPION_ACTIVITY_ID: &str = "http://cD2GSPUMolo6VyXCZLI9dnAvy4skHGNE_rise";
 
 /// Editable copy for the Champion training. `#[serde(default)]` required (see
 /// [`crate::training::foundations::FoundationsContent`]).
@@ -93,8 +100,7 @@ impl Default for ChampionContent {
             tutorial_intro: "Complete the Citizen Science Champion training module.".to_string(),
             // Base URL of the Champion Storyline package. It is wrapped per-user
             // with the LRS launch parameters at render time (see `build_steps`).
-            articulate_url: "https://media.scistarter.org/champion-training/scormdriver/indexAPI.html"
-                .to_string(),
+            articulate_url: CHAMPION_URL.to_string(),
             articulate_image: "https://orrery-media.s3.amazonaws.com/attr/2026-07/Citizen_Science_Champion_nP0OiMQ.png".to_string(),
             claim_heading: "Congratulations, Champion!".to_string(),
             claim_html: r#"<p>🎉 <strong>Congratulations, you are a Citizen Science Champion!</strong> 🎉</p>
@@ -186,6 +192,7 @@ async fn build_content(
     .unwrap_or_default();
 
     Ok(TrainingContent {
+        chrome: TrainingChrome::default(),
         breadcrumb_label: content.title.clone(),
         badge_image: content.badge_image.clone(),
         badge_alt: "Citizen Science Champion certificate".to_string(),
@@ -255,23 +262,16 @@ async fn build_steps(content: &ChampionContent, user_info: &Option<Arc<BasicInfo
             .map(|user| user.handle.clone())
             .unwrap_or_default(),
         next_path: BASE_PATH.to_string(),
+        chrome: TrainingChrome::default(),
     }
     .render_once()
     .unwrap_or_default();
 
-    // Wrap the Storyline base URL with this user's LRS launch parameters
-    // (xAPI actor + JWT), so completion reports back through the LRS to
-    // `record_event_articulate`. Logged-out visitors (the tutorial step is
-    // blocked for them anyway) just see the bare base URL.
-    let tutorial_href = match user_info {
-        Some(user) => format!(
-            "{}?{}",
-            content.articulate_url,
-            ArticulateParams::new(LRS_URL, user.clone())
-                .with_activity_id("http://cD2GSPUMolo6VyXCZLI9dnAvy4skHGNE_rise")
-        ),
-        None => content.articulate_url.clone(),
-    };
+    let tutorial_href = tutorial_launch_url(
+        module_url(&content.articulate_url, CHAMPION_URL),
+        Some(CHAMPION_ACTIVITY_ID),
+        user_info,
+    );
 
     let tutorial_body = TutorialBody {
         intro: content.tutorial_intro.clone(),

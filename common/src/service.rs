@@ -722,6 +722,16 @@ pub enum TriggerEvent {
     /// Sent when the Data Ethics for Practitioners badge is earned
     BadgeDataEthics,
 
+    /// Sent when the Data Ethics badge is earned by finishing the Spanish
+    /// build of the tutorial. One badge for all three languages, so this
+    /// differs from [`TriggerEvent::BadgeDataEthics`] only in the language it
+    /// is written in.
+    BadgeDataEthicsEs,
+
+    /// Sent when the Data Ethics badge is earned by finishing the Portuguese
+    /// build of the tutorial.
+    BadgeDataEthicsPt,
+
     /// Sent when the Ideal Participatory Science badge is earned
     BadgeIdeal,
 
@@ -821,6 +831,12 @@ impl TriggerEvent {
             Self::BadgeDataLiteracy => "When the Building Data Literacy badge is earned",
             Self::BadgeHigherEd => "When the Teaching in Higher Education badge is earned",
             Self::BadgeDataEthics => "When the Data Ethics for Practitioners badge is earned",
+            Self::BadgeDataEthicsEs => {
+                "When the Data Ethics badge is earned in Spanish (badge email in Spanish)"
+            }
+            Self::BadgeDataEthicsPt => {
+                "When the Data Ethics badge is earned in Portuguese (badge email in Portuguese)"
+            }
             Self::BadgeIdeal => "When the Ideal Participatory Science badge is earned",
             Self::BadgeAmbassador => "When the SciStarter Ambassador badge is earned",
             Self::BadgeK12 => "When the Citizen Science for K-12 Educators badge is earned",
@@ -867,6 +883,8 @@ impl TriggerEvent {
             Self::BadgeFoundations
             | Self::BadgeLibrariesHubs
             | Self::BadgeDataLiteracy
+            | Self::BadgeDataEthicsEs
+            | Self::BadgeDataEthicsPt
             | Self::BadgeHigherEd
             | Self::BadgeDataEthics
             | Self::BadgeIdeal

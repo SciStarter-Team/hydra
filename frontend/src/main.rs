@@ -458,6 +458,15 @@ fn user_facing() -> impl Endpoint {
             "/training-foundations",
             get(training::foundations::legacy_redirect),
         )
+        .at(
+            "/training-foundations-project-squirrel-training",
+            get(training::foundations::legacy_squirrel_redirect),
+        )
+        // Orrery's slug carries those capitals; this is the URL in circulation.
+        .at(
+            "/training-foundations-Stall-Catchers-training",
+            get(training::foundations::legacy_stall_redirect),
+        )
         .at("/training/data-ethics", get(training::dataethics::page))
         .at(
             "/training/data-ethics/-progress",
@@ -466,6 +475,30 @@ fn user_facing() -> impl Endpoint {
         .at(
             "/training-dataethics",
             get(training::dataethics::legacy_redirect),
+        )
+        .at(
+            "/training/data-ethics-es",
+            get(training::dataethics::page_es),
+        )
+        .at(
+            "/training/data-ethics-es/-progress",
+            get(training::dataethics::progress_es),
+        )
+        .at(
+            "/training-dataethics-es",
+            get(training::dataethics::legacy_redirect_es),
+        )
+        .at(
+            "/training/data-ethics-pt",
+            get(training::dataethics::page_pt),
+        )
+        .at(
+            "/training/data-ethics-pt/-progress",
+            get(training::dataethics::progress_pt),
+        )
+        .at(
+            "/training-dataethics-pt",
+            get(training::dataethics::legacy_redirect_pt),
         )
         .at("/training/data-literacy", get(training::dataliteracy::page))
         .at(
@@ -755,11 +788,18 @@ async fn main() -> Result<(), Error> {
             "summary_by_id",
             dashboard::entity_summary::summary_by_id
         ));
+        tasks.spawn(handler!(
+            entity_group,
+            "summary_by_slug",
+            dashboard::entity_summary::summary_by_slug
+        ));
         tasks.join_all().await;
     });
 
     println!("Listening on {}", env!("LISTEN_ON"));
-    println!("Frontend NATS service started: frontend.health.check, frontend.entity.summary_by_id");
+    println!(
+        "Frontend NATS service started: frontend.health.check, frontend.entity.summary_by_id, frontend.entity.summary_by_slug"
+    );
     // The id peer messages are tagged with, and the one the staff query
     // tool reports as having answered a query against this instance's
     // copy of the frontend database.

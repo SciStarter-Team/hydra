@@ -1,5 +1,1 @@
-<% if self.logged_in { %>
-<p>You're signed in as <b><%= self.handle %></b>. Your SciStarter account is all set &mdash; continue with the steps below to earn your badge.</p>
-<% } else { %>
-<p>You'll need a free SciStarter account to track your progress and claim your badge. <a href="/login?next=<%= self.next_path %>">Log in</a> or <a href="/login?next=<%= self.next_path %>">create an account</a> to get started, then return to this page.</p>
-<% } %>
+<p><%- self.html() %></p>

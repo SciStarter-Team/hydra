@@ -18,8 +18,9 @@ use sailfish::TemplateOnce;
 use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
 use crate::training::{
-    self, ArticulateCard, SidebarBody, SigninBody, StepView, StepsView, TrainingContent,
-    TutorialBody, linear_states, open_flags, render_page, render_progress_fragment,
+    self, ArticulateCard, SidebarBody, SigninBody, StepView, StepsView, TrainingChrome,
+    TrainingContent, TutorialBody, linear_states, module_url, open_flags, render_page,
+    render_progress_fragment, tutorial_launch_url,
 };
 
 const BASE_PATH: &str = "/training/higher-ed";
@@ -27,6 +28,10 @@ const PROGRESS_PATH: &str = "/training/higher-ed/-progress";
 /// Records the "explore" step then redirects to the AAPS site.
 pub const EXPLORE_PATH: &str = "/training/higher-ed/explore";
 const SLUG: &str = "higher-ed";
+
+// An older Rise export: no launch activity id, but the rest of the context
+// still has to be there.
+const HIGHERED_URL: &str = "https://media.scistarter.org/highered/index.html";
 
 /// Records the Higher Education "list" step for a user (fired when they create
 /// or add to a list). Fire-and-forget; it is a no-op unless the user has
@@ -92,7 +97,7 @@ impl Default for HigherEdContent {
             account_heading: "SciStarter Account".to_string(),
             tutorial_heading: "Complete the tutorial and quiz".to_string(),
             tutorial_intro: r#"<b>Complete this self-guided tutorial and quiz.</b> Score an 80% or higher to move on to the next steps towards claiming your badge."#.to_string(),
-            articulate_url: "https://media.scistarter.org/highered/index.html".to_string(),
+            articulate_url: HIGHERED_URL.to_string(),
             articulate_image: "https://media.scistarter.org/highered/High+Ed+Landing+Page+Image.png".to_string(),
             list_heading: "Create a List on SciStarter".to_string(),
             list_html: r#"<p><strong>Create a List on SciStarter</strong> by visiting <a href="/finder" target="_blank">the project finder</a>, selecting a project, and using the "Add to my lists" link. Select the list you want to add the project to from the drop-down menu, or create a new list by typing in a new list name, then click "Add to list". View the <a href="https://www.youtube.com/watch?v=umVbYNkbq2g" target="_blank">How To Create a SciStarter List video</a>. This step completes automatically once you've created or added to a list.</p>"#.to_string(),
@@ -180,6 +185,7 @@ async fn build_content(
     .unwrap_or_default();
 
     Ok(TrainingContent {
+        chrome: TrainingChrome::default(),
         breadcrumb_label: content.title.clone(),
         badge_image: content.badge_image.clone(),
         badge_alt: "Teaching in Higher Education badge".to_string(),
@@ -226,6 +232,7 @@ async fn build_steps(content: &HigherEdContent, user_info: &Option<Arc<BasicInfo
             .map(|user| user.handle.clone())
             .unwrap_or_default(),
         next_path: BASE_PATH.to_string(),
+        chrome: TrainingChrome::default(),
     }
     .render_once()
     .unwrap_or_default();
@@ -233,7 +240,11 @@ async fn build_steps(content: &HigherEdContent, user_info: &Option<Arc<BasicInfo
     let tutorial_body = TutorialBody {
         intro: content.tutorial_intro.clone(),
         cards: vec![ArticulateCard {
-            href: content.articulate_url.clone(),
+            href: tutorial_launch_url(
+                module_url(&content.articulate_url, HIGHERED_URL),
+                None,
+                user_info,
+            ),
             image: content.articulate_image.clone(),
         }],
         extra: String::new(),

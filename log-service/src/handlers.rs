@@ -20,7 +20,7 @@ use common::{
         UserRecentVisitsResponse,
     },
     query::{QUERY_TIMEOUT, QueryRequest, QueryResponse},
-    service::{TriggerEvent, decode_structured_message, trigger_email},
+    service::{TriggerEvent, decode_structured_message, send, trigger_email},
 };
 use datafusion::prelude::*;
 use ulid::Ulid;
@@ -904,6 +904,52 @@ pub async fn handle_articulate_completion_record(req: &async_nats::service::Requ
     Ok(())
 }
 
+/// Tell an account about its first contribution, once, ever.
+///
+/// Orrery's rule, which this has to match: the mail goes out on a first
+/// contribution to a project, but only to an account that has never been sent
+/// it, and never for the two projects that are nobody's first act of science
+/// -- the Foundations module's own page, which stands for finishing a
+/// training rather than for taking part in anything, and iSeeChange.
+///
+/// The `first-contribution` tag is the record that it was sent, and the guard
+/// against sending it again. It is also mirrored to Constant Contact as an
+/// engagement segment, so it has to be written whenever the mail goes out;
+/// writing it refreshes this service's copy of the account's tags too, so a
+/// second contribution arriving moments later sees it.
+async fn announce_first_contribution(
+    user_id: &str,
+    record: &ProjectParticipationRecord,
+) -> Result<()> {
+    const TAG: &str = "first-contribution";
+
+    if matches!(
+        crate::project_ids::slug_of(&record.project_id).await?,
+        Some(crate::project_ids::FOUNDATIONS_MODULE | crate::project_ids::ISEECHANGE)
+    ) {
+        return Ok(());
+    }
+
+    if log_service::cache::get_user_tags(user_id)
+        .await?
+        .iter()
+        .any(|tag| tag == TAG)
+    {
+        return Ok(());
+    }
+
+    trigger_email(
+        TriggerEvent::FirstContribution,
+        record.user_id,
+        Some(&[("project_id".to_string(), record.project_id.clone())]),
+    )
+    .await?;
+
+    send("user.tags.add", (user_id.to_string(), TAG.to_string())).await?;
+
+    Ok(())
+}
+
 pub async fn handle_project_participation_record(req: &async_nats::service::Request) -> Result<()> {
     let record: ProjectParticipationRecord = decode_structured_message(req.message.clone())?;
 
@@ -922,15 +968,12 @@ pub async fn handle_project_participation_record(req: &async_nats::service::Requ
     .execute(common::shared::db())
     .await?;
 
-    // If this was a new row, it's the user's first contribution to this project
-    if cache_result.rows_affected() > 0 {
-        trigger_email(
-            TriggerEvent::FirstContribution,
-            record.user_id,
-            Some(&[("project_id".to_string(), record.project_id.clone())]),
-        )
-        .await
-        .ok();
+    // A new row means this is the account's first contribution to this
+    // project, which is the first of the two things the mail below asks.
+    if cache_result.rows_affected() > 0
+        && let Err(error) = announce_first_contribution(&user_id_str, &record).await
+    {
+        eprintln!("First contribution by {user_id_str} went unannounced: {error}");
     }
 
     // Record to participation table for permanent record
@@ -967,6 +1010,18 @@ pub async fn handle_project_participation_record(req: &async_nats::service::Requ
         common::channel::Event::new("project_participation", &record.project_id),
     )
     .await?;
+
+    // Participating in one of the Foundations module's projects is a step of
+    // the module. Not fatal: the contribution is already recorded and will not
+    // be offered again, so failing here would lose it to buy nothing.
+    if let Err(error) =
+        crate::foundations::advance_for_participation(&user_id_str, &record.project_id).await
+    {
+        eprintln!(
+            "Participation by {user_id_str} in {} did not advance the Foundations module: {error}",
+            record.project_id
+        );
+    }
 
     // If it's April, automatically create an Acts of Science entry
     let is_april = when_str.get(5..7).map(|m| m == "04").unwrap_or(false);

@@ -1,7 +1,7 @@
 <div class="ss-container mx-auto py-4!">
 
     <ul class="ss-breadcrumbs flex gap-2">
-        <li><a href="/training">Training</a></li>
+        <li><a href="/training"><%= self.chrome.breadcrumb_root %></a></li>
         <li>/</li>
         <li><%= self.breadcrumb_label %></li>
     </ul>
@@ -15,22 +15,22 @@
             <% } %>
             <div class="flex flex-col md:flex-row gap-4 md:items-center mb-0">
                 <h1 class="text-primary-dark mb-0 md:mb-2"><%= self.title %></h1>
-                <a href="#start" class="btn btn-accent self-start md:self-center mb-4 md:mb-0">Start Now</a>
+                <a href="#start" class="btn btn-accent self-start md:self-center mb-4 md:mb-0"><%= self.chrome.start_now %></a>
             </div>
             <p class="mb-8"><%- self.intro %></p>
 
             <div class="flex flex-col md:flex-row gap-4 md:gap-16 mb-8">
                 <dl>
-                    <dt class="text-xs uppercase text-primary-action font-bold mb-2">Estimated time to complete</dt>
+                    <dt class="text-xs uppercase text-primary-action font-bold mb-2"><%= self.chrome.estimated_time_label %></dt>
                     <dd class="text-lg uppercase font-bold font-condensed flex gap-2"><svg width="22px" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="m12 1a11 11 0 1 0 11 11 11.013 11.013 0 0 0 -11-11zm0 20a9 9 0 1 1 9-9 9.011 9.011 0 0 1 -9 9z"/><path d="m13 11.586v-5.586a1 1 0 0 0 -2 0v6a1 1 0 0 0 .293.707l3 3a1 1 0 0 0 1.414-1.414z"/></svg> <%= self.estimated_time %></dd>
                 </dl>
                 <dl>
-                    <dt class="text-xs uppercase text-primary-action font-bold mb-2">Tutorials Completed to Date</dt>
+                    <dt class="text-xs uppercase text-primary-action font-bold mb-2"><%= self.chrome.tutorials_completed_label %></dt>
                     <dd class="text-lg uppercase font-bold font-condensed flex gap-2"><svg width="22px" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 682.7 682.7"><path d="M341.3,0C152.8,0,0,152.8,0,341.4s152.8,341.4,341.4,341.4,341.4-152.8,341.4-341.4S529.9,0,341.3,0ZM341.3,616.8c-152.1,0-275.4-123.3-275.4-275.4S189.2,65.9,341.3,65.9s275.5,123.3,275.5,275.5-123.3,275.4-275.5,275.4Z"/><path d="M291.9,456.3c-6.7,0-13.5-2.6-18.6-7.8l-84.8-86.4c-10.1-10.3-9.9-26.7.4-36.8,10.3-10.1,26.7-9.9,36.8.4l66.7,68,165.1-159.9c10.3-10,26.8-9.7,36.8.6,10,10.3,9.7,26.8-.6,36.8l-183.6,177.8c-5,4.9-11.6,7.3-18.1,7.3Z"/></svg> <span id="tutorials-completed"><%= self.tutorials_completed %></span></dd>
                 </dl>
             </div>
 
-            <h2 class="text-primary-dark">Skills and Competencies</h2>
+            <h2 class="text-primary-dark"><%= self.chrome.skills_heading %></h2>
             <p><%= self.skills_intro %></p>
             <ul class="bullets">
                 <% for skill in &self.skills { %><li><%- skill %></li><% } %>
@@ -39,7 +39,7 @@
 
             <hr class="text-primary-light my-16" />
 
-            <h2 id="start" class="text-primary-dark">Complete the Training</h2>
+            <h2 id="start" class="text-primary-dark"><%= self.chrome.complete_heading %></h2>
 
             <% if self.live_updates { %>
             <%# Signed-in: subscribe to the user's SSE channel; when this %>

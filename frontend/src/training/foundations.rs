@@ -17,8 +17,8 @@ use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
 use crate::training::{
     self, ArticulateCard, ClaimBody, ProjectCardView, SidebarBody, SigninBody, StepView, StepsView,
-    TrainingContent, TutorialBody, linear_states, open_flags, render_page,
-    render_progress_fragment,
+    TrainingChrome, TrainingContent, TutorialBody, linear_states, module_url, open_flags,
+    render_page, render_progress_fragment, tutorial_launch_url,
 };
 
 const BASE_PATH: &str = "/training/foundations";
@@ -27,6 +27,12 @@ const SLUG: &str = "foundations";
 
 // Canonical project pages and the completion keys they map to. Structural — not
 // editable content.
+// The tutorial's two builds. Both are older Rise exports that report a
+// result without a launch activity id, so they are launched without one --
+// but with everything else, or they report nothing at all.
+const FOUNDATIONS_EN_URL: &str = "https://media.scistarter.org/foundations/index.html";
+const FOUNDATIONS_ES_URL: &str = "https://media.scistarter.org/fundamentos/index.html";
+
 const SQUIRREL_LINK: &str = "/projects/project-squirrel";
 const STALL_LINK: &str = "/projects/stall-catchers-by-eyesonalz";
 
@@ -120,8 +126,8 @@ impl Default for FoundationsContent {
             account_heading: "SciStarter Account".to_string(),
             tutorial_heading: "Self-guided tutorial and quiz".to_string(),
             tutorial_intro: r#"<b>Complete this self-guided tutorial and quiz.</b> Score an 80% or higher to move on to the next steps towards claiming your badge! This module opens in a new tab. Return to this page upon completion to finish earning your badge."#.to_string(),
-            articulate_en: "#".to_string(),
-            articulate_es: "#".to_string(),
+            articulate_en: FOUNDATIONS_EN_URL.to_string(),
+            articulate_es: FOUNDATIONS_ES_URL.to_string(),
             projects_heading: "Participate in Two Citizen Science Projects".to_string(),
             projects_intro: r#"<b>Participate in two citizen science projects.</b> It's time to participate in two projects selected because they represent common types of citizen science projects: one where you add data observations to help when there's not enough data; and another where you review and classify data to help when there's too much data. Even if you've completed these projects before, repeat them now to proceed to Step 4 of the training. Important: When you create your Stall Catchers account, be sure to use the same email address you used to create your SciStarter account! And remember, you can find thousands of additional projects anytime on SciStarter.org."#.to_string(),
             squirrel_title: "Project Squirrel".to_string(),
@@ -191,6 +197,23 @@ pub async fn progress(Authenticated(user_info): Authenticated) -> Result<Respons
     render_progress_fragment(steps, count)
 }
 
+/// 301 redirects from the two orrery pages that introduced the module's
+/// projects under their own training URLs.
+///
+/// They are not linked from orrery's own Foundations page any more, but the
+/// URLs are in circulation. Their training-branded framing has no hydra
+/// equivalent; the project pages are where the training itself sends people
+/// for these steps, so that is where a bookmark lands.
+#[handler]
+pub async fn legacy_squirrel_redirect() -> Redirect {
+    Redirect::moved_permanent(SQUIRREL_LINK)
+}
+
+#[handler]
+pub async fn legacy_stall_redirect() -> Redirect {
+    Redirect::moved_permanent(STALL_LINK)
+}
+
 /// 301 redirect from the legacy `/training-foundations` URL.
 #[handler]
 pub async fn legacy_redirect() -> Redirect {
@@ -212,6 +235,7 @@ async fn build_content(
     .unwrap_or_default();
 
     Ok(TrainingContent {
+        chrome: TrainingChrome::default(),
         breadcrumb_label: content.title.clone(),
         badge_image: content.badge_image.clone(),
         badge_alt: "Foundations of Citizen Science badge".to_string(),
@@ -280,6 +304,7 @@ async fn build_steps(
             .map(|user| user.handle.clone())
             .unwrap_or_default(),
         next_path: BASE_PATH.to_string(),
+        chrome: TrainingChrome::default(),
     }
     .render_once()
     .unwrap_or_default();
@@ -288,11 +313,19 @@ async fn build_steps(
         intro: content.tutorial_intro.clone(),
         cards: vec![
             ArticulateCard {
-                href: content.articulate_en.clone(),
+                href: tutorial_launch_url(
+                    module_url(&content.articulate_en, FOUNDATIONS_EN_URL),
+                    None,
+                    user_info,
+                ),
                 image: ARTICULATE_EN_IMAGE.to_string(),
             },
             ArticulateCard {
-                href: content.articulate_es.clone(),
+                href: tutorial_launch_url(
+                    module_url(&content.articulate_es, FOUNDATIONS_ES_URL),
+                    None,
+                    user_info,
+                ),
                 image: ARTICULATE_ES_IMAGE.to_string(),
             },
         ],

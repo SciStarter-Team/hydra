@@ -19,6 +19,8 @@
 //! - **Entity records** (`list_entities` / `get_entity` /
 //!   `create_entity` / `update_entity`) — the slug-to-target routing
 //!   layer ([`Entity`]).
+//! - **Automatic email** (see [`super::email`]) — the stored emails the
+//!   site sends without being asked, and the triggers that send them.
 //!
 //! All writes go through the `LoadStorePeered::store()` path so changes
 //! propagate to every frontend instance, exactly as the admin handlers
@@ -155,9 +157,12 @@ async fn handle_tools_call(id: Option<Value>, params: Option<Value>) -> JsonRpcR
         "get_entity" => tool_get_entity(arguments).await,
         "create_entity" => tool_create_entity(arguments).await,
         "update_entity" => tool_update_entity(arguments).await,
-        other => match super::query::dispatch(other, arguments).await {
+        other => match super::email::dispatch(other, arguments.clone()).await {
             Some(result) => result,
-            None => Err(anyhow!("Unknown tool: {other}")),
+            None => match super::query::dispatch(other, arguments).await {
+                Some(result) => result,
+                None => Err(anyhow!("Unknown tool: {other}")),
+            },
         },
     };
 
@@ -1256,10 +1261,11 @@ pub(crate) fn get_tools() -> Value {
         }
     ]);
 
-    tools
+    let list = tools
         .as_array_mut()
-        .expect("the tool list is an array literal")
-        .extend(super::query::tool_definitions());
+        .expect("the tool list is an array literal");
+    list.extend(super::email::tool_definitions());
+    list.extend(super::query::tool_definitions());
 
     tools
 }

@@ -69,6 +69,7 @@ async fn get_entity_id_for_slug(slug: &str) -> Result<String, Error> {
 }
 
 use super::check_api_key_permission;
+use crate::training::dataethics::DataEthicsLanguage;
 
 /// 404 JSON response for an unknown project slug (matches orrery).
 fn project_not_found() -> Response {
@@ -596,43 +597,25 @@ pub async fn record_event_articulate(Form(form): Form<ArticulateForm>) -> Result
         .ok_or_else(|| anyhow::anyhow!("Invalid JWT email format"))?
         .to_string();
 
-    // Validate it's a proper ULID
-    let user_id = Ulid::from_string(&user_id_str)
+    // Validate it's a proper ULID. Nothing below needs the parsed value -- the
+    // services downstream are addressed by the string form -- but a token
+    // naming something that is not a user has no business advancing a workflow.
+    Ulid::from_string(&user_id_str)
         .map_err(|_| anyhow::anyhow!("JWT email does not contain valid ULID"))?;
 
     // Process based on activity type
     match activity.as_str() {
-        // Foundations of Citizen Science - records participation event
+        // Foundations of Citizen Science. Only the step is recorded here:
+        // finishing the tutorial is one step of the module, and the
+        // participation contribution belongs to finishing the whole thing --
+        // the user service records it where it grants the badge.
         "http://nnlmhour1tutorial" | "http://_lmq5j-gx0q2iuk_qw8moe6fkvtns-_-_rise" | "http://foundationsstandardized" => {
-            // Record workflow progress
             let _: WorkflowProgressResponse = request(
                 "user.workflow.progress",
                 WorkflowProgressRequest {
                     user_id: user_id_str.clone(),
                     workflow: WorkflowType::Foundations,
                     step: "tutorial".to_string(),
-                }
-            ).await?;
-
-            // Get entity_id for foundations project
-            let entity_id = get_entity_id_for_slug("foundations-of-citizen-science-training-module").await
-                .map_err(|_| anyhow::anyhow!("Foundations project not found"))?;
-
-            // Record the participation (orrery records a fixed 300s/1.0 event)
-            send(
-                "log.project_participation_record",
-                ProjectParticipationRecord {
-                    user_id,
-                    project_id: entity_id,
-                    origin: Some(10), // origin 10 = Articulate
-                    when: None,
-                    duration: Some(300.0),
-                    where_point: None,
-                    magnitude: Some(1),
-                    authenticated: Some(true), // JWT-authenticated
-                    extra: Some(String::new()),
-                    fidelity: Some(1.0),
-                    task_name: Some("collection".to_string()),
                 }
             ).await?;
         }
@@ -673,14 +656,22 @@ pub async fn record_event_articulate(Form(form): Form<ArticulateForm>) -> Result
             ).await?;
         }
 
-        // Data Ethics
+        // Data Ethics. One badge for all three builds, but the step says which
+        // language was worked in -- this is the only moment that is known, and
+        // it decides which badge-earned email is sent.
         "http://dataethicsxapisept72022" | /* spanish */ "http://4xi0y6kwb69qegbwdc8i-kkmgeymlbul_rise" | /* portuguese */ "http://k632u-oqbl5kbcd5jfnucao1cr2sekoh_rise" => {
+            let language = match activity.as_str() {
+                "http://4xi0y6kwb69qegbwdc8i-kkmgeymlbul_rise" => DataEthicsLanguage::Spanish,
+                "http://k632u-oqbl5kbcd5jfnucao1cr2sekoh_rise" => DataEthicsLanguage::Portuguese,
+                _ => DataEthicsLanguage::English,
+            };
+
             let _: WorkflowProgressResponse = request(
                 "user.workflow.progress",
                 WorkflowProgressRequest {
                     user_id: user_id_str,
                     workflow: WorkflowType::DataEthics,
-                    step: "tutorial".to_string(),
+                    step: language.step().to_string(),
                 }
             ).await?;
         }

@@ -20,6 +20,7 @@ use common::shared::db;
 use poem::{IntoResponse, Response, web::Html};
 use sailfish::TemplateOnce;
 
+use crate::articulate::{ArticulateParams, LRS_URL};
 use crate::component::{Component, Head, StandardLayout};
 
 pub mod champion;
@@ -105,6 +106,75 @@ pub fn open_flags(states: &[StepState]) -> Vec<bool> {
         .collect()
 }
 
+/// The fixed labels the shared chrome renders around a training's own copy.
+///
+/// A translated training is a page of its own at a URL of its own, rather than
+/// one page run through a message catalogue at render time: the translated
+/// Data Ethics pages have lived at their own orrery URLs since July 2026 and
+/// those have to keep working. So the wording travels with the page. English
+/// by default; [`TrainingChrome::spanish`] and [`TrainingChrome::portuguese`]
+/// carry the wording of orrery's translated pages verbatim, so a learner
+/// arriving from a bookmark reads what they read before.
+#[derive(Debug, Clone)]
+pub struct TrainingChrome {
+    pub breadcrumb_root: String,
+    pub start_now: String,
+    pub estimated_time_label: String,
+    pub tutorials_completed_label: String,
+    pub skills_heading: String,
+    pub complete_heading: String,
+    /// Account-step copy once signed in. `{handle}` is substituted.
+    pub signed_in_html: String,
+    /// Account-step copy when signed out. `{next}` is substituted with the
+    /// path to return to, so the login link comes back to this page.
+    pub signed_out_html: String,
+}
+
+impl Default for TrainingChrome {
+    fn default() -> Self {
+        TrainingChrome {
+            breadcrumb_root: "Training".to_string(),
+            start_now: "Start Now".to_string(),
+            estimated_time_label: "Estimated time to complete".to_string(),
+            tutorials_completed_label: "Tutorials Completed to Date".to_string(),
+            skills_heading: "Skills and Competencies".to_string(),
+            complete_heading: "Complete the Training".to_string(),
+            signed_in_html: "You're signed in as <b>{handle}</b>. Your SciStarter account is all set &mdash; continue with the steps below to earn your badge.".to_string(),
+            signed_out_html: r#"You'll need a free SciStarter account to track your progress and claim your badge. <a href="/login?next={next}">Log in</a> or <a href="/login?next={next}">create an account</a> to get started, then return to this page."#.to_string(),
+        }
+    }
+}
+
+impl TrainingChrome {
+    /// The wording of orrery's `training-dataethics-es` page.
+    pub fn spanish() -> Self {
+        TrainingChrome {
+            breadcrumb_root: "Formación".to_string(),
+            start_now: "Comenzar ahora".to_string(),
+            estimated_time_label: "Tiempo estimado para completar el curso".to_string(),
+            tutorials_completed_label: "Tutoriales completados hasta la fecha".to_string(),
+            skills_heading: "Habilidades y competencias".to_string(),
+            complete_heading: "Completar la formación".to_string(),
+            signed_in_html: "<strong>¡Muy bien!</strong> Has iniciado sesión como <b>{handle}</b> y tu progreso se guardará.".to_string(),
+            signed_out_html: r#"<strong><a href="/login-es?next={next}">Crea una cuenta</a> de SciStarter o <a href="/login-es?next={next}">inicia sesión</a>.</strong> Si no completas este paso, no podrás solicitar/obtener tu insignia."#.to_string(),
+        }
+    }
+
+    /// The wording of orrery's `training-dataethics-pt` page.
+    pub fn portuguese() -> Self {
+        TrainingChrome {
+            breadcrumb_root: "Formação".to_string(),
+            start_now: "Começar agora".to_string(),
+            estimated_time_label: "Tempo estimado para conclusão".to_string(),
+            tutorials_completed_label: "Tutoriais concluídos até o momento".to_string(),
+            skills_heading: "Habilidades e competências".to_string(),
+            complete_heading: "Concluir a formação".to_string(),
+            signed_in_html: "<strong>Ótimo!</strong> Você iniciou sessão como <b>{handle}</b> e seu progresso será salvo.".to_string(),
+            signed_out_html: r#"<strong><a href="/login-pt?next={next}">Crie uma conta</a> SciStarter ou <a href="/login-pt?next={next}">faça login</a></strong>. Sem concluir esta etapa, você não poderá solicitar seu selo."#.to_string(),
+        }
+    }
+}
+
 /// Generic body for the "SciStarter Account" step: a greeting once signed in,
 /// or a login/sign-up prompt that returns to `next_path` afterward. Reused by
 /// every training.
@@ -115,6 +185,20 @@ pub struct SigninBody {
     pub handle: String,
     /// Local path the login/signup flow returns to after success.
     pub next_path: String,
+    pub chrome: TrainingChrome,
+}
+
+impl SigninBody {
+    /// The step's copy, with the account handle and the return path filled in.
+    pub fn html(&self) -> String {
+        if self.logged_in {
+            self.chrome.signed_in_html.replace("{handle}", &self.handle)
+        } else {
+            self.chrome
+                .signed_out_html
+                .replace("{next}", &self.next_path)
+        }
+    }
 }
 
 /// Generic, reusable project card for any training's "participate in projects"
@@ -138,6 +222,56 @@ pub struct ProjectCardView {
 #[template(path = "training/claim.stpl.html")]
 pub struct ClaimBody {
     pub html: String,
+}
+
+/// The module URL to launch: what the content record holds, or what the
+/// training ships with when the record holds nothing usable.
+///
+/// Several of these records were seeded with `"#"` before anyone knew where
+/// the module lived, and a saved record wins over built-in copy -- so a
+/// training whose record still carries the placeholder would go on linking
+/// nowhere however the code around it is fixed. An empty or placeholder value
+/// means "not set", not "link to this".
+pub fn module_url<'a>(stored: &'a str, built_in: &'a str) -> &'a str {
+    match stored.trim() {
+        "" | "#" => built_in,
+        url => url,
+    }
+}
+
+/// Wrap a tutorial module's base URL with this user's LRS launch parameters.
+///
+/// An Articulate package reports its completion to the LRS the launch query
+/// names, as the actor it names, authenticated by the JWT it carries. Linked
+/// bare, the module has nowhere to report to: the learner finishes it, the
+/// callback never fires, and nothing is recorded. Five of these pages linked
+/// bare until September 2026, which is why their first step could never
+/// complete on hydra.
+///
+/// `activity_id` is the module's own xAPI activity IRI, spelled as its
+/// `tincan.xml` spells it. Only content that withholds its assessment result
+/// without the full launch context needs one -- the SCORM Driver exports. The
+/// older Rise exports report without it and pass `None`, but they still need
+/// everything else.
+///
+/// A signed-out visitor gets the bare URL: there is no actor to name, and
+/// every tutorial step is blocked until they sign in anyway.
+pub fn tutorial_launch_url(
+    base_url: &str,
+    activity_id: Option<&str>,
+    user: &Option<Arc<BasicInfo>>,
+) -> String {
+    let Some(user) = user else {
+        return base_url.to_string();
+    };
+
+    let mut params = ArticulateParams::new(LRS_URL, user.clone());
+
+    if let Some(activity_id) = activity_id {
+        params = params.with_activity_id(activity_id);
+    }
+
+    format!("{base_url}?{params}")
 }
 
 /// One Articulate tutorial card — a linked image. A tutorial step has one or
@@ -181,6 +315,7 @@ pub struct StepsView {
 #[derive(TemplateOnce)]
 #[template(path = "training/page_content.stpl.html")]
 pub struct TrainingContent {
+    pub chrome: TrainingChrome,
     pub breadcrumb_label: String,
     pub badge_image: String,
     pub badge_alt: String,
@@ -330,4 +465,81 @@ fn commafy(n: i64) -> String {
         out.push(*b as char);
     }
     if negative { format!("-{out}") } else { out }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Nobody to launch as: a signed-out visitor gets the module's own URL,
+    /// unchanged and unadorned. Every tutorial step is blocked until they sign
+    /// in, so this is the link they cannot use yet rather than a broken one.
+    /// The placeholder several content records shipped with is not a URL, and
+    /// must not be launched as one.
+    #[test]
+    fn a_placeholder_module_url_falls_back_to_the_built_in_one() {
+        assert_eq!(
+            module_url("#", "https://media/x.html"),
+            "https://media/x.html"
+        );
+        assert_eq!(
+            module_url("  ", "https://media/x.html"),
+            "https://media/x.html"
+        );
+        assert_eq!(
+            module_url("https://media/edited.html", "https://media/x.html"),
+            "https://media/edited.html"
+        );
+    }
+
+    #[test]
+    fn a_signed_out_visitor_gets_the_bare_url() {
+        assert_eq!(
+            tutorial_launch_url(
+                "https://media.scistarter.org/foundations/index.html",
+                None,
+                &None
+            ),
+            "https://media.scistarter.org/foundations/index.html"
+        );
+    }
+
+    /// The activity id is what a SCORM Driver export needs before it will
+    /// report a result at all, so it must survive into the query -- and it
+    /// must survive percent-encoded, because it is a URL inside a URL.
+    #[test]
+    fn an_activity_id_is_encoded_into_the_query() {
+        let params = ArticulateParams::new(LRS_URL, test_user()).with_activity_id("http://x_rise");
+
+        assert!(
+            params
+                .to_string()
+                .contains("activity_id=http%3A%2F%2Fx_rise")
+        );
+    }
+
+    /// Older Rise exports report without one. Passing `None` must leave the
+    /// rest of the launch context in place -- that is the whole difference
+    /// between a module that records completions and one that cannot.
+    #[test]
+    fn a_launch_without_an_activity_id_still_carries_the_rest() {
+        let params = ArticulateParams::new(LRS_URL, test_user()).to_string();
+
+        assert!(!params.contains("activity_id"));
+        assert!(params.contains("endpoint="));
+        assert!(params.contains("auth=Bearer"));
+        assert!(params.contains("actor="));
+    }
+
+    fn test_user() -> Arc<BasicInfo> {
+        Arc::new(BasicInfo {
+            user_id: ulid::Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").expect("a ulid"),
+            handle: "ada".to_string(),
+            is_staff: false,
+            is_superuser: false,
+            public: true,
+            protected: false,
+            needs_point: false,
+        })
+    }
 }

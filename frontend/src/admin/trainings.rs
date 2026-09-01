@@ -14,7 +14,7 @@ use crate::component::{AdminLayout, Component};
 use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
 use crate::training::champion::ChampionContent;
-use crate::training::dataethics::DataEthicsContent;
+use crate::training::dataethics::{DataEthicsContent, DataEthicsLanguage};
 use crate::training::dataliteracy::DataLiteracyContent;
 use crate::training::foundations::FoundationsContent;
 use crate::training::highered::HigherEdContent;
@@ -141,6 +141,14 @@ const TRAININGS: &[TrainingRow] = &[
     TrainingRow {
         name: "Data Ethics for Practitioners",
         slug: "data-ethics",
+    },
+    TrainingRow {
+        name: "Data Ethics for Practitioners (Spanish)",
+        slug: "data-ethics-es",
+    },
+    TrainingRow {
+        name: "Data Ethics for Practitioners (Portuguese)",
+        slug: "data-ethics-pt",
     },
     TrainingRow {
         name: "Data Literacy",
@@ -518,16 +526,50 @@ fn dataethics_sections(c: &DataEthicsContent) -> Vec<Section> {
     sections
 }
 
+/// Heading shown above the editor for each language's record.
+fn dataethics_title(language: DataEthicsLanguage) -> &'static str {
+    match language {
+        DataEthicsLanguage::English => "Data Ethics Training",
+        DataEthicsLanguage::Spanish => "Data Ethics Training (Spanish)",
+        DataEthicsLanguage::Portuguese => "Data Ethics Training (Portuguese)",
+    }
+}
+
+fn dataethics_admin_path(language: DataEthicsLanguage) -> String {
+    format!("/-admin/trainings/{}", language.content_slug())
+}
+
 #[handler]
 async fn dataethics_edit(
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    let content = DataEthicsContent::current().await;
+    dataethics_render(DataEthicsLanguage::English, user_info).await
+}
+
+#[handler]
+async fn dataethics_edit_es(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    dataethics_render(DataEthicsLanguage::Spanish, user_info).await
+}
+
+#[handler]
+async fn dataethics_edit_pt(
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    dataethics_render(DataEthicsLanguage::Portuguese, user_info).await
+}
+
+async fn dataethics_render(
+    language: DataEthicsLanguage,
+    user_info: Option<std::sync::Arc<common::message::user::BasicInfo>>,
+) -> Result<poem::Response, anyhow::Error> {
+    let content = DataEthicsContent::current(language).await;
     render_edit(
         user_info,
-        "Data Ethics Training",
+        dataethics_title(language),
         "Data Ethics for Practitioners",
-        "/-admin/trainings/data-ethics",
+        &dataethics_admin_path(language),
         dataethics_sections(&content),
         false,
     )
@@ -539,7 +581,32 @@ async fn dataethics_save(
     Form(form): Form<DataEthicsForm>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
+    dataethics_store(DataEthicsLanguage::English, form, user_info).await
+}
+
+#[handler]
+async fn dataethics_save_es(
+    Form(form): Form<DataEthicsForm>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    dataethics_store(DataEthicsLanguage::Spanish, form, user_info).await
+}
+
+#[handler]
+async fn dataethics_save_pt(
+    Form(form): Form<DataEthicsForm>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    dataethics_store(DataEthicsLanguage::Portuguese, form, user_info).await
+}
+
+async fn dataethics_store(
+    language: DataEthicsLanguage,
+    form: DataEthicsForm,
+    user_info: Option<std::sync::Arc<common::message::user::BasicInfo>>,
+) -> Result<poem::Response, anyhow::Error> {
     let content = DataEthicsContent {
+        language,
         title: form.title,
         sponsor: form.sponsor,
         intro: form.intro,
@@ -558,12 +625,12 @@ async fn dataethics_save(
         sidebar_html: form.sidebar_html,
     };
     content.store().await?;
-    log_edit(&user_info, "data-ethics").await;
+    log_edit(&user_info, language.content_slug()).await;
     render_edit(
         user_info,
-        "Data Ethics Training",
+        dataethics_title(language),
         "Data Ethics for Practitioners",
-        "/-admin/trainings/data-ethics",
+        &dataethics_admin_path(language),
         dataethics_sections(&content),
         true,
     )
@@ -1313,6 +1380,14 @@ pub fn routes() -> impl Endpoint {
         .at("/", get(trainings_list))
         .at("/foundations", get(foundations_edit).post(foundations_save))
         .at("/data-ethics", get(dataethics_edit).post(dataethics_save))
+        .at(
+            "/data-ethics-es",
+            get(dataethics_edit_es).post(dataethics_save_es),
+        )
+        .at(
+            "/data-ethics-pt",
+            get(dataethics_edit_pt).post(dataethics_save_pt),
+        )
         .at(
             "/data-literacy",
             get(dataliteracy_edit).post(dataliteracy_save),

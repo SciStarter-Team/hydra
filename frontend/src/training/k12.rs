@@ -9,17 +9,22 @@ use common::message::user::{BasicInfo, WorkflowStatusResponse, WorkflowType};
 use poem::{Response, handler, web::Redirect};
 use sailfish::TemplateOnce;
 
-use crate::articulate::{ArticulateParams, LRS_URL};
 use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
 use crate::training::{
-    self, ArticulateCard, SidebarBody, SigninBody, StepView, StepsView, TrainingContent,
-    TutorialBody, linear_states, open_flags, render_page, render_progress_fragment,
+    self, ArticulateCard, SidebarBody, SigninBody, StepView, StepsView, TrainingChrome,
+    TrainingContent, TutorialBody, linear_states, module_url, open_flags, render_page,
+    render_progress_fragment, tutorial_launch_url,
 };
 
 const BASE_PATH: &str = "/training/k12";
 const PROGRESS_PATH: &str = "/training/k12/-progress";
 const SLUG: &str = "k12";
+
+const K12_URL: &str = "https://media.scistarter.org/k12/scormdriver/indexAPI.html";
+
+/// The Rise package's own xAPI activity id, as its `tincan.xml` spells it.
+const K12_ACTIVITY_ID: &str = "http://Fr0w9cmLH3BLsC9yKP_zbzhERPeLDG6t_rise";
 
 /// Editable copy for the K-12 Educators training. `#[serde(default)]` required
 /// (see [`crate::training::foundations::FoundationsContent`]).
@@ -75,8 +80,7 @@ impl Default for K12Content {
                 .to_string(),
             // Base URL of the K-12 Rise package. It is wrapped per-user with the
             // LRS launch parameters at render time (see `build_steps`).
-            articulate_url: "https://media.scistarter.org/k12/scormdriver/indexAPI.html"
-                .to_string(),
+            articulate_url: K12_URL.to_string(),
             articulate_image: "https://orrery-media.s3.amazonaws.com/attr/2026-07/Citizen_Science_in_K-12_Education.png".to_string(),
             claim_heading: "Congratulations!".to_string(),
             claim_html: r#"<p>🎉 Congratulations on completing the Citizen Science for K-12 Educators Training. 🎉
@@ -146,6 +150,7 @@ async fn build_content(
     .unwrap_or_default();
 
     Ok(TrainingContent {
+        chrome: TrainingChrome::default(),
         breadcrumb_label: content.title.clone(),
         badge_image: content.badge_image.clone(),
         badge_alt: "Citizen Science for K-12 Educators badge".to_string(),
@@ -199,22 +204,16 @@ async fn build_steps(content: &K12Content, user_info: &Option<Arc<BasicInfo>>) -
             .map(|user| user.handle.clone())
             .unwrap_or_default(),
         next_path: BASE_PATH.to_string(),
+        chrome: TrainingChrome::default(),
     }
     .render_once()
     .unwrap_or_default();
 
-    // Wrap the Rise base URL with this user's LRS launch parameters (xAPI
-    // actor + JWT + activity id), so completion reports back through the LRS
-    // to the xAPI webhook. Logged-out visitors just see the bare base URL.
-    let tutorial_href = match user_info {
-        Some(user) => format!(
-            "{}?{}",
-            content.articulate_url,
-            ArticulateParams::new(LRS_URL, user.clone())
-                .with_activity_id("http://Fr0w9cmLH3BLsC9yKP_zbzhERPeLDG6t_rise")
-        ),
-        None => content.articulate_url.clone(),
-    };
+    let tutorial_href = tutorial_launch_url(
+        module_url(&content.articulate_url, K12_URL),
+        Some(K12_ACTIVITY_ID),
+        user_info,
+    );
 
     let tutorial_body = TutorialBody {
         intro: content.tutorial_intro.clone(),

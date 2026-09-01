@@ -15,13 +15,18 @@ use sailfish::TemplateOnce;
 use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
 use crate::training::{
-    self, ArticulateCard, SidebarBody, SigninBody, StepView, StepsView, TrainingContent,
-    TutorialBody, linear_states, open_flags, render_page, render_progress_fragment,
+    self, ArticulateCard, SidebarBody, SigninBody, StepView, StepsView, TrainingChrome,
+    TrainingContent, TutorialBody, linear_states, module_url, open_flags, render_page,
+    render_progress_fragment, tutorial_launch_url,
 };
 
 const BASE_PATH: &str = "/training/libraries-hubs";
 const PROGRESS_PATH: &str = "/training/libraries-hubs/-progress";
 const SLUG: &str = "libraries-hubs";
+
+// An older Rise export: it reports its result without a launch activity id,
+// but not without the rest of the launch context.
+const LIBRARIES_URL: &str = "https://media.scistarter.org/libraries-hubs-v2/index.html";
 
 /// Editable copy for the Libraries & Hubs training. `#[serde(default)]` required
 /// (see [`crate::training::foundations::FoundationsContent`]).
@@ -73,7 +78,7 @@ impl Default for LibrariesContent {
             prereq_html: r#"<p>Complete the <a href="/training/foundations">Foundations of Citizen Science</a> training module and earn the badge to access the rest of this training.</p>"#.to_string(),
             tutorial_heading: "Complete the Libraries as Community Hubs for Citizen Science Tutorial and Quiz".to_string(),
             tutorial_intro: r#"Click <q>Start</q> to begin the self-guided tutorial."#.to_string(),
-            articulate_url: "#".to_string(),
+            articulate_url: LIBRARIES_URL.to_string(),
             articulate_image: "https://static.scistarter.org/img/training/libraries.png".to_string(),
             supplemental_heading: "Join the Citizen and Community Science Library Network".to_string(),
             supplemental_html: r#"<p>The Library Network provides free resources, peer-to-peer learning and more to support you and your library. Complete the brief form <a href="https://scistarter.org/go/library-network?next=/training/libraries-hubs">here</a>.</p>"#.to_string(),
@@ -154,6 +159,7 @@ async fn build_content(
     .unwrap_or_default();
 
     Ok(TrainingContent {
+        chrome: TrainingChrome::default(),
         breadcrumb_label: content.title.clone(),
         badge_image: content.badge_image.clone(),
         badge_alt: "Libraries as Community Hubs badge".to_string(),
@@ -217,6 +223,7 @@ async fn build_steps(content: &LibrariesContent, user_info: &Option<Arc<BasicInf
             .map(|user| user.handle.clone())
             .unwrap_or_default(),
         next_path: BASE_PATH.to_string(),
+        chrome: TrainingChrome::default(),
     }
     .render_once()
     .unwrap_or_default();
@@ -224,7 +231,11 @@ async fn build_steps(content: &LibrariesContent, user_info: &Option<Arc<BasicInf
     let tutorial_body = TutorialBody {
         intro: content.tutorial_intro.clone(),
         cards: vec![ArticulateCard {
-            href: content.articulate_url.clone(),
+            href: tutorial_launch_url(
+                module_url(&content.articulate_url, LIBRARIES_URL),
+                None,
+                user_info,
+            ),
             image: content.articulate_image.clone(),
         }],
         extra: String::new(),

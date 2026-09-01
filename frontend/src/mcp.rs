@@ -6,10 +6,11 @@
 //! The handler in this file (`mcp_handler`, mounted at `/-mcp`) is
 //! public and read-only. The [`content`] submodule provides a separate,
 //! token-authenticated endpoint for staff, serving both its own content
-//! editing tools and the database query tools in [`query`]. It reuses
-//! the JSON-RPC scaffolding defined here.
+//! editing tools, the email tools in [`email`], and the database query
+//! tools in [`query`]. It reuses the JSON-RPC scaffolding defined here.
 
 pub mod content;
+pub mod email;
 pub mod query;
 
 use anyhow::Error;

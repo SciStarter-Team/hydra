@@ -2,6 +2,8 @@
 
 use async_nats::service::Request;
 use common::badge::Badge;
+use common::message::dashboard::EntitySummary;
+use common::message::log::ProjectParticipationRecord;
 use common::message::user::{
     FoundationsStateEntry, FunnelStage, TrainingStatesResponse, UserAndBadge, WorkflowFunnel,
     WorkflowFunnelResponse, WorkflowProgressRequest, WorkflowProgressResponse,
@@ -9,10 +11,32 @@ use common::message::user::{
     WorkflowTutorialCountResponse, WorkflowType,
 };
 use common::{
-    service::{TriggerEvent, decode_structured_message, send, trigger_email},
+    // Aliased the way forum-service names it: `request` is also what this
+    // module calls the message it is answering, and the two must not collide.
+    service::{
+        TriggerEvent, decode_structured_message, request as nats_request, send, trigger_email,
+    },
     shared::db,
 };
 use ulid::Ulid;
+
+/// The project page standing for the Foundations of Citizen Science training
+/// module, which completing the module records a contribution against.
+const FOUNDATIONS_SLUG: &str = "foundations-of-citizen-science-training-module";
+
+/// Whether SciStarter watched an account do the work it is being credited for.
+///
+/// Completing the Foundations module records a participation contribution
+/// against the module's own project page, and a contribution is a claim that
+/// the participation happened here -- it joins the account's project history
+/// and its acts count toward the million. A cohort credited outright did the
+/// work somewhere this site never saw, so the same completion earns them the
+/// badge without the claim.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Participation {
+    Observed,
+    CreditedOutright,
+}
 
 /// Record workflow progress step completion
 pub async fn record_progress(req: &Request) -> Result<WorkflowProgressResponse, anyhow::Error> {
@@ -92,6 +116,14 @@ async fn update_foundations_progress(
             if result.rows_affected() > 0 {
                 trigger_email(TriggerEvent::FoundationsTutorial, user_ulid, None).await?;
             }
+
+            // The tutorial can be the last step standing: participation in the
+            // module's projects advances it whether or not the tutorial has
+            // been watched yet, and the steps are dated columns rather than a
+            // position, so somebody who did both projects first arrives here
+            // already finished. Checking only on the project steps would leave
+            // them needing a third project to be told so.
+            badge_granted = check_foundations_badge(user_id, Participation::Observed).await?;
         }
         "squirrel" => {
             let result = sqlx::query!(
@@ -107,7 +139,7 @@ async fn update_foundations_progress(
             }
 
             // Check if badge should be granted (need tutorial + 2 projects)
-            badge_granted = check_foundations_badge(user_id).await?;
+            badge_granted = check_foundations_badge(user_id, Participation::Observed).await?;
         }
         "stall" => {
             let result = sqlx::query!(
@@ -122,7 +154,7 @@ async fn update_foundations_progress(
                 trigger_email(TriggerEvent::FoundationsStall, user_ulid, None).await?;
             }
 
-            badge_granted = check_foundations_badge(user_id).await?;
+            badge_granted = check_foundations_badge(user_id, Participation::Observed).await?;
         }
         "debris" => {
             let result = sqlx::query!(
@@ -137,7 +169,7 @@ async fn update_foundations_progress(
                 trigger_email(TriggerEvent::FoundationsDebris, user_ulid, None).await?;
             }
 
-            badge_granted = check_foundations_badge(user_id).await?;
+            badge_granted = check_foundations_badge(user_id, Participation::Observed).await?;
         }
         _ => {}
     }
@@ -160,10 +192,11 @@ async fn update_foundations_progress(
 /// per-step emails are deliberately not sent: nobody is being told they just
 /// finished a step they did off-site weeks ago.
 ///
-/// Note what it does not do: no participation is recorded for the two
-/// projects, so they do not join the account's project history and the acts do
-/// not count toward the million. The claim is that the module is complete, not
-/// that the site watched it happen.
+/// Note what it does not do: no participation is recorded -- not for the two
+/// projects, and not for the module itself, which is why the badge check runs
+/// as [`Participation::CreditedOutright`]. So none of it joins the account's
+/// project history and none of the acts count toward the million. The claim is
+/// that the module is complete, not that the site watched it happen.
 pub async fn credit_foundations_cohort(user_id: &str) -> Result<bool, anyhow::Error> {
     let now = jiff::Zoned::now().to_string();
 
@@ -188,11 +221,48 @@ pub async fn credit_foundations_cohort(user_id: &str) -> Result<bool, anyhow::Er
     .execute(db())
     .await?;
 
-    check_foundations_badge(user_id).await
+    check_foundations_badge(user_id, Participation::CreditedOutright).await
+}
+
+/// Record the participation contribution that finishing the Foundations module
+/// earns, against the module's own project page.
+///
+/// The entity tables live in the frontend's database, so the id the log
+/// service files the contribution under has to be asked for by slug.
+async fn record_foundations_participation(user_id: Ulid) -> Result<(), anyhow::Error> {
+    let summary: Option<EntitySummary> = nats_request(
+        "frontend.entity.summary_by_slug",
+        FOUNDATIONS_SLUG.to_string(),
+    )
+    .await?;
+
+    let summary = summary
+        .ok_or_else(|| anyhow::anyhow!("no project carries the slug `{FOUNDATIONS_SLUG}`"))?;
+
+    send(
+        "log.project_participation_record",
+        ProjectParticipationRecord {
+            user_id,
+            project_id: summary.id.to_string(),
+            origin: Some(1), // origin 1 = SciStarter's own bookkeeping
+            when: None,
+            duration: Some(300.0),
+            where_point: None,
+            magnitude: Some(1),
+            authenticated: Some(true),
+            extra: Some(String::new()),
+            fidelity: Some(1.0),
+            task_name: Some("collection".to_string()),
+        },
+    )
+    .await
 }
 
 /// Check if Foundations badge should be granted (hour1 + 2 of 3 projects)
-async fn check_foundations_badge(user_id: &str) -> Result<bool, anyhow::Error> {
+async fn check_foundations_badge(
+    user_id: &str,
+    participation: Participation,
+) -> Result<bool, anyhow::Error> {
     let row = sqlx::query!(
         r#"SELECT
             hour1_completed_at IS NOT NULL as "has_hour1: bool",
@@ -249,6 +319,23 @@ async fn check_foundations_badge(user_id: &str) -> Result<bool, anyhow::Error> {
         // Trigger email notification
         trigger_email(TriggerEvent::BadgeFoundations, user_ulid, None).await?;
 
+        // The module's own contribution, recorded here at the end of it rather
+        // than when the tutorial reports itself finished. The tutorial is one
+        // step of several -- the projects come after it -- and an account that
+        // watches it and stops has not participated in the module, however far
+        // into it that leaves them.
+        //
+        // Not fatal: the badge is earned either way, and this is the one place
+        // that can grant it. A contribution lost to an unreachable frontend or
+        // log service is worth strictly less than a badge lost with it.
+        if participation == Participation::Observed
+            && let Err(error) = record_foundations_participation(user_ulid).await
+        {
+            eprintln!(
+                "Foundations completion for {user_id} was not recorded as participation: {error}"
+            );
+        }
+
         return Ok(true);
     }
 
@@ -283,6 +370,15 @@ async fn update_libraries_hubs_progress(
             if result.rows_affected() > 0 {
                 trigger_email(TriggerEvent::LibrariesHubsTutorial, user_ulid, None).await?;
             }
+
+            // The tutorial can be the last step standing. The supplemental
+            // signup is its own form, reachable without the training, so it
+            // often comes first -- orrery reads the signup as it enters
+            // `hour2` and goes straight to `supplemental` for exactly that
+            // reason. Checking only on the signup would leave somebody who
+            // did it in that order holding both steps and no badge, with
+            // nothing left to do that would look again.
+            return check_libraries_hubs_badge(user_id).await;
         }
         "supplemental" => {
             let result = sqlx::query!(
@@ -489,14 +585,31 @@ async fn update_higher_ed_progress(
 }
 
 /// Update Data Ethics progress (single step - grants badge immediately)
+/// The badge-earned email for the build of the Data Ethics tutorial a step
+/// reports, or `None` if the step is not one of the module's.
+///
+/// One badge and one completion column for all three builds -- only the mail
+/// differs, because the language a learner worked in is known at this moment
+/// and nowhere else. The step spellings are orrery's
+/// `DataEthicsState.TUTORIAL_EMAILS` keys, so a signal recorded on either side
+/// means the same thing.
+fn data_ethics_badge_email(step: &str) -> Option<TriggerEvent> {
+    match step {
+        "tutorial" => Some(TriggerEvent::BadgeDataEthics),
+        "tutorial-es" => Some(TriggerEvent::BadgeDataEthicsEs),
+        "tutorial-pt" => Some(TriggerEvent::BadgeDataEthicsPt),
+        _ => None,
+    }
+}
+
 async fn update_data_ethics_progress(
     user_id: &str,
     step: &str,
     now: &str,
 ) -> Result<bool, anyhow::Error> {
-    if step != "tutorial" {
+    let Some(badge_email) = data_ethics_badge_email(step) else {
         return Ok(false);
-    }
+    };
 
     let result = sqlx::query!(
         "INSERT OR IGNORE INTO data_ethics_progress (user_id, tutorial_completed_at, badge_granted_at) VALUES (?, ?, ?)",
@@ -525,8 +638,8 @@ async fn update_data_ethics_progress(
         )
         .await?;
 
-        // Trigger email notification
-        trigger_email(TriggerEvent::BadgeDataEthics, user_ulid, None).await?;
+        // Trigger email notification, in the language they worked in.
+        trigger_email(badge_email, user_ulid, None).await?;
 
         Ok(true)
     } else {

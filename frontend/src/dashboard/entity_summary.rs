@@ -18,6 +18,17 @@ pub async fn summary_by_id(req: &Request) -> Result<Option<EntitySummary>, Error
     Ok(lookup_batch(&[id]).await?.into_iter().next())
 }
 
+/// NATS `frontend.entity.summary_by_slug` endpoint. The same resolution the
+/// other way around: a slug (sent as its string form) to its `EntitySummary`,
+/// or `None` when no project/event carries it. The entity tables live only in
+/// the frontend's database, so a service that knows a project by the name it
+/// is written down as -- user-service crediting the Foundations module's own
+/// project page, say -- has to ask for the id here.
+pub async fn summary_by_slug(req: &Request) -> Result<Option<EntitySummary>, Error> {
+    let slug: String = flexbuffers::from_slice(&req.message.payload)?;
+    Ok(lookup_batch_by_slug(&[slug]).await?.into_iter().next())
+}
+
 /// Look up entity summaries for the given target ids (project_id or
 /// event_id strings). Performs a local read against the frontend's
 /// LoadStorePeered tables. Unknown ids are silently dropped. The

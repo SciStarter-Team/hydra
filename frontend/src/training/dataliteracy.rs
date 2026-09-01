@@ -13,13 +13,19 @@ use sailfish::TemplateOnce;
 use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
 use crate::training::{
-    self, ArticulateCard, ClaimBody, SidebarBody, SigninBody, StepView, StepsView, TrainingContent,
-    TutorialBody, linear_states, open_flags, render_page, render_progress_fragment,
+    self, ArticulateCard, ClaimBody, SidebarBody, SigninBody, StepView, StepsView, TrainingChrome,
+    TrainingContent, TutorialBody, linear_states, module_url, open_flags, render_page,
+    render_progress_fragment, tutorial_launch_url,
 };
 
 const BASE_PATH: &str = "/training/data-literacy";
 const PROGRESS_PATH: &str = "/training/data-literacy/-progress";
 const SLUG: &str = "data-literacy";
+
+// The tutorial's two builds, both older Rise exports that report without a
+// launch activity id.
+const DATALITERACY_EN_URL: &str = "https://media.scistarter.org/dataliteracy/index.html";
+const DATALITERACY_ES_URL: &str = "https://media.scistarter.org/dataliteracy/es/index.html";
 
 /// Editable copy for the Data Literacy training. `#[serde(default)]` is required
 /// (see [`crate::training::foundations::FoundationsContent`]).
@@ -67,9 +73,9 @@ impl Default for DataLiteracyContent {
             account_heading: "SciStarter Account".to_string(),
             tutorial_heading: "Self-guided tutorial and quiz".to_string(),
             tutorial_intro: r#"<b>Complete this self-guided tutorial and quiz to claim your badge.</b>"#.to_string(),
-            articulate_en: "https://media.scistarter.org/dataliteracy/index.html".to_string(),
+            articulate_en: DATALITERACY_EN_URL.to_string(),
             articulate_en_image: "https://static.scistarter.org/img/training/data-literacy.png".to_string(),
-            articulate_es: "https://media.scistarter.org/dataliteracy/es/index.html".to_string(),
+            articulate_es: DATALITERACY_ES_URL.to_string(),
             articulate_es_image: "https://static.scistarter.org/img/training/data-literacy-spanish.png".to_string(),
             claim_heading: "Claim your badge".to_string(),
             claim_html: r#"<h2>Congratulations! It's time to claim your badge.</h2>
@@ -137,6 +143,7 @@ async fn build_content(
     .unwrap_or_default();
 
     Ok(TrainingContent {
+        chrome: TrainingChrome::default(),
         breadcrumb_label: content.title.clone(),
         badge_image: content.badge_image.clone(),
         badge_alt: "Data Literacy badge".to_string(),
@@ -185,6 +192,7 @@ async fn build_steps(
             .map(|user| user.handle.clone())
             .unwrap_or_default(),
         next_path: BASE_PATH.to_string(),
+        chrome: TrainingChrome::default(),
     }
     .render_once()
     .unwrap_or_default();
@@ -193,11 +201,19 @@ async fn build_steps(
         intro: content.tutorial_intro.clone(),
         cards: vec![
             ArticulateCard {
-                href: content.articulate_en.clone(),
+                href: tutorial_launch_url(
+                    module_url(&content.articulate_en, DATALITERACY_EN_URL),
+                    None,
+                    user_info,
+                ),
                 image: content.articulate_en_image.clone(),
             },
             ArticulateCard {
-                href: content.articulate_es.clone(),
+                href: tutorial_launch_url(
+                    module_url(&content.articulate_es, DATALITERACY_ES_URL),
+                    None,
+                    user_info,
+                ),
                 image: content.articulate_es_image.clone(),
             },
         ],
