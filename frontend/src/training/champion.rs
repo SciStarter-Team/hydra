@@ -12,7 +12,7 @@ use anyhow::Error;
 use common::message::dashboard::AmbassadorApplication;
 use common::message::user::{BasicInfo, WorkflowStatusResponse, WorkflowType};
 use common::service::request;
-use poem::{Response, handler, web::Redirect};
+use poem::{Response, handler};
 use sailfish::TemplateOnce;
 
 use crate::middleware::authorization::Authenticated;
@@ -168,13 +168,6 @@ pub async fn progress(Authenticated(user_info): Authenticated) -> Result<Respons
     let steps = build_steps(&content, &user_info).await;
     let count = training::tutorials_completed(WorkflowType::Ambassador).await;
     render_progress_fragment(steps, count)
-}
-
-/// 301 redirect to the canonical page. Mounted for both the legacy
-/// `/training-champion` and the outdated `/training-ambassador`.
-#[handler]
-pub async fn legacy_redirect() -> Redirect {
-    Redirect::moved_permanent(BASE_PATH)
 }
 
 async fn build_content(

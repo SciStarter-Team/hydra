@@ -516,6 +516,50 @@ async fn entities_delete(
         .body(html))
 }
 
+/// Tell an event's submitter that it is published, with what the mail names:
+/// the event and a link to it.
+async fn announce_event_published(target: &EntityTarget) -> Result<(), anyhow::Error> {
+    let EntityTarget::Ulid(event_ulid) = target else {
+        return Ok(());
+    };
+
+    let event_id = event_ulid.to_string();
+    let event = sqlx::query!(
+        r#"SELECT e.name, e.page_creator_id,
+                  (SELECT n.slug FROM entities n
+                    WHERE n.kind = 'Event' AND n.target = e.event_id) as "slug?"
+             FROM events e WHERE e.event_id = ?"#,
+        event_id
+    )
+    .fetch_one(db())
+    .await?;
+
+    let creator: Ulid = event.page_creator_id.parse().map_err(|_| {
+        anyhow::anyhow!(
+            "page_creator_id {:?} is not a user id",
+            event.page_creator_id
+        )
+    })?;
+
+    common::service::trigger_email(
+        common::service::TriggerEvent::EventPublished,
+        creator,
+        Some(&[
+            ("project_name".to_string(), event.name),
+            ("project_id".to_string(), event_id),
+            (
+                "project_link".to_string(),
+                format!(
+                    "https://{}/events/{}",
+                    env!("DOMAIN"),
+                    event.slug.unwrap_or_default()
+                ),
+            ),
+        ]),
+    )
+    .await
+}
+
 #[handler]
 async fn entities_publish_toggle(
     Path(slug): Path<String>,
@@ -550,6 +594,16 @@ async fn entities_publish_toggle(
             Some(slug.clone()),
         )
         .await;
+    }
+
+    // Publishing an event here is what publishing a project is in
+    // `projects_publish`: the moment its submitter is told. Events reach this
+    // generic toggle rather than a kind-specific handler, so the notice is
+    // raised from here. Non-fatal -- the entity is published either way.
+    if publish && matches!(updated_entity.kind(), EntityKind::Event) {
+        if let Err(error) = announce_event_published(updated_entity.target()).await {
+            eprintln!("Publish notice for event {slug} not sent: {error}");
+        }
     }
 
     let entity_with_info = create_entity_with_info(&updated_entity)

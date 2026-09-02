@@ -40,6 +40,25 @@ mod tests {
         assert_eq!(result, "Hello Alice, your email is alice@example.com");
     }
 
+    /// Per-send values reach the merge upper-cased (see `processor.rs`), which
+    /// is the only spelling a template carries: the orrery import rewrites
+    /// `{project_name}` to `{{PROJECT_NAME}}`, and every caller passing one
+    /// spells it `project_name`. Both the body and the subject are merged from
+    /// this same field set.
+    #[test]
+    fn a_per_send_value_matches_the_upper_case_field_a_template_carries() {
+        let template = "Regarding Your SciStarter Submission: {{PROJECT_NAME}}";
+        let names = vec!["project_name".to_string().to_uppercase()];
+        let values = vec!["Project Squirrel".to_string()];
+
+        let result = merge_template(template, &names, &values).unwrap();
+
+        assert_eq!(
+            result,
+            "Regarding Your SciStarter Submission: Project Squirrel"
+        );
+    }
+
     #[test]
     fn test_merge_template_missing_fields() {
         let template = "Hello {{FIRST_NAME}}, {{MISSING}} field";

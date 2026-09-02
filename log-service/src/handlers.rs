@@ -1,4 +1,5 @@
 use anyhow::Result;
+use common::message::dashboard::{EntitySummary, EntitySummaryKind};
 use common::{
     message::log::{
         ActsOfScienceCreateRequest, ActsOfScienceCreateResponse, ActsOfScienceSource,
@@ -20,7 +21,9 @@ use common::{
         UserRecentVisitsResponse,
     },
     query::{QUERY_TIMEOUT, QueryRequest, QueryResponse},
-    service::{TriggerEvent, decode_structured_message, send, trigger_email},
+    service::{
+        TriggerEvent, decode_structured_message, request as nats_request, send, trigger_email,
+    },
 };
 use datafusion::prelude::*;
 use ulid::Ulid;
@@ -938,10 +941,33 @@ async fn announce_first_contribution(
         return Ok(());
     }
 
+    // The mail names the project and links its page, so the id alone is not
+    // enough. The entity tables live in the frontend's database; ask it.
+    let summary: Option<EntitySummary> =
+        nats_request("frontend.entity.summary_by_id", record.project_id.clone())
+            .await
+            .unwrap_or(None);
+
+    let mut fields = vec![("project_id".to_string(), record.project_id.clone())];
+
+    if let Some(summary) = summary {
+        // The same two canonical paths the frontend's `entity_link` builds;
+        // that helper lives in the frontend crate and is not reachable here.
+        let prefix = match summary.kind {
+            EntitySummaryKind::Project => "projects",
+            EntitySummaryKind::Event => "events",
+        };
+        fields.push((
+            "project_page_url".to_string(),
+            format!("https://{}/{prefix}/{}", env!("DOMAIN"), summary.slug),
+        ));
+        fields.push(("project_name".to_string(), summary.name));
+    }
+
     trigger_email(
         TriggerEvent::FirstContribution,
         record.user_id,
-        Some(&[("project_id".to_string(), record.project_id.clone())]),
+        Some(&fields),
     )
     .await?;
 

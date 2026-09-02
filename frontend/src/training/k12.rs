@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use anyhow::Error;
 use common::message::user::{BasicInfo, WorkflowStatusResponse, WorkflowType};
-use poem::{Response, handler, web::Redirect};
+use poem::{Response, handler};
 use sailfish::TemplateOnce;
 
 use crate::middleware::authorization::Authenticated;
@@ -127,12 +127,6 @@ pub async fn progress(Authenticated(user_info): Authenticated) -> Result<Respons
     let steps = build_steps(&content, &user_info).await;
     let count = training::tutorials_completed(WorkflowType::K12).await;
     render_progress_fragment(steps, count)
-}
-
-/// 301 redirect from the legacy `/training-k12` URL.
-#[handler]
-pub async fn legacy_redirect() -> Redirect {
-    Redirect::moved_permanent(BASE_PATH)
 }
 
 async fn build_content(

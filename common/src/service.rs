@@ -786,6 +786,11 @@ pub enum TriggerEvent {
     /// Sent when a project is published
     ProjectPublished,
 
+    /// Sent when an event is published. Its own event rather than a kind
+    /// carried on `ProjectPublished`, because a trigger is chosen by name and
+    /// a site may well want to say something different about an event.
+    EventPublished,
+
     /// Sent when a new project is submitted for review (staff notification)
     ProjectCreatedStaff,
 
@@ -855,6 +860,7 @@ impl TriggerEvent {
             Self::CertificateEarned => "When a user earns a certificate",
             Self::EmailValidation => "When a user needs to verify their email address",
             Self::ProjectPublished => "When a project is published",
+            Self::EventPublished => "When an event is published",
             Self::ProjectCreatedStaff => {
                 "When a new project is submitted for review (staff notification)"
             }
@@ -879,6 +885,7 @@ impl TriggerEvent {
             Self::ProjectSubmitted
             | Self::ProjectRejected
             | Self::ProjectPublished
+            | Self::EventPublished
             | Self::ProjectCreatedStaff => "project",
             Self::BadgeFoundations
             | Self::BadgeLibrariesHubs

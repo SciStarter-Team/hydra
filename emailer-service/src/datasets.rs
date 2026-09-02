@@ -70,6 +70,17 @@ impl DataSet for UserIdentity {
                 example: "jane.smith@example.com".to_string(),
             },
             VariableInfo {
+                name: "ULID".to_string(),
+                description: "User's own id, which is how a badge page addresses its holder"
+                    .to_string(),
+                example: "01ARZ3NDEKTSV4RRFFQ69G5FAV".to_string(),
+            },
+            VariableInfo {
+                name: "ENCODED_EMAIL".to_string(),
+                description: "User's primary email, percent-encoded for use in a link".to_string(),
+                example: "jane.smith%40example.com".to_string(),
+            },
+            VariableInfo {
                 name: "HANDLE".to_string(),
                 description: "User's unique handle/username".to_string(),
                 example: "janesmith42".to_string(),
@@ -102,13 +113,17 @@ impl DataSet for UserIdentity {
                 "FIRST_NAME".to_string(),
                 "LAST_NAME".to_string(),
                 "EMAIL".to_string(),
+                "ULID".to_string(),
+                "ENCODED_EMAIL".to_string(),
                 "HANDLE".to_string(),
                 "FRIENDLY_NAME".to_string(),
             ],
             vec![
                 user.first_name,
                 user.last_name,
-                user.primary_email,
+                user.primary_email.clone(),
+                user_id.to_string(),
+                urlencoding::encode(&user.primary_email).into_owned(),
                 user.handle,
                 friendly_name,
             ],

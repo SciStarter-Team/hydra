@@ -213,8 +213,13 @@ pub async fn synchronize_message_templates() {
                 Ok(None) => {}
             }
 
-            // Convert merge field syntax: {fieldname} → {{FIELDNAME}}
+            // Convert merge field syntax: {fieldname} → {{FIELDNAME}}. The
+            // subject is merged at send time from the same field set as the
+            // body, so it has to be converted too -- left raw, a subject like
+            // "Regarding Your SciStarter Submission: {project_name}" can never
+            // match and ships with the brace still in it.
             let converted_html = convert_merge_syntax(&template.body);
+            let converted_subject = convert_merge_syntax(&template.subject);
 
             // Convert HTML body to Quill Delta
             let body_delta = match common::quill::html_to_delta(&converted_html) {
@@ -236,7 +241,7 @@ pub async fn synchronize_message_templates() {
                 r#"INSERT INTO oneoff_emails (oneoff_email_id, subject, body_delta, datasets, created_at, archived, legacy_slug)
                    VALUES (?, ?, ?, ?, ?, 0, ?)"#,
                 oneoff_email_id,
-                template.subject,
+                converted_subject,
                 body_delta,
                 datasets_json,
                 now,
@@ -254,13 +259,26 @@ pub async fn synchronize_message_templates() {
             }
         }
 
-        misc::set("template-sync-last-id", bookmark_id)
-            .await
-            .expect("Saving template sync last_id failed");
-
+        // The bookmark only ever walks forward, so whatever sat below it when
+        // the sync first ran is never asked for again: `project-created-admin`,
+        // `first-contribution` and `people-finder-confirmation` -- orrery ids 4,
+        // 87 and 95, all of them transactional -- had been missing since the
+        // beginning while 100 later templates came across.
+        //
+        // Inserting is keyed on `legacy_slug` and skips what is already held,
+        // so a pass over everything costs a couple of requests and inserts
+        // nothing twice. When a pass runs out of new ids, the next one starts
+        // from the beginning: a gap then heals itself rather than lasting
+        // forever.
         if got_templates == 500 {
+            misc::set("template-sync-last-id", bookmark_id)
+                .await
+                .expect("Saving template sync last_id failed");
             sleep(Duration::from_secs(60)).await;
         } else {
+            misc::set("template-sync-last-id", 0)
+                .await
+                .expect("Saving template sync last_id failed");
             sleep(Duration::from_secs(60 * 60)).await;
         }
     }

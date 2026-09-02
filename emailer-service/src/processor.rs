@@ -274,10 +274,19 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
             }
         }
 
-        // Add additional custom merge fields
+        // Add additional custom merge fields.
+        //
+        // Upper-cased on the way in, because that is the one spelling a merge
+        // field has in a template: the datasets above supply upper-case names,
+        // and the orrery import rewrites `{project_name}` to `{{PROJECT_NAME}}`.
+        // Every caller passing per-send values spells them lower-case, so
+        // matching them up here is what makes those values arrive at all --
+        // done once, rather than trusted to every present and future call site.
         let additional_data: Vec<(String, String)> = serde_json::from_str(&item.additional_data)?;
-        let (add_names, add_values): (Vec<String>, Vec<String>) =
-            additional_data.into_iter().unzip();
+        let (add_names, add_values): (Vec<String>, Vec<String>) = additional_data
+            .into_iter()
+            .map(|(name, value)| (name.to_uppercase(), value))
+            .unzip();
         all_field_names.extend(add_names);
         all_field_values.extend(add_values);
 

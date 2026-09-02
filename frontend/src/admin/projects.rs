@@ -1590,7 +1590,10 @@ async fn projects_publish(
 
     // Fire publish trigger to the project creator
     if let Ok(project_info) = sqlx::query!(
-        "SELECT name, page_creator_id FROM projects WHERE project_id = ?",
+        r#"SELECT p.name, p.page_creator_id,
+                  (SELECT e.slug FROM entities e
+                    WHERE e.kind = 'Project' AND e.target = p.project_id) as "slug?"
+             FROM projects p WHERE p.project_id = ?"#,
         project_id_str
     )
     .fetch_one(db())
@@ -1603,6 +1606,14 @@ async fn projects_publish(
                 Some(&[
                     ("project_name".to_string(), project_info.name),
                     ("project_id".to_string(), project_id_str.clone()),
+                    (
+                        "project_link".to_string(),
+                        format!(
+                            "https://{}/projects/{}",
+                            env!("DOMAIN"),
+                            project_info.slug.unwrap_or_default()
+                        ),
+                    ),
                 ]),
             )
             .await

@@ -454,27 +454,10 @@ fn user_facing() -> impl Endpoint {
             "/training/foundations/-progress",
             get(training::foundations::progress),
         )
-        .at(
-            "/training-foundations",
-            get(training::foundations::legacy_redirect),
-        )
-        .at(
-            "/training-foundations-project-squirrel-training",
-            get(training::foundations::legacy_squirrel_redirect),
-        )
-        // Orrery's slug carries those capitals; this is the URL in circulation.
-        .at(
-            "/training-foundations-Stall-Catchers-training",
-            get(training::foundations::legacy_stall_redirect),
-        )
         .at("/training/data-ethics", get(training::dataethics::page))
         .at(
             "/training/data-ethics/-progress",
             get(training::dataethics::progress),
-        )
-        .at(
-            "/training-dataethics",
-            get(training::dataethics::legacy_redirect),
         )
         .at(
             "/training/data-ethics-es",
@@ -485,10 +468,6 @@ fn user_facing() -> impl Endpoint {
             get(training::dataethics::progress_es),
         )
         .at(
-            "/training-dataethics-es",
-            get(training::dataethics::legacy_redirect_es),
-        )
-        .at(
             "/training/data-ethics-pt",
             get(training::dataethics::page_pt),
         )
@@ -496,18 +475,10 @@ fn user_facing() -> impl Endpoint {
             "/training/data-ethics-pt/-progress",
             get(training::dataethics::progress_pt),
         )
-        .at(
-            "/training-dataethics-pt",
-            get(training::dataethics::legacy_redirect_pt),
-        )
         .at("/training/data-literacy", get(training::dataliteracy::page))
         .at(
             "/training/data-literacy/-progress",
             get(training::dataliteracy::progress),
-        )
-        .at(
-            "/training-data-literacy",
-            get(training::dataliteracy::legacy_redirect),
         )
         .at("/training/higher-ed", get(training::highered::page))
         .at(
@@ -518,18 +489,10 @@ fn user_facing() -> impl Endpoint {
             "/training/higher-ed/explore",
             get(training::highered::explore),
         )
-        .at(
-            "/training-highered",
-            get(training::highered::legacy_redirect),
-        )
         .at("/training/libraries-hubs", get(training::libraries::page))
         .at(
             "/training/libraries-hubs/-progress",
             get(training::libraries::progress),
-        )
-        .at(
-            "/training-library",
-            get(training::libraries::legacy_redirect),
         )
         .at("/training/k12", get(training::k12::page))
         .at("/training/k12/-progress", get(training::k12::progress))
@@ -541,19 +504,10 @@ fn user_facing() -> impl Endpoint {
             "/l/acts-of-science-connected-apply",
             post(acts_connected::submit),
         )
-        .at("/training-k12", get(training::k12::legacy_redirect))
         .at("/training/champion", get(training::champion::page))
         .at(
             "/training/champion/-progress",
             get(training::champion::progress),
-        )
-        .at(
-            "/training-champion",
-            get(training::champion::legacy_redirect),
-        )
-        .at(
-            "/training-ambassador",
-            get(training::champion::legacy_redirect),
         )
         .at(
             "/ambassadors-apply",

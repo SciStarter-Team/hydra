@@ -62,7 +62,16 @@ pub async fn create_certificate(
     trigger_email(
         TriggerEvent::CertificateEarned,
         user_id,
+        // The mail links the certificate, so it needs the address rather than
+        // the id -- orrery interpolates the same `{certificate_url}`.
         Some(&[
+            (
+                "certificate_url".to_string(),
+                format!(
+                    "https://{}/-certificate/{certificate_id_str}",
+                    env!("DOMAIN")
+                ),
+            ),
             ("certificate_id".to_string(), certificate_id_str),
             ("project".to_string(), project),
             ("mode".to_string(), mode),

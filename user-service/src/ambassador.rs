@@ -1141,7 +1141,15 @@ async fn apply_review_effects(
         if !had_badge {
             // Native staff action (not a sync), so an email notification is
             // appropriate here.
-            trigger_email(TriggerEvent::BadgeAmbassador, user_id, None).await?;
+            trigger_email(
+                TriggerEvent::BadgeAmbassador,
+                user_id,
+                Some(&crate::workflow::badge_email_fields(
+                    Badge::SciStarterAmbassador,
+                    &now,
+                )),
+            )
+            .await?;
         }
     }
 

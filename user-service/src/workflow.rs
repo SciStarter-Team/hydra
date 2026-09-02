@@ -38,6 +38,24 @@ enum Participation {
     CreditedOutright,
 }
 
+/// The facts about a badge that its badge-earned mail interpolates.
+///
+/// Everything else it needs is about the holder rather than the badge -- their
+/// own id, which is how the badge page addresses them, and their email, which
+/// its confirm link carries -- and comes from the `user_identity` dataset, so
+/// a stored email for one of these has to declare that dataset.
+///
+/// Spelled in upper case because that is how the emailer's orrery import
+/// spells a merge field: `{badge_name}` in orrery's template arrives here as
+/// `{{BADGE_NAME}}`.
+pub fn badge_email_fields(badge: Badge, issued: &str) -> Vec<(String, String)> {
+    vec![
+        ("BADGE_NAME".to_string(), badge.name().to_string()),
+        ("BADGECLASS".to_string(), badge.badgeclass().to_string()),
+        ("BADGE_ISSUED".to_string(), issued.to_string()),
+    ]
+}
+
 /// Record workflow progress step completion
 pub async fn record_progress(req: &Request) -> Result<WorkflowProgressResponse, anyhow::Error> {
     let request: WorkflowProgressRequest = decode_structured_message(req.message.clone())?;
@@ -317,7 +335,15 @@ async fn check_foundations_badge(
         .await?;
 
         // Trigger email notification
-        trigger_email(TriggerEvent::BadgeFoundations, user_ulid, None).await?;
+        trigger_email(
+            TriggerEvent::BadgeFoundations,
+            user_ulid,
+            Some(&badge_email_fields(
+                Badge::FoundationsOfCitizenScience,
+                &now,
+            )),
+        )
+        .await?;
 
         // The module's own contribution, recorded here at the end of it rather
         // than when the tutorial reports itself finished. The tutorial is one
@@ -449,7 +475,15 @@ async fn check_libraries_hubs_badge(user_id: &str) -> Result<bool, anyhow::Error
         .await?;
 
         // Trigger email notification
-        trigger_email(TriggerEvent::BadgeLibrariesHubs, user_ulid, None).await?;
+        trigger_email(
+            TriggerEvent::BadgeLibrariesHubs,
+            user_ulid,
+            Some(&badge_email_fields(
+                Badge::LibrariesAsHubsForCitizenScience,
+                &now,
+            )),
+        )
+        .await?;
 
         return Ok(true);
     }
@@ -495,7 +529,15 @@ async fn update_data_literacy_progress(
         .await?;
 
         // Trigger email notification
-        trigger_email(TriggerEvent::BadgeDataLiteracy, user_ulid, None).await?;
+        trigger_email(
+            TriggerEvent::BadgeDataLiteracy,
+            user_ulid,
+            Some(&badge_email_fields(
+                Badge::BuildingDataLiteracyThroughCommunityAndCitizenScience,
+                &now,
+            )),
+        )
+        .await?;
 
         Ok(true)
     } else {
@@ -573,7 +615,15 @@ async fn update_higher_ed_progress(
                 )
                 .await?;
 
-                trigger_email(TriggerEvent::BadgeHigherEd, user_ulid, None).await?;
+                trigger_email(
+                    TriggerEvent::BadgeHigherEd,
+                    user_ulid,
+                    Some(&badge_email_fields(
+                        Badge::TeachingInHigherEducationWithCitizenScience,
+                        &now,
+                    )),
+                )
+                .await?;
 
                 Ok(true)
             } else {
@@ -639,7 +689,12 @@ async fn update_data_ethics_progress(
         .await?;
 
         // Trigger email notification, in the language they worked in.
-        trigger_email(badge_email, user_ulid, None).await?;
+        trigger_email(
+            badge_email,
+            user_ulid,
+            Some(&badge_email_fields(Badge::DataEthicsForPractitioners, now)),
+        )
+        .await?;
 
         Ok(true)
     } else {
@@ -685,7 +740,12 @@ async fn update_ideal_progress(
         .await?;
 
         // Trigger email notification
-        trigger_email(TriggerEvent::BadgeIdeal, user_ulid, None).await?;
+        trigger_email(
+            TriggerEvent::BadgeIdeal,
+            user_ulid,
+            Some(&badge_email_fields(Badge::IdealParticipatoryScience, &now)),
+        )
+        .await?;
 
         Ok(true)
     } else {
@@ -787,7 +847,15 @@ async fn update_k12_progress(user_id: &str, step: &str, now: &str) -> Result<boo
                 )
                 .await?;
 
-                trigger_email(TriggerEvent::BadgeK12, user_ulid, None).await?;
+                trigger_email(
+                    TriggerEvent::BadgeK12,
+                    user_ulid,
+                    Some(&badge_email_fields(
+                        Badge::CitizenScienceForK12Educators,
+                        &now,
+                    )),
+                )
+                .await?;
 
                 Ok(true)
             } else {

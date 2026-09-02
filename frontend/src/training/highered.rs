@@ -164,12 +164,6 @@ pub async fn explore(Authenticated(user_info): Authenticated) -> Redirect {
     Redirect::see_other(content.explore_url)
 }
 
-/// 301 redirect from the legacy `/training-highered` URL.
-#[handler]
-pub async fn legacy_redirect() -> Redirect {
-    Redirect::moved_permanent(BASE_PATH)
-}
-
 async fn build_content(
     content: &HigherEdContent,
     user_info: Option<Arc<BasicInfo>>,

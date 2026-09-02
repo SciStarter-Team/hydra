@@ -1992,6 +1992,10 @@ pub async fn persist_new_project(
     let merge = [
         ("project_name".to_string(), name.clone()),
         ("project_id".to_string(), project_id.to_string()),
+        (
+            "project_link".to_string(),
+            format!("https://{}/projects/{slug}", env!("DOMAIN")),
+        ),
     ];
     trigger_email(TriggerEvent::ProjectSubmitted, user_id, Some(&merge))
         .await
