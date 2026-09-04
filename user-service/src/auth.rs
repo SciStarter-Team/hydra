@@ -5,7 +5,7 @@ use common::{
     message::user::{
         BasicInfo, CompleteSignup, CompleteSignupResponse, DeferSignup, DeferSignupOutcome, Login,
         Signup, SnmProfile, UserAndBadge, normalize_tag, signup_grants_foundations,
-        signup_needs_protection,
+        signup_needs_protection, welcome_trigger_for_signup,
     },
     service::{TriggerEvent, log_activity, request, send, trigger_email},
     shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower},
@@ -252,8 +252,13 @@ async fn create_account(
 
     log_activity(None, "signup", user_id, None, None).await.ok();
 
+    // Some cohorts are welcomed in their own words. The tag decides which,
+    // as it does in orrery, and the trigger name is the only thing that
+    // differs -- a cohort with no welcome of its own gets the generic one.
+    let welcome = welcome_trigger_for_signup(&form.tags).unwrap_or(TriggerEvent::UserWelcome);
+
     trigger_email(
-        TriggerEvent::UserWelcome,
+        welcome,
         user_id,
         Some(&[("handle".to_string(), handle.clone())]),
     )

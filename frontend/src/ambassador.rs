@@ -1,4 +1,4 @@
-//! Public SciStarter Ambassador application (`/ambassadors-apply`).
+//! Public SciStarter Ambassador application (`/ambassador-apply`).
 //!
 //! Ported from orrery's `ambassador_apply` / `ambassador_application_save` /
 //! `ambassador_application_draft`. Gated behind the Foundations badge and the
@@ -34,7 +34,7 @@ use crate::component::{Component, Head, StandardLayout};
 use crate::middleware::authorization::Authenticated;
 use crate::training::fetch_status;
 
-const PATH: &str = "/ambassadors-apply";
+const PATH: &str = "/ambassador-apply";
 
 /// Whether the Ambassador program is currently accepting applications. When
 /// false the form still renders (and drafts save) but the submit control is
@@ -405,7 +405,7 @@ pub async fn submit(
     Form(form): Form<ApplyForm>,
 ) -> Result<Response, Error> {
     let Some(user) = user_info.clone() else {
-        return Ok(Redirect::see_other("/login?next=/ambassadors-apply").into_response());
+        return Ok(Redirect::see_other("/login?next=/ambassador-apply").into_response());
     };
     let gate = gate_for(&user_info).await;
 
@@ -571,7 +571,7 @@ pub async fn directory(
         pages: resp.pages,
         total: resp.total,
     };
-    let layout = StandardLayout::new("/ambassadors".to_string(), content)
+    let layout = StandardLayout::new("/ambassadors-directory".to_string(), content)
         .prepare(user_info)
         .await?;
     DirectoryPage {
@@ -619,7 +619,7 @@ pub async fn profile_page(
         viewer_first,
         viewer_last,
     };
-    let layout = StandardLayout::new(format!("/ambassadors/{id}"), content)
+    let layout = StandardLayout::new(format!("/ambassadors-directory/{id}"), content)
         .prepare(user_info)
         .await?;
     ProfilePage {
@@ -652,7 +652,8 @@ fn contact_result(html: &str) -> Response {
     poem::web::Html(html.to_string()).into_response()
 }
 
-/// Queue a contact message to an ambassador (`POST /ambassadors/:id/contact`).
+/// Queue a contact message to an ambassador
+/// (`POST /ambassadors-directory/:id/contact`).
 /// The message is held for staff moderation before delivery, so the visitor sees
 /// a "received, pending review" confirmation. HTMX swaps the returned fragment
 /// into the form's result slot.

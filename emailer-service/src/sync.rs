@@ -276,10 +276,21 @@ pub async fn synchronize_message_templates() {
                 .expect("Saving template sync last_id failed");
             sleep(Duration::from_secs(60)).await;
         } else {
+            // Rewinding is worth doing straight away rather than an hour from
+            // now: a pass that was already at the beginning has just seen
+            // everything, but one that started higher has not looked below its
+            // bookmark at all, and that is exactly the gap being closed.
+            let was_rewound = last_id == 0;
+
             misc::set("template-sync-last-id", 0)
                 .await
                 .expect("Saving template sync last_id failed");
-            sleep(Duration::from_secs(60 * 60)).await;
+
+            if was_rewound {
+                sleep(Duration::from_secs(60 * 60)).await;
+            } else {
+                sleep(Duration::from_secs(60)).await;
+            }
         }
     }
 }

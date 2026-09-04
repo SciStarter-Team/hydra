@@ -3364,6 +3364,11 @@ async fn main() {
     toplevel.spawn(handler!(certs, "check", certificates::check));
     toplevel.spawn(handler!(certs, "list", certificates::list));
     toplevel.spawn(handler!(certs, "get", certificates::get));
+    toplevel.spawn(handler!(
+        certs,
+        "program_status",
+        certificates::program_status
+    ));
 
     // iNaturalist endpoints
     let inat = service.group("user.inat");

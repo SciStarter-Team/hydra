@@ -242,7 +242,7 @@
           >
             <option value="none"<% if self.project.rejection_reason == "none" { %> selected<% } %>>Not rejected</option>
             <option value="participation"<% if self.project.rejection_reason == "participation" { %> selected<% } %>>The volunteer participation opportunity is missing or unclear.</option>
-            <option value="science"<% if self.project.rejection_reason == "science" { %> selected<% } %>>The scientific component is missing or unclear.</option>
+            <option value="science"<% if self.project.rejection_reason == "science" { %> selected<% } %>>The citizen science component is missing or unclear.</option>
             <option value="spam"<% if self.project.rejection_reason == "spam" { %> selected<% } %>>Typos or other issues caused the submission to be flagged as possible spam.</option>
           </select>
           <button

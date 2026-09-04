@@ -4,7 +4,8 @@ use common::{
     message::user::{
         CertificateCheckRequest, CertificateCheckResponse, CertificateCreateRequest,
         CertificateCreateResponse, CertificateGetRequest, CertificateGetResponse, CertificateInfo,
-        UserCertificatesRequest, UserCertificatesResponse,
+        ProgramStatusRequest, ProgramStatusResponse, UserCertificatesRequest,
+        UserCertificatesResponse,
     },
     service::{TriggerEvent, trigger_email},
     shared::db,
@@ -83,6 +84,43 @@ pub async fn create_certificate(
     Ok(CertificateCreateResponse {
         certificate_id,
         already_existed: false,
+    })
+}
+
+/// Where the user stands in the Champion and Ambassador programs.
+///
+/// Answered here, in the one service that owns both facts, rather than as two
+/// round trips from the page that asks.
+///
+/// Being an Ambassador is membership of `ambassador_directory_members` -- the
+/// same view the directory, the profile, the map and the contact form read, so
+/// resource access and a directory listing can never disagree. Orrery words
+/// the same rule as `core_ambassadorstate.state = 'passed'`.
+pub async fn program_status(req: &Request) -> Result<ProgramStatusResponse, Error> {
+    let input: ProgramStatusRequest = flexbuffers::from_slice(&req.message.payload)?;
+    let user_id = input.user_id.to_string();
+
+    let has_champion_cert = sqlx::query_scalar!(
+        r#"SELECT EXISTS(
+               SELECT 1 FROM certificates WHERE user_id = ? AND mode = 'champion'
+           ) AS "exists!: bool""#,
+        user_id
+    )
+    .fetch_one(db())
+    .await?;
+
+    let is_ambassador = sqlx::query_scalar!(
+        r#"SELECT EXISTS(
+               SELECT 1 FROM ambassador_directory_members WHERE user_id = ?
+           ) AS "exists!: bool""#,
+        user_id
+    )
+    .fetch_one(db())
+    .await?;
+
+    Ok(ProgramStatusResponse {
+        has_champion_cert,
+        is_ambassador,
     })
 }
 

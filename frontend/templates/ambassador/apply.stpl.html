@@ -30,7 +30,7 @@
       <div class="rounded border border-red-300 bg-red-50 text-red-800 p-4 mb-6"><%= error %></div>
     <% } %>
 
-    <form method="post" action="/ambassadors-apply" class="space-y-8">
+    <form method="post" action="/ambassador-apply" class="space-y-8">
       <fieldset class="ss-card !p-6">
         <legend class="font-semibold mb-2">About You</legend>
         <div class="grid md:grid-cols-2 gap-4">
@@ -121,7 +121,7 @@
       <div class="flex items-center gap-4">
         <button type="submit" class="btn btn-accent"<% if !self.applications_open { %> disabled<% } %>>Submit application</button>
         <button type="button" class="btn"
-                hx-post="/ambassadors-apply/draft"
+                hx-post="/ambassador-apply/draft"
                 hx-include="closest form"
                 hx-target="#draft-status"
                 hx-swap="innerHTML">Save draft</button>

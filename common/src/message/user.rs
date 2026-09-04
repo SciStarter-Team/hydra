@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::badge::Badge;
+use crate::service::TriggerEvent;
 use crate::timestring::TimeString;
 use anyhow::Error;
 use serde_json::Value as JsonValue;
@@ -232,6 +233,41 @@ pub fn signup_grants_foundations<S: AsRef<str>>(tags: &[S]) -> bool {
 
         FOUNDATIONS_GRANT_SIGNUP_TAGS.contains(&tag.as_str())
     })
+}
+
+/// Signup-context tags whose cohort is welcomed in its own words, and the
+/// trigger that sends each one. Kept in step with orrery's
+/// `User.WELCOME_TEMPLATES_BY_TAG`, including its order.
+///
+/// Order is the rule, not an accident: a Girl Scout volunteer carries the
+/// `girlscout` tag as well, so the volunteer entry has to be reached first or
+/// they would be welcomed as a Scout.
+pub const WELCOME_TRIGGERS_BY_SIGNUP_TAG: [(&str, TriggerEvent); 2] = [
+    (
+        "girlscout-volunteer",
+        TriggerEvent::UserWelcomeGirlScoutVolunteer,
+    ),
+    ("girlscout", TriggerEvent::UserWelcomeGirlScout),
+];
+
+/// The trigger that welcomes an account signing up under `tags`, or `None` for
+/// the generic welcome.
+///
+/// The table names the [`TriggerEvent`] itself rather than the string it
+/// serializes to: the two spellings of a trigger name are exactly the kind of
+/// thing that drifts, and strum renders `UserWelcomeGirlScout` as
+/// `user-welcome-girl-scout`, not as the tag it is named after.
+///
+/// Matched on the normalized name for the reason
+/// [`signup_needs_protection`] is: the tag arrives from a URL a partner
+/// typed, and `#GirlScout` is the same cohort as `girlscout`.
+pub fn welcome_trigger_for_signup<S: AsRef<str>>(tags: &[S]) -> Option<TriggerEvent> {
+    let names: Vec<String> = tags.iter().map(|tag| normalize_tag(tag.as_ref())).collect();
+
+    WELCOME_TRIGGERS_BY_SIGNUP_TAG
+        .iter()
+        .find(|(tag, _)| names.iter().any(|name| name == tag))
+        .map(|(_, trigger)| *trigger)
 }
 
 impl BasicInfo {
@@ -1800,6 +1836,20 @@ pub struct CertificateCreateResponse {
     pub already_existed: bool,
 }
 
+/// Where an account stands in the Citizen Science Champion and SciStarter
+/// Ambassador programs. Both programs' resource pages gate their contents on
+/// this, so one question answers for both rather than each page asking its own.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ProgramStatusRequest {
+    pub user_id: Ulid,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ProgramStatusResponse {
+    pub has_champion_cert: bool,
+    pub is_ambassador: bool,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CertificateCheckRequest {
     pub user_id: Ulid,
@@ -1982,6 +2032,42 @@ mod tests {
     #[test]
     fn a_tag_has_one_spelling() {
         assert_eq!(normalize_tag(" #GirlScout "), "girlscout");
+    }
+
+    /// A volunteer carries both tags, and orrery's list is ordered so the
+    /// volunteer welcome wins. A set would lose that, and the two cohorts
+    /// would be welcomed at random.
+    #[test]
+    fn a_girl_scout_volunteer_is_welcomed_as_a_volunteer_not_a_scout() {
+        assert_eq!(
+            welcome_trigger_for_signup(&[
+                "girlscout".to_string(),
+                "girlscout-volunteer".to_string()
+            ]),
+            Some(TriggerEvent::UserWelcomeGirlScoutVolunteer)
+        );
+    }
+
+    #[test]
+    fn a_girl_scout_is_welcomed_as_one_however_the_tag_is_spelled() {
+        for spelling in [" #GirlScout ", "girlscout", "GIRLSCOUT"] {
+            assert_eq!(
+                welcome_trigger_for_signup(&[spelling.to_string()]),
+                Some(TriggerEvent::UserWelcomeGirlScout),
+                "{spelling}"
+            );
+        }
+    }
+
+    /// Every other signup gets the generic welcome, including one carrying a
+    /// tag that means something else entirely.
+    #[test]
+    fn any_other_cohort_gets_the_generic_welcome() {
+        assert_eq!(welcome_trigger_for_signup::<String>(&[]), None);
+        assert_eq!(
+            welcome_trigger_for_signup(&["laplstudent".to_string()]),
+            None
+        );
         assert_eq!(normalize_tag("their-campaign"), "their-campaign");
         assert_eq!(normalize_tag("#a"), "a");
 

@@ -509,14 +509,22 @@ fn user_facing() -> impl Endpoint {
             "/training/champion/-progress",
             get(training::champion::progress),
         )
+        // Orrery's canonical spellings, which these pages have to keep: it
+        // serves the application at /ambassador-apply and the directory at
+        // /ambassadors-directory, and /ambassadors is the community landing
+        // page, not the directory. The plural and singular variants people
+        // have bookmarked are Redirect entities.
         .at(
-            "/ambassadors-apply",
+            "/ambassador-apply",
             get(ambassador::index).post(ambassador::submit),
         )
-        .at("/ambassadors-apply/draft", post(ambassador::draft))
-        .at("/ambassadors", get(ambassador::directory))
-        .at("/ambassadors/:id", get(ambassador::profile_page))
-        .at("/ambassadors/:id/contact", post(ambassador::contact))
+        .at("/ambassador-apply/draft", post(ambassador::draft))
+        .at("/ambassadors-directory", get(ambassador::directory))
+        .at("/ambassadors-directory/:id", get(ambassador::profile_page))
+        .at(
+            "/ambassadors-directory/:id/contact",
+            post(ambassador::contact),
+        )
         .at(
             "/girlscouts-action",
             get(girlscouts::index).post(girlscouts::submit),
@@ -553,6 +561,11 @@ fn dynamic() -> impl Endpoint {
     // This ensures user page manager status stays synchronized with the user service.
 
     Route::new()
+        // Orrery's path for this, which the two ported resource pages fetch
+        // verbatim from their own copy of the gate script. It reads the
+        // logged-in user through `Authenticated`, so it belongs in this tree:
+        // that extractor panics where AuthMiddleware is not installed.
+        .at("/-api/me/program-status", get(api::me::program_status))
         .nest("/-dev", dev::routes())
         .nest(
             "/-admin",

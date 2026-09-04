@@ -700,6 +700,17 @@ pub enum TriggerEvent {
     /// Sent when a new user completes signup
     UserWelcome,
 
+    /// Sent instead of [`TriggerEvent::UserWelcome`] when the signup carried
+    /// the `girlscout` tag. One badge of membership, one welcome written for
+    /// it; orrery picks the same three by tag in
+    /// `User.WELCOME_TEMPLATES_BY_TAG`.
+    UserWelcomeGirlScout,
+
+    /// Sent instead of [`TriggerEvent::UserWelcome`] when the signup carried
+    /// the `girlscout-volunteer` tag, which a volunteer carries alongside
+    /// `girlscout` -- so this one is chosen first.
+    UserWelcomeGirlScoutVolunteer,
+
     /// Sent when a project is submitted for review
     ProjectSubmitted,
 
@@ -827,6 +838,8 @@ impl TriggerEvent {
     pub fn description(&self) -> &'static str {
         match self {
             Self::UserWelcome => "When a new user completes signup",
+            Self::UserWelcomeGirlScout => "When a Girl Scout signup completes",
+            Self::UserWelcomeGirlScoutVolunteer => "When a Girl Scout volunteer signup completes",
             Self::ProjectSubmitted => "When a project is submitted for review",
             Self::ProjectRejected => "When a project is rejected by a reviewer",
             Self::BadgeFoundations => "When the Foundations of Citizen Science badge is earned",
@@ -881,7 +894,11 @@ impl TriggerEvent {
     /// Get the category for this trigger (e.g., "user", "project")
     pub fn category(&self) -> &'static str {
         match self {
-            Self::UserWelcome | Self::EmailValidation | Self::FirstContribution => "user",
+            Self::UserWelcome
+            | Self::UserWelcomeGirlScout
+            | Self::UserWelcomeGirlScoutVolunteer
+            | Self::EmailValidation
+            | Self::FirstContribution => "user",
             Self::ProjectSubmitted
             | Self::ProjectRejected
             | Self::ProjectPublished

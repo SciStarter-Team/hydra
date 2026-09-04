@@ -295,8 +295,14 @@ const DESTINATIONS: &[Destination] = &[
         source: DestinationSource::Entity("girlscouts-faq"),
     },
     Destination {
-        url: "/ambassadors",
+        url: "/ambassador",
         purpose: "the SciStarter Ambassador program",
+        area: Some(ProgramArea::Ambassadors),
+        source: DestinationSource::Entity("ambassador"),
+    },
+    Destination {
+        url: "/ambassadors-directory",
+        purpose: "the directory of SciStarter Ambassadors, searchable by location",
         area: Some(ProgramArea::Ambassadors),
         source: DestinationSource::Native,
     },

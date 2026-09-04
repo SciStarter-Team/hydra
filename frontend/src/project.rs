@@ -58,7 +58,7 @@ impl ProjectRejectionReason {
         match self {
             Self::None => "",
             Self::Participation => "The volunteer participation opportunity is missing or unclear.",
-            Self::Science => "The scientific component is missing or unclear.",
+            Self::Science => "The citizen science component is missing or unclear.",
             Self::Spam => {
                 "Typos or other issues caused the submission to be flagged as possible spam."
             }
@@ -111,7 +111,7 @@ mod tests {
         );
         assert_eq!(
             ProjectRejectionReason::Science.message(),
-            "The scientific component is missing or unclear."
+            "The citizen science component is missing or unclear."
         );
         assert_eq!(
             ProjectRejectionReason::Spam.message(),

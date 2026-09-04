@@ -3,6 +3,7 @@ use poem::{Endpoint, EndpointExt, IntoEndpoint, Route, get, post};
 pub mod analytics;
 pub mod docs;
 pub mod import;
+pub mod me;
 pub mod middleware;
 pub mod misc;
 pub mod user;
