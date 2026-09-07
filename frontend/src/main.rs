@@ -31,6 +31,7 @@ pub mod gourl;
 pub mod health;
 pub mod home;
 pub mod i18n;
+pub mod invitation;
 pub mod lazy_cache;
 pub mod library_signup;
 pub mod local_time;
@@ -286,6 +287,10 @@ fn user_facing() -> impl Endpoint {
             "/complete-signup",
             get(auth::complete_signup_action)
                 .with(middleware::partitioned_session::EnablePartitionedCookies),
+        )
+        .at(
+            "/invitations/:invitation_id",
+            get(invitation::accept_invitation),
         )
         .at("/add", get(add::add_chooser_page))
         .at(

@@ -8,6 +8,7 @@
 mod acts_connected;
 mod affiliates;
 mod ambassadors;
+mod claim_links;
 mod compare_emails;
 mod curated_report;
 mod email_report;
@@ -44,6 +45,11 @@ pub fn routes() -> impl poem::Endpoint {
             get(affiliates::published_affiliates),
         )
         .at("/verizon-activity", get(affiliates::verizon_activity))
+        .at(
+            "/claim-links",
+            get(claim_links::pages_form).post(claim_links::look_up),
+        )
+        .at("/claim-links/generate", poem::post(claim_links::generate))
         .at(
             "/compare-emails",
             get(compare_emails::form).post(compare_emails::compare_emails),
