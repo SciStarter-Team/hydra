@@ -10,7 +10,7 @@ The recipient has demonstrated all of the following skills associated with apply
 
 ****
 ## Earn the Building Data Literacy Through Community and Citizen Science badge
-The Building Data Literacy Through Community and Citizen Science program equips learners with the skills to contribute to citizen science projects that require data literacy while developing their data literacy in ways that will support others’ participation in citizen science projects. 
+The Building Data Literacy Through Community and Citizen Science program equips learners with the skills to contribute to citizen science projects that require data literacy while developing their data literacy in ways that will support others' participation in citizen science projects. 
 
 Visit [https://scistarter.org/training-data-literacy](https://scistarter.org/training-data-literacy) to learn more about earning this badge and growing your knowledge of how data literacy can be applied in everyday situations.
 ****
@@ -25,7 +25,7 @@ Visit [https://scistarter.org/](https://scistarter.org/) to learn more.
 ****
 
 ## Next Generation Science Standards
-This badge award aligns with the “Analyzing and Interpreting Data” subsection of the Science and Engineering Practices section of the Next Generation Science Standards.
+This badge award aligns with the "Analyzing and Interpreting Data" subsection of the Science and Engineering Practices section of the Next Generation Science Standards.
 
 ### Analyzing and Interpreting Data
 Scientific investigations produce data that must be analyzed in order to derive meaning. Because data patterns and trends are not always obvious, scientists use a range of tools—including tabulation, graphical interpretation, visualization, and statistical analysis—to identify the significant features and patterns in the data. Scientists identify sources of error in the investigations and calculate the degree of certainty in the results. Modern technology makes the collection of large data sets much easier, providing secondary sources for analysis.

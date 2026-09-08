@@ -222,8 +222,13 @@ pub fn signup_needs_protection<S: AsRef<str>>(tags: &[S]) -> bool {
 /// about the same cohort, and a partner can need one without the other --
 /// girlscout is protected and is not credited, ldpl is credited and is not
 /// protected.
-pub const FOUNDATIONS_GRANT_SIGNUP_TAGS: [&str; 4] =
-    ["laplstudent", "ldpl", "signup-noyce", "osher-asu"];
+pub const FOUNDATIONS_GRANT_SIGNUP_TAGS: [&str; 5] = [
+    "laplstudent",
+    "ldpl",
+    "signup-noyce",
+    "osher-asu",
+    "lakedallaslibrary",
+];
 
 /// Whether an account carrying `tags` from its signup context is credited
 /// with the Foundations module outright.

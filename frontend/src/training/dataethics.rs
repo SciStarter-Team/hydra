@@ -77,12 +77,15 @@ impl DataEthicsLanguage {
         }
     }
 
-    /// Where the module is launched. The translations are SCORM Driver
-    /// packages, whose entry point is `scormdriver/indexAPI.html` — `index.html`
-    /// 404s. The English build is an older Rise export launched at its root.
+    /// Where the module is launched. All three are SCORM Driver packages,
+    /// whose entry point is `scormdriver/indexAPI.html` — `index.html` 404s.
+    /// English moved to one in Sep 2026; `dataethics/` still holds the Rise
+    /// export it replaced.
     fn module_url(self) -> &'static str {
         match self {
-            DataEthicsLanguage::English => "https://media.scistarter.org/dataethics/index.html",
+            DataEthicsLanguage::English => {
+                "https://media.scistarter.org/dataethics-v2/scormdriver/indexAPI.html"
+            }
             DataEthicsLanguage::Spanish => {
                 "https://media.scistarter.org/dataethics-es/scormdriver/indexAPI.html"
             }
@@ -93,14 +96,18 @@ impl DataEthicsLanguage {
     }
 
     /// The activity id to launch with, spelled as the module's own `tincan.xml`
-    /// spells it. The SCORM Driver packages only report their assessment result
-    /// when given the full xAPI launch context; the older English export
-    /// reports without one.
-    fn activity_id(self) -> Option<&'static str> {
+    /// spells it.
+    ///
+    /// All three builds are now SCORM Driver packages, which report their
+    /// assessment result only when given the full xAPI launch context, so
+    /// every one of them needs an id -- hence a plain `&str` rather than an
+    /// `Option`. English kept its 2022 activity id across the rebuild, so the
+    /// arm in `api/v2.rs` did not have to change with it.
+    fn activity_id(self) -> &'static str {
         match self {
-            DataEthicsLanguage::English => None,
-            DataEthicsLanguage::Spanish => Some("http://4xI0y6kwB69QeGbWDC8I-KkmgEYmLbuL_rise"),
-            DataEthicsLanguage::Portuguese => Some("http://K632u-OqBl5kbcd5JFNucaO1cr2sekOh_rise"),
+            DataEthicsLanguage::English => "http://DataEthicsxAPISept72022",
+            DataEthicsLanguage::Spanish => "http://4xI0y6kwB69QeGbWDC8I-KkmgEYmLbuL_rise",
+            DataEthicsLanguage::Portuguese => "http://K632u-OqBl5kbcd5JFNucaO1cr2sekOh_rise",
         }
     }
 
@@ -445,7 +452,7 @@ async fn build_steps(content: &DataEthicsContent, user_info: &Option<Arc<BasicIn
 
     let tutorial_href = tutorial_launch_url(
         module_url(&content.articulate_url, content.language.module_url()),
-        content.language.activity_id(),
+        Some(content.language.activity_id()),
         user_info,
     );
 
@@ -500,31 +507,37 @@ mod tests {
     /// string, in two files, and a mismatch is silent: the learner finishes
     /// and nothing is recorded.
     #[test]
-    fn each_translation_launches_the_activity_id_its_callback_matches() {
+    fn each_build_launches_the_activity_id_its_callback_matches() {
         assert_eq!(
-            DataEthicsLanguage::Spanish
-                .activity_id()
-                .map(str::to_lowercase)
-                .as_deref(),
-            Some("http://4xi0y6kwb69qegbwdc8i-kkmgeymlbul_rise"),
+            DataEthicsLanguage::English.activity_id().to_lowercase(),
+            "http://dataethicsxapisept72022",
         );
         assert_eq!(
-            DataEthicsLanguage::Portuguese
-                .activity_id()
-                .map(str::to_lowercase)
-                .as_deref(),
-            Some("http://k632u-oqbl5kbcd5jfnucao1cr2sekoh_rise"),
+            DataEthicsLanguage::Spanish.activity_id().to_lowercase(),
+            "http://4xi0y6kwb69qegbwdc8i-kkmgeymlbul_rise",
+        );
+        assert_eq!(
+            DataEthicsLanguage::Portuguese.activity_id().to_lowercase(),
+            "http://k632u-oqbl5kbcd5jfnucao1cr2sekoh_rise",
         );
     }
 
-    /// The English build is an older Rise export that reports its result
-    /// without a launch context. The translations are SCORM Driver packages
-    /// that report nothing without one, so theirs must never be dropped.
+    /// A SCORM Driver package reports nothing without a launch context, so
+    /// none of the three may be launched without its id. English was the last
+    /// one that could: it was an older Rise export until Sep 2026, and the
+    /// type stopped being an `Option` so that "no id" cannot be spelled again.
     #[test]
-    fn only_the_english_build_launches_without_an_activity_id() {
-        assert!(DataEthicsLanguage::English.activity_id().is_none());
-        assert!(DataEthicsLanguage::Spanish.activity_id().is_some());
-        assert!(DataEthicsLanguage::Portuguese.activity_id().is_some());
+    fn no_build_launches_without_an_activity_id() {
+        for language in [
+            DataEthicsLanguage::English,
+            DataEthicsLanguage::Spanish,
+            DataEthicsLanguage::Portuguese,
+        ] {
+            assert!(
+                !language.activity_id().is_empty(),
+                "{language:?} has no activity id",
+            );
+        }
     }
 
     /// The steps are orrery's `DataEthicsState.TUTORIAL_EMAILS` keys and the
@@ -537,15 +550,16 @@ mod tests {
         assert_eq!(DataEthicsLanguage::Portuguese.step(), "tutorial-pt");
     }
 
-    /// The translations are SCORM Driver packages whose entry point is
-    /// `scormdriver/indexAPI.html`; `index.html` 404s in those builds, and the
-    /// English build has no `scormdriver` directory at all.
+    /// Every build is a SCORM Driver package, whose entry point is
+    /// `scormdriver/indexAPI.html`; `index.html` 404s in all of them. English
+    /// launches from `dataethics-v2/` — `dataethics/` still holds the 2022
+    /// Rise export it replaced, which does 404 at that path.
     #[test]
     fn each_build_is_launched_at_its_own_entry_point() {
         assert!(
             DataEthicsLanguage::English
                 .module_url()
-                .ends_with("/dataethics/index.html")
+                .ends_with("/dataethics-v2/scormdriver/indexAPI.html")
         );
         assert!(
             DataEthicsLanguage::Spanish

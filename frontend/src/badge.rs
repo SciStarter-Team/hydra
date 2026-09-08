@@ -14,7 +14,34 @@ use sailfish::TemplateOnce;
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
+mod text;
+
+use crate::i18n::{Lang, current_lang, tr};
+use text::{BadgeText, LanguageLink, badge_artwork, badge_text, image_query};
+
 const DOMAIN: &str = env!("DOMAIN");
+
+/// The language of a request for the badge *image*.
+///
+/// Only an explicit `?lang=` is honoured, never the session or the browser,
+/// because the image URL recorded in the assertion carries no query string:
+/// anything following the credential gets the badge's own artwork however
+/// its reader happens to be browsing. A translated page asks for translated
+/// artwork by saying so in the URL -- see [`text::image_query`].
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct ImageParams {
+    lang: Option<String>,
+}
+
+impl ImageParams {
+    fn lang(&self) -> Lang {
+        self.lang
+            .as_deref()
+            .and_then(Lang::from_tag)
+            .unwrap_or_default()
+    }
+}
 
 pub fn routes() -> Route {
     Route::new()
@@ -77,6 +104,11 @@ struct BadgeClassJson {
     issuer: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     tags: Option<Vec<String>>,
+    /// The skills the badge is aligned to. The assertion has carried these
+    /// all along; the hosted BadgeClass used to leave them out, so the two
+    /// descriptions of the same badge disagreed.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    alignment: Vec<AlignmentJson>,
 }
 
 #[derive(Serialize)]
@@ -94,8 +126,6 @@ async fn badge_class(
 ) -> poem::Result<Response> {
     let badge = Badge::from_badgeclass(&badgeclass)
         .ok_or_else(|| poem::Error::from_status(StatusCode::NOT_FOUND))?;
-
-    let criteria_narrative = markdown_to_html(badge.criteria_text());
 
     let accept_header = req
         .headers()
@@ -126,11 +156,18 @@ async fn badge_class(
         image: format!("https://{}/badges/{}/badge.png", DOMAIN, badgeclass),
         criteria: BadgeCriteria {
             type_: "Criteria".to_string(),
-            id: format!("https://{}/badges/{}", DOMAIN, badgeclass),
-            narrative: criteria_narrative,
+            // Where the criteria are actually described: the training that
+            // earns the badge. It used to name this page, which describes
+            // the badge rather than how to earn it.
+            id: badge.criteria_url().to_string(),
+            // The badge's own text, as it is baked into the image and as
+            // scistarter.org serves it. Rendering it to HTML here made the
+            // hosted BadgeClass and the baked one disagree.
+            narrative: badge.criteria_text().to_string(),
         },
         issuer: format!("https://{}/badges/issuer.json", DOMAIN),
         tags: Some(badge.tags().iter().map(|s| s.to_string()).collect()),
+        alignment: alignment_json(&badge),
     })
     .into_response()
     .with_header("Vary", "Accept")
@@ -142,6 +179,19 @@ async fn badge_class(
 struct BadgeParams {
     confirm: Option<String>,
     download: Option<bool>,
+    /// Chooses the artwork when this URL is fetched as an image rather than
+    /// read as a page. The page itself takes its language from the request,
+    /// like every other page on the site.
+    lang: Option<String>,
+}
+
+impl BadgeParams {
+    fn image_lang(&self) -> Lang {
+        self.lang
+            .as_deref()
+            .and_then(Lang::from_tag)
+            .unwrap_or_default()
+    }
 }
 
 #[handler]
@@ -227,6 +277,7 @@ async fn badge_instance(
                 &badge,
                 &user_badge,
                 &user_info.primary_email,
+                params.image_lang(),
             )
             .map_err(|e| {
                 tracing::error!("Failed to bake badge: {}", e);
@@ -380,7 +431,10 @@ async fn assertion_json(
 }
 
 #[handler]
-async fn badge_png(Path((badgeclass, user_id)): Path<(String, String)>) -> poem::Result<Response> {
+async fn badge_png(
+    Path((badgeclass, user_id)): Path<(String, String)>,
+    Query(params): Query<ImageParams>,
+) -> poem::Result<Response> {
     let badge = Badge::from_badgeclass(&badgeclass)
         .ok_or_else(|| poem::Error::from_status(StatusCode::NOT_FOUND))?;
 
@@ -423,6 +477,7 @@ async fn badge_png(Path((badgeclass, user_id)): Path<(String, String)>) -> poem:
         &badge,
         &user_badge,
         &user_info.primary_email,
+        params.lang(),
     )
     .map_err(|e| {
         tracing::error!("Failed to bake badge: {}", e);
@@ -435,11 +490,14 @@ async fn badge_png(Path((badgeclass, user_id)): Path<(String, String)>) -> poem:
 }
 
 #[handler]
-async fn badgeclass_png(Path(badgeclass): Path<String>) -> poem::Result<Response> {
+async fn badgeclass_png(
+    Path(badgeclass): Path<String>,
+    Query(params): Query<ImageParams>,
+) -> poem::Result<Response> {
     let badge = Badge::from_badgeclass(&badgeclass)
         .ok_or_else(|| poem::Error::from_status(StatusCode::NOT_FOUND))?;
 
-    let badge_path = badge.template_path();
+    let badge_path = badge_artwork(badge, params.lang()).path;
     let badge_file = crate::Static::get(badge_path)
         .ok_or_else(|| anyhow!("Badge template not found: {}", badge_path))?;
 
@@ -450,17 +508,12 @@ async fn badgeclass_png(Path(badgeclass): Path<String>) -> poem::Result<Response
         .body(png_data))
 }
 
-fn build_badge_assertion(
-    badgeclass: &str,
-    user_id: &str,
-    badge: &Badge,
-    email: &str,
-    when: &str,
-) -> Result<BadgeAssertion, Error> {
-    let assertion_id = format!("https://{}/badges/{}/{}", DOMAIN, badgeclass, user_id);
-    let criteria_narrative = markdown_to_html(badge.criteria_text());
-
-    let alignments: Vec<AlignmentJson> = badge
+/// The badge's skill alignments, in the shape Open Badges consumers read.
+///
+/// One conversion, used by both the hosted BadgeClass and the assertion, so
+/// the two cannot drift apart.
+fn alignment_json(badge: &Badge) -> Vec<AlignmentJson> {
+    badge
         .alignments()
         .iter()
         .map(|a| AlignmentJson {
@@ -470,7 +523,17 @@ fn build_badge_assertion(
             target_framework: a.framework.map(|f| f.to_string()),
             target_code: a.code.map(|c| c.to_string()),
         })
-        .collect();
+        .collect()
+}
+
+fn build_badge_assertion(
+    badgeclass: &str,
+    user_id: &str,
+    badge: &Badge,
+    email: &str,
+    when: &str,
+) -> Result<BadgeAssertion, Error> {
+    let assertion_id = format!("https://{}/badges/{}/{}", DOMAIN, badgeclass, user_id);
 
     Ok(BadgeAssertion {
         context: "https://w3id.org/openbadges/v2".to_string(),
@@ -487,15 +550,16 @@ fn build_badge_assertion(
             id: format!("https://{}/badges/{}", DOMAIN, badgeclass),
             name: badge.name().to_string(),
             description: badge.description().to_string(),
-            image: format!("https://{}/badges/{}", DOMAIN, badgeclass),
+            // The badge's image, not the page about it.
+            image: badge.template_url().to_string(),
             criteria: BadgeCriteria {
                 type_: "Criteria".to_string(),
-                id: format!("https://{}/badges/{}", DOMAIN, badgeclass),
-                narrative: criteria_narrative,
+                id: badge.criteria_url().to_string(),
+                narrative: badge.criteria_text().to_string(),
             },
             issuer: make_issuer_json(),
             tags: Some(badge.tags().iter().map(|s| s.to_string()).collect()),
-            alignment: alignments,
+            alignment: alignment_json(badge),
         },
         issued_on: when.to_string(),
         image: format!(
@@ -508,15 +572,22 @@ fn build_badge_assertion(
     })
 }
 
+/// Bake an earner's assertion into the badge artwork for `lang`.
+///
+/// The payload is built from [`Badge`] alone, so it is the same in every
+/// language: a translated download differs from the English one only in the
+/// picture it is drawn on, and validates identically.
 fn bake_badge(
     badgeclass: &str,
     user_id: &str,
     badge: &Badge,
     user_badge: &UserBadge,
     email: &str,
+    lang: Lang,
 ) -> Result<Vec<u8>, Error> {
-    // Access the embedded badge PNG from the Static struct using the Badge's template_path
-    let badge_path = badge.template_path();
+    // The artwork is presentation, so it is chosen by language; everything
+    // baked into it below comes from the badge itself.
+    let badge_path = badge_artwork(*badge, lang).path;
     let badge_file = crate::Static::get(badge_path)
         .ok_or_else(|| anyhow!("Badge template not found: {}", badge_path))?;
 
@@ -551,11 +622,8 @@ fn bake_badge(
         .with_badge_class_id(format!("https://{}/badges/{}", DOMAIN, badgeclass))
         .with_badge_class_name(badge.name())
         .with_badge_class_description(badge.description())
-        .with_badge_class_image_url(format!("https://{}/badges/{}", DOMAIN, badgeclass))
-        .with_badge_class_criteria(
-            format!("https://{}/badges/{}", DOMAIN, badgeclass),
-            badge.criteria_text(),
-        );
+        .with_badge_class_image_url(badge.template_url())
+        .with_badge_class_criteria(badge.criteria_url(), badge.criteria_text());
 
     // Use Cursor for Read + Seek on the badge PNG data
     let source = std::io::Cursor::new(badge_png_data.as_ref());
@@ -569,7 +637,19 @@ fn bake_badge(
 #[template(path = "badge/badge.stpl.html")]
 struct BadgeTemplate {
     own_badge: bool,
+    /// The value for `<html lang>`, and the language everything below was
+    /// rendered in.
+    lang: &'static str,
+    /// Always the credential's own name, whatever language the page is in,
+    /// because this is what a verifier compares against the baked image.
     name: String,
+    /// The badge's name in the page's language, shown beneath the canonical
+    /// one rather than in place of it.
+    translated_name: Option<&'static str>,
+    /// Present only on a page whose badge really is translated: it points a
+    /// reader at the wording the credential carries.
+    translation_notice: Option<String>,
+    language_links: Vec<LanguageLink>,
     name_urlencoded: String,
     badge_url_urlencoded: String,
     cert_id_urlencoded: String,
@@ -602,11 +682,24 @@ async fn render_badge_html(
     params: &BadgeParams,
     own_badge: bool,
 ) -> Result<String, Error> {
-    let badgeclass_criteria_text = markdown_to_html(badge.criteria_text());
-    let badgeclass_description = markdown_to_html(badge.description());
+    let lang = current_lang();
+    let translation = badge_text(*badge, lang);
+
+    // What the reader is shown: the translation if there is one, and
+    // otherwise the credential's own words. One decision, rather than one
+    // per field.
+    let shown: BadgeText = translation
+        .copied()
+        .unwrap_or_else(|| BadgeText::from(*badge));
+
+    let badgeclass_criteria_text = markdown_to_html(shown.criteria_text);
+    let badgeclass_description = markdown_to_html(shown.description);
     let badge_url = format!("https://{}/badges/{}/{}", DOMAIN, badgeclass, user_id);
     let badge_url_relative = format!("/badges/{}/{}", badgeclass, user_id);
-    let image_url = format!("{}/badge.png", badge_url_relative);
+    // Carries the page's language, so a reader downloads the artwork they
+    // were shown. What is baked into that artwork is the same assertion
+    // either way.
+    let image_url = format!("{}/badge.png{}", badge_url_relative, image_query(lang));
     let canonical_url = badge_url.clone();
 
     // Parse the timestamp
@@ -656,20 +749,29 @@ async fn render_badge_html(
 
     let template = BadgeTemplate {
         own_badge,
+        lang: lang.code(),
+        // The credential's own name, whatever `shown` says: see the field's
+        // documentation on the struct above.
         name: badge.name().to_string(),
+        translated_name: translation.map(|text| text.name),
+        translation_notice: translation.map(|_| translation_notice(&canonical_url)),
+        language_links: text::language_links(&canonical_url, lang),
+        // Canonical on purpose: this string becomes the name of the
+        // credential on the earner's LinkedIn profile, so it has to be the
+        // name the badge itself carries.
         name_urlencoded: urlencoding::encode(badge.name()).to_string(),
         badge_url_urlencoded: urlencoding::encode(&badge_url).to_string(),
         cert_id_urlencoded: urlencoding::encode(&format!("{}/{}", badgeclass, user_id)).to_string(),
-        badgeclass_description_raw: badge.description().to_string(),
+        badgeclass_description_raw: shown.description.to_string(),
         badgeclass_description,
         badgeclass_criteria_text,
         alignments: badge.alignments().to_vec(),
-        tags: badge.tags().iter().map(|s| s.to_string()).collect(),
+        tags: shown.tags.iter().map(|s| s.to_string()).collect(),
         image_url,
         issued,
         issued_year,
         issued_month,
-        earn_url: badge.earn_url().map(|s| s.to_string()),
+        earn_url: shown.earn_url.map(|s| s.to_string()),
         canonical_url: canonical_url.clone(),
         oembed_json: format!(
             "{}/oembed.json?url={}&format=json",
@@ -694,7 +796,12 @@ async fn render_badge_html(
 #[derive(TemplateOnce)]
 #[template(path = "badge/badgeclass.stpl.html")]
 struct BadgeClassTemplate {
+    lang: &'static str,
+    /// Canonical, for the same reason as on [`BadgeTemplate`].
     name: String,
+    translated_name: Option<&'static str>,
+    translation_notice: Option<String>,
+    language_links: Vec<LanguageLink>,
     badgeclass_description_raw: String,
     badgeclass_description: String,
     badgeclass_criteria_text: String,
@@ -706,20 +813,32 @@ struct BadgeClassTemplate {
 }
 
 async fn render_badgeclass_html(badge: &Badge, badgeclass: &str) -> Result<String, Error> {
-    let badgeclass_criteria_text = markdown_to_html(badge.criteria_text());
-    let badgeclass_description = markdown_to_html(badge.description());
-    let canonical_url = format!("https://{}/badge/{}", DOMAIN, badgeclass);
-    let image_url = format!("{}/badge.png", &canonical_url);
+    let lang = current_lang();
+    let translation = badge_text(*badge, lang);
+    let shown: BadgeText = translation
+        .copied()
+        .unwrap_or_else(|| BadgeText::from(*badge));
+
+    let badgeclass_criteria_text = markdown_to_html(shown.criteria_text);
+    let badgeclass_description = markdown_to_html(shown.description);
+    // "/badges/", plural: that is where the routes are mounted. This page
+    // used to name itself "/badge/", so its own image link 404'd.
+    let canonical_url = format!("https://{}/badges/{}", DOMAIN, badgeclass);
+    let image_url = format!("{}/badge.png{}", &canonical_url, image_query(lang));
 
     let template = BadgeClassTemplate {
+        lang: lang.code(),
         name: badge.name().to_string(),
-        badgeclass_description_raw: badge.description().to_string(),
+        translated_name: translation.map(|text| text.name),
+        translation_notice: translation.map(|_| translation_notice(&canonical_url)),
+        language_links: text::language_links(&canonical_url, lang),
+        badgeclass_description_raw: shown.description.to_string(),
         badgeclass_description,
         badgeclass_criteria_text,
         alignments: badge.alignments().to_vec(),
-        tags: badge.tags().iter().map(|s| s.to_string()).collect(),
+        tags: shown.tags.iter().map(|s| s.to_string()).collect(),
         image_url,
-        earn_url: badge.earn_url().map(|s| s.to_string()),
+        earn_url: shown.earn_url.map(|s| s.to_string()),
         canonical_url,
     };
 
@@ -794,6 +913,18 @@ async fn oembed_xml(Path((badgeclass, user_id)): Path<(String, String)>) -> poem
         .body(xml))
 }
 
+/// The courtesy-translation notice for a page whose badge is translated.
+///
+/// It says which language the credential itself is in and links to it, so a
+/// reader who needs the official wording -- the wording a verifier will show
+/// them -- can get to it in one click.
+fn translation_notice(canonical_url: &str) -> String {
+    tr(
+        r#"This is a courtesy translation. The official text of this badge, which is what the verifiable record contains, is in English: <a class=hyperlink href="{url}">see the original</a>."#,
+    )
+    .replace("{url}", &text::english_url(canonical_url))
+}
+
 pub fn markdown_to_html(markdown: &str) -> String {
     use markdown_ppp::html_printer::config::Config;
     use markdown_ppp::html_printer::render_html;
@@ -806,4 +937,147 @@ pub fn markdown_to_html(markdown: &str) -> String {
     };
 
     render_html(&ast, config).replace("</br>", "")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use common::timestring::TimeString;
+
+    /// The credential says the same thing to everyone, in every language.
+    ///
+    /// This is the property the whole translation design rests on -- the
+    /// pages are translated, the badge is not -- so it is checked rather
+    /// than trusted: nothing a translation introduces may appear in the
+    /// hosted assertion or in the metadata baked into the downloadable
+    /// image, which are what an Open Badges validator reads.
+    ///
+    /// orrery has the same test over the same badge, because the two sites
+    /// issue it under the same rules.
+    #[test]
+    fn no_translated_string_reaches_the_credential() {
+        let email = "someone@example.invalid";
+        let user_id = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+        let mut checked = 0;
+
+        for badge in [Badge::DataEthicsForPractitioners] {
+            let translations: Vec<&BadgeText> = Lang::TRANSLATABLE
+                .into_iter()
+                .filter_map(|lang| badge_text(badge, lang))
+                .collect();
+
+            if translations.is_empty() {
+                continue;
+            }
+
+            let badgeclass = badge.badgeclass();
+            let user_badge = UserBadge {
+                badge,
+                when: TimeString::now(),
+            };
+
+            let assertion = build_badge_assertion(
+                badgeclass,
+                user_id,
+                &badge,
+                email,
+                &user_badge.when.to_string(),
+            )
+            .expect("assertion");
+            let json = serde_json::to_string(&assertion).expect("assertion json");
+
+            // Every language's artwork, since a translated badge is offered
+            // for download drawn on its own picture: what is baked into it
+            // has to be the same credential as the English one.
+            let baked: Vec<(Lang, String)> = Lang::ALL
+                .into_iter()
+                .map(|lang| {
+                    let image = bake_badge(badgeclass, user_id, &badge, &user_badge, email, lang)
+                        .expect("baked image");
+
+                    (lang, String::from_utf8_lossy(&image).into_owned())
+                })
+                .collect();
+
+            // Positive control, so this can't pass by finding nothing at
+            // all: the canonical text has to be in there.
+            assert!(
+                json.contains(badge.name()),
+                "no name in the assertion for {badgeclass}"
+            );
+
+            for (lang, image) in &baked {
+                assert!(
+                    image.contains(badge.name()),
+                    "no name in the {} baked image for {badgeclass}",
+                    lang.code()
+                );
+            }
+
+            for text in translations {
+                let opening: String = text.criteria_text.chars().take(80).collect();
+
+                let mut strings = vec![text.name, text.description, opening.as_str()];
+                strings.extend(text.earn_url);
+                strings.extend(text.tags);
+
+                for translated in strings {
+                    assert!(
+                        !json.contains(translated),
+                        "translated text reached the assertion for {badgeclass}: {translated:?}"
+                    );
+
+                    for (lang, image) in &baked {
+                        assert!(
+                            !image.contains(translated),
+                            "translated text reached the {} baked image for {badgeclass}: {translated:?}",
+                            lang.code()
+                        );
+                    }
+                }
+            }
+
+            checked += 1;
+        }
+
+        assert!(
+            checked > 0,
+            "no translated badge to check the invariant against"
+        );
+    }
+
+    /// A translated download is the same credential drawn on a different
+    /// picture, so the bytes have to differ -- otherwise the page is
+    /// offering artwork it isn't actually serving.
+    #[test]
+    fn each_language_bakes_onto_its_own_artwork() {
+        let badge = Badge::DataEthicsForPractitioners;
+        let user_badge = UserBadge {
+            badge,
+            when: TimeString::now(),
+        };
+
+        let bake = |lang| {
+            bake_badge(
+                badge.badgeclass(),
+                "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+                &badge,
+                &user_badge,
+                "someone@example.invalid",
+                lang,
+            )
+            .expect("baked image")
+        };
+
+        let english = bake(Lang::En);
+
+        for lang in Lang::TRANSLATABLE {
+            assert_ne!(
+                english,
+                bake(lang),
+                "{} baked the English artwork",
+                lang.code()
+            );
+        }
+    }
 }

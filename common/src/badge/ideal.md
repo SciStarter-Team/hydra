@@ -26,7 +26,6 @@ SciStarter is a research affiliate of Arizona State University and North Carolin
 
 Visit [https://scistarter.org/](https://scistarter.org/) to learn more.
 ****
-
 # Completion of STAGE I of the asynchronous tutorial
 Recipients of the IDEAL Participatory Science have completed the following requirements:
 
@@ -39,7 +38,7 @@ Recipients of the IDEAL Participatory Science have completed the following requi
 
 ## Positionality
 ### What is Positionality?
-Positionality refers to the way in which an individual’s perceptions, experiences, and research activities are shaped by the current institutions, frameworks, and sociopolitical context within which they live and how one’s position influences and shapes a participatory science project. Positionality can also include one’s assumptions and beliefs about ways of knowing and discovering, and perspectives on what constitutes worthwhile research.
+Positionality refers to the way in which an individual's perceptions, experiences, and research activities are shaped by the current institutions, frameworks, and sociopolitical context within which they live and how one’s position influences and shapes a participatory science project. Positionality can also include one’s assumptions and beliefs about ways of knowing and discovering, and perspectives on what constitutes worthwhile research.
 
 ### Completion of the Positionality Worksheet
 The Positionality Worksheet is designed to support reflection about oneself and an examination of one’s relation to the privilege and power dynamics in society. It helps to critically consider how one’s positionality influences aspects of a participatory science project.
@@ -63,13 +62,11 @@ The Information Gathering Plan is an optional part of the project cycle. Its pur
 
 ## Engagement Goals
 ### What are Engagement Goals?
-It is crucial to set engagement goals to steer project leadership and track progress. These goals should align with your values and priorities while taking into account the project’s scope limitations.
+It is crucial to set engagement goals to steer project leadership and track progress. These goals should align with your values and priorities while taking into account the project's scope limitations.
 
 ### (Optional) Completion of the Engagement Goals Worksheet
 The Engagement Goals Worksheet is a valuable tool in the development of engagement goals. It provides a framework for identifying key perspectives regarding project governance and outlines the participants involved in the project in a SMART Goals format. This worksheet is particularly useful for practitioners and leaders of large-scale participatory science projects, as it helps to establish a clear and concise plan for achieving project objectives. By utilizing this tool, project leaders can ensure that all stakeholders are aligned and working towards the same goals, ultimately leading to a successful outcome.
-
 ****
-
 # Completion of STAGE II  of the asynchronous tutorial
 Recipients of the IDEAL Participatory Science have completed the following requirements:
 
@@ -109,7 +106,7 @@ This worksheet is designed to assist leaders and teams of large-scale participat
 ## Centering at the Margins
 
 ### What is Centering at the margins and why is it an essential IDEAL participatory science practice?
-“Center at the margins” is a concept that counters the dominant culture and norms by shifting viewpoints away from a majority group’s perspective to that of the marginalized group(s) (Ford et al. 2010). The historic and current dominance of White, nondisabled culture and norms in the United States means these are often the default. In other words, if you do not consciously center your project away from the default, it will be centered around White, nondisabled culture, and diversity will arise only through assimilation rather than equity.
+“Center at the margins” is a concept that counters the dominant culture and norms by shifting viewpoints away from a majority group's perspective to that of the marginalized group(s) (Ford et al. 2010). The historic and current dominance of White, nondisabled culture and norms in the United States means these are often the default. In other words, if you do not consciously center your project away from the default, it will be centered around White, nondisabled culture, and diversity will arise only through assimilation rather than equity.
 
 Centering at the margins is part of the principles of universal design for accessibility. When systemically marginalized people are centered in programs, the program will serve not only the margins, but also better serve the needs of the mainstream or dominant culture. 
 

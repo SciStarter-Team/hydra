@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="<%= self.lang %>">
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><%= self.name %> Badge</title>
+    <title><%= crate::i18n::tr("{name} Badge").replace("{name}", &self.name) %></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap" rel="stylesheet">
@@ -11,7 +11,7 @@
     <script src="/-static/js/scripts.js"></script>
     <script src="/-static/js/clickthrough.js" defer></script>
     <script type="text/javascript" src="https://platform-api.sharethis.com/js/sharethis.js#property=684be7fdeb2dda0012da59f3&product=inline-share-buttons&source=platform" async="async"></script>
-    <meta property="og:title" content="<%= &self.name %> Badge">
+    <meta property="og:title" content="<%= crate::i18n::tr("{name} Badge").replace("{name}", &self.name) %>">
     <meta property="og:description" content="<%= &self.badgeclass_description_raw %>">
     <meta property="og:image" content="<%= &self.image_url %>">
     <meta property="og:url" content="<%= &self.canonical_url %>">
@@ -19,18 +19,22 @@
   </head>
   <body>
     <div class="ss-container mx-auto !py-4 ss-text">
+      <% include!("language.stpl.html"); %>
       <div class="flex flex-col sm:flex-row max-w-[1120px] mx-auto mb-8 mt-4">
         <span class="flex justify-center">
-          <img src="<%= &self.image_url %>" title="image of the badge" class="self-center md:self-start w-[200px] h-[200px] mr-4 mb-4 sm:mb-0" />
+          <img src="<%= &self.image_url %>" title="<%= crate::i18n::tr("example {name} badge image").replace("{name}", &self.name) %>" class="self-center md:self-start w-[200px] h-[200px] mr-4 mb-4 sm:mb-0" />
         </span>
         <div>
           <h1 class="ss-xl mb-2"><%= self.name %></h1>
+          <% if let Some(translated) = self.translated_name { %>
+            <p class="ss-normal mt-0 mb-2" lang="<%= self.lang %>"><%= translated %></p>
+          <% } %>
           <p class="ss-small"><%- &self.badgeclass_description %></p>
           <div class="flex items-start gap-4"></div>
           <div class="min-h-[70px]">
             <% if let Some(url) = self.earn_url { %>
             <div class="mb-2">
-              <a href="<%= url %>" class="btn btn-blue">learn how to earn this badge</a>
+              <a href="<%= url %>" class="btn btn-blue"><%= crate::i18n::tr("learn how to earn this badge") %></a>
             </div>
             <% } %>
             <div class="sharethis-inline-share-buttons"></div>
@@ -38,7 +42,7 @@
         </div>
 
         <div class="min-w-[200px] md:ml-4">
-          <div class="ss-xxs">Offered by:</div>
+          <div class="ss-xxs"><%= crate::i18n::tr("Offered by:") %></div>
           <a href="/"><img src="/-static/img/logo/logo-rgb-coral-blue.svg" alt="SciStarter logo" class="max-w-[100px] mb-2" /></a>
 
           <div class="inline-flex items-center gap-2 border border-girlscout rounded-lg px-4 py-2">
@@ -52,8 +56,8 @@
       <div class="flex flex-col sm:flex-row">
         <div class="w-full p-4 gap-8 md:flex">
           <div class="md:text-right min-w-[250px] md:max-w-[250px]">
-            <h2 class="ss-normal">Earning Criteria</h2>
-            <p class="ss-xsmall">Recipients must complete the earning criteria to earn this badge</p>
+            <h2 class="ss-normal"><%= crate::i18n::tr("Earning Criteria") %></h2>
+            <p class="ss-xsmall"><%= crate::i18n::tr("Recipients must complete the earning criteria to earn this badge") %></p>
           </div>
           <div class="markdown-container">
             <%- &self.badgeclass_criteria_text %>
@@ -61,7 +65,7 @@
         </div>
         <div class="w-full sm:w-[300px] p-4">
           <% if !self.tags.is_empty() { %>
-            <h3 class="ss-normal mb-4">Tags</h3>
+            <h3 class="ss-normal mb-4"><%= crate::i18n::tr("Tags") %></h3>
             <% for tag in self.tags.iter() { %>
               <span class="ss-tag"><%= tag %></span>
             <% } %>
@@ -72,8 +76,8 @@
       <div class="flex flex-col sm:flex-row">
         <div class="w-full p-4 gap-8 md:flex">
           <div class="md:text-right min-w-[250px] md:max-w-[250px]">
-            <h2 class="ss-normal">Skills</h2>
-            <p class="ss-xsmall">Recipients demonstrated these job skills</p>
+            <h2 class="ss-normal"><%= crate::i18n::tr("Skills") %></h2>
+            <p class="ss-xsmall"><%= crate::i18n::tr("Recipients demonstrated these job skills") %></p>
           </div>
           <div>
             <% for skill in self.alignments.iter() { %>
@@ -84,7 +88,7 @@
       </div>
 
       <div class="max-w-2xl mx-auto my-8">
-        <span class="ss-large mb-4">Questions? Check out our <a class=hyperlink href="https://scistarter.org/training-faq">FAQ</a>.</span>
+        <span class="ss-large mb-4"><%- crate::i18n::tr(r#"Questions? Check out our <a class=hyperlink href="https://scistarter.org/training-faq">FAQ</a>."#) %></span>
       </div>
 
       <script>

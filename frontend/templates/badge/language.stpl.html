@@ -1,0 +1,14 @@
+<div class="flex flex-wrap items-center gap-2 justify-end ss-xxs mb-2">
+  <span><%= crate::i18n::tr("Language") %>:</span>
+  <% for link in self.language_links.iter() { %>
+    <% if link.current { %>
+      <span lang="<%= link.code %>" aria-current="true"><b><%= link.endonym %></b></span>
+    <% } else { %>
+      <a lang="<%= link.code %>" hreflang="<%= link.code %>" href="<%= &link.url %>"><%= link.endonym %></a>
+    <% } %>
+  <% } %>
+  <a href="?lang=<%= crate::middleware::language::LANG_DEFAULT %>"><%= crate::i18n::tr("Use my browser's setting") %></a>
+</div>
+<% if let Some(notice) = &self.translation_notice { %>
+  <p class="ss-xxs" role="note" lang="<%= self.lang %>"><%- notice %></p>
+<% } %>

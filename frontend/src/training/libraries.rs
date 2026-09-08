@@ -24,9 +24,14 @@ const BASE_PATH: &str = "/training/libraries-hubs";
 const PROGRESS_PATH: &str = "/training/libraries-hubs/-progress";
 const SLUG: &str = "libraries-hubs";
 
-// An older Rise export: it reports its result without a launch activity id,
-// but not without the rest of the launch context.
-const LIBRARIES_URL: &str = "https://media.scistarter.org/libraries-hubs-v2/index.html";
+// A SCORM Driver package as of Sep 2026, whose entry point is
+// `scormdriver/indexAPI.html`; it reports its assessment result only with the
+// full launch context, activity id included. It kept the activity id of the
+// Rise export it replaced, so the arm in `api/v2.rs` did not change with it.
+// `libraries-hubs-v2/` still holds that export.
+const LIBRARIES_URL: &str =
+    "https://media.scistarter.org/libraries-hubs-v3/scormdriver/indexAPI.html";
+const LIBRARIES_ACTIVITY_ID: &str = "http://T-YKeNuPqd7ZP9OtMD-MITGNjH9kXXq6_rise";
 
 /// Editable copy for the Libraries & Hubs training. `#[serde(default)]` required
 /// (see [`crate::training::foundations::FoundationsContent`]).
@@ -227,7 +232,7 @@ async fn build_steps(content: &LibrariesContent, user_info: &Option<Arc<BasicInf
         cards: vec![ArticulateCard {
             href: tutorial_launch_url(
                 module_url(&content.articulate_url, LIBRARIES_URL),
-                None,
+                Some(LIBRARIES_ACTIVITY_ID),
                 user_info,
             ),
             image: content.articulate_image.clone(),
@@ -271,4 +276,37 @@ async fn build_steps(content: &LibrariesContent, user_info: &Option<Arc<BasicInf
     ];
 
     StepsView { steps }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The module is a SCORM Driver package, whose entry point is
+    /// `scormdriver/indexAPI.html`; `index.html` 404s in that build. Two
+    /// older generations of this module are still on the media host --
+    /// `libraries-hubs/` (an original Rise export, still launched by the
+    /// legacy `Library-Training` page in orrery) and `libraries-hubs-v2/`
+    /// (the Rise export this one replaced) -- so a URL that points at the
+    /// wrong one answers 200 with the wrong module rather than failing.
+    #[test]
+    fn the_module_launches_from_its_scorm_driver_entry_point() {
+        assert_eq!(
+            LIBRARIES_URL,
+            "https://media.scistarter.org/libraries-hubs-v3/scormdriver/indexAPI.html",
+        );
+    }
+
+    /// A SCORM Driver package reports its assessment result only when it is
+    /// launched with an activity id, and the callback matches a lowercased
+    /// copy of what the module reports. Two spellings of one string in two
+    /// codebases, and a mismatch is silent: the learner finishes and nothing
+    /// is recorded. This is the spelling `api/v2.rs` compares against.
+    #[test]
+    fn the_launch_activity_id_is_the_one_the_callback_matches() {
+        assert_eq!(
+            LIBRARIES_ACTIVITY_ID.to_lowercase(),
+            "http://t-ykenupqd7zp9otmd-mitgnjh9kxxq6_rise",
+        );
+    }
 }
