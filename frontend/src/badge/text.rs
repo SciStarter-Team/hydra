@@ -201,7 +201,16 @@ pub struct LanguageLink {
 /// to the page itself; [`crate::middleware::language::LANG_DEFAULT`] is
 /// offered alongside them by the template, as the way back to the browser's
 /// own preference.
-pub fn language_links(canonical_url: &str, current: Lang) -> Vec<LanguageLink> {
+///
+/// Empty for a badge nobody has translated: the picker's promise is a
+/// translated *badge*, and the site's own language switching, which is what
+/// still puts translated chrome around such a page, is not this control's
+/// to offer.
+pub fn language_links(badge: Badge, canonical_url: &str, current: Lang) -> Vec<LanguageLink> {
+    if translations(badge).is_none() {
+        return Vec::new();
+    }
+
     Lang::ALL
         .into_iter()
         .map(|lang| LanguageLink {
@@ -248,6 +257,22 @@ mod tests {
             assert_eq!(english.earn_url, badge.earn_url());
             assert_eq!(english.artwork.url, badge.template_url());
             assert_eq!(english.artwork.path, badge.template_path());
+        }
+    }
+
+    /// The picker offers a translated badge, so a badge nobody has
+    /// translated shows none -- while the site's own language switching,
+    /// which is what a `?lang=` still does everywhere else, is untouched.
+    #[test]
+    fn only_a_translated_badge_offers_a_picker() {
+        for badge in Badge::ALL {
+            let links = language_links(badge, "https://example.org/badges/x", Lang::En);
+
+            if translations(badge).is_some() {
+                assert_eq!(links.len(), Lang::ALL.len());
+            } else {
+                assert!(links.is_empty(), "{} offers a picker", badge.name());
+            }
         }
     }
 

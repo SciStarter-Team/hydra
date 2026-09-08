@@ -755,7 +755,7 @@ async fn render_badge_html(
         name: badge.name().to_string(),
         translated_name: translation.map(|text| text.name),
         translation_notice: translation.map(|_| translation_notice(&canonical_url)),
-        language_links: text::language_links(&canonical_url, lang),
+        language_links: text::language_links(*badge, &canonical_url, lang),
         // Canonical on purpose: this string becomes the name of the
         // credential on the earner's LinkedIn profile, so it has to be the
         // name the badge itself carries.
@@ -831,7 +831,7 @@ async fn render_badgeclass_html(badge: &Badge, badgeclass: &str) -> Result<Strin
         name: badge.name().to_string(),
         translated_name: translation.map(|text| text.name),
         translation_notice: translation.map(|_| translation_notice(&canonical_url)),
-        language_links: text::language_links(&canonical_url, lang),
+        language_links: text::language_links(*badge, &canonical_url, lang),
         badgeclass_description_raw: shown.description.to_string(),
         badgeclass_description,
         badgeclass_criteria_text,
