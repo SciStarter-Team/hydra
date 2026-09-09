@@ -129,7 +129,7 @@
       <p class="mb-4 text-sm text-neutral-mid">Part of <a class="text-primary-action underline" href="<%= &self.part_of_path %>"><%= &self.part_of_name %></a></p>
       <% } %>
 
-      <% if !self.location_name.is_empty() || !self.location_description.is_empty() || !self.address.is_empty() || self.entirely_online || self.can_edit || (self.kind.is_event() && self.region_geojson.is_some()) { %>
+      <% if !self.location_name.is_empty() || !self.regions_description.is_empty() || !self.location_description.is_empty() || !self.address.is_empty() || !self.city.is_empty() || !self.state.is_empty() || !self.country.is_empty() || self.entirely_online || self.can_edit || (self.kind.is_event() && self.region_geojson.is_some()) { %>
       <div class="border border-linework rounded-sm bg-primary-light mb-4">
         <dl>
           <dt class="ribbon-project bg-primary-dark text-white">Where</dt>
@@ -137,6 +137,9 @@
             <%+ self.field("entirely_online") %>
             <% if !self.entirely_online || self.can_edit { %>
             <%+ self.field("location_name") %>
+            <% if self.kind.is_project() { %>
+            <%+ self.field("regions_description") %>
+            <% } %>
             <%+ self.field("location_description") %>
             <%+ self.field("address") %>
             <%+ self.field("city") %>

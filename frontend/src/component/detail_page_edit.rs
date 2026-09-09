@@ -262,7 +262,7 @@ pub fn field_meta(field_type: &str, kind: DetailPageKind) -> Option<FieldMeta> {
             input_kind: FieldInputKind::Boolean,
         }),
         ("regions_description", DetailPageKind::Project) => Some(FieldMeta {
-            label: "Regions Description",
+            label: "Name of the geographic area",
             input_kind: FieldInputKind::Textarea,
         }),
         ("materials", DetailPageKind::Project) => Some(FieldMeta {
@@ -1183,6 +1183,7 @@ pub fn editable_field_list(kind: DetailPageKind) -> &'static [&'static str] {
             "description",
             "entirely_online",
             "location_name",
+            "regions_description",
             "location_description",
             "address",
             "city",
@@ -1655,6 +1656,15 @@ async fn format_display_value(
                 format!(r#"<p class="mb-1 font-semibold">{}</p>"#, esc())
             } else if can_edit {
                 format!(r#"<p class="mb-1 font-semibold">{}</p>"#, not_set())
+            } else {
+                String::new()
+            }
+        }
+        "regions_description" => {
+            if !empty {
+                format!(r#"<p class="mb-1">{}</p>"#, esc())
+            } else if can_edit {
+                format!(r#"<p class="mb-1">{}</p>"#, not_set())
             } else {
                 String::new()
             }
@@ -3117,7 +3127,6 @@ static PROJECT_ADDITIONAL_FIELDS: &[&str] = &[
     "in_person",
     "indoors",
     "outdoors",
-    "regions_description",
     "materials",
     "gear",
     "outcomes_label",
