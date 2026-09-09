@@ -26,7 +26,7 @@
         </span>
         <div>
           <h1 class="ss-xl mb-2"><%= self.name %></h1>
-          <% if let Some(translated) = self.translated_name { %>
+          <% if let Some(translated) = &self.translated_name { %>
             <p class="ss-normal mt-0 mb-2" lang="<%= self.lang %>"><%= translated %></p>
           <% } %>
           <p class="ss-small"><%- &self.badgeclass_description %></p>

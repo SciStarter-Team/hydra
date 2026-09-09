@@ -10,182 +10,198 @@
 //! That separation is the entire safety property, so it is kept at the type
 //! level rather than by discipline: `Badge` is what the credential is made
 //! of, and [`BadgeText`] is what a reader is shown. The conversion runs one
-//! way only. `Badge -> BadgeText` is the English rendering of a badge and is
-//! safe by construction, because it cannot produce a `Badge` and so cannot
-//! reach the credential; it exists so that the fallback from "no
-//! translation" to "the credential's own words" is written once rather than
-//! field by field at every use. `BadgeText -> Badge` is the direction that
-//! would put translated prose into a credential, and must never be written.
+//! way only. [`BadgeText::shown`] renders a badge for a reader and is safe by
+//! construction, because it cannot produce a `Badge` and so cannot reach the
+//! credential. `BadgeText -> Badge` is the direction that would put
+//! translated prose into a credential, and must never be written.
 //!
-//! Chrome -- the page talking, rather than the badge talking -- is not here.
-//! It goes through [`crate::i18n::tr`] like the rest of the site, so a badge
-//! page is translated by the same mechanism and in the same admin as every
-//! other page.
+//! What a badge says is translated by [`crate::i18n`], exactly like the rest
+//! of the site: its name, description, criteria narrative and tags are
+//! phrases, discovered when a badge page is rendered and translated in the
+//! same admin as every other phrase. So nothing here enumerates which badges
+//! have been translated or which languages they have been translated into --
+//! any badge may have a translation in any of [`Lang::TRANSLATABLE`], or in
+//! none of them, and adding one is a translator's job rather than a deploy.
+//! This module holds only the two things about a badge page that the general
+//! mechanism has no opinion about: what counts as the badge *being*
+//! translated, and which picture to draw it on.
 //!
-//! A badge's own prose is a whole [`BadgeText`] or nothing: a criteria list
+//! A badge's own prose is all of one language or none of it: a criteria list
 //! with three bullets translated and two not would read as a defect rather
-//! than as a partial translation.
+//! than as a partial translation. That is the one place a badge differs from
+//! ordinary page text, which falls back phrase by phrase, and it is why
+//! [`Prose`] is looked up as a unit.
+//!
+//! Chrome -- the page talking, rather than the badge talking -- is not here
+//! at all. It goes through [`crate::i18n::tr`] where it is written.
 
 use common::badge::Badge;
 
-use crate::i18n::Lang;
+use crate::i18n::{Lang, translation};
 
-/// The badge image a reader of one language is shown, and the template a
-/// download from their page is baked from.
+/// The context under which a badge's "learn how to earn this" address is
+/// translated.
 ///
-/// Artwork is presentation, like the prose around it: the credential baked
-/// into a translated image is the same canonical English payload, and the
-/// image URL recorded *in* that payload is the badge's own, so a verifier
-/// never sees a translated one.
-#[derive(Clone, Copy)]
-pub struct Artwork {
-    /// Where the image is published.
-    pub url: &'static str,
-    /// Where the bake reads it from, as a key into the embedded
-    /// [`crate::Static`] assets rather than a path on disk.
-    pub path: &'static str,
+/// A URL is not prose, and without a context it would sit in the admin
+/// looking like a phrase somebody had stocked by mistake. Naming the sense
+/// says what a translator is being asked for: the address of the same
+/// tutorial in their language, if there is one.
+pub(super) const EARN_URL: &str = "badge: where to earn it";
+
+/// A badge's own words, in one language.
+///
+/// Looked up as a unit rather than field by field, because a badge speaks a
+/// language or it does not: see the module documentation.
+struct Prose {
+    name: String,
+    description: String,
+    criteria_text: String,
+    tags: Vec<String>,
+}
+
+impl Prose {
+    /// The badge as it is written, which is what the credential carries.
+    fn english(badge: Badge) -> Prose {
+        Prose {
+            name: badge.name().to_owned(),
+            description: badge.description().to_owned(),
+            criteria_text: badge.criteria_text().to_owned(),
+            tags: badge.tags().iter().map(|tag| (*tag).to_owned()).collect(),
+        }
+    }
+
+    /// The badge in `lang`, or `None` unless every part of it has been
+    /// translated.
+    ///
+    /// `None` for English too, which is not a translation but the thing
+    /// translations are of.
+    fn translated(badge: Badge, lang: Lang) -> Option<Prose> {
+        Some(Prose {
+            name: translation("", badge.name(), lang)?,
+            description: translation("", badge.description(), lang)?,
+            criteria_text: translation("", badge.criteria_text(), lang)?,
+            tags: badge
+                .tags()
+                .iter()
+                .map(|tag| translation("", tag, lang))
+                .collect::<Option<Vec<String>>>()?,
+        })
+    }
+}
+
+/// Whether the badge itself can be read in `lang`.
+///
+/// The question the language picker asks. Answered by looking rather than by
+/// consulting a list, so a badge starts offering a language the moment its
+/// last phrase is translated.
+fn speaks(badge: Badge, lang: Lang) -> bool {
+    Prose::translated(badge, lang).is_some()
+}
+
+/// The artwork a reader of `lang` is shown, as a key into the embedded
+/// [`crate::Static`] assets rather than a path on disk.
+///
+/// Translated artwork is found by name rather than registered: the badge's
+/// own image with the language code appended to its stem. Drawing
+/// `badge-data-ethics-pt.png` and committing it is therefore the whole of
+/// giving that badge Portuguese artwork -- there is no second place to
+/// remember, and nothing that has to be kept in step with the list of
+/// languages. A badge with no picture in the reader's language is drawn on
+/// its own, which is what every badge did before any of them were
+/// translated.
+///
+/// Artwork is presentation, like the prose around it, and is chosen on its
+/// own terms: the credential baked into a translated image is the same
+/// canonical English payload, and the image URL recorded *in* that payload is
+/// the badge's own, so a verifier never sees a translated one.
+pub fn badge_artwork(badge: Badge, lang: Lang) -> String {
+    let own = badge.template_path();
+
+    if lang == Lang::En {
+        return own.to_owned();
+    }
+
+    let Some((stem, extension)) = own.rsplit_once('.') else {
+        return own.to_owned();
+    };
+
+    let translated = format!("{stem}-{}.{extension}", lang.code());
+
+    if crate::Static::get(&translated).is_some() {
+        translated
+    } else {
+        own.to_owned()
+    }
+}
+
+/// Where "learn how to earn this badge" goes for a reader of `lang`.
+///
+/// Presentation only: the `criteria` URL recorded in the credential stays the
+/// canonical English one, so the badge never points at two different things.
+///
+/// Falls back on its own rather than with the prose. A tutorial exists in the
+/// languages somebody has written it in, which need not be the languages the
+/// badge has been translated into, and pointing a Spanish reader at the
+/// English tutorial is better than pointing them nowhere.
+fn earn_url(badge: Badge, lang: Lang) -> Option<String> {
+    let english = badge.earn_url()?;
+
+    Some(translation(EARN_URL, english, lang).unwrap_or_else(|| english.to_owned()))
 }
 
 /// A badge's prose in one language, for display only.
 ///
-/// Convertible *from* [`Badge`] and never *to* it: see the module
+/// Made *from* a [`Badge`] and never turned back into one: see the module
 /// documentation for why that asymmetry is the point.
-#[derive(Clone, Copy)]
 pub struct BadgeText {
-    /// The badge's name as the translators of its tutorial render it. Shown
-    /// beneath the canonical name, never in place of it -- the canonical
-    /// name is what a verifier matches against the baked image and what the
-    /// "add to LinkedIn" link writes into a profile.
-    pub name: &'static str,
-    pub description: &'static str,
-    pub criteria_text: &'static str,
-    pub tags: &'static [&'static str],
-    /// Where "learn how to earn this badge" goes for a reader of this
-    /// language. Presentation only: the `criteria` URL recorded in the
-    /// credential stays the canonical English one, so the badge never
-    /// points at two different things.
-    pub earn_url: Option<&'static str>,
+    /// Whether the words below are a translation or the credential's own.
+    ///
+    /// False for English, and for a language nobody has finished translating
+    /// this badge into -- such a page renders in translated chrome around the
+    /// English original, which is honest, rather than half in each language.
+    pub translated: bool,
+    /// The badge's name as its translators render it. A page shows this
+    /// beneath the canonical name, never in place of it -- the canonical name
+    /// is what a verifier matches against the baked image and what the "add
+    /// to LinkedIn" link writes into a profile.
+    pub name: String,
+    pub description: String,
+    pub criteria_text: String,
+    pub tags: Vec<String>,
+    pub earn_url: Option<String>,
     /// The artwork for this language, which is the badge's own whenever
     /// nobody has drawn a translated one.
-    pub artwork: Artwork,
+    pub artwork: String,
 }
 
-impl From<Badge> for BadgeText {
-    /// A badge rendered in the language it was written in, which is to say
-    /// its own text, unchanged.
+impl BadgeText {
+    /// What a reader of `lang` is shown.
     ///
-    /// This is what a page falls back to when nobody has translated the
-    /// badge into the language being asked for, so that the fallback is one
-    /// decision in one place instead of one per field per page.
-    fn from(badge: Badge) -> BadgeText {
+    /// The one place the fallback from "no translation" to "the credential's
+    /// own words" is decided, rather than field by field at every use. In
+    /// English that fallback is all there is: the badge as it is written.
+    pub fn shown(badge: Badge, lang: Lang) -> BadgeText {
+        let translated = Prose::translated(badge, lang);
+        let is_translated = translated.is_some();
+
+        let Prose {
+            name,
+            description,
+            criteria_text,
+            tags,
+        } = translated.unwrap_or_else(|| Prose::english(badge));
+
         BadgeText {
-            name: badge.name(),
-            description: badge.description(),
-            criteria_text: badge.criteria_text(),
-            tags: badge.tags(),
-            earn_url: badge.earn_url(),
-            artwork: Artwork {
-                url: badge.template_url(),
-                path: badge.template_path(),
-            },
+            translated: is_translated,
+            name,
+            description,
+            criteria_text,
+            tags,
+            earn_url: earn_url(badge, lang),
+            artwork: badge_artwork(badge, lang),
         }
     }
 }
-
-/// A badge's prose in every language it has been translated into.
-///
-/// A whole struct, so a badge is translated into all of them or none.
-/// Offering a reader a choice of three languages and then quietly handing
-/// one of them the English original would be worse than not offering it.
-struct Translations {
-    es: BadgeText,
-    pt: BadgeText,
-}
-
-/// The translated prose for a badge, if there is any.
-///
-/// `None` for English, whose text is the credential's own, and for any badge
-/// nobody has translated: such a page renders in translated chrome around
-/// the English original, which is honest, rather than half in each language.
-pub fn badge_text(badge: Badge, lang: Lang) -> Option<&'static BadgeText> {
-    let translations = translations(badge)?;
-
-    match lang {
-        Lang::En => None,
-        Lang::Es => Some(&translations.es),
-        Lang::Pt => Some(&translations.pt),
-    }
-}
-
-/// The artwork to show a reader of `lang`, which is the badge's own unless
-/// the badge has been translated into that language.
-///
-/// The same fallback [`badge_text`] gets from the `Badge -> BadgeText`
-/// conversion, for the image handlers, which serve bytes rather than a page
-/// and so never build a [`BadgeText`].
-pub fn badge_artwork(badge: Badge, lang: Lang) -> Artwork {
-    badge_text(badge, lang)
-        .map(|text| text.artwork)
-        .unwrap_or_else(|| BadgeText::from(badge).artwork)
-}
-
-fn translations(badge: Badge) -> Option<&'static Translations> {
-    match badge {
-        Badge::DataEthicsForPractitioners => Some(&DATA_ETHICS),
-        _ => None,
-    }
-}
-
-// Wording follows the published Spanish and Portuguese tutorials
-// (scistarter.org/training-dataethics-es and -pt), which were translated in
-// collaboration with WCS, the Alianza Aguas Amazónicas, the Rede Brasileira
-// de Ciência Cidadã and the Red Iberoamericana de Ciencia Participativa. The
-// skills-and-competencies list on those pages is the same list as the
-// badge's, so an earner reads the same words in both places.
-//
-// The same text is in orrery's `src/badgetext.rs`, which serves the same
-// badge on scistarter.org: the two sites have to say the same thing about
-// the same credential.
-static DATA_ETHICS: Translations = Translations {
-    es: BadgeText {
-        name: "Ética de datos para profesionales",
-        description: "La insignia “Ética de datos para profesionales” se otorga a profesionales y líderes de proyectos de ciencia participativa, incluidos proyectos de ciencia ciudadana y ciencia comunitaria, que han demostrado la capacidad de “pensar como una persona experta en ética”.",
-        criteria_text: include_str!("data_ethics.es.md"),
-        tags: &[
-            "desarrollo profesional",
-            "participación comunitaria",
-            "ciencia ciudadana",
-        ],
-        earn_url: Some("https://scistarter.org/training-dataethics-es"),
-        artwork: Artwork {
-            url: concat!(
-                "https://",
-                env!("DOMAIN"),
-                "/-static/img/badges/badge-data-ethics-es.png"
-            ),
-            path: "img/badges/badge-data-ethics-es.png",
-        },
-    },
-    pt: BadgeText {
-        name: "Ética de Dados para Profissionais",
-        description: "O badge “Ética de Dados para Profissionais” é concedido a profissionais e lideranças de projetos de ciência participativa, incluindo projetos de ciência cidadã e ciência comunitária, que demonstraram a capacidade de “pensar como uma pessoa especialista em ética”.",
-        criteria_text: include_str!("data_ethics.pt.md"),
-        tags: &[
-            "desenvolvimento profissional",
-            "engajamento comunitário",
-            "ciência cidadã",
-        ],
-        earn_url: Some("https://scistarter.org/training-dataethics-pt"),
-        artwork: Artwork {
-            url: concat!(
-                "https://",
-                env!("DOMAIN"),
-                "/-static/img/badges/badge-data-ethics-pt.png"
-            ),
-            path: "img/badges/badge-data-ethics-pt.png",
-        },
-    },
-};
 
 /// One entry in a badge page's language picker.
 pub struct LanguageLink {
@@ -197,22 +213,28 @@ pub struct LanguageLink {
 
 /// The languages a badge page can be read in, as links that pin the choice.
 ///
-/// `?lang=` sticks for the rest of the session, so these are ordinary links
-/// to the page itself; [`crate::middleware::language::LANG_DEFAULT`] is
-/// offered alongside them by the template, as the way back to the browser's
-/// own preference.
+/// English and every language this badge has actually been translated into,
+/// which is however many that happens to be. `?lang=` sticks for the rest of
+/// the session, so these are ordinary links to the page itself;
+/// [`crate::middleware::language::LANG_DEFAULT`] is offered alongside them by
+/// the template, as the way back to the browser's own preference.
 ///
 /// Empty for a badge nobody has translated: the picker's promise is a
 /// translated *badge*, and the site's own language switching, which is what
-/// still puts translated chrome around such a page, is not this control's
-/// to offer.
+/// still puts translated chrome around such a page, is not this control's to
+/// offer.
 pub fn language_links(badge: Badge, canonical_url: &str, current: Lang) -> Vec<LanguageLink> {
-    if translations(badge).is_none() {
+    let spoken: Vec<Lang> = Lang::TRANSLATABLE
+        .into_iter()
+        .filter(|lang| speaks(badge, *lang))
+        .collect();
+
+    if spoken.is_empty() {
         return Vec::new();
     }
 
-    Lang::ALL
-        .into_iter()
+    std::iter::once(Lang::En)
+        .chain(spoken)
         .map(|lang| LanguageLink {
             endonym: lang.endonym(),
             code: lang.code(),
@@ -245,18 +267,79 @@ pub fn english_url(canonical_url: &str) -> String {
 mod tests {
     use super::*;
 
+    use crate::i18n::{Origin, Phrase, install_for_test, phrase_id};
+
+    /// A badge whose phrases no other test translates.
+    ///
+    /// The catalog these tests install into is the process-wide one, so a
+    /// test that translated a badge sharing a tag -- and most of them share
+    /// several -- would change what another test sees. The One Million Acts
+    /// badges carry no tags and no `earn_url`, and their names, descriptions
+    /// and criteria are their own, so each of them can be translated in
+    /// isolation.
+    const TRANSLATED: Badge = Badge::OneMillionActsOfScience2024;
+    const UNTRANSLATED: Badge = Badge::OneMillionActsOfScience2025;
+
+    /// Translate one phrase into each of `langs` in the catalog the site
+    /// translates against, the way the admin would.
+    ///
+    /// A phrase is stored whole -- a [`Phrase`] carries every language at
+    /// once -- so all the languages it should be readable in have to be
+    /// given together: installing Spanish on its own would take Portuguese
+    /// back off again.
+    fn install(context: &str, source: &str, langs: &[Lang], text: impl Fn(Lang) -> String) {
+        let mut phrase = Phrase::new(context, source, Origin::Manual);
+
+        for lang in langs {
+            phrase
+                .translations
+                .insert(lang.code().to_owned(), text(*lang));
+        }
+
+        install_for_test(&phrase);
+    }
+
+    /// Everything [`Prose::translated`] asks for, in each of `langs`, marked
+    /// with the language so a test can tell a translation from the original
+    /// at a glance.
+    fn translate_prose(badge: Badge, langs: &[Lang]) {
+        let mark = |lang: Lang, source: &str| format!("<{}>{source}", lang.code());
+
+        for source in [badge.name(), badge.description(), badge.criteria_text()] {
+            install("", source, langs, |lang| mark(lang, source));
+        }
+
+        for tag in badge.tags() {
+            install("", tag, langs, |lang| mark(lang, tag));
+        }
+    }
+
     #[test]
     fn the_english_rendering_is_the_credentials_own_words() {
         for badge in Badge::ALL {
-            let english = BadgeText::from(badge);
+            let english = BadgeText::shown(badge, Lang::En);
 
+            assert!(!english.translated);
             assert_eq!(english.name, badge.name());
             assert_eq!(english.description, badge.description());
             assert_eq!(english.criteria_text, badge.criteria_text());
             assert_eq!(english.tags, badge.tags());
-            assert_eq!(english.earn_url, badge.earn_url());
-            assert_eq!(english.artwork.url, badge.template_url());
-            assert_eq!(english.artwork.path, badge.template_path());
+            assert_eq!(english.earn_url.as_deref(), badge.earn_url());
+            assert_eq!(english.artwork, badge.template_path());
+        }
+    }
+
+    /// A badge with nothing translated reads as itself in every language, so
+    /// that asking for a language the badge does not speak is honest rather
+    /// than broken.
+    #[test]
+    fn an_untranslated_badge_reads_as_itself_in_every_language() {
+        for lang in Lang::ALL {
+            let shown = BadgeText::shown(UNTRANSLATED, lang);
+
+            assert!(!shown.translated);
+            assert_eq!(shown.name, UNTRANSLATED.name());
+            assert_eq!(shown.criteria_text, UNTRANSLATED.criteria_text());
         }
     }
 
@@ -265,110 +348,159 @@ mod tests {
     /// which is what a `?lang=` still does everywhere else, is untouched.
     #[test]
     fn only_a_translated_badge_offers_a_picker() {
-        for badge in Badge::ALL {
-            let links = language_links(badge, "https://example.org/badges/x", Lang::En);
-
-            if translations(badge).is_some() {
-                assert_eq!(links.len(), Lang::ALL.len());
-            } else {
-                assert!(links.is_empty(), "{} offers a picker", badge.name());
-            }
-        }
+        assert!(
+            language_links(UNTRANSLATED, "https://example.org/badges/x", Lang::En).is_empty(),
+            "a badge nobody has translated offers a picker"
+        );
     }
 
+    /// The point of the rewrite: a badge is translated into whichever
+    /// languages somebody has translated it into, one at a time, and the
+    /// picker offers exactly those alongside the original.
     #[test]
-    fn a_translation_says_something_different_from_the_original() {
-        for badge in Badge::ALL {
-            let Some(translations) = translations(badge) else {
-                continue;
-            };
+    fn a_badge_is_offered_in_the_languages_it_has_been_translated_into() {
+        let links = |current| language_links(TRANSLATED, "https://example.org/badges/x", current);
 
-            for text in [&translations.es, &translations.pt] {
-                assert_ne!(text.name, badge.name());
-                assert_ne!(text.description, badge.description());
-                assert_ne!(text.criteria_text, badge.criteria_text());
-            }
+        assert!(links(Lang::En).is_empty());
 
-            assert_ne!(translations.es.name, translations.pt.name);
-        }
+        translate_prose(TRANSLATED, &[Lang::Pt]);
+
+        let offered: Vec<&str> = links(Lang::Pt).iter().map(|link| link.code).collect();
+
+        assert_eq!(offered, ["en", "pt"], "Spanish is not translated yet");
+
+        let current: Vec<&str> = links(Lang::Pt)
+            .iter()
+            .filter(|link| link.current)
+            .map(|link| link.code)
+            .collect();
+
+        assert_eq!(current, ["pt"]);
+
+        translate_prose(TRANSLATED, &[Lang::Es, Lang::Pt]);
+
+        let offered: Vec<&str> = links(Lang::En).iter().map(|link| link.code).collect();
+
+        assert_eq!(offered, ["en", "es", "pt"]);
     }
 
-    /// English is the language the credential is written in, so it never has
-    /// a translation of its own to hand back.
+    /// A badge translated into one language is shown in it, and still reads
+    /// as itself in a language it has not been translated into.
     #[test]
-    fn english_has_no_translation() {
-        for badge in Badge::ALL {
-            assert!(badge_text(badge, Lang::En).is_none());
-        }
+    fn a_translation_is_shown_only_in_its_own_language() {
+        let badge = Badge::OneMillionActsOfScience2026;
+
+        translate_prose(badge, &[Lang::Es]);
+
+        let spanish = BadgeText::shown(badge, Lang::Es);
+
+        assert!(spanish.translated);
+        assert_eq!(spanish.name, format!("<es>{}", badge.name()));
+        assert_eq!(spanish.description, format!("<es>{}", badge.description()));
+
+        let portuguese = BadgeText::shown(badge, Lang::Pt);
+
+        assert!(!portuguese.translated);
+        assert_eq!(portuguese.name, badge.name());
     }
 
-    /// Artwork is registered as a URL and a path to the same picture, in two
-    /// different places, so the pair is checked rather than trusted: a
-    /// mismatch would publish one image and bake onto another, and nothing
-    /// else would notice.
-    ///
-    /// The two are required to share a filename only for translated artwork,
-    /// which is named here. Some of the badges' own images were published
-    /// under one name and committed under another long before this module
-    /// existed, and renaming a published badge image is not something a test
-    /// should demand.
+    /// Half a badge is not a translation. A page showing a translated name
+    /// over an English criteria list would read as a defect, so the whole
+    /// page stays in the original until the last phrase is done.
     #[test]
-    fn every_artwork_is_embedded() {
-        fn basename(location: &str) -> &str {
-            location.rsplit('/').next().unwrap_or(location)
-        }
+    fn a_partly_translated_badge_is_not_translated() {
+        let badge = Badge::IdealParticipatoryScience;
 
-        for badge in Badge::ALL {
-            let mut artworks = vec![BadgeText::from(badge).artwork];
+        install("", badge.name(), &[Lang::Es], |_| {
+            String::from("Ciencia participativa IDEAL")
+        });
+        install("", badge.description(), &[Lang::Es], |_| {
+            String::from("Una descripción.")
+        });
 
-            if let Some(translations) = translations(badge) {
-                for text in [&translations.es, &translations.pt] {
-                    assert_eq!(
-                        basename(text.artwork.url),
-                        basename(text.artwork.path),
-                        "artwork published at {} is baked from {}",
-                        text.artwork.url,
-                        text.artwork.path
-                    );
+        let shown = BadgeText::shown(badge, Lang::Es);
 
-                    artworks.push(text.artwork);
-                }
-            }
+        assert!(!shown.translated, "criteria are still untranslated");
+        assert_eq!(shown.name, badge.name());
 
-            for artwork in artworks {
-                assert!(
-                    crate::Static::get(artwork.path).is_some(),
-                    "no embedded bake template at {}",
-                    artwork.path
-                );
-            }
-        }
+        install("", badge.criteria_text(), &[Lang::Es], |_| {
+            String::from("Los criterios, en español.")
+        });
+
+        assert!(BadgeText::shown(badge, Lang::Es).translated);
     }
 
-    /// A language whose artwork was never drawn falls back to the badge's
-    /// own, and one whose artwork was drawn gets it.
+    /// The tutorial is a separate thing from the badge, so its address
+    /// follows whether *it* has been translated rather than whether the
+    /// badge has.
+    #[test]
+    fn the_tutorial_address_falls_back_on_its_own() {
+        let badge = Badge::SciStarterAmbassador;
+        let english = badge.earn_url().expect("this badge has a tutorial");
+
+        assert_eq!(
+            BadgeText::shown(badge, Lang::Pt).earn_url.as_deref(),
+            Some(english),
+            "an untranslated tutorial keeps its English address"
+        );
+
+        install(EARN_URL, english, &[Lang::Pt], |_| {
+            String::from("https://example.org/pt")
+        });
+
+        assert_eq!(
+            BadgeText::shown(badge, Lang::Pt).earn_url.as_deref(),
+            Some("https://example.org/pt"),
+            "a badge that is not translated can still have a translated tutorial"
+        );
+    }
+
+    /// Artwork is registered nowhere: it is the badge's own image with the
+    /// language appended, if that file was deployed. So this checks the
+    /// convention against what is actually embedded -- a badge with a
+    /// translated picture gets it, and one without falls back rather than
+    /// serving a 404's worth of nothing.
     #[test]
     fn translated_artwork_is_used_where_it_exists() {
         for badge in Badge::ALL {
-            assert_eq!(badge_artwork(badge, Lang::En).path, badge.template_path());
+            assert_eq!(badge_artwork(badge, Lang::En), badge.template_path());
 
-            let Some(translations) = translations(badge) else {
-                for lang in Lang::TRANSLATABLE {
-                    assert_eq!(badge_artwork(badge, lang).path, badge.template_path());
+            for lang in Lang::TRANSLATABLE {
+                let artwork = badge_artwork(badge, lang);
+
+                assert!(
+                    crate::Static::get(&artwork).is_some(),
+                    "no embedded artwork at {artwork}"
+                );
+
+                let (stem, extension) = badge
+                    .template_path()
+                    .rsplit_once('.')
+                    .expect("badge artwork has an extension");
+                let translated = format!("{stem}-{}.{extension}", lang.code());
+
+                if crate::Static::get(&translated).is_some() {
+                    assert_eq!(artwork, translated);
+                } else {
+                    assert_eq!(artwork, badge.template_path());
                 }
+            }
+        }
+    }
 
-                continue;
-            };
+    /// The badge the seed migration translates really does have artwork in
+    /// both of its languages, which is what a picker offering them promises.
+    #[test]
+    fn the_translated_badge_has_its_own_artwork_in_each_language() {
+        let badge = Badge::DataEthicsForPractitioners;
 
-            assert_eq!(
-                badge_artwork(badge, Lang::Es).path,
-                translations.es.artwork.path
+        for lang in Lang::TRANSLATABLE {
+            assert_ne!(
+                badge_artwork(badge, lang),
+                badge.template_path(),
+                "{} has no artwork of its own",
+                lang.code()
             );
-            assert_eq!(
-                badge_artwork(badge, Lang::Pt).path,
-                translations.pt.artwork.path
-            );
-            assert_ne!(translations.es.artwork.path, translations.pt.artwork.path);
         }
     }
 
@@ -377,5 +509,108 @@ mod tests {
         assert_eq!(image_query(Lang::En), "");
         assert_eq!(image_query(Lang::Es), "?lang=es");
         assert_eq!(image_query(Lang::Pt), "?lang=pt");
+    }
+
+    /// The seed migration carries wording that used to be Rust, so it names
+    /// the badge's strings from outside the compiler's reach. These tests
+    /// are what keeps that from going stale silently: edit the badge's
+    /// description in `common/src/badge` and its phrase id moves, leaving
+    /// the seeded translation stranded and the page quietly English.
+    mod seed {
+        use super::*;
+
+        const SEED: &str =
+            include_str!("../../migrations/20260908234722_seed_badge_translations.sql");
+
+        /// The badge the seed translates, and the languages it translates it
+        /// into.
+        const SEEDED: Badge = Badge::DataEthicsForPractitioners;
+
+        /// A database holding just the translation tables, created from the
+        /// migration itself so the test cannot drift away from the schema.
+        async fn fixture() -> (tempfile::TempDir, sqlx::SqlitePool) {
+            let dir = tempfile::tempdir().expect("temporary directory");
+            let path = dir.path().join("translations.sqlite");
+
+            let pool = sqlx::SqlitePool::connect_with(
+                sqlx::sqlite::SqliteConnectOptions::new()
+                    .filename(&path)
+                    .create_if_missing(true),
+            )
+            .await
+            .expect("pool");
+
+            sqlx::raw_sql(include_str!(
+                "../../migrations/20260821204218_translation_phrases.sql"
+            ))
+            .execute(&pool)
+            .await
+            .expect("schema");
+
+            sqlx::raw_sql(SEED).execute(&pool).await.expect("seed");
+
+            (dir, pool)
+        }
+
+        #[tokio::test]
+        async fn every_seeded_phrase_is_one_the_running_code_can_find() {
+            let (_dir, pool) = fixture().await;
+
+            let rows = sqlx::query!(r#"SELECT phrase_id, context, source FROM translation_phrase"#)
+                .fetch_all(&pool)
+                .await
+                .expect("seeded phrases");
+
+            assert!(!rows.is_empty(), "the seed should insert something");
+
+            for row in &rows {
+                assert_eq!(
+                    row.phrase_id,
+                    phrase_id(&row.context, &row.source),
+                    "seeded id does not match the one {:?} would be looked up under",
+                    row.source
+                );
+            }
+        }
+
+        /// The one that matters: every phrase the badge is looked up by is
+        /// one the seed actually translated. A wording change in
+        /// `common/src/badge` fails here rather than in production.
+        #[tokio::test]
+        async fn the_seeded_badge_is_translated_into_both_languages() {
+            let (_dir, pool) = fixture().await;
+
+            let mut phrases: Vec<(&str, &str)> = vec![
+                ("", SEEDED.name()),
+                ("", SEEDED.description()),
+                ("", SEEDED.criteria_text()),
+                (EARN_URL, SEEDED.earn_url().expect("a tutorial")),
+            ];
+
+            phrases.extend(SEEDED.tags().iter().map(|tag| ("", *tag)));
+
+            for (context, source) in phrases {
+                let id = phrase_id(context, source);
+
+                for lang in Lang::TRANSLATABLE {
+                    let code = lang.code();
+
+                    let translated = sqlx::query_scalar!(
+                        r#"SELECT translated FROM translation WHERE phrase_id = ? AND lang = ?"#,
+                        id,
+                        code
+                    )
+                    .fetch_optional(&pool)
+                    .await
+                    .expect("query")
+                    .unwrap_or_default();
+
+                    assert!(
+                        !translated.is_empty(),
+                        "the seed has no {code} for {source:?}"
+                    );
+                }
+            }
+        }
     }
 }

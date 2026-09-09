@@ -211,6 +211,25 @@ pub fn tr_content(context: &str, source: &str) -> String {
     translated(context, source, current_lang())
 }
 
+/// Whether a phrase has been translated into `lang`, and what it says.
+///
+/// [`tr`] and its relatives answer "what should this reader see", which is
+/// the source text whenever nothing has been translated -- the fallback that
+/// keeps every page readable. A caller that has to tell those two apart asks
+/// this instead: a page offering to be read in another language can only
+/// honestly offer the languages it has actually been written in, and
+/// something assembled out of several phrases -- a badge, say -- may want to
+/// be shown in a translation only once all of them have one.
+///
+/// Discovery happens here as it does in [`tr`], so asking whether a phrase
+/// has been translated is also how it turns up in the admin to be
+/// translated.
+pub fn translation(context: &'static str, source: &'static str, lang: Lang) -> Option<String> {
+    discover(context, source, Origin::Discovered);
+
+    lookup(context, source, lang)
+}
+
 fn translate(context: &str, source: &str, lang: Lang, origin: Origin) -> String {
     // Discovery happens whatever the language, including English. Most
     // traffic is English, and a phrase that only stocked itself when someone
@@ -221,14 +240,18 @@ fn translate(context: &str, source: &str, lang: Lang, origin: Origin) -> String 
     translated(context, source, lang)
 }
 
-/// What the running site's catalog says, falling back to the source text.
-fn translated(context: &str, source: &str, lang: Lang) -> String {
+/// What the running site's catalog says, or `None` to display it as written.
+fn lookup(context: &str, source: &str, lang: Lang) -> Option<String> {
     CATALOG
         .read()
         .expect("translation catalog lock poisoned")
         .lookup(context, source, lang)
-        .unwrap_or(source)
-        .to_owned()
+        .map(str::to_owned)
+}
+
+/// What the running site's catalog says, falling back to the source text.
+fn translated(context: &str, source: &str, lang: Lang) -> String {
+    lookup(context, source, lang).unwrap_or_else(|| source.to_owned())
 }
 
 /// Where a phrase came from.
