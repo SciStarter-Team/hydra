@@ -1530,14 +1530,6 @@ pub struct WorkflowStatusResponse {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct WorkflowTutorialCountRequest {
     pub workflow: WorkflowType,
-    /// Count only the completions of one language's build of the tutorial.
-    ///
-    /// Data Ethics is the only workflow with more than one build, and its
-    /// three landing pages each show their own count rather than the sum;
-    /// every other workflow leaves this `None` and is counted whole.
-    /// Defaulted so that a peer built before the field existed still parses.
-    #[serde(default)]
-    pub language: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

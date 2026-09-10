@@ -17,7 +17,7 @@ use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
 use crate::training::{
     self, ArticulateCard, ClaimBody, ProjectCardView, SidebarBody, SigninBody, StepView, StepsView,
-    TrainingChrome, TrainingContent, TutorialBody, linear_states, module_url, open_flags,
+    TrainingChrome, TrainingContent, TutorialBody, linear_states_ungating, module_url, open_flags,
     render_page, render_progress_fragment, tutorial_launch_url,
 };
 
@@ -193,7 +193,7 @@ pub async fn page(Authenticated(user_info): Authenticated) -> Result<Response, E
 pub async fn progress(Authenticated(user_info): Authenticated) -> Result<Response, Error> {
     let content = FoundationsContent::current().await;
     let steps = build_steps(&content, &user_info).await;
-    let count = training::tutorials_completed(WorkflowType::Foundations, None).await;
+    let count = training::tutorials_completed(WorkflowType::Foundations).await;
     render_progress_fragment(steps, count)
 }
 
@@ -203,7 +203,7 @@ async fn build_content(
 ) -> Result<TrainingContent, Error> {
     let live_updates = user_info.is_some();
     let steps = build_steps(content, &user_info).await;
-    let tutorials_completed = training::tutorials_completed(WorkflowType::Foundations, None).await;
+    let tutorials_completed = training::tutorials_completed(WorkflowType::Foundations).await;
     let sidebar_html = SidebarBody {
         badge_image: content.badge_image.clone(),
         html: content.sidebar_html.clone(),
@@ -266,12 +266,18 @@ async fn build_steps(
         .count()
         >= 2;
 
-    let states = linear_states(&[
-        logged_in,
-        done("tutorial"),
-        projects_done,
-        status.badge_granted,
-    ]);
+    // The tutorial is open to everyone: a visitor with no account can work
+    // through it, they just cannot be credited for it. Orrery's page says the
+    // same thing with `data-unblocked`.
+    let states = linear_states_ungating(
+        &[
+            logged_in,
+            done("tutorial"),
+            projects_done,
+            status.badge_granted,
+        ],
+        &[false, true, false, false],
+    );
     let opens = open_flags(&states);
 
     let account_body = SigninBody {

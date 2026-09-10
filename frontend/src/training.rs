@@ -20,7 +20,7 @@ use common::shared::db;
 use poem::{IntoResponse, Response, web::Html};
 use sailfish::TemplateOnce;
 
-use crate::articulate::{ArticulateParams, LRS_URL};
+use crate::articulate::{ArticulateParams, LRS_URL, standalone_url, with_query};
 use crate::component::{Component, Head, StandardLayout};
 
 pub mod champion;
@@ -34,7 +34,7 @@ pub mod libraries;
 /// Display state of a single accordion step, derived from the user's
 /// completion timestamps. Each variant maps to the CSS class the existing
 /// accordion stylesheet/JS already understands.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum StepState {
     /// Finished — collapsed, shows a checkmark.
     Completed,
@@ -42,6 +42,10 @@ pub enum StepState {
     Current,
     /// Locked behind earlier steps — dimmed and not expandable.
     Blocked,
+    /// Not where the user is, but not locked either: a step they may do now
+    /// even though something before it is unfinished. Reads as an ordinary
+    /// collapsed step — the point is the absence of `blocked disabled`.
+    Available,
 }
 
 impl StepState {
@@ -53,6 +57,7 @@ impl StepState {
             StepState::Completed => "completed",
             StepState::Current => "current",
             StepState::Blocked => "blocked disabled",
+            StepState::Available => "",
         }
     }
 
@@ -66,14 +71,32 @@ impl StepState {
 /// step after it is `Blocked`. This is the common linear-progression case;
 /// trainings whose gating differs can compute states themselves.
 pub fn linear_states(done: &[bool]) -> Vec<StepState> {
+    linear_states_ungating(done, &[])
+}
+
+/// [`linear_states`], with an escape from the gate.
+///
+/// `ungated` runs parallel to `done`: a step marked there is `Available`
+/// rather than `Blocked` when it would otherwise be locked behind an
+/// unfinished step. A short slice leaves the remaining steps gated, so
+/// passing `&[]` is the plain linear case.
+///
+/// Data Ethics is the one training that needs this: its tutorial is open to
+/// anyone, signed in or not, and only the badge at the end requires an
+/// account. Orrery expresses the same exemption as `data-unblocked` in the
+/// page markup, and the two must agree -- a learner offered the tutorial on
+/// one site and refused it on the other is a difference nobody chose.
+pub fn linear_states_ungating(done: &[bool], ungated: &[bool]) -> Vec<StepState> {
     let mut states = Vec::with_capacity(done.len());
     let mut current_assigned = false;
-    for &is_done in done {
+    for (index, &is_done) in done.iter().enumerate() {
         if is_done {
             states.push(StepState::Completed);
         } else if !current_assigned {
             states.push(StepState::Current);
             current_assigned = true;
+        } else if ungated.get(index).copied().unwrap_or(false) {
+            states.push(StepState::Available);
         } else {
             states.push(StepState::Blocked);
         }
@@ -254,15 +277,16 @@ pub fn module_url<'a>(stored: &'a str, built_in: &'a str) -> &'a str {
 /// older Rise exports report without it and pass `None`, but they still need
 /// everything else.
 ///
-/// A signed-out visitor gets the bare URL: there is no actor to name, and
-/// every tutorial step is blocked until they sign in anyway.
+/// A signed-out visitor gets the module's LMS-free entry point (see
+/// [`standalone_url`]): there is no actor to name, and the SCORM Driver
+/// wrapper would show them a blank page rather than the course.
 pub fn tutorial_launch_url(
     base_url: &str,
     activity_id: Option<&str>,
     user: &Option<Arc<BasicInfo>>,
 ) -> String {
     let Some(user) = user else {
-        return base_url.to_string();
+        return standalone_url(base_url).into_owned();
     };
 
     let mut params = ArticulateParams::new(LRS_URL, user.clone());
@@ -271,7 +295,7 @@ pub fn tutorial_launch_url(
         params = params.with_activity_id(activity_id);
     }
 
-    format!("{base_url}?{params}")
+    with_query(base_url, &params.to_string())
 }
 
 /// One Articulate tutorial card — a linked image. A tutorial step has one or
@@ -409,13 +433,10 @@ pub async fn fetch_status(workflow: WorkflowType, user_id: &str) -> WorkflowStat
 
 /// Platform-wide count of completed tutorials for a workflow (the "Tutorials
 /// Completed to Date" figure), formatted with thousands separators.
-pub async fn tutorials_completed(workflow: WorkflowType, language: Option<&str>) -> String {
+pub async fn tutorials_completed(workflow: WorkflowType) -> String {
     let response: WorkflowTutorialCountResponse = common::service::request(
         "user.workflow.tutorial_count",
-        WorkflowTutorialCountRequest {
-            workflow,
-            language: language.map(str::to_string),
-        },
+        WorkflowTutorialCountRequest { workflow },
     )
     .await
     .unwrap_or(WorkflowTutorialCountResponse { count: 0 });
@@ -474,11 +495,8 @@ fn commafy(n: i64) -> String {
 mod tests {
     use super::*;
 
-    /// Nobody to launch as: a signed-out visitor gets the module's own URL,
-    /// unchanged and unadorned. Every tutorial step is blocked until they sign
-    /// in, so this is the link they cannot use yet rather than a broken one.
-    /// The placeholder several content records shipped with is not a URL, and
-    /// must not be launched as one.
+    /// The placeholder several content records shipped with is not a URL,
+    /// and must not be launched as one.
     #[test]
     fn a_placeholder_module_url_falls_back_to_the_built_in_one() {
         assert_eq!(
@@ -495,8 +513,25 @@ mod tests {
         );
     }
 
+    /// Nobody to launch as, so no launch context -- and a SCORM Driver
+    /// wrapper handed no launch context renders a blank page forever. The
+    /// signed-out link has to be the package's LMS-free entry point instead.
     #[test]
-    fn a_signed_out_visitor_gets_the_bare_url() {
+    fn a_signed_out_visitor_gets_an_entry_point_that_works() {
+        assert_eq!(
+            tutorial_launch_url(
+                "https://media.scistarter.org/dataethics-es/scormdriver/indexAPI.html",
+                Some("http://4xI0y6kwB69QeGbWDC8I-KkmgEYmLbuL_rise"),
+                &None
+            ),
+            "https://media.scistarter.org/dataethics-es/scormcontent/index.html"
+        );
+    }
+
+    /// A Rise export runs with or without an LMS, so a signed-out visitor
+    /// gets exactly the URL the training names.
+    #[test]
+    fn a_signed_out_visitor_gets_a_rise_export_unchanged() {
         assert_eq!(
             tutorial_launch_url(
                 "https://media.scistarter.org/foundations/index.html",
@@ -505,6 +540,32 @@ mod tests {
             ),
             "https://media.scistarter.org/foundations/index.html"
         );
+    }
+
+    /// The plain linear case: one step in progress, everything after it shut.
+    #[test]
+    fn a_gated_progression_blocks_everything_past_the_current_step() {
+        assert_eq!(
+            linear_states(&[true, false, false]),
+            vec![StepState::Completed, StepState::Current, StepState::Blocked],
+        );
+    }
+
+    /// An ungated step is reachable while an earlier one is unfinished --
+    /// Data Ethics' tutorial, which anyone may work through -- without
+    /// unlocking the steps around it. `Available` is the whole point: it
+    /// renders without `blocked disabled`, which is what the accordion JS
+    /// checks before it will expand a step.
+    #[test]
+    fn an_ungated_step_stays_reachable_while_its_neighbours_are_locked() {
+        let states = linear_states_ungating(&[false, false, false], &[false, true, false]);
+
+        assert_eq!(
+            states,
+            vec![StepState::Current, StepState::Available, StepState::Blocked],
+        );
+        assert_eq!(states[1].css_class(), "");
+        assert!(states[2].css_class().contains("disabled"));
     }
 
     /// The activity id is what a SCORM Driver export needs before it will

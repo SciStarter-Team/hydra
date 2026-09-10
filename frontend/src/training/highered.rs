@@ -29,9 +29,12 @@ const PROGRESS_PATH: &str = "/training/higher-ed/-progress";
 pub const EXPLORE_PATH: &str = "/training/higher-ed/explore";
 const SLUG: &str = "higher-ed";
 
-// An older Rise export: no launch activity id, but the rest of the context
-// still has to be there.
-const HIGHERED_URL: &str = "https://media.scistarter.org/highered/index.html";
+// A SCORM Driver package, which emits its assessment result only under the
+// full xAPI launch context, so it launches with its activity id. The callback
+// in `crate::api::v2` accepts this alongside the id the Rise export it
+// replaced reported.
+const HIGHERED_URL: &str = "https://media.scistarter.org/highered-v2/scormdriver/indexAPI.html";
+const HIGHERED_ACTIVITY_ID: &str = "http://TeachingInHigherEdStandardized";
 
 /// Records the Higher Education "list" step for a user (fired when they create
 /// or add to a list). Fire-and-forget; it is a no-op unless the user has
@@ -141,7 +144,7 @@ pub async fn page(Authenticated(user_info): Authenticated) -> Result<Response, E
 pub async fn progress(Authenticated(user_info): Authenticated) -> Result<Response, Error> {
     let content = HigherEdContent::current().await;
     let steps = build_steps(&content, &user_info).await;
-    let count = training::tutorials_completed(WorkflowType::HigherEd, None).await;
+    let count = training::tutorials_completed(WorkflowType::HigherEd).await;
     render_progress_fragment(steps, count)
 }
 
@@ -170,7 +173,7 @@ async fn build_content(
 ) -> Result<TrainingContent, Error> {
     let live_updates = user_info.is_some();
     let steps = build_steps(content, &user_info).await;
-    let tutorials_completed = training::tutorials_completed(WorkflowType::HigherEd, None).await;
+    let tutorials_completed = training::tutorials_completed(WorkflowType::HigherEd).await;
     let sidebar_html = SidebarBody {
         badge_image: content.badge_image.clone(),
         html: content.sidebar_html.clone(),
@@ -236,7 +239,7 @@ async fn build_steps(content: &HigherEdContent, user_info: &Option<Arc<BasicInfo
         cards: vec![ArticulateCard {
             href: tutorial_launch_url(
                 module_url(&content.articulate_url, HIGHERED_URL),
-                None,
+                Some(HIGHERED_ACTIVITY_ID),
                 user_info,
             ),
             image: content.articulate_image.clone(),
@@ -274,4 +277,30 @@ async fn build_steps(content: &HigherEdContent, user_info: &Option<Arc<BasicInfo
     ];
 
     StepsView { steps }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A SCORM Driver package reports its assessment result only when it is
+    /// launched with an activity id, and the callback matches a lowercased
+    /// copy of what the module reports. This is the spelling `api/v2.rs`
+    /// compares against; a mismatch is silent -- the learner finishes and
+    /// nothing is recorded.
+    #[test]
+    fn the_launch_activity_id_is_the_one_the_callback_matches() {
+        assert_eq!(
+            HIGHERED_ACTIVITY_ID.to_lowercase(),
+            "http://teachinginhigheredstandardized",
+        );
+    }
+
+    /// `highered/` still holds the Rise export this replaced, so the prefix
+    /// is the difference between the current module and the old one.
+    #[test]
+    fn the_build_launched_is_the_current_export() {
+        assert!(HIGHERED_URL.ends_with("/scormdriver/indexAPI.html"));
+        assert!(HIGHERED_URL.contains("/highered-v2/"));
+    }
 }

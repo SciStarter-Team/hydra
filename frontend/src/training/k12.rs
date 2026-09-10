@@ -125,7 +125,7 @@ pub async fn page(Authenticated(user_info): Authenticated) -> Result<Response, E
 pub async fn progress(Authenticated(user_info): Authenticated) -> Result<Response, Error> {
     let content = K12Content::current().await;
     let steps = build_steps(&content, &user_info).await;
-    let count = training::tutorials_completed(WorkflowType::K12, None).await;
+    let count = training::tutorials_completed(WorkflowType::K12).await;
     render_progress_fragment(steps, count)
 }
 
@@ -135,7 +135,7 @@ async fn build_content(
 ) -> Result<TrainingContent, Error> {
     let live_updates = user_info.is_some();
     let steps = build_steps(content, &user_info).await;
-    let tutorials_completed = training::tutorials_completed(WorkflowType::K12, None).await;
+    let tutorials_completed = training::tutorials_completed(WorkflowType::K12).await;
     let sidebar_html = SidebarBody {
         badge_image: content.badge_image.clone(),
         html: content.sidebar_html.clone(),

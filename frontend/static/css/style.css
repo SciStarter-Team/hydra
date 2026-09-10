@@ -34,6 +34,10 @@
 @import "./elements/tailwind-v3-compat.css" layer(hydra);
 
 
+/** Load Utilities **/
+@import "./utilities/visibility.css" layer(hydra);
+
+
 /** Load Elements **/
 @import "./elements/typography.css" layer(hydra);
 @import "./elements/btn.css" layer(hydra);

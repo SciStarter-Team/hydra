@@ -638,12 +638,12 @@ async fn update_higher_ed_progress(
 /// language of the build that was finished, and the badge-earned email
 /// written in it. `None` if the step is not one of the module's.
 ///
-/// One badge and one completion row for all three builds; the language they
-/// differ by is knowable at this moment and nowhere else, so it is recorded
-/// alongside the completion as well as used to pick the mail -- each of the
-/// three landing pages counts its own build. The step spellings and the
-/// language codes are orrery's `DataEthicsState.TUTORIAL_COMPLETIONS`, so a
-/// completion means the same thing whichever side recorded it.
+/// One badge, one completion row and one tally for all three builds; the
+/// language they differ by is knowable at this moment and nowhere else, so
+/// it is recorded alongside the completion as well as used to pick the mail.
+/// The step spellings and the language codes are orrery's
+/// `DataEthicsState.TUTORIAL_COMPLETIONS`, so a completion means the same
+/// thing whichever side recorded it.
 fn data_ethics_completion(step: &str) -> Option<(&'static str, TriggerEvent)> {
     match step {
         "tutorial" => Some(("en", TriggerEvent::BadgeDataEthics)),
@@ -911,25 +911,15 @@ pub async fn tutorial_count(req: &Request) -> Result<WorkflowTutorialCountRespon
         )
         .fetch_one(db())
         .await?,
-        // The one workflow with a build per language: each page counts its
-        // own. A completion recorded before `tutorial_language` existed says
-        // nothing about which build it was and is counted with English --
-        // until August 2026 all three pages launched the English module.
-        WorkflowType::DataEthics => match request.language.as_deref() {
-            Some(language) => sqlx::query_scalar!(
-                r#"SELECT COUNT(*) as "count: i64" FROM data_ethics_progress
-                   WHERE tutorial_completed_at IS NOT NULL
-                     AND (tutorial_language = ?1 OR (tutorial_language = '' AND ?1 = 'en'))"#,
-                language
-            )
-            .fetch_one(db())
-            .await?,
-            None => sqlx::query_scalar!(
-                r#"SELECT COUNT(*) as "count: i64" FROM data_ethics_progress WHERE tutorial_completed_at IS NOT NULL"#
-            )
-            .fetch_one(db())
-            .await?,
-        },
+        // Data Ethics has a build per language, but they are one tutorial as
+        // far as this figure is concerned, so all three pages show the sum.
+        // `tutorial_language` still records which build each learner
+        // finished; this query does not read it.
+        WorkflowType::DataEthics => sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count: i64" FROM data_ethics_progress WHERE tutorial_completed_at IS NOT NULL"#
+        )
+        .fetch_one(db())
+        .await?,
         WorkflowType::Ideal => sqlx::query_scalar!(
             r#"SELECT COUNT(*) as "count: i64" FROM ideal_progress WHERE tutorial_completed_at IS NOT NULL"#
         )

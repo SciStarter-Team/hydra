@@ -22,10 +22,18 @@ const BASE_PATH: &str = "/training/data-literacy";
 const PROGRESS_PATH: &str = "/training/data-literacy/-progress";
 const SLUG: &str = "data-literacy";
 
-// The tutorial's two builds, both older Rise exports that report without a
-// launch activity id.
-const DATALITERACY_EN_URL: &str = "https://media.scistarter.org/dataliteracy/index.html";
-const DATALITERACY_ES_URL: &str = "https://media.scistarter.org/dataliteracy/es/index.html";
+// The tutorial's two builds. Both are current-generation exports, which emit
+// their assessment result only under the full xAPI launch context, so each
+// launches with its own activity id -- the export's TC_COURSE_ID. The
+// callback in `crate::api::v2` accepts these alongside the ids the Rise
+// exports they replaced reported, so a learner mid-attempt on the old build
+// still has their completion recorded.
+const DATALITERACY_EN_URL: &str =
+    "https://media.scistarter.org/data-literacy/scormdriver/indexAPI.html";
+const DATALITERACY_EN_ACTIVITY_ID: &str = "http://DataLiteracyWithBadgeStandardized";
+const DATALITERACY_ES_URL: &str =
+    "https://media.scistarter.org/data-literacy-es/scormdriver/indexAPI.html";
+const DATALITERACY_ES_ACTIVITY_ID: &str = "http://DataLiteracySpanishWithBadge";
 
 /// Editable copy for the Data Literacy training. `#[serde(default)]` is required
 /// (see [`crate::training::foundations::FoundationsContent`]).
@@ -118,7 +126,7 @@ pub async fn page(Authenticated(user_info): Authenticated) -> Result<Response, E
 pub async fn progress(Authenticated(user_info): Authenticated) -> Result<Response, Error> {
     let content = DataLiteracyContent::current().await;
     let steps = build_steps(&content, &user_info).await;
-    let count = training::tutorials_completed(WorkflowType::DataLiteracy, None).await;
+    let count = training::tutorials_completed(WorkflowType::DataLiteracy).await;
     render_progress_fragment(steps, count)
 }
 
@@ -128,7 +136,7 @@ async fn build_content(
 ) -> Result<TrainingContent, Error> {
     let live_updates = user_info.is_some();
     let steps = build_steps(content, &user_info).await;
-    let tutorials_completed = training::tutorials_completed(WorkflowType::DataLiteracy, None).await;
+    let tutorials_completed = training::tutorials_completed(WorkflowType::DataLiteracy).await;
     let sidebar_html = SidebarBody {
         badge_image: content.badge_image.clone(),
         html: content.sidebar_html.clone(),
@@ -197,7 +205,7 @@ async fn build_steps(
             ArticulateCard {
                 href: tutorial_launch_url(
                     module_url(&content.articulate_en, DATALITERACY_EN_URL),
-                    None,
+                    Some(DATALITERACY_EN_ACTIVITY_ID),
                     user_info,
                 ),
                 image: content.articulate_en_image.clone(),
@@ -205,7 +213,7 @@ async fn build_steps(
             ArticulateCard {
                 href: tutorial_launch_url(
                     module_url(&content.articulate_es, DATALITERACY_ES_URL),
-                    None,
+                    Some(DATALITERACY_ES_ACTIVITY_ID),
                     user_info,
                 ),
                 image: content.articulate_es_image.clone(),
@@ -244,4 +252,38 @@ async fn build_steps(
     ];
 
     StepsView { steps }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A SCORM Driver package reports its assessment result only when it is
+    /// launched with an activity id, and the callback matches a lowercased
+    /// copy of what the module reports. These are the spellings `api/v2.rs`
+    /// compares against; a mismatch is silent -- the learner finishes and
+    /// nothing is recorded.
+    #[test]
+    fn the_launch_activity_ids_are_the_ones_the_callback_matches() {
+        assert_eq!(
+            DATALITERACY_EN_ACTIVITY_ID.to_lowercase(),
+            "http://dataliteracywithbadgestandardized",
+        );
+        assert_eq!(
+            DATALITERACY_ES_ACTIVITY_ID.to_lowercase(),
+            "http://dataliteracyspanishwithbadge",
+        );
+    }
+
+    /// Both builds are SCORM Driver packages, whose entry point is
+    /// `scormdriver/indexAPI.html`. The Rise exports they replaced still sit
+    /// at `dataliteracy/`, so a launch URL naming that prefix is the old
+    /// module rather than a typo.
+    #[test]
+    fn each_build_launches_the_current_export() {
+        for url in [DATALITERACY_EN_URL, DATALITERACY_ES_URL] {
+            assert!(url.ends_with("/scormdriver/indexAPI.html"), "{url}");
+            assert!(!url.contains("/dataliteracy/"), "{url}");
+        }
+    }
 }

@@ -22,7 +22,7 @@ use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
 use crate::training::{
     self, ArticulateCard, ClaimBody, SidebarBody, SigninBody, StepView, StepsView, TrainingChrome,
-    TrainingContent, TutorialBody, linear_states, module_url, open_flags, render_page,
+    TrainingContent, TutorialBody, linear_states_ungating, module_url, open_flags, render_page,
     render_progress_fragment, tutorial_launch_url,
 };
 
@@ -63,17 +63,6 @@ impl DataEthicsLanguage {
             DataEthicsLanguage::English => "/training/data-ethics/-progress",
             DataEthicsLanguage::Spanish => "/training/data-ethics-es/-progress",
             DataEthicsLanguage::Portuguese => "/training/data-ethics-pt/-progress",
-        }
-    }
-
-    /// How this language is written in `data_ethics_progress`, and in
-    /// orrery's `DataEthicsState.language`, so a completion counts the same
-    /// whichever side recorded it.
-    pub fn code(self) -> &'static str {
-        match self {
-            DataEthicsLanguage::English => "en",
-            DataEthicsLanguage::Spanish => "es",
-            DataEthicsLanguage::Portuguese => "pt",
         }
     }
 
@@ -388,10 +377,7 @@ async fn render_progress(
 ) -> Result<Response, Error> {
     let content = DataEthicsContent::current(language).await;
     let steps = build_steps(&content, &user_info).await;
-    // This page's own build, not all three: see `tutorial_count` in
-    // user-service.
-    let count =
-        training::tutorials_completed(WorkflowType::DataEthics, Some(language.code())).await;
+    let count = training::tutorials_completed(WorkflowType::DataEthics).await;
     render_progress_fragment(steps, count)
 }
 
@@ -401,9 +387,7 @@ async fn build_content(
 ) -> Result<TrainingContent, Error> {
     let live_updates = user_info.is_some();
     let steps = build_steps(content, &user_info).await;
-    let tutorials_completed =
-        training::tutorials_completed(WorkflowType::DataEthics, Some(content.language.code()))
-            .await;
+    let tutorials_completed = training::tutorials_completed(WorkflowType::DataEthics).await;
     let sidebar_html = SidebarBody {
         badge_image: content.badge_image.clone(),
         html: content.sidebar_html.clone(),
@@ -451,7 +435,13 @@ async fn build_steps(content: &DataEthicsContent, user_info: &Option<Arc<BasicIn
         .completed_steps
         .iter()
         .any(|step| step == content.language.step());
-    let states = linear_states(&[logged_in, tutorial_done, status.badge_granted]);
+    // The tutorial is open to everyone: a visitor with no account can work
+    // through it, they just cannot be awarded the badge at the end. Orrery's
+    // three pages say the same thing with `data-unblocked`.
+    let states = linear_states_ungating(
+        &[logged_in, tutorial_done, status.badge_granted],
+        &[false, true, false],
+    );
     let opens = open_flags(&states);
 
     let account_body = SigninBody {
@@ -565,16 +555,6 @@ mod tests {
         assert_eq!(DataEthicsLanguage::English.step(), "tutorial");
         assert_eq!(DataEthicsLanguage::Spanish.step(), "tutorial-es");
         assert_eq!(DataEthicsLanguage::Portuguese.step(), "tutorial-pt");
-    }
-
-    /// The codes a page counts by, which are what `data_ethics_progress`
-    /// and orrery's `DataEthicsState.language` store. A page counting under
-    /// a spelling nothing writes would read zero rather than fail.
-    #[test]
-    fn the_language_codes_are_the_ones_completions_are_stored_under() {
-        assert_eq!(DataEthicsLanguage::English.code(), "en");
-        assert_eq!(DataEthicsLanguage::Spanish.code(), "es");
-        assert_eq!(DataEthicsLanguage::Portuguese.code(), "pt");
     }
 
     /// Every build is a SCORM Driver package, whose entry point is

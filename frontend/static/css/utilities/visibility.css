@@ -1,0 +1,29 @@
+/*
+  Responsive Visibility
+
+  The canonical pair for showing content on exactly one of the two form
+  factors, kept identical to orrery's `scss/utility/_visibility.scss`.
+
+  Both classes are purely subtractive: each one only ever hides, and neither
+  sets a display value. An element that is shown therefore keeps whatever
+  display it already had, so a single pair works on flex and grid containers,
+  table rows, and inline elements alike -- unlike the older display:block
+  variants, which forced every shown element to be a block and so had to be
+  duplicated per display type (see `.mobile-only-flex` / `.no-mobile-flex` in
+  main.css, which exist only for that reason).
+
+  These are literal rules rather than `@utility` declarations because the main
+  consumer is CMS-authored content, which Tailwind's source scanning never
+  sees.
+
+  Neither query is qualified with `screen`, so print -- whose page box is wider
+  than the breakpoint -- is treated as desktop.
+*/
+
+@media (max-width: 767px) {
+  .only-desktop { display: none !important; }
+}
+
+@media (min-width: 768px) {
+  .only-mobile { display: none !important; }
+}
