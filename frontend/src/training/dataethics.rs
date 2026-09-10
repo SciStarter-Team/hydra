@@ -66,6 +66,17 @@ impl DataEthicsLanguage {
         }
     }
 
+    /// How this language is written in `data_ethics_progress`, and in
+    /// orrery's `DataEthicsState.language`, so a completion counts the same
+    /// whichever side recorded it.
+    pub fn code(self) -> &'static str {
+        match self {
+            DataEthicsLanguage::English => "en",
+            DataEthicsLanguage::Spanish => "es",
+            DataEthicsLanguage::Portuguese => "pt",
+        }
+    }
+
     /// The completion step reported to the user service. Spelled as orrery
     /// spells the same three signals, so an account's progress reads alike
     /// whichever side recorded it.
@@ -377,7 +388,10 @@ async fn render_progress(
 ) -> Result<Response, Error> {
     let content = DataEthicsContent::current(language).await;
     let steps = build_steps(&content, &user_info).await;
-    let count = training::tutorials_completed(WorkflowType::DataEthics).await;
+    // This page's own build, not all three: see `tutorial_count` in
+    // user-service.
+    let count =
+        training::tutorials_completed(WorkflowType::DataEthics, Some(language.code())).await;
     render_progress_fragment(steps, count)
 }
 
@@ -387,7 +401,9 @@ async fn build_content(
 ) -> Result<TrainingContent, Error> {
     let live_updates = user_info.is_some();
     let steps = build_steps(content, &user_info).await;
-    let tutorials_completed = training::tutorials_completed(WorkflowType::DataEthics).await;
+    let tutorials_completed =
+        training::tutorials_completed(WorkflowType::DataEthics, Some(content.language.code()))
+            .await;
     let sidebar_html = SidebarBody {
         badge_image: content.badge_image.clone(),
         html: content.sidebar_html.clone(),
@@ -540,14 +556,25 @@ mod tests {
         }
     }
 
-    /// The steps are orrery's `DataEthicsState.TUTORIAL_EMAILS` keys and the
-    /// arms of user-service's `data_ethics_badge_email`. Neither can import
-    /// this spelling, and a step nothing matches earns no badge at all.
+    /// The steps are orrery's `DataEthicsState.TUTORIAL_COMPLETIONS` keys
+    /// and the arms of user-service's `data_ethics_completion`. Neither can
+    /// import this spelling, and a step nothing matches earns no badge at
+    /// all.
     #[test]
     fn the_steps_are_spelled_as_both_sides_expect() {
         assert_eq!(DataEthicsLanguage::English.step(), "tutorial");
         assert_eq!(DataEthicsLanguage::Spanish.step(), "tutorial-es");
         assert_eq!(DataEthicsLanguage::Portuguese.step(), "tutorial-pt");
+    }
+
+    /// The codes a page counts by, which are what `data_ethics_progress`
+    /// and orrery's `DataEthicsState.language` store. A page counting under
+    /// a spelling nothing writes would read zero rather than fail.
+    #[test]
+    fn the_language_codes_are_the_ones_completions_are_stored_under() {
+        assert_eq!(DataEthicsLanguage::English.code(), "en");
+        assert_eq!(DataEthicsLanguage::Spanish.code(), "es");
+        assert_eq!(DataEthicsLanguage::Portuguese.code(), "pt");
     }
 
     /// Every build is a SCORM Driver package, whose entry point is

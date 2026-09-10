@@ -25,10 +25,7 @@
           <img src="<%= &self.image_url %>" title="<%= crate::i18n::tr("example {name} badge image").replace("{name}", &self.name) %>" class="self-center md:self-start w-[200px] h-[200px] mr-4 mb-4 sm:mb-0" />
         </span>
         <div>
-          <h1 class="ss-xl mb-2"><%= self.name %></h1>
-          <% if let Some(translated) = &self.translated_name { %>
-            <p class="ss-normal mt-0 mb-2" lang="<%= self.lang %>"><%= translated %></p>
-          <% } %>
+          <h1 class="ss-xl mb-2" lang="<%= self.lang %>"><%= self.name %></h1>
           <p class="ss-small"><%- &self.badgeclass_description %></p>
           <div class="flex items-start gap-4"></div>
           <div class="min-h-[70px]">

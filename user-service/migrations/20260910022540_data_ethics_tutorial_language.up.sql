@@ -1,0 +1,17 @@
+-- Which build of the Data Ethics tutorial an account finished.
+--
+-- The tutorial has English, Spanish and Portuguese builds -- separate
+-- Articulate exports reporting their own xAPI activity ids -- and all three
+-- record the same completion here and earn the same badge. The language is
+-- knowable only at the moment the completion arrives, and until now it was
+-- used to pick the badge-earned email and then discarded, so each of the
+-- three landing pages could only show the total of all three.
+--
+-- Blank for a completion recorded before this column existed. Those are
+-- counted with English, which is what every one of the three pages launched
+-- until August 2026; they are left blank rather than written down as English
+-- so the two stay tellable apart.
+--
+-- Spelled as orrery's `DataEthicsState.language` spells it ("en", "es",
+-- "pt"), so a completion reads the same whichever side recorded it.
+ALTER TABLE data_ethics_progress ADD COLUMN tutorial_language TEXT NOT NULL DEFAULT '';

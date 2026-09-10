@@ -160,10 +160,11 @@ pub struct BadgeText {
     /// this badge into -- such a page renders in translated chrome around the
     /// English original, which is honest, rather than half in each language.
     pub translated: bool,
-    /// The badge's name as its translators render it. A page shows this
-    /// beneath the canonical name, never in place of it -- the canonical name
-    /// is what a verifier matches against the baked image and what the "add
-    /// to LinkedIn" link writes into a profile.
+    /// The badge's name as its translators render it. This is the page's
+    /// headline in that language; the canonical name is still what a verifier
+    /// matches against the baked image and what the "add to LinkedIn" link
+    /// writes into a profile, and is one click away through the
+    /// courtesy-translation notice.
     pub name: String,
     pub description: String,
     pub criteria_text: String,
@@ -522,6 +523,12 @@ mod tests {
         const SEED: &str =
             include_str!("../../migrations/20260908234722_seed_badge_translations.sql");
 
+        /// Applied on top of [`SEED`], as it is in a running database: it
+        /// seeds the translated month names and date pattern, and edits the
+        /// badge's own criteria narrative.
+        const DATES_AND_CITATION_NOTE: &str =
+            include_str!("../../migrations/20260910021818_translated_dates_and_citation_note.sql");
+
         /// The badge the seed translates, and the languages it translates it
         /// into.
         const SEEDED: Badge = Badge::DataEthicsForPractitioners;
@@ -548,6 +555,10 @@ mod tests {
             .expect("schema");
 
             sqlx::raw_sql(SEED).execute(&pool).await.expect("seed");
+            sqlx::raw_sql(DATES_AND_CITATION_NOTE)
+                .execute(&pool)
+                .await
+                .expect("dates and citation note");
 
             (dir, pool)
         }
@@ -610,6 +621,82 @@ mod tests {
                         "the seed has no {code} for {source:?}"
                     );
                 }
+            }
+        }
+
+        /// Every month the date formatter can ask for is one the seed
+        /// translated, in the context it asks under. A month left to fall
+        /// back on its source would put one English word in the middle of an
+        /// otherwise Spanish date.
+        #[tokio::test]
+        async fn every_month_the_formatter_asks_for_is_translated() {
+            let (_dir, pool) = fixture().await;
+
+            for source in crate::i18n::MONTHS
+                .iter()
+                .copied()
+                .chain(std::iter::once("{day} {month} {year}"))
+            {
+                let context = if source.starts_with('{') {
+                    "date"
+                } else {
+                    "month"
+                };
+                let id = phrase_id(context, source);
+
+                for lang in Lang::TRANSLATABLE {
+                    let code = lang.code();
+
+                    let translated = sqlx::query_scalar!(
+                        r#"SELECT translated FROM translation WHERE phrase_id = ? AND lang = ?"#,
+                        id,
+                        code
+                    )
+                    .fetch_optional(&pool)
+                    .await
+                    .expect("query")
+                    .unwrap_or_default();
+
+                    assert!(
+                        !translated.is_empty(),
+                        "the seed has no {code} for {source:?}"
+                    );
+                }
+            }
+        }
+
+        /// The translations said the bibliography was quoted in its published
+        /// language; the English original never did. Checked on the stored
+        /// text rather than on a rendered page, because that is what the edit
+        /// touched.
+        #[tokio::test]
+        async fn the_translated_criteria_no_longer_explain_the_citations() {
+            let (_dir, pool) = fixture().await;
+
+            let id = phrase_id("", SEEDED.criteria_text());
+
+            for (code, sentence) in [
+                ("es", "Las referencias se citan en su idioma original."),
+                ("pt", "As referências são citadas no idioma original."),
+            ] {
+                let translated = sqlx::query_scalar!(
+                    r#"SELECT translated FROM translation WHERE phrase_id = ? AND lang = ?"#,
+                    id,
+                    code
+                )
+                .fetch_one(&pool)
+                .await
+                .expect("a translation");
+
+                assert!(
+                    !translated.contains(sentence),
+                    "{code} still carries the citation note"
+                );
+                // The paragraph it was appended to has to survive the edit.
+                assert!(
+                    translated.contains("1835352"),
+                    "{code} lost the grant it introduces"
+                );
             }
         }
     }

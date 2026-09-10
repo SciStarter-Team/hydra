@@ -640,12 +640,12 @@ struct BadgeTemplate {
     /// The value for `<html lang>`, and the language everything below was
     /// rendered in.
     lang: &'static str,
-    /// Always the credential's own name, whatever language the page is in,
-    /// because this is what a verifier compares against the baked image.
+    /// The badge's name in the language the page is written in.
+    /// Presentation only, like the rest of the page: the credential keeps
+    /// its canonical English name, which is what a verifier compares
+    /// against the baked image and which `name_urlencoded` below still
+    /// carries to LinkedIn.
     name: String,
-    /// The badge's name in the page's language, shown beneath the canonical
-    /// one rather than in place of it.
-    translated_name: Option<String>,
     /// Present only on a page whose badge really is translated: it points a
     /// reader at the wording the credential carries.
     translation_notice: Option<String>,
@@ -659,7 +659,10 @@ struct BadgeTemplate {
     alignments: Vec<Alignment>,
     tags: Vec<String>,
     image_url: String,
-    issued: Timestamp,
+    /// The issue date written out in the page's language, which
+    /// `strftime`'s `%B` cannot do -- it names months in English whatever
+    /// the page is in.
+    issued_on: String,
     issued_year: i16,
     issued_month: i8,
     earn_url: Option<String>,
@@ -747,10 +750,7 @@ async fn render_badge_html(
     let template = BadgeTemplate {
         own_badge,
         lang: lang.code(),
-        // The credential's own name, whatever `shown` says: see the field's
-        // documentation on the struct above.
-        name: badge.name().to_string(),
-        translated_name: shown.translated.then(|| shown.name.clone()),
+        name: shown.name.clone(),
         translation_notice: shown.translated.then(|| translation_notice(&canonical_url)),
         language_links: text::language_links(*badge, &canonical_url, lang),
         // Canonical on purpose: this string becomes the name of the
@@ -765,7 +765,7 @@ async fn render_badge_html(
         alignments: badge.alignments().to_vec(),
         tags: shown.tags,
         image_url,
-        issued,
+        issued_on: crate::i18n::format_date(issued_zoned.date()),
         issued_year,
         issued_month,
         earn_url: shown.earn_url,
@@ -794,9 +794,8 @@ async fn render_badge_html(
 #[template(path = "badge/badgeclass.stpl.html")]
 struct BadgeClassTemplate {
     lang: &'static str,
-    /// Canonical, for the same reason as on [`BadgeTemplate`].
+    /// The page's language, for the same reason as on [`BadgeTemplate`].
     name: String,
-    translated_name: Option<String>,
     translation_notice: Option<String>,
     language_links: Vec<LanguageLink>,
     badgeclass_description_raw: String,
@@ -822,8 +821,7 @@ async fn render_badgeclass_html(badge: &Badge, badgeclass: &str) -> Result<Strin
 
     let template = BadgeClassTemplate {
         lang: lang.code(),
-        name: badge.name().to_string(),
-        translated_name: shown.translated.then(|| shown.name.clone()),
+        name: shown.name.clone(),
         translation_notice: shown.translated.then(|| translation_notice(&canonical_url)),
         language_links: text::language_links(*badge, &canonical_url, lang),
         badgeclass_description_raw: shown.description,

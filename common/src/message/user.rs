@@ -194,7 +194,7 @@ pub fn normalize_tag(tag: &str) -> String {
 /// that mark the account being created as one whose owner needs protection
 /// — a cohort signing up through a partner that enrolls minors. Kept in
 /// step with orrery's `PROTECTED_SIGNUP_TAGS`.
-pub const PROTECTED_SIGNUP_TAGS: [&str; 2] = ["laplstudent", "girlscout"];
+pub const PROTECTED_SIGNUP_TAGS: [&str; 3] = ["laplstudent", "girlscout", "port-charlotte"];
 
 /// Whether an account signing up under `tags` must be protected.
 ///
@@ -222,12 +222,13 @@ pub fn signup_needs_protection<S: AsRef<str>>(tags: &[S]) -> bool {
 /// about the same cohort, and a partner can need one without the other --
 /// girlscout is protected and is not credited, ldpl is credited and is not
 /// protected.
-pub const FOUNDATIONS_GRANT_SIGNUP_TAGS: [&str; 5] = [
+pub const FOUNDATIONS_GRANT_SIGNUP_TAGS: [&str; 6] = [
     "laplstudent",
     "ldpl",
     "signup-noyce",
     "osher-asu",
     "lakedallaslibrary",
+    "port-charlotte",
 ];
 
 /// Whether an account carrying `tags` from its signup context is credited
@@ -1529,6 +1530,14 @@ pub struct WorkflowStatusResponse {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct WorkflowTutorialCountRequest {
     pub workflow: WorkflowType,
+    /// Count only the completions of one language's build of the tutorial.
+    ///
+    /// Data Ethics is the only workflow with more than one build, and its
+    /// three landing pages each show their own count rather than the sum;
+    /// every other workflow leaves this `None` and is counted whole.
+    /// Defaulted so that a peer built before the field existed still parses.
+    #[serde(default)]
+    pub language: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -2119,6 +2128,28 @@ mod tests {
 
         assert!(signup_grants_foundations(&["ldpl".to_string()]));
         assert!(!signup_needs_protection(&["ldpl".to_string()]));
+    }
+
+    /// Adding a cohort is adding a string to a list, so the whole of each
+    /// list is run through its predicate here rather than growing a case per
+    /// partner. The lists are duplicated from orrery and nothing checks that
+    /// the two agree, so a string that only reached one codebase at least
+    /// cannot also go untested in the one it reached.
+    #[test]
+    fn every_listed_tag_is_recognized() {
+        for tag in PROTECTED_SIGNUP_TAGS {
+            assert!(
+                signup_needs_protection(&[tag.to_string()]),
+                "{tag} is listed as protecting and is not recognized"
+            );
+        }
+
+        for tag in FOUNDATIONS_GRANT_SIGNUP_TAGS {
+            assert!(
+                signup_grants_foundations(&[tag.to_string()]),
+                "{tag} is listed as crediting and is not recognized"
+            );
+        }
     }
 
     #[test]

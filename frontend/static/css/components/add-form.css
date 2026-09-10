@@ -48,6 +48,10 @@ form .link-btn {
    closed and becomes a plain label once open. */
 form .place-details > summary {
     @apply text-sm text-neutral-mid;
+    list-style: none;
+}
+form .place-details > summary::-webkit-details-marker {
+    display: none;
 }
 /* The summary carries the address itself once a place is picked, with a quiet
    "edit" affordance after it. */

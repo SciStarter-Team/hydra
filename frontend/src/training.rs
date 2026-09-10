@@ -409,10 +409,13 @@ pub async fn fetch_status(workflow: WorkflowType, user_id: &str) -> WorkflowStat
 
 /// Platform-wide count of completed tutorials for a workflow (the "Tutorials
 /// Completed to Date" figure), formatted with thousands separators.
-pub async fn tutorials_completed(workflow: WorkflowType) -> String {
+pub async fn tutorials_completed(workflow: WorkflowType, language: Option<&str>) -> String {
     let response: WorkflowTutorialCountResponse = common::service::request(
         "user.workflow.tutorial_count",
-        WorkflowTutorialCountRequest { workflow },
+        WorkflowTutorialCountRequest {
+            workflow,
+            language: language.map(str::to_string),
+        },
     )
     .await
     .unwrap_or(WorkflowTutorialCountResponse { count: 0 });

@@ -634,20 +634,21 @@ async fn update_higher_ed_progress(
     }
 }
 
-/// Update Data Ethics progress (single step - grants badge immediately)
-/// The badge-earned email for the build of the Data Ethics tutorial a step
-/// reports, or `None` if the step is not one of the module's.
+/// What the step a Data Ethics completion arrives under says about it: the
+/// language of the build that was finished, and the badge-earned email
+/// written in it. `None` if the step is not one of the module's.
 ///
-/// One badge and one completion column for all three builds -- only the mail
-/// differs, because the language a learner worked in is known at this moment
-/// and nowhere else. The step spellings are orrery's
-/// `DataEthicsState.TUTORIAL_EMAILS` keys, so a signal recorded on either side
-/// means the same thing.
-fn data_ethics_badge_email(step: &str) -> Option<TriggerEvent> {
+/// One badge and one completion row for all three builds; the language they
+/// differ by is knowable at this moment and nowhere else, so it is recorded
+/// alongside the completion as well as used to pick the mail -- each of the
+/// three landing pages counts its own build. The step spellings and the
+/// language codes are orrery's `DataEthicsState.TUTORIAL_COMPLETIONS`, so a
+/// completion means the same thing whichever side recorded it.
+fn data_ethics_completion(step: &str) -> Option<(&'static str, TriggerEvent)> {
     match step {
-        "tutorial" => Some(TriggerEvent::BadgeDataEthics),
-        "tutorial-es" => Some(TriggerEvent::BadgeDataEthicsEs),
-        "tutorial-pt" => Some(TriggerEvent::BadgeDataEthicsPt),
+        "tutorial" => Some(("en", TriggerEvent::BadgeDataEthics)),
+        "tutorial-es" => Some(("es", TriggerEvent::BadgeDataEthicsEs)),
+        "tutorial-pt" => Some(("pt", TriggerEvent::BadgeDataEthicsPt)),
         _ => None,
     }
 }
@@ -657,13 +658,13 @@ async fn update_data_ethics_progress(
     step: &str,
     now: &str,
 ) -> Result<bool, anyhow::Error> {
-    let Some(badge_email) = data_ethics_badge_email(step) else {
+    let Some((language, badge_email)) = data_ethics_completion(step) else {
         return Ok(false);
     };
 
     let result = sqlx::query!(
-        "INSERT OR IGNORE INTO data_ethics_progress (user_id, tutorial_completed_at, badge_granted_at) VALUES (?, ?, ?)",
-        user_id, now, now
+        "INSERT OR IGNORE INTO data_ethics_progress (user_id, tutorial_completed_at, badge_granted_at, tutorial_language) VALUES (?, ?, ?, ?)",
+        user_id, now, now, language
     )
     .execute(db())
     .await?;
@@ -910,11 +911,25 @@ pub async fn tutorial_count(req: &Request) -> Result<WorkflowTutorialCountRespon
         )
         .fetch_one(db())
         .await?,
-        WorkflowType::DataEthics => sqlx::query_scalar!(
-            r#"SELECT COUNT(*) as "count: i64" FROM data_ethics_progress WHERE tutorial_completed_at IS NOT NULL"#
-        )
-        .fetch_one(db())
-        .await?,
+        // The one workflow with a build per language: each page counts its
+        // own. A completion recorded before `tutorial_language` existed says
+        // nothing about which build it was and is counted with English --
+        // until August 2026 all three pages launched the English module.
+        WorkflowType::DataEthics => match request.language.as_deref() {
+            Some(language) => sqlx::query_scalar!(
+                r#"SELECT COUNT(*) as "count: i64" FROM data_ethics_progress
+                   WHERE tutorial_completed_at IS NOT NULL
+                     AND (tutorial_language = ?1 OR (tutorial_language = '' AND ?1 = 'en'))"#,
+                language
+            )
+            .fetch_one(db())
+            .await?,
+            None => sqlx::query_scalar!(
+                r#"SELECT COUNT(*) as "count: i64" FROM data_ethics_progress WHERE tutorial_completed_at IS NOT NULL"#
+            )
+            .fetch_one(db())
+            .await?,
+        },
         WorkflowType::Ideal => sqlx::query_scalar!(
             r#"SELECT COUNT(*) as "count: i64" FROM ideal_progress WHERE tutorial_completed_at IS NOT NULL"#
         )

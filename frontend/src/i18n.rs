@@ -165,6 +165,45 @@ pub fn tr_ctx(context: &'static str, source: &'static str) -> String {
     translate(context, source, current_lang(), Origin::Discovered)
 }
 
+/// The month names, January first, in the language the source is written in.
+///
+/// A fixed-size array so a language cannot be given eleven of them, and
+/// `&'static str` so each one can be a phrase like any other.
+pub(crate) const MONTHS: [&'static str; 12] = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+];
+
+/// A date written the way the current language writes it.
+///
+/// `strftime`'s `%B` names months in English whatever the page is rendered
+/// in, so the month is translated here like any other phrase. The joining
+/// words and the order differ too -- "9 September 2026" against "9 de
+/// septiembre de 2026" -- so the whole shape is one translatable pattern
+/// rather than a fixed layout with a translated word dropped into it.
+///
+/// The months carry a `month` context because several of their English
+/// spellings are ordinary words as well ("May", "March"), and a translator
+/// seeing them bare has no way to tell which sense is wanted.
+pub fn format_date(date: jiff::civil::Date) -> String {
+    let month = tr_ctx("month", MONTHS[(date.month() - 1) as usize]);
+
+    tr_ctx("date", "{day} {month} {year}")
+        .replace("{day}", &date.day().to_string())
+        .replace("{month}", &month)
+        .replace("{year}", &date.year().to_string())
+}
+
 /// Translate into a language chosen explicitly rather than by the request.
 ///
 /// For the few callers that render text in a language other than the one

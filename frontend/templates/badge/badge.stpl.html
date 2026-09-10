@@ -30,10 +30,7 @@
           <img src="<%= &self.image_url %>" title="<%= crate::i18n::tr("verifiable {name} badge image").replace("{name}", &self.name) %>" class="self-center md:self-start w-[200px] h-[200px] mr-4 mb-4 sm:mb-0" />
         </a>
         <div>
-          <h1 class="ss-xl mb-2"><%= self.name %></h1>
-          <% if let Some(translated) = &self.translated_name { %>
-            <p class="ss-normal mt-0 mb-2" lang="<%= self.lang %>"><%= translated %></p>
-          <% } %>
+          <h1 class="ss-xl mb-2" lang="<%= self.lang %>"><%= self.name %></h1>
           <p class="ss-small"><%- &self.badgeclass_description %></p>
           <div class="flex items-start gap-4">
             <img src="/-static/img/check-rounded.svg" alt="Icon" class="w-12 h-12 flex-shrink-0" />
@@ -43,7 +40,7 @@
             </div>
           </div>
           <div>
-            <p class="ss-xxs" style="margin-bottom: 0px"><b><%= crate::i18n::tr("Issued on:") %></b> <%= &self.issued.strftime("%e %B %Y")|disp %></p>
+            <p class="ss-xxs" style="margin-bottom: 0px"><b><%= crate::i18n::tr("Issued on:") %></b> <%= &self.issued_on %></p>
             <% if self.confirm && self.confirmed { %>
               <p class="ss-xxs"><b><%= crate::i18n::tr("Issued to:") %></b> <span style="color: #09BC10"><%= &self.confirm_email %></span></p>
             <% } else { %>
