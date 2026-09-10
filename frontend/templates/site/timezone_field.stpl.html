@@ -1,0 +1,31 @@
+<%# The zone in effect as a line of prose, with the picker behind it. Open when
+    nothing is selected yet, so the control is reachable without JavaScript. %>
+<% let stated = !self.selected_label.is_empty(); %>
+<details class="tz-field" data-tz-field <% if !stated { %>open<% } %>>
+  <%# Both wordings live here rather than half here and half in the form script:
+      it swaps which one is shown and fills in the zone name. %>
+  <summary class="tz-summary">
+    <span class="tz-stated" <% if !stated { %>hidden<% } %>>Times are in <span class="tz-zone"><%= self.selected_label %></span></span>
+    <span class="tz-unset" <% if stated { %>hidden<% } %>>Set a time zone</span>
+    <span class="tz-change" <% if !stated { %>hidden<% } %>>change</span>
+  </summary>
+  <%# Labelled by attribute rather than a <label for>: instance rows are cloned
+      client-side, and a cloned id would collide with the row it came from. %>
+  <div class="mt-2">
+    <select class="tz-select" name="<%= self.field_name %>" aria-label="Time zone" <% if self.required { %>required<% } %>>
+      <option value="" <% if self.selected.is_empty() { %>selected<% } %> disabled>Select time zone&hellip;</option>
+      <optgroup label="Common">
+        <% for tz in self.timezones { %>
+          <option value="<%= tz.0 %>" <% if self.selected == tz.0 { %>selected<% } %>><%= tz.1 %></option>
+        <% } %>
+      </optgroup>
+      <% for (region, zones) in self.all_timezones { %>
+        <optgroup label="<%= region %>">
+          <% for tz in zones { %>
+            <option value="<%= tz.0 %>" <% if self.selected == tz.0 { %>selected<% } %>><%= tz.1 %></option>
+          <% } %>
+        </optgroup>
+      <% } %>
+    </select>
+  </div>
+</details>

@@ -30,7 +30,7 @@
         <div id="instances" class="space-y-4">
           <% for (i, inst) in self.values.instances.iter().enumerate() { %>
             <div class="instance-row border border-linework rounded-md p-4 space-y-3">
-              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div class="pill-field">
                   <svg class="pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
                   <label class="pill-body">
@@ -45,27 +45,9 @@
                     <input type="time" name="instances[<%= i %>][begin_time]" value="<%= inst.begin_time %>" required>
                   </label>
                 </div>
-                <div class="pill-field">
-                  <label class="pill-body">
-                    <span class="pill-label">Time zone</span>
-                    <select class="tz-select" name="instances[<%= i %>][timezone]" required>
-                      <option value="" <% if inst.timezone.is_empty() { %>selected<% } %> disabled>Select time zone&hellip;</option>
-                      <optgroup label="Common">
-                        <% for tz in self.timezones { %>
-                          <option value="<%= tz.0 %>" <% if inst.timezone == tz.0 { %>selected<% } %>><%= tz.1 %></option>
-                        <% } %>
-                      </optgroup>
-                      <% for (region, zones) in self.all_timezones { %>
-                        <optgroup label="<%= region %>">
-                          <% for tz in zones { %>
-                            <option value="<%= tz.0 %>" <% if inst.timezone == tz.0 { %>selected<% } %>><%= tz.1 %></option>
-                          <% } %>
-                        </optgroup>
-                      <% } %>
-                    </select>
-                  </label>
-                </div>
               </div>
+
+              <%+ crate::add::TimezoneField::build(format!("instances[{i}][timezone]"), &inst.timezone, true) %>
 
               <input type="checkbox" class="has-end-toggle sr-only" name="instances[<%= i %>][has_end]" <% if inst.has_end { %>checked<% } %> tabindex="-1" aria-hidden="true">
               <button type="button" class="link-btn end-toggle" <% if inst.has_end { %>hidden<% } %>>+ End date and time</button>
@@ -209,7 +191,7 @@
           <summary class="cursor-pointer font-medium">Ticketing / registration (optional)</summary>
           <div class="mt-3 space-y-3">
             <p class="text-sm text-neutral-mid">If tickets or registration open at a specific time, set it here.</p>
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label>Opens on</label>
                 <input type="date" name="ticketing_date" value="<%= self.values.ticketing_date %>">
@@ -218,25 +200,9 @@
                 <label>Time</label>
                 <input type="time" name="ticketing_time" value="<%= self.values.ticketing_time %>">
               </div>
-              <div>
-                <label>Time zone</label>
-                <select class="tz-select" name="ticketing_timezone">
-                  <option value="" <% if self.values.ticketing_timezone.is_empty() { %>selected<% } %> disabled>Select time zone&hellip;</option>
-                  <optgroup label="Common">
-                    <% for tz in self.timezones { %>
-                      <option value="<%= tz.0 %>" <% if self.values.ticketing_timezone == tz.0 { %>selected<% } %>><%= tz.1 %></option>
-                    <% } %>
-                  </optgroup>
-                  <% for (region, zones) in self.all_timezones { %>
-                    <optgroup label="<%= region %>">
-                      <% for tz in zones { %>
-                        <option value="<%= tz.0 %>" <% if self.values.ticketing_timezone == tz.0 { %>selected<% } %>><%= tz.1 %></option>
-                      <% } %>
-                    </optgroup>
-                  <% } %>
-                </select>
-              </div>
             </div>
+
+            <%+ crate::add::TimezoneField::build("ticketing_timezone", &self.values.ticketing_timezone, false) %>
           </div>
         </details>
       </div>
@@ -264,6 +230,25 @@
       return Array.prototype.some.call(select.options, function (o) { return o.value === tz; });
     }
 
+    // The zone in effect is stated in the disclosure's summary; keep that line
+    // true, and collapse the picker once a zone is settled (it renders open
+    // when there is nothing to state, which is the no-JavaScript case).
+    function syncTz(select) {
+      if (!select) return;
+      var field = select.closest("[data-tz-field]");
+      if (!field) return;
+      var chosen = select.value ? select.selectedOptions[0] : null;
+      var zone = field.querySelector(".tz-zone");
+      if (zone && chosen) zone.textContent = chosen.textContent;
+      field.querySelectorAll(".tz-stated, .tz-change").forEach(function (el) {
+        el.hidden = !chosen;
+      });
+      field.querySelectorAll(".tz-unset").forEach(function (el) {
+        el.hidden = !!chosen;
+      });
+      field.open = !chosen;
+    }
+
     function ensureTz(select) {
       if (!select) return;
       if (browserTz && !hasOption(select, browserTz)) {
@@ -279,13 +264,15 @@
           select.value = browserTz;
         }
       }
+      syncTz(select);
     }
     document.querySelectorAll("select.tz-select").forEach(ensureTz);
 
     // A hand-picked zone is an explicit choice; remember not to overwrite it.
     document.addEventListener("change", function (e) {
-      if (e.isTrusted && e.target.matches && e.target.matches("select.tz-select")) {
-        e.target.dataset.userSet = "1";
+      if (e.target.matches && e.target.matches("select.tz-select")) {
+        if (e.isTrusted) e.target.dataset.userSet = "1";
+        syncTz(e.target);
       }
     });
 
@@ -296,6 +283,7 @@
       document.querySelectorAll("select.tz-select").forEach(function (select) {
         if (!select.dataset.userSet && hasOption(select, placeTz)) {
           select.value = placeTz;
+          syncTz(select);
         }
       });
     });

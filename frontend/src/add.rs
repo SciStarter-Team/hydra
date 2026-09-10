@@ -457,8 +457,6 @@ struct AddEventPage {
 struct AddEventContent {
     error: Option<String>,
     values: EventFormValues,
-    timezones: &'static [(&'static str, &'static str)],
-    all_timezones: &'static [(String, Vec<(String, String)>)],
     event_types: Vec<String>,
     location: LocationPicker,
     image: ImageField,
@@ -541,17 +539,57 @@ impl LocationPicker {
             },
         }
     }
+}
 
-    /// Whether any structured address component has a value (used to open the
-    /// address-details disclosure on re-render).
-    fn has_address(&self) -> bool {
-        !(self.location_name.is_empty()
-            && self.address.is_empty()
-            && self.city.is_empty()
-            && self.state.is_empty()
-            && self.zip.is_empty()
-            && self.country.is_empty())
+/// The time-zone control for one date/time row: the zone in effect stated in a
+/// line of prose, with the full picker collapsed behind it. Zones are inferred
+/// from the picked venue or the browser, so the list is there to correct an
+/// inference rather than to ask a question. Rendered open when nothing is
+/// selected yet, which is what a visitor without JavaScript gets.
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "site/timezone_field.stpl.html")]
+struct TimezoneField {
+    field_name: String,
+    selected: String,
+    selected_label: String,
+    required: bool,
+    timezones: &'static [(&'static str, &'static str)],
+    all_timezones: &'static [(String, Vec<(String, String)>)],
+}
+
+impl TimezoneField {
+    /// Build the control for `field_name`, preselecting `selected`.
+    fn build(field_name: impl Into<String>, selected: &str, required: bool) -> Self {
+        TimezoneField {
+            field_name: field_name.into(),
+            selected: selected.to_string(),
+            selected_label: timezone_label(selected),
+            required,
+            timezones: COMMON_TIMEZONES,
+            all_timezones: all_timezones(),
+        }
     }
+}
+
+/// Display label for an IANA zone: the curated name where there is one, the
+/// grouped name otherwise, and the identifier itself as a last resort (which is
+/// also what a browser-supplied zone missing from the list renders as).
+fn timezone_label(tz: &str) -> String {
+    if tz.is_empty() {
+        return String::new();
+    }
+
+    if let Some((_, label)) = COMMON_TIMEZONES.iter().find(|(value, _)| *value == tz) {
+        return (*label).to_string();
+    }
+
+    for (region, zones) in all_timezones() {
+        if let Some((_, label)) = zones.iter().find(|(value, _)| value == tz) {
+            return format!("{region}/{label}");
+        }
+    }
+
+    tz.to_string()
 }
 
 /// The tag-pill widget with HTMX autocomplete, backed by `js/tags-input.js`.
@@ -691,8 +729,6 @@ async fn render_event_form(
     let content = AddEventContent {
         error,
         values,
-        timezones: COMMON_TIMEZONES,
-        all_timezones: all_timezones(),
         event_types: EventType::ALL.iter().map(|e| e.to_string()).collect(),
         location,
         image,
@@ -1996,5 +2032,19 @@ mod tests {
             .iter()
             .any(|(_, zones)| zones.iter().any(|(value, _)| *value == zone));
         assert!(listed, "inferred zone {zone} missing from the tz select");
+    }
+
+    /// The zone stated on the collapsed time-zone field: the curated name where
+    /// there is one, the grouped name otherwise, and never a bare identifier for
+    /// a zone the select actually lists.
+    #[test]
+    fn timezone_labels_read_as_names() {
+        assert_eq!(timezone_label(""), "");
+        assert_eq!(
+            timezone_label("America/New_York"),
+            "Eastern Time (US & Canada)"
+        );
+        assert_eq!(timezone_label("Africa/Nairobi"), "Africa/Nairobi");
+        assert_eq!(timezone_label("Mars/Olympus"), "Mars/Olympus");
     }
 }

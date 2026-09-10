@@ -81,8 +81,28 @@
       latitude: root.querySelector('input[name="latitude"]'),
       longitude: root.querySelector('input[name="longitude"]'),
     };
+    var summary = root.querySelector("[data-place-summary]");
+    var summaryEdit = root.querySelector(".place-summary-edit");
     var timer = null;
     var seq = 0;
+
+    // One-line rendering of the structured address, shown on the collapsed
+    // disclosure so a picked place can be checked without opening it. The only
+    // copy of this rule: the values are unsubmitted form input, so the server
+    // renders the plain label and this fills it in.
+    function syncSummary() {
+      if (!summary) return;
+      var value = function (key) {
+        return fields[key] && fields[key].value.trim() ? fields[key].value.trim() : "";
+      };
+      var region = [value("state"), value("zip")].filter(Boolean).join(" ");
+      var place = [value("address"), value("city"), region, value("country")]
+        .filter(Boolean)
+        .join(", ");
+      var line = [value("location_name"), place].filter(Boolean).join(" \u00b7 ");
+      summary.textContent = line || "Venue & address details";
+      if (summaryEdit) summaryEdit.hidden = !line;
+    }
 
     function close() {
       list.hidden = true;
@@ -100,6 +120,7 @@
       if (fields.latitude) fields.latitude.value = s.latitude;
       if (fields.longitude) fields.longitude.value = s.longitude;
       input.value = s.context ? s.name + ", " + s.context : s.name;
+      syncSummary();
       close();
       // A picked venue pinpoints its time zone; forms with time-zone fields
       // (the event form) listen and default any untouched selects. Regions
@@ -116,7 +137,10 @@
         fetch("/add/zip-lookup?lat=" + s.latitude + "&lon=" + s.longitude, { headers: { Accept: "application/json" } })
           .then(function (r) { return r.ok ? r.json() : null; })
           .then(function (data) {
-            if (data && data.zip && !fields.zip.value) fields.zip.value = data.zip;
+            if (data && data.zip && !fields.zip.value) {
+              fields.zip.value = data.zip;
+              syncSummary();
+            }
           })
           .catch(function () {});
       }
@@ -195,6 +219,16 @@
         if (fields.longitude) fields.longitude.value = "";
       });
     });
+
+    // Hand-editing any component rewrites the summary line too.
+    ["location_name", "address", "city", "state", "zip", "country"].forEach(function (key) {
+      if (!fields[key]) return;
+      fields[key].addEventListener("input", syncSummary);
+    });
+
+    // A re-rendered form (a validation error, say) arrives with the fields
+    // already filled, so state the line before anyone touches anything.
+    syncSummary();
   }
 
   function initAll() {

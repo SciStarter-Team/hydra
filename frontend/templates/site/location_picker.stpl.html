@@ -1,7 +1,6 @@
 <% let inperson_active = self.mode == "in_person"; %>
 <% let online_active = self.mode == "online"; %>
 <% let region_active = self.mode == "region"; %>
-<% let has_address = self.has_address(); %>
 <div data-location-picker class="space-y-4">
   <div>
     <label for="location-mode" class="sr-only">Is it in person or virtual?</label>
@@ -27,8 +26,16 @@
     <input type="hidden" name="latitude" value="<%= self.latitude %>">
     <input type="hidden" name="longitude" value="<%= self.longitude %>">
 
-    <details class="place-details" <% if has_address { %>open<% } %>>
-      <summary class="cursor-pointer text-sm">Venue &amp; address details</summary>
+    <%# Collapsed even once filled: `syncSummary` in js/location-picker.js states
+        on the summary what a picked place put in the fields, so it can be checked
+        without opening them. It composes that line from the fields themselves —
+        the values are the browser's until they are submitted — leaving this the
+        label a visitor without JavaScript gets. %>
+    <details class="place-details">
+      <summary class="cursor-pointer text-sm">
+        <span class="place-summary" data-place-summary>Venue &amp; address details</span>
+        <span class="place-summary-edit" hidden>edit</span>
+      </summary>
       <div class="mt-3 space-y-3">
         <div>
           <label>Venue name</label>

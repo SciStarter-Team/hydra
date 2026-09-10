@@ -49,6 +49,30 @@ form .link-btn {
 form .place-details > summary {
     @apply text-sm text-neutral-mid;
 }
+/* The summary carries the address itself once a place is picked, with a quiet
+   "edit" affordance after it. */
+form .place-details .place-summary {
+    @apply text-neutral-dark;
+}
+form .place-details .place-summary-edit,
+form .tz-field .tz-change {
+    @apply ml-2 text-accent1 underline;
+}
+
+/* Time zone: a line of prose stating the zone in effect, with the full picker
+   collapsed behind it. Zones are inferred from the venue or the browser, so the
+   list is a correction rather than a question. */
+form .tz-field > summary {
+    @apply text-sm text-neutral-mid cursor-pointer;
+    width: fit-content;
+    list-style: none;
+}
+form .tz-field > summary::-webkit-details-marker {
+    display: none;
+}
+form .tz-field[open] > summary .tz-change {
+    display: none;
+}
 form .location-note > summary {
     @apply text-sm text-accent1 underline cursor-pointer;
     width: fit-content;
