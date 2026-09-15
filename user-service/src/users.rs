@@ -1596,6 +1596,9 @@ pub async fn user_details_create(req: &Request) -> Result<UserDetailsResponse, E
 
     let user_id_str = user_id.to_string();
     let password_hash = djangohashers::make_password(&request.password);
+    // The spelling every other account's `date_joined` has, so that the
+    // column sorts as time.
+    let date_joined = TimeString::now().to_string();
 
     let mut tx = db().begin().await?;
 
@@ -1604,7 +1607,7 @@ pub async fn user_details_create(req: &Request) -> Result<UserDetailsResponse, E
             "user_id", "handle", "first_name", "last_name", "primary_email",
             "password", "is_active", "is_staff", "is_superuser", "is_page_manager", "verified",
             "date_joined"
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))"#,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         user_id_str,
         request.handle,
         request.first_name,
@@ -1615,7 +1618,8 @@ pub async fn user_details_create(req: &Request) -> Result<UserDetailsResponse, E
         is_staff,
         false,
         is_page_manager,
-        request.verified
+        request.verified,
+        date_joined,
     )
     .execute(&mut *tx)
     .await;

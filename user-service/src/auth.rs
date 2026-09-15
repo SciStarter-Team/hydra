@@ -43,7 +43,22 @@ pub async fn signup(req: &Request) -> Result<Option<BasicInfo>, Error> {
         djangohashers::make_password(&form.password)
     };
 
-    Ok(Some(create_account(form, password, false).await?))
+    match create_account(form, password, false).await {
+        Ok(basic_info) => Ok(Some(basic_info)),
+        // The email address already belongs to an account. Caught by the
+        // insert rather than checked beforehand, so that two signups racing for
+        // one address cannot both get past the check.
+        Err(err) if is_unique_violation(&err) => Ok(None),
+        Err(err) => Err(err),
+    }
+}
+
+/// Whether an error is the database refusing a row that duplicates a unique
+/// key, which for account creation means the email address is already in use.
+fn is_unique_violation(err: &Error) -> bool {
+    err.downcast_ref::<sqlx::Error>()
+        .and_then(|e| e.as_database_error())
+        .is_some_and(|e| e.is_unique_violation())
 }
 
 /// Insert the user, primary email, and tags, then fire the welcome email.
@@ -81,6 +96,7 @@ async fn create_account(
     let public = !protected;
 
     let signup_tags = crate::constant_contact::encode_tags(&form.tags);
+    let date_joined = TimeString::now().to_string();
 
     let mut tx = db().begin().await?;
 
@@ -101,6 +117,7 @@ async fn create_account(
     sqlx::query!(
         r#"insert into "users" (
           "user_id",
+          "date_joined",
           "handle",
           "primary_email",
           "verified",
@@ -124,6 +141,7 @@ async fn create_account(
         )
         values (
           ?1,
+          ?12,
           ?3,
           ?2,
           ?9,
@@ -147,6 +165,7 @@ async fn create_account(
         verified,
         signup_tags,
         public,
+        date_joined,
     )
     .execute(&mut *tx)
     .await?;
@@ -522,13 +541,7 @@ pub async fn complete_signup(req: &Request) -> Result<Option<CompleteSignupRespo
     let basic_info = match create_account(form, row.password, true).await {
         Ok(info) => info,
         Err(err) => {
-            let unique_violation = err
-                .downcast_ref::<sqlx::Error>()
-                .and_then(|e| e.as_database_error())
-                .map(|e| e.is_unique_violation())
-                .unwrap_or(false);
-
-            if unique_violation {
+            if is_unique_violation(&err) {
                 // The account came into being some other way after this
                 // signup was deferred, so the pending record is obsolete.
                 sqlx::query!(

@@ -333,6 +333,7 @@ fn generate_random_display_name() -> String {
 struct LoginPageParameters {
     system: Option<bool>,
     password: Option<bool>,
+    mismatch: Option<bool>,
     unauthorized: Option<bool>,
     exists: Option<bool>,
     ratelimited: Option<bool>,
@@ -389,6 +390,7 @@ fn signup_will_be_protected(session: &Session) -> bool {
 struct LoginSignupContent {
     system: bool,
     password: bool,
+    mismatch: bool,
     unauthorized: bool,
     exists: bool,
     ratelimited: bool,
@@ -444,6 +446,7 @@ pub async fn login_signup_page(
         LoginSignupContent {
             system: params.system.unwrap_or_default(),
             password: params.password.unwrap_or_default(),
+            mismatch: params.mismatch.unwrap_or_default(),
             unauthorized: params.unauthorized.unwrap_or_default(),
             exists: params.exists.unwrap_or_default(),
             ratelimited: params.ratelimited.unwrap_or_default(),
@@ -525,7 +528,7 @@ pub async fn signup_action(
 
     // Validate password confirmation (only if not using passkey)
     if !use_passkey && form.password1 != form.password2 {
-        return Redirect::see_other("/login?password=mismatch").into_response();
+        return Redirect::see_other("/login?mismatch=true").into_response();
     }
 
     let token = form.cf_turnstile_response.as_deref().unwrap_or("");
@@ -630,19 +633,15 @@ pub async fn signup_action(
                 }
             }
             Ok(None) => {
-                // Signup failed - redirect back with error
-                Redirect::see_other("/login?signup=failed").into_response()
+                // The email address already belongs to an account.
+                Redirect::see_other("/login?exists=true").into_response()
             }
-            Err(_) => {
-                // This should never happen since request_with_retry retries indefinitely
-                // But we include it for completeness
-                Redirect::see_other("/login?signup=error").into_response()
-            }
+            Err(_) => Redirect::see_other("/login?system=true").into_response(),
         }
     } else {
         // Passkey signup - this shouldn't be reached since JavaScript handles it
         // Return an error if somehow we get here
-        Redirect::see_other("/login?signup=error").into_response()
+        Redirect::see_other("/login?system=true").into_response()
     }
 }
 
@@ -1403,7 +1402,7 @@ pub async fn webauthn_registration_complete(
                             session.remove("pending_user_id");
 
                             Json(serde_json::json!({
-                                "error": "Failed to create user account after passkey registration"
+                                "error": crate::i18n::tr("That email address already belongs to a SciStarter account. Log in below to continue.")
                             }))
                             .into_response()
                         }

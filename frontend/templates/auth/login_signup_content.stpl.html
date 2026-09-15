@@ -17,6 +17,11 @@
         <%= crate::i18n::tr("That password was incorrect.") %>
       </div>
     <% } %>
+    <% if self.mismatch { %>
+      <div class="ss-alert">
+        <%= crate::i18n::tr("The two passwords you entered didn't match. Please try again.") %>
+      </div>
+    <% } %>
     <% if self.exists { %>
       <div class="ss-alert">
         <%= crate::i18n::tr("That email address already belongs to a SciStarter account. Log in below to continue.") %>
