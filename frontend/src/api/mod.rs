@@ -74,7 +74,7 @@ where
 {
     ep.into_endpoint()
         .with(crate::middleware::authorization::AuthMiddleware)
-        .with(crate::server_session())
+        .with(crate::middleware::session_cookie::server_session())
         .with(crate::middleware::error_pages::ErrorPages)
         .with(poem::middleware::SetHeader::new().overriding("Cache-Control", "no-store"))
 }

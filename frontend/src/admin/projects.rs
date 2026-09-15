@@ -541,11 +541,11 @@ pub async fn fetch_projects_page(
 
     // Add spatial filtering
     if let Some(geojson) = spatial_overlap {
-        query.push(" AND (ST_Intersects(p.regions, GeomFromGeoJSON(");
+        query.push(" AND (ST_Intersects(p.regions, SetSRID(GeomFromGeoJSON(");
         query.push_bind(geojson);
-        query.push(")) OR ST_Intersects(p.point, GeomFromGeoJSON(");
+        query.push("), 4326)) OR ST_Intersects(p.point, SetSRID(GeomFromGeoJSON(");
         query.push_bind(geojson);
-        query.push(")))");
+        query.push("), 4326)))");
     }
 
     if let Some((lat, lng, radius)) = spatial_point {
@@ -696,11 +696,11 @@ pub async fn count_projects(
 
     // Add spatial filtering (same as in fetch_projects_page)
     if let Some(geojson) = spatial_overlap {
-        query.push(" AND (ST_Intersects(p.regions, GeomFromGeoJSON(");
+        query.push(" AND (ST_Intersects(p.regions, SetSRID(GeomFromGeoJSON(");
         query.push_bind(geojson);
-        query.push(")) OR ST_Intersects(p.point, GeomFromGeoJSON(");
+        query.push("), 4326)) OR ST_Intersects(p.point, SetSRID(GeomFromGeoJSON(");
         query.push_bind(geojson);
-        query.push(")))");
+        query.push("), 4326)))");
     }
 
     if let Some((lat, lng, radius)) = spatial_point {

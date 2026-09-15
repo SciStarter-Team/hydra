@@ -1054,7 +1054,7 @@ dependencies = [
 [[package]]
 name = "badgebuilder"
 version = "0.1.4"
-source = "git+https://git.sr.ht/~djarb/badgebuilder#bb58e656fec4e280317750ccdad8069873149af0"
+source = "git+https://git.highenergymagic.org/badgebuilder.git#164afe5fe8ab318d493021e0e597c9af1c71e994"
 dependencies = [
  "jiff",
  "png 0.17.16",

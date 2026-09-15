@@ -769,7 +769,7 @@ impl LoadStorePeered for ProjectAll {
             when ?112 is null then
               null
             when substr(?112, 1, 1) == '{' and substr(?112, -1, 1) == '}' then
-              GeomFromGeoJSON(?112)
+              SetSRID(GeomFromGeoJSON(?112), 4326)
             else
               GeomFromEWKT(?112)
           end,
@@ -777,7 +777,7 @@ impl LoadStorePeered for ProjectAll {
             when ?113 is null then
               null
             when substr(?113, 1, 1) == '{' and substr(?113, -1, 1) == '}' then
-              GeomFromGeoJSON(?113)
+              SetSRID(GeomFromGeoJSON(?113), 4326)
             else
               GeomFromEWKT(?113)
           end

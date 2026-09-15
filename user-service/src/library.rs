@@ -381,7 +381,7 @@ pub async fn directory_record(req: &Request) -> Result<LibraryDirectoryRecordRes
     let result = sqlx::query!(
         r#"INSERT OR IGNORE INTO "libraries"
              ("name", "recorded", "address", "city", "state", "zipcode", "org_type", "url", "point")
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, GeomFromGeoJSON(?))"#,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, SetSRID(GeomFromGeoJSON(?), 4326))"#,
         entry.name,
         recorded,
         entry.address,

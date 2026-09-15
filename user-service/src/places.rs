@@ -51,7 +51,7 @@ pub async fn add(req: &Request) -> Result<UserPlace, Error> {
 
     let row = sqlx::query!(
         r#"INSERT INTO "user_places" ("id", "user_id", "name", "point")
-        VALUES (?, ?, ?, GeomFromGeoJSON(?))
+        VALUES (?, ?, ?, SetSRID(GeomFromGeoJSON(?), 4326))
         RETURNING "created""#,
         id_str,
         user_id_str,

@@ -83,19 +83,13 @@ use poem::{
     listener::TcpListener,
     middleware::{ForceHttps, NormalizePath, SetHeader, TrailingSlash},
     post, put,
-    session::{CookieConfig, ServerSession},
-    web::{Form, Path, Redirect, cookie::SameSite},
+    web::{Form, Path, Redirect},
 };
 use project::{all::ProjectAll, field::ProjectField};
 use rust_embed::Embed;
-use session::UserServiceSessionStorage;
 use tracing::Level;
 
-#[cfg(debug_assertions)]
-pub const SESSION_COOKIE: &'static str = "session-id";
-
-#[cfg(not(debug_assertions))]
-pub const SESSION_COOKIE: &'static str = "__Host-session-id";
+use middleware::session_cookie::server_session;
 
 // Serving the files from static instead of dist doesn't work well
 // when many of those files are inputs for compilers and are not ready
@@ -267,26 +261,26 @@ fn user_facing() -> impl Endpoint {
             "/signup",
             post(auth::signup_action)
                 .with(auth::credential_rate_limit())
-                .with(middleware::partitioned_session::EnablePartitionedCookies),
+                .with(middleware::session_cookie::EnablePartitionedCookies),
         )
         .at(
             "/login",
             get(auth::login_signup_page).post(
                 auth::login_action
                     .with(auth::credential_rate_limit())
-                    .with(middleware::partitioned_session::EnablePartitionedCookies),
+                    .with(middleware::session_cookie::EnablePartitionedCookies),
             ),
         )
         .at(
             "/logout",
             get(auth::logout_action)
-                .with(middleware::partitioned_session::EnablePartitionedCookies),
+                .with(middleware::session_cookie::EnablePartitionedCookies),
         )
         .at("/check-email", get(auth::check_email_page))
         .at(
             "/complete-signup",
             get(auth::complete_signup_action)
-                .with(middleware::partitioned_session::EnablePartitionedCookies),
+                .with(middleware::session_cookie::EnablePartitionedCookies),
         )
         .at(
             "/invitations/:invitation_id",
@@ -540,22 +534,6 @@ fn user_facing() -> impl Endpoint {
         .with(middleware::analytics::AnalyticsMiddleware)
 }
 
-/// The shared server-side session middleware configuration. Factored out so
-/// every route tree that needs the session cookie (the main `dynamic()` tree and
-/// the `/oauth2` tree) uses identical cookie settings.
-fn server_session() -> ServerSession<UserServiceSessionStorage> {
-    ServerSession::new(
-        CookieConfig::default()
-            .name(SESSION_COOKIE)
-            .http_only(true)
-            .secure(true)
-            .same_site(SameSite::Lax)
-            .path("/")
-            .max_age(std::time::Duration::from_secs(60 * 60 * 24 * 365)),
-        UserServiceSessionStorage,
-    )
-}
-
 fn dynamic() -> impl Endpoint {
     // IMPORTANT: When adding project/event creation, editing, or page editor management endpoints,
     // remember to call the appropriate page_manager sync functions:
@@ -595,7 +573,7 @@ fn dynamic() -> impl Endpoint {
         .with(middleware::language::LanguageMiddleware)
         .with(middleware::authorization::AuthMiddleware)
         .with(server_session())
-        .with(middleware::partitioned_session::PartitionedSessionMiddleware)
+        .with(middleware::session_cookie::SessionCookieMiddleware)
         .with(SetHeader::new().overriding("Cache-Control", "no-store"))
         .with(NormalizePath::new(TrailingSlash::Trim))
 }

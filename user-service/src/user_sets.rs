@@ -273,7 +273,7 @@ async fn evaluate_criterion(
                    SELECT ?, ?, ?, user_id, ?
                    FROM users
                    WHERE point IS NOT NULL
-                     AND ST_Within(point, GeomFromGeoJSON(?)) = 1"#,
+                     AND ST_Within(point, SetSRID(GeomFromGeoJSON(?), 4326)) = 1"#,
                 evaluation_id,
                 criterion_index,
                 operation,

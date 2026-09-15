@@ -159,7 +159,7 @@ impl LoadStorePeered for EventAll {
                 when ?30 is null then
                   null
                 when substr(?30, 1, 1) == '{' and substr(?30, -1, 1) == '}' then
-                  GeomFromGeoJSON(?30)
+                  SetSRID(GeomFromGeoJSON(?30), 4326)
                 else
                   GeomFromEWKT(?30)
               end,
@@ -167,7 +167,7 @@ impl LoadStorePeered for EventAll {
                 when ?31 is null then
                   null
                 when substr(?31, 1, 1) == '{' and substr(?31, -1, 1) == '}' then
-                  GeomFromGeoJSON(?31)
+                  SetSRID(GeomFromGeoJSON(?31), 4326)
                 else
                   GeomFromEWKT(?31)
               end

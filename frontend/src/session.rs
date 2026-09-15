@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, time::Duration};
 
-use common::{message::user::Session, shared::nats};
+use common::{message::user::Session, service::request_typed, shared::nats};
 use jiff::Timestamp;
 use poem::{
     Result,
@@ -69,16 +69,15 @@ impl SessionStorage for UserServiceSessionStorage {
         Ok(())
     }
 
+    /// Waits for user-service to confirm the delete rather than publishing it
+    /// and moving on. The response to a logout is followed at once by the
+    /// browser's next request, and were the delete still in flight, that
+    /// request could load the session, find it logged in, and store it back.
     #[tracing::instrument]
     async fn remove_session<'a>(&'a self, session_id: &'a str) -> Result<()> {
-        let session_id = flexbuffers::to_vec(session_id.to_owned()).map_err(BadRequest)?;
-        let nats = nats();
-
-        nats.publish("user.session.delete", session_id.into())
+        request_typed::<()>("user.session.delete", session_id.to_owned())
             .await
-            .map_err(InternalServerError)?;
-
-        Ok(())
+            .map_err(InternalServerError)
     }
 }
 

@@ -669,7 +669,7 @@ impl EventField {
         sqlx::query!(
             r#"UPDATE events SET point = case
             when ?1 is null then null
-            when substr(?1, 1, 1) == '{' and substr(?1, -1, 1) == '}' then GeomFromGeoJSON(?1)
+            when substr(?1, 1, 1) == '{' and substr(?1, -1, 1) == '}' then SetSRID(GeomFromGeoJSON(?1), 4326)
             else GeomFromEWKT(?1)
         end WHERE event_id = ?2"#,
             point,
@@ -686,7 +686,7 @@ impl EventField {
         sqlx::query!(
             r#"UPDATE events SET regions = case
             when ?1 is null then null
-            when substr(?1, 1, 1) == '{' and substr(?1, -1, 1) == '}' then GeomFromGeoJSON(?1)
+            when substr(?1, 1, 1) == '{' and substr(?1, -1, 1) == '}' then SetSRID(GeomFromGeoJSON(?1), 4326)
             else GeomFromEWKT(?1)
         end WHERE event_id = ?2"#,
             regions,

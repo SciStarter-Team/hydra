@@ -2,7 +2,9 @@ use std::{collections::BTreeMap, time::Duration};
 
 use async_nats::service::ServiceExt;
 use common::{
-    handler, misc, recv_handler,
+    handler,
+    message::user::Session,
+    misc, recv_handler,
     service::log_activity,
     shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower, nats},
     timestring::TimeString,
@@ -45,12 +47,15 @@ pub mod zooniverse;
 
 async fn cleanup() {
     loop {
-        if let Err(err) =
-            sqlx::query!(r#"delete from "sessions" where datetime("expires") < datetime()"#,)
-                .execute(db())
-                .await
-        {
-            eprintln!("Error while performing session cleanup: {:?}", err);
+        match sessions::canonicalize_expiries().await {
+            Ok(()) => {
+                if let Err(err) = sessions::delete_expired().await {
+                    eprintln!("Error while performing session cleanup: {:?}", err);
+                }
+            }
+            Err(err) => {
+                eprintln!("Error while canonicalizing session expiries: {:?}", err);
+            }
         }
 
         if let Err(err) = sqlx::query!(
@@ -154,7 +159,6 @@ async fn sessions_synchronize() {
             }
         };
 
-        let db = db();
         let mut bookmark = last.clone();
 
         let got_sessions = sessions.len();
@@ -167,16 +171,19 @@ async fn sessions_synchronize() {
                 bookmark = session.expire_date.clone();
             }
 
-            sqlx::query!(
-                r#"insert into "sessions" ("session_id", "expires", "data")
-                   values (?, ?, ?)
-                   on conflict ("session_id") do
-                   update set "expires" = excluded."expires", "data" = excluded."data""#,
-                session.session_key,
-                session.expire_date,
-                data,
-            )
-            .execute(db)
+            if let Err(err) = sessions::canonical_expiry(&session.expire_date) {
+                eprintln!(
+                    "Skipping session {} with unreadable expiry {}: {err}",
+                    session.session_key, session.expire_date
+                );
+                continue;
+            }
+
+            sessions::save_session(&Session {
+                session_id: session.session_key.clone(),
+                expires: Some(session.expire_date.clone()),
+                data: data.into_boxed_slice(),
+            })
             .await
             .expect("Saving session failed");
 
@@ -2926,7 +2933,7 @@ async fn main() {
     let session = service.group("user.session");
     toplevel.spawn(recv_handler!(session, "store", sessions::store));
     toplevel.spawn(handler!(session, "retrieve", sessions::retrieve));
-    toplevel.spawn(recv_handler!(session, "delete", sessions::delete));
+    toplevel.spawn(handler!(session, "delete", sessions::delete));
 
     let auth = service.group("user.auth");
     toplevel.spawn(handler!(auth, "signup", auth::signup));

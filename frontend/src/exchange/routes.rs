@@ -1,7 +1,7 @@
 use poem::{Endpoint, EndpointExt, Route};
 
 use super::handlers::*;
-use crate::middleware::partitioned_session::EnablePartitionedCookies;
+use crate::middleware::session_cookie::EnablePartitionedCookies;
 
 pub fn routes() -> impl Endpoint {
     Route::new()

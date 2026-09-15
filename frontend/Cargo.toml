@@ -9,7 +9,7 @@ async-nats = "0.42.0"
 aws-config = "1.8.8"
 aws-sdk-bedrockruntime = { version = "1", features = ["behavior-version-latest"] }
 aws-smithy-types = "1"
-badgebuilder = { git = "https://git.sr.ht/~djarb/badgebuilder", version = "0.1.4" }
+badgebuilder = { git = "https://git.highenergymagic.org/badgebuilder.git", version = "0.1.4" }
 flexbuffers = "25.2.10"
 inventory = "0.3"
 jiff = { version = "0.2.15", features = ["serde"] }

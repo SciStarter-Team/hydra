@@ -61,7 +61,7 @@ pub async fn geocode_and_update_project_point(project_id: Ulid) -> Result<(), Er
 
     if let Some(geojson) = geocode_address_to_point(&city, &state, &country).await {
         sqlx::query!(
-            r#"UPDATE projects SET point = GeomFromGeoJSON(?1) WHERE project_id = ?2"#,
+            r#"UPDATE projects SET point = SetSRID(GeomFromGeoJSON(?1), 4326) WHERE project_id = ?2"#,
             geojson,
             project_id_str
         )
@@ -93,7 +93,7 @@ pub async fn geocode_and_update_event_point(event_id: Ulid) -> Result<(), Error>
 
     if let Some(geojson) = geocode_address_to_point(&city, &state, &country).await {
         sqlx::query!(
-            r#"UPDATE events SET point = GeomFromGeoJSON(?1) WHERE event_id = ?2"#,
+            r#"UPDATE events SET point = SetSRID(GeomFromGeoJSON(?1), 4326) WHERE event_id = ?2"#,
             geojson,
             event_id_str
         )

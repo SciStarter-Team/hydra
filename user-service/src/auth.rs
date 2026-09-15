@@ -132,7 +132,7 @@ async fn create_account(
           ?6,
           ?7,
           ?11,
-          GeomFromGeoJSON(?8),
+          SetSRID(GeomFromGeoJSON(?8), 4326),
           ?10,
           1
         )"#,
