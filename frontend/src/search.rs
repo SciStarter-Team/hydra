@@ -840,41 +840,18 @@ async fn search_with_location(
               WHEN p.city != '' AND p.state != '' THEN p.city || ', ' || p.state \
               WHEN p.location_name != '' THEN p.location_name \
               ELSE '' END AS location_display, \
-         NULL AS event_begin, \
-         CASE WHEN p.entirely_online = 1 THEN NULL \
-              WHEN p.regions IS NOT NULL THEN ST_Distance(ST_MakeValid(p.regions), MakePoint(",
+         NULL AS event_begin, ",
         );
-        qb.push_bind(lng);
-        qb.push(", ");
-        qb.push_bind(lat);
+        push_distance_km(&mut qb, LocatedTable::Projects, lat, lng);
         qb.push(
-            ", 4326), 1) / 1000.0 WHEN p.point IS NOT NULL THEN ST_Distance(p.point, MakePoint(",
-        );
-        qb.push_bind(lng);
-        qb.push(", ");
-        qb.push_bind(lat);
-        qb.push(
-        ", 4326), 1) / 1000.0 \
-         ELSE NULL END AS distance_km, \
+            ", \
          CASE WHEN p.regions IS NOT NULL THEN AsGeoJSON(p.regions) \
               WHEN p.point IS NOT NULL THEN AsGeoJSON(p.point) \
-              ELSE NULL END AS geo_json, \
-         CASE WHEN p.entirely_online = 1 THEN 200.0 \
-              WHEN p.regions IS NOT NULL THEN COALESCE(ST_Distance(ST_MakeValid(p.regions), MakePoint(",
-    );
-        qb.push_bind(lng);
-        qb.push(", ");
-        qb.push_bind(lat);
+              ELSE NULL END AS geo_json, ",
+        );
+        push_project_comparison(&mut qb, lat, lng);
         qb.push(
-        ", 4326), 1) / 1000.0, 0) + COALESCE(NULLIF(SQRT(ST_Area(ST_MakeValid(p.regions), 1) / 1000000.0), 0.0), 22583.0) \
-              WHEN p.point IS NOT NULL THEN COALESCE(ST_Distance(p.point, MakePoint(",
-    );
-        qb.push_bind(lng);
-        qb.push(", ");
-        qb.push_bind(lat);
-        qb.push(
-            ", 4326), 1) / 1000.0, 22583.0) \
-              ELSE 0.0 END * 1.0 AS comparison_value \
+            " \
          FROM entities_fts f \
          JOIN entities e ON f.slug = e.slug \
          JOIN projects p ON e.target = p.project_id \
@@ -900,44 +877,18 @@ async fn search_with_location(
               WHEN ev.location_name != '' THEN ev.location_name \
               ELSE '' END AS location_display, \
          (SELECT ei.begin FROM event_instances ei WHERE ei.event_id = ev.event_id \
-          AND ei.begin >= datetime('now') ORDER BY ei.begin LIMIT 1) AS event_begin, \
-         CASE WHEN ev.entirely_online = 1 THEN NULL \
-              WHEN ev.regions IS NOT NULL THEN ST_Distance(ST_MakeValid(ev.regions), MakePoint(",
+          AND ei.begin >= datetime('now') ORDER BY ei.begin LIMIT 1) AS event_begin, ",
         );
-        qb.push_bind(lng);
-        qb.push(", ");
-        qb.push_bind(lat);
+        push_distance_km(&mut qb, LocatedTable::Events, lat, lng);
         qb.push(
-            ", 4326), 1) / 1000.0 WHEN ev.point IS NOT NULL THEN ST_Distance(ev.point, MakePoint(",
-        );
-        qb.push_bind(lng);
-        qb.push(", ");
-        qb.push_bind(lat);
-        qb.push(
-        ", 4326), 1) / 1000.0 \
-         ELSE NULL END AS distance_km, \
+            ", \
          CASE WHEN ev.regions IS NOT NULL THEN AsGeoJSON(ev.regions) \
               WHEN ev.point IS NOT NULL THEN AsGeoJSON(ev.point) \
-              ELSE NULL END AS geo_json, \
-         COALESCE(MAX(0.0, julianday((SELECT ei2.begin FROM event_instances ei2 \
-          WHERE ei2.event_id = ev.event_id AND ei2.begin >= datetime('now') \
-          ORDER BY ei2.begin LIMIT 1)) - julianday('now')), 0.0) * 10.0 \
-         + CASE WHEN ev.entirely_online = 1 THEN 100.0 \
-                WHEN ev.regions IS NOT NULL THEN COALESCE(ST_Distance(ST_MakeValid(ev.regions), MakePoint(",
-    );
-        qb.push_bind(lng);
-        qb.push(", ");
-        qb.push_bind(lat);
-        qb.push(
-            ", 4326), 1) / 1000.0, 0) \
-                WHEN ev.point IS NOT NULL THEN COALESCE(ST_Distance(ev.point, MakePoint(",
+              ELSE NULL END AS geo_json, ",
         );
-        qb.push_bind(lng);
-        qb.push(", ");
-        qb.push_bind(lat);
+        push_event_comparison(&mut qb, lat, lng);
         qb.push(
-            ", 4326), 1) / 1000.0, 22583.0) \
-                ELSE 0.0 END * 1.0 AS comparison_value \
+            " \
          FROM entities_fts f \
          JOIN entities e ON f.slug = e.slug \
          JOIN events ev ON e.target = ev.event_id \
@@ -1049,10 +1000,155 @@ fn location_row_to_result(row: LocationRow) -> FinderResult {
     }
 }
 
+/// The ranking distance, in kilometres, that stands for "anywhere on Earth".
+///
+/// Roughly the square root of the Earth's surface area in square kilometres,
+/// so a footprint with no measurable size ranks as if it covered the planet,
+/// and one with no measurable distance as if it were as far away as that.
+const WHOLE_WORLD_KM: f64 = 22583.0;
+
+/// SQL that is true when the `regions` footprint in `table` can be measured on the
+/// ellipsoid.
+///
+/// `ST_Distance(.., 1)` and `ST_Area(.., 1)` join each pair of vertices by
+/// the shorter geodesic, while the stored coordinates describe the polygon on
+/// the flat longitude/latitude plane. The two readings agree only while no
+/// polygon part spans half the globe: a part that wide is either the whole
+/// world or a ring drawn the long way round, and measures as some other
+/// shape. The test is per part because a region crossing the antimeridian is
+/// stored as parts either side of it, as New Zealand, Alaska and the United
+/// States are, and each of those parts measures correctly.
+///
+/// Orrery's `measurable_as_geography` makes the same per-part test. SpatiaLite
+/// additionally needs every longitude within +/-180: PostGIS wraps a vertex
+/// drawn past 180 degrees back onto the globe, but SpatiaLite's distance does
+/// not, so a box drawn from 170 to 190 degrees measures hundreds of
+/// kilometres too far from anyone just east of the antimeridian.
+///
+/// A footprint that fails ranks by the project's point if it has one, and
+/// otherwise as covering the whole world.
+fn measurable_footprint(table: LocatedTable) -> String {
+    let table = table.alias();
+
+    format!(
+        "({table}.regions IS NOT NULL \
+          AND MbrMinX({table}.regions) >= -180 AND MbrMaxX({table}.regions) <= 180 \
+          AND NOT EXISTS ( \
+            WITH RECURSIVE part(n) AS ( \
+              SELECT 1 UNION ALL SELECT n + 1 FROM part WHERE n < NumGeometries({table}.regions) \
+            ) \
+            SELECT 1 FROM part \
+            WHERE MbrMaxX(GeometryN({table}.regions, n)) - MbrMinX(GeometryN({table}.regions, n)) >= 180 \
+          ))"
+    )
+}
+
+/// Which kind of entity a location-ranked subquery reads, by the alias its
+/// table goes under there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LocatedTable {
+    /// `projects p`
+    Projects,
+    /// `events ev`
+    Events,
+}
+
+impl LocatedTable {
+    fn alias(self) -> &'static str {
+        match self {
+            LocatedTable::Projects => "p",
+            LocatedTable::Events => "ev",
+        }
+    }
+}
+
+/// Push the searcher's location as a SpatiaLite point.
+fn push_search_point(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, lat: f64, lng: f64) {
+    qb.push("MakePoint(");
+    qb.push_bind(lng);
+    qb.push(", ");
+    qb.push_bind(lat);
+    qb.push(", 4326)");
+}
+
+/// Push the `distance_km` column shown beside a result: from the searcher to
+/// the footprint if it is measurable, else to the point, else nothing.
+fn push_distance_km(
+    qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>,
+    table: LocatedTable,
+    lat: f64,
+    lng: f64,
+) {
+    let measurable = measurable_footprint(table);
+    let table = table.alias();
+
+    qb.push(format!(
+        "CASE WHEN {table}.entirely_online = 1 THEN NULL \
+              WHEN {measurable} THEN ST_Distance(ST_MakeValid({table}.regions), "
+    ));
+    push_search_point(qb, lat, lng);
+    qb.push(format!(
+        ", 1) / 1000.0 WHEN {table}.point IS NOT NULL THEN ST_Distance({table}.point, "
+    ));
+    push_search_point(qb, lat, lng);
+    qb.push(", 1) / 1000.0 ELSE NULL END AS distance_km");
+}
+
+/// Push a project's `comparison_value`, the key results sort by: a footprint
+/// ranks by its distance plus the square root of its area, so a small area
+/// nearby beats a large one that merely reaches this far; a point by plain
+/// distance; an online project as if 200 km away.
+fn push_project_comparison(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, lat: f64, lng: f64) {
+    let measurable = measurable_footprint(LocatedTable::Projects);
+
+    qb.push(format!(
+        "CASE WHEN p.entirely_online = 1 THEN 200.0 \
+              WHEN {measurable} THEN COALESCE(ST_Distance(ST_MakeValid(p.regions), "
+    ));
+    push_search_point(qb, lat, lng);
+    qb.push(format!(
+        ", 1) / 1000.0, 0) + COALESCE(NULLIF(SQRT(ST_Area(ST_MakeValid(p.regions), 1) / 1000000.0), 0.0), {WHOLE_WORLD_KM:.1}) \
+              WHEN p.point IS NOT NULL THEN COALESCE(ST_Distance(p.point, "
+    ));
+    push_search_point(qb, lat, lng);
+    qb.push(format!(
+        ", 1) / 1000.0, {WHOLE_WORLD_KM:.1}) \
+              WHEN p.regions IS NOT NULL THEN {WHOLE_WORLD_KM:.1} \
+              ELSE 0.0 END * 1.0 AS comparison_value"
+    ));
+}
+
+/// Push an event's `comparison_value`: ten kilometres per day until its next
+/// instance, plus its distance -- to a footprint, else to its point, with an
+/// online event counted as 100 km away.
+fn push_event_comparison(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, lat: f64, lng: f64) {
+    let measurable = measurable_footprint(LocatedTable::Events);
+
+    qb.push(format!(
+        "COALESCE(MAX(0.0, julianday((SELECT ei2.begin FROM event_instances ei2 \
+          WHERE ei2.event_id = ev.event_id AND ei2.begin >= datetime('now') \
+          ORDER BY ei2.begin LIMIT 1)) - julianday('now')), 0.0) * 10.0 \
+         + CASE WHEN ev.entirely_online = 1 THEN 100.0 \
+                WHEN {measurable} THEN COALESCE(ST_Distance(ST_MakeValid(ev.regions), "
+    ));
+    push_search_point(qb, lat, lng);
+    qb.push(
+        ", 1) / 1000.0, 0) \
+                WHEN ev.point IS NOT NULL THEN COALESCE(ST_Distance(ev.point, ",
+    );
+    push_search_point(qb, lat, lng);
+    qb.push(format!(
+        ", 1) / 1000.0, {WHOLE_WORLD_KM:.1}) \
+                WHEN ev.regions IS NOT NULL THEN {WHOLE_WORLD_KM:.1} \
+                ELSE 0.0 END * 1.0 AS comparison_value"
+    ));
+}
+
 /// Push the location-ranked **project** subquery into `qb` (no filters, no outer
-/// wrapper). Shared by [`search_location_only`] and [`nearby_entities`] so the
-/// distance and `comparison_value` sort expression has a single source of
-/// truth. Callers append their own filters and close the statement.
+/// wrapper). Shared by [`search_location_only`] and [`nearby_entities`].
+/// The distance and `comparison_value` expressions come from
+/// [`push_distance_km`] and [`push_project_comparison`], which the text
+/// search uses too. Callers append their own filters and close the statement.
 fn push_project_location_subquery(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, lat: f64, lng: f64) {
     qb.push(
         "SELECT e.slug, 'Project' AS entity_type, p.name AS title, p.description, p.image, \
@@ -1061,39 +1157,18 @@ fn push_project_location_subquery(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, lat
               WHEN p.city != '' AND p.state != '' THEN p.city || ', ' || p.state \
               WHEN p.location_name != '' THEN p.location_name \
               ELSE '' END AS location_display, \
-         NULL AS event_begin, \
-         CASE WHEN p.entirely_online = 1 THEN NULL \
-              WHEN p.regions IS NOT NULL THEN ST_Distance(ST_MakeValid(p.regions), MakePoint(",
+         NULL AS event_begin, ",
     );
-    qb.push_bind(lng);
-    qb.push(", ");
-    qb.push_bind(lat);
-    qb.push(", 4326), 1) / 1000.0 WHEN p.point IS NOT NULL THEN ST_Distance(p.point, MakePoint(");
-    qb.push_bind(lng);
-    qb.push(", ");
-    qb.push_bind(lat);
+    push_distance_km(qb, LocatedTable::Projects, lat, lng);
     qb.push(
-        ", 4326), 1) / 1000.0 \
-         ELSE NULL END AS distance_km, \
+        ", \
          CASE WHEN p.regions IS NOT NULL THEN AsGeoJSON(p.regions) \
               WHEN p.point IS NOT NULL THEN AsGeoJSON(p.point) \
-              ELSE NULL END AS geo_json, \
-         CASE WHEN p.entirely_online = 1 THEN 200.0 \
-              WHEN p.regions IS NOT NULL THEN COALESCE(ST_Distance(ST_MakeValid(p.regions), MakePoint(",
+              ELSE NULL END AS geo_json, ",
     );
-    qb.push_bind(lng);
-    qb.push(", ");
-    qb.push_bind(lat);
+    push_project_comparison(qb, lat, lng);
     qb.push(
-        ", 4326), 1) / 1000.0, 0) + COALESCE(NULLIF(SQRT(ST_Area(ST_MakeValid(p.regions), 1) / 1000000.0), 0.0), 22583.0) \
-              WHEN p.point IS NOT NULL THEN COALESCE(ST_Distance(p.point, MakePoint(",
-    );
-    qb.push_bind(lng);
-    qb.push(", ");
-    qb.push_bind(lat);
-    qb.push(
-        ", 4326), 1) / 1000.0, 22583.0) \
-              ELSE 0.0 END * 1.0 AS comparison_value \
+        " \
          FROM entities e JOIN projects p ON e.target = p.project_id \
          WHERE e.kind = 'Project' AND e.publish = 1 \
          AND (p.point IS NOT NULL OR p.regions IS NOT NULL OR p.entirely_online = 1)",
@@ -1111,42 +1186,18 @@ fn push_event_location_subquery(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, lat: 
               WHEN ev.location_name != '' THEN ev.location_name \
               ELSE '' END AS location_display, \
          (SELECT ei.begin FROM event_instances ei WHERE ei.event_id = ev.event_id \
-          AND ei.begin >= datetime('now') ORDER BY ei.begin LIMIT 1) AS event_begin, \
-         CASE WHEN ev.entirely_online = 1 THEN NULL \
-              WHEN ev.regions IS NOT NULL THEN ST_Distance(ST_MakeValid(ev.regions), MakePoint(",
+          AND ei.begin >= datetime('now') ORDER BY ei.begin LIMIT 1) AS event_begin, ",
     );
-    qb.push_bind(lng);
-    qb.push(", ");
-    qb.push_bind(lat);
-    qb.push(", 4326), 1) / 1000.0 WHEN ev.point IS NOT NULL THEN ST_Distance(ev.point, MakePoint(");
-    qb.push_bind(lng);
-    qb.push(", ");
-    qb.push_bind(lat);
+    push_distance_km(qb, LocatedTable::Events, lat, lng);
     qb.push(
-        ", 4326), 1) / 1000.0 \
-         ELSE NULL END AS distance_km, \
+        ", \
          CASE WHEN ev.regions IS NOT NULL THEN AsGeoJSON(ev.regions) \
               WHEN ev.point IS NOT NULL THEN AsGeoJSON(ev.point) \
-              ELSE NULL END AS geo_json, \
-         COALESCE(MAX(0.0, julianday((SELECT ei2.begin FROM event_instances ei2 \
-          WHERE ei2.event_id = ev.event_id AND ei2.begin >= datetime('now') \
-          ORDER BY ei2.begin LIMIT 1)) - julianday('now')), 0.0) * 10.0 \
-         + CASE WHEN ev.entirely_online = 1 THEN 100.0 \
-                WHEN ev.regions IS NOT NULL THEN COALESCE(ST_Distance(ST_MakeValid(ev.regions), MakePoint(",
+              ELSE NULL END AS geo_json, ",
     );
-    qb.push_bind(lng);
-    qb.push(", ");
-    qb.push_bind(lat);
+    push_event_comparison(qb, lat, lng);
     qb.push(
-        ", 4326), 1) / 1000.0, 0) \
-                WHEN ev.point IS NOT NULL THEN COALESCE(ST_Distance(ev.point, MakePoint(",
-    );
-    qb.push_bind(lng);
-    qb.push(", ");
-    qb.push_bind(lat);
-    qb.push(
-        ", 4326), 1) / 1000.0, 22583.0) \
-                ELSE 0.0 END * 1.0 AS comparison_value \
+        " \
          FROM entities e JOIN events ev ON e.target = ev.event_id \
          WHERE e.kind = 'Event' AND e.publish = 1 \
          AND (ev.point IS NOT NULL OR ev.regions IS NOT NULL OR ev.entirely_online = 1)",
@@ -1452,7 +1503,181 @@ pub async fn handle_finder(
 
 #[cfg(test)]
 mod tests {
-    use super::make_snippet;
+    use super::{
+        LocatedTable, WHOLE_WORLD_KM, make_snippet, push_distance_km, push_event_comparison,
+        push_project_comparison,
+    };
+    use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
+
+    /// Crosses the antimeridian the way stored regions do: one part either
+    /// side of it, each ten degrees wide.
+    const SPLIT: &str = "MULTIPOLYGON(((170 -40, 180 -40, 180 -30, 170 -30, 170 -40)), \
+                         ((-180 -40, -170 -40, -170 -30, -180 -30, -180 -40)))";
+
+    /// The same box drawn as one ring the long way round.
+    const LONG_WAY: &str = "MULTIPOLYGON(((-170 -40, 170 -40, 170 -30, -170 -30, -170 -40)))";
+
+    /// The same box drawn as one ring past 180 degrees.
+    const UNWRAPPED: &str = "MULTIPOLYGON(((170 -40, 190 -40, 190 -30, 170 -30, 170 -40)))";
+
+    const WORLD: &str = "MULTIPOLYGON(((-180 -90, 180 -90, 180 90, -180 90, -180 -90)))";
+
+    /// Where the searcher stands: inside the eastern part of [`SPLIT`].
+    const LAT: f64 = -35.0;
+    const LNG: f64 = -175.0;
+
+    /// A point about 111 km due north of the searcher.
+    const POINT_NORTH: &str = "POINT(-175 -34)";
+
+    /// A scratch database with just the columns the ranking reads.
+    async fn database() -> SqlitePool {
+        // SAFETY: mod_spatialite is a trusted extension, the same one the
+        // application loads.
+        let options = unsafe { SqliteConnectOptions::new().extension("mod_spatialite") };
+
+        // One connection, because every connection to ":memory:" is a
+        // database of its own.
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options.filename(":memory:"))
+            .await
+            .unwrap();
+
+        // Ellipsoidal measurement looks the SRID up in spatial_ref_sys.
+        for statement in [
+            "SELECT InitSpatialMetadata(1)",
+            "CREATE TABLE projects (name TEXT, entirely_online INTEGER, regions BLOB, point BLOB)",
+            "CREATE TABLE events (event_id TEXT, name TEXT, entirely_online INTEGER, regions BLOB, point BLOB)",
+            "CREATE TABLE event_instances (event_id TEXT, begin TEXT)",
+        ] {
+            sqlx::query(statement).execute(&pool).await.unwrap();
+        }
+
+        pool
+    }
+
+    async fn add(
+        pool: &SqlitePool,
+        table: LocatedTable,
+        name: &str,
+        regions: Option<&str>,
+        point: Option<&str>,
+    ) {
+        let query = match table {
+            LocatedTable::Projects => sqlx::query(
+                "INSERT INTO projects VALUES (?, 0, GeomFromText(?, 4326), GeomFromText(?, 4326))",
+            )
+            .bind(name),
+            LocatedTable::Events => sqlx::query(
+                "INSERT INTO events VALUES (?, ?, 0, GeomFromText(?, 4326), GeomFromText(?, 4326))",
+            )
+            .bind(name)
+            .bind(name),
+        };
+
+        query.bind(regions).bind(point).execute(pool).await.unwrap();
+    }
+
+    /// Each row's name, `distance_km` and `comparison_value`.
+    async fn ranked(pool: &SqlitePool, table: LocatedTable) -> Vec<(String, Option<f64>, f64)> {
+        let alias = table.alias();
+
+        let mut qb = sqlx::QueryBuilder::new(format!("SELECT {alias}.name, "));
+        push_distance_km(&mut qb, table, LAT, LNG);
+        qb.push(", ");
+        let from = match table {
+            LocatedTable::Projects => {
+                push_project_comparison(&mut qb, LAT, LNG);
+                "projects"
+            }
+            LocatedTable::Events => {
+                push_event_comparison(&mut qb, LAT, LNG);
+                "events"
+            }
+        };
+        qb.push(format!(" FROM {from} {alias}"));
+
+        qb.build_query_as::<(String, Option<f64>, f64)>()
+            .fetch_all(pool)
+            .await
+            .unwrap()
+    }
+
+    fn row<'a>(
+        rows: &'a [(String, Option<f64>, f64)],
+        name: &str,
+    ) -> &'a (String, Option<f64>, f64) {
+        rows.iter().find(|r| r.0 == name).unwrap()
+    }
+
+    #[tokio::test]
+    async fn a_region_split_at_the_antimeridian_is_measured() {
+        let pool = database().await;
+        add(&pool, LocatedTable::Projects, "split", Some(SPLIT), None).await;
+
+        let rows = ranked(&pool, LocatedTable::Projects).await;
+        let (_, distance, comparison) = row(&rows, "split");
+
+        // The searcher stands inside it, and its two 10x10 degree parts at
+        // these latitudes come to about two million square kilometres.
+        assert_eq!(*distance, Some(0.0));
+        assert!((1_400.0..1_430.0).contains(comparison), "{comparison}");
+    }
+
+    #[tokio::test]
+    async fn an_unmeasurable_footprint_ranks_by_its_point() {
+        let pool = database().await;
+
+        for (name, regions) in [("long way", LONG_WAY), ("unwrapped", UNWRAPPED)] {
+            add(
+                &pool,
+                LocatedTable::Projects,
+                name,
+                Some(regions),
+                Some(POINT_NORTH),
+            )
+            .await;
+        }
+
+        let rows = ranked(&pool, LocatedTable::Projects).await;
+
+        for name in ["long way", "unwrapped"] {
+            let (_, distance, comparison) = row(&rows, name);
+            let distance = distance.unwrap();
+
+            assert!((110.0..112.0).contains(&distance), "{name}: {distance}");
+            assert_eq!(*comparison, distance, "{name}");
+        }
+    }
+
+    #[tokio::test]
+    async fn an_unmeasurable_footprint_without_a_point_covers_the_world() {
+        let pool = database().await;
+        add(&pool, LocatedTable::Projects, "world", Some(WORLD), None).await;
+        add(
+            &pool,
+            LocatedTable::Projects,
+            "long way",
+            Some(LONG_WAY),
+            None,
+        )
+        .await;
+        add(
+            &pool,
+            LocatedTable::Events,
+            "long way",
+            Some(LONG_WAY),
+            None,
+        )
+        .await;
+
+        for table in [LocatedTable::Projects, LocatedTable::Events] {
+            for (name, distance, comparison) in ranked(&pool, table).await {
+                assert_eq!(distance, None, "{table:?} {name}");
+                assert_eq!(comparison, WHOLE_WORLD_KM, "{table:?} {name}");
+            }
+        }
+    }
 
     #[test]
     fn delta_description_renders_as_plain_text() {
