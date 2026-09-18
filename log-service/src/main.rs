@@ -7,6 +7,7 @@ use tokio::{signal, task::JoinSet};
 use tokio_util::sync::CancellationToken;
 
 mod bridges;
+mod engagement;
 mod exchange;
 mod foundations;
 mod handlers;
@@ -340,6 +341,11 @@ async fn main() -> Result<()> {
     // Stats endpoints
     let stats_group = svc.group("log.stats");
     toplevel.spawn(handler!(stats_group, "go_url", handle_go_url_stats));
+    toplevel.spawn(handler!(
+        stats_group,
+        "annual_engagement",
+        engagement::handle_annual_engagement
+    ));
 
     // Cache endpoints
     let cache_group = svc.group("log.cache");

@@ -41,6 +41,7 @@ pub mod mcp_token;
 pub mod middleware;
 pub mod misc;
 pub mod news;
+pub mod number;
 pub mod oauth2;
 pub mod page_manager;
 pub mod pagebuilder;
@@ -273,8 +274,7 @@ fn user_facing() -> impl Endpoint {
         )
         .at(
             "/logout",
-            get(auth::logout_action)
-                .with(middleware::session_cookie::EnablePartitionedCookies),
+            get(auth::logout_action).with(middleware::session_cookie::EnablePartitionedCookies),
         )
         .at("/check-email", get(auth::check_email_page))
         .at(
@@ -325,6 +325,7 @@ fn user_facing() -> impl Endpoint {
         .nest("/-search", search::routes())
         .nest("/-concierge", concierge::routes())
         .at("/finder", get(search::handle_finder))
+        .at("/data", get(pages::data::data_page))
         .at("/-news/:id/content", get(news::news_content))
         .nest("/list", entity_list::page::routes())
         .nest("/communities", communities::routes())

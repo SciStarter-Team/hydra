@@ -1,0 +1,161 @@
+/* Site statistics page (/data) */
+
+/* Tabs on this page carry a subtitle under the name, so their label is a
+   stacked block rather than the single line .tabs-bar assumes. */
+.ss-data .tabs-bar .tab-icon {
+    @apply items-start text-left;
+}
+
+.ss-data .tab-text {
+    @apply flex flex-col;
+}
+
+.ss-data .tab-name {
+    @apply font-semibold;
+}
+
+.ss-data .tab-subtitle {
+    @apply text-sm opacity-80;
+}
+
+/* A bordered block grouping one set of figures. */
+.ss-data .data-panel {
+    @apply border border-linework rounded-sm bg-white p-4;
+}
+
+.ss-data .data-panel h2,
+.ss-data .data-panel h3 {
+    @apply text-lg mt-0 mb-3;
+}
+
+.ss-data > h2 {
+    @apply text-xl mt-8 mb-3;
+}
+
+/* One figure: illustration on the left, number and caption on the right. */
+.ss-data .stat {
+    @apply flex items-center gap-4;
+}
+
+.ss-data .stat-icon {
+    @apply w-16 shrink-0;
+}
+
+.ss-data .stat-sm .stat-icon {
+    @apply w-10;
+}
+
+.ss-data .stat-figure {
+    @apply font-header-lg text-2xl text-primary-dark leading-none mb-1;
+}
+
+.ss-data .stat-sm .stat-figure {
+    @apply text-xl;
+}
+
+.ss-data .stat-label {
+    @apply text-sm font-semibold text-neutral-dark mb-0;
+}
+
+.ss-data .stat-note {
+    @apply text-xs uppercase tracking-wide text-neutral-mid mb-0;
+}
+
+/* The "?" beside a caption, explaining what the figure counts. */
+.ss-data .stat-help {
+    @apply inline-grid place-items-center w-4 h-4 align-middle rounded-full;
+    @apply bg-primary-light text-primary-action text-2xs font-bold;
+    cursor: help;
+}
+
+/* A labelled horizontal bar. The label and the value keep fixed columns so
+   that a column of bars lines up however long the labels are. */
+.ss-data .bar-row {
+    @apply grid items-center gap-2 mb-2 text-sm;
+    grid-template-columns: minmax(0, 11rem) 1fr auto;
+}
+
+.ss-data .bar-row:has(> .bar-track:first-child) {
+    grid-template-columns: 1fr;
+}
+
+.ss-data .bar-label {
+    @apply text-neutral-dark;
+    /* Labels get a fixed column, and some of them ("Hiatus/Unpublished") have
+       no space to break at, so allow a break anywhere rather than let the
+       label run under its own bar. */
+    overflow-wrap: anywhere;
+}
+
+.ss-data .bar-track {
+    @apply block w-full h-3 rounded-full bg-neutral-xlight overflow-hidden;
+}
+
+.ss-data .bar-fill {
+    @apply block h-full rounded-full bg-primary;
+}
+
+.ss-data .bar-value {
+    @apply text-neutral-mid whitespace-nowrap;
+}
+
+@media (max-width: 640px) {
+    .ss-data .bar-row {
+        grid-template-columns: minmax(0, 7rem) 1fr auto;
+    }
+}
+
+/* Gender split, drawn as a ring whose circumference is 100 units so that a
+   segment's dasharray is its percentage. */
+.ss-data .donut-row {
+    @apply flex items-center gap-6 flex-wrap;
+}
+
+.ss-data .donut {
+    @apply w-40 h-40 shrink-0;
+    transform: rotate(-90deg);
+}
+
+.ss-data .donut-hole {
+    fill: var(--color-white);
+    stroke: var(--color-neutral-xlight);
+    stroke-width: 5;
+}
+
+.ss-data .donut-segment {
+    fill: none;
+    stroke-width: 5;
+}
+
+.ss-data .donut-female,
+.ss-data .legend-female {
+    stroke: var(--color-primary);
+    background-color: var(--color-primary);
+}
+
+.ss-data .donut-male,
+.ss-data .legend-male {
+    stroke: var(--color-accent1);
+    background-color: var(--color-accent1);
+}
+
+.ss-data .donut-legend {
+    @apply list-none m-0 p-0 text-sm;
+}
+
+.ss-data .donut-legend li {
+    @apply flex items-start gap-2 mb-3 ml-0;
+}
+
+.ss-data .legend-dot {
+    @apply block w-4 h-4 rounded-full shrink-0 mt-1;
+}
+
+/* The two-line heading over a bar chart. */
+.ss-data .chart-eyebrow {
+    @apply text-xs uppercase tracking-wide text-neutral-mid mb-0;
+}
+
+.ss-data .chart-note {
+    @apply text-xs text-neutral-mid mb-4;
+}

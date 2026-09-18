@@ -2921,6 +2921,7 @@ async fn main() {
     let stats = service.group("user.stats");
     toplevel.spawn(handler!(stats, "total_count", stats::total_count));
     toplevel.spawn(handler!(stats, "verified_count", stats::verified_count));
+    toplevel.spawn(handler!(stats, "count_as_of", stats::count_as_of));
     toplevel.spawn(handler!(stats, "admin_analytics", stats::admin_analytics));
     toplevel.spawn(handler!(stats, "geographic", stats::geographic_analytics));
     toplevel.spawn(handler!(stats, "activity", stats::activity_analytics));

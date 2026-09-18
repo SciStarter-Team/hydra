@@ -756,3 +756,32 @@ pub struct LastActiveEntry {
 pub struct LastActiveForResponse {
     pub entries: Vec<LastActiveEntry>,
 }
+
+/// One calendar year's site-wide engagement totals, as shown on `/data`.
+///
+/// `year` selects the year to report on; `None` asks for the most recent
+/// calendar year that has fully elapsed.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnnualEngagementRequest {
+    pub year: Option<i32>,
+}
+
+/// The four engagement counts for a year.
+///
+/// A year the legacy site recorded is answered from its own final tally
+/// rather than from this system's logs, because for those years our tables
+/// hold a synchronized copy of the same events and the copy is neither
+/// complete nor free of duplicates. See `legacy_engagement` in the log
+/// service's migrations.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnnualEngagementResponse {
+    pub year: i32,
+    /// Pages visited.
+    pub views: i64,
+    /// Projects saved for later.
+    pub saves: i64,
+    /// Visits sent on to a project's own site.
+    pub referrals: i64,
+    /// Records submitted to affiliate projects.
+    pub contributions: i64,
+}

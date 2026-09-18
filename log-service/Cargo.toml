@@ -9,6 +9,10 @@ default-run = "log-service"
 name = "analytics-shell"
 path = "src/bin/shell/main.rs"
 
+[[bin]]
+name = "dedupe-log"
+path = "src/bin/dedupe-log.rs"
+
 [dependencies]
 common = { version = "0.1.0", path = "../common" }
 thiserror = "2.0"

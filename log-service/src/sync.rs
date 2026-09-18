@@ -1,3 +1,19 @@
+//! Importers for orrery's sync feeds.
+//!
+//! Each feed is paged with a watermark: the importer remembers how far it has
+//! read and asks for everything after that. Which column the watermark follows
+//! decides whether a delivery and an event are the same thing.
+//!
+//! Most feeds page on `when`, the moment the thing happened, which orrery never
+//! changes. A row crosses that watermark exactly once, so every delivery is a
+//! new event and logging each one is correct.
+//!
+//! Joins and bookmarks page on `activity`, which orrery bumps whenever the row
+//! is touched. Those rows cross the watermark again on every change, and the
+//! importer is handed an event it has already logged. For those two feeds a
+//! delivery is *not* an event, and they consult [`claim_source_row`] before
+//! writing. Adding a feed that pages on a mutable column means doing the same.
+
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -8,6 +24,54 @@ use log_service::database::{
     Database, get_sync_bookmark, get_sync_last_id, set_sync_bookmark, set_sync_last_id,
 };
 use std::sync::Arc;
+
+/// Feed names for [`claim_source_row`]. orrery's ids are only unique within
+/// one of its tables, so the ledger is keyed by both.
+const JOIN_FEED: &str = "joins";
+const BOOKMARK_FEED: &str = "bookmarks";
+
+/// Claim `source_id` for `feed`, reporting whether this importer had it already.
+///
+/// `true` means the row has not been logged before and its events should be
+/// written; `false` means this is a re-delivery of a row whose `activity`
+/// moved, and writing it again would log the same event twice.
+///
+/// The claim is taken before the write rather than after, so that a crash
+/// between the two costs one duplicated event rather than a silently dropped
+/// one. A write that fails outright gives the claim back via
+/// [`release_source_row`].
+async fn claim_source_row(feed: &str, source_id: i32) -> Result<bool> {
+    let claimed = sqlx::query!(
+        r#"INSERT OR IGNORE INTO synced_source_rows ("feed", "source_id") VALUES (?, ?)"#,
+        feed,
+        source_id
+    )
+    .execute(common::shared::db())
+    .await?
+    .rows_affected();
+
+    Ok(claimed > 0)
+}
+
+/// Give back a claim whose events could not be written, so that the next pass
+/// treats the row as new rather than as a re-delivery.
+///
+/// A failure here is only reported: the row keeps its claim, the event stays
+/// unlogged, and the repair tooling is what recovers it. Propagating would
+/// take down an importer over a row it was already failing to write.
+async fn release_source_row(feed: &str, source_id: i32) {
+    let released = sqlx::query!(
+        r#"DELETE FROM synced_source_rows WHERE "feed" = ? AND "source_id" = ?"#,
+        feed,
+        source_id
+    )
+    .execute(common::shared::db())
+    .await;
+
+    if let Err(e) = released {
+        eprintln!("Failed to release {feed} row {source_id} after a failed write: {e}");
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParticipationEventData {
@@ -84,7 +148,7 @@ pub struct ReviewData {
     pub checked: bool,
 }
 
-// Participation sync functions
+/// Watermark: the immutable `when`, so every delivery is a new event.
 pub async fn participation_synchronize(
     database: Arc<Database>,
     cancellation_token: CancellationToken,
@@ -205,6 +269,8 @@ pub async fn participation_synchronize(
     }
 }
 
+/// Watermark: the mutable `activity`, so a delivery is not an event and
+/// rows are claimed through [`claim_source_row`] before being logged.
 pub async fn bookmark_synchronize(database: Arc<Database>, cancellation_token: CancellationToken) {
     loop {
         // Check for cancellation at start of loop
@@ -274,17 +340,30 @@ pub async fn bookmark_synchronize(database: Arc<Database>, cancellation_token: C
             let mut bookmark_id = last_id;
 
             for bm in bookmarks {
-                if let Err(e) = insert_bookmark(&database, &bm).await {
-                    eprintln!("Failed to insert bookmark: {}", e);
-                    continue;
+                // Pages on the mutable `activity`, exactly as joins do, so the
+                // same bookmark arrives again every time it is touched.
+                let first_delivery = match claim_source_row(BOOKMARK_FEED, bm.id).await {
+                    Ok(claimed) => claimed,
+                    Err(e) => {
+                        eprintln!("Failed to claim bookmark {}: {}", bm.id, e);
+                        continue;
+                    }
+                };
+
+                if first_delivery {
+                    if let Err(e) = insert_bookmark(&database, &bm).await {
+                        eprintln!("Failed to insert bookmark {}: {}", bm.id, e);
+                        release_source_row(BOOKMARK_FEED, bm.id).await;
+                        continue;
+                    }
+
+                    println!("Inserted bookmark {}", bm.id);
                 }
 
                 if bm.activity > bookmark || (bm.activity == bookmark && bm.id > bookmark_id) {
                     bookmark = bm.activity.clone();
                     bookmark_id = bm.id;
                 }
-
-                println!("Inserted bookmark {}", bm.id);
             }
 
             set_sync_bookmark(&database, "bookmark-sync-bookmark", &bookmark)
@@ -312,6 +391,8 @@ pub async fn bookmark_synchronize(database: Arc<Database>, cancellation_token: C
     }
 }
 
+/// Watermark: the mutable `activity`, so a delivery is not an event and
+/// rows are claimed through [`claim_source_row`] before being logged.
 pub async fn join_synchronize(database: Arc<Database>, cancellation_token: CancellationToken) {
     loop {
         // Check for cancellation at start of loop
@@ -381,31 +462,50 @@ pub async fn join_synchronize(database: Arc<Database>, cancellation_token: Cance
             let mut bookmark_id = last_id;
 
             for join in joins {
-                match join.kind {
-                    0 => {
-                        if let Err(e) = insert_join_as_clickthrough(&database, &join).await {
-                            eprintln!("Failed to insert join as clickthrough: {}", e);
+                // This feed pages on `activity`, which orrery mutates, so the
+                // same join arrives again every time it is touched. Only the
+                // first delivery is an event; see `claim_source_row`.
+                let first_delivery = match join.kind {
+                    0 | 1 => match claim_source_row(JOIN_FEED, join.id).await {
+                        Ok(claimed) => claimed,
+                        Err(e) => {
+                            eprintln!("Failed to claim join {}: {}", join.id, e);
+                            // The watermark must not move past a row we have
+                            // not decided about, or the event is lost.
                             continue;
                         }
-                        println!("Inserted join {} as clickthrough", join.id);
-                    }
-                    1 => {
-                        if let Err(e) = insert_join_as_clickthrough(&database, &join).await {
-                            eprintln!("Failed to insert join as clickthrough: {}", e);
-                            continue;
-                        }
-                        if let Err(e) = insert_join(&database, &join).await {
-                            eprintln!("Failed to insert join: {}", e);
-                            continue;
-                        }
-                        println!("Inserted join {} as both clickthrough and join", join.id);
-                    }
+                    },
                     _ => {
                         println!("Skipping join {} with kind {}", join.id, join.kind);
+                        false
+                    }
+                };
+
+                if first_delivery {
+                    let written = match join.kind {
+                        0 => insert_join_as_clickthrough(&database, &join)
+                            .await
+                            .inspect(|()| println!("Inserted join {} as clickthrough", join.id)),
+                        _ => match insert_join_as_clickthrough(&database, &join).await {
+                            Ok(()) => insert_join(&database, &join).await.inspect(|()| {
+                                println!("Inserted join {} as both clickthrough and join", join.id)
+                            }),
+                            Err(e) => Err(e),
+                        },
+                    };
+
+                    if let Err(e) = written {
+                        eprintln!("Failed to insert join {}: {}", join.id, e);
+                        // Hand the row back so the retry logs it rather than
+                        // mistaking it for a delivery it has already seen.
+                        release_source_row(JOIN_FEED, join.id).await;
                         continue;
                     }
                 }
 
+                // Reached for a logged event, a re-delivery and a kind we do
+                // not log alike: all three are finished with, and holding the
+                // watermark back for any of them stalls the feed.
                 if join.activity > bookmark || (join.activity == bookmark && join.id > bookmark_id)
                 {
                     bookmark = join.activity.clone();
@@ -438,6 +538,7 @@ pub async fn join_synchronize(database: Arc<Database>, cancellation_token: Cance
     }
 }
 
+/// Watermark: the immutable `when`, so every delivery is a new event.
 pub async fn rating_synchronize(database: Arc<Database>, cancellation_token: CancellationToken) {
     loop {
         // Check for cancellation at start of loop
@@ -543,6 +644,7 @@ pub async fn rating_synchronize(database: Arc<Database>, cancellation_token: Can
     }
 }
 
+/// Watermark: the immutable `when`, so every delivery is a new event.
 pub async fn review_synchronize(database: Arc<Database>, cancellation_token: CancellationToken) {
     loop {
         // Check for cancellation at start of loop
@@ -648,6 +750,7 @@ pub async fn review_synchronize(database: Arc<Database>, cancellation_token: Can
     }
 }
 
+/// Watermark: the immutable `when`, so every delivery is a new event.
 pub async fn golink_synchronize(database: Arc<Database>, cancellation_token: CancellationToken) {
     loop {
         // Check for cancellation at start of loop
@@ -933,6 +1036,7 @@ pub struct ActsOfScienceData {
     pub entity_ulid: Option<String>,
 }
 
+/// Watermark: the immutable `when`, so every delivery is a new event.
 pub async fn acts_of_science_synchronize(
     database: Arc<Database>,
     cancellation_token: CancellationToken,

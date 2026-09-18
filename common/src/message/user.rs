@@ -494,6 +494,17 @@ pub struct UserCountResponse {
     pub count: u64,
 }
 
+/// How many accounts existed at a moment in time.
+///
+/// Asked by the `/data` page, which reports a year's referrals and
+/// contributions per account and so needs the population as it stood at the
+/// end of that year rather than today's.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserCountAsOfRequest {
+    /// Accounts joined strictly before this timestamp are counted.
+    pub before: TimeString,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct UserDetailsListRequest {
     pub page: Option<u32>,

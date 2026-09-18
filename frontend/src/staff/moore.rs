@@ -33,6 +33,7 @@ use poem::{Response, handler};
 
 use super::csv_field;
 use crate::component::html_escape;
+use crate::number::thousands;
 
 /// First month shown. The Ambassador program opened in July 2024, so a ledger
 /// starting a month earlier shows every program metric from zero except the two
@@ -414,24 +415,6 @@ impl Goal {
     }
 }
 
-fn thousands(n: i64) -> String {
-    let digits = n.abs().to_string();
-    let mut out = String::with_capacity(digits.len() + digits.len() / 3 + 1);
-
-    if n < 0 {
-        out.push('-');
-    }
-
-    for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i) % 3 == 0 {
-            out.push(',');
-        }
-        out.push(c);
-    }
-
-    out
-}
-
 /// Gather the ledger from the three services that hold its parts.
 async fn fetch() -> Result<Ledger, anyhow::Error> {
     let buckets: MooreBucketsResponse = request("user.moore.buckets", ()).await?;
@@ -795,15 +778,6 @@ mod tests {
         assert_eq!(acts_mark(1), 2_333_333);
         assert_eq!(acts_mark(2), 3_666_666);
         assert_eq!(acts_mark(3), 5_000_000);
-    }
-
-    #[test]
-    fn thousands_separates_groups_of_three() {
-        assert_eq!(thousands(0), "0");
-        assert_eq!(thousands(999), "999");
-        assert_eq!(thousands(1_000), "1,000");
-        assert_eq!(thousands(1_234_567), "1,234,567");
-        assert_eq!(thousands(-4_321), "-4,321");
     }
 
     #[test]

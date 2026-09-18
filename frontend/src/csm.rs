@@ -55,7 +55,7 @@ impl CsmHero {
         let animation_duration_s = 0.1 + 2.9 * ratio;
 
         let formatted_date = format_acts_date(&acts.date);
-        let formatted_count = format_number(acts.number);
+        let formatted_count = crate::number::thousands(acts.number);
 
         let goal_reached = acts.date_reached.is_some();
         let goal_reached_date = acts
@@ -99,18 +99,6 @@ fn format_acts_date(date_str: &str) -> String {
     };
     let day = parts[2].trim_start_matches('0');
     format!("{month} {day}")
-}
-
-fn format_number(n: i64) -> String {
-    let s = n.to_string();
-    let mut result = String::new();
-    for (i, c) in s.chars().rev().enumerate() {
-        if i > 0 && i % 3 == 0 {
-            result.push(',');
-        }
-        result.push(c);
-    }
-    result.chars().rev().collect()
 }
 
 #[derive(TemplateOnce)]

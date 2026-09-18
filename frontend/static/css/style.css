@@ -80,6 +80,7 @@
 @import "./pages/csm.css" layer(hydra);
 @import "./pages/project.css" layer(hydra);
 @import "./pages/api.css" layer(hydra);
+@import "./pages/data.css" layer(hydra);
 
 
 /** Load Page Specific **/

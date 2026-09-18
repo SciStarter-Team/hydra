@@ -2,8 +2,10 @@ use crate::db;
 use anyhow::Result;
 use common::message::user::{
     ActivityAnalyticsRequest, ActivityAnalyticsResponse, ActivityStat, AdminAnalyticsResponse,
-    GeographicAnalyticsRequest, GeographicAnalyticsResponse, GeographicStat, UserCountResponse,
+    GeographicAnalyticsRequest, GeographicAnalyticsResponse, GeographicStat, UserCountAsOfRequest,
+    UserCountResponse,
 };
+use common::service::decode_structured_message;
 
 /// Get total user count
 pub async fn total_count(_req: &async_nats::service::Request) -> Result<UserCountResponse> {
@@ -23,6 +25,22 @@ pub async fn verified_count(_req: &async_nats::service::Request) -> Result<UserC
         .fetch_one(db())
         .await?
         .count as u64;
+
+    Ok(UserCountResponse { count: user_count })
+}
+
+/// Get the user count as it stood at a moment in time.
+pub async fn count_as_of(req: &async_nats::service::Request) -> Result<UserCountResponse> {
+    let request: UserCountAsOfRequest = decode_structured_message(req.message.clone())?;
+    let before = request.before.to_string();
+
+    let user_count = sqlx::query!(
+        "SELECT COUNT(*) as count FROM users WHERE date_joined < ?",
+        before
+    )
+    .fetch_one(db())
+    .await?
+    .count as u64;
 
     Ok(UserCountResponse { count: user_count })
 }

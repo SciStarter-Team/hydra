@@ -1,0 +1,307 @@
+<div class="ss-container !pt-8 !pb-8 mx-auto ss-data">
+  <h1>Explore SciStarter Data</h1>
+
+  <div class="tabs-bar-wrapper mb-8">
+    <div class="tabs-wrapper no-shadow">
+      <div class="tabs tabs-bar" role="tablist" aria-label="SciStarter data">
+        <button class="tab tab-icon" role="tab" aria-selected="true" aria-controls="panel-audience" id="tab-audience">
+          <svg width="24" height="24" aria-hidden="true" class="shrink-0"><use xlink:href="/-static/img/icons.svg#icon--audience"></use></svg>
+          <span class="tab-text">
+            <span class="tab-name">Our Audience</span>
+            <span class="tab-subtitle">Find out more about SciStarter users</span>
+          </span>
+        </button>
+        <button class="tab tab-icon" role="tab" aria-selected="false" aria-controls="panel-opportunities" id="tab-opportunities">
+          <svg width="24" height="24" aria-hidden="true" class="shrink-0"><use xlink:href="/-static/img/icons.svg#icon--gear"></use></svg>
+          <span class="tab-text">
+            <span class="tab-name">Our Opportunities</span>
+            <span class="tab-subtitle">Find out more about SciStarter opportunities</span>
+          </span>
+        </button>
+      </div>
+
+      <%# Narrow screens scroll the tab row; tabs.js shows this when a tab is
+          scrolled out of sight. %>
+      <div class="chevron">
+        <button class="chev-btn" aria-label="Show more tabs">
+          <svg class="chev-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M9 6l6 6-6 6"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="tab-panels border border-linework border-t-0 p-4">
+
+      <%# ------------------------------------------------------------------ %>
+      <%# Our Audience                                                        %>
+      <%# ------------------------------------------------------------------ %>
+      <div class="tab-panel" id="panel-audience" role="tabpanel" aria-hidden="false">
+
+        <div class="grid gap-4 sm:grid-cols-2 mb-6">
+          <div class="data-panel stat">
+            <img src="/-static/img/data/calendar.svg" alt="" class="stat-icon" />
+            <div>
+              <%# A figure from analytics the site does not itself keep, so it is
+                  a written-down finding rather than a query. %>
+              <p class="stat-figure">24,114</p>
+              <p class="stat-label">Average Monthly Unique Users</p>
+              <p class="stat-note">All Time</p>
+            </div>
+          </div>
+          <div class="data-panel stat">
+            <img src="/-static/img/data/robot-cog.svg" alt="" class="stat-icon" />
+            <div>
+              <p class="stat-figure"><%= thousands(self.accounts) %></p>
+              <p class="stat-label">SciStarter Accounts</p>
+              <p class="stat-note">All Time</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="data-panel mb-6">
+          <h2><%= self.engagement.year %> Engagement Stats</h2>
+
+          <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div class="stat stat-sm">
+              <img src="/-static/img/data/views.svg" alt="" class="stat-icon" />
+              <div>
+                <p class="stat-figure"><%= thousands(self.engagement.views) %></p>
+                <p class="stat-label">Page Views <span class="stat-help" title="# of times pages have been visited" aria-label="# of times pages have been visited">?</span></p>
+              </div>
+            </div>
+            <div class="stat stat-sm">
+              <img src="/-static/img/data/saves.svg" alt="" class="stat-icon" />
+              <div>
+                <p class="stat-figure"><%= thousands(self.engagement.saves) %></p>
+                <p class="stat-label">Saves <span class="stat-help" title="# of times projects have been saved by users for later review" aria-label="# of times projects have been saved by users for later review">?</span></p>
+              </div>
+            </div>
+            <div class="stat stat-sm">
+              <img src="/-static/img/data/referrals.svg" alt="" class="stat-icon" />
+              <div>
+                <p class="stat-figure"><%= thousands(self.engagement.referrals) %></p>
+                <p class="stat-label">Referrals <span class="stat-help" title="# of times projects' websites have been visited from our pages" aria-label="# of times projects' websites have been visited from our pages">?</span></p>
+              </div>
+            </div>
+            <div class="stat stat-sm">
+              <img src="/-static/img/data/contributions.svg" alt="" class="stat-icon" />
+              <div>
+                <p class="stat-figure"><%= thousands(self.engagement.contributions) %></p>
+                <p class="stat-label">Contributions to Affiliate Projects <span class="stat-help" title="# of times SciStarter users have submitted records to our affiliate projects" aria-label="# of times SciStarter users have submitted records to our affiliate projects">?</span></p>
+              </div>
+            </div>
+          </div>
+
+          <hr class="my-4 border-linework" />
+
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div class="stat stat-sm">
+              <img src="/-static/img/data/referrals.svg" alt="" class="stat-icon" />
+              <div>
+                <p class="stat-figure"><%= average(self.engagement.avg_referrals()) %></p>
+                <p class="stat-label">Average Number of Referrals to Projects Per SciStarter User <span class="stat-help" title="Average number of project websites SciStarters visit from our pages" aria-label="Average number of project websites SciStarters visit from our pages">?</span></p>
+              </div>
+            </div>
+            <div class="stat stat-sm">
+              <img src="/-static/img/data/contributions.svg" alt="" class="stat-icon" />
+              <div>
+                <p class="stat-figure"><%= average(self.engagement.avg_contributions()) %></p>
+                <p class="stat-label">Average Number of Contributions Made by SciStarter Users to Affiliate Projects <span class="stat-help" title="Average number of records submitted to affiliate projects by our users" aria-label="Average number of records submitted to affiliate projects by our users">?</span></p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <%# The demographics are survey findings about who our participants are.
+            Nothing in these databases records them, so they are written here and
+            change when the survey does. %>
+        <h2>Demographics</h2>
+
+        <div class="grid gap-4 lg:grid-cols-2">
+          <div class="data-panel">
+            <h3>Gender</h3>
+            <div class="donut-row">
+              <svg class="donut" viewBox="0 0 42 42" role="img" aria-label="Female 56 percent, male 44 percent">
+                <circle class="donut-hole" cx="21" cy="21" r="15.9155"></circle>
+                <circle class="donut-segment donut-female" cx="21" cy="21" r="15.9155"
+                        stroke-dasharray="56 44" stroke-dashoffset="25"></circle>
+                <circle class="donut-segment donut-male" cx="21" cy="21" r="15.9155"
+                        stroke-dasharray="44 56" stroke-dashoffset="-31"></circle>
+              </svg>
+              <ul class="donut-legend">
+                <li><span class="legend-dot legend-female"></span><span><b>Female</b><br />56%</span></li>
+                <li><span class="legend-dot legend-male"></span><span><b>Male</b><br />44%</span></li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="data-panel">
+            <h3>Ethnicity</h3>
+            <p class="bar-row"><span class="bar-label">Caucasian</span><span class="bar-track"><span class="bar-fill" style="width:90%"></span></span><span class="bar-value">90%</span></p>
+            <p class="bar-row"><span class="bar-label">Hispanic</span><span class="bar-track"><span class="bar-fill" style="width:5%"></span></span><span class="bar-value">5%</span></p>
+            <p class="bar-row"><span class="bar-label">African American</span><span class="bar-track"><span class="bar-fill" style="width:2%"></span></span><span class="bar-value">2%</span></p>
+            <p class="bar-row"><span class="bar-label">Asian</span><span class="bar-track"><span class="bar-fill" style="width:2%"></span></span><span class="bar-value">2%</span></p>
+            <p class="bar-row"><span class="bar-label">Other</span><span class="bar-track"><span class="bar-fill" style="width:1%"></span></span><span class="bar-value">1%</span></p>
+          </div>
+
+          <div class="data-panel">
+            <h3>Age Group</h3>
+            <p class="bar-row"><span class="bar-label">18-20</span><span class="bar-track"><span class="bar-fill" style="width:5%"></span></span><span class="bar-value">5%</span></p>
+            <p class="bar-row"><span class="bar-label">21-24</span><span class="bar-track"><span class="bar-fill" style="width:8%"></span></span><span class="bar-value">8%</span></p>
+            <p class="bar-row"><span class="bar-label">25-29</span><span class="bar-track"><span class="bar-fill" style="width:11%"></span></span><span class="bar-value">11%</span></p>
+            <p class="bar-row"><span class="bar-label">30-34</span><span class="bar-track"><span class="bar-fill" style="width:12%"></span></span><span class="bar-value">12%</span></p>
+            <p class="bar-row"><span class="bar-label">35-39</span><span class="bar-track"><span class="bar-fill" style="width:12%"></span></span><span class="bar-value">12%</span></p>
+            <p class="bar-row"><span class="bar-label">40-44</span><span class="bar-track"><span class="bar-fill" style="width:13%"></span></span><span class="bar-value">13%</span></p>
+            <p class="bar-row"><span class="bar-label">45-49</span><span class="bar-track"><span class="bar-fill" style="width:10%"></span></span><span class="bar-value">10%</span></p>
+            <p class="bar-row"><span class="bar-label">50-54</span><span class="bar-track"><span class="bar-fill" style="width:11%"></span></span><span class="bar-value">11%</span></p>
+            <p class="bar-row"><span class="bar-label">55-59</span><span class="bar-track"><span class="bar-fill" style="width:5%"></span></span><span class="bar-value">5%</span></p>
+            <p class="bar-row"><span class="bar-label">60-64</span><span class="bar-track"><span class="bar-fill" style="width:7%"></span></span><span class="bar-value">7%</span></p>
+            <p class="bar-row"><span class="bar-label">65+</span><span class="bar-track"><span class="bar-fill" style="width:6%"></span></span><span class="bar-value">6%</span></p>
+          </div>
+
+          <div class="data-panel">
+            <h3>Education</h3>
+            <p class="bar-row"><span class="bar-label">No College</span><span class="bar-track"><span class="bar-fill" style="width:32%"></span></span><span class="bar-value">32%</span></p>
+            <p class="bar-row"><span class="bar-label">College</span><span class="bar-track"><span class="bar-fill" style="width:44%"></span></span><span class="bar-value">44%</span></p>
+            <p class="bar-row"><span class="bar-label">Grad School</span><span class="bar-track"><span class="bar-fill" style="width:24%"></span></span><span class="bar-value">24%</span></p>
+          </div>
+        </div>
+      </div>
+
+      <%# ------------------------------------------------------------------ %>
+      <%# Our Opportunities                                                   %>
+      <%# ------------------------------------------------------------------ %>
+      <div class="tab-panel" id="panel-opportunities" role="tabpanel" aria-hidden="true">
+
+        <div class="data-panel mb-6">
+          <div class="grid gap-4 lg:grid-cols-2 items-center">
+            <div class="stat">
+              <img src="/-static/img/data/robot-cog.svg" alt="" class="stat-icon" />
+              <div>
+                <p class="stat-figure"><%= thousands(self.projects.alltime) %></p>
+                <p class="stat-label">Citizen Science Projects</p>
+                <p class="stat-note">All Time</p>
+              </div>
+            </div>
+            <div>
+              <p class="bar-row">
+                <span class="bar-label">Active and Published</span>
+                <span class="bar-track"><span class="bar-fill" style="width:<%= percent(self.projects.active, self.projects.alltime) %>%"></span></span>
+                <span class="bar-value"><b><%= thousands(self.projects.active) %></b>/<%= thousands(self.projects.alltime) %></span>
+              </p>
+              <p class="bar-row">
+                <span class="bar-label">Expired</span>
+                <span class="bar-track"><span class="bar-fill" style="width:<%= percent(self.projects.expired, self.projects.alltime) %>%"></span></span>
+                <span class="bar-value"><b><%= thousands(self.projects.expired) %></b>/<%= thousands(self.projects.alltime) %></span>
+              </p>
+              <p class="bar-row">
+                <span class="bar-label">Hiatus / Unpublished</span>
+                <span class="bar-track"><span class="bar-fill" style="width:<%= percent(self.projects.hiatus, self.projects.alltime) %>%"></span></span>
+                <span class="bar-value"><b><%= thousands(self.projects.hiatus) %></b>/<%= thousands(self.projects.alltime) %></span>
+              </p>
+            </div>
+          </div>
+
+          <hr class="my-4 border-linework" />
+
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div>
+              <div class="stat stat-sm">
+                <img src="/-static/img/data/inperson.svg" alt="" class="stat-icon" />
+                <div>
+                  <p class="stat-figure"><%= thousands(self.projects.inperson) %></p>
+                  <p class="stat-label">In person, in a place</p>
+                </div>
+              </div>
+              <p class="bar-row"><span class="bar-track"><span class="bar-fill" style="width:<%= percent(self.projects.inperson, self.projects.alltime) %>%"></span></span></p>
+            </div>
+            <div>
+              <div class="stat stat-sm">
+                <img src="/-static/img/data/online.svg" alt="" class="stat-icon" />
+                <div>
+                  <p class="stat-figure"><%= thousands(self.projects.online) %></p>
+                  <p class="stat-label">Online only</p>
+                </div>
+              </div>
+              <p class="bar-row"><span class="bar-track"><span class="bar-fill" style="width:<%= percent(self.projects.online, self.projects.alltime) %>%"></span></span></p>
+            </div>
+          </div>
+
+          <hr class="my-4 border-linework" />
+
+          <div class="grid gap-4 sm:grid-cols-3">
+            <div>
+              <div class="stat stat-sm">
+                <img src="/-static/img/data/global.svg" alt="" class="stat-icon" />
+                <div>
+                  <p class="stat-figure"><%= thousands(self.projects.global) %></p>
+                  <p class="stat-label">Global</p>
+                </div>
+              </div>
+              <p class="bar-row"><span class="bar-track"><span class="bar-fill" style="width:<%= percent(self.projects.global, self.projects.alltime) %>%"></span></span></p>
+            </div>
+            <div>
+              <div class="stat stat-sm">
+                <img src="/-static/img/data/region.svg" alt="" class="stat-icon" />
+                <div>
+                  <p class="stat-figure"><%= thousands(self.projects.region) %></p>
+                  <p class="stat-label">In a region</p>
+                </div>
+              </div>
+              <p class="bar-row"><span class="bar-track"><span class="bar-fill" style="width:<%= percent(self.projects.region, self.projects.alltime) %>%"></span></span></p>
+            </div>
+            <div>
+              <div class="stat stat-sm">
+                <img src="/-static/img/data/point.svg" alt="" class="stat-icon" />
+                <div>
+                  <p class="stat-figure"><%= thousands(self.projects.point) %></p>
+                  <p class="stat-label">At a point location</p>
+                </div>
+              </div>
+              <p class="bar-row"><span class="bar-track"><span class="bar-fill" style="width:<%= percent(self.projects.point, self.projects.alltime) %>%"></span></span></p>
+            </div>
+          </div>
+        </div>
+
+        <h2>Projects by Attributes</h2>
+
+        <div class="grid gap-4 lg:grid-cols-2 items-start">
+          <div class="data-panel">
+            <p class="chart-eyebrow">Citizen Science Opportunities</p>
+            <h3>By Topic</h3>
+            <p class="chart-note">Some opportunities may have more than one topic and are counted multiple times.</p>
+            <% let topics_max = largest(&self.projects.topics); %>
+            <% for bar in &self.projects.topics { %>
+            <p class="bar-row"><span class="bar-label"><%= bar.label %></span><span class="bar-track"><span class="bar-fill" style="width:<%= percent(bar.value, topics_max) %>%"></span></span><span class="bar-value"><%= thousands(bar.value) %></span></p>
+            <% } %>
+          </div>
+
+          <div>
+            <div class="data-panel mb-4">
+              <p class="chart-eyebrow">Citizen Science Opportunities</p>
+              <h3>By Indoor/Outdoor</h3>
+              <p class="chart-note">Some opportunities may be done in more than one setting and are counted multiple times.</p>
+              <% let settings = self.projects.settings(); %>
+              <% let settings_max = largest(&settings); %>
+              <% for bar in &settings { %>
+              <p class="bar-row"><span class="bar-label"><%= bar.label %></span><span class="bar-track"><span class="bar-fill" style="width:<%= percent(bar.value, settings_max) %>%"></span></span><span class="bar-value"><%= thousands(bar.value) %></span></p>
+              <% } %>
+            </div>
+
+            <div class="data-panel">
+              <p class="chart-eyebrow">Citizen Science Opportunities</p>
+              <h3>By Audience</h3>
+              <p class="chart-note">Some opportunities may have more than one target audience and are counted multiple times.</p>
+              <% let audiences_max = largest(&self.projects.audiences); %>
+              <% for bar in &self.projects.audiences { %>
+              <p class="bar-row"><span class="bar-label"><%= bar.label %></span><span class="bar-track"><span class="bar-fill" style="width:<%= percent(bar.value, audiences_max) %>%"></span></span><span class="bar-value"><%= thousands(bar.value) %></span></p>
+              <% } %>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>

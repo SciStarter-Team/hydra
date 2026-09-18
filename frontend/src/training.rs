@@ -440,7 +440,7 @@ pub async fn tutorials_completed(workflow: WorkflowType) -> String {
     )
     .await
     .unwrap_or(WorkflowTutorialCountResponse { count: 0 });
-    commafy(response.count)
+    crate::number::thousands(response.count)
 }
 
 /// Render a complete training page within the standard site layout.
@@ -474,21 +474,6 @@ pub fn render_progress_fragment(
     }
     .render_once()?;
     Ok(Html(html).into_response())
-}
-
-/// Format an integer with comma thousands separators (e.g. `58221` → `58,221`).
-fn commafy(n: i64) -> String {
-    let negative = n < 0;
-    let digits = n.unsigned_abs().to_string();
-    let mut out = String::with_capacity(digits.len() + digits.len() / 3 + 1);
-    let bytes = digits.as_bytes();
-    for (i, b) in bytes.iter().enumerate() {
-        if i > 0 && (bytes.len() - i) % 3 == 0 {
-            out.push(',');
-        }
-        out.push(*b as char);
-    }
-    if negative { format!("-{out}") } else { out }
 }
 
 #[cfg(test)]
