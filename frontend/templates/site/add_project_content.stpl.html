@@ -8,19 +8,29 @@
     <%+ crate::component::floating_field::FormErrorNotice { error } %>
 
     <form method="post" action="/add-project" class="add-form">
-      <p class="field-help">Fields marked <span aria-hidden="true">*</span> are required.</p>
+      <p class="field-help add-area-note">Fields marked <span aria-hidden="true">*</span> are required.</p>
 
-      <%+ self.image %>
+      <%# The groups below are the columns of the desktop layout (the image,
+          and the name and where); on a phone they stack in this same order. %>
+      <div class="add-area add-area-image">
+        <%+ self.image %>
+      </div>
 
-      <%+ FloatingField::new(FieldKind::Text, "name", "Project name", self.values.name.as_str()).id("project-name").required().errors(error) %>
+      <div class="add-area add-area-main">
+        <%+ FloatingField::new(FieldKind::Text, "name", "Project name", self.values.name.as_str()).id("project-name").required().errors(error) %>
 
-      <%+ self.location %>
+        <%+ self.location %>
+      </div>
 
-      <%+ FloatingField::new(FieldKind::TextArea { rows: 4 }, "description", "What are the details?", self.values.description.as_str()).id("project-description").required().described_by("review-note").errors(error) %>
-      <%+ FloatingField::new(FieldKind::Text, "goal", "Scientific goal", self.values.goal.as_str()).id("project-goal") %>
-      <%+ FloatingField::new(FieldKind::Text, "task", "What participants do", self.values.task.as_str()).id("project-task") %>
+      <div class="add-area add-area-details">
+        <%+ FloatingField::new(FieldKind::TextArea { rows: 4 }, "description", "What are the details?", self.values.description.as_str()).id("project-description").required().described_by("review-note").errors(error) %>
+        <div class="field-pair">
+          <%+ FloatingField::new(FieldKind::Text, "goal", "Scientific goal", self.values.goal.as_str()).id("project-goal") %>
+          <%+ FloatingField::new(FieldKind::Text, "task", "What participants do", self.values.task.as_str()).id("project-task") %>
+        </div>
 
-      <p id="review-note" class="field-help">Your project will be reviewed by SciStarter staff before it appears publicly.</p>
+        <p id="review-note" class="field-help">Your project will be reviewed by SciStarter staff before it appears publicly.</p>
+      </div>
 
       <div class="add-sections">
         <details class="add-section">
@@ -92,8 +102,10 @@
         </details>
       </div>
 
-      <button type="submit" class="btn btn-primary add-form-submit">Create project</button>
-      <a class="add-form-cancel" href="/add">Cancel</a>
+      <div class="add-area add-area-actions">
+        <button type="submit" class="btn btn-primary add-form-submit">Create project</button>
+        <a class="add-form-cancel" href="/add">Cancel</a>
+      </div>
     </form>
   </div>
 </div>

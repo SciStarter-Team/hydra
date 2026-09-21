@@ -1,6 +1,6 @@
-/* Add Event / Add Project forms: one narrow column of floating-label fields,
-   the optional sections as a list of collapsed rows, the cover image, the
-   place type-ahead and the calendar popover. */
+/* Add Event / Add Project forms: floating-label fields in one narrow column
+   (two on a desktop screen), the optional sections as collapsed rows, the
+   cover image, the place type-ahead and the calendar popover. */
 
 .add-form-shell {
     max-width: 34rem;
@@ -10,8 +10,40 @@
     @apply text-center mb-6;
     font-size: var(--text-xl);
 }
-form.add-form {
+form.add-form,
+form .add-area {
     @apply flex flex-col gap-3;
+}
+
+/* On a desktop screen the form is two columns: the image on the left, the
+   name, when and where on the right (about the image's height together), and
+   the long or optional parts (details, the optional sections) across both
+   beneath. The areas are the same groups,
+   in the same order, that stack in the single column, so reading and tab
+   order are unchanged. */
+@media (min-width: 64rem) {
+    .add-form-shell {
+        max-width: 64rem;
+    }
+    form.add-form {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-areas:
+            "note     note"
+            "image    main"
+            "details  details"
+            "sections sections"
+            "actions  actions";
+        column-gap: 2rem;
+        row-gap: 1rem;
+        align-items: start;
+    }
+    form .add-area-note { grid-area: note; }
+    form .add-area-image { grid-area: image; }
+    form .add-area-main { grid-area: main; }
+    form .add-area-details { grid-area: details; }
+    form .add-sections { grid-area: sections; }
+    form .add-area-actions { grid-area: actions; }
 }
 
 /* A bordered field box with an optional leading icon. Its label sits inside
@@ -125,32 +157,48 @@ form .field-help {
     @apply text-sm text-neutral-mid mt-1 mb-0;
 }
 
-/* Start date · start time · zone on one line where there's room. On a phone
-   the date, whose value is the widest, takes a line of its own, with the time
-   and zone sharing the next; where even those two won't fit side by side (a
-   narrow screen, or enlarged text) every field takes its own line. */
+/* Start date · start time · zone on one line where there's room. Where
+   there isn't (a phone, or a desktop layout's column) the date, whose value
+   is the widest, takes a line of its own, with the time and zone sharing the
+   next; where even those two won't fit side by side (a narrow screen, or
+   enlarged text) every field takes its own line. The room is the row's own
+   width, not the screen's, since the same row sits in spaces of different
+   widths. */
+form .instance-row,
+form .add-section-body {
+    container-type: inline-size;
+}
 form .when-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 0.5rem;
 }
 form .when-grid > .pill-field:has(input[type="date"]) {
     grid-column: 1 / -1;
 }
-@media (min-width: 640px) {
+@container (max-width: 18rem) {
     form .when-grid {
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 9rem;
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+/* Three across once each fits, sized by what it holds rather than split
+   evenly: beside 4rem of icon and padding, a date's value takes about 7.75rem
+   in Inter (122px), a time's 4.75rem, and a zone's short name ("GMT+10")
+   4rem. */
+@container (min-width: 29.5rem) {
+    form .when-grid {
+        grid-template-columns: minmax(11.75rem, 1.35fr) minmax(8.75rem, 1fr) 8rem;
     }
     form .when-grid > .pill-field:has(input[type="date"]) {
         grid-column: auto;
     }
 }
 
-/* Two related fields side by side, stacking when each can't have 12rem: wide
-   enough for a date's value beside its icon, at any text size. */
+/* Two related fields side by side, stacking when each can't have 12.5rem:
+   wide enough for a date's value (11.75rem with its icon), at any text size. */
 form .field-pair {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 12.5rem), 1fr));
     gap: 0.5rem;
 }
 form .pill-field,
@@ -295,6 +343,30 @@ form .add-form-submit {
 }
 form .add-form-cancel {
     @apply self-center text-sm text-neutral-mid underline;
+}
+@media (min-width: 64rem) {
+    /* The optional sections stay one list of rows (a grid of them would share
+       row heights, so opening one would open a gap beside it); inside an open
+       one, the fields sit two across, and help lines and multi-part widgets
+       take the full width. */
+    form .add-section-body:not(.checkbox-grid) {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 0.5rem 1rem;
+    }
+    form .add-section-body:not(.checkbox-grid) > :not(.pill-field, [data-tag-input]) {
+        grid-column: 1 / -1;
+    }
+    form .add-section-body.checkbox-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    /* A full-width button across 60rem would read as a banner, not a button. */
+    form .add-area-actions {
+        @apply items-center;
+    }
+    form .add-form-submit {
+        max-width: 22rem;
+    }
 }
 
 /* The cover image: a banner-shaped upload area leading the form, showing the

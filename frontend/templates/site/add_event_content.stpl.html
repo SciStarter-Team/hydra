@@ -8,45 +8,54 @@
     <%+ crate::component::floating_field::FormErrorNotice { error } %>
 
     <form method="post" action="/add-event" class="add-form">
-      <p class="field-help">Fields marked <span aria-hidden="true">*</span> are required.</p>
+      <p class="field-help add-area-note">Fields marked <span aria-hidden="true">*</span> are required.</p>
 
-      <%+ self.image %>
-
-      <%+ FloatingField::new(FieldKind::Text, "name", "Event name", self.values.name.as_str()).id("event-name").required().errors(error) %>
-
-      <div id="instances">
-        <% for (i, inst) in self.values.instances.iter().enumerate() { %>
-          <fieldset class="instance-row">
-            <legend class="sr-only instance-legend">Date and time <%= i + 1 %></legend>
-            <div class="when-grid">
-              <%+ FloatingField::new(FieldKind::Date, format!("instances[{i}][begin_date]"), "Start date", inst.begin_date.as_str()).icon(FieldIcon::Calendar).required().errors(error) %>
-              <%+ FloatingField::new(FieldKind::Time, format!("instances[{i}][begin_time]"), "Start time", inst.begin_time.as_str()).icon(FieldIcon::Clock).required().errors(error) %>
-              <%+ TimezoneField::build(format!("instances[{i}][timezone]"), &inst.timezone, true).errors(error) %>
-            </div>
-
-            <input type="checkbox" class="has-end-toggle sr-only" name="instances[<%= i %>][has_end]" <% if inst.has_end { %>checked<% } %> tabindex="-1" aria-hidden="true">
-            <button type="button" class="link-btn end-toggle" <% if inst.has_end { %>hidden<% } %>>+ End date and time</button>
-
-            <div class="end-block" <% if !inst.has_end { %>hidden<% } %>>
-              <div class="field-pair">
-                <%+ FloatingField::new(FieldKind::Date, format!("instances[{i}][end_date]"), "End date", inst.end_date.as_str()).icon(FieldIcon::Calendar).errors(error) %>
-                <%+ FloatingField::new(FieldKind::Time, format!("instances[{i}][end_time]"), "End time", inst.end_time.as_str()).icon(FieldIcon::Clock).errors(error) %>
-              </div>
-              <button type="button" class="link-btn end-remove">Remove end date &amp; time</button>
-            </div>
-
-            <button type="button" class="link-btn remove-instance" aria-label="Remove date and time <%= i + 1 %>" <% if i == 0 { %>hidden<% } %>>Remove this date</button>
-          </fieldset>
-        <% } %>
+      <%# The groups below are the columns of the desktop layout (the image,
+          and the name, when and where); on a phone they stack in this same
+          order. %>
+      <div class="add-area add-area-image">
+        <%+ self.image %>
       </div>
 
-      <button type="button" id="add-instance" class="link-btn">+ Add another date/time</button>
+      <div class="add-area add-area-main">
+        <%+ FloatingField::new(FieldKind::Text, "name", "Event name", self.values.name.as_str()).id("event-name").required().errors(error) %>
 
-      <%+ self.location %>
+        <div id="instances">
+          <% for (i, inst) in self.values.instances.iter().enumerate() { %>
+            <fieldset class="instance-row">
+              <legend class="sr-only instance-legend">Date and time <%= i + 1 %></legend>
+              <div class="when-grid">
+                <%+ FloatingField::new(FieldKind::Date, format!("instances[{i}][begin_date]"), "Start date", inst.begin_date.as_str()).icon(FieldIcon::Calendar).required().errors(error) %>
+                <%+ FloatingField::new(FieldKind::Time, format!("instances[{i}][begin_time]"), "Start time", inst.begin_time.as_str()).icon(FieldIcon::Clock).required().errors(error) %>
+                <%+ TimezoneField::build(format!("instances[{i}][timezone]"), &inst.timezone, true).errors(error) %>
+              </div>
 
-      <%+ FloatingField::new(FieldKind::TextArea { rows: 4 }, "description", "What are the details?", self.values.description.as_str()).id("event-description").required().described_by("review-note").errors(error) %>
+              <input type="checkbox" class="has-end-toggle sr-only" name="instances[<%= i %>][has_end]" <% if inst.has_end { %>checked<% } %> tabindex="-1" aria-hidden="true">
+              <button type="button" class="link-btn end-toggle" <% if inst.has_end { %>hidden<% } %>>+ End date and time</button>
 
-      <p id="review-note" class="field-help">Your event will be reviewed by SciStarter staff before it appears on the public calendar.</p>
+              <div class="end-block" <% if !inst.has_end { %>hidden<% } %>>
+                <div class="field-pair">
+                  <%+ FloatingField::new(FieldKind::Date, format!("instances[{i}][end_date]"), "End date", inst.end_date.as_str()).icon(FieldIcon::Calendar).errors(error) %>
+                  <%+ FloatingField::new(FieldKind::Time, format!("instances[{i}][end_time]"), "End time", inst.end_time.as_str()).icon(FieldIcon::Clock).errors(error) %>
+                </div>
+                <button type="button" class="link-btn end-remove">Remove end date &amp; time</button>
+              </div>
+
+              <button type="button" class="link-btn remove-instance" aria-label="Remove date and time <%= i + 1 %>" <% if i == 0 { %>hidden<% } %>>Remove this date</button>
+            </fieldset>
+          <% } %>
+        </div>
+
+        <button type="button" id="add-instance" class="link-btn">+ Add another date/time</button>
+
+        <%+ self.location %>
+      </div>
+
+      <div class="add-area add-area-details">
+        <%+ FloatingField::new(FieldKind::TextArea { rows: 4 }, "description", "What are the details?", self.values.description.as_str()).id("event-description").required().described_by("review-note").errors(error) %>
+
+        <p id="review-note" class="field-help">Your event will be reviewed by SciStarter staff before it appears on the public calendar.</p>
+      </div>
 
       <div class="add-sections">
         <details class="add-section" <% if self.values.repeat_frequency != "once" { %>open<% } %>>
@@ -94,27 +103,29 @@
           <%+ SectionSummary::new(SectionIcon::Umbrella, "Part of a larger event") %>
           <div class="add-section-body">
             <p id="part-of-help" class="field-help">If this event belongs to an umbrella event (e.g. a festival), search for and select it.</p>
-            <div class="pill-field">
-              <label class="pill-body">
-                <span class="pill-label">Search published events</span>
-                <input id="part-of-search" type="search" name="q" placeholder=" " autocomplete="off" aria-describedby="part-of-help"
-                  hx-get="/add-event/parent-search" hx-trigger="input changed delay:300ms, search"
-                  hx-target="#parent-results" hx-swap="innerHTML"
-                  hx-on:keydown="if (event.key === 'Enter') event.preventDefault()">
-              </label>
+            <div class="part-of-picker flex flex-col gap-2">
+              <div class="pill-field">
+                <label class="pill-body">
+                  <span class="pill-label">Search published events</span>
+                  <input id="part-of-search" type="search" name="q" placeholder=" " autocomplete="off" aria-describedby="part-of-help"
+                    hx-get="/add-event/parent-search" hx-trigger="input changed delay:300ms, search"
+                    hx-target="#parent-results" hx-swap="innerHTML"
+                    hx-on:keydown="if (event.key === 'Enter') event.preventDefault()">
+                </label>
+              </div>
+              <div id="parent-selected" aria-live="polite">
+                <% if !self.values.part_of.is_empty() { %>
+                  <div class="flex items-center gap-2">
+                    <span>Part of: <strong><%= self.values.part_of_name %></strong></span>
+                    <button type="button" class="link-btn" aria-label="Clear the larger event"
+                      hx-on:click="document.getElementById('part-of-search').focus()"
+                      hx-get="/add-event/parent-clear" hx-target="#parent-selected" hx-swap="innerHTML">Clear</button>
+                  </div>
+                <% } %>
+              </div>
+              <div id="parent-results"></div>
+              <span id="parent-results-status" class="sr-only" role="status"></span>
             </div>
-            <div id="parent-selected" aria-live="polite">
-              <% if !self.values.part_of.is_empty() { %>
-                <div class="flex items-center gap-2">
-                  <span>Part of: <strong><%= self.values.part_of_name %></strong></span>
-                  <button type="button" class="link-btn" aria-label="Clear the larger event"
-                    hx-on:click="document.getElementById('part-of-search').focus()"
-                    hx-get="/add-event/parent-clear" hx-target="#parent-selected" hx-swap="innerHTML">Clear</button>
-                </div>
-              <% } %>
-            </div>
-            <div id="parent-results"></div>
-            <span id="parent-results-status" class="sr-only" role="status"></span>
             <input type="hidden" name="part_of" id="part_of" value="<%= self.values.part_of %>">
           </div>
         </details>
@@ -143,8 +154,10 @@
         </details>
       </div>
 
-      <button type="submit" class="btn btn-primary add-form-submit">Create event</button>
-      <a class="add-form-cancel" href="/add">Cancel</a>
+      <div class="add-area add-area-actions">
+        <button type="submit" class="btn btn-primary add-form-submit">Create event</button>
+        <a class="add-form-cancel" href="/add">Cancel</a>
+      </div>
     </form>
   </div>
 </div>
