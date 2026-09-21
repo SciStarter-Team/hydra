@@ -1,5 +1,6 @@
 <span class="text-green-700">Uploaded &check;</span>
-<input type="url" id="add-image" name="image" value="<%= &self.url %>" placeholder="https://&hellip;" hx-swap-oob="true">
-<div id="add-image-preview" class="mt-2" hx-swap-oob="true">
-  <img src="<%= &self.url %>" class="max-h-32 rounded border border-linework" alt="Image preview">
+<%+ crate::component::image_field::ImageUrlInput { value: &self.url, layout: self.layout, oob: true } %>
+<%# innerHTML, so the preview keeps whichever layout's frame it is in. %>
+<div id="add-image-preview" hx-swap-oob="innerHTML">
+  <img src="<%= &self.url %>" alt="Image preview">
 </div>

@@ -1,7 +1,10 @@
 <% if !self.id.is_empty() { %>
   <div class="flex items-center gap-2">
     <span>Part of: <strong><%= self.name %></strong></span>
-    <button type="button" class="text-sm text-accent1 underline"
+    <%# Focus follows the choice (the result button picked is gone), and on to
+        the search once the choice is cleared, before this button goes too. %>
+    <button type="button" class="link-btn" aria-label="Clear the larger event" autofocus
+      hx-on:click="document.getElementById('part-of-search').focus()"
       hx-get="/add-event/parent-clear" hx-target="#parent-selected" hx-swap="innerHTML">Clear</button>
   </div>
 <% } %>

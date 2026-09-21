@@ -1,16 +1,20 @@
+<% use crate::component::image_field::{ImageLayout, ImageUrlInput}; %>
+<% let url_input = ImageUrlInput { value: &self.value, layout: self.layout, oob: false }; %>
+<% match self.layout { ImageLayout::Inline => { %>
 <div>
   <label for="add-image"><%= self.label %></label>
-  <input type="url" id="add-image" name="image" value="<%= self.value %>" placeholder="https://&hellip;">
+  <%+ url_input %>
   <div class="flex items-center gap-2 mt-1">
     <input type="file" accept="image/*" name="file"
       class="text-sm text-neutral-mid cursor-pointer file:mr-3 file:cursor-pointer file:rounded file:border-0 file:bg-primary-action file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:opacity-90"
       hx-post="/add/upload-image" hx-encoding="multipart/form-data" hx-trigger="change"
+      hx-vals='{"image_layout": "<%= self.layout.as_str() %>"}'
       hx-target="#add-image-status" hx-swap="innerHTML">
-    <span id="add-image-status" class="text-sm text-neutral-mid"></span>
+    <span id="add-image-status" class="text-sm text-neutral-mid" aria-live="polite"></span>
   </div>
-  <div id="add-image-preview" class="mt-2">
+  <div id="add-image-preview" class="image-preview mt-2">
     <% if !self.value.is_empty() { %>
-    <img src="<%= self.value %>" class="max-h-32 rounded border border-linework" alt="Image preview">
+    <img src="<%= self.value %>" alt="Image preview">
     <% } %>
   </div>
 </div>
@@ -21,3 +25,39 @@
   <input type="text" id="add-image-credit" name="image_credit" value="<%= credit %>">
 </div>
 <% } %>
+<% } ImageLayout::Cover => { %>
+<%# The whole banner is the upload control; the image it shows is the preview
+    the upload answers into. %>
+<div class="image-cover">
+  <div id="add-image-preview" class="image-cover-preview">
+    <% if !self.value.is_empty() { %>
+    <img src="<%= self.value %>" alt="Image preview">
+    <% } %>
+  </div>
+  <label class="image-cover-upload">
+    <svg class="image-cover-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg>
+    <span class="image-cover-add">Add a cover image</span>
+    <span class="image-cover-change">Change image</span>
+    <input type="file" accept="image/*" name="file" class="sr-only"
+      hx-post="/add/upload-image" hx-encoding="multipart/form-data" hx-trigger="change"
+      hx-vals='{"image_layout": "<%= self.layout.as_str() %>"}'
+      hx-target="#add-image-status" hx-swap="innerHTML">
+  </label>
+  <span id="add-image-status" class="image-cover-status" aria-live="polite"></span>
+</div>
+
+<details class="quiet-disclosure" <% if !self.value.is_empty() || self.credit.as_deref().is_some_and(|c| !c.is_empty()) { %>open<% } %>>
+  <summary>+ Image link<% if self.credit.is_some() { %> &amp; credit<% } %></summary>
+  <div class="space-y-2">
+    <div class="pill-field">
+      <label class="pill-body">
+        <span class="pill-label"><%= self.label %></span>
+        <%+ url_input %>
+      </label>
+    </div>
+    <% if let Some(credit) = &self.credit { %>
+    <%+ crate::component::floating_field::FloatingField::new(crate::component::floating_field::FieldKind::Text, "image_credit", "Image credit", credit.as_str()).id("add-image-credit") %>
+    <% } %>
+  </div>
+</details>
+<% } } %>

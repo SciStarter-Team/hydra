@@ -1,3 +1,1 @@
-<% for tag in &self.tags { %>
-<button type="button" class="tag-suggestion block w-full text-left px-3 py-1 hover:bg-linework" data-tag="<%= tag %>"><%= tag %></button>
-<% } %>
+<%# Kept on one line: with no tags the swapped-in content must be truly empty (no whitespace), or the box's `empty:hidden` would not apply. The status span is out-of-band, so it never counts. %><% for tag in &self.tags { %><button type="button" class="tag-suggestion block w-full text-left px-3 py-1 hover:bg-linework" data-tag="<%= tag %>"><%= tag %></button><% } %><span id="tag-input-status" hx-swap-oob="innerHTML"><% if self.searched { %><% if self.tags.is_empty() { %>No matching tags<% } else if self.tags.len() == 1 { %>1 matching tag<% } else { %><%= self.tags.len() %> matching tags<% } %><% } %></span>

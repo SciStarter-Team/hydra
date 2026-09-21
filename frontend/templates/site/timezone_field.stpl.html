@@ -1,19 +1,15 @@
-<%# The zone in effect as a line of prose, with the picker behind it. Open when
-    nothing is selected yet, so the control is reachable without JavaScript. %>
-<% let stated = !self.selected_label.is_empty(); %>
-<details class="tz-field" data-tz-field <% if !stated { %>open<% } %>>
-  <%# Both wordings live here rather than half here and half in the form script:
-      it swaps which one is shown and fills in the zone name. %>
-  <summary class="tz-summary">
-    <span class="tz-stated" <% if !stated { %>hidden<% } %>>Times are in <span class="tz-zone"><%= self.selected_label %></span></span>
-    <span class="tz-unset" <% if stated { %>hidden<% } %>>Set a time zone</span>
-    <span class="tz-change" <% if !stated { %>hidden<% } %>>change</span>
-  </summary>
-  <%# Labelled by attribute rather than a <label for>: instance rows are cloned
-      client-side, and a cloned id would collide with the row it came from. %>
-  <div class="mt-2">
-    <select class="tz-select" name="<%= self.field_name %>" aria-label="Time zone" <% if self.required { %>required<% } %>>
-      <option value="" <% if self.selected.is_empty() { %>selected<% } %> disabled>Select time zone&hellip;</option>
+<%# The form script marks the field `tz-enhanced` and writes the zone's short
+    name into `.tz-short`; the list then lies invisibly over the whole field,
+    so a click anywhere on it opens the list. Without the script the list is
+    simply visible. Labelled by attribute rather than a <label for>: date/time
+    rows are cloned client-side, and a cloned id would collide. %>
+<div class="pill-field tz-pill" data-tz-field>
+  <svg class="pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z"/></svg>
+  <label class="pill-body">
+    <span class="pill-label">Time zone</span>
+    <span class="tz-short" aria-hidden="true"></span>
+    <select class="tz-select" name="<%= self.field_name %>" aria-label="Time zone" <% if self.required { %>required<% } %><% if self.invalid { %> aria-invalid="true" aria-describedby="<%= crate::component::floating_field::FormError::ELEMENT_ID %>"<% } %>>
+      <option value="" <% if self.selected.is_empty() { %>selected<% } %> disabled></option>
       <optgroup label="Common">
         <% for tz in self.timezones { %>
           <option value="<%= tz.0 %>" <% if self.selected == tz.0 { %>selected<% } %>><%= tz.1 %></option>
@@ -27,5 +23,5 @@
         </optgroup>
       <% } %>
     </select>
-  </div>
-</details>
+  </label>
+</div>

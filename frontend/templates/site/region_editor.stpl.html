@@ -1,14 +1,21 @@
 <div class="region-editor" data-region-editor data-target="<%= self.field_id %>">
   <input type="hidden" name="<%= self.field_name %>" id="<%= self.field_id %>" value="<%= self.initial %>">
-  <div class="flex gap-2 mb-2">
-    <input type="text" class="region-lookup-input grow" placeholder="Look up a place (city, state, or country)&hellip;">
+  <div class="flex gap-2 mb-2 items-center">
+    <div class="pill-field grow">
+      <label class="pill-body">
+        <span class="pill-label">Look up a place (city, state, or country)</span>
+        <input type="text" class="region-lookup-input" placeholder=" ">
+      </label>
+    </div>
     <button type="button" class="region-lookup-btn btn shrink-0">Look up</button>
   </div>
-  <span class="region-lookup-status block text-sm text-neutral-mid mb-2"></span>
-  <div class="region-editor-map" style="height: 320px; width: 100%; border-radius: 4px; overflow: hidden;"></div>
+  <span class="region-lookup-status block text-sm text-neutral-mid mb-2" role="status"></span>
+  <%# Drawing needs a pointer; looking the place up above is the way in
+      without one, which the map's name says. %>
+  <div class="region-editor-map" role="region" aria-label="Map for drawing the area by clicking its corners. Without a mouse, look the place up above instead." style="height: 320px; width: 100%; border-radius: 4px; overflow: hidden;"></div>
   <div class="flex items-center gap-3 mt-2 text-sm">
     <button type="button" class="region-editor-undo btn">Undo point</button>
     <button type="button" class="region-editor-clear btn">Clear</button>
-    <span class="region-editor-status text-neutral-mid"></span>
+    <span class="region-editor-status text-neutral-mid" role="status"></span>
   </div>
 </div>

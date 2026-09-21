@@ -11,3 +11,4 @@
     <li class="px-3 py-2 text-sm text-neutral-mid">No matching events.</li>
   <% } %>
 </ul>
+<span id="parent-results-status" hx-swap-oob="innerHTML"><% if self.events.is_empty() { %>No matching events<% } else if self.events.len() == 1 { %>1 matching event<% } else { %><%= self.events.len() %> matching events<% } %></span>

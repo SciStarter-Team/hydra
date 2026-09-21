@@ -17,24 +17,35 @@
     var pillsEl = root.querySelector(".tag-pills");
     var input = root.querySelector(".tag-input");
     var suggestions = root.querySelector(".tag-suggestions");
+    var status = root.querySelector("[data-tag-status]");
     if (!hidden || !pillsEl || !input) return;
 
     var tags = hidden.value.split(",").map(function (t) { return t.trim(); }).filter(Boolean);
 
+    function announce(text) {
+      if (status) status.textContent = text;
+    }
+
     function render() {
       pillsEl.innerHTML = "";
       tags.forEach(function (t) {
-        var pill = document.createElement("span");
-        pill.className = "inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium text-white";
-        pill.style.backgroundColor = "hsl(" + hue(t) + ", 70%, 45%)";
+        var pill = document.createElement("li");
+        pill.className = "inline-flex items-center gap-1 px-2 py-1 rounded-full text-sm font-medium text-white";
+        // Dark enough that white text reads at 4.5:1 or better whatever the hue
+        // (yellows are the lightest).
+        pill.style.backgroundColor = "hsl(" + hue(t) + ", 70%, 28%)";
         pill.appendChild(document.createTextNode(t));
         var x = document.createElement("button");
         x.type = "button";
         x.className = "ml-1 leading-none font-bold";
         x.textContent = "×";
+        x.setAttribute("aria-label", "Remove tag " + t);
         x.addEventListener("click", function () {
           tags = tags.filter(function (other) { return other !== t; });
           render();
+          announce("Removed tag " + t);
+          // The button is gone; carry on from the tag input.
+          input.focus();
         });
         pill.appendChild(x);
         pillsEl.appendChild(pill);
@@ -44,10 +55,14 @@
 
     function add(tag) {
       tag = (tag || "").trim();
-      if (tag && tags.indexOf(tag) === -1) tags.push(tag);
+      var added = tag && tags.indexOf(tag) === -1;
+      if (added) tags.push(tag);
       input.value = "";
       if (suggestions) suggestions.innerHTML = "";
       render();
+      if (added) announce("Added tag " + tag);
+      // A picked suggestion button is gone; carry on from the tag input.
+      input.focus();
     }
 
     input.addEventListener("keydown", function (e) {

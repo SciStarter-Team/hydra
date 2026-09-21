@@ -81,10 +81,19 @@
       latitude: root.querySelector('input[name="latitude"]'),
       longitude: root.querySelector('input[name="longitude"]'),
     };
+    var status = wrap.querySelector("[data-place-status]");
     var summary = root.querySelector("[data-place-summary]");
     var summaryEdit = root.querySelector(".place-summary-edit");
     var timer = null;
     var seq = 0;
+    // The suggestions on offer, and which one the arrow keys have reached
+    // (-1: none; typing stays in the input either way).
+    var current = [];
+    var active = -1;
+
+    function announce(text) {
+      if (status) status.textContent = text;
+    }
 
     // One-line rendering of the structured address, shown on the collapsed
     // disclosure so a picked place can be checked without opening it. The only
@@ -107,7 +116,23 @@
     function close() {
       list.hidden = true;
       list.innerHTML = "";
+      current = [];
+      active = -1;
       input.setAttribute("aria-expanded", "false");
+      input.removeAttribute("aria-activedescendant");
+    }
+
+    // Move the arrow-key highlight; the input keeps focus and names the
+    // highlighted option through aria-activedescendant.
+    function setActive(index) {
+      var options = list.querySelectorAll('[role="option"]');
+      if (!options.length) return;
+      active = (index + options.length) % options.length;
+      options.forEach(function (option, i) {
+        option.setAttribute("aria-selected", i === active ? "true" : "false");
+      });
+      input.setAttribute("aria-activedescendant", options[active].id);
+      options[active].scrollIntoView({ block: "nearest" });
     }
 
     function pick(s) {
@@ -122,6 +147,7 @@
       input.value = s.context ? s.name + ", " + s.context : s.name;
       syncSummary();
       close();
+      announce("Selected " + input.value);
       // A picked venue pinpoints its time zone; forms with time-zone fields
       // (the event form) listen and default any untouched selects. Regions
       // and virtual events get no inference — a region may span zones.
@@ -150,17 +176,21 @@
       list.innerHTML = "";
       if (!suggestions.length) {
         close();
+        announce("No places found");
         return;
       }
-      suggestions.forEach(function (s) {
+      current = suggestions;
+      active = -1;
+      input.removeAttribute("aria-activedescendant");
+      suggestions.forEach(function (s, i) {
         var li = document.createElement("li");
         li.setAttribute("role", "option");
-        var btn = document.createElement("button");
-        btn.type = "button";
+        li.setAttribute("aria-selected", "false");
+        li.id = list.id + "-" + i;
         var name = document.createElement("span");
         name.className = "place-name";
         name.textContent = s.name;
-        btn.appendChild(name);
+        li.appendChild(name);
         // The kind ("City", "County") is often the only difference between
         // same-named places, so it leads the context line.
         var contextText = [s.kind, s.context].filter(Boolean).join(" · ");
@@ -168,14 +198,18 @@
           var context = document.createElement("span");
           context.className = "place-context";
           context.textContent = contextText;
-          btn.appendChild(context);
+          li.appendChild(context);
         }
-        btn.addEventListener("click", function () { pick(s); });
-        li.appendChild(btn);
+        // Keep focus in the input while the pointer picks.
+        li.addEventListener("mousedown", function (e) { e.preventDefault(); });
+        li.addEventListener("click", function () { pick(s); });
         list.appendChild(li);
       });
       list.hidden = false;
       input.setAttribute("aria-expanded", "true");
+      announce(suggestions.length === 1
+        ? "1 place found; use the arrow keys to choose it"
+        : suggestions.length + " places found; use the arrow keys to choose one");
     }
 
     function search() {
@@ -198,11 +232,20 @@
       timer = setTimeout(search, 300);
     });
     input.addEventListener("keydown", function (e) {
-      if (e.key === "Enter") {
+      var open = !list.hidden && current.length > 0;
+      if (e.key === "ArrowDown" && open) {
         e.preventDefault();
-        var first = list.querySelector("button");
-        if (first && !list.hidden) first.click();
-      } else if (e.key === "Escape") {
+        setActive(active + 1);
+      } else if (e.key === "ArrowUp" && open) {
+        e.preventDefault();
+        setActive(active - 1);
+      } else if (e.key === "Enter") {
+        // Enter never submits the form from here; it picks the highlighted
+        // place, or the first when none is highlighted.
+        e.preventDefault();
+        if (open) pick(current[active >= 0 ? active : 0]);
+      } else if (e.key === "Escape" && open) {
+        e.preventDefault();
         close();
       }
     });

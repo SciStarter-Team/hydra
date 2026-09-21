@@ -28,7 +28,10 @@ use serde::Deserialize;
 use std::sync::Arc;
 use ulid::Ulid;
 
-use crate::component::{Component, Head, StandardLayout, image_field::ImageField};
+use crate::component::{
+    Component, Head, StandardLayout,
+    image_field::{ImageField, ImageLayout},
+};
 use crate::middleware::authorization::Authenticated;
 
 const PATH: &str = "/girlscouts-action";
@@ -63,6 +66,7 @@ impl TakeActionContent {
                 label: "Add a picture of your troop doing the Take Action project".to_string(),
                 value: form.image,
                 credit: None,
+                layout: ImageLayout::Inline,
             },
         }
     }

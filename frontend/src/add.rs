@@ -19,7 +19,11 @@ use common::{
 };
 
 use crate::{
-    component::{Component, Head, StandardLayout, image_field::ImageField},
+    component::{
+        Component, Head, StandardLayout,
+        floating_field::FormError,
+        image_field::{ImageField, ImageLayout, ImageUploadResult},
+    },
     contact::{Contact, ContactRole},
     entity::{Entity, EntityKind, EntityTarget},
     event::{EventInstance, EventType, all::EventAll},
@@ -455,7 +459,7 @@ struct AddEventPage {
 #[derive(sailfish::TemplateOnce)]
 #[template(path = "site/add_event_content.stpl.html")]
 struct AddEventContent {
-    error: Option<String>,
+    error: Option<FormError>,
     values: EventFormValues,
     event_types: Vec<String>,
     location: LocationPicker,
@@ -502,6 +506,8 @@ struct LocationPicker {
     location_description: String,
     url: String,
     region_editor: RegionEditor,
+    /// The form's error, when it was refused; marks the control it is about.
+    error: Option<FormError>,
 }
 
 impl LocationPicker {
@@ -537,22 +543,35 @@ impl LocationPicker {
                 field_id: "regions-geojson".to_string(),
                 initial: regions_geojson.to_string(),
             },
+            error: None,
         }
+    }
+
+    /// Mark the control `error` is about, when it is one of this section's.
+    fn errors(mut self, error: Option<&FormError>) -> Self {
+        self.error = error.cloned();
+        self
+    }
+
+    /// Whether the form's error is about the control named `field`.
+    fn is_invalid(&self, field: &str) -> bool {
+        self.error.as_ref().is_some_and(|e| e.is_about(field))
     }
 }
 
-/// The time-zone control for one date/time row: the zone in effect stated in a
-/// line of prose, with the full picker collapsed behind it. Zones are inferred
-/// from the picked venue or the browser, so the list is there to correct an
-/// inference rather than to ask a question. Rendered open when nothing is
-/// selected yet, which is what a visitor without JavaScript gets.
+/// The time-zone control for one date/time row, a field in the row beside
+/// the date and time. Zones are inferred from the picked venue or the
+/// browser, so the list is there to correct an inference rather than to ask a
+/// question. With JavaScript the field shows the zone's short name ("PDT",
+/// "GMT+3") over the full list, which opens on click; without it, the list
+/// itself shows.
 #[derive(sailfish::TemplateOnce)]
 #[template(path = "site/timezone_field.stpl.html")]
 struct TimezoneField {
     field_name: String,
     selected: String,
-    selected_label: String,
     required: bool,
+    invalid: bool,
     timezones: &'static [(&'static str, &'static str)],
     all_timezones: &'static [(String, Vec<(String, String)>)],
 }
@@ -563,33 +582,47 @@ impl TimezoneField {
         TimezoneField {
             field_name: field_name.into(),
             selected: selected.to_string(),
-            selected_label: timezone_label(selected),
             required,
+            invalid: false,
             timezones: COMMON_TIMEZONES,
             all_timezones: all_timezones(),
         }
     }
+
+    /// Mark the field invalid when `error` is about it.
+    fn errors(mut self, error: Option<&FormError>) -> Self {
+        self.invalid = error.is_some_and(|e| e.is_about(&self.field_name));
+        self
+    }
 }
 
-/// Display label for an IANA zone: the curated name where there is one, the
-/// grouped name otherwise, and the identifier itself as a last resort (which is
-/// also what a browser-supplied zone missing from the list renders as).
-fn timezone_label(tz: &str) -> String {
-    if tz.is_empty() {
-        return String::new();
-    }
+/// The header of one of an add form's optional sections: an icon and a title
+/// on the `<summary>` of a collapsed `details.add-section` (the chevron is
+/// drawn by the stylesheet).
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "site/add_section_summary.stpl.html")]
+struct SectionSummary {
+    icon: SectionIcon,
+    title: &'static str,
+}
 
-    if let Some((_, label)) = COMMON_TIMEZONES.iter().find(|(value, _)| *value == tz) {
-        return (*label).to_string();
+impl SectionSummary {
+    fn new(icon: SectionIcon, title: &'static str) -> Self {
+        SectionSummary { icon, title }
     }
+}
 
-    for (region, zones) in all_timezones() {
-        if let Some((_, label)) = zones.iter().find(|(value, _)| value == tz) {
-            return format!("{region}/{label}");
-        }
-    }
-
-    tz.to_string()
+#[derive(Clone, Copy)]
+enum SectionIcon {
+    Repeat,
+    Details,
+    Umbrella,
+    Contact,
+    Ticket,
+    Topics,
+    Science,
+    Audience,
+    Activities,
 }
 
 /// The tag-pill widget with HTMX autocomplete, backed by `js/tags-input.js`.
@@ -685,14 +718,14 @@ pub async fn add_event_submit(
             ))
             .into_response())
         }
-        Err(message) => {
-            render_event_form(Some(message), EventFormValues::from(&form), Some(user_info)).await
+        Err(error) => {
+            render_event_form(Some(error), EventFormValues::from(&form), Some(user_info)).await
         }
     }
 }
 
 async fn render_event_form(
-    error: Option<String>,
+    error: Option<FormError>,
     mut values: EventFormValues,
     user_info: Option<Arc<BasicInfo>>,
 ) -> Result<Response, anyhow::Error> {
@@ -716,11 +749,13 @@ async fn render_event_form(
         &values.location_description,
         &values.url,
         &values.regions,
-    );
+    )
+    .errors(error.as_ref());
     let image = ImageField {
-        label: "Image".to_string(),
+        label: "Image link".to_string(),
         value: values.image.clone(),
         credit: Some(values.image_credit.clone()),
+        layout: ImageLayout::Cover,
     };
     let tags = TagInput {
         value: values.tags.clone(),
@@ -937,6 +972,9 @@ struct TagSearchQuery {
 #[template(path = "site/add_tag_suggestions.stpl.html")]
 struct TagSuggestions {
     tags: Vec<String>,
+    /// Whether there was a query to answer; an emptied input clears the
+    /// status line rather than reporting no matches.
+    searched: bool,
 }
 
 /// GET `/add/tag-search?q=` — suggest existing tags (across both projects and
@@ -948,7 +986,11 @@ pub async fn add_tag_search(
 ) -> Result<Response, anyhow::Error> {
     let q = query.q.trim();
     if q.is_empty() {
-        return Ok(html_fragment(String::new()));
+        let none = TagSuggestions {
+            tags: Vec::new(),
+            searched: false,
+        };
+        return Ok(html_fragment(none.render_once()?));
     }
 
     let pattern = format!("%{q}%");
@@ -963,17 +1005,13 @@ pub async fn add_tag_search(
     .fetch_all(db())
     .await?;
 
-    if tags.is_empty() {
-        return Ok(html_fragment(String::new()));
-    }
-
-    Ok(html_fragment(TagSuggestions { tags }.render_once()?))
-}
-
-#[derive(sailfish::TemplateOnce)]
-#[template(path = "site/add_image_uploaded.stpl.html")]
-struct ImageUploadResult {
-    url: String,
+    Ok(html_fragment(
+        TagSuggestions {
+            tags,
+            searched: true,
+        }
+        .render_once()?,
+    ))
 }
 
 /// POST `/add/upload-image` — store an uploaded image (untracked) and return
@@ -989,35 +1027,47 @@ pub async fn add_upload_image(
 
     let user = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
 
+    // The upload control sends its field's layout alongside the file (the
+    // enclosing form's other values come along too, and are ignored), so the
+    // answer can render the URL input the way that layout does.
+    let mut layout = ImageLayout::default();
+    let mut url = None;
+
     while let Some(field) = multipart.next_field().await? {
-        if field.name() != Some("file") {
-            continue;
+        match field.name() {
+            Some("image_layout") => {
+                layout = field.text().await?.parse()?;
+            }
+            Some("file") if url.is_none() => {
+                let filename = field.file_name().map(|s| s.to_string());
+                let content_type = field.content_type().map(|s| s.to_string());
+                let file_id = Ulid::new();
+
+                let mut data = Vec::new();
+                field.into_async_read().read_to_end(&mut data).await?;
+
+                let metadata = crate::upload::storage::FileMetadata {
+                    file_id,
+                    original_filename: filename,
+                    content_type,
+                    size: data.len() as u64,
+                    uploaded_by: user.user_id,
+                    access: crate::upload::storage::FileAccess::Untracked,
+                    variant: None,
+                    force_download: false,
+                };
+                crate::upload::STORAGE.upload_file(metadata, data).await?;
+
+                url = Some(format!("/-uploaded/{file_id}"));
+            }
+            _ => {}
         }
-
-        let filename = field.file_name().map(|s| s.to_string());
-        let content_type = field.content_type().map(|s| s.to_string());
-        let file_id = Ulid::new();
-
-        let mut data = Vec::new();
-        field.into_async_read().read_to_end(&mut data).await?;
-
-        let metadata = crate::upload::storage::FileMetadata {
-            file_id,
-            original_filename: filename,
-            content_type,
-            size: data.len() as u64,
-            uploaded_by: user.user_id,
-            access: crate::upload::storage::FileAccess::Untracked,
-            variant: None,
-            force_download: false,
-        };
-        crate::upload::STORAGE.upload_file(metadata, data).await?;
-
-        let url = format!("/-uploaded/{file_id}");
-        return Ok(html_fragment(ImageUploadResult { url }.render_once()?));
     }
 
-    Err(anyhow::anyhow!("No file provided"))
+    let url = url.ok_or_else(|| anyhow::anyhow!("No file provided"))?;
+    Ok(html_fragment(
+        ImageUploadResult { url, layout }.render_once()?,
+    ))
 }
 
 #[derive(Debug, Deserialize)]
@@ -1337,24 +1387,31 @@ fn photon_suggestion(feature: &serde_json::Value) -> Option<PlaceSuggestion> {
 
 /// Validate the submitted form and assemble an `EventAll` ready to store.
 /// Returns a user-facing message string on validation failure.
-fn validate_and_build(form: &AddEventForm, user_id: Ulid) -> Result<EventAll, String> {
+fn validate_and_build(form: &AddEventForm, user_id: Ulid) -> Result<EventAll, FormError> {
     let name = form.name.trim();
     if name.is_empty() {
-        return Err("Please enter a name for your event.".to_string());
+        return Err(FormError::at("name", "Please enter a name for your event."));
     }
 
     let description = form.description.trim();
     if description.is_empty() {
-        return Err("Please add a description of your event.".to_string());
+        return Err(FormError::at(
+            "description",
+            "Please add a description of your event.",
+        ));
     }
 
-    let mode = form
-        .location_mode
-        .ok_or_else(|| "Please choose where the event takes place.".to_string())?;
+    let mode = form.location_mode.ok_or_else(|| {
+        FormError::at(
+            "location_mode",
+            "Please choose where the event takes place.",
+        )
+    })?;
 
     // Resolve the date/time rows that carry a start.
     let mut base: Vec<ZonedInstance> = Vec::new();
-    for inst in &form.instances {
+    for (i, inst) in form.instances.iter().enumerate() {
+        let field = |part: &str| format!("instances[{i}][{part}]");
         let begin_date = inst.begin_date.trim();
         let begin_time = inst.begin_time.trim();
 
@@ -1362,13 +1419,31 @@ fn validate_and_build(form: &AddEventForm, user_id: Ulid) -> Result<EventAll, St
             continue; // an untouched row
         }
         if begin_date.is_empty() || begin_time.is_empty() {
-            return Err("Each date/time needs both a date and a start time.".to_string());
+            let missing = if begin_date.is_empty() {
+                "begin_date"
+            } else {
+                "begin_time"
+            };
+            return Err(FormError::at(
+                field(missing),
+                "Each date/time needs both a date and a start time.",
+            ));
         }
         if inst.timezone.trim().is_empty() {
-            return Err("Please choose a time zone for each date/time.".to_string());
+            return Err(FormError::at(
+                field("timezone"),
+                "Please choose a time zone for each date/time.",
+            ));
         }
 
-        let begin = parse_datetime(begin_date, begin_time, inst.timezone.trim())?;
+        let begin = parse_datetime(begin_date, begin_time, inst.timezone.trim())
+            .map_err(|message| FormError::at(field("begin_date"), message))?;
+        if starts_before_today(&begin, &Zoned::now()) {
+            return Err(FormError::at(
+                field("begin_date"),
+                "An event can't start on a date that has already passed.",
+            ));
+        }
 
         let end = if inst.has_end.is_some()
             && !inst.end_date.trim().is_empty()
@@ -1378,9 +1453,13 @@ fn validate_and_build(form: &AddEventForm, user_id: Ulid) -> Result<EventAll, St
                 inst.end_date.trim(),
                 inst.end_time.trim(),
                 inst.timezone.trim(),
-            )?;
+            )
+            .map_err(|message| FormError::at(field("end_date"), message))?;
             if end < begin {
-                return Err("An event's end time can't be before its start time.".to_string());
+                return Err(FormError::at(
+                    field("end_date"),
+                    "An event's end time can't be before its start time.",
+                ));
             }
             Some(end)
         } else {
@@ -1391,7 +1470,10 @@ fn validate_and_build(form: &AddEventForm, user_id: Ulid) -> Result<EventAll, St
     }
 
     if base.is_empty() {
-        return Err("Please add at least one date and start time.".to_string());
+        return Err(FormError::at(
+            "instances[0][begin_date]",
+            "Please add at least one date and start time.",
+        ));
     }
 
     let instances = expand_recurrence(base, form)?;
@@ -1402,21 +1484,26 @@ fn validate_and_build(form: &AddEventForm, user_id: Ulid) -> Result<EventAll, St
     match mode {
         LocationMode::Online => {
             if url.is_empty() {
-                return Err(
-                    "Please provide a link where people can join the online event.".to_string(),
-                );
+                return Err(FormError::at(
+                    "url",
+                    "Please provide a link where people can join the online event.",
+                ));
             }
         }
         LocationMode::InPerson => {
             if form.address.trim().is_empty() && form.city.trim().is_empty() {
-                return Err(
-                    "Please provide an address or city for the in-person event.".to_string()
-                );
+                return Err(FormError::at(
+                    "address",
+                    "Please provide an address or city for the in-person event.",
+                ));
             }
         }
         LocationMode::Region => {
             if form.location_description.trim().is_empty() {
-                return Err("Please describe the area the event covers.".to_string());
+                return Err(FormError::at(
+                    "location_description",
+                    "Please describe the area the event covers.",
+                ));
             }
         }
     }
@@ -1442,7 +1529,10 @@ fn validate_and_build(form: &AddEventForm, user_id: Ulid) -> Result<EventAll, St
     let ticketing_date = form.ticketing_date.trim();
     if !ticketing_date.is_empty() {
         if form.ticketing_timezone.trim().is_empty() {
-            return Err("Please choose a time zone for the ticketing date.".to_string());
+            return Err(FormError::at(
+                "ticketing_timezone",
+                "Please choose a time zone for the ticketing date.",
+            ));
         }
         let ticketing_time = form.ticketing_time.trim();
         let ticketing_time = if ticketing_time.is_empty() {
@@ -1454,7 +1544,8 @@ fn validate_and_build(form: &AddEventForm, user_id: Ulid) -> Result<EventAll, St
             ticketing_date,
             ticketing_time,
             form.ticketing_timezone.trim(),
-        )?;
+        )
+        .map_err(|message| FormError::at("ticketing_date", message))?;
         event.ticketing_begins = Some(TimeString::from(begins.timestamp()));
     }
     event.tags = form
@@ -1555,11 +1646,14 @@ fn filter_to_vocabulary(values: &[String], vocabulary: &[&str]) -> Box<[String]>
 fn expand_recurrence(
     base: Vec<ZonedInstance>,
     form: &AddEventForm,
-) -> Result<Vec<EventInstance>, String> {
+) -> Result<Vec<EventInstance>, FormError> {
     let frequency = form.repeat_frequency.unwrap_or_default();
     let recurring = frequency != RepeatFrequency::Once;
     let until = if recurring && !form.repeat_until.trim().is_empty() {
-        Some(parse_date(form.repeat_until.trim())?)
+        Some(
+            parse_date(form.repeat_until.trim())
+                .map_err(|message| FormError::at("repeat_until", message))?,
+        )
     } else {
         None
     };
@@ -1586,12 +1680,11 @@ fn expand_recurrence(
                     let span = frequency.span();
                     begin = begin
                         .checked_add(span)
-                        .map_err(|_| "Couldn't compute the repeat schedule.".to_string())?;
+                        .map_err(|_| FormError::general("Couldn't compute the repeat schedule."))?;
                     end = match end {
-                        Some(e) => Some(
-                            e.checked_add(span)
-                                .map_err(|_| "Couldn't compute the repeat schedule.".to_string())?,
-                        ),
+                        Some(e) => Some(e.checked_add(span).map_err(|_| {
+                            FormError::general("Couldn't compute the repeat schedule.")
+                        })?),
                         None => None,
                     };
                 }
@@ -1631,6 +1724,13 @@ fn parse_datetime(date: &str, time: &str, timezone: &str) -> Result<Zoned, Strin
     datetime
         .to_zoned(tz)
         .map_err(|e| format!("That date and time isn't valid in the chosen time zone: {e}"))
+}
+
+/// Whether `begin` falls on a day before `now`'s, both read in `begin`'s own
+/// zone: "today" is the event's today, wherever the visitor is. Earlier the
+/// same day is allowed, so an event can be listed while it's under way.
+fn starts_before_today(begin: &Zoned, now: &Zoned) -> bool {
+    begin.date() < now.with_time_zone(begin.time_zone().clone()).date()
 }
 
 fn parse_date(date: &str) -> Result<civil::Date, String> {
@@ -1796,7 +1896,7 @@ struct AddProjectPage {
 #[derive(sailfish::TemplateOnce)]
 #[template(path = "site/add_project_content.stpl.html")]
 struct AddProjectContent {
-    error: Option<String>,
+    error: Option<FormError>,
     values: ProjectFormValues,
     location: LocationPicker,
     image: ImageField,
@@ -1838,19 +1938,14 @@ pub async fn add_project_submit(
             ))
             .into_response())
         }
-        Err(message) => {
-            render_project_form(
-                Some(message),
-                ProjectFormValues::from(&form),
-                Some(user_info),
-            )
-            .await
+        Err(error) => {
+            render_project_form(Some(error), ProjectFormValues::from(&form), Some(user_info)).await
         }
     }
 }
 
 async fn render_project_form(
-    error: Option<String>,
+    error: Option<FormError>,
     values: ProjectFormValues,
     user_info: Option<Arc<BasicInfo>>,
 ) -> Result<Response, anyhow::Error> {
@@ -1867,11 +1962,13 @@ async fn render_project_form(
         &values.location_description,
         &values.url,
         &values.regions,
-    );
+    )
+    .errors(error.as_ref());
     let image = ImageField {
-        label: "Image".to_string(),
+        label: "Image link".to_string(),
         value: values.image.clone(),
         credit: Some(values.image_credit.clone()),
+        layout: ImageLayout::Cover,
     };
     let tags = TagInput {
         value: values.tags.clone(),
@@ -1899,38 +1996,57 @@ async fn render_project_form(
 
 /// Validate the submitted project form and assemble a `ProjectAll`. Returns a
 /// user-facing message string on validation failure.
-fn validate_and_build_project(form: &AddProjectForm, user_id: Ulid) -> Result<ProjectAll, String> {
+fn validate_and_build_project(
+    form: &AddProjectForm,
+    user_id: Ulid,
+) -> Result<ProjectAll, FormError> {
     let name = form.name.trim();
     if name.is_empty() {
-        return Err("Please enter a name for your project.".to_string());
+        return Err(FormError::at(
+            "name",
+            "Please enter a name for your project.",
+        ));
     }
 
     let description = form.description.trim();
     if description.is_empty() {
-        return Err("Please add a description of your project.".to_string());
+        return Err(FormError::at(
+            "description",
+            "Please add a description of your project.",
+        ));
     }
 
-    let mode = form
-        .location_mode
-        .ok_or_else(|| "Please choose where the project takes place.".to_string())?;
+    let mode = form.location_mode.ok_or_else(|| {
+        FormError::at(
+            "location_mode",
+            "Please choose where the project takes place.",
+        )
+    })?;
 
     let url = form.url.trim().to_string();
     match mode {
         LocationMode::Online => {
             if url.is_empty() {
-                return Err("Please provide a link for the online project.".to_string());
+                return Err(FormError::at(
+                    "url",
+                    "Please provide a link for the online project.",
+                ));
             }
         }
         LocationMode::InPerson => {
             if form.address.trim().is_empty() && form.city.trim().is_empty() {
-                return Err(
-                    "Please provide an address or city for the in-person project.".to_string(),
-                );
+                return Err(FormError::at(
+                    "address",
+                    "Please provide an address or city for the in-person project.",
+                ));
             }
         }
         LocationMode::Region => {
             if form.location_description.trim().is_empty() {
-                return Err("Please describe the area the project covers.".to_string());
+                return Err(FormError::at(
+                    "location_description",
+                    "Please describe the area the project covers.",
+                ));
             }
         }
     }
@@ -2023,6 +2139,21 @@ mod tests {
     /// time-zone select actually offers, or the client-side defaulting is a
     /// silent no-op.
     #[test]
+    fn past_start_dates_are_judged_in_the_events_zone() {
+        // 02:00 UTC on 2026-09-21 is still the evening of the 20th in Chicago.
+        let now: Zoned = "2026-09-21T02:00:00+00:00[UTC]".parse().unwrap();
+
+        let chicago_evening = parse_datetime("2026-09-20", "21:00", "America/Chicago").unwrap();
+        assert!(!starts_before_today(&chicago_evening, &now));
+
+        let chicago_yesterday = parse_datetime("2026-09-19", "21:00", "America/Chicago").unwrap();
+        assert!(starts_before_today(&chicago_yesterday, &now));
+
+        let tokyo_same_instant = parse_datetime("2026-09-20", "21:00", "Asia/Tokyo").unwrap();
+        assert!(starts_before_today(&tokyo_same_instant, &now));
+    }
+
+    #[test]
     fn venue_timezone_is_selectable() {
         // Philadelphia city hall.
         let zone = timezone_at(39.9527, -75.1635);
@@ -2032,19 +2163,5 @@ mod tests {
             .iter()
             .any(|(_, zones)| zones.iter().any(|(value, _)| *value == zone));
         assert!(listed, "inferred zone {zone} missing from the tz select");
-    }
-
-    /// The zone stated on the collapsed time-zone field: the curated name where
-    /// there is one, the grouped name otherwise, and never a bare identifier for
-    /// a zone the select actually lists.
-    #[test]
-    fn timezone_labels_read_as_names() {
-        assert_eq!(timezone_label(""), "");
-        assert_eq!(
-            timezone_label("America/New_York"),
-            "Eastern Time (US & Canada)"
-        );
-        assert_eq!(timezone_label("Africa/Nairobi"), "Africa/Nairobi");
-        assert_eq!(timezone_label("Mars/Olympus"), "Mars/Olympus");
     }
 }

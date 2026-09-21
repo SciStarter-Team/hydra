@@ -1,0 +1,4 @@
+<% use crate::component::image_field::ImageLayout; %>
+<%# The cover layout's input sits in a floating-label field, whose label
+    stands in for a placeholder; a real one would print over it. %>
+<input type="url" id="add-image" name="image" value="<%= self.value %>" placeholder="<% if self.layout == ImageLayout::Cover { %> <% } else { %>https://&hellip;<% } %>"<% if self.oob { %> hx-swap-oob="true"<% } %>>

@@ -1,218 +1,150 @@
+<% use crate::component::floating_field::{FieldIcon, FieldKind, FloatingField}; %>
+<% use crate::add::{SectionIcon, SectionSummary, TimezoneField}; %>
+<% let error = self.error.as_ref(); %>
 <div class="ss-container !pt-8 !pb-12 mx-auto">
-  <div class="ss-small-container">
-    <h1 class="text-center">Add an Event</h1>
-    <p class="intro text-center">Promote your bioblitz, workshop, festival, or webinar on the SciStarter Event Calendar.</p>
+  <div class="add-form-shell">
+    <h1 class="add-form-title">Add an Event</h1>
 
-    <% if let Some(error) = &self.error { %>
-      <div class="ss-alert" role="alert"><%= error %></div>
-    <% } %>
+    <%+ crate::component::floating_field::FormErrorNotice { error } %>
 
-    <form method="post" action="/add-event" class="space-y-6 mt-6">
+    <form method="post" action="/add-event" class="add-form">
+      <p class="field-help">Fields marked <span aria-hidden="true">*</span> are required.</p>
 
-      <!-- Basics -->
-      <div class="bg-white border border-linework rounded-lg shadow-sm p-6 space-y-4">
-        <div>
-          <label for="event-name">Event name</label>
-          <input id="event-name" type="text" name="name" required value="<%= self.values.name %>">
-        </div>
-      </div>
+      <%+ self.image %>
 
-      <!-- Where: before When — a picked venue defaults When's time zones -->
-      <div class="bg-white border border-linework rounded-lg shadow-sm p-6 space-y-4">
-        <h3>Where</h3>
-        <%+ self.location %>
-      </div>
+      <%+ FloatingField::new(FieldKind::Text, "name", "Event name", self.values.name.as_str()).id("event-name").required().errors(error) %>
 
-      <!-- When -->
-      <div class="bg-white border border-linework rounded-lg shadow-sm p-6 space-y-4">
-        <h3>When</h3>
-
-        <div id="instances" class="space-y-4">
-          <% for (i, inst) in self.values.instances.iter().enumerate() { %>
-            <div class="instance-row border border-linework rounded-md p-4 space-y-3">
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div class="pill-field">
-                  <svg class="pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
-                  <label class="pill-body">
-                    <span class="pill-label">Start date</span>
-                    <input type="date" name="instances[<%= i %>][begin_date]" value="<%= inst.begin_date %>" required>
-                  </label>
-                </div>
-                <div class="pill-field">
-                  <svg class="pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
-                  <label class="pill-body">
-                    <span class="pill-label">Start time</span>
-                    <input type="time" name="instances[<%= i %>][begin_time]" value="<%= inst.begin_time %>" required>
-                  </label>
-                </div>
-              </div>
-
-              <%+ crate::add::TimezoneField::build(format!("instances[{i}][timezone]"), &inst.timezone, true) %>
-
-              <input type="checkbox" class="has-end-toggle sr-only" name="instances[<%= i %>][has_end]" <% if inst.has_end { %>checked<% } %> tabindex="-1" aria-hidden="true">
-              <button type="button" class="link-btn end-toggle" <% if inst.has_end { %>hidden<% } %>>+ End date and time</button>
-
-              <div class="end-block space-y-3" <% if !inst.has_end { %>hidden<% } %>>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div class="pill-field">
-                    <svg class="pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
-                    <label class="pill-body">
-                      <span class="pill-label">End date</span>
-                      <input type="date" name="instances[<%= i %>][end_date]" value="<%= inst.end_date %>">
-                    </label>
-                  </div>
-                  <div class="pill-field">
-                    <svg class="pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
-                    <label class="pill-body">
-                      <span class="pill-label">End time</span>
-                      <input type="time" name="instances[<%= i %>][end_time]" value="<%= inst.end_time %>">
-                    </label>
-                  </div>
-                </div>
-                <button type="button" class="link-btn end-remove">Remove end date &amp; time</button>
-              </div>
-
-              <button type="button" class="remove-instance text-sm text-accent1 underline" <% if i == 0 { %>hidden<% } %>>Remove this date</button>
+      <div id="instances">
+        <% for (i, inst) in self.values.instances.iter().enumerate() { %>
+          <fieldset class="instance-row">
+            <legend class="sr-only instance-legend">Date and time <%= i + 1 %></legend>
+            <div class="when-grid">
+              <%+ FloatingField::new(FieldKind::Date, format!("instances[{i}][begin_date]"), "Start date", inst.begin_date.as_str()).icon(FieldIcon::Calendar).required().errors(error) %>
+              <%+ FloatingField::new(FieldKind::Time, format!("instances[{i}][begin_time]"), "Start time", inst.begin_time.as_str()).icon(FieldIcon::Clock).required().errors(error) %>
+              <%+ TimezoneField::build(format!("instances[{i}][timezone]"), &inst.timezone, true).errors(error) %>
             </div>
-          <% } %>
-        </div>
 
-        <button type="button" id="add-instance" class="btn">+ Add another date/time</button>
+            <input type="checkbox" class="has-end-toggle sr-only" name="instances[<%= i %>][has_end]" <% if inst.has_end { %>checked<% } %> tabindex="-1" aria-hidden="true">
+            <button type="button" class="link-btn end-toggle" <% if inst.has_end { %>hidden<% } %>>+ End date and time</button>
 
-        <details class="border border-linework rounded-md p-3" <% if self.values.repeat_frequency != "once" { %>open<% } %>>
-          <summary class="cursor-pointer font-medium">Repeat this event</summary>
-          <div class="mt-3 space-y-3">
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label>Frequency</label>
-                <select name="repeat_frequency">
-                  <option value="once" <% if self.values.repeat_frequency == "once" { %>selected<% } %>>Just once</option>
-                  <option value="daily" <% if self.values.repeat_frequency == "daily" { %>selected<% } %>>Daily</option>
-                  <option value="weekly" <% if self.values.repeat_frequency == "weekly" { %>selected<% } %>>Weekly</option>
-                  <option value="biweekly" <% if self.values.repeat_frequency == "biweekly" { %>selected<% } %>>Every 2 weeks</option>
-                  <option value="monthly" <% if self.values.repeat_frequency == "monthly" { %>selected<% } %>>Monthly</option>
+            <div class="end-block" <% if !inst.has_end { %>hidden<% } %>>
+              <div class="field-pair">
+                <%+ FloatingField::new(FieldKind::Date, format!("instances[{i}][end_date]"), "End date", inst.end_date.as_str()).icon(FieldIcon::Calendar).errors(error) %>
+                <%+ FloatingField::new(FieldKind::Time, format!("instances[{i}][end_time]"), "End time", inst.end_time.as_str()).icon(FieldIcon::Clock).errors(error) %>
+              </div>
+              <button type="button" class="link-btn end-remove">Remove end date &amp; time</button>
+            </div>
+
+            <button type="button" class="link-btn remove-instance" aria-label="Remove date and time <%= i + 1 %>" <% if i == 0 { %>hidden<% } %>>Remove this date</button>
+          </fieldset>
+        <% } %>
+      </div>
+
+      <button type="button" id="add-instance" class="link-btn">+ Add another date/time</button>
+
+      <%+ self.location %>
+
+      <%+ FloatingField::new(FieldKind::TextArea { rows: 4 }, "description", "What are the details?", self.values.description.as_str()).id("event-description").required().described_by("review-note").errors(error) %>
+
+      <p id="review-note" class="field-help">Your event will be reviewed by SciStarter staff before it appears on the public calendar.</p>
+
+      <div class="add-sections">
+        <details class="add-section" <% if self.values.repeat_frequency != "once" { %>open<% } %>>
+          <%+ SectionSummary::new(SectionIcon::Repeat, "Repeat event") %>
+          <div class="add-section-body">
+            <div class="field-pair">
+              <div class="pill-field">
+                <label class="pill-body">
+                  <span class="pill-label">Frequency</span>
+                  <select name="repeat_frequency" aria-describedby="repeat-help">
+                    <option value="once" <% if self.values.repeat_frequency == "once" { %>selected<% } %>>Just once</option>
+                    <option value="daily" <% if self.values.repeat_frequency == "daily" { %>selected<% } %>>Daily</option>
+                    <option value="weekly" <% if self.values.repeat_frequency == "weekly" { %>selected<% } %>>Weekly</option>
+                    <option value="biweekly" <% if self.values.repeat_frequency == "biweekly" { %>selected<% } %>>Every 2 weeks</option>
+                    <option value="monthly" <% if self.values.repeat_frequency == "monthly" { %>selected<% } %>>Monthly</option>
+                  </select>
+                </label>
+              </div>
+              <%+ FloatingField::new(FieldKind::Date, "repeat_until", "Repeat until", self.values.repeat_until.as_str()).icon(FieldIcon::Calendar).described_by("repeat-help").errors(error) %>
+            </div>
+            <p id="repeat-help" class="field-help">Each date/time above repeats at this frequency through the &ldquo;repeat until&rdquo; date.</p>
+          </div>
+        </details>
+
+        <details class="add-section">
+          <%+ SectionSummary::new(SectionIcon::Details, "More details") %>
+          <div class="add-section-body">
+            <div class="pill-field">
+              <label class="pill-body">
+                <span class="pill-label">Event type</span>
+                <select id="event-type" name="event_type">
+                  <% for et in &self.event_types { %>
+                    <option value="<%= et %>" <% if self.values.event_type == *et { %>selected<% } %>><%= et %></option>
+                  <% } %>
                 </select>
-              </div>
-              <div>
-                <label>Repeat until</label>
-                <input type="date" name="repeat_until" value="<%= self.values.repeat_until %>">
-              </div>
+              </label>
             </div>
-            <p class="text-sm text-neutral-mid">Leave as &ldquo;Just once&rdquo; for a one-time event. Otherwise each date/time above repeats at this frequency through the end date.</p>
-          </div>
-        </details>
-      </div>
-
-      <!-- Details -->
-      <div class="bg-white border border-linework rounded-lg shadow-sm p-6 space-y-4">
-        <h3>Details</h3>
-        <div>
-          <label for="event-description">Description</label>
-          <textarea id="event-description" name="description" rows="5" required placeholder="What are the details?"><%= self.values.description %></textarea>
-        </div>
-
-        <%+ self.image %>
-
-        <details class="border border-linework rounded-md p-3">
-          <summary class="cursor-pointer font-medium">More details (optional)</summary>
-          <div class="mt-3 space-y-4">
-            <div>
-              <label for="event-type">Event type</label>
-              <select id="event-type" name="event_type">
-                <% for et in &self.event_types { %>
-                  <option value="<%= et %>" <% if self.values.event_type == *et { %>selected<% } %>><%= et %></option>
-                <% } %>
-              </select>
-            </div>
-            <div>
-              <label>Organizer / presenter</label>
-              <input type="text" name="presenter" value="<%= self.values.presenter %>">
-            </div>
-            <div>
-              <label>How to join / participate</label>
-              <textarea name="how_to_join" rows="3"><%= self.values.how_to_join %></textarea>
-            </div>
-            <div>
-              <label>Tags</label>
-              <%+ self.tags %>
-            </div>
+            <%+ FloatingField::new(FieldKind::Text, "presenter", "Organizer / presenter", self.values.presenter.as_str()) %>
+            <%+ FloatingField::new(FieldKind::TextArea { rows: 3 }, "how_to_join", "How to join / participate", self.values.how_to_join.as_str()) %>
+            <%+ self.tags %>
           </div>
         </details>
 
-        <details class="border border-linework rounded-md p-3" <% if !self.values.part_of.is_empty() { %>open<% } %>>
-          <summary class="cursor-pointer font-medium">Part of a larger event (optional)</summary>
-          <div class="mt-3 space-y-2">
-            <p class="text-sm text-neutral-mid">If this event belongs to an umbrella event (e.g. a festival), search for and select it.</p>
-            <input type="search" name="q" placeholder="Search published events&hellip;" autocomplete="off"
-              hx-get="/add-event/parent-search" hx-trigger="input changed delay:300ms, search"
-              hx-target="#parent-results" hx-swap="innerHTML"
-              hx-on:keydown="if (event.key === 'Enter') event.preventDefault()">
-            <div id="parent-selected">
+        <details class="add-section" <% if !self.values.part_of.is_empty() { %>open<% } %>>
+          <%+ SectionSummary::new(SectionIcon::Umbrella, "Part of a larger event") %>
+          <div class="add-section-body">
+            <p id="part-of-help" class="field-help">If this event belongs to an umbrella event (e.g. a festival), search for and select it.</p>
+            <div class="pill-field">
+              <label class="pill-body">
+                <span class="pill-label">Search published events</span>
+                <input id="part-of-search" type="search" name="q" placeholder=" " autocomplete="off" aria-describedby="part-of-help"
+                  hx-get="/add-event/parent-search" hx-trigger="input changed delay:300ms, search"
+                  hx-target="#parent-results" hx-swap="innerHTML"
+                  hx-on:keydown="if (event.key === 'Enter') event.preventDefault()">
+              </label>
+            </div>
+            <div id="parent-selected" aria-live="polite">
               <% if !self.values.part_of.is_empty() { %>
                 <div class="flex items-center gap-2">
                   <span>Part of: <strong><%= self.values.part_of_name %></strong></span>
-                  <button type="button" class="text-sm text-accent1 underline"
+                  <button type="button" class="link-btn" aria-label="Clear the larger event"
+                    hx-on:click="document.getElementById('part-of-search').focus()"
                     hx-get="/add-event/parent-clear" hx-target="#parent-selected" hx-swap="innerHTML">Clear</button>
                 </div>
               <% } %>
             </div>
             <div id="parent-results"></div>
+            <span id="parent-results-status" class="sr-only" role="status"></span>
             <input type="hidden" name="part_of" id="part_of" value="<%= self.values.part_of %>">
           </div>
         </details>
 
-        <details class="border border-linework rounded-md p-3">
-          <summary class="cursor-pointer font-medium">Organizer contact (optional)</summary>
-          <div class="mt-3 space-y-4">
-            <div>
-              <label>Contact name</label>
-              <input type="text" name="contact_name" value="<%= self.values.contact_name %>">
-            </div>
-            <div>
-              <label>Email</label>
-              <input type="email" name="contact_email" value="<%= self.values.contact_email %>">
-            </div>
-            <div>
-              <label>Affiliation</label>
-              <input type="text" name="contact_affiliation" value="<%= self.values.contact_affiliation %>">
-            </div>
-            <div>
-              <label>Phone</label>
-              <input type="tel" name="contact_phone" value="<%= self.values.contact_phone %>">
-            </div>
-            <div>
-              <label>Mailing address</label>
-              <input type="text" name="contact_address" value="<%= self.values.contact_address %>">
-            </div>
+        <details class="add-section">
+          <%+ SectionSummary::new(SectionIcon::Contact, "Organizer contact") %>
+          <div class="add-section-body">
+            <%+ FloatingField::new(FieldKind::Text, "contact_name", "Contact name", self.values.contact_name.as_str()).autocomplete("name") %>
+            <%+ FloatingField::new(FieldKind::Email, "contact_email", "Email", self.values.contact_email.as_str()).autocomplete("email") %>
+            <%+ FloatingField::new(FieldKind::Text, "contact_affiliation", "Affiliation", self.values.contact_affiliation.as_str()).autocomplete("organization") %>
+            <%+ FloatingField::new(FieldKind::Tel, "contact_phone", "Phone", self.values.contact_phone.as_str()).autocomplete("tel") %>
+            <%+ FloatingField::new(FieldKind::Text, "contact_address", "Mailing address", self.values.contact_address.as_str()).autocomplete("street-address") %>
           </div>
         </details>
 
-        <details class="border border-linework rounded-md p-3" <% if !self.values.ticketing_date.is_empty() { %>open<% } %>>
-          <summary class="cursor-pointer font-medium">Ticketing / registration (optional)</summary>
-          <div class="mt-3 space-y-3">
-            <p class="text-sm text-neutral-mid">If tickets or registration open at a specific time, set it here.</p>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label>Opens on</label>
-                <input type="date" name="ticketing_date" value="<%= self.values.ticketing_date %>">
-              </div>
-              <div>
-                <label>Time</label>
-                <input type="time" name="ticketing_time" value="<%= self.values.ticketing_time %>">
-              </div>
+        <details class="add-section" <% if !self.values.ticketing_date.is_empty() { %>open<% } %>>
+          <%+ SectionSummary::new(SectionIcon::Ticket, "Ticketing / registration") %>
+          <div class="add-section-body">
+            <p id="ticketing-help" class="field-help">If tickets or registration open at a specific time, set it here.</p>
+            <div class="when-grid">
+              <%+ FloatingField::new(FieldKind::Date, "ticketing_date", "Opens on", self.values.ticketing_date.as_str()).icon(FieldIcon::Calendar).described_by("ticketing-help").errors(error) %>
+              <%+ FloatingField::new(FieldKind::Time, "ticketing_time", "Time", self.values.ticketing_time.as_str()).icon(FieldIcon::Clock) %>
+              <%+ TimezoneField::build("ticketing_timezone", &self.values.ticketing_timezone, false).errors(error) %>
             </div>
-
-            <%+ crate::add::TimezoneField::build("ticketing_timezone", &self.values.ticketing_timezone, false) %>
           </div>
         </details>
       </div>
 
-      <p class="text-sm text-neutral-mid">Your event will be reviewed by SciStarter staff before it appears on the public calendar.</p>
-
-      <div class="flex items-center gap-3">
-        <button type="submit" class="btn btn-primary">Create event</button>
-        <a class="btn" href="/add">Cancel</a>
-      </div>
+      <button type="submit" class="btn btn-primary add-form-submit">Create event</button>
+      <a class="add-form-cancel" href="/add">Cancel</a>
     </form>
   </div>
 </div>
@@ -230,23 +162,24 @@
       return Array.prototype.some.call(select.options, function (o) { return o.value === tz; });
     }
 
-    // The zone in effect is stated in the disclosure's summary; keep that line
-    // true, and collapse the picker once a zone is settled (it renders open
-    // when there is nothing to state, which is the no-JavaScript case).
+    // The field shows the zone's short name ("PDT", "GMT+3") over the full
+    // list, which lies invisibly across the field and opens on click.
+    function shortName(tz) {
+      try {
+        var parts = new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "short" }).formatToParts(new Date());
+        var name = parts.find(function (p) { return p.type === "timeZoneName"; });
+        return name ? name.value : tz;
+      } catch (e) {
+        return tz;
+      }
+    }
     function syncTz(select) {
       if (!select) return;
       var field = select.closest("[data-tz-field]");
       if (!field) return;
-      var chosen = select.value ? select.selectedOptions[0] : null;
-      var zone = field.querySelector(".tz-zone");
-      if (zone && chosen) zone.textContent = chosen.textContent;
-      field.querySelectorAll(".tz-stated, .tz-change").forEach(function (el) {
-        el.hidden = !chosen;
-      });
-      field.querySelectorAll(".tz-unset").forEach(function (el) {
-        el.hidden = !!chosen;
-      });
-      field.open = !chosen;
+      field.classList.add("tz-enhanced");
+      var short = field.querySelector(".tz-short");
+      if (short) short.textContent = select.value ? shortName(select.value) : "";
     }
 
     function ensureTz(select) {
@@ -288,10 +221,35 @@
       });
     });
 
+    // Events are added ahead of time, so dates the event itself happens on
+    // start from today (the visitor's today; the server checks again in the
+    // event's own zone). A fresh form proposes today at the next full hour.
+    function pad(n) { return (n < 10 ? "0" : "") + n; }
+    function isoDate(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+    var today = isoDate(new Date());
+    function setMinDates(root) {
+      root.querySelectorAll('input[name$="[begin_date]"], input[name$="[end_date]"], input[name="repeat_until"]').forEach(function (input) {
+        input.min = today;
+      });
+    }
+    setMinDates(document);
+
     var container = document.getElementById("instances");
+
+    var firstRow = container.querySelector(".instance-row");
+    var firstDate = firstRow.querySelector('input[name$="[begin_date]"]');
+    var firstTime = firstRow.querySelector('input[name$="[begin_time]"]');
+    if (!firstDate.value && !firstTime.value) {
+      var start = new Date();
+      start.setHours(start.getHours() + 1, 0, 0, 0);
+      firstDate.value = isoDate(start);
+      firstTime.value = pad(start.getHours()) + ":00";
+    }
 
     // "+ End date and time" reveals a row's end fields (and checks the hidden
     // has_end box that carries the state to the server); "Remove" undoes it.
+    // Each hides the control that was used, so focus moves to the one that
+    // takes its place.
     function setEnd(row, on) {
       var toggle = row.querySelector(".has-end-toggle");
       var block = row.querySelector(".end-block");
@@ -302,6 +260,12 @@
       if (!on && block) {
         block.querySelectorAll("input").forEach(function (el) { el.value = ""; });
       }
+      if (on && block) {
+        var endDate = block.querySelector("input");
+        if (endDate) endDate.focus();
+      } else if (!on && link) {
+        link.focus();
+      }
     }
     container.addEventListener("click", function (e) {
       if (e.target.classList.contains("end-toggle")) {
@@ -311,16 +275,23 @@
       }
     });
 
-    // Keep instance rows numbered contiguously (instances[0], instances[1], ...)
-    // and hide the remove button when only one row remains.
+    // Keep instance rows numbered contiguously (instances[0], instances[1], ...),
+    // along with the "Date and time 2" names assistive software gives each row
+    // and its remove button, and hide the remove button when only one row
+    // remains.
     function renumber() {
       var rows = container.querySelectorAll(".instance-row");
       rows.forEach(function (row, i) {
         row.querySelectorAll("[name]").forEach(function (el) {
           el.name = el.name.replace(/instances\[\d+\]/, "instances[" + i + "]");
         });
+        var legend = row.querySelector(".instance-legend");
+        if (legend) legend.textContent = "Date and time " + (i + 1);
         var rm = row.querySelector(".remove-instance");
-        if (rm) rm.hidden = rows.length === 1;
+        if (rm) {
+          rm.hidden = rows.length === 1;
+          rm.setAttribute("aria-label", "Remove date and time " + (i + 1));
+        }
       });
     }
 
@@ -329,6 +300,11 @@
       var clone = rows[0].cloneNode(true);
       clone.querySelectorAll("input").forEach(function (el) {
         if (el.type === "checkbox") { el.checked = false; } else { el.value = ""; }
+      });
+      // A refused submission's error belongs to the row it was about.
+      clone.querySelectorAll("[aria-invalid]").forEach(function (el) {
+        el.removeAttribute("aria-invalid");
+        el.removeAttribute("aria-describedby");
       });
       var sel = clone.querySelector("select.tz-select");
       if (sel) {
@@ -341,7 +317,9 @@
       if (endToggle) endToggle.hidden = false;
       container.appendChild(clone);
       ensureTz(clone.querySelector("select.tz-select"));
+      setMinDates(clone);
       renumber();
+      clone.querySelector('input[name$="[begin_date]"]').focus();
     });
 
     container.addEventListener("click", function (e) {
@@ -350,7 +328,17 @@
         if (rows.length > 1) {
           e.target.closest(".instance-row").remove();
           renumber();
+          document.getElementById("add-instance").focus();
         }
+      }
+    });
+
+    // Time fields hide the browser's picker button (they draw their own
+    // clock), so a click on one opens the picker directly.
+    document.addEventListener("click", function (e) {
+      var input = e.target.closest && e.target.closest('.pill-field input[type="time"]');
+      if (input && input.showPicker) {
+        try { input.showPicker(); } catch (err) {}
       }
     });
 

@@ -1,26 +1,46 @@
+<% use crate::component::floating_field::{FieldKind, FloatingField, FormError}; %>
 <% let inperson_active = self.mode == "in_person"; %>
 <% let online_active = self.mode == "online"; %>
 <% let region_active = self.mode == "region"; %>
-<div data-location-picker class="space-y-4">
-  <div>
-    <label for="location-mode" class="sr-only">Is it in person or virtual?</label>
-    <select id="location-mode" name="location_mode" required>
-      <option value="" <% if self.mode.is_empty() { %>selected<% } %> disabled hidden>Is it in person or virtual?</option>
-      <option value="in_person" <% if inperson_active { %>selected<% } %>>In person</option>
-      <option value="online" <% if online_active { %>selected<% } %>>Virtual</option>
-      <%# Not offered in the dropdown; selected via the "wider area" link. %>
-      <option value="region" <% if region_active { %>selected<% } %> hidden>Across a wider area</option>
-    </select>
+<%# Taken out of `self` up front: rendering the region editor consumes it. %>
+<% let error = self.error.clone(); %>
+<% let error = error.as_ref(); %>
+<% let url_invalid = self.is_invalid("url"); %>
+<%# Attributes marking a hand-written control the form's error is about. %>
+<% let invalid_attrs = |field: &str| if error.is_some_and(|e| e.is_about(field)) { format!(r#" aria-invalid="true" aria-describedby="{}""#, FormError::ELEMENT_ID) } else { String::new() }; %>
+<div data-location-picker class="space-y-2">
+  <%# The label stands in for a placeholder until a mode is chosen: the empty
+      option is selected and the required select is `:invalid`. %>
+  <div class="pill-field">
+    <label class="pill-body">
+      <span class="pill-label">Is it in person or virtual?</span>
+      <select id="location-mode" name="location_mode" required<%- invalid_attrs("location_mode") %>>
+        <option value="" <% if self.mode.is_empty() { %>selected<% } %> disabled hidden></option>
+        <option value="in_person" <% if inperson_active { %>selected<% } %>>In person</option>
+        <option value="online" <% if online_active { %>selected<% } %>>Virtual</option>
+        <%# Not offered in the dropdown; selected via the "wider area" link. %>
+        <option value="region" <% if region_active { %>selected<% } %> hidden>Across a wider area</option>
+      </select>
+    </label>
   </div>
 
   <%# Each mode's fields live in a fieldset that is disabled (so its controls
       don't submit) whenever that mode isn't selected. %>
-  <fieldset class="location-fields space-y-3 border-0 p-0 m-0" data-mode="in_person" <% if !inperson_active { %>hidden disabled<% } %>>
+  <fieldset class="location-fields space-y-2 border-0 p-0 m-0" data-mode="in_person" <% if !inperson_active { %>hidden disabled<% } %>>
     <div class="place-search" data-place-search>
-      <label for="place-search-input" class="sr-only">Place or address</label>
-      <input id="place-search-input" type="search" placeholder="Include a place or address&hellip;"
-        autocomplete="off" role="combobox" aria-expanded="false" aria-controls="place-search-results">
-      <ul id="place-search-results" class="place-search-results" role="listbox" hidden></ul>
+      <div class="pill-field">
+        <svg class="pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
+        <label class="pill-body">
+          <span class="pill-label">Add a place or address</span>
+          <%# The address the in-person check wants is set by picking here, so
+              an error about it marks this, the control a visitor sees. %>
+          <input id="place-search-input" type="search" placeholder=" "
+            autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false"
+            aria-controls="place-search-results"<%- invalid_attrs("address") %>>
+        </label>
+      </div>
+      <ul id="place-search-results" class="place-search-results" role="listbox" aria-label="Places" hidden></ul>
+      <span class="sr-only" aria-live="polite" data-place-status></span>
     </div>
 
     <input type="hidden" name="latitude" value="<%= self.latitude %>">
@@ -31,39 +51,23 @@
         without opening them. It composes that line from the fields themselves —
         the values are the browser's until they are submitted — leaving this the
         label a visitor without JavaScript gets. %>
+    <%# The venue's address, not the visitor's: `autocomplete="off"` keeps
+        browsers from offering to fill in their own. %>
     <details class="place-details">
       <summary class="cursor-pointer text-sm">
         <span class="place-summary" data-place-summary>Venue &amp; address details</span>
         <span class="place-summary-edit" hidden>edit</span>
       </summary>
-      <div class="mt-3 space-y-3">
-        <div>
-          <label>Venue name</label>
-          <input type="text" name="location_name" value="<%= self.location_name %>">
+      <div class="mt-2 space-y-2">
+        <%+ FloatingField::new(FieldKind::Text, "location_name", "Venue name", self.location_name.as_str()).autocomplete("off").errors(error) %>
+        <%+ FloatingField::new(FieldKind::Text, "address", "Street address", self.address.as_str()).autocomplete("off").errors(error) %>
+        <div class="field-pair">
+          <%+ FloatingField::new(FieldKind::Text, "city", "City", self.city.as_str()).autocomplete("off").errors(error) %>
+          <%+ FloatingField::new(FieldKind::Text, "state", "State / Province", self.state.as_str()).autocomplete("off").errors(error) %>
         </div>
-        <div>
-          <label>Street address</label>
-          <input type="text" name="address" value="<%= self.address %>">
-        </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label>City</label>
-            <input type="text" name="city" value="<%= self.city %>">
-          </div>
-          <div>
-            <label>State / Province</label>
-            <input type="text" name="state" value="<%= self.state %>">
-          </div>
-        </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label>ZIP / Postal code</label>
-            <input type="text" name="zip" value="<%= self.zip %>">
-          </div>
-          <div>
-            <label>Country</label>
-            <input type="text" name="country" value="<%= self.country %>">
-          </div>
+        <div class="field-pair">
+          <%+ FloatingField::new(FieldKind::Text, "zip", "ZIP / Postal code", self.zip.as_str()).autocomplete("off").errors(error) %>
+          <%+ FloatingField::new(FieldKind::Text, "country", "Country", self.country.as_str()).autocomplete("off").errors(error) %>
         </div>
       </div>
     </details>
@@ -71,33 +75,35 @@
     <button type="button" class="link-btn" data-mode-link="region">Happens across a wider area? Draw the region instead.</button>
   </fieldset>
 
-  <fieldset class="location-fields space-y-3 border-0 p-0 m-0" data-mode="region" <% if !region_active { %>hidden disabled<% } %>>
+  <fieldset class="location-fields space-y-2 border-0 p-0 m-0" data-mode="region" <% if !region_active { %>hidden disabled<% } %>>
     <%+ self.region_editor %>
     <button type="button" class="link-btn" data-mode-link="in_person">Back to a single place</button>
   </fieldset>
 
   <%# Fields meaningful in every mode, held back until the "in person or
       virtual?" question is answered so the section starts as one control. %>
-  <div class="space-y-4" data-location-common <% if self.mode.is_empty() { %>hidden<% } %>>
+  <div class="space-y-2" data-location-common <% if self.mode.is_empty() { %>hidden<% } %>>
     <div data-url-field
       data-online-label="Join link"
       data-online-help="The link people use to join or participate online."
       data-default-label="Link / URL"
       data-default-help="A website, registration page, or livestream link.">
-      <label for="add-url" class="url-label"><% if online_active { %>Join link<% } else { %>Link / URL<% } %></label>
-      <input id="add-url" type="url" name="url" value="<%= self.url %>" placeholder="https://&hellip;">
-      <p class="text-sm text-neutral-mid url-help"><% if online_active { %>The link people use to join or participate online.<% } else { %>A website, registration page, or livestream link.<% } %></p>
+      <div class="pill-field">
+        <label class="pill-body">
+          <span class="pill-label url-label"><% if online_active { %>Join link<% } else { %>Link / URL<% } %></span>
+          <input id="add-url" type="url" name="url" value="<%= self.url %>" placeholder=" "<% if url_invalid { %> aria-invalid="true" aria-describedby="<%= FormError::ELEMENT_ID %> add-url-help"<% } else { %> aria-describedby="add-url-help"<% } %>>
+        </label>
+      </div>
+      <p id="add-url-help" class="field-help url-help"><% if online_active { %>The link people use to join or participate online.<% } else { %>A website, registration page, or livestream link.<% } %></p>
     </div>
 
     <%# A location note meaningful in any mode (the area for a region, or a
         "meet at the north entrance"-style note). Collapsed behind a quiet
         disclosure; region mode requires it, so it opens there. %>
-    <details class="location-note" <% if region_active || !self.location_description.is_empty() { %>open<% } %>>
-      <summary class="location-note-summary"><span class="when-closed">+ Add a location note</span><span class="when-open">Location note</span></summary>
-      <div class="mt-2">
-        <label for="location-description" class="sr-only">Location note</label>
-        <input id="location-description" type="text" name="location_description" value="<%= self.location_description %>" placeholder="e.g. Greater Phoenix metro area, or &ldquo;meet at the north entrance&rdquo;">
-      </div>
+    <details class="quiet-disclosure location-note" <% if region_active || !self.location_description.is_empty() { %>open<% } %>>
+      <summary>+ Add a location note</summary>
+      <%+ FloatingField::new(FieldKind::Text, "location_description", "Location note", self.location_description.as_str()).id("location-description").described_by("location-description-help").errors(error) %>
+      <p id="location-description-help" class="field-help">The area it covers, or a note like &ldquo;meet at the north entrance.&rdquo;</p>
     </details>
   </div>
 </div>

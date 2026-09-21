@@ -1,101 +1,353 @@
-/* Add Event / Add Project form controls: the pill-style date/time fields,
-   the place type-ahead, the calendar popover, and quiet link-style buttons. */
+/* Add Event / Add Project forms: one narrow column of floating-label fields,
+   the optional sections as a list of collapsed rows, the cover image, the
+   place type-ahead and the calendar popover. */
 
-/* A compact bordered field with an optional icon and a small floating label
-   above the value, sharing one focus ring. */
-form .pill-field {
-    @apply flex items-center gap-3 bg-white border border-linework rounded-lg px-4 py-2;
+.add-form-shell {
+    max-width: 34rem;
+    margin-inline: auto;
 }
+.add-form-title {
+    @apply text-center mb-6;
+    font-size: var(--text-xl);
+}
+form.add-form {
+    @apply flex flex-col gap-3;
+}
+
+/* A bordered field box with an optional leading icon. Its label sits inside
+   the box: small above the value, or, while the field is empty and unfocused,
+   placeholder-sized where the value will go (the control itself folds to no
+   height meanwhile; it is still there to be focused, by a click on the label
+   or the keyboard). The label stays in the flow, so a long one wraps and the
+   box grows, rather than being cut off, when the text is enlarged. Used by
+   FloatingField (component/floating_field.rs) and by the hand-written fields
+   that carry behaviour of their own. */
+form .pill-field {
+    @apply flex items-center gap-3 bg-white rounded-lg px-4;
+    border: 1px solid var(--color-field-border);
+    min-height: 3.5rem;
+}
+/* An outline rather than a shadow: forced-colors modes keep outlines. */
 form .pill-field:focus-within {
     border-color: var(--color-primary-action);
-    box-shadow: 0 0 0 1px var(--color-primary-action);
+    outline: 2px solid var(--color-primary-action);
+    outline-offset: -1px;
 }
 .pill-icon {
     @apply w-5 h-5 text-neutral-mid shrink-0;
 }
 form .pill-body {
-    @apply flex flex-col grow mb-0 min-w-0;
+    @apply flex flex-col grow self-stretch justify-center mb-0 min-w-0 relative;
+    padding: 0.5rem 0;
 }
 form .pill-body .pill-label {
-    @apply block text-sm text-neutral-mid;
+    @apply block text-neutral-mid;
+    font-size: 0.8125rem;
+    line-height: 1rem;
+    overflow-wrap: anywhere;
+    transition: font-size 120ms ease, line-height 120ms ease;
+}
+form .pill-body:has(> :is(input, textarea):placeholder-shown:not(:focus)) .pill-label,
+form .pill-body:has(> select:invalid:not(:focus)) .pill-label,
+form .tz-pill.tz-enhanced .pill-body:has(> select:invalid) .pill-label {
+    font-size: 1rem;
+    line-height: 1.5rem;
+}
+form .pill-body > input:placeholder-shown:not(:focus),
+form .pill-field:not(.tz-enhanced) .pill-body > select:invalid:not(:focus) {
+    height: 0;
+}
+/* A select draws its own chevron: the browser's goes with the control while
+   the control is folded away under its label. */
+form .pill-field:has(> .pill-body > select):not(.tz-enhanced)::after {
+    content: "";
+    @apply w-2 h-2 shrink-0 text-neutral-dark pointer-events-none;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: translateY(-25%) rotate(45deg);
+}
+form .pill-field .pill-body > select {
+    appearance: none;
+    cursor: pointer;
+}
+
+/* A multi-line field keeps its rows while empty; its label sits over them. */
+form .pill-field-multiline .pill-body {
+    @apply justify-start;
+}
+
+/* Required fields: the asterisk is for the eye; `required` says it to
+   assistive software. */
+form .pill-required {
+    @apply text-alert;
+}
+
+/* A field the refused submission was about: a heavier red edge, alongside
+   the message at the top of the form that names the problem. */
+form .pill-field:has([aria-invalid="true"]) {
+    border-color: var(--color-alert);
+    outline: 1px solid var(--color-alert);
+    outline-offset: -1px;
+}
+form .pill-field:has([aria-invalid="true"]):focus-within {
+    outline-width: 2px;
+}
+.form-error-notice:focus {
+    outline: 2px solid var(--color-alert);
+    outline-offset: 2px;
 }
 form .pill-field input,
-form .pill-field select {
+form .pill-field select,
+form .pill-field textarea {
     border: 0;
     border-radius: 0;
     padding: 0;
     width: 100%;
     background: transparent;
+    font-size: 1rem;
+    line-height: 1.5rem;
 }
 form .pill-field input:focus,
-form .pill-field select:focus {
+form .pill-field select:focus,
+form .pill-field textarea:focus {
     outline: none;
     box-shadow: none;
 }
+form .pill-field-multiline {
+    @apply items-start;
+}
+form .pill-field-multiline textarea {
+    resize: vertical;
+}
 
-/* A button that reads as a quiet inline link ("+ End date and time"). */
+/* Help and notices under a field. */
+form .field-help {
+    @apply text-sm text-neutral-mid mt-1 mb-0;
+}
+
+/* Start date · start time · zone on one line; on a phone the zone takes the
+   full width under the other two, and where even two won't fit side by side
+   (a narrow screen, or enlarged text) every field takes its own line. */
+form .when-grid,
+form .field-pair {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+    gap: 0.5rem;
+}
+form .when-grid > .tz-pill {
+    grid-column: 1 / -1;
+}
+@media (min-width: 640px) {
+    form .when-grid {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 9rem;
+    }
+    form .when-grid > .tz-pill {
+        grid-column: auto;
+    }
+}
+form .pill-field,
+form .pill-field :is(input, select, textarea) {
+    min-width: 0;
+}
+form .instance-row {
+    @apply flex flex-col gap-2 items-start;
+}
+form .instance-row > .when-grid,
+form .instance-row > .end-block {
+    @apply self-stretch;
+}
+form .end-block {
+    @apply flex flex-col gap-2 items-start;
+}
+form .end-block > .field-pair {
+    @apply self-stretch;
+}
+
+/* Time zone: once the form script has written the zone's short name into the
+   field, the full list lies invisibly across it (across the field's body,
+   the positioned box), so a click there opens it. */
+form .tz-pill .tz-short {
+    @apply block truncate;
+    font-size: 1rem;
+    line-height: 1.5rem;
+}
+form .tz-pill:not(.tz-enhanced) .tz-short {
+    display: none;
+}
+form .tz-pill.tz-enhanced select {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+/* A button that reads as a quiet inline link ("+ End date and time"), tall
+   enough (24px) to be a comfortable target. */
 form .link-btn {
-    @apply text-sm text-accent1 underline text-left;
+    @apply inline-flex items-center text-sm text-primary-action underline text-left;
     background: none;
     border: 0;
     padding: 0;
+    min-height: 1.5rem;
     cursor: pointer;
     width: fit-content;
 }
 
-/* Optional-field disclosures in the location section: quiet link-style
-   summaries; the location note's summary reads "+ Add a location note"
-   closed and becomes a plain label once open. */
+/* Keyboard focus on the form's links, summaries and buttons: a visible ring
+   that forced-colors modes keep. */
+form :is(.link-btn, summary, .add-form-submit, .add-form-cancel, .tag-suggestion, button):focus-visible {
+    outline: 2px solid var(--color-primary-action);
+    outline-offset: 2px;
+}
+
+/* A "+ Add something" link that reveals its fields in place of itself. */
+form .quiet-disclosure > summary {
+    @apply inline-flex items-center text-sm text-primary-action underline cursor-pointer;
+    min-height: 1.5rem;
+    width: fit-content;
+    list-style: none;
+}
+form .quiet-disclosure > summary::-webkit-details-marker {
+    display: none;
+}
+form .quiet-disclosure[open] > summary {
+    display: none;
+}
+
+/* The picked place, stated on the collapsed address fields. */
 form .place-details > summary {
     @apply text-sm text-neutral-mid;
+    min-height: 1.5rem;
     list-style: none;
 }
 form .place-details > summary::-webkit-details-marker {
     display: none;
 }
-/* The summary carries the address itself once a place is picked, with a quiet
-   "edit" affordance after it. */
 form .place-details .place-summary {
     @apply text-neutral-dark;
 }
-form .place-details .place-summary-edit,
-form .tz-field .tz-change {
-    @apply ml-2 text-accent1 underline;
+form .place-details .place-summary-edit {
+    @apply ml-2 text-primary-action underline;
 }
 
-/* Time zone: a line of prose stating the zone in effect, with the full picker
-   collapsed behind it. Zones are inferred from the venue or the browser, so the
-   list is a correction rather than a question. */
-form .tz-field > summary {
-    @apply text-sm text-neutral-mid cursor-pointer;
-    width: fit-content;
+/* Optional sections: a list of rows, each an icon, a bold title and a
+   chevron, opening in place. */
+form .add-sections {
+    border-top: 1px solid var(--color-neutral-light);
+}
+form .add-section {
+    border-bottom: 1px solid var(--color-neutral-light);
+}
+form .add-section > summary {
+    @apply flex items-center gap-3 py-3 cursor-pointer;
     list-style: none;
 }
-form .tz-field > summary::-webkit-details-marker {
+form .add-section > summary::-webkit-details-marker {
     display: none;
 }
-form .tz-field[open] > summary .tz-change {
-    display: none;
+form .add-section > summary::after {
+    content: "";
+    @apply ml-auto w-2 h-2 shrink-0;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: translateY(-25%) rotate(45deg);
+    transition: transform 120ms ease;
 }
-form .location-note > summary {
-    @apply text-sm text-accent1 underline cursor-pointer;
-    width: fit-content;
-    list-style: none;
+form .add-section[open] > summary::after {
+    transform: translateY(25%) rotate(-135deg);
 }
-form .location-note > summary::-webkit-details-marker {
-    display: none;
+.add-section-icon {
+    @apply w-5 h-5 shrink-0 text-neutral-dark;
 }
-form .location-note[open] > summary {
-    @apply text-base text-black no-underline;
+.add-section-title {
+    @apply font-semibold;
 }
-form .location-note:not([open]) .when-open {
-    display: none;
+form .add-section-body {
+    @apply flex flex-col gap-2 pb-4;
 }
-form .location-note[open] .when-closed {
-    display: none;
+form .add-section-body.checkbox-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.25rem 1rem;
+}
+@media (min-width: 640px) {
+    form .add-section-body.checkbox-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+form .checkbox-option {
+    @apply flex items-center gap-2 mb-0;
+}
+form .checkbox-option input {
+    @apply w-auto;
 }
 
-/* Place type-ahead suggestions, anchored under the search input. */
+form .add-form-submit {
+    @apply w-full mt-2 py-3 text-center;
+}
+form .add-form-cancel {
+    @apply self-center text-sm text-neutral-mid underline;
+}
+
+/* The cover image: a banner-shaped upload area leading the form, showing the
+   image once there is one. */
+.image-cover {
+    @apply relative overflow-hidden rounded-lg bg-neutral-xlight;
+    aspect-ratio: 1.91 / 1;
+    border: 1px solid var(--color-field-border);
+}
+.image-cover-preview {
+    @apply absolute inset-0;
+}
+.image-cover-preview img {
+    @apply w-full h-full object-cover;
+}
+.image-cover-upload {
+    @apply absolute inset-0 flex flex-col items-center justify-center gap-2 mb-0 cursor-pointer text-neutral-dark;
+}
+.image-cover-upload:focus-within {
+    outline: 2px solid var(--color-primary-action);
+    outline-offset: -2px;
+}
+.image-cover-icon {
+    @apply w-8 h-8;
+}
+.image-cover-add {
+    @apply font-semibold;
+}
+.image-cover-change {
+    display: none;
+}
+/* With an image showing, the upload control shrinks to a button in the corner. */
+.image-cover:has(.image-cover-preview img) .image-cover-upload {
+    @apply inset-auto right-3 bottom-3 flex-row gap-2 px-3 py-2 rounded-md bg-white shadow;
+}
+.image-cover:has(.image-cover-preview img) .image-cover-icon {
+    @apply w-5 h-5;
+}
+.image-cover:has(.image-cover-preview img) .image-cover-add {
+    display: none;
+}
+.image-cover:has(.image-cover-preview img) .image-cover-change {
+    @apply font-semibold text-sm;
+    display: inline;
+}
+.image-cover-status {
+    @apply absolute left-3 bottom-3 text-sm;
+}
+.image-cover-status:empty {
+    display: none;
+}
+.image-cover:has(.image-cover-preview img) .image-cover-status {
+    @apply px-2 py-1 rounded bg-white;
+}
+
+/* The inline image field's preview thumbnail. */
+.image-preview img {
+    @apply max-h-32 rounded border border-linework;
+}
+
+/* Place type-ahead suggestions, anchored under the search field. */
 .place-search {
     position: relative;
 }
@@ -107,15 +359,23 @@ form .location-note[open] .when-closed {
     margin-left: 0;
     padding-left: 0;
 }
-.place-search-results li button {
-    @apply block w-full text-left px-4 py-2;
-    background: none;
-    border: 0;
-    cursor: pointer;
+.place-search-results [role="option"] {
+    @apply block w-full px-4 py-2 cursor-pointer;
 }
-.place-search-results li button:hover,
-.place-search-results li button:focus {
+.place-search-results [role="option"]:hover,
+.place-search-results [role="option"][aria-selected="true"] {
     @apply bg-primary-light;
+}
+/* The arrow-key highlight is also drawn as an edge, which forced-colors modes
+   keep where they drop the background. */
+.place-search-results [role="option"][aria-selected="true"] {
+    box-shadow: inset 3px 0 0 var(--color-primary-action);
+}
+@media (forced-colors: active) {
+    .place-search-results [role="option"][aria-selected="true"] {
+        outline: 2px solid Highlight;
+        outline-offset: -2px;
+    }
 }
 .place-search-results .place-name {
     @apply block font-medium;
@@ -164,10 +424,40 @@ form .location-note[open] .when-closed {
 .cal-day:hover {
     @apply bg-primary-light;
 }
+.cal-day:disabled {
+    @apply text-neutral-light cursor-default;
+    background: none;
+}
 .cal-day.is-today {
     @apply font-bold text-primary-action;
 }
 .cal-day.is-selected {
     @apply text-white;
     background-color: var(--color-primary-action);
+}
+
+/* A time field draws its own leading clock; the browser's picker button would
+   be a second one. The form script opens the picker on a click instead. */
+form .pill-field input[type=time]::-webkit-calendar-picker-indicator {
+    display: none;
+}
+
+/* Fieldsets group each date/time row for assistive software (with a visually
+   hidden legend); they draw nothing themselves. */
+form fieldset.instance-row {
+    border: 0;
+    margin: 0;
+    padding: 0;
+    min-width: 0;
+}
+form fieldset.instance-row + fieldset.instance-row {
+    @apply mt-3 pt-3;
+    border-top: 1px solid var(--color-neutral-light);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    form .pill-body .pill-label,
+    form .add-section > summary::after {
+        transition: none;
+    }
 }

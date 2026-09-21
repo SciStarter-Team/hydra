@@ -1,145 +1,99 @@
+<% use crate::component::floating_field::{FieldKind, FloatingField}; %>
+<% use crate::add::{SectionIcon, SectionSummary}; %>
+<% let error = self.error.as_ref(); %>
 <div class="ss-container !pt-8 !pb-12 mx-auto">
-  <div class="ss-small-container">
-    <h1 class="text-center">Add a Project</h1>
-    <p class="intro text-center">List your citizen science project so participants can discover it and get involved.</p>
+  <div class="add-form-shell">
+    <h1 class="add-form-title">Add a Project</h1>
 
-    <% if let Some(error) = &self.error { %>
-      <div class="ss-alert" role="alert"><%= error %></div>
-    <% } %>
+    <%+ crate::component::floating_field::FormErrorNotice { error } %>
 
-    <form method="post" action="/add-project" class="space-y-6 mt-6">
+    <form method="post" action="/add-project" class="add-form">
+      <p class="field-help">Fields marked <span aria-hidden="true">*</span> are required.</p>
 
-      <!-- Basics -->
-      <div class="bg-white border border-linework rounded-lg shadow-sm p-6 space-y-4">
-        <div>
-          <label for="project-name">Project name</label>
-          <input id="project-name" type="text" name="name" required value="<%= self.values.name %>">
-        </div>
-      </div>
+      <%+ self.image %>
 
-      <!-- Where -->
-      <div class="bg-white border border-linework rounded-lg shadow-sm p-6 space-y-4">
-        <h3>Where</h3>
-        <%+ self.location %>
-      </div>
+      <%+ FloatingField::new(FieldKind::Text, "name", "Project name", self.values.name.as_str()).id("project-name").required().errors(error) %>
 
-      <!-- Details -->
-      <div class="bg-white border border-linework rounded-lg shadow-sm p-6 space-y-4">
-        <h3>Details</h3>
-        <div>
-          <label for="project-description">Description</label>
-          <textarea id="project-description" name="description" rows="5" required placeholder="What are the details?"><%= self.values.description %></textarea>
-        </div>
-        <div>
-          <label for="project-goal">Scientific goal</label>
-          <input id="project-goal" type="text" name="goal" value="<%= self.values.goal %>">
-        </div>
-        <div>
-          <label for="project-task">What participants do</label>
-          <input id="project-task" type="text" name="task" value="<%= self.values.task %>">
-        </div>
+      <%+ self.location %>
 
-        <%+ self.image %>
+      <%+ FloatingField::new(FieldKind::TextArea { rows: 4 }, "description", "What are the details?", self.values.description.as_str()).id("project-description").required().described_by("review-note").errors(error) %>
+      <%+ FloatingField::new(FieldKind::Text, "goal", "Scientific goal", self.values.goal.as_str()).id("project-goal") %>
+      <%+ FloatingField::new(FieldKind::Text, "task", "What participants do", self.values.task.as_str()).id("project-task") %>
 
-        <details class="border border-linework rounded-md p-3">
-          <summary class="cursor-pointer font-medium">More details (optional)</summary>
-          <div class="mt-3 space-y-4">
-            <div>
-              <label>Organizer / presenter</label>
-              <input type="text" name="presenter" value="<%= self.values.presenter %>">
-            </div>
-            <div>
-              <label>How to get started</label>
-              <textarea name="how_to_join" rows="3"><%= self.values.how_to_join %></textarea>
-            </div>
-            <div>
-              <label>Tags</label>
-              <%+ self.tags %>
-            </div>
+      <p id="review-note" class="field-help">Your project will be reviewed by SciStarter staff before it appears publicly.</p>
+
+      <div class="add-sections">
+        <details class="add-section">
+          <%+ SectionSummary::new(SectionIcon::Details, "More details") %>
+          <div class="add-section-body">
+            <%+ FloatingField::new(FieldKind::Text, "presenter", "Organizer / presenter", self.values.presenter.as_str()) %>
+            <%+ FloatingField::new(FieldKind::TextArea { rows: 3 }, "how_to_join", "How to get started", self.values.how_to_join.as_str()) %>
+            <%+ self.tags %>
           </div>
         </details>
 
-        <details class="border border-linework rounded-md p-3">
-          <summary class="cursor-pointer font-medium">Topics (optional)</summary>
-          <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-1">
+        <details class="add-section">
+          <%+ SectionSummary::new(SectionIcon::Topics, "Topics") %>
+          <div class="add-section-body checkbox-grid" role="group" aria-label="Topics">
             <% for topic in crate::project::field::TOPICS_VOCABULARY { %>
-            <label class="flex items-center gap-2">
-              <input type="checkbox" class="w-auto" name="topics[]" value="<%= topic %>" <% if self.values.topics.iter().any(|t| t.as_str() == *topic) { %>checked<% } %>>
+            <label class="checkbox-option">
+              <input type="checkbox" name="topics[]" value="<%= topic %>" <% if self.values.topics.iter().any(|t| t.as_str() == *topic) { %>checked<% } %>>
               <%= topic %>
             </label>
             <% } %>
           </div>
         </details>
 
-        <details class="border border-linework rounded-md p-3">
-          <summary class="cursor-pointer font-medium">Fields of science (optional)</summary>
-          <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-1">
+        <details class="add-section">
+          <%+ SectionSummary::new(SectionIcon::Science, "Fields of science") %>
+          <div class="add-section-body checkbox-grid" role="group" aria-label="Fields of science">
             <% for field in crate::project::field::FIELDS_OF_SCIENCE_VOCABULARY { %>
-            <label class="flex items-center gap-2">
-              <input type="checkbox" class="w-auto" name="fields_of_science[]" value="<%= field %>" <% if self.values.fields_of_science.iter().any(|t| t.as_str() == *field) { %>checked<% } %>>
+            <label class="checkbox-option">
+              <input type="checkbox" name="fields_of_science[]" value="<%= field %>" <% if self.values.fields_of_science.iter().any(|t| t.as_str() == *field) { %>checked<% } %>>
               <%= field %>
             </label>
             <% } %>
           </div>
         </details>
 
-        <details class="border border-linework rounded-md p-3">
-          <summary class="cursor-pointer font-medium">Audience (optional)</summary>
-          <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-1">
+        <details class="add-section">
+          <%+ SectionSummary::new(SectionIcon::Audience, "Audience") %>
+          <div class="add-section-body checkbox-grid" role="group" aria-label="Audience">
             <% for aud in crate::project::field::AUDIENCE_VOCABULARY { %>
-            <label class="flex items-center gap-2">
-              <input type="checkbox" class="w-auto" name="audience[]" value="<%= aud %>" <% if self.values.audience.iter().any(|t| t.as_str() == *aud) { %>checked<% } %>>
+            <label class="checkbox-option">
+              <input type="checkbox" name="audience[]" value="<%= aud %>" <% if self.values.audience.iter().any(|t| t.as_str() == *aud) { %>checked<% } %>>
               <%= aud %>
             </label>
             <% } %>
           </div>
         </details>
 
-        <details class="border border-linework rounded-md p-3">
-          <summary class="cursor-pointer font-medium">Activities (optional)</summary>
-          <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-1">
+        <details class="add-section">
+          <%+ SectionSummary::new(SectionIcon::Activities, "Activities") %>
+          <div class="add-section-body checkbox-grid" role="group" aria-label="Activities">
             <% for activity in crate::project::field::ACTIVITIES_VOCABULARY { %>
-            <label class="flex items-center gap-2">
-              <input type="checkbox" class="w-auto" name="activities[]" value="<%= activity %>" <% if self.values.activities.iter().any(|t| t.as_str() == *activity) { %>checked<% } %>>
+            <label class="checkbox-option">
+              <input type="checkbox" name="activities[]" value="<%= activity %>" <% if self.values.activities.iter().any(|t| t.as_str() == *activity) { %>checked<% } %>>
               <%= activity %>
             </label>
             <% } %>
           </div>
         </details>
 
-        <details class="border border-linework rounded-md p-3">
-          <summary class="cursor-pointer font-medium">Organizer contact (optional)</summary>
-          <div class="mt-3 space-y-4">
-            <div>
-              <label>Contact name</label>
-              <input type="text" name="contact_name" value="<%= self.values.contact_name %>">
-            </div>
-            <div>
-              <label>Email</label>
-              <input type="email" name="contact_email" value="<%= self.values.contact_email %>">
-            </div>
-            <div>
-              <label>Affiliation</label>
-              <input type="text" name="contact_affiliation" value="<%= self.values.contact_affiliation %>">
-            </div>
-            <div>
-              <label>Phone</label>
-              <input type="tel" name="contact_phone" value="<%= self.values.contact_phone %>">
-            </div>
-            <div>
-              <label>Mailing address</label>
-              <input type="text" name="contact_address" value="<%= self.values.contact_address %>">
-            </div>
+        <details class="add-section">
+          <%+ SectionSummary::new(SectionIcon::Contact, "Organizer contact") %>
+          <div class="add-section-body">
+            <%+ FloatingField::new(FieldKind::Text, "contact_name", "Contact name", self.values.contact_name.as_str()).autocomplete("name") %>
+            <%+ FloatingField::new(FieldKind::Email, "contact_email", "Email", self.values.contact_email.as_str()).autocomplete("email") %>
+            <%+ FloatingField::new(FieldKind::Text, "contact_affiliation", "Affiliation", self.values.contact_affiliation.as_str()).autocomplete("organization") %>
+            <%+ FloatingField::new(FieldKind::Tel, "contact_phone", "Phone", self.values.contact_phone.as_str()).autocomplete("tel") %>
+            <%+ FloatingField::new(FieldKind::Text, "contact_address", "Mailing address", self.values.contact_address.as_str()).autocomplete("street-address") %>
           </div>
         </details>
       </div>
 
-      <p class="text-sm text-neutral-mid">Your project will be reviewed by SciStarter staff before it appears publicly.</p>
-
-      <div class="flex items-center gap-3">
-        <button type="submit" class="btn btn-primary">Create project</button>
-        <a class="btn" href="/add">Cancel</a>
-      </div>
+      <button type="submit" class="btn btn-primary add-form-submit">Create project</button>
+      <a class="add-form-cancel" href="/add">Cancel</a>
     </form>
   </div>
 </div>

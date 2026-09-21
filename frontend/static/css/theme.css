@@ -39,6 +39,9 @@
   --color-black: #000;
   --color-white: #fff;
   --color-linework: #d7eeff;
+  /* Boundary of a form control: 3.2:1 against white, the WCAG 1.4.11 floor
+     for a control's edge being distinguishable. */
+  --color-field-border: #8a8f98;
   --color-neutral-xlight: #F8F8F8;
   --color-neutral-light: #D9D9D9;
   --color-neutral-mid: #757575;

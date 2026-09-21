@@ -4,7 +4,14 @@
 // below it; picking a day writes the ISO value back to the input. Typing in
 // the input still works and the grid follows along. A single shared popover
 // element serves every date input via event delegation, so rows cloned after
-// load (e.g. "+ Add another date/time") need no re-initialization.
+// load (e.g. "+ Add another date/time") need no re-initialization. Days
+// outside the input's `min`/`max` are shown but can't be picked.
+//
+// The popover is a pointer convenience only: it is hidden from assistive
+// software and kept out of the tab order, because the date input itself (typed
+// day, month and year, with the browser's own labelling of each) is the
+// keyboard and screen-reader path, and a second, partial one alongside it
+// would only be noise.
 (function () {
   var MONTHS = ["January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"];
@@ -20,11 +27,12 @@
     pop = document.createElement("div");
     pop.className = "cal-popover";
     pop.hidden = true;
+    pop.setAttribute("aria-hidden", "true");
     // Keep focus in the input while interacting with the popover.
     pop.addEventListener("mousedown", function (e) { e.preventDefault(); });
     pop.addEventListener("click", function (e) {
       var btn = e.target.closest("button");
-      if (!btn || !current) return;
+      if (!btn || btn.disabled || !current) return;
       if (btn.classList.contains("cal-prev") || btn.classList.contains("cal-next")) {
         viewMonth += btn.classList.contains("cal-next") ? 1 : -1;
         if (viewMonth < 0) { viewMonth = 11; viewYear--; }
@@ -51,11 +59,14 @@
   function render() {
     var selected = parseISO(current.value);
     var now = new Date();
+    // ISO dates compare correctly as strings.
+    var min = parseISO(current.min) ? current.min : "";
+    var max = parseISO(current.max) ? current.max : "";
 
     var html = '<div class="cal-header">' +
-      '<button type="button" class="cal-prev" aria-label="Previous month">&#8249;</button>' +
+      '<button type="button" class="cal-prev" tabindex="-1">&#8249;</button>' +
       '<span class="cal-title">' + MONTHS[viewMonth] + " " + viewYear + "</span>" +
-      '<button type="button" class="cal-next" aria-label="Next month">&#8250;</button>' +
+      '<button type="button" class="cal-next" tabindex="-1">&#8250;</button>' +
       "</div>" +
       '<div class="cal-grid">';
     WEEKDAYS.forEach(function (d) { html += '<span class="cal-dow">' + d + "</span>"; });
@@ -72,7 +83,9 @@
       if (now.getFullYear() === viewYear && now.getMonth() === viewMonth && now.getDate() === day) {
         classes += " is-today";
       }
-      html += '<button type="button" class="' + classes + '" data-date="' + iso + '">' + day + "</button>";
+      var outOfRange = (min && iso < min) || (max && iso > max);
+      html += '<button type="button" tabindex="-1" class="' + classes + '" data-date="' + iso + '"' +
+        (outOfRange ? " disabled" : "") + ">" + day + "</button>";
     }
     html += "</div>";
     pop.innerHTML = html;
