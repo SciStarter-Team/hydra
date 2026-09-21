@@ -125,25 +125,33 @@ form .field-help {
     @apply text-sm text-neutral-mid mt-1 mb-0;
 }
 
-/* Start date · start time · zone on one line; on a phone the zone takes the
-   full width under the other two, and where even two won't fit side by side
-   (a narrow screen, or enlarged text) every field takes its own line. */
-form .when-grid,
-form .field-pair {
+/* Start date · start time · zone on one line where there's room. On a phone
+   the date, whose value is the widest, takes a line of its own, with the time
+   and zone sharing the next; where even those two won't fit side by side (a
+   narrow screen, or enlarged text) every field takes its own line. */
+form .when-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
     gap: 0.5rem;
 }
-form .when-grid > .tz-pill {
+form .when-grid > .pill-field:has(input[type="date"]) {
     grid-column: 1 / -1;
 }
 @media (min-width: 640px) {
     form .when-grid {
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 9rem;
     }
-    form .when-grid > .tz-pill {
+    form .when-grid > .pill-field:has(input[type="date"]) {
         grid-column: auto;
     }
+}
+
+/* Two related fields side by side, stacking when each can't have 12rem: wide
+   enough for a date's value beside its icon, at any text size. */
+form .field-pair {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+    gap: 0.5rem;
 }
 form .pill-field,
 form .pill-field :is(input, select, textarea) {
