@@ -9,6 +9,7 @@ use crate::{
 };
 use anyhow::Error;
 use common::shared::db;
+use jiff::civil::Date;
 use poem::{Endpoint, Response, Result, Route, get, handler, session::Session, web::Query};
 use sailfish::TemplateOnce;
 use serde::Deserialize;
@@ -56,6 +57,14 @@ where
     }
 }
 
+/// The `kind[]` values the finder's entity-kind toggles submit.
+pub(crate) const PROJECT_KIND: &str = "project";
+pub(crate) const EVENT_KIND: &str = "event";
+
+/// Submitted by a hidden field, so that a form with both toggles cleared says
+/// so rather than looking like a form that was never filled in.
+const NO_KIND: &str = "none";
+
 #[derive(Debug, Deserialize)]
 pub struct FinderQuery {
     pub q: Option<String>,
@@ -75,6 +84,93 @@ pub struct FinderQuery {
     pub show_completed: Option<String>,
     #[serde(default)]
     pub misc_filter: Vec<String>,
+
+    /// Which kinds of entity to search, as the sidebar's toggles submit them:
+    /// [`PROJECT_KIND`], [`EVENT_KIND`], and the hidden [`NO_KIND`] that lets a
+    /// form say "neither" -- unchecked boxes submit nothing, so without it an
+    /// empty list would be indistinguishable from an unfiltered `/finder`.
+    #[serde(default)]
+    pub kind: Vec<String>,
+
+    /// The earliest and latest dates, `YYYY-MM-DD`, an event may run on.
+    pub start: Option<String>,
+    pub end: Option<String>,
+
+    /// Include events that are over, the way `show_completed` includes
+    /// projects that are.
+    pub show_past: Option<String>,
+}
+
+impl FinderQuery {
+    /// The finder's own query string for this search, without `page`:
+    /// everything a link needs to run it again. The pagination links and the
+    /// concierge's links into the finder both go through here, so a filter
+    /// can only be left out of a link in one place.
+    pub(crate) fn to_query_string(&self) -> String {
+        let mut params = Vec::new();
+
+        if let Some(q) = self.q.as_deref().filter(|q| !q.is_empty()) {
+            params.push(format!("q={}", urlencoding::encode(q)));
+        }
+
+        if let (Some(lat), Some(lng)) = (self.lat, self.lng) {
+            params.push(format!("lat={lat}"));
+            params.push(format!("lng={lng}"));
+        }
+
+        if let Some(name) = self
+            .location_name
+            .as_deref()
+            .filter(|name| !name.is_empty())
+        {
+            params.push(format!("location_name={}", urlencoding::encode(name)));
+        }
+
+        if let Some(location_type) = self
+            .location_type
+            .as_deref()
+            .filter(|location_type| *location_type != "either")
+        {
+            params.push(format!("location_type={location_type}"));
+        }
+
+        for (name, values) in [
+            ("topic", &self.topic),
+            ("audience", &self.audience),
+            ("activity", &self.activity),
+            ("misc_filter", &self.misc_filter),
+        ] {
+            for value in values {
+                params.push(format!("{name}[]={}", urlencoding::encode(value)));
+            }
+        }
+
+        if self.show_completed.is_some() {
+            params.push("show_completed=on".to_string());
+        }
+
+        if self.show_past.is_some() {
+            params.push("show_past=on".to_string());
+        }
+
+        if let Some(start) = parse_date(&self.start) {
+            params.push(format!("start={start}"));
+        }
+
+        if let Some(end) = parse_date(&self.end) {
+            params.push(format!("end={end}"));
+        }
+
+        // Both kinds is what a link with no kinds at all already means.
+        let kinds = SearchKinds::from_query(self);
+        if !matches!(kinds, SearchKinds::Both) {
+            for kind in kinds.as_params() {
+                params.push(format!("kind[]={kind}"));
+            }
+        }
+
+        params.join("&")
+    }
 }
 
 #[derive(Debug, TemplateOnce)]
@@ -131,23 +227,53 @@ impl FtsTermStyle {
     }
 }
 
-/// Which entity kinds a finder search covers. The `/finder` page always
-/// searches both; the concierge narrows to one kind when the visitor asks
-/// specifically for projects or for events.
+/// Which entity kinds a finder search covers. The finder's sidebar has a
+/// toggle per kind, and the concierge narrows to one kind when the visitor
+/// asks specifically for projects or for events.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SearchKinds {
     Both,
     ProjectsOnly,
     EventsOnly,
+    Neither,
 }
 
 impl SearchKinds {
+    /// The kinds a finder query asks for. No `kind[]` at all -- a bare
+    /// `/finder`, or a link written before the toggles existed -- means both.
+    pub(crate) fn from_query(query: &FinderQuery) -> Self {
+        if query.kind.is_empty() {
+            return SearchKinds::Both;
+        }
+
+        let projects = query.kind.iter().any(|kind| kind == PROJECT_KIND);
+        let events = query.kind.iter().any(|kind| kind == EVENT_KIND);
+
+        match (projects, events) {
+            (true, true) => SearchKinds::Both,
+            (true, false) => SearchKinds::ProjectsOnly,
+            (false, true) => SearchKinds::EventsOnly,
+            (false, false) => SearchKinds::Neither,
+        }
+    }
+
+    /// The `kind[]` values that ask for exactly these kinds, which is how a
+    /// link or a log line records them.
+    pub(crate) fn as_params(self) -> &'static [&'static str] {
+        match self {
+            SearchKinds::Both => &[PROJECT_KIND, EVENT_KIND],
+            SearchKinds::ProjectsOnly => &[PROJECT_KIND],
+            SearchKinds::EventsOnly => &[EVENT_KIND],
+            SearchKinds::Neither => &[NO_KIND],
+        }
+    }
+
     fn projects(self) -> bool {
-        !matches!(self, SearchKinds::EventsOnly)
+        matches!(self, SearchKinds::Both | SearchKinds::ProjectsOnly)
     }
 
     fn events(self) -> bool {
-        !matches!(self, SearchKinds::ProjectsOnly)
+        matches!(self, SearchKinds::Both | SearchKinds::EventsOnly)
     }
 }
 
@@ -287,66 +413,35 @@ struct FinderContent {
     available_audiences: Vec<String>,
     available_activities: Vec<String>,
     // Current filter state
+    search_projects: bool,
+    search_events: bool,
     location_type: String,
     selected_topics: Vec<String>,
     selected_audiences: Vec<String>,
     selected_activities: Vec<String>,
     show_completed: bool,
+    show_past: bool,
+    event_start: String,
+    event_end: String,
     has_classroom_materials: bool,
     has_app: bool,
     is_affiliate: bool,
     usa_only: bool,
     outside_usa: bool,
     exclusively_outdoors: bool,
+
+    /// This search as a query string, for the links that run it again on
+    /// another page.
+    filter_params: String,
 }
 
 impl FinderContent {
     fn pagination_params(&self, page: u32) -> String {
-        let mut params = Vec::new();
-        params.push(format!("page={}", page));
-        if !self.query.is_empty() {
-            params.push(format!("q={}", urlencoding::encode(&self.query)));
+        if self.filter_params.is_empty() {
+            format!("page={page}")
+        } else {
+            format!("page={page}&{}", self.filter_params)
         }
-        if !self.lat.is_empty() {
-            params.push(format!("lat={}", urlencoding::encode(&self.lat)));
-        }
-        if !self.lng.is_empty() {
-            params.push(format!("lng={}", urlencoding::encode(&self.lng)));
-        }
-        if !self.location_name.is_empty() {
-            params.push(format!(
-                "location_name={}",
-                urlencoding::encode(&self.location_name)
-            ));
-        }
-        if self.location_type != "either" {
-            params.push(format!("location_type={}", &self.location_type));
-        }
-        for t in &self.selected_topics {
-            params.push(format!("topic[]={}", urlencoding::encode(t)));
-        }
-        for a in &self.selected_audiences {
-            params.push(format!("audience[]={}", urlencoding::encode(a)));
-        }
-        for a in &self.selected_activities {
-            params.push(format!("activity[]={}", urlencoding::encode(a)));
-        }
-        if self.show_completed {
-            params.push("show_completed=on".to_string());
-        }
-        for (flag, key) in [
-            (self.has_classroom_materials, "has_classroom_materials"),
-            (self.has_app, "has_app"),
-            (self.is_affiliate, "is_affiliate"),
-            (self.usa_only, "usa_only"),
-            (self.outside_usa, "outside_usa"),
-            (self.exclusively_outdoors, "exclusively_outdoors"),
-        ] {
-            if flag {
-                params.push(format!("misc_filter[]={}", key));
-            }
-        }
-        params.join("&")
     }
 }
 
@@ -449,6 +544,104 @@ fn apply_project_filters<'a>(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, query: &
     }
 }
 
+/// The span of time an event has to touch to match a finder search.
+///
+/// A search that asks for no dates gets what has not finished yet, which is
+/// what the finder shows by default. "Show past events" opens the window to
+/// all of time, and a start date the searcher picked replaces the implicit
+/// "from now on" floor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct EventWindow {
+    from: Option<EventWindowStart>,
+    until: Option<Date>,
+}
+
+/// Where a window starts: on a date the searcher picked, or at whatever the
+/// present moment is when the query runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EventWindowStart {
+    Now,
+    On(Date),
+}
+
+impl EventWindow {
+    fn from_query(query: &FinderQuery) -> Self {
+        let from = match parse_date(&query.start) {
+            Some(date) => Some(EventWindowStart::On(date)),
+            None if query.show_past.is_some() => None,
+            None => Some(EventWindowStart::Now),
+        };
+
+        EventWindow {
+            from,
+            until: parse_date(&query.end),
+        }
+    }
+
+    /// Whether the window leaves anything out. An open window is no condition
+    /// at all, which also lets an event that has no instances through.
+    fn is_open(&self) -> bool {
+        self.from.is_none() && self.until.is_none()
+    }
+
+    /// Push the conditions an `event_instances` row under `alias` must meet to
+    /// fall inside the window, each introduced by its own ` AND `.
+    fn push_conditions(&self, qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, alias: &str) {
+        match self.from {
+            // An instance that has begun and not yet ended is still going on,
+            // so the window keeps it. MAX() also rescues an instance whose
+            // stored end precedes its begin, as some imported instances do.
+            Some(EventWindowStart::Now) => {
+                qb.push(format!(
+                    " AND MAX({alias}.begin, {alias}.end) >= datetime('now')"
+                ));
+            }
+            Some(EventWindowStart::On(date)) => {
+                qb.push(format!(" AND MAX({alias}.begin, {alias}.end) >= "));
+                qb.push_bind(date.to_string());
+            }
+            None => {}
+        }
+
+        if let Some(until) = self.until {
+            // Instants carry a time of day and the picked date does not, so
+            // the last day asked for runs until the day after it begins.
+            qb.push(format!(" AND {alias}.begin < "));
+            qb.push_bind(until.tomorrow().unwrap_or(until).to_string());
+        }
+    }
+}
+
+/// A `YYYY-MM-DD` date field, as a date picker submits it. Anything else --
+/// including the empty string an untouched picker sends -- is no date at all.
+fn parse_date(value: &Option<String>) -> Option<Date> {
+    Date::strptime("%Y-%m-%d", value.as_deref()?.trim()).ok()
+}
+
+/// Push the scalar subquery for the instance a result is dated and ranked by:
+/// the first one inside `window`, or the event's first of all when the window
+/// is open. Correlated on the `ev` alias the event subqueries all use.
+fn push_selected_instance_begin(
+    qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>,
+    window: &EventWindow,
+    alias: &str,
+) {
+    qb.push(format!(
+        "(SELECT {alias}.begin FROM event_instances {alias} WHERE {alias}.event_id = ev.event_id"
+    ));
+    window.push_conditions(qb, alias);
+    qb.push(format!(" ORDER BY {alias}.begin LIMIT 1)"));
+}
+
+/// Push an event's share of `comparison_value` that comes from its date: ten
+/// kilometres' worth of rank for every day until the instance the window
+/// selected, and none at all for one already under way.
+fn push_event_delay(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, window: &EventWindow) {
+    qb.push("COALESCE(MAX(0.0, julianday(");
+    push_selected_instance_begin(qb, window, "ei2");
+    qb.push(") - julianday('now')), 0.0) * 10.0");
+}
+
 /// Apply event-specific filters to a QueryBuilder
 fn apply_event_filters<'a>(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, query: &'a FinderQuery) {
     // Filter out bad geographic data: (0,0) points and swapped lat/lng
@@ -466,8 +659,11 @@ fn apply_event_filters<'a>(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, query: &'a
         _ => {}
     }
 
-    if query.show_completed.is_none() {
-        qb.push(" AND ev.event_id IN (SELECT ei.event_id FROM event_instances ei WHERE ei.begin >= datetime('now'))");
+    let window = EventWindow::from_query(query);
+    if !window.is_open() {
+        qb.push(" AND EXISTS (SELECT 1 FROM event_instances ei WHERE ei.event_id = ev.event_id");
+        window.push_conditions(qb, "ei");
+        qb.push(")");
     }
 
     if !query.topic.is_empty() {
@@ -546,6 +742,7 @@ async fn search_all(
 ) -> Result<FinderSearchResult, Error> {
     let limit = FINDER_PER_PAGE as i64;
     let offset = ((page - 1) * FINDER_PER_PAGE) as i64;
+    let window = EventWindow::from_query(fq);
 
     // Count
     let proj_count: i64 = if kinds.projects() {
@@ -604,15 +801,18 @@ async fn search_all(
              CASE WHEN ev.entirely_online = 1 THEN 'Online' \
                   WHEN ev.city != '' AND ev.state != '' THEN ev.city || ', ' || ev.state \
                   WHEN ev.location_name != '' THEN ev.location_name \
-                  ELSE '' END AS location_display, \
-             (SELECT ei.begin FROM event_instances ei WHERE ei.event_id = ev.event_id \
-              AND ei.begin >= datetime('now') ORDER BY ei.begin LIMIT 1) AS event_begin, \
+                  ELSE '' END AS location_display, ",
+        );
+        push_selected_instance_begin(&mut qb, &window, "ei");
+        qb.push(
+            " AS event_begin, \
              CASE WHEN ev.regions IS NOT NULL THEN AsGeoJSON(ev.regions) \
                   WHEN ev.point IS NOT NULL THEN AsGeoJSON(ev.point) \
-                  ELSE NULL END AS geo_json, \
-             COALESCE(MAX(0.0, julianday((SELECT ei2.begin FROM event_instances ei2 \
-              WHERE ei2.event_id = ev.event_id AND ei2.begin >= datetime('now') \
-              ORDER BY ei2.begin LIMIT 1)) - julianday('now')), 0.0) * 10.0 * 1.0 AS comparison_value \
+                  ELSE NULL END AS geo_json, ",
+        );
+        push_event_delay(&mut qb, &window);
+        qb.push(
+            " * 1.0 AS comparison_value \
              FROM entities e JOIN events ev ON e.target = ev.event_id \
              WHERE e.kind = 'Event' AND e.publish = 1",
         );
@@ -673,6 +873,7 @@ async fn search_text_only(
     let search_term = style.term_for(q);
     let limit = FINDER_PER_PAGE as i64;
     let offset = ((page - 1) * FINDER_PER_PAGE) as i64;
+    let window = EventWindow::from_query(fq);
 
     // Count
     let proj_count: i64 = if kinds.projects() {
@@ -732,15 +933,18 @@ async fn search_text_only(
              CASE WHEN ev.entirely_online = 1 THEN 'Online' \
                   WHEN ev.city != '' AND ev.state != '' THEN ev.city || ', ' || ev.state \
                   WHEN ev.location_name != '' THEN ev.location_name \
-                  ELSE '' END AS location_display, \
-             (SELECT ei.begin FROM event_instances ei WHERE ei.event_id = ev.event_id \
-              AND ei.begin >= datetime('now') ORDER BY ei.begin LIMIT 1) AS event_begin, \
+                  ELSE '' END AS location_display, ",
+        );
+        push_selected_instance_begin(&mut qb, &window, "ei");
+        qb.push(
+            " AS event_begin, \
              CASE WHEN ev.regions IS NOT NULL THEN AsGeoJSON(ev.regions) \
                   WHEN ev.point IS NOT NULL THEN AsGeoJSON(ev.point) \
-                  ELSE NULL END AS geo_json, \
-             COALESCE(MAX(0.0, julianday((SELECT ei2.begin FROM event_instances ei2 \
-              WHERE ei2.event_id = ev.event_id AND ei2.begin >= datetime('now') \
-              ORDER BY ei2.begin LIMIT 1)) - julianday('now')), 0.0) * 10.0 * 1.0 AS comparison_value \
+                  ELSE NULL END AS geo_json, ",
+        );
+        push_event_delay(&mut qb, &window);
+        qb.push(
+            " * 1.0 AS comparison_value \
              FROM entities_fts f \
              JOIN entities e ON f.slug = e.slug \
              JOIN events ev ON e.target = ev.event_id \
@@ -827,6 +1031,7 @@ async fn search_with_location(
 
     let limit = FINDER_PER_PAGE as i64;
     let offset = ((page - 1) * FINDER_PER_PAGE) as i64;
+    let window = EventWindow::from_query(fq);
 
     // Build UNION ALL with spatial columns
     let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new("SELECT * FROM (");
@@ -875,10 +1080,10 @@ async fn search_with_location(
          CASE WHEN ev.entirely_online = 1 THEN 'Online' \
               WHEN ev.city != '' AND ev.state != '' THEN ev.city || ', ' || ev.state \
               WHEN ev.location_name != '' THEN ev.location_name \
-              ELSE '' END AS location_display, \
-         (SELECT ei.begin FROM event_instances ei WHERE ei.event_id = ev.event_id \
-          AND ei.begin >= datetime('now') ORDER BY ei.begin LIMIT 1) AS event_begin, ",
+              ELSE '' END AS location_display, ",
         );
+        push_selected_instance_begin(&mut qb, &window, "ei");
+        qb.push(" AS event_begin, ");
         push_distance_km(&mut qb, LocatedTable::Events, lat, lng);
         qb.push(
             ", \
@@ -886,7 +1091,7 @@ async fn search_with_location(
               WHEN ev.point IS NOT NULL THEN AsGeoJSON(ev.point) \
               ELSE NULL END AS geo_json, ",
         );
-        push_event_comparison(&mut qb, lat, lng);
+        push_event_comparison(&mut qb, lat, lng, &window);
         qb.push(
             " \
          FROM entities_fts f \
@@ -1118,17 +1323,20 @@ fn push_project_comparison(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, lat: f64, 
     ));
 }
 
-/// Push an event's `comparison_value`: ten kilometres per day until its next
-/// instance, plus its distance -- to a footprint, else to its point, with an
-/// online event counted as 100 km away.
-fn push_event_comparison(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, lat: f64, lng: f64) {
+/// Push an event's `comparison_value`: [`push_event_delay`]'s ten kilometres
+/// per day until the instance the window selected, plus its distance -- to a
+/// footprint, else to its point, with an online event counted as 100 km away.
+fn push_event_comparison(
+    qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>,
+    lat: f64,
+    lng: f64,
+    window: &EventWindow,
+) {
     let measurable = measurable_footprint(LocatedTable::Events);
 
+    push_event_delay(qb, window);
     qb.push(format!(
-        "COALESCE(MAX(0.0, julianday((SELECT ei2.begin FROM event_instances ei2 \
-          WHERE ei2.event_id = ev.event_id AND ei2.begin >= datetime('now') \
-          ORDER BY ei2.begin LIMIT 1)) - julianday('now')), 0.0) * 10.0 \
-         + CASE WHEN ev.entirely_online = 1 THEN 100.0 \
+        " + CASE WHEN ev.entirely_online = 1 THEN 100.0 \
                 WHEN {measurable} THEN COALESCE(ST_Distance(ST_MakeValid(ev.regions), "
     ));
     push_search_point(qb, lat, lng);
@@ -1177,17 +1385,22 @@ fn push_project_location_subquery(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, lat
 
 /// Push the location-ranked **event** subquery into `qb` (no filters, no outer
 /// wrapper). Companion to [`push_project_location_subquery`].
-fn push_event_location_subquery(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, lat: f64, lng: f64) {
+fn push_event_location_subquery(
+    qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>,
+    lat: f64,
+    lng: f64,
+    window: &EventWindow,
+) {
     qb.push(
         "SELECT e.slug, 'Event' AS entity_type, ev.name AS title, ev.description, ev.image, \
          '' AS goal, '' AS task, '' AS status, \
          CASE WHEN ev.entirely_online = 1 THEN 'Online' \
               WHEN ev.city != '' AND ev.state != '' THEN ev.city || ', ' || ev.state \
               WHEN ev.location_name != '' THEN ev.location_name \
-              ELSE '' END AS location_display, \
-         (SELECT ei.begin FROM event_instances ei WHERE ei.event_id = ev.event_id \
-          AND ei.begin >= datetime('now') ORDER BY ei.begin LIMIT 1) AS event_begin, ",
+              ELSE '' END AS location_display, ",
     );
+    push_selected_instance_begin(qb, window, "ei");
+    qb.push(" AS event_begin, ");
     push_distance_km(qb, LocatedTable::Events, lat, lng);
     qb.push(
         ", \
@@ -1195,7 +1408,7 @@ fn push_event_location_subquery(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, lat: 
               WHEN ev.point IS NOT NULL THEN AsGeoJSON(ev.point) \
               ELSE NULL END AS geo_json, ",
     );
-    push_event_comparison(qb, lat, lng);
+    push_event_comparison(qb, lat, lng, window);
     qb.push(
         " \
          FROM entities e JOIN events ev ON e.target = ev.event_id \
@@ -1224,7 +1437,7 @@ fn push_location_union(
         qb.push(" UNION ALL ");
     }
     if kinds.events() {
-        push_event_location_subquery(qb, lat, lng);
+        push_event_location_subquery(qb, lat, lng, &EventWindow::from_query(fq));
         apply_event_filters(qb, fq);
     }
 }
@@ -1245,6 +1458,10 @@ fn default_location_query(lat: f64, lng: f64) -> FinderQuery {
         activity: Vec::new(),
         show_completed: None,
         misc_filter: Vec::new(),
+        kind: Vec::new(),
+        start: None,
+        end: None,
+        show_past: None,
     }
 }
 
@@ -1319,6 +1536,13 @@ pub(crate) async fn run_finder_search(
     style: FtsTermStyle,
     kinds: SearchKinds,
 ) -> Result<FinderSearchResult, Error> {
+    if matches!(kinds, SearchKinds::Neither) {
+        return Ok(FinderSearchResult {
+            results: Vec::new(),
+            total: 0,
+        });
+    }
+
     let q = query.q.as_deref().unwrap_or("").trim();
     let has_query = !q.is_empty();
 
@@ -1354,7 +1578,9 @@ pub async fn handle_finder(
             poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
         })?;
 
-    let search_result = run_finder_search(&query, page, FtsTermStyle::Phrase, SearchKinds::Both)
+    let kinds = SearchKinds::from_query(&query);
+
+    let search_result = run_finder_search(&query, page, FtsTermStyle::Phrase, kinds)
         .await
         .unwrap_or_else(|e| {
             tracing::error!("Finder search error: {}", e);
@@ -1412,6 +1638,10 @@ pub async fn handle_finder(
                 serde_json::to_string(&query.misc_filter).ok()
             },
             show_completed: query.show_completed.is_some(),
+            kinds: Some(kinds.as_params().join(",")),
+            show_past: query.show_past.is_some(),
+            event_start: parse_date(&query.start).map(|date| date.to_string()),
+            event_end: parse_date(&query.end).map(|date| date.to_string()),
             page: page as i32,
             result_count: search_result.total as i32,
             search_type: search_type.to_string(),
@@ -1455,11 +1685,20 @@ pub async fn handle_finder(
             available_topics,
             available_audiences,
             available_activities,
+            search_projects: kinds.projects(),
+            search_events: kinds.events(),
             location_type,
             selected_topics: query.topic.clone(),
             selected_audiences: query.audience.clone(),
             selected_activities: query.activity.clone(),
             show_completed: query.show_completed.is_some(),
+            show_past: query.show_past.is_some(),
+            event_start: parse_date(&query.start)
+                .map(|date| date.to_string())
+                .unwrap_or_default(),
+            event_end: parse_date(&query.end)
+                .map(|date| date.to_string())
+                .unwrap_or_default(),
             has_classroom_materials: query
                 .misc_filter
                 .iter()
@@ -1472,6 +1711,7 @@ pub async fn handle_finder(
                 .misc_filter
                 .iter()
                 .any(|v| v == "exclusively_outdoors"),
+            filter_params: query.to_query_string(),
         },
     )
     .prepare(user_info.clone())
@@ -1504,8 +1744,9 @@ pub async fn handle_finder(
 #[cfg(test)]
 mod tests {
     use super::{
-        LocatedTable, WHOLE_WORLD_KM, make_snippet, push_distance_km, push_event_comparison,
-        push_project_comparison,
+        EventWindow, EventWindowStart, FinderQuery, LocatedTable, SearchKinds, WHOLE_WORLD_KM,
+        apply_event_filters, default_location_query, make_snippet, push_distance_km,
+        push_event_comparison, push_project_comparison,
     };
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 
@@ -1521,6 +1762,12 @@ mod tests {
     const UNWRAPPED: &str = "MULTIPOLYGON(((170 -40, 190 -40, 190 -30, 170 -30, 170 -40)))";
 
     const WORLD: &str = "MULTIPOLYGON(((-180 -90, 180 -90, 180 90, -180 90, -180 -90)))";
+
+    /// What the finder asks for when nobody has touched the date fields.
+    const UPCOMING: EventWindow = EventWindow {
+        from: Some(EventWindowStart::Now),
+        until: None,
+    };
 
     /// Where the searcher stands: inside the eastern part of [`SPLIT`].
     const LAT: f64 = -35.0;
@@ -1548,7 +1795,7 @@ mod tests {
             "SELECT InitSpatialMetadata(1)",
             "CREATE TABLE projects (name TEXT, entirely_online INTEGER, regions BLOB, point BLOB)",
             "CREATE TABLE events (event_id TEXT, name TEXT, entirely_online INTEGER, regions BLOB, point BLOB)",
-            "CREATE TABLE event_instances (event_id TEXT, begin TEXT)",
+            "CREATE TABLE event_instances (event_id TEXT, begin TEXT, \"end\" TEXT)",
         ] {
             sqlx::query(statement).execute(&pool).await.unwrap();
         }
@@ -1591,7 +1838,7 @@ mod tests {
                 "projects"
             }
             LocatedTable::Events => {
-                push_event_comparison(&mut qb, LAT, LNG);
+                push_event_comparison(&mut qb, LAT, LNG, &UPCOMING);
                 "events"
             }
         };
@@ -1608,6 +1855,209 @@ mod tests {
         name: &str,
     ) -> &'a (String, Option<f64>, f64) {
         rows.iter().find(|r| r.0 == name).unwrap()
+    }
+
+    /// A search of the events, with the date fields filled in as given and
+    /// everything else left alone.
+    fn event_query(start: Option<&str>, end: Option<&str>, show_past: bool) -> FinderQuery {
+        FinderQuery {
+            start: start.map(str::to_string),
+            end: end.map(str::to_string),
+            show_past: show_past.then(|| "on".to_string()),
+            kind: vec![super::EVENT_KIND.to_string()],
+            ..default_location_query(LAT, LNG)
+        }
+    }
+
+    /// The UTC date `days` from today, as a date field submits it.
+    fn utc_date_in(days: i64) -> String {
+        let today = jiff::Timestamp::now()
+            .to_zoned(jiff::tz::TimeZone::UTC)
+            .date();
+
+        today
+            .checked_add(jiff::Span::new().days(days))
+            .unwrap()
+            .to_string()
+    }
+
+    /// An event with a single instance, running from `begin` to `end` -- both
+    /// SQLite modifiers relative to now -- and stored the way real instances
+    /// are, with a `T` and a `Z` around the time of day.
+    async fn add_event(pool: &SqlitePool, name: &str, begin: &str, end: &str) {
+        sqlx::query("INSERT INTO events VALUES (?, ?, 0, NULL, NULL)")
+            .bind(name)
+            .bind(name)
+            .execute(pool)
+            .await
+            .unwrap();
+
+        sqlx::query(
+            "INSERT INTO event_instances VALUES (?, \
+             strftime('%Y-%m-%dT%H:%M:%SZ', 'now', ?), \
+             strftime('%Y-%m-%dT%H:%M:%SZ', 'now', ?))",
+        )
+        .bind(name)
+        .bind(begin)
+        .bind(end)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    /// A database holding an event that is over, one under way, and one still
+    /// to come.
+    async fn three_events() -> SqlitePool {
+        let pool = database().await;
+        add_event(&pool, "over", "-10 days", "-9 days").await;
+        add_event(&pool, "under way", "-1 day", "+1 day").await;
+        add_event(&pool, "to come", "+10 days", "+11 days").await;
+        pool
+    }
+
+    /// The events a query keeps, by name.
+    async fn matching(pool: &SqlitePool, query: &FinderQuery) -> Vec<String> {
+        let mut qb = sqlx::QueryBuilder::new("SELECT ev.name FROM events ev WHERE 1 = 1");
+        apply_event_filters(&mut qb, query);
+        qb.push(" ORDER BY ev.name");
+
+        qb.build_query_scalar::<String>()
+            .fetch_all(pool)
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn an_event_under_way_has_not_passed() {
+        let pool = three_events().await;
+
+        assert_eq!(
+            matching(&pool, &event_query(None, None, false)).await,
+            vec!["to come".to_string(), "under way".to_string()]
+        );
+    }
+
+    #[tokio::test]
+    async fn past_events_come_back_when_they_are_asked_for() {
+        let pool = three_events().await;
+
+        assert_eq!(
+            matching(&pool, &event_query(None, None, true)).await,
+            vec![
+                "over".to_string(),
+                "to come".to_string(),
+                "under way".to_string()
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_date_range_includes_the_whole_of_its_last_day() {
+        let pool = three_events().await;
+
+        let last_day = utc_date_in(10);
+        assert_eq!(
+            matching(&pool, &event_query(None, Some(&last_day), false)).await,
+            vec!["to come".to_string(), "under way".to_string()]
+        );
+
+        let day_before = utc_date_in(9);
+        assert_eq!(
+            matching(&pool, &event_query(None, Some(&day_before), false)).await,
+            vec!["under way".to_string()]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_start_date_reaches_back_past_the_present() {
+        let pool = three_events().await;
+
+        let a_fortnight_ago = utc_date_in(-14);
+        assert_eq!(
+            matching(&pool, &event_query(Some(&a_fortnight_ago), None, false)).await,
+            vec![
+                "over".to_string(),
+                "to come".to_string(),
+                "under way".to_string()
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_date_that_is_not_one_is_no_date_at_all() {
+        let pool = three_events().await;
+
+        assert_eq!(
+            matching(&pool, &event_query(Some("whenever"), Some(""), false)).await,
+            vec!["to come".to_string(), "under way".to_string()]
+        );
+    }
+
+    #[test]
+    fn cleared_toggles_say_so_and_absent_ones_do_not() {
+        let kinds = |kind: &[&str]| {
+            SearchKinds::from_query(&FinderQuery {
+                kind: kind.iter().map(|k| k.to_string()).collect(),
+                ..default_location_query(LAT, LNG)
+            })
+        };
+
+        // A link that predates the toggles, or a bare /finder.
+        assert_eq!(kinds(&[]), SearchKinds::Both);
+        assert_eq!(kinds(&["none", "project", "event"]), SearchKinds::Both);
+        assert_eq!(kinds(&["none", "event"]), SearchKinds::EventsOnly);
+        assert_eq!(kinds(&["none", "project"]), SearchKinds::ProjectsOnly);
+        assert_eq!(kinds(&["none"]), SearchKinds::Neither);
+    }
+
+    /// The toggles ride on `kind[]`, and a browser percent-encodes those
+    /// brackets on its way to the finder -- from the `/events` redirect, or
+    /// from any link that was written out in full.
+    #[tokio::test]
+    async fn percent_encoded_kinds_still_parse() {
+        use crate::form::QsQuery;
+        use poem::FromRequest;
+
+        let request = poem::Request::builder()
+            .uri(poem::http::Uri::from_static("/finder?kind%5B%5D=event"))
+            .finish();
+
+        let QsQuery(query) = QsQuery::<FinderQuery>::from_request_without_body(&request)
+            .await
+            .unwrap();
+
+        assert_eq!(SearchKinds::from_query(&query), SearchKinds::EventsOnly);
+    }
+
+    #[test]
+    fn a_link_carries_the_filters_that_narrow_the_search() {
+        let query = FinderQuery {
+            kind: vec!["none".to_string(), "event".to_string()],
+            start: Some("2026-10-01".to_string()),
+            end: Some("whenever".to_string()),
+            show_past: Some("on".to_string()),
+            ..default_location_query(LAT, LNG)
+        };
+
+        let params = query.to_query_string();
+
+        assert!(params.contains("kind[]=event"), "{params}");
+        assert!(!params.contains("kind[]=project"), "{params}");
+        assert!(params.contains("start=2026-10-01"), "{params}");
+        assert!(params.contains("show_past=on"), "{params}");
+        // A date field that holds no date says nothing.
+        assert!(!params.contains("end="), "{params}");
+
+        // Both kinds is what a link with no kinds at all already means.
+        let both = FinderQuery {
+            kind: vec![
+                "none".to_string(),
+                "project".to_string(),
+                "event".to_string(),
+            ],
+            ..default_location_query(LAT, LNG)
+        };
+        assert!(!both.to_query_string().contains("kind[]"));
     }
 
     #[tokio::test]

@@ -4,8 +4,24 @@
 
       <!-- SIDEBAR -->
       <div class="col-span-1">
-        <form action="/finder" method="get">
+        <form action="/finder" method="get" class="finder-form">
           <fieldset>
+            <!-- What to search for -->
+            <div class="mb-4">
+              <span class="block font-semibold mb-1 !text-sm">Search For</span>
+              <%# An unchecked box submits nothing at all, so a hidden field
+                  carries the case where the searcher has cleared both. %>
+              <input type="hidden" name="kind[]" value="none" />
+              <div class="w-full rounded-sm border border-linework text-lg p-2">
+                <label class="block mb-2 !text-sm !font-normal">
+                  <input type="checkbox" id="finder-kind-projects" name="kind[]" value="project" class="mr-2" <% if self.search_projects { %>checked<% } %> /> Projects
+                </label>
+                <label class="block !text-sm !font-normal">
+                  <input type="checkbox" id="finder-kind-events" name="kind[]" value="event" class="mr-2" <% if self.search_events { %>checked<% } %> /> Events
+                </label>
+              </div>
+            </div>
+
             <div class="mb-4">
               <label class="block font-semibold mb-1 !text-sm" for="finder-location">City, State, or Zip Code</label>
               <div class="relative">
@@ -18,6 +34,18 @@
             <div class="mb-4">
               <label class="block font-semibold mb-1 !text-sm" for="finder-keywords">Keywords</label>
               <input type="text" id="finder-keywords" name="q" class="w-full rounded-sm border border-linework p-2" placeholder="e.g. dinosaurs, astronomy" value="<%= self.query %>" />
+            </div>
+
+            <!-- When (events only) -->
+            <div class="event-filter grid grid-cols-2 gap-2 mb-4">
+              <div>
+                <label class="block font-semibold mb-1 !text-sm" for="finder-start">Start Date</label>
+                <input type="date" id="finder-start" name="start" class="w-full rounded-sm border border-linework p-2" value="<%= self.event_start %>" />
+              </div>
+              <div>
+                <label class="block font-semibold mb-1 !text-sm" for="finder-end">End Date</label>
+                <input type="date" id="finder-end" name="end" class="w-full rounded-sm border border-linework p-2" value="<%= self.event_end %>" />
+              </div>
             </div>
 
             <button type="button" class="toggle-mobile-filters btn btn-small btn-secondary btn-icon block md:hidden! mb-4">
@@ -51,7 +79,7 @@
               </div>
 
               <!-- Age Groups -->
-              <div>
+              <div class="project-filter">
                 <select multiple name="audience[]" data-placeholder="Age Group(s)">
                   <% for audience in &self.available_audiences { %>
                   <option value="<%= audience %>" <% if self.selected_audiences.contains(audience) { %>selected<% } %>><%= audience %></option>
@@ -60,7 +88,7 @@
               </div>
 
               <!-- Activities -->
-              <div>
+              <div class="project-filter">
                 <select multiple name="activity[]" data-placeholder="Projects to do while...">
                   <% for activity in &self.available_activities { %>
                   <option value="<%= activity %>" <% if self.selected_activities.contains(activity) { %>selected<% } %>><%= activity %></option>
@@ -69,7 +97,7 @@
               </div>
 
               <!-- Only projects that... -->
-              <div>
+              <div class="project-filter">
                 <select multiple name="misc_filter[]" data-placeholder="Only projects that...">
                   <option value="has_classroom_materials" <% if self.has_classroom_materials { %>selected<% } %>>Have classroom materials</option>
                   <option value="has_app" <% if self.has_app { %>selected<% } %>>Use a smartphone or tablet app</option>
@@ -81,10 +109,18 @@
               </div>
 
               <!-- Show Completed -->
-              <div>
+              <div class="project-filter">
                 <div class="form-toggle inline-flex items-center gap-4">
                   <input type="checkbox" role="switch" id="show-completed" name="show_completed" value="on" class="!text-base" <% if self.show_completed { %>checked<% } %> />
                   <label for="show-completed" class="text-primary-dark !text-sm !mb-0">Show Completed Projects</label>
+                </div>
+              </div>
+
+              <!-- Show Past -->
+              <div class="event-filter">
+                <div class="form-toggle inline-flex items-center gap-4">
+                  <input type="checkbox" role="switch" id="show-past" name="show_past" value="on" class="!text-base" <% if self.show_past { %>checked<% } %> />
+                  <label for="show-past" class="text-primary-dark !text-sm !mb-0">Show Past Events</label>
                 </div>
               </div>
 
@@ -104,7 +140,9 @@
 
       <!-- RESULTS -->
       <div class="col-span-2">
-        <% if self.results.is_empty() { %>
+        <% if !self.search_projects && !self.search_events { %>
+        <p class="text-gray-500">Choose projects, events, or both to search for.</p>
+        <% } else if self.results.is_empty() { %>
         <p class="text-gray-500">No results found<% if !self.query.is_empty() { %> for "<%= self.query %>"<% } %><% if !self.location_name.is_empty() { %> near <%= self.location_name %><% } %>.</p>
         <% } else { %>
 

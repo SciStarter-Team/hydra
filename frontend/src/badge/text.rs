@@ -170,9 +170,6 @@ pub struct BadgeText {
     pub criteria_text: String,
     pub tags: Vec<String>,
     pub earn_url: Option<String>,
-    /// The artwork for this language, which is the badge's own whenever
-    /// nobody has drawn a translated one.
-    pub artwork: String,
 }
 
 impl BadgeText {
@@ -199,7 +196,6 @@ impl BadgeText {
             criteria_text,
             tags,
             earn_url: earn_url(badge, lang),
-            artwork: badge_artwork(badge, lang),
         }
     }
 }
@@ -326,7 +322,6 @@ mod tests {
             assert_eq!(english.criteria_text, badge.criteria_text());
             assert_eq!(english.tags, badge.tags());
             assert_eq!(english.earn_url.as_deref(), badge.earn_url());
-            assert_eq!(english.artwork, badge.template_path());
         }
     }
 

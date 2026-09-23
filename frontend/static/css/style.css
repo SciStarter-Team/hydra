@@ -81,6 +81,7 @@
 @import "./pages/project.css" layer(hydra);
 @import "./pages/api.css" layer(hydra);
 @import "./pages/data.css" layer(hydra);
+@import "./pages/finder.css" layer(hydra);
 
 
 /** Load Page Specific **/

@@ -973,6 +973,12 @@ pub async fn dispatch_search(input: &serde_json::Value) -> Result<ToolCallResult
         activity: activities,
         show_completed: None,
         misc_filter: Vec::new(),
+        // The link this tool hands back opens the finder on the same kinds
+        // the tool searched.
+        kind: kinds.as_params().iter().map(|k| k.to_string()).collect(),
+        start: None,
+        end: None,
+        show_past: None,
     };
 
     let finder_url = finder_url_for(&query);
@@ -1083,36 +1089,12 @@ pub async fn dispatch_communities(input: &serde_json::Value) -> Result<ToolCallR
 
 /// Build a `/finder` URL reproducing this query.
 fn finder_url_for(query: &FinderQuery) -> String {
-    let mut params = Vec::new();
-    if let Some(q) = &query.q {
-        params.push(format!("q={}", urlencoding::encode(q)));
-    }
-    if let (Some(lat), Some(lng)) = (query.lat, query.lng) {
-        params.push(format!("lat={}", lat));
-        params.push(format!("lng={}", lng));
-    }
-    if let Some(name) = &query.location_name {
-        params.push(format!("location_name={}", urlencoding::encode(name)));
-    }
-    if let Some(location_type) = &query.location_type {
-        if location_type != "either" {
-            params.push(format!("location_type={}", location_type));
-        }
-    }
-    for topic in &query.topic {
-        params.push(format!("topic[]={}", urlencoding::encode(topic)));
-    }
-    for audience in &query.audience {
-        params.push(format!("audience[]={}", urlencoding::encode(audience)));
-    }
-    for activity in &query.activity {
-        params.push(format!("activity[]={}", urlencoding::encode(activity)));
-    }
+    let params = query.to_query_string();
 
     if params.is_empty() {
         "/finder".to_string()
     } else {
-        format!("/finder?{}", params.join("&"))
+        format!("/finder?{params}")
     }
 }
 

@@ -347,6 +347,21 @@ pub struct SearchEvent {
     pub activities: Option<String>,
     pub misc_filters: Option<String>,
     pub show_completed: bool,
+
+    /// Which entity kinds the search covered: `project`, `event`, both joined
+    /// by a comma, or `none` when the searcher turned both off.
+    #[serde(default)]
+    pub kinds: Option<String>,
+    #[serde(default)]
+    pub show_past: bool,
+
+    /// Earliest event date asked for, as `YYYY-MM-DD`.
+    #[serde(default)]
+    pub event_start: Option<String>,
+
+    /// Latest event date asked for, as `YYYY-MM-DD`.
+    #[serde(default)]
+    pub event_end: Option<String>,
     pub page: i32,
     pub result_count: i32,
     pub search_type: String,

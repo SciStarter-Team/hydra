@@ -1,0 +1,13 @@
+/* Project and event finder (/finder) */
+
+/* The sidebar's kind toggles decide which filters are worth showing: a field
+   that can only narrow projects is noise in an events-only search, and the
+   date range is noise in a projects-only one. The fields keep their values
+   while hidden, so re-ticking a kind brings its filters back as they were. */
+.finder-form:not(:has(#finder-kind-projects:checked)) .project-filter {
+    display: none;
+}
+
+.finder-form:not(:has(#finder-kind-events:checked)) .event-filter {
+    display: none;
+}
