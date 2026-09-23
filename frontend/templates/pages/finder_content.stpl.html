@@ -9,39 +9,48 @@
             <!-- What to search for -->
             <div class="finder-kinds mb-4">
               <span class="block font-semibold mb-1 !text-sm">Search For</span>
-              <%# An unchecked box submits nothing at all, so a hidden field
-                  carries the case where the searcher has cleared both. %>
+              <%# An unchecked box submits nothing at all, so a hidden field carries the case where the
+              searcher has cleared both. %>
               <input type="hidden" name="kind[]" value="none" />
               <div class="w-full rounded-sm border border-linework text-lg p-2">
                 <label class="block mb-2 !text-sm !font-normal">
-                  <input type="checkbox" id="finder-kind-projects" name="kind[]" value="project" class="finder-kind mr-2" <% if self.search_projects { %>checked<% } %> /> Projects
+                  <input type="checkbox" id="finder-kind-projects" name="kind[]" value="project"
+                    class="finder-kind mr-2" <% if self.search_projects { %>checked<% } %> />
+                  Projects
                 </label>
                 <label class="block !text-sm !font-normal">
-                  <input type="checkbox" id="finder-kind-events" name="kind[]" value="event" class="finder-kind mr-2" <% if self.search_events { %>checked<% } %> /> Events
+                  <input type="checkbox" id="finder-kind-events" name="kind[]" value="event"
+                    class="finder-kind mr-2" <% if self.search_events { %>checked<% } %> />
+                  Events
                 </label>
               </div>
             </div>
 
-            <%# Shown by the stylesheet only while neither box is ticked, when
-                it stands in for the rest of the form. %>
+            <%# Shown by the stylesheet only while neither box is ticked, when it stands in for the rest of
+            the form. %>
             <p class="finder-no-kinds text-gray-500 !text-sm">Select Projects or Events to search.</p>
 
-            <%# Shown only while both are ticked, where the single-kind filters
-                would otherwise be. %>
-            <p class="finder-both-note text-gray-500 !text-sm mb-4">Filters that apply to only one of them appear when you search projects or events on their own.</p>
+            <%# Shown only while both are ticked, where the single-kind filters would otherwise be. %>
+            <p class="finder-both-note text-gray-500 !text-sm mb-4">Some filters apply to Projects
+              only or Events only, and are not shown when both are selected.</p>
 
             <div class="mb-4">
-              <label class="block font-semibold mb-1 !text-sm" for="finder-location">City, State, or Zip Code</label>
+              <label class="block font-semibold mb-1 !text-sm" for="finder-location">City, State,
+                or Zip Code</label>
               <div class="relative">
                 <div id="geosearch-location"></div>
                 <input type="hidden" name="lat" id="geosearch-lat" value="<%= self.lat %>" />
                 <input type="hidden" name="lng" id="geosearch-lng" value="<%= self.lng %>" />
-                <input type="hidden" name="location_name" id="geosearch-name" value="<%= self.location_name %>" />
+                <input type="hidden" name="location_name" id="geosearch-name"
+                  value="<%= self.location_name %>" />
               </div>
             </div>
             <div class="mb-4">
-              <label class="block font-semibold mb-1 !text-sm" for="finder-keywords">Keywords</label>
-              <input type="text" id="finder-keywords" name="q" class="w-full rounded-sm border border-linework p-2" placeholder="e.g. dinosaurs, astronomy" value="<%= self.query %>" />
+              <label class="block font-semibold mb-1 !text-sm"
+                for="finder-keywords">Keywords</label>
+              <input type="text" id="finder-keywords" name="q"
+                class="w-full rounded-sm border border-linework p-2"
+                placeholder="e.g. dinosaurs, astronomy" value="<%= self.query %>" />
             </div>
 
             <!-- When (events only) -->
@@ -49,18 +58,29 @@
               <span class="kind-note">Events only</span>
               <div class="grid grid-cols-2 gap-2">
                 <div>
-                  <label class="block font-semibold mb-1 !text-sm" for="finder-start">Start Date</label>
-                  <input type="date" id="finder-start" name="start" class="w-full rounded-sm border border-linework p-2" value="<%= self.event_start %>" />
+                  <label class="block font-semibold mb-1 !text-sm" for="finder-start">Start
+                    Date</label>
+                  <input type="date" id="finder-start" name="start"
+                    class="w-full rounded-sm border border-linework p-2"
+                    value="<%= self.event_start %>" />
                 </div>
                 <div>
-                  <label class="block font-semibold mb-1 !text-sm" for="finder-end">End Date</label>
-                  <input type="date" id="finder-end" name="end" class="w-full rounded-sm border border-linework p-2" value="<%= self.event_end %>" />
+                  <label class="block font-semibold mb-1 !text-sm" for="finder-end">End
+                    Date</label>
+                  <input type="date" id="finder-end" name="end"
+                    class="w-full rounded-sm border border-linework p-2"
+                    value="<%= self.event_end %>" />
                 </div>
               </div>
             </div>
 
-            <button type="button" class="toggle-mobile-filters btn btn-small btn-secondary btn-icon block md:hidden! mb-4">
-              <svg class="!fill-primary-action" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M22,19a.99974.99974,0,0,1-1,1H11.81573a2.982,2.982,0,0,1-5.6314,0H3a1,1,0,0,1,0-2H6.18427a2.98208,2.98208,0,0,1,5.63146,0H21A.99974.99974,0,0,1,22,19Zm-1-8H18.81573a2.98208,2.98208,0,0,0-5.63146,0H3a1,1,0,0,0,0,2H13.18433a2.982,2.982,0,0,0,5.6314,0H21a1,1,0,0,0,0-2ZM3,6H8.18433a2.982,2.982,0,0,0,5.6314,0H21a1,1,0,0,0,0-2H13.81573A2.98208,2.98208,0,0,0,8.18427,4H3A1,1,0,0,0,3,6Z"/></svg>
+            <button type="button"
+              class="toggle-mobile-filters btn btn-small btn-secondary btn-icon block md:hidden! mb-4">
+              <svg class="!fill-primary-action" xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24">
+                <path
+                  d="M22,19a.99974.99974,0,0,1-1,1H11.81573a2.982,2.982,0,0,1-5.6314,0H3a1,1,0,0,1,0-2H6.18427a2.98208,2.98208,0,0,1,5.63146,0H21A.99974.99974,0,0,1,22,19Zm-1-8H18.81573a2.98208,2.98208,0,0,0-5.63146,0H3a1,1,0,0,0,0,2H13.18433a2.982,2.982,0,0,0,5.6314,0H21a1,1,0,0,0,0-2ZM3,6H8.18433a2.982,2.982,0,0,0,5.6314,0H21a1,1,0,0,0,0-2H13.81573A2.98208,2.98208,0,0,0,8.18427,4H3A1,1,0,0,0,3,6Z" />
+              </svg>
               <span>Show Filters</span>
             </button>
 
@@ -70,13 +90,16 @@
               <!-- Location Type -->
               <div class="w-full rounded-sm border border-linework text-lg p-2 mb-4">
                 <label class="block mb-2 !text-sm !font-normal">
-                  <input type="radio" name="location_type" value="remote" class="mr-2" <% if self.location_type == "remote" { %>checked<% } %> /> Remote
+                  <input type="radio" name="location_type" value="remote" class="mr-2" <% if
+                      self.location_type=="remote" { %>checked<% } %> /> Remote
                 </label>
                 <label class="block mb-2 !text-sm !font-normal">
-                  <input type="radio" name="location_type" value="onsite" class="mr-2" <% if self.location_type == "onsite" { %>checked<% } %> /> On-Site
+                  <input type="radio" name="location_type" value="onsite" class="mr-2" <% if
+                      self.location_type=="onsite" { %>checked<% } %> /> On-Site
                 </label>
                 <label class="block !text-sm !font-normal">
-                  <input type="radio" name="location_type" value="either" class="mr-2" <% if self.location_type == "either" { %>checked<% } %> /> Either
+                  <input type="radio" name="location_type" value="either" class="mr-2" <% if
+                      self.location_type=="either" { %>checked<% } %> /> Either
                 </label>
               </div>
 
@@ -84,7 +107,9 @@
               <div>
                 <select multiple name="topic[]" data-placeholder="Select a topic(s)">
                   <% for topic in &self.available_topics { %>
-                  <option value="<%= topic %>" <% if self.selected_topics.contains(topic) { %>selected<% } %>><%= topic %></option>
+                    <option value="<%= topic %>" <% if self.selected_topics.contains(topic)
+                        { %>selected<% } %>><%= topic %>
+                    </option>
                   <% } %>
                 </select>
               </div>
@@ -94,7 +119,10 @@
                 <span class="kind-note">Projects only</span>
                 <select multiple name="audience[]" data-placeholder="Age Group(s)">
                   <% for audience in &self.available_audiences { %>
-                  <option value="<%= audience %>" <% if self.selected_audiences.contains(audience) { %>selected<% } %>><%= audience %></option>
+                    <option value="<%= audience %>" <% if
+                        self.selected_audiences.contains(audience) { %>selected<% } %>><%=
+                        audience %>
+                    </option>
                   <% } %>
                 </select>
               </div>
@@ -104,7 +132,10 @@
                 <span class="kind-note">Projects only</span>
                 <select multiple name="activity[]" data-placeholder="Projects to do while...">
                   <% for activity in &self.available_activities { %>
-                  <option value="<%= activity %>" <% if self.selected_activities.contains(activity) { %>selected<% } %>><%= activity %></option>
+                    <option value="<%= activity %>" <% if
+                        self.selected_activities.contains(activity) { %>selected<% } %>><%=
+                        activity %>
+                    </option>
                   <% } %>
                 </select>
               </div>
@@ -113,12 +144,18 @@
               <div class="project-filter">
                 <span class="kind-note">Projects only</span>
                 <select multiple name="misc_filter[]" data-placeholder="Only projects that...">
-                  <option value="has_classroom_materials" <% if self.has_classroom_materials { %>selected<% } %>>Have classroom materials</option>
-                  <option value="has_app" <% if self.has_app { %>selected<% } %>>Use a smartphone or tablet app</option>
-                  <option value="is_affiliate" <% if self.is_affiliate { %>selected<% } %>>Are SciStarter affiliates</option>
-                  <option value="usa_only" <% if self.usa_only { %>selected<% } %>>Are within the USA</option>
-                  <option value="outside_usa" <% if self.outside_usa { %>selected<% } %>>Are outside the USA</option>
-                  <option value="exclusively_outdoors" <% if self.exclusively_outdoors { %>selected<% } %>>Exclusively outdoors</option>
+                  <option value="has_classroom_materials" <% if self.has_classroom_materials {
+                      %>selected<% } %>>Have classroom materials</option>
+                  <option value="has_app" <% if self.has_app { %>selected<% } %>>Use a
+                    smartphone or tablet app</option>
+                  <option value="is_affiliate" <% if self.is_affiliate { %>selected<% } %>>Are
+                    SciStarter affiliates</option>
+                  <option value="usa_only" <% if self.usa_only { %>selected<% } %>>Are within
+                    the USA</option>
+                  <option value="outside_usa" <% if self.outside_usa { %>selected<% } %>>Are
+                    outside the USA</option>
+                  <option value="exclusively_outdoors" <% if self.exclusively_outdoors { %>
+                    selected<% } %>>Exclusively outdoors</option>
                 </select>
               </div>
 
@@ -126,8 +163,12 @@
               <div class="project-filter">
                 <span class="kind-note">Projects only</span>
                 <div class="form-toggle inline-flex items-center gap-4">
-                  <input type="checkbox" role="switch" id="show-completed" name="show_completed" value="on" class="!text-base" <% if self.show_completed { %>checked<% } %> />
-                  <label for="show-completed" class="text-primary-dark !text-sm !mb-0">Show Completed Projects</label>
+                  <input type="checkbox" role="switch" id="show-completed"
+                    name="show_completed" value="on" class="!text-base" <% if
+                    self.show_completed { %>checked<% } %> />
+                  <label for="show-completed"
+                    class="text-primary-dark !text-sm !mb-0">Show Completed
+                    Projects</label>
                 </div>
               </div>
 
@@ -135,13 +176,20 @@
               <div class="event-filter">
                 <span class="kind-note">Events only</span>
                 <div class="form-toggle inline-flex items-center gap-4">
-                  <input type="checkbox" role="switch" id="show-past" name="show_past" value="on" class="!text-base" <% if self.show_past { %>checked<% } %> />
-                  <label for="show-past" class="text-primary-dark !text-sm !mb-0">Show Past Events</label>
+                  <input type="checkbox" role="switch" id="show-past" name="show_past"
+                    value="on" class="!text-base" <% if self.show_past { %>checked<% } %> />
+                  <label for="show-past" class="text-primary-dark !text-sm !mb-0">Show
+                    Past Events</label>
                 </div>
               </div>
 
-              <button type="submit" id="finder-submit" class="btn btn-primary btn-icon md:gap-0! !border-primary-action justify-center w-full mt-4">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="fill-primary-action w-[15px] md:mr-3"><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352a144 144 0 1 0 0-288 144 144 0 1 0 0 288z"/></svg>
+              <button type="submit" id="finder-submit"
+                class="btn btn-primary btn-icon md:gap-0! !border-primary-action justify-center w-full mt-4">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"
+                  class="fill-primary-action w-[15px] md:mr-3">
+                  <path
+                    d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352a144 144 0 1 0 0-288 144 144 0 1 0 0 288z" />
+                </svg>
                 Search
               </button>
             </div>
@@ -157,141 +205,229 @@
       <!-- RESULTS -->
       <div class="col-span-2">
         <% if !self.search_projects && !self.search_events { %>
-        <p class="text-gray-500">Nothing selected to search for.</p>
+          <p class="text-gray-500">Nothing selected to search for.</p>
         <% } else if self.results.is_empty() { %>
-        <p class="text-gray-500">No results found<% if !self.query.is_empty() { %> for "<%= self.query %>"<% } %><% if !self.location_name.is_empty() { %> near <%= self.location_name %><% } %>.</p>
+          <p class="text-gray-500">No results found<% if !self.query.is_empty() { %> for "<%= self.query
+              %>"<% } %>
+            <% if !self.location_name.is_empty() { %> near <%= self.location_name %>
+            <% } %>.</p>
         <% } else { %>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <% for result in &self.results { %>
-          <% if result.entity_type == "Project" { %>
-          <!-- Project card -->
-          <div class="project-finder">
-            <% if result.is_completed { %><span class="pf-complete ribbon-project">Completed</span><% } %>
-            <a href="<%= result.link() %>" class="block">
-              <% if !result.image.is_empty() { %>
-              <img src="<%= result.image %>" alt="<%= result.title %>" class="mx-auto" />
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <% for result in &self.results { %>
+              <% if result.entity_type=="Project" { %>
+                <!-- Project card -->
+                <div class="project-finder">
+                  <% if result.is_completed { %><span
+                    class="pf-complete ribbon-project">Completed</span>
+                  <% } %>
+                  <a href="<%= result.link() %>" class="block">
+                    <% if !result.image.is_empty() { %>
+                      <img src="<%= result.image %>" alt="<%= result.title %>"
+                        class="mx-auto" />
+                    <% } else { %>
+                      <img src="/-static/img/logo/logo-rgb-coral-blue.svg"
+                        alt="SciStarter" class="mx-auto p-4" />
+                    <% } %>
+                  </a>
+                  <div class="p-4 pt-2">
+                    <h1><a href="<%= result.link() %>">
+                      <%= result.title %>
+                    </a></h1>
+                    <table>
+                      <% if !result.goal.is_empty() { %>
+                        <tr>
+                          <td
+                            class="font-bold uppercase text-sm tracking-wide text-right align-top">
+                            Goal</td>
+                          <td
+                            class="self-tooltip text-sm pl-2 line-clamp-1 leading-[1.4]">
+                            <%= result.goal %>
+                          </td>
+                        </tr>
+                      <% } %>
+                      <% if !result.task.is_empty() { %>
+                        <tr>
+                          <td
+                            class="font-bold uppercase text-sm tracking-wide text-right align-top">
+                            Task</td>
+                          <td
+                            class="self-tooltip text-sm pl-2 line-clamp-1 leading-[1.4]">
+                            <%= result.task %>
+                          </td>
+                        </tr>
+                      <% } %>
+                      <% if !result.location_display.is_empty() {
+                          %>
+                        <tr>
+                          <td
+                            class="font-bold uppercase text-sm tracking-wide text-right align-top">
+                            Where</td>
+                          <td
+                            class="text-sm pl-2 line-clamp-1">
+                            <%= result.location_display %>
+                            <% if let
+                            Some(mi)=result.distance_mi()
+                            { %> (<%=
+                                format!("{:.0}", mi)
+                                %> mi)<% } %>
+                          </td>
+                        </tr>
+                      <% } else if let Some(ref
+                      geo)=result.geo_json { %>
+                      <tr>
+                        <td
+                          class="font-bold uppercase text-sm tracking-wide text-right align-top">
+                          Where</td>
+                        <td class="text-sm pl-2"><a
+                          href="#"
+                          class="text-primary-action underline"
+                          hx-on:click="event.preventDefault(); showFinderMap('<%= result.slug %>', <%= geo %>)">See
+                          map</a></td>
+                      </tr>
+                    <% } %>
+                    </table>
+                  </div>
+                </div>
               <% } else { %>
-              <img src="/-static/img/logo/logo-rgb-coral-blue.svg" alt="SciStarter" class="mx-auto p-4" />
+                <!-- Event card -->
+                <div class="event-finder">
+                  <div class="ef-date">
+                    <span><%- result.event_date_html(TimeFormat::Month) %></span>
+                    <span><%- result.event_date_html(TimeFormat::Day) %></span>
+                    <span><%- result.event_date_html(TimeFormat::Year) %></span>
+                  </div>
+                  <div class="ef-info">
+                    <a href="<%= result.link() %>" class="block">
+                      <% if !result.image.is_empty() { %>
+                        <img src="<%= result.image %>" alt="<%= result.title %>"
+                          class="w-full rounded-sm mb-2" />
+                      <% } else { %>
+                        <img src="/-static/img/logo/logo-rgb-coral-blue.svg"
+                          alt="SciStarter" class="w-full p-4 mb-2" />
+                      <% } %>
+                    </a>
+                    <h2><a href="<%= result.link() %>">
+                      <%= result.title %>
+                    </a></h2>
+                    <% if !result.location_display.is_empty() { %>
+                      <p>
+                        <%= result.location_display %>
+                        <% if let Some(mi)=result.distance_mi() { %> (<%=
+                            format!("{:.0}", mi) %> mi)<% } %>
+                      </p>
+                    <% } else if let Some(ref geo)=result.geo_json { %>
+                      <p><a href="#" class="text-primary-action underline"
+                        hx-on:click="event.preventDefault(); showFinderMap('<%= result.slug %>', <%= geo %>)">See
+                        map</a></p>
+                    <% } %>
+                    <% if !result.description_snippet.is_empty() { %>
+                      <p class="line-clamp-2">
+                        <%= result.description_snippet %>
+                      </p>
+                    <% } %>
+                  </div>
+                </div>
               <% } %>
-            </a>
-            <div class="p-4 pt-2">
-              <h1><a href="<%= result.link() %>"><%= result.title %></a></h1>
-              <table>
-                <% if !result.goal.is_empty() { %>
-                <tr><td class="font-bold uppercase text-sm tracking-wide text-right align-top">Goal</td><td class="self-tooltip text-sm pl-2 line-clamp-1 leading-[1.4]"><%= result.goal %></td></tr>
-                <% } %>
-                <% if !result.task.is_empty() { %>
-                <tr><td class="font-bold uppercase text-sm tracking-wide text-right align-top">Task</td><td class="self-tooltip text-sm pl-2 line-clamp-1 leading-[1.4]"><%= result.task %></td></tr>
-                <% } %>
-                <% if !result.location_display.is_empty() { %>
-                <tr><td class="font-bold uppercase text-sm tracking-wide text-right align-top">Where</td><td class="text-sm pl-2 line-clamp-1"><%= result.location_display %><% if let Some(mi) = result.distance_mi() { %> (<%= format!("{:.0}", mi) %> mi)<% } %></td></tr>
-                <% } else if let Some(ref geo) = result.geo_json { %>
-                <tr><td class="font-bold uppercase text-sm tracking-wide text-right align-top">Where</td><td class="text-sm pl-2"><a href="#" class="text-primary-action underline" hx-on:click="event.preventDefault(); showFinderMap('<%= result.slug %>', <%= geo %>)">See map</a></td></tr>
-                <% } %>
-              </table>
-            </div>
-          </div>
-          <% } else { %>
-          <!-- Event card -->
-          <div class="event-finder">
-            <div class="ef-date">
-              <span><%- result.event_date_html(TimeFormat::Month) %></span>
-              <span><%- result.event_date_html(TimeFormat::Day) %></span>
-              <span><%- result.event_date_html(TimeFormat::Year) %></span>
-            </div>
-            <div class="ef-info">
-              <a href="<%= result.link() %>" class="block">
-                <% if !result.image.is_empty() { %>
-                <img src="<%= result.image %>" alt="<%= result.title %>" class="w-full rounded-sm mb-2" />
-                <% } else { %>
-                <img src="/-static/img/logo/logo-rgb-coral-blue.svg" alt="SciStarter" class="w-full p-4 mb-2" />
-                <% } %>
-              </a>
-              <h2><a href="<%= result.link() %>"><%= result.title %></a></h2>
-              <% if !result.location_display.is_empty() { %>
-              <p><%= result.location_display %><% if let Some(mi) = result.distance_mi() { %> (<%= format!("{:.0}", mi) %> mi)<% } %></p>
-              <% } else if let Some(ref geo) = result.geo_json { %>
-              <p><a href="#" class="text-primary-action underline" hx-on:click="event.preventDefault(); showFinderMap('<%= result.slug %>', <%= geo %>)">See map</a></p>
-              <% } %>
-              <% if !result.description_snippet.is_empty() { %>
-              <p class="line-clamp-2"><%= result.description_snippet %></p>
-              <% } %>
-            </div>
-          </div>
-          <% } %>
-          <% } %>
-        </div><!-- grid -->
+            <% } %>
+          </div><!-- grid -->
 
-        <!-- Pagination -->
-        <% if self.total_pages > 1 { %>
-        <div class="flex items-center mx-auto bg-white px-4 py-3 sm:px-6 mt-4">
-          <div class="flex items-center justify-center w-full">
-            <div>
-              <nav class="isolate inline-flex -space-x-px rounded-md shadow-xs" aria-label="Pagination">
-                <% if self.has_previous { %>
-                <a href="/finder?<%= self.pagination_params(self.current_page - 1) %>" class="relative inline-flex items-center rounded-l-md px-2 py-2 text-primary-action ring-1 ring-inset ring-gray-300 focus:z-20 focus:outline-offset-0 hover:text-white hover:bg-primary-action">
-                  <span class="sr-only">Previous</span>
-                  <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                    <path fill-rule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clip-rule="evenodd" />
-                  </svg>
-                </a>
-                <% } else { %>
-                <span class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-300 ring-1 ring-inset ring-gray-300">
-                  <span class="sr-only">Previous</span>
-                  <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                    <path fill-rule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clip-rule="evenodd" />
-                  </svg>
-                </span>
-                <% } %>
-                <%
-                  let window = 2u32;
-                  let mut pages_to_show: Vec<u32> = Vec::new();
-                  pages_to_show.push(1);
-                  let start = if self.current_page > window + 1 { self.current_page - window } else { 2 };
-                  let end = if self.current_page + window < self.total_pages { self.current_page + window } else { self.total_pages - 1 };
-                  for p in start..=end {
-                    if p > 1 && p < self.total_pages {
-                      pages_to_show.push(p);
-                    }
-                  }
-                  if self.total_pages > 1 { pages_to_show.push(self.total_pages); }
-                  let mut last_shown = 0u32;
-                  for &p in &pages_to_show {
-                    if last_shown > 0 && p > last_shown + 1 {
-                %>
-                <span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-700 ring-1 ring-inset focus:outline-offset-0">...</span>
-                <%  }
-                    if p == self.current_page {
-                %>
-                <a href="/finder?<%= self.pagination_params(p) %>" aria-current="page" class="relative z-10 inline-flex items-center bg-primary-action px-4 py-2 text-sm font-semibold text-white focus:z-20 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2"><%= p %></a>
-                <%  } else { %>
-                <a href="/finder?<%= self.pagination_params(p) %>" class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-primary-action ring-1 ring-inset hover:bg-primary-action hover:text-white focus:z-20 focus:outline-offset-0"><%= p %></a>
-                <%  }
-                    last_shown = p;
-                  }
-                %>
-                <% if self.has_next { %>
-                <a href="/finder?<%= self.pagination_params(self.current_page + 1) %>" class="relative inline-flex items-center rounded-r-md px-2 py-2 text-primary-action ring-1 ring-inset hover:bg-primary-action hover:text-white focus:z-20 focus:outline-offset-0">
-                  <span class="sr-only">Next</span>
-                  <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                    <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
-                  </svg>
-                </a>
-                <% } else { %>
-                <span class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-300 ring-1 ring-inset ring-gray-300">
-                  <span class="sr-only">Next</span>
-                  <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                    <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
-                  </svg>
-                </span>
-                <% } %>
-              </nav>
+          <!-- Pagination -->
+          <% if self.total_pages> 1 { %>
+            <div class="flex items-center mx-auto bg-white px-4 py-3 sm:px-6 mt-4">
+              <div class="flex items-center justify-center w-full">
+                <div>
+                  <nav class="isolate inline-flex -space-x-px rounded-md shadow-xs"
+                    aria-label="Pagination">
+                    <% if self.has_previous { %>
+                      <a href="/finder?<%= self.pagination_params(self.current_page - 1) %>"
+                        class="relative inline-flex items-center rounded-l-md px-2 py-2 text-primary-action ring-1 ring-inset ring-gray-300 focus:z-20 focus:outline-offset-0 hover:text-white hover:bg-primary-action">
+                        <span class="sr-only">Previous</span>
+                        <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"
+                          aria-hidden="true">
+                          <path fill-rule="evenodd"
+                            d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z"
+                            clip-rule="evenodd" />
+                        </svg>
+                      </a>
+                    <% } else { %>
+                      <span
+                        class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-300 ring-1 ring-inset ring-gray-300">
+                        <span class="sr-only">Previous</span>
+                        <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"
+                          aria-hidden="true">
+                          <path fill-rule="evenodd"
+                            d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z"
+                            clip-rule="evenodd" />
+                        </svg>
+                      </span>
+                    <% } %>
+                    <% let window=2u32; let mut pages_to_show: Vec<u32> =
+                    Vec::new();
+                    pages_to_show.push(1);
+                    let start = if self.current_page > window + 1 {
+                        self.current_page - window } else { 2 };
+                    let end = if self.current_page + window <
+                    self.total_pages { self.current_page + window } else
+                    { self.total_pages - 1 }; for p in start..=end { if
+                    p> 1 && p < self.total_pages {
+                        pages_to_show.push(p); } } if self.total_pages>
+                    1 { pages_to_show.push(self.total_pages); }
+                    let mut last_shown = 0u32;
+                    for &p in &pages_to_show {
+                        if last_shown > 0 && p > last_shown + 1 {
+                            %>
+                        <span
+                          class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-700 ring-1 ring-inset focus:outline-offset-0">...</span>
+                      <% } if p==self.current_page { %>
+                        <a href="/finder?<%= self.pagination_params(p) %>"
+                          aria-current="page"
+                          class="relative z-10 inline-flex items-center bg-primary-action px-4 py-2 text-sm font-semibold text-white focus:z-20 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2">
+                          <%= p %>
+                        </a>
+                      <% } else { %>
+                        <a href="/finder?<%= self.pagination_params(p) %>"
+                          class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-primary-action ring-1 ring-inset hover:bg-primary-action hover:text-white focus:z-20 focus:outline-offset-0">
+                          <%= p %>
+                        </a>
+                      <% } last_shown=p; } %>
+                    <% if self.has_next { %>
+                      <a href="/finder?<%= self.pagination_params(self.current_page + 1) %>"
+                        class="relative inline-flex items-center rounded-r-md px-2 py-2 text-primary-action ring-1 ring-inset hover:bg-primary-action hover:text-white focus:z-20 focus:outline-offset-0">
+                        <span
+                          class="sr-only">Next</span>
+                        <svg class="h-5 w-5"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                          aria-hidden="true">
+                          <path
+                            fill-rule="evenodd"
+                            d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
+                            clip-rule="evenodd" />
+                        </svg>
+                      </a>
+                    <% } else { %>
+                      <span
+                        class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-300 ring-1 ring-inset ring-gray-300">
+                        <span
+                          class="sr-only">Next</span>
+                        <svg class="h-5 w-5"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                          aria-hidden="true">
+                          <path
+                            fill-rule="evenodd"
+                            d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
+                            clip-rule="evenodd" />
+                        </svg>
+                      </span>
+                    <% } %>
+                  </nav>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-        <% } %>
-        <!-- end pagination -->
+          <% } %>
+          <!-- end pagination -->
 
         <% } %>
       </div><!-- col-span-2 -->
@@ -309,9 +445,9 @@
 
 <!-- Geosearch widget setup -->
 <script>
-  document.addEventListener('DOMContentLoaded', function() {
-    var locationJustSelected = <% if !self.location_name.is_empty() { %>true<% } else { %>false<% } %>;
-    function getSubmitBtn() { return document.getElementById('finder-submit'); }
+  document.addEventListener('DOMContentLoaded', function () {
+    var locationJustSelected = <% if !self.location_name.is_empty() { %> true <% } else { %> false <% } %>;
+    function getSubmitBtn() {return document.getElementById('finder-submit');}
     function clearLocationFields() {
       document.getElementById('geosearch-lat').value = '';
       document.getElementById('geosearch-lng').value = '';
@@ -321,7 +457,7 @@
       container: '#geosearch-location',
       placeholder: 'City, State, or Zip Code',
       <% if !self.location_name.is_empty() { %>
-      initialState: { query: '<%= self.location_name %>' },
+        initialState: {query: '<%= self.location_name %>'},
       <% } %>
       onReset: function() {
         clearLocationFields();
@@ -340,22 +476,22 @@
       },
       plugins: [
         {
-          getSources: function(params) {
+          getSources: function (params) {
             var q = (params.query || '').trim();
             if (q.length < 3 || q.length > 10 || !/\d/.test(q) || !/^[a-zA-Z0-9 \-]+$/.test(q)) return [];
             return [{
               sourceId: 'zipcode',
-              getItems: function() {
+              getItems: function () {
                 return fetch('/-zipcode/' + encodeURIComponent(q))
-                  .then(function(r) { return r.json(); })
-                  .then(function(data) { return data.results || []; })
-                  .catch(function() { return []; });
+                .then(function (r) {return r.json();})
+                .then(function (data) {return data.results || [];})
+                .catch(function () {return [];});
               },
               templates: {
-                header: function(params) { return params.html`<div class="aa-SourceHeader">Postal Code</div>`; },
-                item: function(params) { return params.html`<div class="aa-ItemContent">${params.item.formatted}</div>`; }
+                header: function (params) {return params.html`<div class="aa-SourceHeader">Postal Code</div>`;},
+                item: function (params) {return params.html`<div class="aa-ItemContent">${params.item.formatted}</div>`;}
               },
-              onSelect: function(params) {
+              onSelect: function (params) {
                 locationJustSelected = true;
                 document.getElementById('geosearch-lat').value = params.item.latitude;
                 document.getElementById('geosearch-lng').value = params.item.longitude;
@@ -367,9 +503,9 @@
           }
         },
         opencage.OpenCageGeoSearchPlugin(
-          { key: '<%= self.geosearch_key %>' },
+          {key: '<%= self.geosearch_key %>'},
           {
-            onSelect: function(params) {
+            onSelect: function (params) {
               locationJustSelected = true;
               document.getElementById('geosearch-lat').value = params.item.geometry.lat;
               document.getElementById('geosearch-lng').value = params.item.geometry.lng;
@@ -385,10 +521,10 @@
 
 <!-- Mobile filter toggle -->
 <script>
-  document.querySelectorAll('.toggle-mobile-filters').forEach(function(toggle) {
+  document.querySelectorAll('.toggle-mobile-filters').forEach(function (toggle) {
     var filters = toggle.nextElementSibling;
     if (!filters || !filters.classList.contains('finder-filters')) return;
-    toggle.addEventListener('click', function() {
+    toggle.addEventListener('click', function () {
       filters.classList.toggle('hidden');
       var toggleSpan = toggle.querySelector('span');
       if (!toggleSpan) return;
@@ -398,11 +534,14 @@
 </script>
 
 <!-- Map modal -->
-<div id="finder-map-modal" class="fixed inset-0 z-[10000] hidden items-center justify-center bg-black/50" hx-on:click="if(event.target===this){this.classList.remove('flex');this.classList.add('hidden')}">
+<div id="finder-map-modal" class="fixed inset-0 z-[10000] hidden items-center justify-center bg-black/50"
+  hx-on:click="if(event.target===this){this.classList.remove('flex');this.classList.add('hidden')}">
   <div class="bg-white rounded-lg shadow-lg w-[90vw] max-w-2xl mx-auto">
     <div class="flex items-center justify-between p-4 border-b border-linework">
       <h3 id="finder-map-title" class="font-semibold text-lg"></h3>
-      <button hx-on:click="var m=document.getElementById('finder-map-modal');m.classList.remove('flex');m.classList.add('hidden')" class="text-gray-500 hover:text-gray-800 text-2xl leading-none">&times;</button>
+      <button
+        hx-on:click="var m=document.getElementById('finder-map-modal');m.classList.remove('flex');m.classList.add('hidden')"
+        class="text-gray-500 hover:text-gray-800 text-2xl leading-none">&times;</button>
     </div>
     <div id="finder-map" style="height:400px;"></div>
   </div>
@@ -416,31 +555,31 @@
     modal.classList.remove('hidden');
     modal.classList.add('flex');
 
-    if (finderMap) { finderMap.remove(); }
+    if (finderMap) {finderMap.remove();}
     finderMap = new maplibregl.Map({
       container: 'finder-map',
-      style: { version: 8, sources: { osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' } }, layers: [{ id: 'osm', type: 'raster', source: 'osm' }] },
+      style: {version: 8, sources: {osm: {type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}}, layers: [{id: 'osm', type: 'raster', source: 'osm'}]},
       center: [0, 0],
       zoom: 2
     });
 
-    finderMap.on('load', function() {
-      finderMap.addSource('geo', { type: 'geojson', data: geojson });
-      if (geojson.type === 'Point') {
-        finderMap.addLayer({ id: 'geo-point', type: 'circle', source: 'geo', paint: { 'circle-radius': 8, 'circle-color': '#e05a47', 'circle-stroke-width': 2, 'circle-stroke-color': '#fff' } });
-        finderMap.setCenter(geojson.coordinates);
-        finderMap.setZoom(10);
-      } else {
-        finderMap.addLayer({ id: 'geo-fill', type: 'fill', source: 'geo', paint: { 'fill-color': '#e05a47', 'fill-opacity': 0.3 } });
-        finderMap.addLayer({ id: 'geo-line', type: 'line', source: 'geo', paint: { 'line-color': '#e05a47', 'line-width': 2 } });
-        var bounds = new maplibregl.LngLatBounds();
-        function addCoords(coords) {
-          if (typeof coords[0] === 'number') { bounds.extend(coords); }
-          else { coords.forEach(addCoords); }
-        }
-        addCoords(geojson.coordinates);
-        finderMap.fitBounds(bounds, { padding: 40 });
+        finderMap.on('load', function () {
+          finderMap.addSource('geo', {type: 'geojson', data: geojson});
+          if (geojson.type === 'Point') {
+            finderMap.addLayer({id: 'geo-point', type: 'circle', source: 'geo', paint: {'circle-radius': 8, 'circle-color': '#e05a47', 'circle-stroke-width': 2, 'circle-stroke-color': '#fff'}});
+            finderMap.setCenter(geojson.coordinates);
+            finderMap.setZoom(10);
+          } else {
+            finderMap.addLayer({id: 'geo-fill', type: 'fill', source: 'geo', paint: {'fill-color': '#e05a47', 'fill-opacity': 0.3}});
+            finderMap.addLayer({id: 'geo-line', type: 'line', source: 'geo', paint: {'line-color': '#e05a47', 'line-width': 2}});
+            var bounds = new maplibregl.LngLatBounds();
+            function addCoords(coords) {
+              if (typeof coords[0] === 'number') {bounds.extend(coords);}
+              else {coords.forEach(addCoords);}
+            }
+            addCoords(geojson.coordinates);
+            finderMap.fitBounds(bounds, {padding: 40});
+          }
+        });
       }
-    });
-  }
-</script>
+      </script>
