@@ -65,7 +65,7 @@ pub(crate) const EVENT_KIND: &str = "event";
 /// so rather than looking like a form that was never filled in.
 const NO_KIND: &str = "none";
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct FinderQuery {
     pub q: Option<String>,
     #[serde(default, deserialize_with = "deserialize_optional_f64")]
@@ -101,7 +101,92 @@ pub struct FinderQuery {
     pub show_past: Option<String>,
 }
 
+/// What the finder's sidebar does with a filter only one kind of result
+/// understands -- an age group, which no event records, or a date range, which
+/// no project has instances for -- when the search covers both kinds.
+///
+/// The two answers are a policy choice, not a mechanism one, so the choice
+/// lives here in one place: [`SingleKindFilters::CURRENT`] is what the site
+/// serves, [`FinderQuery::as_offered`] applies it to the search, and the
+/// sidebar's form carries [`SingleKindFilters::form_class`] so that
+/// `static/css/pages/finder.css` shows exactly the fields that are in force.
+/// Changing the one constant moves all three.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SingleKindFilters {
+    /// Held back until its own kind is the whole search. Results then answer
+    /// every filter on display, at the price of a plainer sidebar whenever
+    /// both kinds are searched.
+    HeldBack,
+
+    /// Offered whenever its kind is in the search, marked with the kind it
+    /// narrows. The full sidebar is always to hand, at the price of results
+    /// where one kind has been narrowed and the other has not.
+    ///
+    /// Allowed dead: this is the arm of a compile-time switch, so whichever
+    /// one [`SingleKindFilters::CURRENT`] does not name is never constructed
+    /// outside the tests. Drop the attribute if `CURRENT` comes to name this
+    /// one -- the other will need it instead.
+    #[allow(dead_code)]
+    Marked,
+}
+
+impl SingleKindFilters {
+    /// What the finder does today.
+    pub(crate) const CURRENT: SingleKindFilters = SingleKindFilters::HeldBack;
+
+    /// The class the sidebar's form carries under this policy, which is how
+    /// the stylesheet follows it.
+    pub(crate) fn form_class(self) -> &'static str {
+        match self {
+            SingleKindFilters::HeldBack => "",
+            SingleKindFilters::Marked => "marks-single-kind",
+        }
+    }
+}
+
 impl FinderQuery {
+    /// The query as the finder's sidebar offers it for a search of `kinds`.
+    ///
+    /// Whatever the sidebar does not offer must not narrow anything either, or
+    /// the results would be answering a question the page has stopped asking.
+    /// Dropping it here is what makes the two agree, under either
+    /// [`SingleKindFilters`] policy. The value itself stays in the query
+    /// string, so a filter set aside comes back into force with the search
+    /// that offers it.
+    ///
+    /// This is the sidebar's rule, applied where the sidebar's query arrives.
+    /// The concierge asks for what it means and gets it.
+    pub(crate) fn as_offered(
+        &self,
+        kinds: SearchKinds,
+        single_kind: SingleKindFilters,
+    ) -> FinderQuery {
+        let (projects, events) = match single_kind {
+            SingleKindFilters::HeldBack => (
+                kinds == SearchKinds::ProjectsOnly,
+                kinds == SearchKinds::EventsOnly,
+            ),
+            SingleKindFilters::Marked => (kinds.projects(), kinds.events()),
+        };
+
+        let mut offered = self.clone();
+
+        if !projects {
+            offered.audience.clear();
+            offered.activity.clear();
+            offered.misc_filter.clear();
+            offered.show_completed = None;
+        }
+
+        if !events {
+            offered.start = None;
+            offered.end = None;
+            offered.show_past = None;
+        }
+
+        offered
+    }
+
     /// The finder's own query string for this search, without `page`:
     /// everything a link needs to run it again. The pagination links and the
     /// concierge's links into the finder both go through here, so a filter
@@ -415,6 +500,10 @@ struct FinderContent {
     // Current filter state
     search_projects: bool,
     search_events: bool,
+
+    /// Marks the form with the [`SingleKindFilters`] policy the stylesheet
+    /// has to follow.
+    single_kind_class: &'static str,
     location_type: String,
     selected_topics: Vec<String>,
     selected_audiences: Vec<String>,
@@ -1580,7 +1669,13 @@ pub async fn handle_finder(
 
     let kinds = SearchKinds::from_query(&query);
 
-    let search_result = run_finder_search(&query, page, FtsTermStyle::Phrase, kinds)
+    // What the sidebar is offering, which is what the results answer. The
+    // untouched `query` still describes the form, and the links below carry
+    // it, so a filter that is out of scope here is waiting where the searcher
+    // left it when they narrow the search back to its kind.
+    let searched = query.as_offered(kinds, SingleKindFilters::CURRENT);
+
+    let search_result = run_finder_search(&searched, page, FtsTermStyle::Phrase, kinds)
         .await
         .unwrap_or_else(|e| {
             tracing::error!("Finder search error: {}", e);
@@ -1596,6 +1691,8 @@ pub async fn handle_finder(
         use common::service::send;
         use common::timestring::TimeString;
 
+        // The filters that shaped `result_count`, rather than the ones the form
+        // carried past them.
         let search_type = match (has_query, has_location) {
             (true, true) => "text_location",
             (false, true) => "location_only",
@@ -1616,32 +1713,32 @@ pub async fn handle_finder(
             } else {
                 query.location_name.clone()
             },
-            location_type: query.location_type.clone(),
-            topics: if query.topic.is_empty() {
+            location_type: searched.location_type.clone(),
+            topics: if searched.topic.is_empty() {
                 None
             } else {
-                serde_json::to_string(&query.topic).ok()
+                serde_json::to_string(&searched.topic).ok()
             },
-            audiences: if query.audience.is_empty() {
+            audiences: if searched.audience.is_empty() {
                 None
             } else {
-                serde_json::to_string(&query.audience).ok()
+                serde_json::to_string(&searched.audience).ok()
             },
-            activities: if query.activity.is_empty() {
+            activities: if searched.activity.is_empty() {
                 None
             } else {
-                serde_json::to_string(&query.activity).ok()
+                serde_json::to_string(&searched.activity).ok()
             },
-            misc_filters: if query.misc_filter.is_empty() {
+            misc_filters: if searched.misc_filter.is_empty() {
                 None
             } else {
-                serde_json::to_string(&query.misc_filter).ok()
+                serde_json::to_string(&searched.misc_filter).ok()
             },
-            show_completed: query.show_completed.is_some(),
+            show_completed: searched.show_completed.is_some(),
             kinds: Some(kinds.as_params().join(",")),
-            show_past: query.show_past.is_some(),
-            event_start: parse_date(&query.start).map(|date| date.to_string()),
-            event_end: parse_date(&query.end).map(|date| date.to_string()),
+            show_past: searched.show_past.is_some(),
+            event_start: parse_date(&searched.start).map(|date| date.to_string()),
+            event_end: parse_date(&searched.end).map(|date| date.to_string()),
             page: page as i32,
             result_count: search_result.total as i32,
             search_type: search_type.to_string(),
@@ -1687,6 +1784,7 @@ pub async fn handle_finder(
             available_activities,
             search_projects: kinds.projects(),
             search_events: kinds.events(),
+            single_kind_class: SingleKindFilters::CURRENT.form_class(),
             location_type,
             selected_topics: query.topic.clone(),
             selected_audiences: query.audience.clone(),
@@ -1744,9 +1842,10 @@ pub async fn handle_finder(
 #[cfg(test)]
 mod tests {
     use super::{
-        EventWindow, EventWindowStart, FinderQuery, LocatedTable, SearchKinds, WHOLE_WORLD_KM,
-        apply_event_filters, default_location_query, make_snippet, push_distance_km,
-        push_event_comparison, push_project_comparison,
+        EVENT_KIND, EventWindow, EventWindowStart, FinderQuery, LocatedTable, PROJECT_KIND,
+        SearchKinds, SingleKindFilters, WHOLE_WORLD_KM, apply_event_filters,
+        default_location_query, make_snippet, push_distance_km, push_event_comparison,
+        push_project_comparison,
     };
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 
@@ -2027,6 +2126,108 @@ mod tests {
             .unwrap();
 
         assert_eq!(SearchKinds::from_query(&query), SearchKinds::EventsOnly);
+    }
+
+    /// Everything a sidebar can be filled in with, so that what survives
+    /// [`FinderQuery::as_offered`] is the whole of what a search is offered.
+    fn every_filter() -> FinderQuery {
+        FinderQuery {
+            topic: vec!["Birds".to_string()],
+            audience: vec!["Kids".to_string()],
+            activity: vec!["At home".to_string()],
+            misc_filter: vec!["has_app".to_string()],
+            show_completed: Some("on".to_string()),
+            start: Some("2026-10-01".to_string()),
+            end: Some("2026-10-31".to_string()),
+            show_past: Some("on".to_string()),
+            ..default_location_query(LAT, LNG)
+        }
+    }
+
+    #[test]
+    fn a_search_of_both_kinds_is_offered_only_what_they_share() {
+        let both = every_filter().as_offered(SearchKinds::Both, SingleKindFilters::HeldBack);
+
+        // Shared ground: every kind of result can be judged by these.
+        assert_eq!(both.topic, vec!["Birds".to_string()]);
+        assert_eq!(both.lat, Some(LAT));
+
+        // A project's filters would leave the events unvetted, and the dates
+        // would leave the projects unvetted, so neither set is in play.
+        assert!(both.audience.is_empty());
+        assert!(both.activity.is_empty());
+        assert!(both.misc_filter.is_empty());
+        assert!(both.show_completed.is_none());
+        assert!(both.start.is_none());
+        assert!(both.end.is_none());
+        assert!(both.show_past.is_none());
+    }
+
+    #[test]
+    fn a_search_of_one_kind_is_offered_that_kinds_filters() {
+        let projects =
+            every_filter().as_offered(SearchKinds::ProjectsOnly, SingleKindFilters::HeldBack);
+
+        assert_eq!(projects.audience, vec!["Kids".to_string()]);
+        assert_eq!(projects.activity, vec!["At home".to_string()]);
+        assert_eq!(projects.misc_filter, vec!["has_app".to_string()]);
+        assert!(projects.show_completed.is_some());
+        assert!(projects.start.is_none());
+        assert!(projects.show_past.is_none());
+
+        let events =
+            every_filter().as_offered(SearchKinds::EventsOnly, SingleKindFilters::HeldBack);
+
+        assert_eq!(events.start.as_deref(), Some("2026-10-01"));
+        assert_eq!(events.end.as_deref(), Some("2026-10-31"));
+        assert!(events.show_past.is_some());
+        assert!(events.audience.is_empty());
+        assert!(events.show_completed.is_none());
+    }
+
+    /// Marking the filters instead keeps them in force wherever the sidebar
+    /// still shows them, which is the whole point of the other policy: what is
+    /// on display is what narrowed the results, either way round.
+    #[test]
+    fn marked_filters_are_in_force_in_a_search_of_both_kinds() {
+        let both = every_filter().as_offered(SearchKinds::Both, SingleKindFilters::Marked);
+
+        assert_eq!(both.audience, vec!["Kids".to_string()]);
+        assert_eq!(both.start.as_deref(), Some("2026-10-01"));
+        assert!(both.show_completed.is_some());
+        assert!(both.show_past.is_some());
+
+        // A kind the search does not cover still has nothing to say about it.
+        let events = every_filter().as_offered(SearchKinds::EventsOnly, SingleKindFilters::Marked);
+
+        assert!(events.audience.is_empty());
+        assert_eq!(events.end.as_deref(), Some("2026-10-31"));
+    }
+
+    /// Only one policy can be on the page at a time, and the stylesheet knows
+    /// which by the class the form carries.
+    #[test]
+    fn each_policy_marks_the_form_its_own_way() {
+        assert!(SingleKindFilters::HeldBack.form_class().is_empty());
+        assert!(!SingleKindFilters::Marked.form_class().is_empty());
+    }
+
+    /// What is out of scope stays in the link, or narrowing the search back to
+    /// its kind would find the field empty.
+    #[test]
+    fn a_link_still_carries_a_filter_the_search_set_aside() {
+        let query = FinderQuery {
+            kind: vec![PROJECT_KIND.to_string(), EVENT_KIND.to_string()],
+            ..every_filter()
+        };
+
+        assert!(
+            query
+                .as_offered(SearchKinds::Both, SingleKindFilters::HeldBack)
+                .audience
+                .is_empty()
+        );
+        assert!(query.to_query_string().contains("audience[]=Kids"));
     }
 
     #[test]

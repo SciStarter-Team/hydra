@@ -1,13 +1,61 @@
 /* Project and event finder (/finder) */
 
-/* The sidebar's kind toggles decide which filters are worth showing: a field
-   that can only narrow projects is noise in an events-only search, and the
-   date range is noise in a projects-only one. The fields keep their values
-   while hidden, so re-ticking a kind brings its filters back as they were. */
-.finder-form:not(:has(#finder-kind-projects:checked)) .project-filter {
+/* A kind's own filters -- age group, activity and the rest for projects, the
+   date range for events -- are only ever offered while that kind is in the
+   search at all. */
+.finder-form:not(:has(#finder-kind-projects:checked)) .project-filter,
+.finder-form:not(:has(#finder-kind-events:checked)) .event-filter {
     display: none;
 }
 
-.finder-form:not(:has(#finder-kind-events:checked)) .event-filter {
+/* What happens to them in a search of both kinds is a policy, chosen in
+   `SingleKindFilters::CURRENT` (frontend/src/search.rs) and carried here by
+   the class on the form. `as_offered` drops whatever these rules hide, so the
+   results always answer the filters on display.
+
+   Held back, the default: age group narrows projects and nothing else, so
+   offering it alongside events would leave half the results unvetted, which
+   reads as a fault in the search rather than a limit of the data. The fields
+   keep their values meanwhile and come back with the search that offers
+   them. */
+.finder-form:not(.marks-single-kind):has(#finder-kind-events:checked) .project-filter,
+.finder-form:not(.marks-single-kind):has(#finder-kind-projects:checked) .event-filter {
+    display: none;
+}
+
+/* Marked, the alternative: every filter stays to hand, and each says which
+   kind of result it narrows. The mark is worth saying only where it tells the
+   searcher something -- a search of projects alone has no other kind for a
+   filter to miss. */
+.kind-note {
+    display: none;
+}
+
+.finder-form.marks-single-kind:has(#finder-kind-projects:checked):has(#finder-kind-events:checked)
+    .kind-note {
+    @apply block font-semibold mb-1 text-xs uppercase tracking-wide text-neutral-mid;
+}
+
+/* Where the held-back filters went, said only while both kinds are searched
+   and only while that is what becomes of them. */
+.finder-form.marks-single-kind .finder-both-note,
+.finder-form:not(:has(#finder-kind-projects:checked)) .finder-both-note,
+.finder-form:not(:has(#finder-kind-events:checked)) .finder-both-note {
+    display: none;
+}
+
+/* Neither kind ticked is nothing to search for, so the rest of the form goes
+   away and leaves the toggles and a line saying why. Written as "every field
+   but those" rather than as a list, so a filter added later is covered
+   without anyone having to remember this rule.
+
+   !important because one of those fields is the filter panel, which
+   .show_desktop_always holds open at desktop widths with an !important of
+   its own. */
+.finder-form:not(:has(.finder-kind:checked)) fieldset > *:not(.finder-kinds):not(.finder-no-kinds) {
+    display: none !important;
+}
+
+.finder-form:has(.finder-kind:checked) .finder-no-kinds {
     display: none;
 }
