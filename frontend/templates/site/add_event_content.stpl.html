@@ -346,15 +346,6 @@
       }
     });
 
-    // Time fields hide the browser's picker button (they draw their own
-    // clock), so a click on one opens the picker directly.
-    document.addEventListener("click", function (e) {
-      var input = e.target.closest && e.target.closest('.pill-field input[type="time"]');
-      if (input && input.showPicker) {
-        try { input.showPicker(); } catch (err) {}
-      }
-    });
-
     renumber();
   })();
 </script>

@@ -60,13 +60,12 @@ input:where([type="checkbox"][role="switch"]):checked::before {
   /* @apply bg-accent2-dark; */
 }
 
-/* Chrome, Edge, Safari */
-input[type="date"]::-webkit-calendar-picker-indicator {
+/* The add forms draw their own leading calendar and clock icons and open the
+   browser's picker from a click anywhere in the field (js/native-picker.js),
+   so Chrome's button inside the field would be a second, redundant one. Every
+   other form keeps it: it is the only way to open a picker by pointer.
+   (Firefox has no equivalent selector, so its button stays everywhere.) */
+form.add-form input[type="date"]::-webkit-calendar-picker-indicator,
+form.add-form input[type="time"]::-webkit-calendar-picker-indicator {
   display: none;
-}
-
-/* Firefox */
-input[type="date"] {
-  appearance: none;
-  -moz-appearance: textfield;
 }

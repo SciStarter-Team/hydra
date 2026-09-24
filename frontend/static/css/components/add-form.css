@@ -22,8 +22,9 @@ form .add-area {
    in the same order, that stack in the single column, so reading and tab
    order are unchanged. */
 @media (min-width: 64rem) {
+    /* Wide enough that each column fits a date, a time and a zone across. */
     .add-form-shell {
-        max-width: 64rem;
+        max-width: 66rem;
     }
     form.add-form {
         display: grid;
@@ -85,9 +86,27 @@ form .tz-pill.tz-enhanced .pill-body:has(> select:invalid) .pill-label {
     font-size: 1rem;
     line-height: 1.5rem;
 }
-form .pill-body > input:placeholder-shown:not(:focus),
-form .pill-field:not(.tz-enhanced) .pill-body > select:invalid:not(:focus) {
+form .pill-body > input:placeholder-shown:not(:focus) {
     height: 0;
+}
+/* A select keeps its height even while its label stands in the value's place:
+   folded away, the first click would land on the label and only focus it,
+   leaving the list to a second click. The label lies over it instead, and
+   lets the click through. */
+form .pill-field:not(.tz-enhanced) .pill-body:has(> select:invalid:not(:focus)) .pill-label {
+    position: absolute;
+    inset-inline: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+}
+/* The select covers the field's whole height, the padding around it
+   included, so that a click anywhere in the box opens the list rather than
+   landing on the label and merely focusing it. */
+form .pill-field:not(.tz-enhanced) .pill-body > select {
+    flex: 1 1 auto;
+    margin-block: -0.5rem;
+    padding-block: 0.5rem;
 }
 /* A select draws its own chevron: the browser's goes with the control while
    the control is folded away under its label. */
@@ -182,12 +201,14 @@ form .when-grid > .pill-field:has(input[type="date"]) {
     }
 }
 /* Three across once each fits, sized by what it holds rather than split
-   evenly: beside 4rem of icon and padding, a date's value takes about 7.75rem
-   in Inter (122px), a time's 4.75rem, and a zone's short name ("GMT+10")
+   evenly. Beside 4rem of icon and padding, a date's value needs about 7.75rem
+   and a time's about 7rem: measured in Firefox, which draws its own picker
+   button inside the field (the rule hiding that button is `-webkit-` only, so
+   Chrome's is gone and Firefox's stays). A zone's short name ("GMT+10") needs
    4rem. */
-@container (min-width: 29.5rem) {
+@container (min-width: 31.75rem) {
     form .when-grid {
-        grid-template-columns: minmax(11.75rem, 1.35fr) minmax(8.75rem, 1fr) 8rem;
+        grid-template-columns: minmax(11.75rem, 1.35fr) minmax(11rem, 1fr) 8rem;
     }
     form .when-grid > .pill-field:has(input[type="date"]) {
         grid-column: auto;
@@ -462,64 +483,6 @@ form .add-form-cancel {
 }
 .place-search-results .place-context {
     @apply block text-sm text-neutral-mid;
-}
-
-/* Month-grid calendar popover for date inputs (js/calendar-popover.js). */
-.cal-popover {
-    @apply absolute z-50 bg-white border border-linework rounded-lg shadow-lg p-3;
-    width: 18rem;
-}
-.cal-header {
-    @apply flex items-center justify-between mb-2;
-}
-.cal-title {
-    @apply font-medium;
-}
-.cal-prev,
-.cal-next {
-    @apply w-8 h-8 rounded-full text-lg leading-none;
-    background: none;
-    border: 0;
-    cursor: pointer;
-}
-.cal-prev:hover,
-.cal-next:hover {
-    @apply bg-primary-light;
-}
-.cal-grid {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 2px;
-}
-.cal-dow {
-    @apply text-xs text-neutral-mid text-center py-1;
-}
-.cal-day {
-    @apply rounded-full text-sm text-center;
-    aspect-ratio: 1;
-    background: none;
-    border: 0;
-    cursor: pointer;
-}
-.cal-day:hover {
-    @apply bg-primary-light;
-}
-.cal-day:disabled {
-    @apply text-neutral-light cursor-default;
-    background: none;
-}
-.cal-day.is-today {
-    @apply font-bold text-primary-action;
-}
-.cal-day.is-selected {
-    @apply text-white;
-    background-color: var(--color-primary-action);
-}
-
-/* A time field draws its own leading clock; the browser's picker button would
-   be a second one. The form script opens the picker on a click instead. */
-form .pill-field input[type=time]::-webkit-calendar-picker-indicator {
-    display: none;
 }
 
 /* Fieldsets group each date/time row for assistive software (with a visually
