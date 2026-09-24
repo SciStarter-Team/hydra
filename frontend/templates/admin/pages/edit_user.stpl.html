@@ -137,6 +137,20 @@
                                 Active Account
                             </label>
                         </div>
+                        <div class="flex items-start">
+                            <input
+                                type="checkbox"
+                                id="badge_allowed"
+                                name="badge_allowed"
+                                value="true"
+                                <% if self.badge_allowed { %>checked<% } %>
+                                class="mt-0.5 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                            >
+                            <label for="badge_allowed" class="ml-2 block text-sm text-gray-900">
+                                Allow badges while unverified
+                                <span class="block text-xs text-gray-500">Serves this account's badge pages and verifiable images before its email is verified</span>
+                            </label>
+                        </div>
                     </div>
                 </div>
 

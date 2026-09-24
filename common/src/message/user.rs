@@ -478,6 +478,10 @@ pub struct BadgeHolderInfo {
     pub last_name: String,
     pub primary_email: String,
     pub verified: bool,
+    /// Staff have let this account's badges be handed out although it is
+    /// not verified.
+    #[serde(default)]
+    pub badge_allowed: bool,
     pub when: TimeString,
 }
 
@@ -523,6 +527,10 @@ pub struct UserDetails {
     pub is_superuser: bool,
     pub is_page_manager: bool,
     pub verified: bool,
+    /// Staff have let this account's badges be handed out although it is
+    /// not verified.
+    #[serde(default)]
+    pub badge_allowed: bool,
     pub date_joined: String,
     pub emails: Vec<UserEmail>,
     pub orcid: Option<String>,
@@ -604,6 +612,10 @@ pub struct UserDetailsUpdateRequest {
     pub new_password: Option<String>, // None means don't change password
     pub role: String,                 // user, page_manager, staff
     pub verified: bool,
+    /// Staff have let this account's badges be handed out although it is
+    /// not verified.
+    #[serde(default)]
+    pub badge_allowed: bool,
     pub is_active: bool,
     pub orcid: Option<String>,
 }
@@ -1088,6 +1100,10 @@ pub struct UserEmailInfo {
     pub last_name: String,
     pub primary_email: String,
     pub verified: bool,
+    /// Staff have let this account's badges be handed out although it is
+    /// not verified.
+    #[serde(default)]
+    pub badge_allowed: bool,
     pub accept_emails: bool,
 }
 

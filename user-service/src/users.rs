@@ -1038,6 +1038,7 @@ pub async fn get_badge_holders(req: &Request) -> Result<BadgeHoldersResponse, Er
             u."last_name",
             u."primary_email",
             u."verified" as "verified: bool",
+            u."badge_allowed" as "badge_allowed: bool",
             ub."when"
         FROM "user_badges" ub
         INNER JOIN "users" u ON ub."user_id" = u."user_id"
@@ -1073,6 +1074,7 @@ pub async fn get_badge_holders(req: &Request) -> Result<BadgeHoldersResponse, Er
             last_name: row.last_name,
             primary_email: row.primary_email,
             verified: row.verified,
+            badge_allowed: row.badge_allowed,
             when,
         });
     }
@@ -1105,6 +1107,7 @@ pub async fn user_details_list(req: &Request) -> Result<UserDetailsListResponse,
             "is_superuser" as "is_superuser: bool",
             "is_page_manager" as "is_page_manager: bool",
             "verified" as "verified: bool",
+            "badge_allowed" as "badge_allowed: bool",
             "date_joined",
             "orcid"
         FROM "users"
@@ -1140,6 +1143,7 @@ pub async fn user_details_list(req: &Request) -> Result<UserDetailsListResponse,
             is_superuser: row.is_superuser,
             is_page_manager: row.is_page_manager,
             verified: row.verified,
+            badge_allowed: row.badge_allowed,
             date_joined: row.date_joined,
             emails: vec![], // Empty for list operations - use user_details_get for full details
             orcid: row.orcid,
@@ -1232,6 +1236,7 @@ pub async fn user_details_search(req: &Request) -> Result<UserDetailsListRespons
             u."is_superuser" as "is_superuser: bool",
             u."is_page_manager" as "is_page_manager: bool",
             u."verified" as "verified: bool",
+            u."badge_allowed" as "badge_allowed: bool",
             u."date_joined",
             u."orcid"
         FROM "users" u
@@ -1297,6 +1302,7 @@ pub async fn user_details_search(req: &Request) -> Result<UserDetailsListRespons
             is_superuser: row.is_superuser,
             is_page_manager: row.is_page_manager,
             verified: row.verified,
+            badge_allowed: row.badge_allowed,
             date_joined: row.date_joined,
             emails: vec![], // Empty for list operations - use user_details_get for full details
             orcid: row.orcid,
@@ -1331,6 +1337,7 @@ pub async fn user_details_export(req: &Request) -> Result<UserDetailsExportRespo
             "is_superuser" as "is_superuser: bool",
             "is_page_manager" as "is_page_manager: bool",
             "verified" as "verified: bool",
+            "badge_allowed" as "badge_allowed: bool",
             "date_joined",
             "orcid"
         FROM "users"
@@ -1365,6 +1372,7 @@ pub async fn user_details_export(req: &Request) -> Result<UserDetailsExportRespo
             is_superuser: row.is_superuser,
             is_page_manager: row.is_page_manager,
             verified: row.verified,
+            badge_allowed: row.badge_allowed,
             date_joined: row.date_joined,
             emails: vec![], // Empty for export operations
             orcid: row.orcid,
@@ -1391,6 +1399,7 @@ pub async fn user_details_get(req: &Request) -> Result<UserDetailsResponse, Erro
             "is_superuser" as "is_superuser: bool",
             "is_page_manager" as "is_page_manager: bool",
             "verified" as "verified: bool",
+            "badge_allowed" as "badge_allowed: bool",
             "date_joined",
             "orcid"
         FROM "users"
@@ -1422,6 +1431,7 @@ pub async fn user_details_get(req: &Request) -> Result<UserDetailsResponse, Erro
                 is_superuser: row.is_superuser,
                 is_page_manager: row.is_page_manager,
                 verified: row.verified,
+                badge_allowed: row.badge_allowed,
                 date_joined: row.date_joined,
                 emails,
                 orcid: row.orcid,
@@ -1446,6 +1456,7 @@ pub async fn user_email_info(req: &Request) -> Result<UserEmailInfo, Error> {
             "last_name",
             "primary_email",
             "verified",
+            "badge_allowed",
             "accept_emails"
         FROM "users"
         WHERE "user_id" = ?
@@ -1469,6 +1480,7 @@ pub async fn user_email_info(req: &Request) -> Result<UserEmailInfo, Error> {
                 last_name: row.last_name,
                 primary_email: row.primary_email,
                 verified: row.verified,
+                badge_allowed: row.badge_allowed,
                 accept_emails: row.accept_emails != 0,
             })
         }
@@ -1673,6 +1685,7 @@ pub async fn user_details_create(req: &Request) -> Result<UserDetailsResponse, E
         is_superuser: false,
         is_page_manager,
         verified: request.verified,
+        badge_allowed: false,
         date_joined: "now".to_string(),
         emails,
         orcid: None,
@@ -1702,7 +1715,7 @@ pub async fn user_details_update(req: &Request) -> Result<UserDetailsResponse, E
             r#"UPDATE "users" SET
                 "handle" = ?, "first_name" = ?, "last_name" = ?, "primary_email" = ?,
                 "password" = ?, "is_active" = ?, "is_staff" = ?, "is_page_manager" = ?, "verified" = ?,
-                "orcid" = ?
+                "badge_allowed" = ?, "orcid" = ?
             WHERE "user_id" = ?"#,
             request.handle,
             request.first_name,
@@ -1713,6 +1726,7 @@ pub async fn user_details_update(req: &Request) -> Result<UserDetailsResponse, E
             is_staff,
             is_page_manager,
             calculated_verified,
+            request.badge_allowed,
             request.orcid,
             user_id_str
         )
@@ -1723,7 +1737,7 @@ pub async fn user_details_update(req: &Request) -> Result<UserDetailsResponse, E
             r#"UPDATE "users" SET
                 "handle" = ?, "first_name" = ?, "last_name" = ?, "primary_email" = ?,
                 "is_active" = ?, "is_staff" = ?, "is_page_manager" = ?, "verified" = ?,
-                "orcid" = ?
+                "badge_allowed" = ?, "orcid" = ?
             WHERE "user_id" = ?"#,
             request.handle,
             request.first_name,
@@ -1733,6 +1747,7 @@ pub async fn user_details_update(req: &Request) -> Result<UserDetailsResponse, E
             is_staff,
             is_page_manager,
             calculated_verified,
+            request.badge_allowed,
             request.orcid,
             user_id_str
         )
@@ -1768,6 +1783,7 @@ pub async fn user_details_update(req: &Request) -> Result<UserDetailsResponse, E
                 is_superuser: updated_user.is_superuser != 0,
                 is_page_manager,
                 verified: calculated_verified,
+                badge_allowed: request.badge_allowed,
                 date_joined: updated_user.date_joined,
                 emails,
                 orcid: request.orcid,
@@ -2208,6 +2224,7 @@ pub async fn admin_email_toggle_verified(req: &Request) -> Result<UserDetailsRes
                             "is_superuser" as "is_superuser: bool",
                             "is_page_manager" as "is_page_manager: bool",
                             "verified" as "verified: bool",
+                            "badge_allowed" as "badge_allowed: bool",
                             "date_joined",
                             "orcid"
                         FROM "users"
@@ -2237,6 +2254,7 @@ pub async fn admin_email_toggle_verified(req: &Request) -> Result<UserDetailsRes
                         is_superuser: user_result.is_superuser,
                         is_page_manager: user_result.is_page_manager,
                         verified: user_result.verified,
+                        badge_allowed: user_result.badge_allowed,
                         date_joined: user_result.date_joined,
                         emails,
                         orcid: user_result.orcid,

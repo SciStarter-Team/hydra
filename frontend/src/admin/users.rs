@@ -331,6 +331,7 @@ struct EditUserPage {
     handle: String,
     role: String,
     active: bool,
+    badge_allowed: bool,
     emails: Vec<UserEmail>,
     error_message: Option<String>,
     orcid: Option<String>,
@@ -358,6 +359,8 @@ struct UpdateUserForm {
     role: String,
     #[serde(default)]
     active: bool,
+    #[serde(default)]
+    badge_allowed: bool,
     orcid: Option<String>,
 }
 
@@ -408,6 +411,7 @@ async fn users_edit(
                     "user".to_string()
                 },
                 active: admin_user.is_active,
+                badge_allowed: admin_user.badge_allowed,
                 emails: admin_user.emails,
                 error_message: None,
                 orcid: admin_user.orcid,
@@ -423,6 +427,7 @@ async fn users_edit(
                 handle: "".to_string(),
                 role: "user".to_string(),
                 active: true,
+                badge_allowed: false,
                 emails: vec![],
                 error_message: Some("User not found".to_string()),
                 orcid: None,
@@ -689,6 +694,7 @@ async fn users_update(
             handle: form.handle,
             role: form.role,
             active: form.active,
+            badge_allowed: form.badge_allowed,
             emails: vec![],
             error_message: Some("Email is required".to_string()),
             orcid: form.orcid,
@@ -719,6 +725,7 @@ async fn users_update(
         new_password: form.new_password.clone().filter(|p| !p.trim().is_empty()),
         role: form.role.clone(),
         verified: false, // Will be auto-calculated by backend based on email verification
+        badge_allowed: form.badge_allowed,
         is_active: form.active,
         orcid,
     };
@@ -733,7 +740,10 @@ async fn users_update(
                     "user-update",
                     user_info.user_id,
                     parsed_user_id,
-                    format!("handle={} role={}", form.handle, form.role),
+                    format!(
+                        "handle={} role={} badge_allowed={}",
+                        form.handle, form.role, form.badge_allowed
+                    ),
                 )
                 .await?;
             }
@@ -754,6 +764,7 @@ async fn users_update(
                 handle: form.handle,
                 role: form.role,
                 active: form.active,
+                badge_allowed: form.badge_allowed,
                 emails: vec![],
                 error_message: Some(format!("Failed to update user: {}", e)),
                 orcid: form.orcid,

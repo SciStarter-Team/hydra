@@ -217,6 +217,11 @@ async fn users_synchronize() {
         username: String,
         password: String,
         verified: bool,
+        // Orrery's `badge-allowed` UserFlag. Absent from a payload orrery
+        // sent before it learned to carry the flag, and read as unset, so
+        // the sync survives orrery deploying second.
+        #[serde(default)]
+        badge_allowed: bool,
         is_superuser: bool,
         is_staff: bool,
         is_test: bool,
@@ -559,6 +564,7 @@ async fn users_synchronize() {
                      -- answer orrery reached or the two compute different
                      -- digests for the same account.
                      "signup_tags",
+                     "badge_allowed",
                      -- Named explicitly because this is an INSERT OR
                      -- REPLACE: a column left out of the list is reset to
                      -- its default on every pass of the sync, which would
@@ -641,6 +647,7 @@ async fn users_synchronize() {
                      ?73,
                      ?74,
                      ?75,
+                     ?76,
                      -- Orrery is doing the pushing for as long as it is the
                      -- primary and this sync is running, and the digest it
                      -- sends says the record is current.
@@ -721,6 +728,7 @@ async fn users_synchronize() {
                 user.state,
                 user.constant_contact_digest,
                 user.signup_tags,
+                user.badge_allowed,
             )
             .execute(db)
             .await

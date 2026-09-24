@@ -194,28 +194,36 @@ impl BadgeParams {
     }
 }
 
-#[handler]
-async fn badge_instance(
-    session: &Session,
-    req: &poem::Request,
-    Path((badgeclass, user_id)): Path<(String, String)>,
-    Query(params): Query<BadgeParams>,
-) -> poem::Result<Response> {
-    let badge = Badge::from_badgeclass(&badgeclass)
+/// An earner's badge, with what issuing it takes, once it may be handed out.
+struct Issued {
+    badge: Badge,
+    user_ulid: Ulid,
+    user_badge: UserBadge,
+    user_info: UserEmailInfo,
+}
+
+fn is_own_badge(session: &Session, user_ulid: Ulid) -> bool {
+    session
+        .get::<BasicInfo>("basic_info")
+        .is_some_and(|u| u.user_id == user_ulid)
+}
+
+/// Look up `user_id`'s `badgeclass` badge, provided it may be handed out.
+///
+/// A badge is earned whether or not the earner's account is verified: the
+/// grant is recorded, and the badge is listed on their profile. What waits
+/// for verification (or for staff to allow it, which orrery records as the
+/// `badge-allowed` flag) is the credential itself: the badge page, the baked
+/// image and the assertion. Every handler that serves one of those comes
+/// through here, so none of them can hand out what the others hold back.
+async fn issued_badge(session: &Session, badgeclass: &str, user_id: &str) -> poem::Result<Issued> {
+    let badge = Badge::from_badgeclass(badgeclass)
         .ok_or_else(|| poem::Error::from_status(StatusCode::NOT_FOUND))?;
 
     let user_ulid = user_id
         .parse::<Ulid>()
         .map_err(|_| poem::Error::from_status(StatusCode::BAD_REQUEST))?;
 
-    // Check if current user owns this badge
-    let current_user: Option<BasicInfo> = session.get("basic_info");
-    let own_badge = current_user
-        .as_ref()
-        .map(|u| u.user_id == user_ulid)
-        .unwrap_or(false);
-
-    // Query user-service for badge data
     let request = UserAndBadge {
         user_id: user_ulid,
         badge,
@@ -230,7 +238,6 @@ async fn badge_instance(
 
     let user_badge = user_badge.ok_or_else(|| poem::Error::from_status(StatusCode::NOT_FOUND))?;
 
-    // Get user email
     let email_request = UserEmailInfoRequest { user_id: user_ulid };
 
     let user_info: UserEmailInfo = common::service::request("user.info.email_info", &email_request)
@@ -240,10 +247,45 @@ async fn badge_instance(
             poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
         })?;
 
-    // Check if user is verified - unverified users' badges are not publicly viewable
-    if !user_info.verified {
-        return Err(poem::Error::from_status(StatusCode::NOT_FOUND));
+    if !user_info.verified && !user_info.badge_allowed {
+        // Only the earner is told why. Anyone else sees the same bare 404 as
+        // for a badge that was never earned, so a withheld badge reveals
+        // nothing about the account behind it.
+        return Err(if is_own_badge(session, user_ulid) {
+            poem::Error::from_string(
+                tr(
+                    "This badge will not be valid until your account is verified. Check your email (including the spam folder) or visit scistarter.org to get your account verified.",
+                ),
+                StatusCode::NOT_FOUND,
+            )
+        } else {
+            poem::Error::from_status(StatusCode::NOT_FOUND)
+        });
     }
+
+    Ok(Issued {
+        badge,
+        user_ulid,
+        user_badge,
+        user_info,
+    })
+}
+
+#[handler]
+async fn badge_instance(
+    session: &Session,
+    req: &poem::Request,
+    Path((badgeclass, user_id)): Path<(String, String)>,
+    Query(params): Query<BadgeParams>,
+) -> poem::Result<Response> {
+    let Issued {
+        badge,
+        user_ulid,
+        user_badge,
+        user_info,
+    } = issued_badge(session, &badgeclass, &user_id).await?;
+
+    let own_badge = is_own_badge(session, user_ulid);
 
     // Check Accept header for content negotiation
     let accept_header = req
@@ -377,43 +419,15 @@ struct AlignmentJson {
 
 #[handler]
 async fn assertion_json(
+    session: &Session,
     Path((badgeclass, user_id)): Path<(String, String)>,
 ) -> poem::Result<Json<BadgeAssertion>> {
-    let badge = Badge::from_badgeclass(&badgeclass)
-        .ok_or_else(|| poem::Error::from_status(StatusCode::NOT_FOUND))?;
-
-    let user_ulid = user_id
-        .parse::<Ulid>()
-        .map_err(|_| poem::Error::from_status(StatusCode::BAD_REQUEST))?;
-
-    let request = UserAndBadge {
-        user_id: user_ulid,
+    let Issued {
         badge,
-    };
-
-    let user_badge: Option<UserBadge> = common::service::request("user.badges.get", &request)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to get badge from user-service: {}", e);
-            poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
-        })?;
-
-    let user_badge = user_badge.ok_or_else(|| poem::Error::from_status(StatusCode::NOT_FOUND))?;
-
-    // Get user email
-    let email_request = UserEmailInfoRequest { user_id: user_ulid };
-
-    let user_info: UserEmailInfo = common::service::request("user.info.email_info", &email_request)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to get user email: {}", e);
-            poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
-        })?;
-
-    // Check if user is verified - unverified users' badges are not publicly viewable
-    if !user_info.verified {
-        return Err(poem::Error::from_status(StatusCode::NOT_FOUND));
-    }
+        user_badge,
+        user_info,
+        ..
+    } = issued_badge(session, &badgeclass, &user_id).await?;
 
     let assertion = build_badge_assertion(
         &badgeclass,
@@ -432,44 +446,16 @@ async fn assertion_json(
 
 #[handler]
 async fn badge_png(
+    session: &Session,
     Path((badgeclass, user_id)): Path<(String, String)>,
     Query(params): Query<ImageParams>,
 ) -> poem::Result<Response> {
-    let badge = Badge::from_badgeclass(&badgeclass)
-        .ok_or_else(|| poem::Error::from_status(StatusCode::NOT_FOUND))?;
-
-    let user_ulid = user_id
-        .parse::<Ulid>()
-        .map_err(|_| poem::Error::from_status(StatusCode::BAD_REQUEST))?;
-
-    let request = UserAndBadge {
-        user_id: user_ulid,
+    let Issued {
         badge,
-    };
-
-    let user_badge: Option<UserBadge> = common::service::request("user.badges.get", &request)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to get badge from user-service: {}", e);
-            poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
-        })?;
-
-    let user_badge = user_badge.ok_or_else(|| poem::Error::from_status(StatusCode::NOT_FOUND))?;
-
-    // Get user email
-    let email_request = UserEmailInfoRequest { user_id: user_ulid };
-
-    let user_info: UserEmailInfo = common::service::request("user.info.email_info", &email_request)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to get user email: {}", e);
-            poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
-        })?;
-
-    // Check if user is verified - unverified users' badges are not publicly viewable
-    if !user_info.verified {
-        return Err(poem::Error::from_status(StatusCode::NOT_FOUND));
-    }
+        user_badge,
+        user_info,
+        ..
+    } = issued_badge(session, &badgeclass, &user_id).await?;
 
     let png_data = bake_badge(
         &badgeclass,

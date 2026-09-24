@@ -455,6 +455,7 @@ mod tests {
             is_superuser: false,
             is_page_manager: false,
             verified: true,
+            badge_allowed: false,
             date_joined: String::new(),
             emails: Vec::new(),
             orcid: None,
