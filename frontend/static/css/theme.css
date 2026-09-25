@@ -33,6 +33,9 @@
   --color-primary-light: #E8F7FF;
   --color-accent1: #F54017;
   --color-accent1-dark: #B92D0E;
+  /* Accent1 deepened just enough for white text to pass WCAG AA (4.8:1);
+     accent1 itself only reaches 3.7:1, so it is for large text only. */
+  --color-accent1-action: #D63511;
   --color-accent2: #ADBD49;
   --color-accent2-dark: #76801a;
   /* --color-black: #1C1C1C; */

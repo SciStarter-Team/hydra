@@ -17,6 +17,8 @@
   --color-primary-action: #037f9b;
   --color-primary-action-dark: #02667c;
   --color-primary-light: #e8f7ff;
+  --color-accent1-action: #d63511;
+  --color-accent1-dark: #b92d0e;
   --color-girlscout: #00b34d;
   --color-girlscout-hover: #028a3d;
   --color-linework: #d9d9d9;
@@ -82,6 +84,21 @@ a.btn {
 }
 
 a.btn:hover { background-color: var(--color-primary-action-dark); color: #fff; }
+
+/* The sign-up link is a coral pill, the same as the .signup-cta in the site
+   header (static/css/elements/btn.css). */
+.account a.signup-cta {
+  display: inline-block;
+  background-color: var(--color-accent1-action);
+  color: #fff;
+  border-radius: 9999px;
+  padding: 0.25rem 0.75rem;
+  font-weight: 700;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.account a.signup-cta:hover { background-color: var(--color-accent1-dark); color: #fff; }
 
 nav ul { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
 
@@ -199,6 +216,9 @@ nav a.girlscouts:hover { color: var(--color-girlscout-hover); border-bottom-colo
     color: var(--color-primary-action-dark);
   }
 
+  /* The sign-up pill stays coral on the panel; keep its text white on hover. */
+  header.open .account a.signup-cta:hover { color: #fff; }
+
   header.open .panel { flex-direction: column; align-items: stretch; gap: 0.75rem; }
   header.open .search input { flex: 1; width: auto; min-width: 0; }
 
@@ -244,7 +264,7 @@ nav a.girlscouts:hover { color: var(--color-girlscout-hover); border-bottom-colo
         <a href="https://scistarter.org/logout" data-ss-auth target="_top">Log Out</a>
       <% } else { %>
         <a href="https://scistarter.org/login" data-ss-auth target="_top">log in</a>
-        <a class="btn" href="https://scistarter.org/login" data-ss-auth target="_top">sign up</a>
+        <a class="signup-cta" href="https://scistarter.org/login" data-ss-auth target="_top">sign up</a>
       <% } %>
     </div>
 

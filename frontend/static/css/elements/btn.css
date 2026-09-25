@@ -78,6 +78,18 @@
     @apply py-1 px-2 text-sm;
 }
 
+/* The sign-up half of a combined "log in or sign up" link, picked out as a
+   coral pill. It is a span inside the link, so it darkens when any part of
+   the link is hovered. The embedded header (templates/embed/header.stpl.html)
+   has its own copy of this rule. */
+.signup-cta {
+    @apply inline-block rounded-full bg-accent1-action px-3 py-1 font-bold leading-tight text-white no-underline;
+}
+
+a:hover .signup-cta {
+    @apply bg-accent1-dark;
+}
+
 .btn-icon svg {
     @apply h-4;
 }
