@@ -615,7 +615,7 @@ async fn main() -> Result<(), Error> {
             StaticFile::new("apple-touch-icon.png"),
         )
         .nest("/-static", StaticFiles::new())
-        .nest("/-uploaded", upload::anonymous_routes())
+        .nest(upload::storage::UNTRACKED_PATH, upload::anonymous_routes())
         .nest("/messaging/emailer", emailer::routes())
         .nest("/api", api::routes().with(api::middleware::api_cors()))
         .at("/-mcp", post(mcp::mcp_handler))

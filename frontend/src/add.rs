@@ -1056,9 +1056,7 @@ pub async fn add_upload_image(
                     variant: None,
                     force_download: false,
                 };
-                crate::upload::STORAGE.upload_file(metadata, data).await?;
-
-                url = Some(format!("/-uploaded/{file_id}"));
+                url = Some(crate::upload::STORAGE.upload_file(metadata, data).await?);
             }
             _ => {}
         }

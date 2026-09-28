@@ -24,6 +24,42 @@ pub struct FileMetadata {
     pub force_download: bool, // Whether to serve with attachment headers
 }
 
+/// Where untracked (public) uploads are served: `<UNTRACKED_PATH>/<file id>`.
+pub const UNTRACKED_PATH: &str = "/-uploaded";
+
+/// The file id in an untracked upload's public path, if `path` is one.
+pub fn untracked_file_id(path: &str) -> Option<Ulid> {
+    path.strip_prefix(UNTRACKED_PATH)?
+        .strip_prefix('/')?
+        .parse()
+        .ok()
+}
+
+impl FileMetadata {
+    /// Where the file's bytes live in the uploads bucket:
+    /// `<sanitized filename stem>/<file id>.<extension>`, or `unnamed/<file
+    /// id>.bin` when the upload had no name. Storing and fetching both address
+    /// the object through this, and so does anything that reads the bucket
+    /// directly, such as the thumbnail service (see [`crate::thumbnail`]).
+    pub fn object_key(&self) -> String {
+        let name = self.original_filename.as_deref().map(Path::new);
+        let extension = name
+            .and_then(Path::extension)
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("bin");
+        let folder = name
+            .map(|name| {
+                sanitize_filename(
+                    name.file_stem()
+                        .and_then(|stem| stem.to_str())
+                        .unwrap_or("unnamed"),
+                )
+            })
+            .unwrap_or_else(|| "unnamed".to_string());
+        format!("{folder}/{}.{extension}", self.file_id)
+    }
+}
+
 pub struct StorageManager {
     object_store: Box<dyn ObjectStore>,
 }
@@ -66,7 +102,7 @@ impl StorageManager {
         // Return the path for the original file (first in the list)
         let file_path = match metadata.access {
             FileAccess::Tracked => format!("/-upload/files/{}", metadata.file_id),
-            FileAccess::Untracked => format!("/-uploaded/{}", metadata.file_id),
+            FileAccess::Untracked => format!("{UNTRACKED_PATH}/{}", metadata.file_id),
         };
 
         Ok(file_path)
@@ -77,29 +113,11 @@ impl StorageManager {
         processed_file: &super::processing::ProcessedFile,
         original_metadata: &FileMetadata,
     ) -> Result<()> {
-        let file_extension = processed_file
-            .original_filename
-            .as_ref()
-            .and_then(|name| Path::new(name).extension())
-            .and_then(|ext| ext.to_str())
-            .unwrap_or("bin");
-
-        let filename = format!("{}.{}", processed_file.file_id, file_extension);
-
-        let folder_name = processed_file
-            .original_filename
-            .as_ref()
-            .map(|name| {
-                // Remove extension and sanitize filename for folder name
-                let stem = Path::new(name)
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("unnamed");
-                sanitize_filename(stem)
-            })
-            .unwrap_or_else(|| "unnamed".to_string());
-
-        let object_path = format!("{}/{}", folder_name, filename);
+        let file_metadata = processed_file.to_metadata(
+            original_metadata.uploaded_by,
+            original_metadata.access.clone(),
+        );
+        let object_path = file_metadata.object_key();
         let object_key = ObjectPath::from(object_path.clone());
 
         // Store the file in object storage
@@ -109,10 +127,6 @@ impl StorageManager {
             .with_context(|| format!("Failed to upload file to object storage: {}", object_path))?;
 
         // Store metadata using LoadStorePeered
-        let file_metadata = processed_file.to_metadata(
-            original_metadata.uploaded_by,
-            original_metadata.access.clone(),
-        );
         file_metadata.store().await?;
 
         info!(
@@ -148,29 +162,7 @@ impl StorageManager {
             }
         }
 
-        // Reconstruct the object path
-        let file_extension = metadata
-            .original_filename
-            .as_ref()
-            .and_then(|name| Path::new(name).extension())
-            .and_then(|ext| ext.to_str())
-            .unwrap_or("bin");
-
-        let filename = format!("{}.{}", metadata.file_id, file_extension);
-
-        let folder_name = metadata
-            .original_filename
-            .as_ref()
-            .map(|name| {
-                let stem = Path::new(name)
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("unnamed");
-                sanitize_filename(stem)
-            })
-            .unwrap_or_else(|| "unnamed".to_string());
-
-        let object_path = format!("{}/{}", folder_name, filename);
+        let object_path = metadata.object_key();
         let object_key = ObjectPath::from(object_path.clone());
 
         // Get the file from object storage

@@ -61,19 +61,25 @@ struct ProfilePage {
 #[template(path = "ambassador/card.stpl.html")]
 pub struct AmbassadorCard {
     entry: AmbassadorDirectoryEntry,
+    /// The photo, sized for the card's 75px circle.
+    image_src: Option<String>,
 }
 
 impl AmbassadorCard {
-    fn href(&self) -> String {
-        profile_path(self.entry.user_id)
+    async fn new(entry: AmbassadorDirectoryEntry) -> AmbassadorCard {
+        let image_src = match &entry.image {
+            Some(image) => Some(thumbnail_url(image, 150, 150).await),
+            None => None,
+        };
+        AmbassadorCard { entry, image_src }
     }
 
-    /// The photo, sized for the card's 75px circle.
-    fn image_src(&self) -> Option<String> {
-        self.entry
-            .image
-            .as_deref()
-            .map(|image| thumbnail_url(image, 150, 150))
+    async fn all(entries: Vec<AmbassadorDirectoryEntry>) -> Vec<AmbassadorCard> {
+        futures::future::join_all(entries.into_iter().map(AmbassadorCard::new)).await
+    }
+
+    fn href(&self) -> String {
+        profile_path(self.entry.user_id)
     }
 
     /// The letter shown in place of a missing photo.
@@ -158,11 +164,7 @@ pub async fn directory(
     );
 
     let content = DirectoryContent {
-        cards: resp
-            .entries
-            .into_iter()
-            .map(|entry| AmbassadorCard { entry })
-            .collect(),
+        cards: AmbassadorCard::all(resp.entries).await,
         searching: !name.is_empty() || !near.is_empty(),
         name,
         near,
@@ -341,7 +343,8 @@ pub struct ProfileContent {
     user_id: Ulid,
     name: String,
     first_name: String,
-    image: Option<String>,
+    /// The photo, sized for the header's 160px circle.
+    image_src: Option<String>,
     city: String,
     state: String,
     bio_html: String,
@@ -355,13 +358,6 @@ pub struct ProfileContent {
 }
 
 impl ProfileContent {
-    /// The photo, sized for the header's 160px circle.
-    fn image_src(&self) -> Option<String> {
-        self.image
-            .as_deref()
-            .map(|image| thumbnail_url(image, 320, 320))
-    }
-
     fn place(&self) -> String {
         match (self.city.is_empty(), self.state.is_empty()) {
             (false, false) => format!("{}, {}", self.city, self.state),
@@ -438,18 +434,17 @@ pub async fn profile_page(
         video: Video::from_url(&profile.youtube_video_url),
         name: profile.name,
         first_name: profile.first_name,
-        image: profile.image,
+        image_src: match &profile.image {
+            Some(image) => Some(thumbnail_url(image, 320, 320).await),
+            None => None,
+        },
         city: profile.city,
         state: profile.state,
         listed: profile.listed,
         viewer,
         upcoming,
         past,
-        nearby: profile
-            .nearby
-            .into_iter()
-            .map(|entry| AmbassadorCard { entry })
-            .collect(),
+        nearby: AmbassadorCard::all(profile.nearby).await,
     };
     let title = format!("{} - SciStarter Ambassador", content.name);
     let layout = StandardLayout::new(profile_path(user_id), content)
