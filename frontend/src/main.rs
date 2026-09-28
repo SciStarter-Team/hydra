@@ -60,6 +60,7 @@ pub mod session;
 pub mod ssrf;
 pub mod staff;
 pub mod staff_pick;
+pub mod thumbnail;
 pub mod training;
 pub mod ui;
 pub mod upload;

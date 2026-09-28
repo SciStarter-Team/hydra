@@ -37,6 +37,7 @@ use crate::local_time::{TimeFormat, local_time};
 use crate::markdown::user_content_html;
 use crate::middleware::authorization::Authenticated;
 use crate::middleware::error_pages::error_response;
+use crate::thumbnail::thumbnail_url;
 
 #[derive(TemplateOnce)]
 #[template(path = "ambassador/page.stpl.html")]
@@ -65,6 +66,14 @@ pub struct AmbassadorCard {
 impl AmbassadorCard {
     fn href(&self) -> String {
         profile_path(self.entry.user_id)
+    }
+
+    /// The photo, sized for the card's 75px circle.
+    fn image_src(&self) -> Option<String> {
+        self.entry
+            .image
+            .as_deref()
+            .map(|image| thumbnail_url(image, 150, 150))
     }
 
     /// The letter shown in place of a missing photo.
@@ -346,6 +355,13 @@ pub struct ProfileContent {
 }
 
 impl ProfileContent {
+    /// The photo, sized for the header's 160px circle.
+    fn image_src(&self) -> Option<String> {
+        self.image
+            .as_deref()
+            .map(|image| thumbnail_url(image, 320, 320))
+    }
+
     fn place(&self) -> String {
         match (self.city.is_empty(), self.state.is_empty()) {
             (false, false) => format!("{}, {}", self.city, self.state),
