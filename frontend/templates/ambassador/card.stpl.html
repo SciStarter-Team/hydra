@@ -1,0 +1,11 @@
+<a href="<%= self.href() %>" class="flex items-center gap-4 border border-linework rounded-full overflow-hidden group hover:bg-primary-light">
+  <% if let Some(image) = &self.entry.image { %>
+    <img src="<%= image %>" alt="" loading="lazy" class="w-[75px] h-[75px] shrink-0 rounded-full object-cover">
+  <% } else { %>
+    <span aria-hidden="true" class="w-[75px] h-[75px] shrink-0 rounded-full bg-primary-light flex items-center justify-center text-2xl font-bold text-primary-dark"><%= self.initial() %></span>
+  <% } %>
+  <span class="min-w-0 pr-4">
+    <span class="block font-semibold text-primary-dark group-hover:underline"><%= self.entry.name %></span>
+    <span class="block text-sm"><%= self.entry.city %><% if !self.entry.city.is_empty() && !self.entry.state.is_empty() { %>, <% } %><%= self.entry.state %></span>
+  </span>
+</a>

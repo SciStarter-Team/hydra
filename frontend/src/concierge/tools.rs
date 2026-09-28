@@ -301,7 +301,7 @@ const DESTINATIONS: &[Destination] = &[
         source: DestinationSource::Entity("ambassador"),
     },
     Destination {
-        url: "/ambassadors-directory",
+        url: crate::ambassador::DIRECTORY_PATH,
         purpose: "the directory of SciStarter Ambassadors, searchable by location",
         area: Some(ProgramArea::Ambassadors),
         source: DestinationSource::Native,

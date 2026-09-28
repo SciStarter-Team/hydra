@@ -139,6 +139,8 @@ impl LoadStorePeered for EntityList {
 
     #[tracing::instrument]
     async fn save_to_database(&self) -> Result<(), Error> {
+        // An upsert: REPLACE would delete the row first, and the delete
+        // cascades to the list's entries, viewers and identities.
         let list_id_str = self.list_id.to_string();
         let owner_id_str = self.owner_id.to_string();
         let delegate_id_str = self.delegate_id.map(|u| u.to_string());
@@ -146,10 +148,21 @@ impl LoadStorePeered for EntityList {
         let hide_identity_form_i64 = if self.hide_identity_form { 1i64 } else { 0i64 };
 
         sqlx::query!(
-            r#"INSERT OR REPLACE INTO entity_lists (
+            r#"INSERT INTO entity_lists (
                  list_id, created_at, private, owner_id, delegate_id, name, note, sidebar, slug, hide_identity_form, image
                )
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT (list_id) DO UPDATE SET
+                 created_at = excluded.created_at,
+                 private = excluded.private,
+                 owner_id = excluded.owner_id,
+                 delegate_id = excluded.delegate_id,
+                 name = excluded.name,
+                 note = excluded.note,
+                 sidebar = excluded.sidebar,
+                 slug = excluded.slug,
+                 hide_identity_form = excluded.hide_identity_form,
+                 image = excluded.image"#,
             list_id_str,
             self.created_at,
             private_i64,

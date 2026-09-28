@@ -477,8 +477,15 @@ async fn users_synchronize() {
 
             // I would really like to see keyword parameters in SQLx
             // for DBs that support them.
+            //
+            // An upsert, never INSERT OR REPLACE. REPLACE deletes the old row
+            // before inserting, and with foreign keys on that delete cascades
+            // to everything hanging off the account (applications, joins,
+            // bookmarks, emails, tags, passkeys ...). It also resets every
+            // column the sync does not carry, such as `orcid` and
+            // `is_page_manager`, which hydra maintains itself.
             sqlx::query!(
-                r#"insert or replace into "users" (
+                r#"insert into "users" (
                      "user_id",
                      "legacy_v2_id",
                      "legacy_v2_userdata_id",
@@ -565,10 +572,6 @@ async fn users_synchronize() {
                      -- digests for the same account.
                      "signup_tags",
                      "badge_allowed",
-                     -- Named explicitly because this is an INSERT OR
-                     -- REPLACE: a column left out of the list is reset to
-                     -- its default on every pass of the sync, which would
-                     -- silently empty the sweep's work list.
                      "constant_contact_dirty"
                    )
                    values (
@@ -652,7 +655,84 @@ async fn users_synchronize() {
                      -- primary and this sync is running, and the digest it
                      -- sends says the record is current.
                      0
-                   )"#,
+                   )
+                   on conflict ("user_id") do update set
+                     "legacy_v2_id" = excluded."legacy_v2_id",
+                     "legacy_v2_userdata_id" = excluded."legacy_v2_userdata_id",
+                     "legacy_v3_id" = excluded."legacy_v3_id",
+                     "legacy_v2_profile_id" = excluded."legacy_v2_profile_id",
+                     "legacy_v3_alias_id" = excluded."legacy_v3_alias_id",
+                     "legacy_v3_profile_id" = excluded."legacy_v3_profile_id",
+                     "date_joined" = excluded."date_joined",
+                     "updated" = excluded."updated",
+                     "password" = excluded."password",
+                     "handle" = excluded."handle",
+                     "primary_email" = excluded."primary_email",
+                     "verified" = excluded."verified",
+                     "is_superuser" = excluded."is_superuser",
+                     "is_staff" = excluded."is_staff",
+                     "is_test" = excluded."is_test",
+                     "is_active" = excluded."is_active",
+                     "public" = excluded."public",
+                     "accept_emails" = excluded."accept_emails",
+                     "newsletter" = excluded."newsletter",
+                     "date_unsubscribed" = excluded."date_unsubscribed",
+                     "accept_messages" = excluded."accept_messages",
+                     "track_contributions" = excluded."track_contributions",
+                     "first_name" = excluded."first_name",
+                     "last_name" = excluded."last_name",
+                     "image" = excluded."image",
+                     "birthday" = excluded."birthday",
+                     "gender" = excluded."gender",
+                     "bio" = excluded."bio",
+                     "facebook_url" = excluded."facebook_url",
+                     "twitter_profile" = excluded."twitter_profile",
+                     "inat_username" = excluded."inat_username",
+                     "inat_last_update" = excluded."inat_last_update",
+                     "inat_linked_at" = excluded."inat_linked_at",
+                     "zipcode" = excluded."zipcode",
+                     "country" = excluded."country",
+                     "mailing_address" = excluded."mailing_address",
+                     "scientist" = excluded."scientist",
+                     "educator" = excluded."educator",
+                     "origin" = excluded."origin",
+                     "referer" = excluded."referer",
+                     "utm_source" = excluded."utm_source",
+                     "utm_medium" = excluded."utm_medium",
+                     "utm_campaign" = excluded."utm_campaign",
+                     "utm_term" = excluded."utm_term",
+                     "utm_content" = excluded."utm_content",
+                     "misc" = excluded."misc",
+                     "restricted_navigation" = excluded."restricted_navigation",
+                     "protected" = excluded."protected",
+                     "extra_skills" = excluded."extra_skills",
+                     "extra_tools" = excluded."extra_tools",
+                     "api_key" = excluded."api_key",
+                     "site_dressing" = excluded."site_dressing",
+                     "country_code" = excluded."country_code",
+                     "needs_inat_username" = excluded."needs_inat_username",
+                     "opaque_id" = excluded."opaque_id",
+                     "zooniverse_username" = excluded."zooniverse_username",
+                     "zooniverse_linked_at" = excluded."zooniverse_linked_at",
+                     "degree" = excluded."degree",
+                     "ethnicity" = excluded."ethnicity",
+                     "income" = excluded."income",
+                     "ai_opt_out" = excluded."ai_opt_out",
+                     "ai_opt_out_at" = excluded."ai_opt_out_at",
+                     "umbrella_project_id" = excluded."umbrella_project_id",
+                     "automatic_affiliate" = excluded."automatic_affiliate",
+                     "circuit_id" = excluded."circuit_id",
+                     "home_page" = excluded."home_page",
+                     "constant_contact_id" = excluded."constant_contact_id",
+                     "ambassador" = excluded."ambassador",
+                     "point" = excluded."point",
+                     "regions" = excluded."regions",
+                     "state" = excluded."state",
+                     "constant_contact_digest" = excluded."constant_contact_digest",
+                     "signup_tags" = excluded."signup_tags",
+                     "badge_allowed" = excluded."badge_allowed",
+                     "constant_contact_dirty" = excluded."constant_contact_dirty"
+                   "#,
                 user.ulid,
                 user.legacy_id,
                 user.legacy_userdata_id,
@@ -668,7 +748,7 @@ async fn users_synchronize() {
                 user.verified,
                 user_is_superuser,
                 user_is_staff,
-                0, // is_page_manager defaults to false for sync
+                0, // is_page_manager: false for a new account; hydra derives it, so an update leaves it alone
                 user_is_test,
                 user_is_active,
                 user_is_public,
@@ -2447,6 +2527,11 @@ async fn applications_synchronize() {
         survey: bool,
         reviewers: String,
         notes: String,
+        // The directory's shuffle position. Absent from a payload orrery sent
+        // before it carried the field; the row then keeps the one it has, or
+        // draws one on insert, so the sync survives orrery deploying second.
+        #[serde(default)]
+        position: Option<f64>,
     }
 
     loop {
@@ -2524,10 +2609,10 @@ async fn applications_synchronize() {
                      "marked", "archived", "cohort", "app_status", "screening_status",
                      "verified", "orientation", "kit_sent", "renewal_date",
                      "welcome_sent", "rejection_sent", "survey", "reviewers", "notes",
-                     "submitted", "updated_at"
+                     "submitted", "updated_at", "position"
                    ) VALUES (
                      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                    )
                    ON CONFLICT ("user_id") DO UPDATE SET
                      "contact_email" = excluded."contact_email",
@@ -2573,7 +2658,8 @@ async fn applications_synchronize() {
                      "reviewers" = excluded."reviewers",
                      "notes" = excluded."notes",
                      "submitted" = excluded."submitted",
-                     "updated_at" = excluded."updated_at""#,
+                     "updated_at" = excluded."updated_at",
+                     "position" = COALESCE(excluded."position", "ambassador_applications"."position")"#,
                 application.user_ulid,
                 application.contact_email,
                 application.phone,
@@ -2619,6 +2705,7 @@ async fn applications_synchronize() {
                 application.notes,
                 application.submitted,
                 application.updated,
+                application.position,
             )
             .execute(db())
             .await;
@@ -2659,6 +2746,48 @@ async fn applications_synchronize() {
         } else {
             sleep(Duration::from_secs(60 * 60)).await;
         }
+    }
+}
+
+/// Mirror orrery's ambassador connections (`User.ambassador_connections`).
+///
+/// A snapshot, not a change feed: orrery keeps no dates on the relationship,
+/// so the whole set is fetched and replaces ours, which is also how a removed
+/// connection goes away. It is a few hundred rows.
+async fn ambassador_connections_synchronize() {
+    #[derive(serde::Deserialize)]
+    struct ConnectionImport {
+        user_ulid: String,
+        entity_ulid: String,
+    }
+
+    loop {
+        let client = reqwest::Client::new();
+        let fetched = match client
+            .get("https://scistarter.org/staff/sync/ambassador_connections")
+            .bearer_auth(env!("SYNC_TOKEN"))
+            .send()
+            .await
+            .and_then(|response| response.error_for_status())
+        {
+            Ok(response) => response.json::<Vec<ConnectionImport>>().await,
+            Err(e) => Err(e),
+        };
+
+        match fetched {
+            Ok(connections) => {
+                let pairs: Vec<(String, String)> = connections
+                    .into_iter()
+                    .map(|c| (c.user_ulid, c.entity_ulid))
+                    .collect();
+                if let Err(e) = ambassador::replace_connections(&pairs).await {
+                    eprintln!("Failed to save ambassador connections: {}", e);
+                }
+            }
+            Err(e) => eprintln!("Ambassador connections sync error: {}", e),
+        }
+
+        sleep(Duration::from_secs(60 * 60)).await;
     }
 }
 
@@ -2887,6 +3016,7 @@ async fn main() {
     let _applications_sync_task = spawn(applications_synchronize());
 
     let _library_signups_sync_task = spawn(library_signups_synchronize());
+    let _ambassador_connections_sync_task = spawn(ambassador_connections_synchronize());
 
     let _constant_contact_task = spawn(constant_contact::sweep_periodically());
 

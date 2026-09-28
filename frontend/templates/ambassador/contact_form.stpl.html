@@ -1,0 +1,27 @@
+<form hx-post="<%= self.action %>" hx-target="this" hx-swap="outerHTML" class="grid grid-cols-1 gap-3">
+  <% if let Some(error) = self.error { %>
+    <p class="text-sm text-red-600"><%= error %></p>
+  <% } %>
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+    <label class="block">
+      <span class="block text-sm mb-1 font-semibold">First name</span>
+      <input type="text" name="first_name" required autocomplete="given-name" value="<%= self.first_name %>" class="w-full border border-linework rounded px-3 py-2">
+    </label>
+    <label class="block">
+      <span class="block text-sm mb-1 font-semibold">Last name</span>
+      <input type="text" name="last_name" required autocomplete="family-name" value="<%= self.last_name %>" class="w-full border border-linework rounded px-3 py-2">
+    </label>
+  </div>
+  <label class="block">
+    <span class="block text-sm mb-1 font-semibold">Dates (if applicable)</span>
+    <input type="text" name="dates" value="<%= self.dates %>" class="w-full border border-linework rounded px-3 py-2">
+  </label>
+  <label class="block">
+    <span class="block text-sm mb-1 font-semibold">Message</span>
+    <textarea name="body" rows="5" required class="w-full border border-linework rounded px-3 py-2"><%= self.body %></textarea>
+  </label>
+  <div class="flex justify-end gap-2">
+    <button type="button" class="btn btn-secondary btn-thin" hx-on:click="this.closest('dialog').close()">Cancel</button>
+    <button type="submit" class="btn btn-primary btn-thin">Send</button>
+  </div>
+</form>

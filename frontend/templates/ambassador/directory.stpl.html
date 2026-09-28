@@ -1,82 +1,162 @@
 <div class="ss-container mx-auto py-8">
-  <h1 class="text-primary-dark mb-2">SciStarter Certified Ambassadors</h1>
-  <p class="mb-6 max-w-3xl text-gray-700">
-    Certified Ambassadors have completed the Foundations of Citizen Science training and badge and
-    the Ambassador training and badge. They've also been screened by a third party and submitted an
-    application to commit to being part of this searchable directory. Please adhere to your
-    organization's screening protocols when inviting an Ambassador to attend an event. SciStarter is
-    not liable or responsible for any interaction once you connect with an Ambassador.
-  </p>
+  <div class="max-w-3xl mb-6">
+    <h1 class="text-primary-dark mb-2">Certified Ambassadors</h1>
+    <p>
+      Certified Ambassadors have completed the Foundations of Citizen Science training and badge and
+      the Ambassador training and badge. They've also been screened by a third party and submitted an
+      application to commit to being part of this searchable directory. Please adhere to your
+      organization's screening protocols when inviting an Ambassador to attend an event. SciStarter is
+      not liable or responsible for any interaction once you connect with an Ambassador.
+    </p>
+  </div>
 
-  <form method="get" action="/ambassadors-directory" class="flex flex-col sm:flex-row gap-3 mb-8 max-w-2xl">
-    <input type="text" name="name" value="<%= self.name %>" placeholder="Search by name"
-           class="flex-1 border border-gray-300 rounded p-2">
-    <input type="text" name="near" value="<%= self.near %>" placeholder="City, state, or ZIP"
-           class="flex-1 border border-gray-300 rounded p-2">
-    <button type="submit" class="btn btn-accent">Search</button>
-  </form>
-
-  <div id="ambassador-map" class="w-full h-80 rounded-lg mb-8 border border-gray-200"></div>
-  <script>
-    (function () {
-      if (typeof maplibregl === "undefined") return;
-      var map = new maplibregl.Map({
-        container: "ambassador-map",
-        style: "https://tiles.openfreemap.org/styles/liberty",
-        center: [-98.5, 39.8],
-        zoom: 3,
-      });
-      map.on("load", function () {
-        fetch("/api/ambassador_map.geojson")
-          .then(function (r) { return r.json(); })
-          .then(function (data) {
-            map.addSource("ambassadors", { type: "geojson", data: data });
-            map.addLayer({
-              id: "ambassador-points",
-              type: "circle",
-              source: "ambassadors",
-              paint: {
-                "circle-radius": 6,
-                "circle-color": "#7c3aed",
-                "circle-stroke-width": 2,
-                "circle-stroke-color": "#ffffff",
-              },
-            });
-          })
-          .catch(function () {});
-      });
-    })();
-  </script>
-
-  <p class="text-sm text-gray-500 mb-4"><%= self.total %> ambassador<% if self.total != 1 { %>s<% } %></p>
-
-  <% if self.entries.is_empty() { %>
-    <p class="text-gray-500">No ambassadors match your search.</p>
-  <% } else { %>
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-      <% for e in &self.entries { %>
-        <a href="/ambassadors/<%= e.user_id |disp %>" class="ss-card !p-4 flex flex-col items-center text-center hover:shadow-md transition">
-          <% if let Some(image) = &e.image { %>
-            <img src="<%= image %>" alt="<%= e.name %>" class="w-24 h-24 rounded-full object-cover mb-3">
-          <% } else { %>
-            <div class="w-24 h-24 rounded-full bg-primary-light/30 flex items-center justify-center text-2xl font-bold text-primary-dark mb-3"><%= e.name.chars().next().unwrap_or('?') %></div>
-          <% } %>
-          <div class="font-semibold text-primary-dark"><%= e.name %></div>
-          <div class="text-sm text-gray-500"><%= e.city %><% if !e.state.is_empty() { %>, <%= e.state %><% } %></div>
-        </a>
-      <% } %>
+  <div class="tabs-bar-wrapper">
+    <div class="tabs tabs-bar max-w-xs" role="tablist" aria-label="Directory view">
+      <button type="button" class="tab" role="tab" id="ambassador-list-tab" aria-selected="true" aria-controls="ambassador-list">List</button>
+      <button type="button" class="tab" role="tab" id="ambassador-map-tab" aria-selected="false" aria-controls="ambassador-map-panel">Map</button>
     </div>
+    <div class="tab-panels">
+      <div class="tab-panel !max-w-none py-6" id="ambassador-list" role="tabpanel" aria-labelledby="ambassador-list-tab" aria-hidden="false">
+        <form method="get" action="<%= crate::ambassador::DIRECTORY_PATH %>" role="search" class="border border-linework bg-primary-light rounded-sm p-4 mb-8">
+          <div class="flex flex-col md:flex-row gap-4 mb-4">
+            <label class="grow">
+              <span class="block">Ambassador name</span>
+              <input type="search" name="name" value="<%= self.name %>" class="p-2 w-full border border-linework rounded-sm bg-white">
+            </label>
+            <label class="grow">
+              <span class="block">City, state or ZIP</span>
+              <input type="search" name="near" value="<%= self.near %>" placeholder="e.g. Sioux Falls, SD" class="p-2 w-full border border-linework rounded-sm bg-white">
+            </label>
+          </div>
+          <div class="flex flex-wrap items-center gap-4">
+            <button type="submit" class="btn btn-primary">Search Ambassadors</button>
+            <% if self.searching { %>
+              <a href="<%= crate::ambassador::DIRECTORY_PATH %>" class="text-primary-action hover:underline">Clear search</a>
+            <% } %>
+          </div>
+        </form>
 
-    <% if self.pages > 1 { %>
-      <div class="flex justify-center items-center gap-4 mt-8">
-        <% if self.page > 1 { %>
-          <a class="btn" href="/ambassadors?name=<%= self.name %>&near=<%= self.near %>&page=<%= self.page - 1 %>">&larr; Previous</a>
+        <p class="mb-4"><b><%= self.total %></b> Ambassador<% if self.total != 1 { %>s<% } %></p>
+
+        <% if self.cards.is_empty() { %>
+          <p>No ambassadors match your search.</p>
+        <% } else { %>
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+            <% for card in self.cards { %>
+              <%+ card %>
+            <% } %>
+          </div>
         <% } %>
-        <span class="text-sm text-gray-500">Page <%= self.page %> of <%= self.pages %></span>
-        <% if self.page < self.pages { %>
-          <a class="btn" href="/ambassadors?name=<%= self.name %>&near=<%= self.near %>&page=<%= self.page + 1 %>">Next &rarr;</a>
+
+        <% if let Some(pagination) = self.pagination { %>
+          <%+ pagination %>
         <% } %>
       </div>
-    <% } %>
-  <% } %>
+
+      <div class="tab-panel !max-w-none py-6" id="ambassador-map-panel" role="tabpanel" aria-labelledby="ambassador-map-tab" aria-hidden="true">
+        <p class="mb-4 text-sm">Select a place to list the ambassadors there.</p>
+        <div id="ambassador-map" class="w-full h-[500px] max-h-[80vh] rounded-sm border border-linework"></div>
+      </div>
+    </div>
+  </div>
 </div>
+
+<script>
+  (function () {
+    // Built the first time its tab is shown: a map laid out inside a hidden
+    // panel has no size to lay out in.
+    var map = null;
+    // A click on a place lists the ambassadors there.
+    var listPrefix = <%- serde_json::to_string(&format!("{}?near=", crate::ambassador::DIRECTORY_PATH)).unwrap_or_default() %>;
+
+    function build() {
+      if (map || typeof maplibregl === "undefined") return;
+      map = new maplibregl.Map({
+        container: "ambassador-map",
+        style: "https://tiles.openfreemap.org/styles/liberty",
+        bounds: [[-128.99107, 22.62724], [-63.35107, 50.26125]],
+      });
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }));
+      map.on("load", function () {
+        map.addSource("ambassador-places", {
+          type: "geojson",
+          data: "/api/ambassador_map.geojson",
+          cluster: true,
+          clusterMaxZoom: 20,
+          clusterRadius: 64,
+        });
+        map.addLayer({
+          id: "clusters",
+          type: "circle",
+          source: "ambassador-places",
+          filter: ["has", "point_count"],
+          paint: {
+            "circle-color": "#f37d2d",
+            "circle-radius": ["step", ["get", "point_count"], 20, 5, 30, 20, 40],
+          },
+        });
+        map.addLayer({
+          id: "cluster-count",
+          type: "symbol",
+          source: "ambassador-places",
+          filter: ["has", "point_count"],
+          layout: {
+            "text-field": ["get", "point_count_abbreviated"],
+            "text-font": ["Noto Sans Bold"],
+            "text-size": 12,
+          },
+        });
+        map.addLayer({
+          id: "places",
+          type: "circle",
+          source: "ambassador-places",
+          filter: ["!", ["has", "point_count"]],
+          paint: {
+            "circle-color": "#f37d2d",
+            "circle-radius": 7,
+            "circle-stroke-width": 2,
+            "circle-stroke-color": "#ffffff",
+          },
+        });
+        map.addLayer({
+          id: "place-labels",
+          type: "symbol",
+          source: "ambassador-places",
+          filter: ["!", ["has", "point_count"]],
+          layout: {
+            "text-field": ["get", "city"],
+            "text-font": ["Noto Sans Bold"],
+            "text-size": 12,
+            "text-offset": [0, 1.1],
+            "text-anchor": "top",
+          },
+        });
+
+        map.on("click", "clusters", function (e) {
+          var feature = e.features[0];
+          map.getSource("ambassador-places")
+            .getClusterExpansionZoom(feature.properties.cluster_id)
+            .then(function (zoom) {
+              map.easeTo({ center: feature.geometry.coordinates, zoom: zoom });
+            });
+        });
+        map.on("click", "places", function (e) {
+          var place = e.features[0].properties;
+          window.location = listPrefix + encodeURIComponent(place.city + ", " + place.state);
+        });
+        ["clusters", "places"].forEach(function (layer) {
+          map.on("mouseenter", layer, function () { map.getCanvas().style.cursor = "pointer"; });
+          map.on("mouseleave", layer, function () { map.getCanvas().style.cursor = ""; });
+        });
+      });
+    }
+
+    document.getElementById("ambassador-map-tab").addEventListener("click", function () {
+      // tabs.js reveals the panel in its own click handler; build or resize
+      // once that has happened.
+      setTimeout(function () {
+        if (map) { map.resize(); } else { build(); }
+      }, 0);
+    });
+  })();
+</script>

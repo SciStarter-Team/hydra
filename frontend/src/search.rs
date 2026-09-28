@@ -1,5 +1,5 @@
 use crate::{
-    component::{Component, Head, StandardLayout},
+    component::{Component, Head, NumberedPagination, StandardLayout},
     form::QsQuery,
     local_time::{TimeFormat, local_time},
     middleware::{
@@ -488,11 +488,7 @@ struct FinderContent {
     lat: String,
     lng: String,
     geosearch_key: String,
-    // Pagination
-    current_page: u32,
-    has_previous: bool,
-    has_next: bool,
-    total_pages: u32,
+    pagination: Option<NumberedPagination>,
     // Filter options
     available_topics: Vec<String>,
     available_audiences: Vec<String>,
@@ -518,19 +514,14 @@ struct FinderContent {
     usa_only: bool,
     outside_usa: bool,
     exclusively_outdoors: bool,
-
-    /// This search as a query string, for the links that run it again on
-    /// another page.
-    filter_params: String,
 }
 
-impl FinderContent {
-    fn pagination_params(&self, page: u32) -> String {
-        if self.filter_params.is_empty() {
-            format!("page={page}")
-        } else {
-            format!("page={page}&{}", self.filter_params)
-        }
+/// The finder URL for `page` of the search `filter_params` describes.
+fn finder_page_href(filter_params: &str, page: u32) -> String {
+    if filter_params.is_empty() {
+        format!("/finder?page={page}")
+    } else {
+        format!("/finder?page={page}&{filter_params}")
     }
 }
 
@@ -1763,6 +1754,8 @@ pub async fn handle_finder(
         .unwrap_or("either")
         .to_string();
 
+    let filter_params = query.to_query_string();
+
     let lat_str = lat.map(|v| v.to_string()).unwrap_or_default();
     let lng_str = lng.map(|v| v.to_string()).unwrap_or_default();
 
@@ -1775,10 +1768,9 @@ pub async fn handle_finder(
             lat: lat_str,
             lng: lng_str,
             geosearch_key: env!("GEOSEARCH_KEY").to_string(),
-            current_page: page,
-            has_previous: page > 1,
-            has_next: page < total_pages,
-            total_pages,
+            pagination: NumberedPagination::new(page, total_pages, |p| {
+                finder_page_href(&filter_params, p)
+            }),
             available_topics,
             available_audiences,
             available_activities,
@@ -1809,7 +1801,6 @@ pub async fn handle_finder(
                 .misc_filter
                 .iter()
                 .any(|v| v == "exclusively_outdoors"),
-            filter_params: query.to_query_string(),
         },
     )
     .prepare(user_info.clone())

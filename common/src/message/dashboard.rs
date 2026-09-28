@@ -804,7 +804,9 @@ pub struct AmbassadorExportRow {
 }
 
 /// Query for the public ambassador directory (`user.ambassador.directory`).
-/// `name` matches first/last name or bio; `near` matches city/state/ZIP.
+/// `name` matches a first or last name, the whole name either way round, or
+/// the bio; `near` is "City, ST" for an exact place, an all-capitals state
+/// code, or otherwise any part of a city, state or ZIP.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AmbassadorDirectoryQuery {
     pub name: String,
@@ -813,12 +815,37 @@ pub struct AmbassadorDirectoryQuery {
     pub order: AmbassadorDirectoryOrder,
 }
 
+/// How the public directory is sorted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum AmbassadorDirectoryOrder {
+    /// A shuffle that holds still: each application draws a random position
+    /// once, so nobody is permanently at the top of an alphabetical list and
+    /// paging does not repeat or skip anyone.
     #[default]
-    Default,
+    Random,
     Name,
+    /// Most recently certified first.
     Time,
+}
+
+impl AmbassadorDirectoryOrder {
+    /// The `order` query-string value, or `None` for the default.
+    pub fn as_param(self) -> Option<&'static str> {
+        match self {
+            AmbassadorDirectoryOrder::Random => None,
+            AmbassadorDirectoryOrder::Name => Some("name"),
+            AmbassadorDirectoryOrder::Time => Some("time"),
+        }
+    }
+
+    /// Read an `order` query-string value; anything unrecognised is the default.
+    pub fn from_param(param: &str) -> Self {
+        match param {
+            "name" => AmbassadorDirectoryOrder::Name,
+            "time" => AmbassadorDirectoryOrder::Time,
+            _ => AmbassadorDirectoryOrder::Random,
+        }
+    }
 }
 
 /// One card in the public ambassador directory.
@@ -840,18 +867,39 @@ pub struct AmbassadorDirectoryResponse {
     pub entries: Vec<AmbassadorDirectoryEntry>,
 }
 
-/// A single public ambassador profile (`user.ambassador.profile`). `others` are
-/// a few fellow ambassadors for cross-linking.
+/// Request for one ambassador profile (`user.ambassador.profile`).
+///
+/// The viewer matters because a profile that is not listed publicly (not yet
+/// promoted, demoted, or hidden) can still be previewed by its owner and by
+/// staff, the way orrery lets them.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AmbassadorProfileQuery {
+    pub user_id: Ulid,
+    pub viewer: Option<Ulid>,
+    pub viewer_is_staff: bool,
+}
+
+/// A single ambassador profile (`user.ambassador.profile`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AmbassadorProfile {
     pub user_id: Ulid,
     pub name: String,
+    pub first_name: String,
     pub image: Option<String>,
     pub city: String,
     pub state: String,
+    /// Markdown written by the ambassador.
     pub bio: String,
     pub youtube_video_url: String,
-    pub others: Vec<AmbassadorDirectoryEntry>,
+    /// Whether the public directory lists this person. `false` only reaches
+    /// the owner or staff, previewing.
+    pub listed: bool,
+    /// Events staff (or orrery, for an event's owner) linked to this person as
+    /// an ambassador. The frontend owns the event data, so it narrows these to
+    /// published ambassador events and adds the events the person manages.
+    pub connected_event_ids: Vec<Ulid>,
+    /// A few other listed ambassadors in the same state.
+    pub nearby: Vec<AmbassadorDirectoryEntry>,
 }
 
 /// A logged-in visitor's message to a directory ambassador

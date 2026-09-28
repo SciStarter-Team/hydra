@@ -1,7 +1,7 @@
 <% use common::message::dashboard::{AmbassadorAppStatus, AmbassadorScreeningStatus, ambassador_cohort_label}; %>
 <tr id="amb-row-<%= self.row.user_id |disp %>" class="border-b border-gray-200 align-top text-xs">
   <td class="px-2 py-2 whitespace-nowrap">
-    <div class="font-medium text-gray-900"><%= self.row.name %></div>
+    <a class="block font-medium text-gray-900 hover:underline" href="<%= crate::ambassador::profile_path(self.row.user_id) %>"><%= self.row.name %></a>
     <div class="text-gray-500">@<%= self.row.handle %></div>
     <div class="text-gray-500"><%= self.row.email %></div>
   </td>

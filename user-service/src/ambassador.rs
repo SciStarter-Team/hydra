@@ -8,14 +8,16 @@ use common::{
         AmbassadorDirectoryOrder, AmbassadorDirectoryQuery, AmbassadorDirectoryResponse,
         AmbassadorExportRow, AmbassadorFilters, AmbassadorListRequest, AmbassadorListResponse,
         AmbassadorMessageForm, AmbassadorMessageReview, AmbassadorMessageRow, AmbassadorMilestones,
-        AmbassadorProfile, AmbassadorReviewUpdate, AmbassadorScreeningStatus, AmbassadorStage,
-        AmbassadorStageRow, AmbassadorStagesRequest, DatePresence, TriState,
+        AmbassadorProfile, AmbassadorProfileQuery, AmbassadorReviewUpdate,
+        AmbassadorScreeningStatus, AmbassadorStage, AmbassadorStageRow, AmbassadorStagesRequest,
+        DatePresence, TriState,
     },
     message::email::EmailRecipient,
     message::user::{AmbassadorLocation, AmbassadorPassedLocationsResponse, UserAndBadge},
     service::{TriggerEvent, decode_structured_message, send, send_email, trigger_email},
     shared::db,
     timestring::TimeString,
+    transaction::Immediate,
     ulid::AsUlid,
 };
 use sqlx::{QueryBuilder, Row, Sqlite};
@@ -104,16 +106,15 @@ fn escape_html(s: &str) -> String {
         .replace('>', "&gt;")
 }
 
-/// Distinct city/state locations of ambassadors in the public directory
-/// (the `ambassador_directory_members` view). Backs /api/ambassador_map.geojson;
-/// the frontend geocodes each location for the map.
+/// Distinct city/state locations of the ambassadors the public directory
+/// lists (the `ambassador_directory_listing` view). Backs
+/// /api/ambassador_map.geojson; the frontend geocodes each location for the map.
 pub async fn passed_locations(_req: &Request) -> Result<AmbassadorPassedLocationsResponse, Error> {
     let rows = sqlx::query!(
-        r#"SELECT DISTINCT a.city AS "city!", a.state AS "state!"
-           FROM ambassador_applications a
-           JOIN ambassador_directory_members m ON m.user_id = a.user_id
-           WHERE a.city != ''
-           ORDER BY a.city, a.state"#,
+        r#"SELECT DISTINCT l.city AS "city!", l.state AS "state!"
+           FROM ambassador_directory_listing l
+           WHERE l.city != ''
+           ORDER BY l.city, l.state"#,
     )
     .fetch_all(db())
     .await?;
@@ -377,6 +378,9 @@ pub async fn update(req: &Request) -> Result<(), Error> {
 
 const DIRECTORY_PAGE_SIZE: i64 = 24;
 
+/// How many other ambassadors a profile suggests.
+const NEARBY_LIMIT: i64 = 5;
+
 struct DirectoryRow {
     user_id: String,
     first_name: String,
@@ -400,134 +404,280 @@ impl From<DirectoryRow> for AmbassadorDirectoryEntry {
     }
 }
 
-/// Public ambassador directory (`user.ambassador.directory`): everyone in the
-/// directory (non-null `users.ambassador`, not hidden), filtered by name/near
-/// and paginated. Built with a runtime query because the ordering and filters
-/// are dynamic.
+/// What the directory's "near" box asks for. The three readings are orrery's,
+/// so a search that worked there works here.
+#[derive(Debug, PartialEq, Eq)]
+enum NearFilter {
+    Anywhere,
+    /// "Sioux Falls, SD": exactly that city in exactly that state.
+    CityAndState {
+        city: String,
+        state: String,
+    },
+    /// "SD", or anything else typed in capitals: part of a state.
+    State(String),
+    /// Anything else: part of a city, a state or a ZIP code.
+    Loose(String),
+}
+
+impl NearFilter {
+    fn parse(near: &str) -> NearFilter {
+        let near = near.trim();
+        if near.is_empty() {
+            return NearFilter::Anywhere;
+        }
+        if let Some((city, state)) = near.split_once(',') {
+            return NearFilter::CityAndState {
+                city: city.trim().to_string(),
+                state: state.trim().to_string(),
+            };
+        }
+        // Python's `str.isupper`, which orrery uses: some letter, and none of
+        // them lower case.
+        let shouting =
+            near.chars().any(char::is_uppercase) && !near.chars().any(char::is_lowercase);
+        if shouting {
+            NearFilter::State(near.to_string())
+        } else {
+            NearFilter::Loose(near.to_string())
+        }
+    }
+}
+
+/// A LIKE pattern matching `text` anywhere, with its own `%`, `_` and `\`
+/// taken literally. Use with `ESCAPE '\'`.
+fn contains_pattern(text: &str) -> String {
+    let mut pattern = String::with_capacity(text.len() + 2);
+    pattern.push('%');
+    for c in text.chars() {
+        if matches!(c, '%' | '_' | '\\') {
+            pattern.push('\\');
+        }
+        pattern.push(c);
+    }
+    pattern.push('%');
+    pattern
+}
+
+/// Push the directory's search onto a query over `ambassador_directory_listing
+/// l JOIN users u` that already ends in a WHERE clause. Shared by the page and
+/// its count, so the two cannot disagree about what matched.
+fn push_directory_filters(qb: &mut QueryBuilder<Sqlite>, name: &str, near: &NearFilter) {
+    // "Jane  Doe" and "Jane Doe" are the same search.
+    let name = name.split_whitespace().collect::<Vec<_>>().join(" ");
+    if !name.is_empty() {
+        let pattern = contains_pattern(&name);
+        qb.push(" AND (u.first_name LIKE ");
+        qb.push_bind(pattern.clone());
+        qb.push(" ESCAPE '\\' OR u.last_name LIKE ");
+        qb.push_bind(pattern.clone());
+        qb.push(" ESCAPE '\\' OR l.bio LIKE ");
+        qb.push_bind(pattern.clone());
+        qb.push(" ESCAPE '\\' OR (u.first_name || ' ' || u.last_name) LIKE ");
+        qb.push_bind(pattern.clone());
+        qb.push(" ESCAPE '\\' OR (u.last_name || ' ' || u.first_name) LIKE ");
+        qb.push_bind(pattern);
+        qb.push(" ESCAPE '\\')");
+    }
+
+    match near {
+        NearFilter::Anywhere => {}
+        NearFilter::CityAndState { city, state } => {
+            qb.push(" AND lower(l.city) = lower(");
+            qb.push_bind(city.clone());
+            qb.push(") AND lower(l.state) = lower(");
+            qb.push_bind(state.clone());
+            qb.push(")");
+        }
+        NearFilter::State(state) => {
+            qb.push(" AND l.state LIKE ");
+            qb.push_bind(contains_pattern(state));
+            qb.push(" ESCAPE '\\'");
+        }
+        NearFilter::Loose(place) => {
+            let pattern = contains_pattern(place);
+            qb.push(" AND (u.zipcode LIKE ");
+            qb.push_bind(pattern.clone());
+            qb.push(" ESCAPE '\\' OR l.city LIKE ");
+            qb.push_bind(pattern.clone());
+            qb.push(" ESCAPE '\\' OR l.state LIKE ");
+            qb.push_bind(pattern);
+            qb.push(" ESCAPE '\\')");
+        }
+    }
+}
+
+/// Public ambassador directory (`user.ambassador.directory`): everyone
+/// `ambassador_directory_listing` lists, searched and paginated.
 pub async fn directory(req: &Request) -> Result<AmbassadorDirectoryResponse, Error> {
     let q: AmbassadorDirectoryQuery = decode_structured_message(req.message.clone())?;
     let page = q.page.max(1);
     let offset = (page - 1) * DIRECTORY_PAGE_SIZE;
+    let near = NearFilter::parse(&q.near);
 
-    let name_empty = q.name.trim().is_empty() as i64;
-    let name_like = format!("%{}%", q.name.trim());
-    let near_empty = q.near.trim().is_empty() as i64;
-    let near_like = format!("%{}%", q.near.trim());
-    // "time" sorts newest-certified first; anything else is alphabetical.
-    let order = match q.order {
-        AmbassadorDirectoryOrder::Time => "time",
-        _ => "name",
-    };
+    let mut count = QueryBuilder::<Sqlite>::new(
+        "SELECT COUNT(*) FROM ambassador_directory_listing l \
+         JOIN users u ON u.user_id = l.user_id WHERE 1 = 1",
+    );
+    push_directory_filters(&mut count, &q.name, &near);
+    let total: i64 = count.build_query_scalar().fetch_one(db()).await?;
 
-    let total = sqlx::query_scalar!(
-        r#"SELECT COUNT(*) FROM ambassador_applications a
-           JOIN users u ON u.user_id = a.user_id
-           JOIN ambassador_directory_members m ON m.user_id = a.user_id
-           WHERE a.hidden = 0
-           AND (? = 1 OR u.first_name LIKE ? OR u.last_name LIKE ? OR a.bio LIKE ?)
-           AND (? = 1 OR a.city LIKE ? OR a.state LIKE ? OR u.zipcode LIKE ?)"#,
-        name_empty,
-        name_like,
-        name_like,
-        name_like,
-        near_empty,
-        near_like,
-        near_like,
-        near_like,
-    )
-    .fetch_one(db())
-    .await? as i64;
+    let mut select = QueryBuilder::<Sqlite>::new(
+        "SELECT l.user_id, u.first_name, u.last_name, u.image, l.city, l.state \
+         FROM ambassador_directory_listing l \
+         JOIN users u ON u.user_id = l.user_id WHERE 1 = 1",
+    );
+    push_directory_filters(&mut select, &q.name, &near);
+    // The user id breaks ties, so a page boundary never falls between two
+    // rows whose relative order the database is free to change.
+    select.push(match q.order {
+        AmbassadorDirectoryOrder::Random => " ORDER BY l.position IS NULL, l.position, l.user_id",
+        AmbassadorDirectoryOrder::Name => {
+            " ORDER BY u.last_name COLLATE NOCASE, u.first_name COLLATE NOCASE, l.user_id"
+        }
+        AmbassadorDirectoryOrder::Time => " ORDER BY u.ambassador DESC, l.user_id",
+    });
+    select.push(" LIMIT ");
+    select.push_bind(DIRECTORY_PAGE_SIZE);
+    select.push(" OFFSET ");
+    select.push_bind(offset);
 
-    // The ORDER BY switches on a bound param: for "time" the first sort key is
-    // the certification timestamp (DESC); otherwise it is NULL for every row, so
-    // ordering falls through to name.
-    let rows = sqlx::query_as!(
-        DirectoryRow,
-        r#"SELECT a.user_id AS "user_id!", u.first_name AS "first_name!",
-                  u.last_name AS "last_name!", u.image AS "image",
-                  a.city AS "city!", a.state AS "state!"
-           FROM ambassador_applications a
-           JOIN users u ON u.user_id = a.user_id
-           JOIN ambassador_directory_members m ON m.user_id = a.user_id
-           WHERE a.hidden = 0
-           AND (? = 1 OR u.first_name LIKE ? OR u.last_name LIKE ? OR a.bio LIKE ?)
-           AND (? = 1 OR a.city LIKE ? OR a.state LIKE ? OR u.zipcode LIKE ?)
-           ORDER BY (CASE WHEN ? = 'time' THEN u.ambassador END) DESC,
-                    u.last_name COLLATE NOCASE, u.first_name COLLATE NOCASE
-           LIMIT ? OFFSET ?"#,
-        name_empty,
-        name_like,
-        name_like,
-        name_like,
-        near_empty,
-        near_like,
-        near_like,
-        near_like,
-        order,
-        DIRECTORY_PAGE_SIZE,
-        offset,
-    )
-    .fetch_all(db())
-    .await?;
-
-    let pages = (total + DIRECTORY_PAGE_SIZE - 1) / DIRECTORY_PAGE_SIZE;
+    let entries = select
+        .build()
+        .fetch_all(db())
+        .await?
+        .into_iter()
+        .map(|row| {
+            DirectoryRow {
+                user_id: row.get("user_id"),
+                first_name: row.get("first_name"),
+                last_name: row.get("last_name"),
+                image: row.get("image"),
+                city: row.get("city"),
+                state: row.get("state"),
+            }
+            .into()
+        })
+        .collect();
 
     Ok(AmbassadorDirectoryResponse {
         page,
-        pages,
+        pages: (total + DIRECTORY_PAGE_SIZE - 1) / DIRECTORY_PAGE_SIZE,
         total,
-        entries: rows.into_iter().map(Into::into).collect(),
+        entries,
     })
 }
 
-/// A single public ambassador profile (`user.ambassador.profile`). Returns
-/// `None` if the user is not a directory ambassador.
+/// One ambassador profile (`user.ambassador.profile`).
+///
+/// Anyone sees a listed ambassador. The owner and staff also see one who is
+/// not listed, provided an application exists to show, marked `listed: false`
+/// so the page can say so. Everybody else gets `None`.
 pub async fn profile(req: &Request) -> Result<Option<AmbassadorProfile>, Error> {
-    let user_id: String = flexbuffers::from_slice(&req.message.payload)?;
-    let user_ulid = user_id.as_ulid()?;
+    let q: AmbassadorProfileQuery = decode_structured_message(req.message.clone())?;
+    let user_id = q.user_id.to_string();
 
-    let row = sqlx::query!(
+    let Some(row) = sqlx::query!(
         r#"SELECT u.first_name AS "first_name!", u.last_name AS "last_name!",
-                  u.image AS "image", a.bio AS "bio!", a.city AS "city!",
-                  a.state AS "state!", a.youtube_video_url AS "youtube_video_url!"
-           FROM users u JOIN ambassador_applications a ON a.user_id = u.user_id
-           JOIN ambassador_directory_members m ON m.user_id = u.user_id
-           WHERE u.user_id = ? AND a.hidden = 0"#,
+                  u.image AS "image",
+                  COALESCE(a.city, '') AS "city!: String",
+                  COALESCE(a.state, '') AS "state!: String",
+                  COALESCE(a.bio, '') AS "bio!: String",
+                  COALESCE(a.youtube_video_url, '') AS "youtube_video_url!: String",
+                  a.user_id IS NOT NULL AS "has_application!: bool",
+                  EXISTS (SELECT 1 FROM ambassador_directory_listing l
+                           WHERE l.user_id = u.user_id) AS "listed!: bool"
+           FROM users u
+           LEFT JOIN ambassador_applications a ON a.user_id = u.user_id
+           WHERE u.user_id = ?"#,
         user_id
     )
     .fetch_optional(db())
-    .await?;
-
-    let Some(row) = row else {
+    .await?
+    else {
         return Ok(None);
     };
 
-    let others = sqlx::query_as!(
-        DirectoryRow,
-        r#"SELECT a.user_id AS "user_id!", u.first_name AS "first_name!",
-                  u.last_name AS "last_name!", u.image AS "image",
-                  a.city AS "city!", a.state AS "state!"
-           FROM ambassador_applications a JOIN users u ON u.user_id = a.user_id
-           JOIN ambassador_directory_members m ON m.user_id = a.user_id
-           WHERE a.hidden = 0 AND a.user_id != ?
-           ORDER BY u.ambassador DESC LIMIT 5"#,
-        user_id,
+    let privileged = q.viewer_is_staff || q.viewer == Some(q.user_id);
+    if !(row.listed || privileged && row.has_application) {
+        return Ok(None);
+    }
+
+    let connected_event_ids = sqlx::query_scalar!(
+        r#"SELECT entity_id FROM ambassador_connections WHERE user_id = ?"#,
+        user_id
     )
     .fetch_all(db())
-    .await?;
+    .await?
+    .into_iter()
+    .filter_map(|id| id.as_ulid().ok())
+    .collect();
+
+    // orrery's "others": listed ambassadors in the same state.
+    let nearby = if row.state.trim().is_empty() {
+        Vec::new()
+    } else {
+        sqlx::query_as!(
+            DirectoryRow,
+            r#"SELECT l.user_id AS "user_id!", u.first_name AS "first_name!",
+                      u.last_name AS "last_name!", u.image AS "image",
+                      l.city AS "city!", l.state AS "state!"
+               FROM ambassador_directory_listing l
+               JOIN users u ON u.user_id = l.user_id
+               WHERE l.user_id != ? AND lower(l.state) = lower(?)
+               ORDER BY l.position IS NULL, l.position, l.user_id
+               LIMIT ?"#,
+            user_id,
+            row.state,
+            NEARBY_LIMIT,
+        )
+        .fetch_all(db())
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect()
+    };
 
     Ok(Some(AmbassadorProfile {
-        user_id: user_ulid,
+        user_id: q.user_id,
         name: format!("{} {}", row.first_name, row.last_name)
             .trim()
             .to_string(),
+        first_name: row.first_name.trim().to_string(),
         image: row.image,
         city: row.city,
         state: row.state,
         bio: row.bio,
         youtube_video_url: row.youtube_video_url,
-        others: others.into_iter().map(Into::into).collect(),
+        listed: row.listed,
+        connected_event_ids,
+        nearby,
     }))
+}
+
+/// Replace the mirror of orrery's ambassador connections with `pairs` (user
+/// ULID, entity ULID) in one transaction. The feed is a snapshot rather than a
+/// change log, since orrery keeps no dates on the relationship, so replacing is
+/// how a removed connection goes away. A pair naming an account that has not
+/// synced yet is skipped; the next snapshot brings it.
+pub async fn replace_connections(pairs: &[(String, String)]) -> Result<(), Error> {
+    let mut tx = Immediate::begin_with_retry(db(), None, None).await?;
+    sqlx::query!("DELETE FROM ambassador_connections")
+        .execute(&mut tx)
+        .await?;
+    for (user_id, entity_id) in pairs {
+        sqlx::query!(
+            r#"INSERT OR IGNORE INTO ambassador_connections (user_id, entity_id)
+               SELECT ?, ? WHERE EXISTS (SELECT 1 FROM users WHERE user_id = ?)"#,
+            user_id,
+            entity_id,
+            user_id,
+        )
+        .execute(&mut tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(())
 }
 
 /// Push the staff grid's filters onto a query already ending in a WHERE
@@ -673,6 +823,8 @@ fn push_filters(qb: &mut QueryBuilder<Sqlite>, f: &AmbassadorFilters) {
         qb.push(" AND (u.\"first_name\" LIKE ");
         qb.push_bind(pattern.clone());
         qb.push(" OR u.\"last_name\" LIKE ");
+        qb.push_bind(pattern.clone());
+        qb.push(" OR (u.\"first_name\" || ' ' || u.\"last_name\") LIKE ");
         qb.push_bind(pattern.clone());
         qb.push(" OR u.\"handle\" LIKE ");
         qb.push_bind(pattern.clone());
@@ -1218,9 +1370,10 @@ pub async fn message_send(req: &Request) -> Result<(), Error> {
     let recipient_str = form.recipient_id.to_string();
     let sender_str = form.sender_id.to_string();
 
-    // Only directory ambassadors are contactable.
+    // Only listed ambassadors are contactable: the form is on the public
+    // profile, which an unlisted one does not have.
     let is_ambassador = sqlx::query_scalar!(
-        "SELECT COUNT(*) FROM ambassador_directory_members WHERE user_id = ?",
+        "SELECT COUNT(*) FROM ambassador_directory_listing WHERE user_id = ?",
         recipient_str
     )
     .fetch_one(db())
@@ -1576,5 +1729,37 @@ mod tests {
     #[test]
     fn champion_is_the_verdict_the_directory_view_excludes() {
         assert_eq!(AmbassadorAppStatus::Champion.as_i64(), 5);
+    }
+
+    #[test]
+    fn near_reads_city_and_state_state_code_or_anything() {
+        assert_eq!(NearFilter::parse("  "), NearFilter::Anywhere);
+        assert_eq!(
+            NearFilter::parse("Sioux Falls, SD"),
+            NearFilter::CityAndState {
+                city: "Sioux Falls".into(),
+                state: "SD".into()
+            }
+        );
+        assert_eq!(NearFilter::parse("SD"), NearFilter::State("SD".into()));
+        assert_eq!(
+            NearFilter::parse("NEW YORK"),
+            NearFilter::State("NEW YORK".into())
+        );
+        assert_eq!(
+            NearFilter::parse("sioux"),
+            NearFilter::Loose("sioux".into())
+        );
+        // A ZIP code has no letters, so it is not "in capitals".
+        assert_eq!(
+            NearFilter::parse("57104"),
+            NearFilter::Loose("57104".into())
+        );
+    }
+
+    #[test]
+    fn contains_pattern_takes_wildcards_literally() {
+        assert_eq!(contains_pattern("Doe"), "%Doe%");
+        assert_eq!(contains_pattern("50%_\\"), "%50\\%\\_\\\\%");
     }
 }

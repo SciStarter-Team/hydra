@@ -52,10 +52,19 @@ impl LoadStorePeered for Client {
         let allowed_scopes = self.allowed_scopes.join(" ");
         let created_str = self.created.to_string();
 
+        // An upsert: REPLACE would delete the row first, and the delete
+        // cascades to every token and authorization code issued to the client.
         sqlx::query!(
-            "INSERT OR REPLACE INTO oauth2_clients
+            "INSERT INTO oauth2_clients
              (client_id, client_secret, client_name, redirect_uris, allowed_scopes, created, owner_user_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?)",
+             VALUES (?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT (client_id) DO UPDATE SET
+               client_secret = excluded.client_secret,
+               client_name = excluded.client_name,
+               redirect_uris = excluded.redirect_uris,
+               allowed_scopes = excluded.allowed_scopes,
+               created = excluded.created,
+               owner_user_id = excluded.owner_user_id",
             self.client_id,
             self.client_secret,
             self.client_name,

@@ -36,6 +36,7 @@ pub mod lazy_cache;
 pub mod library_signup;
 pub mod local_time;
 pub mod lru_cache;
+pub mod markdown;
 pub mod mcp;
 pub mod mcp_token;
 pub mod middleware;
@@ -509,21 +510,24 @@ fn user_facing() -> impl Endpoint {
             "/training/champion/-progress",
             get(training::champion::progress),
         )
-        // Orrery's canonical spellings, which these pages have to keep: it
-        // serves the application at /ambassador-apply and the directory at
-        // /ambassadors-directory, and /ambassadors is the community landing
-        // page, not the directory. The plural and singular variants people
-        // have bookmarked are Redirect entities.
+        // Paths and their history: see the `ambassador` module docs.
         .at(
             "/ambassador-apply",
-            get(ambassador::index).post(ambassador::submit),
+            get(ambassador::apply::index).post(ambassador::apply::submit),
         )
-        .at("/ambassador-apply/draft", post(ambassador::draft))
-        .at("/ambassadors-directory", get(ambassador::directory))
-        .at("/ambassadors-directory/:id", get(ambassador::profile_page))
+        .at("/ambassador-apply/draft", post(ambassador::apply::draft))
+        .at(ambassador::DIRECTORY_PATH, get(ambassador::directory::directory))
         .at(
-            "/ambassadors-directory/:id/contact",
-            post(ambassador::contact),
+            format!("{}/:id", ambassador::DIRECTORY_PATH),
+            get(ambassador::directory::profile_page),
+        )
+        .at(
+            format!("{}/:id/contact", ambassador::DIRECTORY_PATH),
+            post(ambassador::directory::contact),
+        )
+        .at(
+            "/ambassador/:id",
+            get(ambassador::directory::legacy_profile_redirect),
         )
         .at(
             "/girlscouts-action",

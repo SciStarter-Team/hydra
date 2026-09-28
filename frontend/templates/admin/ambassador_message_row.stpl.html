@@ -1,7 +1,7 @@
 <tr class="border-t border-gray-100 align-top">
   <td class="px-2 py-2 whitespace-nowrap text-gray-500"><%= self.row.when %></td>
   <td class="px-2 py-2">
-    <a class="text-primary-action hover:underline" href="/ambassadors/<%= self.row.recipient_id |disp %>"><%= self.row.recipient_name %></a>
+    <a class="text-primary-action hover:underline" href="<%= crate::ambassador::profile_path(self.row.recipient_id) %>"><%= self.row.recipient_name %></a>
     <div class="text-gray-400"><%= self.row.recipient_email %></div>
   </td>
   <td class="px-2 py-2">

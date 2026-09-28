@@ -10,6 +10,7 @@ pub mod htmx_runtime;
 pub mod image_field;
 pub mod layout;
 pub mod notification;
+pub mod pagination;
 pub mod sidebar;
 pub mod wordpress;
 
@@ -24,6 +25,7 @@ pub use header::Header;
 pub use htmx_runtime::HtmxRuntime;
 pub use layout::StandardLayout;
 pub use notification::{Notification, Notifications};
+pub use pagination::NumberedPagination;
 pub use sidebar::Sidebar;
 pub use wordpress::WordPressContent;
 

@@ -1,83 +1,119 @@
-<div class="ss-container mx-auto py-8 max-w-4xl">
+<div class="ss-container mx-auto py-8">
   <ul class="ss-breadcrumbs flex gap-2 text-sm mb-4">
-    <li><a href="/ambassadors-directory">Ambassador Directory</a></li>
-    <li>/</li>
-    <li><%= self.profile.name %></li>
+    <li><a href="<%= crate::ambassador::DIRECTORY_PATH %>">Certified Ambassadors</a></li>
+    <li aria-hidden="true">/</li>
+    <li><%= self.name %></li>
   </ul>
 
-  <div class="flex flex-col md:flex-row gap-8">
-    <div class="md:w-1/3 flex flex-col items-center text-center">
-      <% if let Some(image) = &self.profile.image { %>
-        <img src="<%= image %>" alt="<%= self.profile.name %>" class="w-40 h-40 rounded-full object-cover mb-4">
-      <% } else { %>
-        <div class="w-40 h-40 rounded-full bg-primary-light/30 flex items-center justify-center text-5xl font-bold text-primary-dark mb-4"><%= self.profile.name.chars().next().unwrap_or('?') %></div>
-      <% } %>
-      <h1 class="text-primary-dark text-2xl mb-1"><%= self.profile.name %></h1>
-      <div class="text-gray-500"><%= self.profile.city %><% if !self.profile.state.is_empty() { %>, <%= self.profile.state %><% } %></div>
-      <div class="mt-2 inline-block text-xs uppercase tracking-wide font-semibold text-primary-action">Certified SciStarter Ambassador</div>
-    </div>
-
-    <div class="md:w-2/3">
-      <% if !self.profile.bio.trim().is_empty() { %>
-        <h2 class="text-primary-dark text-lg mb-2">About</h2>
-        <p class="mb-6 whitespace-pre-line"><%= self.profile.bio %></p>
-      <% } %>
-
-      <% if !self.profile.youtube_video_url.trim().is_empty() { %>
-        <h2 class="text-primary-dark text-lg mb-2">Introduction</h2>
-        <p class="mb-6"><a class="text-primary-action underline" href="<%= self.profile.youtube_video_url %>" target="_blank" rel="noopener noreferrer">Watch <%= self.profile.name %>'s introduction video</a></p>
-      <% } %>
-
-      <hr class="my-6 text-primary-light">
-      <h2 class="text-primary-dark text-lg mb-2">Contact <%= self.profile.name %></h2>
-      <p class="text-sm text-gray-500 mb-4">Messages are reviewed by SciStarter staff before being forwarded. Please adhere to your organization's screening protocols when inviting an Ambassador to an event.</p>
-      <% if self.logged_in { %>
-        <form hx-post="/ambassadors/<%= self.profile.user_id |disp %>/contact"
-              hx-target="#contact-result" hx-swap="innerHTML"
-              hx-on::after:request="if(event.detail.ctx.response.status < 400) this.reset()"
-              class="flex flex-col gap-3 max-w-lg">
-          <div class="flex flex-col sm:flex-row gap-3">
-            <label class="flex-1 text-sm">First name<span class="text-red-600">*</span>
-              <input type="text" name="first_name" required value="<%= self.viewer_first %>"
-                     class="mt-1 w-full border border-gray-300 rounded p-2">
-            </label>
-            <label class="flex-1 text-sm">Last name<span class="text-red-600">*</span>
-              <input type="text" name="last_name" required value="<%= self.viewer_last %>"
-                     class="mt-1 w-full border border-gray-300 rounded p-2">
-            </label>
-          </div>
-          <label class="text-sm">Dates (if applicable)
-            <input type="text" name="dates" class="mt-1 w-full border border-gray-300 rounded p-2">
-          </label>
-          <label class="text-sm">Message<span class="text-red-600">*</span>
-            <textarea name="body" required rows="4" class="mt-1 w-full border border-gray-300 rounded p-2"></textarea>
-          </label>
-          <div>
-            <button type="submit" class="btn btn-accent">Send message</button>
-          </div>
-        </form>
-        <div id="contact-result" class="mt-3"></div>
-      <% } else { %>
-        <p class="text-sm"><span class="mr-1">&#9993;</span><a class="text-primary-action underline" href="/login?next=/ambassadors/<%= self.profile.user_id |disp %>">Log in</a> or <a class="text-primary-action underline" href="/signup?next=/ambassadors/<%= self.profile.user_id |disp %>">create an account</a> to contact <%= self.profile.name %>.</p>
-      <% } %>
-    </div>
-  </div>
-
-  <% if !self.profile.others.is_empty() { %>
-    <hr class="my-8 text-primary-light">
-    <h2 class="text-primary-dark text-lg mb-4">More Ambassadors</h2>
-    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-      <% for e in &self.profile.others { %>
-        <a href="/ambassadors/<%= e.user_id |disp %>" class="ss-card !p-3 flex flex-col items-center text-center hover:shadow-md transition">
-          <% if let Some(image) = &e.image { %>
-            <img src="<%= image %>" alt="<%= e.name %>" class="w-16 h-16 rounded-full object-cover mb-2">
-          <% } else { %>
-            <div class="w-16 h-16 rounded-full bg-primary-light/30 flex items-center justify-center text-lg font-bold text-primary-dark mb-2"><%= e.name.chars().next().unwrap_or('?') %></div>
-          <% } %>
-          <div class="text-sm font-medium text-primary-dark"><%= e.name %></div>
-          <div class="text-xs text-gray-500"><%= e.city %><% if !e.state.is_empty() { %>, <%= e.state %><% } %></div>
-        </a>
-      <% } %>
+  <% if !self.listed { %>
+    <div class="border border-linework bg-primary-light rounded-sm p-4 mb-6">
+      <p class="font-semibold text-primary-dark">This profile is not in the public directory.</p>
+      <p class="text-sm">Only <% if self.viewer == Viewer::Owner { %>you<% } else { %><%= self.first_name %><% } %> and SciStarter staff can see it.</p>
     </div>
   <% } %>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <div class="lg:col-span-2">
+      <div class="flex flex-col sm:flex-row items-center sm:items-start gap-6 mb-8">
+        <% if let Some(image) = &self.image { %>
+          <img src="<%= image %>" alt="" class="w-40 h-40 shrink-0 rounded-full object-cover">
+        <% } else { %>
+          <span aria-hidden="true" class="w-40 h-40 shrink-0 rounded-full bg-primary-light flex items-center justify-center text-5xl font-bold text-primary-dark"><%= self.name.chars().next().unwrap_or('?') %></span>
+        <% } %>
+        <div class="text-center sm:text-left">
+          <p class="text-xs uppercase tracking-wide font-semibold text-primary-action">Certified SciStarter Ambassador</p>
+          <h1 class="font-semibold text-4xl text-primary-dark"><%= self.name %></h1>
+          <p class="text-lg text-primary-dark"><%= self.place() %></p>
+          <div class="flex flex-wrap justify-center sm:justify-start gap-4 mt-4">
+            <% match self.viewer { Viewer::Owner => { %>
+              <a class="btn btn-primary" href="/dashboard/settings?tab=ambassador">Edit your profile</a>
+            <% } Viewer::Anonymous => { %>
+              <a class="btn btn-primary" href="<%= self.login_href() %>">Log in to contact <%= self.first_name %></a>
+            <% } Viewer::SignedIn | Viewer::Staff => { %>
+              <% if self.listed { %>
+                <button type="button" class="btn btn-primary" hx-on:click="document.getElementById('ambassador-contact').showModal()">Contact <%= self.first_name %></button>
+              <% } %>
+            <% } } %>
+            <% if self.viewer == Viewer::Staff { %>
+              <a class="btn btn-secondary" href="<%= self.review_href() %>">Review in the staff grid</a>
+            <% } %>
+          </div>
+        </div>
+      </div>
+
+      <% if !self.bio_html.trim().is_empty() || self.video.is_some() { %>
+        <section class="mb-8 max-w-[800px]">
+          <h2 class="font-semibold text-2xl text-primary-dark mb-2">More about <%= self.first_name %></h2>
+          <div class="ss-text [&_a]:text-primary-action [&_a]:underline"><%- self.bio_html %></div>
+          <% match &self.video { Some(Video::Embed(src)) => { %>
+            <div class="aspect-video mt-4">
+              <iframe class="w-full h-full" src="<%= src %>" title="<%= self.first_name %>'s introduction video"
+                      allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      referrerpolicy="strict-origin-when-cross-origin" allowfullscreen loading="lazy"></iframe>
+            </div>
+          <% } Some(Video::Link(href)) => { %>
+            <p class="mt-4"><a class="text-primary-action underline" href="<%= href %>" rel="nofollow ugc noopener noreferrer">Watch <%= self.first_name %>'s introduction video</a></p>
+          <% } None => {} } %>
+        </section>
+      <% } %>
+
+      <% if !self.upcoming.is_empty() { %>
+        <section class="mb-8 max-w-[800px] border-t border-linework pt-4">
+          <h2 class="font-semibold text-2xl text-primary-dark mb-4">Upcoming Events</h2>
+          <ul>
+            <% for event in &self.upcoming { %>
+              <li class="mb-4">
+                <p class="text-accent1"><%- event.date_html() %></p>
+                <h3><a href="<%= event.href %>" class="font-semibold text-xl text-primary-action underline"><%= event.name %></a></h3>
+                <% if !event.location_name.is_empty() { %><p><%= event.location_name %></p><% } %>
+              </li>
+            <% } %>
+          </ul>
+        </section>
+      <% } %>
+
+      <% if !self.past.is_empty() { %>
+        <section class="mb-8 max-w-[800px] border-t border-linework pt-4">
+          <h2 class="font-semibold text-2xl text-primary-dark mb-4">Past Events Hosted by <%= self.first_name %></h2>
+          <ul>
+            <% for event in &self.past { %>
+              <li class="mb-4">
+                <p class="text-accent1"><%- event.date_html() %></p>
+                <h3><a href="<%= event.href %>" class="font-semibold text-xl text-primary-action underline"><%= event.name %></a></h3>
+                <% if !event.location_name.is_empty() { %><p><%= event.location_name %></p><% } %>
+              </li>
+            <% } %>
+          </ul>
+        </section>
+      <% } %>
+    </div>
+
+    <% if !self.nearby.is_empty() { %>
+      <aside class="rounded-sm border border-linework p-4 self-start">
+        <h2 class="font-semibold text-2xl text-primary-dark mb-4">More Nearby Ambassadors</h2>
+        <div class="flex flex-col gap-4">
+          <% for card in self.nearby { %>
+            <%+ card %>
+          <% } %>
+        </div>
+      </aside>
+    <% } %>
+  </div>
 </div>
+
+<% if self.listed && matches!(self.viewer, Viewer::SignedIn | Viewer::Staff) { %>
+  <dialog id="ambassador-contact" data-notifications
+          class="rounded-lg shadow-xl max-w-lg w-full backdrop:bg-gray-500/75 m-auto"
+          hx-on:click="if (event.target === this) this.close()">
+    <div class="p-6">
+      <div class="flex justify-between items-center mb-2">
+        <h2 class="text-lg font-semibold text-primary-dark">Contact <%= self.name %></h2>
+        <button type="button" hx-on:click="this.closest('dialog').close()" class="text-gray-400 hover:text-gray-600" aria-label="Close">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" class="w-4 h-4 fill-current"><path d="M342.6 150.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L192 210.7 86.6 105.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L146.7 256 41.4 361.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L192 301.3 297.4 406.6c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L237.3 256 342.6 150.6z"/></svg>
+        </button>
+      </div>
+      <p class="text-sm text-gray-600 mb-4">SciStarter staff review every message before forwarding it. Please follow your organization's screening protocols when inviting an Ambassador to an event.</p>
+      <%+ self.contact %>
+    </div>
+  </dialog>
+<% } %>
