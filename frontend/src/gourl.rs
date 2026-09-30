@@ -235,7 +235,7 @@ impl GoUrl {
     /// already taken in any capitalization.
     ///
     /// Only a new link's slug is held to this. The slug is the record's key and
-    /// never changes afterwards, and links imported from orrery carry slugs the
+    /// never changes afterwards, and links synced from orrery carry slugs the
     /// rule would reject (`wpct-library-scistarter_org_…`), which have to stay
     /// editable.
     pub async fn check_new_slug(slug: &str) -> Result<(), GoUrlError> {

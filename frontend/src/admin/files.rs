@@ -479,7 +479,7 @@ async fn files_links_update_go_url(
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, poem::Error> {
     // Load rather than rebuild: the record carries state-machine and session
-    // fields imported from orrery that this form does not show, and
+    // fields synced from orrery that this form does not show, and
     // constructing a fresh one would silently discard them. The slug is the
     // database key, so it stays put --- renaming is a delete and a create.
     let mut go_url = match GoUrl::find(&slug).await {

@@ -3,9 +3,11 @@
 //! A go link is a short address, `/go/<slug>`, that either redirects or serves
 //! a tracked file, logging a clickthrough on the way. It can also record a
 //! step of the visitor's training and stamp a value into their session. Most
-//! of the ten thousand or so that exist were imported from orrery, including
-//! the `wpct-…` links the WordPress pages use for click tracking, and nothing
-//! re-imports them, so an edit made here is the lasting one.
+//! of the ten thousand or so that exist come from orrery, including the
+//! `wpct-…` links the WordPress pages use for click tracking. Until the
+//! cutover orrery remains their source: the go URL sync stores each link
+//! orrery changes over hydra's copy, so an edit made here to an orrery link
+//! lasts until orrery next changes that link.
 //!
 //! Every write goes through [`GoUrl`]'s own operations, the same ones the
 //! admin Files & Links screen uses, so the two enforce identical rules and
@@ -208,7 +210,7 @@ pub fn tool_definitions() -> Vec<Value> {
     vec![
         json!({
             "name": "list_go_links",
-            "description": "List go links (/go/<slug>): short addresses that redirect or serve a tracked file, logging each click. There are about ten thousand, most imported from orrery; the wpct-… ones are click-tracking links used by the WordPress pages. Search matches slug and destination, so it finds every link pointing at a given path.",
+            "description": "List go links (/go/<slug>): short addresses that redirect or serve a tracked file, logging each click. There are about ten thousand, most synced from orrery, which overwrites hydra's copy of any link it changes until the cutover; the wpct-… ones are click-tracking links used by the WordPress pages. Search matches slug and destination, so it finds every link pointing at a given path.",
             "inputSchema": {
                 "type": "object",
                 "properties": {

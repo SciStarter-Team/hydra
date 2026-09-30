@@ -1,7 +1,9 @@
 use std::{fmt::Display, sync::Arc};
 
 use anyhow::Error;
-use common::{message::user::BasicInfo, shared::db, timestring::TimeString};
+use common::{
+    message::user::BasicInfo, shared::db, timestring::TimeString, transaction::Immediate,
+};
 use poem::{
     IntoResponse,
     http::{Method, StatusCode},
@@ -135,6 +137,24 @@ pub enum EntityKind {
 }
 
 impl EntityKind {
+    /// Whether an entity of this kind is the address of a piece of hydra
+    /// content, identified by its ULID. A piece of content has exactly one
+    /// such address; the other kinds point at URLs or at nothing, and any
+    /// number of them may share a target. The `entities_by_target` index
+    /// enforces this, and must list the same kinds.
+    pub fn addresses_content(&self) -> bool {
+        match self {
+            EntityKind::RawHtml
+            | EntityKind::DressedHtml
+            | EntityKind::Wysiwyg
+            | EntityKind::PageBuilder
+            | EntityKind::Form
+            | EntityKind::Project
+            | EntityKind::Event => true,
+            EntityKind::Redirect | EntityKind::WordPress | EntityKind::Placeholder => false,
+        }
+    }
+
     /// The URL path prefix under which entities of this kind are
     /// served. Projects and events live under `/projects/` and
     /// `/events/`; every other kind is served at the top level.
@@ -912,33 +932,32 @@ impl LoadStorePeered for Entity {
     #[tracing::instrument]
     async fn save_to_database(&self) -> Result<(), Error> {
         let target = self.target.to_string();
+        let mut tx = Immediate::begin_with_retry(db(), None, None).await?;
 
-        // Tried using the standard "on conflict" clause, but it
-        // handles the case when both unique columns conflict with
-        // different rows poorly. The nonstandard "insert or replace",
-        // on the other hand, handles that case cleanly, and does
-        // precisely what we want it to as well.
-
-        // r#"insert into "entities" (
-        //      "slug",
-        //      "kind",
-        //      "target"
-        //    )
-        //    values (
-        //      ?1,
-        //      ?2,
-        //      ?3
-        //    )
-        //    on conflict ("slug") do update set
-        //      "kind" = excluded."kind",
-        //      "target" = excluded."target"
-        //    on conflict ("target") do update set
-        //      "slug" = excluded."slug",
-        //      "kind" = excluded."kind"
-        // "#,
+        // Content has one address. If this entity gives its content a new
+        // slug, the slug it had until now becomes a redirect to the new
+        // address, so that links to it keep working. The kinds listed are
+        // the ones `addresses_content` excludes, as in the index that
+        // enforces the rule.
+        if self.kind.addresses_content() {
+            let canonical_path = self.canonical_path();
+            sqlx::query!(
+                r#"update "entities"
+                   set "kind" = ?, "target" = ?, "password" = NULL
+                   where "target" = ?
+                     and "kind" not in ('Redirect', 'WordPress', 'Placeholder')
+                     and LOWER("slug") <> LOWER(?)"#,
+                EntityKind::Redirect,
+                canonical_path,
+                target,
+                self.slug,
+            )
+            .execute(&mut tx)
+            .await?;
+        }
 
         sqlx::query!(
-            r#"insert or replace into "entities" (
+            r#"insert into "entities" (
                  "slug",
                  "kind",
                  "target",
@@ -946,14 +965,14 @@ impl LoadStorePeered for Entity {
                  "created",
                  "password"
                )
-               values (
-                 ?1,
-                 ?2,
-                 ?3,
-                 ?4,
-                 ?5,
-                 ?6
-               )
+               values (?, ?, ?, ?, ?, ?)
+               on conflict (LOWER("slug")) do update set
+                 "slug" = excluded."slug",
+                 "kind" = excluded."kind",
+                 "target" = excluded."target",
+                 "publish" = excluded."publish",
+                 "created" = excluded."created",
+                 "password" = excluded."password"
             "#,
             self.slug,
             self.kind,
@@ -962,8 +981,10 @@ impl LoadStorePeered for Entity {
             self.created,
             self.password,
         )
-        .execute(db())
+        .execute(&mut tx)
         .await?;
+
+        tx.commit().await?;
 
         Ok(())
     }
