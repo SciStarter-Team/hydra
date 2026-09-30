@@ -1,7 +1,7 @@
 //! Girl Scouts Take Action submissions (top-level admin, staff-facing).
 //!
 //! The read side orrery never had: troops log Take Action projects at
-//! `/girlscouts-action`, and this is where staff read them. Submissions are
+//! `/girlscouts/action`, and this is where staff read them. Submissions are
 //! records of what a troop did, so they are listed and deletable but not
 //! editable --- correcting someone else's write-up would defeat the point of
 //! keeping it.

@@ -1,10 +1,11 @@
 //! The public Acts of Science Connected hosting application.
 //!
-//! Ported from orrery's `acts_of_science_connected_form`, at the same path so
-//! the curated page that carries the form keeps working after the cutover.
-//! Like orrery's, this is POST-only: the form itself is authored on
+//! Ported from orrery's `acts_of_science_connected_form`. Like orrery's, this
+//! is POST-only: the form itself is authored on
 //! `/library-acts-of-science-connected-apply`, and this endpoint only receives
-//! it.
+//! it. Orrery's address for it, `/l/acts-of-science-connected-apply`, is a
+//! `Redirect` entity, which forwards a POST with its form intact, so a form
+//! still aimed there keeps working.
 //!
 //! The application is stored by the user service, and the applicant gets a
 //! confirmation. The staff export lives at
@@ -69,7 +70,7 @@ pub struct ApplicationForm {
     request_grant: String,
 }
 
-/// POST `/l/acts-of-science-connected-apply` — record an application.
+/// POST `/library-network/apply-for-connected` — record an application.
 #[handler]
 #[tracing::instrument]
 pub async fn submit(Form(form): Form<ApplicationForm>) -> Result<Response, anyhow::Error> {

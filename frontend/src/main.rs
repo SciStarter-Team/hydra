@@ -129,14 +129,7 @@ async fn entity_page(
     if &slug == "" {
         Ok(index_page_pseudo_handler(client_ip, user_info).await?)
     } else {
-        Entity::response_for_slug(
-            slug,
-            "/",
-            user_info,
-            session,
-            req.uri().query().unwrap_or(""),
-        )
-        .await
+        Entity::response_for_slug(slug, "/", user_info, session, req).await
     }
 }
 
@@ -152,14 +145,7 @@ async fn project_page(
     req: &poem::Request,
     Path(slug): Path<String>,
 ) -> poem::Result<poem::Response> {
-    Entity::response_for_slug(
-        slug,
-        "/projects/",
-        user_info,
-        session,
-        req.uri().query().unwrap_or(""),
-    )
-    .await
+    Entity::response_for_slug(slug, "/projects/", user_info, session, req).await
 }
 
 /// Serve an event at its canonical `/events/<slug>` path.
@@ -171,14 +157,7 @@ async fn event_page(
     req: &poem::Request,
     Path(slug): Path<String>,
 ) -> poem::Result<poem::Response> {
-    Entity::response_for_slug(
-        slug,
-        "/events/",
-        user_info,
-        session,
-        req.uri().query().unwrap_or(""),
-    )
-    .await
+    Entity::response_for_slug(slug, "/events/", user_info, session, req).await
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -290,19 +269,19 @@ fn user_facing() -> impl Endpoint {
         )
         .at("/add", get(add::add_chooser_page))
         .at(
-            "/add-event",
+            "/add/event",
             get(add::add_event_page).post(add::add_event_submit),
         )
-        .at("/add-event/submitted", get(add::add_event_submitted_page))
+        .at("/add/event/submitted", get(add::add_event_submitted_page))
         .at(
-            "/add-event/parent-search",
+            "/add/event/parent-search",
             get(add::add_event_parent_search),
         )
         .at(
-            "/add-event/parent-select",
+            "/add/event/parent-select",
             get(add::add_event_parent_select),
         )
-        .at("/add-event/parent-clear", get(add::add_event_parent_clear))
+        .at("/add/event/parent-clear", get(add::add_event_parent_clear))
         .at("/add/tag-search", get(add::add_tag_search))
         .at("/add/upload-image", post(add::add_upload_image))
         .at("/add/region-lookup", get(add::add_region_lookup))
@@ -310,11 +289,11 @@ fn user_facing() -> impl Endpoint {
         .at("/add/zip-lookup", get(add::add_zip_lookup))
         .nest("/staff", staff::routes())
         .at(
-            "/add-project",
+            "/add/project",
             get(add::add_project_page).post(add::add_project_submit),
         )
         .at(
-            "/add-project/submitted",
+            "/add/project/submitted",
             get(add::add_project_submitted_page),
         )
         .at("/demo-forum", get(demo_forum))
@@ -499,11 +478,11 @@ fn user_facing() -> impl Endpoint {
         .at("/training/k12", get(training::k12::page))
         .at("/training/k12/-progress", get(training::k12::progress))
         .at(
-            "/l/library-network-signup",
+            "/library-network/signup",
             get(library_signup::index).post(library_signup::submit),
         )
         .at(
-            "/l/acts-of-science-connected-apply",
+            "/library-network/apply-for-connected",
             post(acts_connected::submit),
         )
         .at("/training/champion", get(training::champion::page))
@@ -513,11 +492,17 @@ fn user_facing() -> impl Endpoint {
         )
         // Paths and their history: see the `ambassador` module docs.
         .at(
-            "/ambassador-apply",
+            ambassador::APPLY_PATH,
             get(ambassador::apply::index).post(ambassador::apply::submit),
         )
-        .at("/ambassador-apply/draft", post(ambassador::apply::draft))
-        .at(ambassador::DIRECTORY_PATH, get(ambassador::directory::directory))
+        .at(
+            format!("{}/draft", ambassador::APPLY_PATH),
+            post(ambassador::apply::draft),
+        )
+        .at(
+            ambassador::DIRECTORY_PATH,
+            get(ambassador::directory::directory),
+        )
         .at(
             format!("{}/:id", ambassador::DIRECTORY_PATH),
             get(ambassador::directory::profile_page),
@@ -531,12 +516,16 @@ fn user_facing() -> impl Endpoint {
             get(ambassador::directory::legacy_profile_redirect),
         )
         .at(
-            "/girlscouts-action",
+            "/ambassadors-directory/:id",
+            get(ambassador::directory::legacy_profile_redirect),
+        )
+        .at(
+            girlscouts::PATH,
             get(girlscouts::index).post(girlscouts::submit),
         )
         .at("/projects/*slug", get(project_page))
         .at("/events/*slug", get(event_page))
-        .at("/*slug", get(entity_page))
+        .at("/*slug", get(entity_page).post(entity_page))
         .with(middleware::analytics::AnalyticsMiddleware)
 }
 

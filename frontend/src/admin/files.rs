@@ -1,7 +1,7 @@
 // Files & Links management for admin
 
 use crate::component::{AdminLayout, Component};
-use crate::gourl::{GoUrl, GoUrlType};
+use crate::gourl::{GoUrl, GoUrlError, GoUrlType};
 use crate::local_time::{TimeFormat, local_time};
 use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
@@ -16,12 +16,19 @@ use sailfish::TemplateOnce;
 use serde::{Deserialize, Serialize};
 use sqlx::{QueryBuilder, Row};
 
-/// Shown when a target is neither scheme-qualified nor a path on this site.
-const INVALID_TARGET_MESSAGE: &str = concat!(
-    r#"<div class="text-red-600">"#,
-    "Target must start with a scheme (https://, mailto:) or with / for a path on this site",
-    "</div>",
-);
+/// The message an HTMX form shows when a go link operation is refused.
+fn go_url_error_response(error: GoUrlError) -> poem::Response {
+    if let GoUrlError::Storage(e) = &error {
+        tracing::error!("Go URL storage failed: {e:#}");
+    }
+    poem::Response::builder()
+        .status(error.status())
+        .content_type("text/html")
+        .body(format!(
+            r#"<div class="text-red-600">{}</div>"#,
+            crate::component::html_escape(&error.to_string())
+        ))
+}
 
 // Types
 #[derive(Debug, Clone)]
@@ -362,52 +369,12 @@ async fn files_links_create_redirect(
     Form(request): Form<CreateRedirectRequest>,
     Authenticated(user_info): Authenticated,
 ) -> Result<impl IntoResponse, poem::Error> {
-    // Validate slug
-    if !GoUrl::is_valid_slug(&request.slug) {
-        return Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::BAD_REQUEST)
-            .content_type("text/html")
-            .body(r#"<div class="text-red-600">Invalid slug format</div>"#));
-    }
-
-    if !GoUrl::is_valid_target(&request.target_url) {
-        return Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::BAD_REQUEST)
-            .content_type("text/html")
-            .body(INVALID_TARGET_MESSAGE));
-    }
-
-    // Check if slug already exists (case-insensitive)
-    match GoUrl::slug_exists(&request.slug).await {
-        Ok(true) => {
-            return Ok(poem::Response::builder()
-                .status(poem::http::StatusCode::BAD_REQUEST)
-                .content_type("text/html")
-                .body(r#"<div class="text-red-600">Slug already exists</div>"#));
-        }
-        Err(e) => {
-            tracing::error!("Failed to check slug existence: {}", e);
-            return Ok(poem::Response::builder()
-                .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-                .content_type("text/html")
-                .body(r#"<div class="text-red-600">Database error</div>"#));
-        }
-        Ok(false) => {
-            // Slug doesn't exist, continue with creation
-        }
-    }
-
     // Save slug before it gets moved
     let slug = request.slug.clone();
 
-    // Create and save redirect
     let go_url = GoUrl::new_redirect(request.slug, request.target_url);
-    if let Err(e) = go_url.store().await {
-        tracing::error!("Failed to create redirect: {}", e);
-        return Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-            .content_type("text/html")
-            .body(r#"<div class="text-red-600">Failed to create redirect</div>"#));
+    if let Err(error) = go_url.create().await {
+        return Ok(go_url_error_response(error));
     }
 
     // Log the activity
@@ -446,15 +413,9 @@ async fn files_links_create_redirect(
 /// Both the edit and cancel paths need the record fetched and rendered the same
 /// way, so they share this.
 async fn go_url_row_response(slug: &str, editing: bool) -> Result<poem::Response, poem::Error> {
-    let go_url = match GoUrl::load(slug.to_string()).await {
+    let go_url = match GoUrl::find(slug).await {
         Ok(go_url) => go_url,
-        Err(e) => {
-            tracing::error!("Failed to load go URL {}: {}", slug, e);
-            return Ok(poem::Response::builder()
-                .status(poem::http::StatusCode::NOT_FOUND)
-                .content_type("text/html")
-                .body(r#"<div class="text-red-600">Go URL not found</div>"#));
-        }
+        Err(error) => return Ok(go_url_error_response(error)),
     };
 
     // A tracked file's destination is the file itself, changed through the
@@ -462,12 +423,7 @@ async fn go_url_row_response(slug: &str, editing: bool) -> Result<poem::Response
     let target_url = match &go_url.url_type {
         GoUrlType::Redirect { target_url } => target_url.clone(),
         GoUrlType::TrackedFile { .. } => {
-            return Ok(poem::Response::builder()
-                .status(poem::http::StatusCode::BAD_REQUEST)
-                .content_type("text/html")
-                .body(
-                    r#"<div class="text-red-600">Only redirects have an editable target</div>"#,
-                ));
+            return Ok(go_url_error_response(GoUrlError::NotARedirect));
         }
     };
 
@@ -522,46 +478,25 @@ async fn files_links_update_go_url(
     Form(request): Form<UpdateRedirectRequest>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, poem::Error> {
-    let target_url = request.target_url.trim();
-    if !GoUrl::is_valid_target(target_url) {
-        return Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::BAD_REQUEST)
-            .content_type("text/html")
-            .body(INVALID_TARGET_MESSAGE));
-    }
-
     // Load rather than rebuild: the record carries state-machine and session
-    // fields synced from orrery that this form does not show, and constructing
-    // a fresh one would silently discard them. The slug is the database key, so
-    // it stays put --- renaming is a delete and a create.
-    let mut go_url = match GoUrl::load(slug.clone()).await {
+    // fields imported from orrery that this form does not show, and
+    // constructing a fresh one would silently discard them. The slug is the
+    // database key, so it stays put --- renaming is a delete and a create.
+    let mut go_url = match GoUrl::find(&slug).await {
         Ok(go_url) => go_url,
-        Err(e) => {
-            tracing::error!("Failed to load go URL {}: {}", slug, e);
-            return Ok(poem::Response::builder()
-                .status(poem::http::StatusCode::NOT_FOUND)
-                .content_type("text/html")
-                .body(r#"<div class="text-red-600">Go URL not found</div>"#));
-        }
+        Err(error) => return Ok(go_url_error_response(error)),
     };
 
     if !matches!(go_url.url_type, GoUrlType::Redirect { .. }) {
-        return Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::BAD_REQUEST)
-            .content_type("text/html")
-            .body(r#"<div class="text-red-600">Only redirects have an editable target</div>"#));
+        return Ok(go_url_error_response(GoUrlError::NotARedirect));
     }
 
     go_url.url_type = GoUrlType::Redirect {
-        target_url: target_url.to_string(),
+        target_url: request.target_url.trim().to_string(),
     };
 
-    if let Err(e) = go_url.store().await {
-        tracing::error!("Failed to update go URL {}: {}", slug, e);
-        return Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-            .content_type("text/html")
-            .body(r#"<div class="text-red-600">Failed to update go URL</div>"#));
+    if let Err(error) = go_url.save().await {
+        return Ok(go_url_error_response(error));
     }
 
     if let Some(user_info) = &user_info {
@@ -583,33 +518,8 @@ async fn files_links_delete_go_url(
     Path(slug): Path<String>,
     Authenticated(user_info): Authenticated,
 ) -> Result<impl IntoResponse, poem::Error> {
-    // Check if the go URL exists (case-insensitive) before attempting deletion
-    match GoUrl::slug_exists(&slug).await {
-        Ok(false) => {
-            return Ok(poem::Response::builder()
-                .status(poem::http::StatusCode::NOT_FOUND)
-                .content_type("text/html")
-                .body(r#"<div class="text-red-600">Go URL not found</div>"#));
-        }
-        Err(e) => {
-            tracing::error!("Failed to check slug existence: {}", e);
-            return Ok(poem::Response::builder()
-                .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-                .content_type("text/html")
-                .body(r#"<div class="text-red-600">Database error</div>"#));
-        }
-        Ok(true) => {
-            // Go URL exists, continue with deletion
-        }
-    }
-
-    // Delete the go URL
-    if let Err(e) = GoUrl::delete(slug.clone()).await {
-        tracing::error!("Failed to delete go URL {}: {}", slug, e);
-        return Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-            .content_type("text/html")
-            .body(r#"<div class="text-red-600">Failed to delete go URL</div>"#));
+    if let Err(error) = GoUrl::remove(&slug).await {
+        return Ok(go_url_error_response(error));
     }
 
     // Log the activity

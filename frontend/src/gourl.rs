@@ -1,6 +1,7 @@
 use crate::middleware::analytics::{Device, Interaction};
 use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
+use crate::upload::storage::FileMetadata;
 use anyhow::{Context, Result};
 use common::message::user::{
     BasicInfo, WorkflowProgressRequest, WorkflowProgressResponse, WorkflowType,
@@ -17,6 +18,49 @@ use std::net::IpAddr;
 use std::sync::Arc;
 use tracing::{error, info};
 use ulid::Ulid;
+
+/// Why a go link could not be created, changed or removed. Everything but
+/// [`GoUrlError::Storage`] is the caller's to fix.
+#[derive(Debug, thiserror::Error)]
+pub enum GoUrlError {
+    #[error(
+        "Invalid slug {0:?}: use letters, digits and hyphens, not starting or ending with a hyphen, at most 100 characters"
+    )]
+    InvalidSlug(String),
+    #[error("A go link with slug {0:?} already exists")]
+    SlugTaken(String),
+    #[error("No go link has slug {0:?}")]
+    NotFound(String),
+    #[error(
+        "Invalid target {0:?}: it must start with a scheme (https://, mailto:) or with / for a path on this site"
+    )]
+    InvalidTarget(String),
+    #[error("Only a redirect has a target; a tracked file's destination is its file")]
+    NotARedirect,
+    #[error("No uploaded file has id {0}")]
+    FileNotFound(Ulid),
+    #[error("No training has the state machine {0:?}")]
+    UnknownStateMachine(String),
+    #[error("A state machine and a transition must be set together, or neither")]
+    IncompleteTracking,
+    #[error("A go link may not set the session key {0:?}: that would forge a login")]
+    AuthenticationSessionKey(String),
+    #[error("A session value needs a session key to be stored under")]
+    SessionValueWithoutKey,
+    #[error(transparent)]
+    Storage(#[from] anyhow::Error),
+}
+
+impl GoUrlError {
+    /// The HTTP status a web request that failed this way answers with.
+    pub fn status(&self) -> StatusCode {
+        match self {
+            GoUrlError::NotFound(_) | GoUrlError::FileNotFound(_) => StatusCode::NOT_FOUND,
+            GoUrlError::Storage(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            _ => StatusCode::BAD_REQUEST,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GoUrlType {
@@ -35,6 +79,34 @@ pub struct GoUrl {
     pub transition: String,
     pub session_set_key: String,
     pub session_set_value: String,
+}
+
+/// A `go_urls` row as stored, before its destination is decoded.
+struct GoUrlDB {
+    slug: String,
+    url_type: Vec<u8>,
+    statemachine: String,
+    transition: String,
+    session_set_key: String,
+    session_set_value: String,
+}
+
+impl TryFrom<GoUrlDB> for GoUrl {
+    type Error = anyhow::Error;
+
+    fn try_from(row: GoUrlDB) -> Result<Self, Self::Error> {
+        let url_type: GoUrlType = flexbuffers::from_slice(&row.url_type)
+            .context("Failed to decode GoUrlType from database")?;
+
+        Ok(GoUrl {
+            slug: row.slug, // Return the original case from the database
+            url_type,
+            statemachine: row.statemachine,
+            transition: row.transition,
+            session_set_key: row.session_set_key,
+            session_set_value: row.session_set_value,
+        })
+    }
 }
 
 impl LoadStorePeered for GoUrl {
@@ -71,7 +143,8 @@ impl LoadStorePeered for GoUrl {
         use common::shared::db;
 
         // Use case-insensitive lookup
-        let row = sqlx::query!(
+        sqlx::query_as!(
+            GoUrlDB,
             r#"SELECT slug, url_type, statemachine, transition,
                       session_set_key, session_set_value
                FROM go_urls
@@ -81,19 +154,8 @@ impl LoadStorePeered for GoUrl {
         .fetch_optional(db())
         .await
         .context("Failed to query go_url from database")?
-        .ok_or_else(|| anyhow::anyhow!("Go URL not found"))?;
-
-        let url_type: GoUrlType = flexbuffers::from_slice(&row.url_type)
-            .context("Failed to decode GoUrlType from database")?;
-
-        Ok(GoUrl {
-            slug: row.slug, // Return the original case from the database
-            url_type,
-            statemachine: row.statemachine,
-            transition: row.transition,
-            session_set_key: row.session_set_key,
-            session_set_value: row.session_set_value,
-        })
+        .ok_or_else(|| anyhow::anyhow!("Go URL not found"))?
+        .try_into()
     }
 
     async fn delete_from_database(key: Self::DatabaseKey) -> Result<(), anyhow::Error> {
@@ -123,12 +185,126 @@ impl GoUrl {
     pub fn new_redirect(slug: String, target_url: String) -> Self {
         Self {
             slug,
-            url_type: GoUrlType::Redirect { target_url },
+            url_type: GoUrlType::Redirect {
+                target_url: target_url.trim().to_string(),
+            },
             statemachine: String::new(),
             transition: String::new(),
             session_set_key: String::new(),
             session_set_value: String::new(),
         }
+    }
+
+    /// Every go link, in slug order.
+    pub async fn all() -> Result<Vec<GoUrl>, anyhow::Error> {
+        use common::shared::db;
+
+        sqlx::query_as!(
+            GoUrlDB,
+            r#"SELECT slug, url_type, statemachine, transition,
+                      session_set_key, session_set_value
+               FROM go_urls
+               ORDER BY slug"#
+        )
+        .fetch_all(db())
+        .await
+        .context("Failed to list go_urls")?
+        .into_iter()
+        .map(GoUrl::try_from)
+        .collect()
+    }
+
+    /// Where the link leads, as text: the redirect's target, or the tracked
+    /// file's id.
+    pub fn destination(&self) -> String {
+        match &self.url_type {
+            GoUrlType::Redirect { target_url } => target_url.clone(),
+            GoUrlType::TrackedFile { file_id } => file_id.to_string(),
+        }
+    }
+
+    /// Load a go link, telling a missing one apart from a failed lookup.
+    pub async fn find(slug: &str) -> Result<GoUrl, GoUrlError> {
+        if !GoUrl::slug_exists(slug).await? {
+            return Err(GoUrlError::NotFound(slug.to_string()));
+        }
+        Ok(GoUrl::load(slug.to_string()).await?)
+    }
+
+    /// Check that a slug may be given to a new go link: well formed, and not
+    /// already taken in any capitalization.
+    ///
+    /// Only a new link's slug is held to this. The slug is the record's key and
+    /// never changes afterwards, and links imported from orrery carry slugs the
+    /// rule would reject (`wpct-library-scistarter_org_…`), which have to stay
+    /// editable.
+    pub async fn check_new_slug(slug: &str) -> Result<(), GoUrlError> {
+        if !GoUrl::is_valid_slug(slug) {
+            return Err(GoUrlError::InvalidSlug(slug.to_string()));
+        }
+        if GoUrl::slug_exists(slug).await? {
+            return Err(GoUrlError::SlugTaken(slug.to_string()));
+        }
+        Ok(())
+    }
+
+    /// Check everything about a go link that can change after it is created:
+    /// where it leads, the training step it records, and the session value it
+    /// sets.
+    pub async fn validate(&self) -> Result<(), GoUrlError> {
+        match &self.url_type {
+            GoUrlType::Redirect { target_url } => {
+                if !GoUrl::is_valid_target(target_url) {
+                    return Err(GoUrlError::InvalidTarget(target_url.clone()));
+                }
+            }
+            GoUrlType::TrackedFile { file_id } => {
+                if FileMetadata::load(*file_id).await.is_err() {
+                    return Err(GoUrlError::FileNotFound(*file_id));
+                }
+            }
+        }
+
+        match (self.statemachine.is_empty(), self.transition.is_empty()) {
+            (true, true) => {}
+            (false, false) => {
+                if WorkflowType::from_statemachine(&self.statemachine).is_none() {
+                    return Err(GoUrlError::UnknownStateMachine(self.statemachine.clone()));
+                }
+            }
+            _ => return Err(GoUrlError::IncompleteTracking),
+        }
+
+        if AUTHENTICATION_SESSION_KEYS.contains(&self.session_set_key.as_str()) {
+            return Err(GoUrlError::AuthenticationSessionKey(
+                self.session_set_key.clone(),
+            ));
+        }
+        if self.session_set_key.is_empty() && !self.session_set_value.is_empty() {
+            return Err(GoUrlError::SessionValueWithoutKey);
+        }
+
+        Ok(())
+    }
+
+    /// Store a new go link on every frontend instance.
+    pub async fn create(&self) -> Result<(), GoUrlError> {
+        GoUrl::check_new_slug(&self.slug).await?;
+        self.save().await
+    }
+
+    /// Store changes to an existing go link on every frontend instance.
+    pub async fn save(&self) -> Result<(), GoUrlError> {
+        self.validate().await?;
+        Ok(self.store().await?)
+    }
+
+    /// Delete a go link from every frontend instance.
+    pub async fn remove(slug: &str) -> Result<(), GoUrlError> {
+        if !GoUrl::slug_exists(slug).await? {
+            return Err(GoUrlError::NotFound(slug.to_string()));
+        }
+        Ok(GoUrl::delete(slug.to_string()).await?)
     }
 
     pub fn is_valid_slug(slug: &str) -> bool {
@@ -408,7 +584,85 @@ pub async fn handle_go_url(
 
 #[cfg(test)]
 mod tests {
-    use super::GoUrl;
+    use super::{GoUrl, GoUrlError};
+
+    fn redirect() -> GoUrl {
+        GoUrl::new_redirect("example".to_string(), "/finder".to_string())
+    }
+
+    #[tokio::test]
+    async fn a_plain_redirect_is_valid() {
+        assert!(redirect().validate().await.is_ok());
+    }
+
+    #[test]
+    fn a_redirect_target_is_stored_trimmed() {
+        let go_url = GoUrl::new_redirect("example".to_string(), "  /finder ".to_string());
+        assert_eq!(go_url.destination(), "/finder");
+    }
+
+    #[tokio::test]
+    async fn an_invalid_target_is_refused() {
+        let go_url = GoUrl::new_redirect("example".to_string(), "example.org".to_string());
+        assert!(matches!(
+            go_url.validate().await,
+            Err(GoUrlError::InvalidTarget(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn a_training_step_needs_both_halves() {
+        let mut go_url = redirect();
+        go_url.statemachine = "higheredstate".to_string();
+        assert!(matches!(
+            go_url.validate().await,
+            Err(GoUrlError::IncompleteTracking)
+        ));
+
+        go_url.transition = "explore".to_string();
+        assert!(go_url.validate().await.is_ok());
+
+        go_url.statemachine = String::new();
+        assert!(matches!(
+            go_url.validate().await,
+            Err(GoUrlError::IncompleteTracking)
+        ));
+    }
+
+    #[tokio::test]
+    async fn an_unknown_training_is_refused() {
+        let mut go_url = redirect();
+        go_url.statemachine = "nosuchstate".to_string();
+        go_url.transition = "explore".to_string();
+        assert!(matches!(
+            go_url.validate().await,
+            Err(GoUrlError::UnknownStateMachine(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn a_link_cannot_forge_a_login() {
+        let mut go_url = redirect();
+        go_url.session_set_key = "basic_info".to_string();
+        go_url.session_set_value = "anything".to_string();
+        assert!(matches!(
+            go_url.validate().await,
+            Err(GoUrlError::AuthenticationSessionKey(_))
+        ));
+
+        go_url.session_set_key = "signup_tags".to_string();
+        assert!(go_url.validate().await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn a_session_value_needs_a_key() {
+        let mut go_url = redirect();
+        go_url.session_set_value = "girlscout".to_string();
+        assert!(matches!(
+            go_url.validate().await,
+            Err(GoUrlError::SessionValueWithoutKey)
+        ));
+    }
 
     #[test]
     fn a_target_needs_a_scheme_or_a_leading_slash() {

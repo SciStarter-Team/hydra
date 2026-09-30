@@ -11,6 +11,7 @@
 
 pub mod content;
 pub mod email;
+pub mod golinks;
 pub mod query;
 
 use anyhow::Error;

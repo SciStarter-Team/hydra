@@ -97,7 +97,7 @@ Your <strong>badge</strong> is now available on your <a href="/dashboard/profile
 <p><strong>What to Do Next:</strong><br>
 ✅ <strong>Join the Library Network Facebook Group</strong> to connect with others and get inspired: <a href="https://www.facebook.com/groups/788879025402547" target="_blank">Library Network group</a><br>
 ✅ <strong>Reach out to a <a href="/training/champion">Citizen Science Champion</a></strong> for support planning and facilitating programs.<br>
-✅ <strong><a href="/add-event">Add your events</a></strong> to the SciStarter Event Calendar to promote and track your impact.<br>
+✅ <strong><a href="/add/event">Add your events</a></strong> to the SciStarter Event Calendar to promote and track your impact.<br>
 ✅ These <strong>resources</strong> and more can be found on <a href="https://scistarter.org/library">SciStarter.org/library</a>.<br>
 ✅ Look for more resources and updates in our monthly newsletter!</p>"#.to_string(),
             sidebar_html: r#"<p class="mt-4">With support from Arizona State University, the National Library of Medicine, and others, SciStarter assembled a team with expertise in instructional design, education, libraries, digital design, micro accreditation, and, of course, citizen science to produce a series of tutorials, trainings, and accompanying modules.</p>

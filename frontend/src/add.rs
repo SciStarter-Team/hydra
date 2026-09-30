@@ -52,7 +52,7 @@ struct AddChooserContent {
 
 /// Landing page for the contribute flow: lets a visitor choose whether
 /// to add a project or an event. The submission forms themselves live
-/// at `/add-project` and `/add-event` and require authentication.
+/// at `/add/project` and `/add/event` and require authentication.
 #[handler]
 #[tracing::instrument]
 pub async fn add_chooser_page(
@@ -483,7 +483,7 @@ struct RegionEditor {
 }
 
 // ---------------------------------------------------------------------------
-// Shared add-form components (used by both /add-event and /add-project)
+// Shared add-form components (used by both /add/event and /add/project)
 // ---------------------------------------------------------------------------
 
 /// The location section: an "in person or virtual?" mode select, a place
@@ -636,7 +636,7 @@ struct TagInput {
 // Add Event: handlers
 // ---------------------------------------------------------------------------
 
-/// GET `/add-event` — render the (empty) submission form. Submitting requires
+/// GET `/add/event` — render the (empty) submission form. Submitting requires
 /// authentication, so unauthenticated visitors are sent to log in first.
 #[handler]
 #[tracing::instrument]
@@ -644,7 +644,7 @@ pub async fn add_event_page(
     Authenticated(user_info): Authenticated,
 ) -> Result<Response, anyhow::Error> {
     if user_info.is_none() {
-        return Ok(Redirect::see_other("/login?next=/add-event").into_response());
+        return Ok(Redirect::see_other("/login?next=/add/event").into_response());
     }
 
     let mut values = EventFormValues::default();
@@ -655,7 +655,7 @@ pub async fn add_event_page(
     render_event_form(None, values, user_info).await
 }
 
-/// POST `/add-event` — validate, create the event (unpublished), and redirect
+/// POST `/add/event` — validate, create the event (unpublished), and redirect
 /// to the confirmation page. On validation failure, re-render the form with
 /// the entered values preserved.
 #[handler]
@@ -665,7 +665,7 @@ pub async fn add_event_submit(
     QsForm(form): QsForm<AddEventForm>,
 ) -> Result<Response, anyhow::Error> {
     let Some(user_info) = user_info else {
-        return Ok(Redirect::see_other("/login?next=/add-event").into_response());
+        return Ok(Redirect::see_other("/login?next=/add/event").into_response());
     };
 
     match validate_and_build(&form, user_info.user_id) {
@@ -713,7 +713,7 @@ pub async fn add_event_submit(
             .ok();
 
             Ok(Redirect::see_other(format!(
-                "/add-event/submitted?name={}",
+                "/add/event/submitted?name={}",
                 urlencoding::encode(&name)
             ))
             .into_response())
@@ -770,7 +770,7 @@ async fn render_event_form(
         tags,
     };
 
-    let layout = StandardLayout::new("/add-event", content)
+    let layout = StandardLayout::new("/add/event", content)
         .prepare(user_info)
         .await?;
 
@@ -827,24 +827,24 @@ async fn render_submitted(
     .await
 }
 
-/// GET `/add-event/submitted` — "thanks, pending review" confirmation page.
+/// GET `/add/event/submitted` — "thanks, pending review" confirmation page.
 #[handler]
 #[tracing::instrument]
 pub async fn add_event_submitted_page(
     Authenticated(user_info): Authenticated,
     Query(query): Query<SubmittedQuery>,
 ) -> Result<Response, anyhow::Error> {
-    render_submitted(user_info, "/add-event", query.name, "event").await
+    render_submitted(user_info, "/add/event", query.name, "event").await
 }
 
-/// GET `/add-project/submitted` — "thanks, pending review" confirmation page.
+/// GET `/add/project/submitted` — "thanks, pending review" confirmation page.
 #[handler]
 #[tracing::instrument]
 pub async fn add_project_submitted_page(
     Authenticated(user_info): Authenticated,
     Query(query): Query<SubmittedQuery>,
 ) -> Result<Response, anyhow::Error> {
-    render_submitted(user_info, "/add-project", query.name, "project").await
+    render_submitted(user_info, "/add/project", query.name, "project").await
 }
 
 // ---------------------------------------------------------------------------
@@ -870,7 +870,7 @@ struct ParentSelected {
     name: String,
 }
 
-/// GET `/add-event/parent-search?q=` — list published events matching the query
+/// GET `/add/event/parent-search?q=` — list published events matching the query
 /// as pickable options (only published events can serve as an umbrella).
 #[handler]
 #[tracing::instrument]
@@ -901,7 +901,7 @@ pub async fn add_event_parent_search(
     Ok(html_fragment(ParentResults { events }.render_once()?))
 }
 
-/// GET `/add-event/parent-select?id=` — record the chosen parent: returns the
+/// GET `/add/event/parent-select?id=` — record the chosen parent: returns the
 /// "selected" display plus out-of-band updates for the hidden field and the
 /// (now-cleared) results list.
 #[handler]
@@ -925,7 +925,7 @@ struct ParentSelectQuery {
     id: String,
 }
 
-/// GET `/add-event/parent-clear` — clear the chosen parent.
+/// GET `/add/event/parent-clear` — clear the chosen parent.
 #[handler]
 #[tracing::instrument]
 pub async fn add_event_parent_clear() -> Result<Response, anyhow::Error> {
@@ -1901,19 +1901,19 @@ struct AddProjectContent {
     tags: TagInput,
 }
 
-/// GET `/add-project` — render the (empty) submission form (login required).
+/// GET `/add/project` — render the (empty) submission form (login required).
 #[handler]
 #[tracing::instrument]
 pub async fn add_project_page(
     Authenticated(user_info): Authenticated,
 ) -> Result<Response, anyhow::Error> {
     if user_info.is_none() {
-        return Ok(Redirect::see_other("/login?next=/add-project").into_response());
+        return Ok(Redirect::see_other("/login?next=/add/project").into_response());
     }
     render_project_form(None, ProjectFormValues::default(), user_info).await
 }
 
-/// POST `/add-project` — validate, create the project (draft + unpublished),
+/// POST `/add/project` — validate, create the project (draft + unpublished),
 /// and redirect to the confirmation page.
 #[handler]
 #[tracing::instrument(skip(form))]
@@ -1922,7 +1922,7 @@ pub async fn add_project_submit(
     QsForm(form): QsForm<AddProjectForm>,
 ) -> Result<Response, anyhow::Error> {
     let Some(user_info) = user_info else {
-        return Ok(Redirect::see_other("/login?next=/add-project").into_response());
+        return Ok(Redirect::see_other("/login?next=/add/project").into_response());
     };
 
     match validate_and_build_project(&form, user_info.user_id) {
@@ -1931,7 +1931,7 @@ pub async fn add_project_submit(
             // Public submissions stay unpublished pending review.
             crate::project::all::persist_new_project(project, false, user_info.user_id).await?;
             Ok(Redirect::see_other(format!(
-                "/add-project/submitted?name={}",
+                "/add/project/submitted?name={}",
                 urlencoding::encode(&name)
             ))
             .into_response())
@@ -1980,7 +1980,7 @@ async fn render_project_form(
         tags,
     };
 
-    let layout = StandardLayout::new("/add-project", content)
+    let layout = StandardLayout::new("/add/project", content)
         .prepare(user_info)
         .await?;
 

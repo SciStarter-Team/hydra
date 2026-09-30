@@ -7,7 +7,7 @@
 
     <%+ crate::component::floating_field::FormErrorNotice { error } %>
 
-    <form method="post" action="/add-event" class="add-form">
+    <form method="post" action="/add/event" class="add-form">
       <p class="field-help add-area-note">Fields marked <span aria-hidden="true">*</span> are required.</p>
 
       <%# The groups below are the columns of the desktop layout (the image,
@@ -108,7 +108,7 @@
                 <label class="pill-body">
                   <span class="pill-label">Search published events</span>
                   <input id="part-of-search" type="search" name="q" placeholder=" " autocomplete="off" aria-describedby="part-of-help"
-                    hx-get="/add-event/parent-search" hx-trigger="input changed delay:300ms, search"
+                    hx-get="/add/event/parent-search" hx-trigger="input changed delay:300ms, search"
                     hx-target="#parent-results" hx-swap="innerHTML"
                     hx-on:keydown="if (event.key === 'Enter') event.preventDefault()">
                 </label>
@@ -119,7 +119,7 @@
                     <span>Part of: <strong><%= self.values.part_of_name %></strong></span>
                     <button type="button" class="link-btn" aria-label="Clear the larger event"
                       hx-on:click="document.getElementById('part-of-search').focus()"
-                      hx-get="/add-event/parent-clear" hx-target="#parent-selected" hx-swap="innerHTML">Clear</button>
+                      hx-get="/add/event/parent-clear" hx-target="#parent-selected" hx-swap="innerHTML">Clear</button>
                   </div>
                 <% } %>
               </div>

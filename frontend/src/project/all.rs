@@ -1945,7 +1945,7 @@ impl LoadStorePeered for ProjectAll {
 
 /// Persist a brand-new project and its page entity, then fire the submission
 /// triggers. This is the single source of truth for project creation, shared by
-/// the admin "Add Project" handler and the public `/add-project` form — callers
+/// the admin "Add Project" handler and the public `/add/project` form — callers
 /// build the `ProjectAll` with whatever fields their form collects and set the
 /// system fields (page_creator_id, created, origin, authoritative, status,
 /// draft); this function handles the persistence/entity/notification sequence.

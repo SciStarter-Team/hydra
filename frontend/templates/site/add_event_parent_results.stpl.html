@@ -2,7 +2,7 @@
   <% for (id, name) in &self.events { %>
     <li>
       <button type="button" class="w-full text-left px-3 py-2 hover:bg-linework"
-        hx-get="/add-event/parent-select?id=<%= id %>" hx-target="#parent-selected" hx-swap="innerHTML">
+        hx-get="/add/event/parent-select?id=<%= id %>" hx-target="#parent-selected" hx-swap="innerHTML">
         <%= name %>
       </button>
     </li>

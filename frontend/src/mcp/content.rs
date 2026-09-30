@@ -21,6 +21,8 @@
 //!   layer ([`Entity`]).
 //! - **Automatic email** (see [`super::email`]) — the stored emails the
 //!   site sends without being asked, and the triggers that send them.
+//! - **Go links** (see [`super::golinks`]) — the `/go/<slug>` short
+//!   addresses.
 //!
 //! All writes go through the `LoadStorePeered::store()` path so changes
 //! propagate to every frontend instance, exactly as the admin handlers
@@ -159,9 +161,12 @@ async fn handle_tools_call(id: Option<Value>, params: Option<Value>) -> JsonRpcR
         "update_entity" => tool_update_entity(arguments).await,
         other => match super::email::dispatch(other, arguments.clone()).await {
             Some(result) => result,
-            None => match super::query::dispatch(other, arguments).await {
+            None => match super::golinks::dispatch(other, arguments.clone()).await {
                 Some(result) => result,
-                None => Err(anyhow!("Unknown tool: {other}")),
+                None => match super::query::dispatch(other, arguments).await {
+                    Some(result) => result,
+                    None => Err(anyhow!("Unknown tool: {other}")),
+                },
             },
         },
     };
@@ -1265,6 +1270,7 @@ pub(crate) fn get_tools() -> Value {
         .as_array_mut()
         .expect("the tool list is an array literal");
     list.extend(super::email::tool_definitions());
+    list.extend(super::golinks::tool_definitions());
     list.extend(super::query::tool_definitions());
 
     tools

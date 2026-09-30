@@ -2,7 +2,7 @@
   <h1 class="text-2xl font-bold text-gray-900 mb-1">Girl Scouts Take Action</h1>
   <p class="text-sm text-gray-500 mb-4 max-w-3xl">
     Take Action projects logged by troops at
-    <a class="hover:underline text-blue-600" href="/girlscouts-action">/girlscouts-action</a>,
+    <a class="hover:underline text-blue-600" href="<%= crate::girlscouts::PATH %>"><%= crate::girlscouts::PATH %></a>,
     the last step of the Think Like a Citizen Scientist Journey.
     <%= self.total %> submission<% if self.total != 1 { %>s<% } %> so far.
   </p>

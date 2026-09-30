@@ -82,7 +82,7 @@ impl Default for ChampionContent {
   <summary class="cursor-pointer font-bold">Become a Certified SciStarter Ambassador</summary>
   <p>Champions (18+ and based in the US) are eligible to apply to become a SciStarter Ambassador! Ambassadors receive all the benefits of Champions. However, Ambassadors are included in a public, searchable directory so they may be contacted and invited to host or support events that introduce citizen science and SciStarter to new audiences. Upon successful completion of an application and third-party background screening, among other requirements, Ambassadors receive a digital badge with personalized metadata, access to free event materials, and are required to host or facilitate events at least two times a year.</p>
   <p>Ambassador applications are open periodically throughout the year. Everyone who completes the Citizen Science Champion training will be notified when applications reopen.</p>
-  <p><a href="/ambassador-apply" class="btn btn-accent">Find out more about the SciStarter Ambassador Program here.</a></p>
+  <p><a href="/ambassador/apply" class="btn btn-accent">Find out more about the SciStarter Ambassador Program here.</a></p>
 </details>"#.to_string(),
             estimated_time: "1 hour".to_string(),
             badge_image: "https://media.scistarter.org/curated/2026/Citizen_Science_Champion_certificate.png".to_string(),
@@ -113,7 +113,7 @@ Your <strong>Champion Certificate</strong> is now available on your <a href="/da
 <ul>
 <li class="mb-2">✅ <strong>Join the Facebook Group</strong> to connect with fellow Champions and get inspired: <a href="https://www.facebook.com/share/g/18rEgXA9yA/" target="_blank">Champions group</a></li>
 <li class="mb-2">✅ <strong>Reach Out to Local Partners</strong> (libraries, schools, nature centers!) to explore collaboration. <a href="https://scistarter.org/library-locations">Explore the locations in our Citizen and Community Science Library Network</a>.</li>
-<li class="mb-2">✅ <strong>Add Your Events</strong> to the <a href="/add-event" target="_blank">SciStarter Event Calendar</a> to promote and track your impact.</li>
+<li class="mb-2">✅ <strong>Add Your Events</strong> to the <a href="/add/event" target="_blank">SciStarter Event Calendar</a> to promote and track your impact.</li>
 </ul>"#.to_string(),
             apply_heading: "Apply to be a Certified Ambassador".to_string(),
             apply_html: r#"<p><strong>You will be notified when applications open.</strong></p>

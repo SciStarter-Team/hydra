@@ -5,7 +5,7 @@
         the search once the choice is cleared, before this button goes too. %>
     <button type="button" class="link-btn" aria-label="Clear the larger event" autofocus
       hx-on:click="document.getElementById('part-of-search').focus()"
-      hx-get="/add-event/parent-clear" hx-target="#parent-selected" hx-swap="innerHTML">Clear</button>
+      hx-get="/add/event/parent-clear" hx-target="#parent-selected" hx-swap="innerHTML">Clear</button>
   </div>
 <% } %>
 <input type="hidden" name="part_of" id="part_of" value="<%= self.id %>" hx-swap-oob="true">

@@ -2,20 +2,27 @@
 //! ([`apply`]) and the directory of certified ambassadors with their profiles
 //! ([`directory`]).
 //!
-//! The paths are orrery's canonical spellings, which these pages have to
-//! keep: it serves the application at `/ambassador-apply` and the directory at
-//! `/ambassadors-directory`, while `/ambassador` is the program's overview page
-//! and `/ambassadors` redirects to it. The plural and singular variants people
-//! have bookmarked are `Redirect` entities; orrery's `/ambassador/<id>` profile
-//! links are [`directory::legacy_profile_redirect`].
+//! The program lives under `/ambassador`, its overview page: the application
+//! is at `/ambassador/apply` and the directory at `/ambassador/directory`.
+//! `/ambassadors` redirects to the overview. The addresses these pages had
+//! before, orrery's `/ambassador-apply` and `/ambassadors-directory`, and the
+//! plural and singular variants people have bookmarked, are `Redirect`
+//! entities. Profile links carry an ID, so the old ones, orrery's
+//! `/ambassador/<id>` and `/ambassadors-directory/<id>`, are
+//! [`directory::legacy_profile_redirect`] instead. The first shares this
+//! prefix, which is safe: the router prefers the literal `apply` and
+//! `directory` segments to its `:id`, and no ID is spelled like either.
 
 pub mod apply;
 pub mod directory;
 
 use ulid::Ulid;
 
+/// The application form.
+pub const APPLY_PATH: &str = "/ambassador/apply";
+
 /// The public directory.
-pub const DIRECTORY_PATH: &str = "/ambassadors-directory";
+pub const DIRECTORY_PATH: &str = "/ambassador/directory";
 
 /// An ambassador's public profile. Everything that links to a profile builds
 /// the link here.

@@ -1,4 +1,4 @@
-//! Girl Scouts Take Action logging (`/girlscouts-action`).
+//! Girl Scouts Take Action logging (`/girlscouts/action`).
 //!
 //! Ported from orrery's `ss-girlscouts-take-action` Vue component and its
 //! `girlscouts_action_save` endpoint. The last step of the Think Like a Citizen
@@ -34,7 +34,7 @@ use crate::component::{
 };
 use crate::middleware::authorization::Authenticated;
 
-const PATH: &str = "/girlscouts-action";
+pub const PATH: &str = "/girlscouts/action";
 
 /// The Take Action form body, rendered inside `StandardLayout`.
 #[derive(TemplateOnce)]

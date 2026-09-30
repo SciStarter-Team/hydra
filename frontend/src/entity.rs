@@ -4,7 +4,7 @@ use anyhow::Error;
 use common::{message::user::BasicInfo, shared::db, timestring::TimeString};
 use poem::{
     IntoResponse,
-    http::StatusCode,
+    http::{Method, StatusCode},
     web::{Html, Redirect},
 };
 use ulid::Ulid;
@@ -45,6 +45,43 @@ pub fn is_password_authorized(session: &poem::session::Session, slug: &str) -> b
 /// Grant password authorization for an entity in session
 pub fn grant_password_authorization(session: &poem::session::Session, slug: &str) {
     session.set(&entity_password_session_key(slug), true);
+}
+
+/// Whether a request only reads, as opposed to submitting something.
+fn is_read(method: &Method) -> bool {
+    method == Method::GET || method == Method::HEAD
+}
+
+/// Permanently redirect a request to the address that replaced the one it
+/// asked for.
+///
+/// A read gets a 301. Anything else gets a 308, because a browser following
+/// a 301 is allowed to turn a POST into a GET and drop the form it carried.
+fn moved(location: &str, req: &poem::Request) -> poem::Response {
+    let location = forward_query(location, req.uri().query().unwrap_or(""));
+    if is_read(req.method()) {
+        Redirect::moved_permanent(location).into_response()
+    } else {
+        Redirect::permanent(location).into_response()
+    }
+}
+
+/// Carry a request's query string over to a redirect's location, so that a
+/// moved address keeps its parameters. They follow any the location already
+/// has, and come before its fragment.
+fn forward_query(location: &str, query: &str) -> String {
+    if query.is_empty() {
+        return location.to_string();
+    }
+    let (base, fragment) = match location.split_once('#') {
+        Some((base, fragment)) => (base, Some(fragment)),
+        None => (location, None),
+    };
+    let separator = if base.contains('?') { '&' } else { '?' };
+    match fragment {
+        Some(fragment) => format!("{base}{separator}{query}#{fragment}"),
+        None => format!("{base}{separator}{query}"),
+    }
 }
 
 #[derive(sailfish::TemplateOnce)]
@@ -445,13 +482,15 @@ impl Entity {
         Ok(Entity::new(slug, kind, target))
     }
 
-    #[tracing::instrument(skip(session))]
+    #[tracing::instrument(skip(session, req))]
     pub async fn response(
         &self,
         user_info: Option<Arc<BasicInfo>>,
         session: &poem::session::Session,
-        query: &str,
+        req: &poem::Request,
     ) -> poem::Result<poem::Response> {
+        let query = req.uri().query().unwrap_or("");
+
         // Check access permissions for unpublished entities
         let password_authorized = is_password_authorized(session, &self.slug);
         match check_entity_access(self, user_info.as_deref(), password_authorized).await? {
@@ -474,7 +513,7 @@ impl Entity {
                     _ => None,
                 };
                 if let Some(location) = location {
-                    Redirect::moved_permanent(location).into_response()
+                    moved(&location, req)
                 } else {
                     return Err(poem::Error::from_status(StatusCode::NOT_FOUND));
                 }
@@ -737,27 +776,33 @@ impl Entity {
         .await?)
     }
 
-    #[tracing::instrument(skip(slug, session))]
+    #[tracing::instrument(skip(slug, session, req))]
     pub async fn response_for_slug(
         slug: impl AsRef<str>,
         prefix: &str,
         user_info: Option<Arc<BasicInfo>>,
         session: &poem::session::Session,
-        query: &str,
+        req: &poem::Request,
     ) -> poem::Result<poem::Response> {
         // This as_ref().to_string() silliness is due to the issue
         // mentioned in peering.rs forcing us to use String instead of
         // &str as the key type.
         match Entity::load(slug.as_ref().to_string()).await {
             Ok(ent) => {
+                // A Redirect forwards whatever request reaches it, so that
+                // a form posting to a moved address still arrives. Every
+                // other kind is a page, and only answers a read.
+                //
                 // If the entity was requested under a prefix that
                 // isn't its canonical one (e.g. a project reached at
                 // the top level, or a page reached under /projects/),
                 // permanently redirect to the canonical path.
-                if prefix != ent.kind().path_prefix() {
-                    Ok(Redirect::moved_permanent(ent.canonical_path()).into_response())
+                if !is_read(req.method()) && !matches!(ent.kind(), EntityKind::Redirect) {
+                    Ok(StatusCode::METHOD_NOT_ALLOWED.into())
+                } else if prefix != ent.kind().path_prefix() {
+                    Ok(moved(&ent.canonical_path(), req))
                 } else {
-                    ent.response(user_info, session, query).await
+                    ent.response(user_info, session, req).await
                 }
             }
             Err(err) => match err.downcast_ref::<sqlx::Error>() {
@@ -921,5 +966,40 @@ impl LoadStorePeered for Entity {
         .await?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::forward_query;
+
+    #[test]
+    fn forward_query_leaves_a_bare_request_alone() {
+        assert_eq!(forward_query("/add/project", ""), "/add/project");
+    }
+
+    #[test]
+    fn forward_query_starts_a_query() {
+        assert_eq!(
+            forward_query("/add/project", "exchange=12"),
+            "/add/project?exchange=12"
+        );
+    }
+
+    #[test]
+    fn forward_query_follows_the_targets_own_query() {
+        assert_eq!(
+            forward_query("/finder?kind[]=event", "near=Boston"),
+            "/finder?kind[]=event&near=Boston"
+        );
+    }
+
+    #[test]
+    fn forward_query_keeps_the_fragment_last() {
+        assert_eq!(forward_query("/page#success", "a=1"), "/page?a=1#success");
+        assert_eq!(
+            forward_query("https://example.org/page?x=2#top", "a=1"),
+            "https://example.org/page?x=2&a=1#top"
+        );
     }
 }

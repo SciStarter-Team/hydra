@@ -459,9 +459,11 @@ pub async fn profile_page(
     .await
 }
 
-/// Old profile links: orrery served profiles at `/ambassador/<its user id>`.
-/// The target has to be looked up, so this is a handler rather than a
-/// `Redirect` entity. A ULID is accepted too.
+/// Old profile links: orrery served profiles at `/ambassador/<its user id>`,
+/// and this directory served them at `/ambassadors-directory/<id>` before it
+/// moved under `/ambassador`. The target has to be worked out from the ID,
+/// so this is a handler rather than a `Redirect` entity. A ULID or an orrery
+/// user id is accepted at either address.
 #[handler]
 pub async fn legacy_profile_redirect(Path(id): Path<String>) -> Result<Response, Error> {
     let user_id = if let Ok(user_id) = Ulid::from_string(&id) {
@@ -613,7 +615,7 @@ mod tests {
     fn directory_links_keep_the_search() {
         assert_eq!(
             directory_href("", "", AmbassadorDirectoryOrder::Random, 1),
-            "/ambassadors-directory"
+            "/ambassador/directory"
         );
         assert_eq!(
             directory_href(
@@ -622,7 +624,7 @@ mod tests {
                 AmbassadorDirectoryOrder::Name,
                 3
             ),
-            "/ambassadors-directory?name=Jane+Doe&near=Sioux+Falls%2C+SD&order=name&page=3"
+            "/ambassador/directory?name=Jane+Doe&near=Sioux+Falls%2C+SD&order=name&page=3"
         );
     }
 }

@@ -1,9 +1,10 @@
 //! The public Citizen and Community Science Library Network sign-up form.
 //!
-//! Ported from orrery's `/l/library-network-signup`, at the same path so links
-//! already in the wild keep working after the cutover. Deliberately a
-//! standalone page rather than one wearing the site layout, matching orrery:
-//! it is handed out as a link on its own.
+//! Served at `/library-network/signup`. Ported from orrery's
+//! `/l/library-network-signup`, which is a `Redirect` entity now, so links
+//! already in the wild keep working. Deliberately a standalone page rather
+//! than one wearing the site layout, matching orrery: it is handed out as a
+//! link on its own.
 //!
 //! Submitting records the signup and, for a signed-in visitor, advances their
 //! Libraries-as-Hubs training to `supplemental`.

@@ -1,4 +1,4 @@
-//! Public SciStarter Ambassador application (`/ambassador-apply`).
+//! Public SciStarter Ambassador application (`/ambassador/apply`).
 //!
 //! Ported from orrery's `ambassador_apply` / `ambassador_application_save` /
 //! `ambassador_application_draft`. Gated behind the Foundations badge and the
@@ -29,7 +29,7 @@ use crate::component::{Component, Head, StandardLayout};
 use crate::middleware::authorization::Authenticated;
 use crate::training::fetch_status;
 
-const PATH: &str = "/ambassador-apply";
+use super::APPLY_PATH;
 
 /// Whether the Ambassador program is currently accepting applications. When
 /// false the form still renders (and drafts save) but the submit control is
@@ -205,7 +205,7 @@ impl ApplyForm {
             already_submitted: gate.already_submitted,
             applications_open: APPLICATIONS_OPEN,
             error,
-            login_next: PATH.to_string(),
+            login_next: APPLY_PATH.to_string(),
             first_name: self.first_name,
             last_name: self.last_name,
             email: self.email,
@@ -275,7 +275,7 @@ async fn render(
     user_info: Option<Arc<BasicInfo>>,
     content: ApplyContent,
 ) -> Result<Response, Error> {
-    let layout = StandardLayout::new(PATH.to_string(), content)
+    let layout = StandardLayout::new(APPLY_PATH.to_string(), content)
         .prepare(user_info)
         .await?;
     ApplyPage {
@@ -298,7 +298,7 @@ pub async fn index(Authenticated(user_info): Authenticated) -> Result<Response, 
         champion_done: gate.champion_done,
         already_submitted: gate.already_submitted,
         applications_open: APPLICATIONS_OPEN,
-        login_next: PATH.to_string(),
+        login_next: APPLY_PATH.to_string(),
         ..Default::default()
     };
 
@@ -360,7 +360,7 @@ pub async fn submit(
     Form(form): Form<ApplyForm>,
 ) -> Result<Response, Error> {
     let Some(user) = user_info.clone() else {
-        return Ok(Redirect::see_other("/login?next=/ambassador-apply").into_response());
+        return Ok(Redirect::see_other(format!("/login?next={APPLY_PATH}")).into_response());
     };
     let gate = gate_for(&user_info).await;
 
@@ -456,7 +456,7 @@ pub async fn submit(
     }
 
     let _: () = request("user.ambassador.submit", form.to_wire(user.user_id)).await?;
-    Ok(Redirect::see_other(PATH).into_response())
+    Ok(Redirect::see_other(APPLY_PATH).into_response())
 }
 
 /// Re-render the form after a validation failure.
