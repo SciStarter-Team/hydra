@@ -26,6 +26,27 @@ pub struct Signup {
     /// emailed link is clicked — possibly in another browser, where no session
     /// key survives.
     pub badgeclass: Option<crate::badge::Badge>,
+    /// Where the visitor came from, recorded on the account it creates.
+    /// Defaulted so that a service built before the field existed still
+    /// decodes the message.
+    #[serde(default)]
+    pub attribution: Attribution,
+}
+
+/// The visit that brought a new account's owner to the site: the referrer,
+/// landing path (`origin`), and UTM tags of their first page load, captured
+/// by the frontend's `FirstTouchMiddleware`. The fields are the `users`
+/// columns of the same names, and mirror orrery's (`src/attribution.rs`
+/// there), whose accounts the user sync copies here with them.
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Default, PartialEq, Eq)]
+pub struct Attribution {
+    pub referer: String,
+    pub origin: String,
+    pub utm_source: String,
+    pub utm_medium: String,
+    pub utm_campaign: String,
+    pub utm_term: String,
+    pub utm_content: String,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
@@ -222,13 +243,15 @@ pub fn signup_needs_protection<S: AsRef<str>>(tags: &[S]) -> bool {
 /// about the same cohort, and a partner can need one without the other --
 /// girlscout is protected and is not credited, ldpl is credited and is not
 /// protected.
-pub const FOUNDATIONS_GRANT_SIGNUP_TAGS: [&str; 6] = [
+pub const FOUNDATIONS_GRANT_SIGNUP_TAGS: [&str; 8] = [
     "laplstudent",
     "ldpl",
     "signup-noyce",
     "osher-asu",
     "lakedallaslibrary",
     "port-charlotte",
+    "turkey-scicomm",
+    "azla",
 ];
 
 /// Whether an account carrying `tags` from its signup context is credited
@@ -2001,6 +2024,70 @@ pub struct UserLegacyIdLookupResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A `Signup` as a service built before `attribution` existed sends it.
+    #[derive(serde::Serialize)]
+    struct SignupWithoutAttribution {
+        handle: String,
+        email: String,
+        password: String,
+        newsletter: bool,
+        zipcode: String,
+        protected: bool,
+        point: Option<String>,
+        tags: Vec<String>,
+        disabled_password: bool,
+        badgeclass: Option<crate::badge::Badge>,
+    }
+
+    #[test]
+    fn a_signup_from_an_older_sender_decodes_with_no_attribution() {
+        let old = SignupWithoutAttribution {
+            handle: "ada".to_string(),
+            email: "ada@example.invalid".to_string(),
+            password: String::new(),
+            newsletter: false,
+            zipcode: "12345".to_string(),
+            protected: false,
+            point: None,
+            tags: vec!["signup-noyce".to_string()],
+            disabled_password: false,
+            badgeclass: None,
+        };
+
+        let signup: Signup = flexbuffers::from_slice(&flexbuffers::to_vec(&old).unwrap()).unwrap();
+
+        assert_eq!(signup.attribution, Attribution::default());
+        assert_eq!(signup.tags, ["signup-noyce"]);
+    }
+
+    #[test]
+    fn a_signup_carries_its_attribution() {
+        let attribution = Attribution {
+            referer: "https://www.google.com/".to_string(),
+            origin: "/project/123".to_string(),
+            utm_source: "newsletter".to_string(),
+            ..Attribution::default()
+        };
+        let signup = Signup {
+            handle: "ada".to_string(),
+            email: "ada@example.invalid".to_string(),
+            password: String::new(),
+            newsletter: false,
+            zipcode: "12345".to_string(),
+            protected: false,
+            point: None,
+            tags: vec![],
+            disabled_password: false,
+            badgeclass: None,
+            attribution: attribution.clone(),
+        };
+
+        let decoded: Signup =
+            flexbuffers::from_slice(&flexbuffers::to_vec(&signup).unwrap()).unwrap();
+
+        assert_eq!(decoded.attribution, attribution);
+    }
 
     fn basic_info(public: bool, protected: bool) -> BasicInfo {
         BasicInfo {

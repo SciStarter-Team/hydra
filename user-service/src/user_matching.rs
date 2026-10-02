@@ -247,7 +247,7 @@ pub async fn api_create_user(req: &Request) -> Result<ApiCreateUserResponse, any
     }
 
     // Create via NATS loopback to auth.signup
-    use common::message::user::Signup;
+    use common::message::user::{Attribution, Signup};
     let signup = Signup {
         email: request.email.clone(),
         password: request.password.unwrap_or_default(),
@@ -260,6 +260,13 @@ pub async fn api_create_user(req: &Request) -> Result<ApiCreateUserResponse, any
         disabled_password: false,
         // API-created accounts never followed a tracked go link.
         badgeclass: None,
+        // Nor did anyone land on a page: the API caller names the origin and
+        // referring project instead.
+        attribution: Attribution {
+            origin: request.origin.unwrap_or_default(),
+            referer: request.referer.unwrap_or_default(),
+            ..Attribution::default()
+        },
     };
 
     let basic_info: Option<common::message::user::BasicInfo> =
@@ -285,18 +292,14 @@ pub async fn api_create_user(req: &Request) -> Result<ApiCreateUserResponse, any
         .await?;
     }
 
-    // Apply API-supplied account metadata (origin, referring project, user type).
-    let origin = request.origin.unwrap_or_default();
-    let referer = request.referer.unwrap_or_default();
-    // Mirror orrery's misc format: {"user_type": N}. Empty when not supplied.
+    // Apply the API-supplied user type. Mirror orrery's misc format:
+    // {"user_type": N}. Empty when not supplied.
     let misc = request
         .user_type
         .map(|ut| format!(r#"{{"user_type": {}}}"#, ut))
         .unwrap_or_default();
     sqlx::query!(
-        r#"UPDATE users SET origin = ?, referer = ?, misc = ? WHERE user_id = ?"#,
-        origin,
-        referer,
+        r#"UPDATE users SET misc = ? WHERE user_id = ?"#,
         misc,
         user_id
     )

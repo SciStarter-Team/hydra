@@ -527,6 +527,7 @@ fn user_facing() -> impl Endpoint {
         .at("/events/*slug", get(event_page))
         .at("/*slug", get(entity_page).post(entity_page))
         .with(middleware::analytics::AnalyticsMiddleware)
+        .with(middleware::attribution::FirstTouchMiddleware)
 }
 
 fn dynamic() -> impl Endpoint {

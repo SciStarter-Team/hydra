@@ -3,9 +3,9 @@ use async_nats::service::Request;
 use common::{
     message::email::{EmailRecipient, SendEmailRequest, SendEmailResponse, noreply_reply_to},
     message::user::{
-        BasicInfo, CompleteSignup, CompleteSignupResponse, DeferSignup, DeferSignupOutcome, Login,
-        Signup, SnmProfile, UserAndBadge, normalize_tag, signup_grants_foundations,
-        signup_needs_protection, welcome_trigger_for_signup,
+        Attribution, BasicInfo, CompleteSignup, CompleteSignupResponse, DeferSignup,
+        DeferSignupOutcome, Login, Signup, SnmProfile, UserAndBadge, normalize_tag,
+        signup_grants_foundations, signup_needs_protection, welcome_trigger_for_signup,
     },
     service::{TriggerEvent, log_activity, request, send, trigger_email},
     shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower},
@@ -79,6 +79,7 @@ async fn create_account(
     let zipcode = form.zipcode;
     let point = form.point;
     let badgeclass = form.badgeclass;
+    let attribution = form.attribution;
 
     // Some signup contexts identify a cohort that needs protecting. The rule
     // lives here rather than in a frontend handler so that every lane —
@@ -137,7 +138,14 @@ async fn create_account(
           -- did not ask for the newsletter, and it costs one row update rather
           -- than a new account sitting unknown to them until something else
           -- happens to touch it.
-          "constant_contact_dirty"
+          "constant_contact_dirty",
+          "referer",
+          "origin",
+          "utm_source",
+          "utm_medium",
+          "utm_campaign",
+          "utm_term",
+          "utm_content"
         )
         values (
           ?1,
@@ -152,7 +160,14 @@ async fn create_account(
           ?11,
           SetSRID(GeomFromGeoJSON(?8), 4326),
           ?10,
-          1
+          1,
+          ?13,
+          ?14,
+          ?15,
+          ?16,
+          ?17,
+          ?18,
+          ?19
         )"#,
         user_id_str,
         email,
@@ -166,6 +181,13 @@ async fn create_account(
         signup_tags,
         public,
         date_joined,
+        attribution.referer,
+        attribution.origin,
+        attribution.utm_source,
+        attribution.utm_medium,
+        attribution.utm_campaign,
+        attribution.utm_term,
+        attribution.utm_content,
     )
     .execute(&mut *tx)
     .await?;
@@ -365,6 +387,7 @@ pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
     let password = djangohashers::make_password(&form.password);
     let tags = form.tags.join(",");
     let badgeclass = form.badgeclass.map(|badge| badge.badgeclass().to_string());
+    let attribution = &form.attribution;
     let now = TimeString::now().to_string();
 
     let existing_code = sqlx::query_scalar!(
@@ -392,7 +415,9 @@ pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
                     r#"update "pending_signups" set
                        "email" = ?, "handle" = ?, "password" = ?, "newsletter" = ?,
                        "zipcode" = ?, "protected" = ?, "point" = ?, "tags" = ?,
-                       "badgeclass" = ?, "next" = ?, "ip_address" = ?, "email_sent" = ?
+                       "badgeclass" = ?, "next" = ?, "ip_address" = ?, "email_sent" = ?,
+                       "referer" = ?, "origin" = ?, "utm_source" = ?, "utm_medium" = ?,
+                       "utm_campaign" = ?, "utm_term" = ?, "utm_content" = ?
                        where "email_lower" = ?"#,
                     form.email,
                     form.handle,
@@ -406,6 +431,13 @@ pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
                     defer.next,
                     ip_address,
                     now,
+                    attribution.referer,
+                    attribution.origin,
+                    attribution.utm_source,
+                    attribution.utm_medium,
+                    attribution.utm_campaign,
+                    attribution.utm_term,
+                    attribution.utm_content,
                     email_lower,
                 )
                 .execute(db())
@@ -418,7 +450,9 @@ pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
                     r#"update "pending_signups" set
                        "email" = ?, "handle" = ?, "password" = ?, "newsletter" = ?,
                        "zipcode" = ?, "protected" = ?, "point" = ?, "tags" = ?,
-                       "badgeclass" = ?, "next" = ?, "ip_address" = ?
+                       "badgeclass" = ?, "next" = ?, "ip_address" = ?,
+                       "referer" = ?, "origin" = ?, "utm_source" = ?, "utm_medium" = ?,
+                       "utm_campaign" = ?, "utm_term" = ?, "utm_content" = ?
                        where "email_lower" = ?"#,
                     form.email,
                     form.handle,
@@ -431,6 +465,13 @@ pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
                     badgeclass,
                     defer.next,
                     ip_address,
+                    attribution.referer,
+                    attribution.origin,
+                    attribution.utm_source,
+                    attribution.utm_medium,
+                    attribution.utm_campaign,
+                    attribution.utm_term,
+                    attribution.utm_content,
                     email_lower,
                 )
                 .execute(db())
@@ -449,8 +490,10 @@ pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
                 r#"insert into "pending_signups" (
                    "code", "email", "email_lower", "handle", "password",
                    "newsletter", "zipcode", "protected", "point", "tags",
-                   "badgeclass", "next", "ip_address", "created", "email_sent"
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                   "badgeclass", "next", "ip_address", "created", "email_sent",
+                   "referer", "origin", "utm_source", "utm_medium",
+                   "utm_campaign", "utm_term", "utm_content"
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
                 code,
                 form.email,
                 email_lower,
@@ -466,6 +509,13 @@ pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
                 ip_address,
                 now,
                 now,
+                attribution.referer,
+                attribution.origin,
+                attribution.utm_source,
+                attribution.utm_medium,
+                attribution.utm_campaign,
+                attribution.utm_term,
+                attribution.utm_content,
             )
             .execute(db())
             .await?;
@@ -486,7 +536,9 @@ pub async fn complete_signup(req: &Request) -> Result<Option<CompleteSignupRespo
 
     let row = sqlx::query!(
         r#"select "email", "handle", "password", "newsletter", "zipcode",
-                  "protected", "point", "tags", "badgeclass", "next"
+                  "protected", "point", "tags", "badgeclass", "next",
+                  "referer", "origin", "utm_source", "utm_medium",
+                  "utm_campaign", "utm_term", "utm_content"
            from "pending_signups"
            where "code" = ? and datetime("created") >= datetime('now', '-7 days')"#,
         complete.code
@@ -536,6 +588,16 @@ pub async fn complete_signup(req: &Request) -> Result<Option<CompleteSignupRespo
             .badgeclass
             .as_deref()
             .and_then(common::badge::Badge::from_badgeclass),
+        // Likewise captured when the visitor arrived, not when they click.
+        attribution: Attribution {
+            referer: row.referer,
+            origin: row.origin,
+            utm_source: row.utm_source,
+            utm_medium: row.utm_medium,
+            utm_campaign: row.utm_campaign,
+            utm_term: row.utm_term,
+            utm_content: row.utm_content,
+        },
     };
 
     let basic_info = match create_account(form, row.password, true).await {

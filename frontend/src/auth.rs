@@ -27,6 +27,7 @@ use ulid::Ulid;
 use crate::{
     component::{Component, Head, StandardLayout},
     middleware::{
+        attribution::first_touch,
         authorization::Authenticated,
         rate_limit::{RateLimitConfig, RateLimitMiddleware},
     },
@@ -565,6 +566,7 @@ pub async fn signup_action(
             tags,
             disabled_password: false, // Regular password account
             badgeclass: staked_out_badge(session),
+            attribution: first_touch(session),
         };
 
         if !turnstile_ok {
@@ -1353,6 +1355,7 @@ pub async fn webauthn_registration_complete(
                         tags: tags,
                         disabled_password: true, // Mark as disabled password account
                         badgeclass: staked_out_badge(session),
+                        attribution: first_touch(session),
                     };
 
                     match request_with_retry::<Option<BasicInfo>>(
