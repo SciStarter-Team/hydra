@@ -100,6 +100,7 @@ fn stored_email_json(email: &StoredEmail) -> Value {
         "subject": email.subject,
         "datasets": email.datasets,
         "reply_to_noreply": email.reply_to_noreply,
+        "no_unsubscribe": email.no_unsubscribe,
         "updated_at": email.updated_at.to_string(),
     })
 }
@@ -159,6 +160,10 @@ async fn tool_create_stored_email(arguments: Value) -> Result<String, Error> {
                 .get("reply_to_noreply")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
+            no_unsubscribe: arguments
+                .get("no_unsubscribe")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
         },
     )
     .await?;
@@ -184,6 +189,7 @@ async fn tool_update_stored_email(arguments: Value) -> Result<String, Error> {
             body_delta,
             datasets: arguments.get("datasets").map(|_| datasets_arg(&arguments)),
             reply_to_noreply: arguments.get("reply_to_noreply").and_then(Value::as_bool),
+            no_unsubscribe: arguments.get("no_unsubscribe").and_then(Value::as_bool),
         },
     )
     .await?;
@@ -416,7 +422,8 @@ pub fn tool_definitions() -> Vec<Value> {
                     "subject": { "type": "string", "description": "Subject line" },
                     "body_html": { "type": "string", "description": "Body as HTML" },
                     "datasets": { "type": "array", "items": { "type": "string" }, "description": "Names of datasets whose variables the body may use" },
-                    "reply_to_noreply": { "type": "boolean", "description": "Send replies to the no-reply address (default false)" }
+                    "reply_to_noreply": { "type": "boolean", "description": "Send replies to the no-reply address (default false)" },
+                    "no_unsubscribe": { "type": "boolean", "description": "Send without an Unsubscribe link or one-click header, for an email its recipient cannot opt out of (default false)" }
                 },
                 "required": ["slug", "subject", "body_html"]
             }
@@ -432,7 +439,8 @@ pub fn tool_definitions() -> Vec<Value> {
                     "subject": { "type": "string" },
                     "body_html": { "type": "string", "description": "Replacement body as HTML" },
                     "datasets": { "type": "array", "items": { "type": "string" } },
-                    "reply_to_noreply": { "type": "boolean" }
+                    "reply_to_noreply": { "type": "boolean" },
+                    "no_unsubscribe": { "type": "boolean" }
                 },
                 "required": ["stored_email_id"]
             }

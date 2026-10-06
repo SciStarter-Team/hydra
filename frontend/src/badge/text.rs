@@ -524,6 +524,11 @@ mod tests {
         const DATES_AND_CITATION_NOTE: &str =
             include_str!("../../migrations/20260910021818_translated_dates_and_citation_note.sql");
 
+        /// Applied last: it renames the badge to what its translated
+        /// tutorials are called, in every phrase that quotes the name.
+        const TRANSLATED_NAMES: &str =
+            include_str!("../../migrations/20261005120326_data_ethics_badge_translated_names.sql");
+
         /// The badge the seed translates, and the languages it translates it
         /// into.
         const SEEDED: Badge = Badge::DataEthicsForPractitioners;
@@ -554,6 +559,10 @@ mod tests {
                 .execute(&pool)
                 .await
                 .expect("dates and citation note");
+            sqlx::raw_sql(TRANSLATED_NAMES)
+                .execute(&pool)
+                .await
+                .expect("translated names");
 
             (dir, pool)
         }
@@ -692,6 +701,62 @@ mod tests {
                     translated.contains("1835352"),
                     "{code} lost the grant it introduces"
                 );
+            }
+        }
+
+        /// The badge is called what its tutorial is called, everywhere its
+        /// own prose says its name: an earner who met one name on the
+        /// tutorial should not meet another in the badge's description.
+        #[tokio::test]
+        async fn the_translated_badge_goes_by_its_tutorials_name() {
+            let (_dir, pool) = fixture().await;
+
+            for (code, name, replaced) in [
+                (
+                    "es",
+                    "Ética de Datos para las Ciencias Participativas",
+                    "Ética de datos para profesionales",
+                ),
+                (
+                    "pt",
+                    "Ética de Dados para Ciência Cidadã",
+                    "Ética de Dados para Profissionais",
+                ),
+            ] {
+                for source in [SEEDED.name(), SEEDED.description(), SEEDED.criteria_text()] {
+                    let id = phrase_id("", source);
+
+                    let translated = sqlx::query_scalar!(
+                        r#"SELECT translated FROM translation WHERE phrase_id = ? AND lang = ?"#,
+                        id,
+                        code
+                    )
+                    .fetch_one(&pool)
+                    .await
+                    .expect("a translation");
+
+                    assert!(
+                        translated.contains(name),
+                        "{code} does not name the badge in {source:?}"
+                    );
+                    assert!(
+                        !translated.contains(replaced),
+                        "{code} still carries the replaced name in {source:?}"
+                    );
+                }
+
+                let id = phrase_id("", SEEDED.name());
+
+                let shown = sqlx::query_scalar!(
+                    r#"SELECT translated FROM translation WHERE phrase_id = ? AND lang = ?"#,
+                    id,
+                    code
+                )
+                .fetch_one(&pool)
+                .await
+                .expect("a translation");
+
+                assert_eq!(shown, name, "{code} headline");
             }
         }
     }

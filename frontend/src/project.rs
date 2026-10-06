@@ -36,6 +36,14 @@ pub enum ProjectPromotionTime {
     PreferOnTargetDate,
 }
 
+/// Whether reviewers are offered a rejection reason on a project, picking
+/// which emails the submitter (`TriggerEvent::ProjectRejected`). The two go
+/// together: the picker does nothing but send that email.
+///
+/// Mirrors orrery's `SUBMISSION_REJECTION_NOTICES` setting, and like it is
+/// off. What was sent while it was on stays recorded on each project.
+pub const SUBMISSION_REJECTION_NOTICES: bool = false;
+
 /// Why a reviewer declined to publish a submission.
 ///
 /// Mirrored in orrery as `Entity.RejectionReason` (core/models.py) — the two

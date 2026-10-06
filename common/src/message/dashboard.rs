@@ -505,6 +505,29 @@ pub struct MooreBucketsResponse {
     pub buckets: Vec<MooreBucket>,
 }
 
+/// The months a sign-up referral report covers, first and last inclusive
+/// (`user.referrals.monthly`).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct ReferralsRequest {
+    pub first: crate::report_kit::month::Month,
+    pub last: crate::report_kit::month::Month,
+}
+
+/// One tallied report per month of the requested range, in order, including
+/// months with no sign-ups.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct ReferralsResponse {
+    pub months: Vec<crate::referrals::report::MonthReport>,
+}
+
+/// Every Foundations completion, by month and whether the account came
+/// through EvolveMe, oldest first (`user.foundations.monthly`). The whole
+/// history, since the report's running total needs it; one row per month.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct FoundationsCompletionsResponse {
+    pub counts: Vec<crate::foundations::report::MonthCount>,
+}
+
 /// One library in the network directory (`user.library.directory_record` to
 /// add, `user.library.directory_list` to read).
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]

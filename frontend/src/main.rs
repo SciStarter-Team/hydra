@@ -64,6 +64,7 @@ pub mod thumbnail;
 pub mod training;
 pub mod ui;
 pub mod upload;
+pub mod verify_email;
 pub mod webinar;
 pub mod wiki;
 pub mod wordpress;
@@ -262,6 +263,12 @@ fn user_facing() -> impl Endpoint {
             "/complete-signup",
             get(auth::complete_signup_action)
                 .with(middleware::session_cookie::EnablePartitionedCookies),
+        )
+        .at("/verify", get(verify_email::verify_email_action))
+        .at("/verified", get(verify_email::email_verified_page))
+        .at(
+            "/resend-verification",
+            post(verify_email::resend_verification_action),
         )
         .at(
             "/invitations/:invitation_id",

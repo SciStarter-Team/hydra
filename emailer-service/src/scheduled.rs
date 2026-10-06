@@ -21,6 +21,7 @@ pub async fn schedule_send(
     additional_data: Option<Vec<(String, String)>>,
     recipients: Option<String>,
     reply_to: Option<Vec<String>>,
+    no_unsubscribe: bool,
 ) -> Result<Ulid, Error> {
     let scheduled_id = Ulid::new();
     let created_at = TimeString::now();
@@ -36,8 +37,8 @@ pub async fn schedule_send(
 
     sqlx::query!(
         r#"INSERT INTO scheduled_sends
-           (scheduled_id, user_id, hook, scheduled_time, template_html, subject, data_sets, additional_data, recipients, reply_to, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+           (scheduled_id, user_id, hook, scheduled_time, template_html, subject, data_sets, additional_data, recipients, reply_to, no_unsubscribe, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         scheduled_id_str,
         user_id_str,
         hook,
@@ -48,6 +49,7 @@ pub async fn schedule_send(
         additional_data_json,
         recipients,
         reply_to_json,
+        no_unsubscribe,
         created_at
     )
     .execute(db())
@@ -79,6 +81,7 @@ pub async fn handle_schedule_send(req: &Request) -> Result<ScheduleSendResponse,
         request.additional_data,
         request.recipients,
         request.reply_to,
+        request.no_unsubscribe,
     )
     .await?;
 

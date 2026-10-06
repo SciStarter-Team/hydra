@@ -13,8 +13,10 @@ use crate::{
     datasets::DATASET_REGISTRY,
     format::{add_footer_to_plain_text, html_to_markdown, wrap_html_layout},
     ratelimit::{mark_sent, wait_until_can_send},
+    sends::send_email_queued,
     ses::{from_email, send_email},
     template::merge_template,
+    triggers::resolve_trigger_recipients,
 };
 
 /// Why a send was skipped. Each variant corresponds to a per-reason counter
@@ -82,11 +84,14 @@ pub async fn run_scheduled_processor() {
 /// Process the next email in the queue
 /// Returns Ok(true) if an email was processed, Ok(false) if queue was empty
 async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
-    // Fetch next pending email from queue
+    // Fetch next pending email from queue: a message addressed to one person
+    // ahead of a mailing to a set, and the oldest first among equals (a
+    // queue_id is a ULID, so it sorts by when the message was queued).
     let queue_item = sqlx::query!(
-        r#"SELECT queue_id, sending_id, target_type, target_value, data_sets, template_html, subject, additional_data, reply_to, retry_count
+        r#"SELECT queue_id, sending_id, target_type, target_value, data_sets, template_html, subject, additional_data, reply_to, retry_count, no_unsubscribe
            FROM send_queue
            WHERE status = 'pending'
+           ORDER BY priority DESC, queue_id
            LIMIT 1"#
     )
     .fetch_optional(db())
@@ -303,8 +308,9 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
             "/messaging/emailer/open?a={}&b={}",
             item.sending_id, unsubscribe_param
         );
+        let unsubscribe_url = format!("https://{}{}", env!("DOMAIN"), unsubscribe_path);
         all_field_names.push("UNSUBSCRIBE_URL".to_string());
-        all_field_values.push(format!("https://{}{}", env!("DOMAIN"), unsubscribe_path));
+        all_field_values.push(unsubscribe_url.clone());
 
         // Merge template
         let merged_html = merge_template(&item.template_html, &all_field_names, &all_field_values)?;
@@ -312,12 +318,23 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
         // Merge subject
         let merged_subject = merge_template(&item.subject, &all_field_names, &all_field_values)?;
 
+        // An email its recipient cannot opt out of offers no way to
+        // unsubscribe: not in the footer, and not in the headers below.
+        let offer_unsubscribe = !item.no_unsubscribe;
+
         // Wrap in layout
-        let final_html = wrap_html_layout(&merged_html, &unsubscribe_path, &open_path);
+        let final_html = wrap_html_layout(
+            &merged_html,
+            offer_unsubscribe.then_some(unsubscribe_path.as_str()),
+            &open_path,
+        );
 
         // Convert to plain text
         let plain_text = html_to_markdown(&merged_html);
-        let final_text = add_footer_to_plain_text(&plain_text);
+        let final_text = add_footer_to_plain_text(
+            &plain_text,
+            offer_unsubscribe.then_some(unsubscribe_url.as_str()),
+        );
 
         // Wait for rate limit and quota
         wait_until_can_send().await;
@@ -347,6 +364,7 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
             &reply_to,
             sending_ulid,
             user_id_opt,
+            offer_unsubscribe,
         )
         .await
         {
@@ -606,7 +624,7 @@ async fn process_scheduled_sends() -> Result<bool, Error> {
 
     // Fetch next scheduled send that is due
     let scheduled = sqlx::query!(
-        r#"SELECT scheduled_id, user_id, hook, template_html, subject, data_sets, additional_data, reply_to
+        r#"SELECT scheduled_id, user_id, hook, template_html, subject, data_sets, additional_data, recipients, reply_to, no_unsubscribe
            FROM scheduled_sends
            WHERE scheduled_time <= ?
            ORDER BY scheduled_time ASC
@@ -620,42 +638,31 @@ async fn process_scheduled_sends() -> Result<bool, Error> {
         return Ok(false); // No scheduled sends are due
     };
 
-    // Create a new sending record
-    let sending_id = Ulid::new();
-    let sending_id_str = sending_id.to_string();
-    let created_at = TimeString::now();
+    // Who it goes to is whoever it was scheduled for: the recipients its
+    // trigger was configured with, or the user it was scheduled about when
+    // none were.
+    let user_id = item.user_id.parse::<Ulid>()?;
+    let recipients = resolve_trigger_recipients(&item.recipients, user_id, None);
 
-    sqlx::query!(
-        r#"INSERT INTO sendings (sending_id, created_at, subject, total_queued, reply_to)
-           VALUES (?, ?, ?, 1, ?)"#,
-        sending_id_str,
-        created_at,
-        item.subject,
-        item.reply_to
-    )
-    .execute(db())
-    .await?;
+    let data_sets: Vec<String> = serde_json::from_str(&item.data_sets)?;
+    let additional_data: Vec<(String, String)> = serde_json::from_str(&item.additional_data)?;
+    let reply_to: Option<Vec<String>> = item
+        .reply_to
+        .as_deref()
+        .map(serde_json::from_str)
+        .transpose()?;
 
-    // Queue the email
-    let queue_id = Ulid::new();
-    let queue_id_str = queue_id.to_string();
-    let queued_at = TimeString::now();
-
-    sqlx::query!(
-        r#"INSERT INTO send_queue
-           (queue_id, sending_id, target_type, target_value, data_sets, template_html, subject, additional_data, reply_to, queued_at, status)
-           VALUES (?, ?, 'user_id', ?, ?, ?, ?, ?, ?, ?, 'pending')"#,
-        queue_id_str,
-        sending_id_str,
-        item.user_id,
-        item.data_sets,
+    // Sent the way any other email is, and queued before the record of it
+    // having been scheduled is deleted below.
+    let sending_id = send_email_queued(
         item.template_html,
         item.subject,
-        item.additional_data,
-        item.reply_to,
-        queued_at
+        recipients,
+        data_sets,
+        Some(additional_data),
+        reply_to,
+        item.no_unsubscribe,
     )
-    .execute(db())
     .await?;
 
     // Delete the scheduled send record

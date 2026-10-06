@@ -92,6 +92,49 @@ pub struct CompleteSignupResponse {
     pub next: Option<String>,
 }
 
+/// Payload for `user.auth.resend_email_verification`: send the account's
+/// confirmation email again, as the unconfirmed-email banner offers to.
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct ResendEmailVerification {
+    pub user_id: Ulid,
+}
+
+/// What became of a request to send the confirmation email again, which
+/// decides what the banner says next.
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EmailVerificationResend {
+    /// A new confirmation email is on its way.
+    Sent,
+    /// One was sent less than a minute ago.
+    TooSoon,
+    /// As many were sent in the last day as one account may ask for.
+    LimitReached,
+    /// The address is on the do-not-send list -- it bounced, complained, or
+    /// unsubscribed -- so no email we send would reach it.
+    Undeliverable,
+}
+
+/// Payload for `user.auth.verify_email`: redeem the code from a confirmation
+/// email. The response is None when the code is unknown or expired.
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct VerifyEmail {
+    pub code: String,
+}
+
+/// The address a confirmation code vouched for, and the account it is on.
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct VerifiedEmail {
+    pub user_id: Ulid,
+    pub email: String,
+}
+
+/// Payload for `user.emails.bounced`: mail to this address has bounced, so it
+/// no longer counts as confirmed.
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct BouncedEmail {
+    pub email: String,
+}
+
 /// Profile fields returned to Science Near Me after a successful credential
 /// check (the encrypted payload of the /api/login-for-snm bridge).
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]

@@ -23,6 +23,7 @@ use common::{
     transaction::Immediate,
     ulid::AsUlid,
 };
+use sqlx::SqlitePool;
 use ulid::Ulid;
 
 #[derive(Debug)]
@@ -53,21 +54,25 @@ impl TryFrom<BasicInfoDb> for BasicInfo {
 }
 
 /// Calculate user's verified status based on their email records
-async fn calculate_user_verified_status(user_id: Ulid) -> Result<bool, Error> {
+async fn calculate_user_verified_status(pool: &SqlitePool, user_id: Ulid) -> Result<bool, Error> {
     let user_id_str = user_id.to_string();
     let verified_count = sqlx::query_scalar!(
         r#"SELECT COUNT(*) > 0 FROM "emails" WHERE "user_id" = ? AND "verified" = 1"#,
         user_id_str
     )
-    .fetch_one(db())
+    .fetch_one(pool)
     .await?;
 
     Ok(verified_count != 0)
 }
 
-/// Update user's verified status in the database based on their email records
-async fn update_user_verified_status(user_id: Ulid) -> Result<(), Error> {
-    let calculated_verified = calculate_user_verified_status(user_id).await?;
+/// Update user's verified status in the given database based on their email
+/// records
+pub(crate) async fn update_user_verified_status_in(
+    pool: &SqlitePool,
+    user_id: Ulid,
+) -> Result<(), Error> {
+    let calculated_verified = calculate_user_verified_status(pool, user_id).await?;
     let user_id_str = user_id.to_string();
 
     sqlx::query!(
@@ -75,10 +80,15 @@ async fn update_user_verified_status(user_id: Ulid) -> Result<(), Error> {
         calculated_verified,
         user_id_str
     )
-    .execute(db())
+    .execute(pool)
     .await?;
 
     Ok(())
+}
+
+/// Update user's verified status in the database based on their email records
+async fn update_user_verified_status(user_id: Ulid) -> Result<(), Error> {
+    update_user_verified_status_in(db(), user_id).await
 }
 
 pub async fn basic_info_by_username(req: &Request) -> Result<Option<BasicInfo>, Error> {
@@ -1706,7 +1716,7 @@ pub async fn user_details_update(req: &Request) -> Result<UserDetailsResponse, E
     let user_id_str = request.user_id.to_string();
 
     // Calculate verified status based on email records
-    let calculated_verified = calculate_user_verified_status(request.user_id).await?;
+    let calculated_verified = calculate_user_verified_status(db(), request.user_id).await?;
 
     // Handle password update if provided
     let result = if let Some(new_password) = &request.new_password {

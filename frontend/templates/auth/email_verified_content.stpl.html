@@ -1,0 +1,15 @@
+<div class="ss-container !pt-8 !pb-12 mx-auto">
+  <div class="ss-small-container">
+    <h1 class="text-center"><%= crate::i18n::tr("Your Email Is Confirmed") %></h1>
+
+    <div class="bg-white border border-linework rounded-lg shadow-sm p-6 mt-6">
+      <p><%= crate::i18n::tr("Thank you! Your email address is confirmed, and your SciStarter account is fully active.") %></p>
+      <p class="mt-2"><%= crate::i18n::tr("You can now view and share the badges you earn, and you'll get email about your projects, like updates and messages from project teams.") %></p>
+      <% if self.logged_in { %>
+        <p class="mt-4"><a class="btn btn-primary" href="/"><%= crate::i18n::tr("Find a Project") %></a></p>
+      <% } else { %>
+        <p class="mt-4"><a class="btn btn-primary" href="/login"><%= crate::i18n::tr("Log In") %></a></p>
+      <% } %>
+    </div>
+  </div>
+</div>

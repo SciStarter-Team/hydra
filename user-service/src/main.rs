@@ -22,6 +22,8 @@ pub mod bookmarks;
 pub mod certificates;
 pub mod communities;
 pub mod constant_contact;
+pub mod email_verification;
+pub mod foundations;
 pub mod geocode;
 pub mod girlscouts;
 pub mod health;
@@ -35,6 +37,7 @@ pub mod places;
 pub mod profile;
 pub mod project_joins;
 pub mod recipient_search;
+pub mod referrals;
 pub mod sessions;
 pub mod stats;
 pub mod sync;
@@ -908,6 +911,29 @@ async fn users_synchronize() {
                 .await
                 .expect("Saving second email failed");
             }
+
+            // The inserts above record whether an address is verified only
+            // when the address is new here. Orrery is the primary for as long
+            // as this sync runs, so its word on the account has to reach the
+            // addresses it already had as well: an unverified account has no
+            // verified address, and a verified one's primary address is
+            // verified. Without this, `users.verified` -- which this sync
+            // does overwrite -- comes to disagree with the addresses it is
+            // otherwise derived from, and the next thing to re-derive it
+            // (an admin edit, a bounce) undoes what orrery said.
+            sqlx::query!(
+                r#"
+                update "emails"
+                set "verified" = (? and ("email" = ? or "verified"))
+                where "user_id" = ?
+                "#,
+                user.verified,
+                user_primary_email,
+                user.ulid
+            )
+            .execute(db)
+            .await
+            .expect("Updating email verification failed");
 
             let tag_list: Vec<String> = user
                 .tags
@@ -3078,6 +3104,12 @@ async fn main() {
     toplevel.spawn(handler!(auth, "signup", auth::signup));
     toplevel.spawn(handler!(auth, "defer_signup", auth::defer_signup));
     toplevel.spawn(handler!(auth, "complete_signup", auth::complete_signup));
+    toplevel.spawn(handler!(
+        auth,
+        "resend_email_verification",
+        email_verification::resend
+    ));
+    toplevel.spawn(handler!(auth, "verify_email", email_verification::verify));
     toplevel.spawn(handler!(auth, "login", auth::login));
     toplevel.spawn(handler!(auth, "snm_login", auth::snm_login));
 
@@ -3107,6 +3139,11 @@ async fn main() {
     toplevel.spawn(recv_handler!(emails, "set", users::set_user_emails));
     toplevel.spawn(recv_handler!(emails, "add", users::add_user_email));
     toplevel.spawn(recv_handler!(emails, "remove", users::remove_user_email));
+    toplevel.spawn(recv_handler!(
+        emails,
+        "bounced",
+        email_verification::bounced
+    ));
 
     let badges = service.group("user.badges");
     toplevel.spawn(handler!(badges, "all", users::get_user_badges));
@@ -3304,6 +3341,14 @@ async fn main() {
     // The Moore Foundation grant ledger.
     let moore_group = service.group("user.moore");
     toplevel.spawn(handler!(moore_group, "buckets", moore::buckets));
+
+    // The monthly sign-up referral report.
+    let referrals_group = service.group("user.referrals");
+    toplevel.spawn(handler!(referrals_group, "monthly", referrals::monthly));
+
+    // The monthly Foundations completions report.
+    let foundations_group = service.group("user.foundations");
+    toplevel.spawn(handler!(foundations_group, "monthly", foundations::monthly));
 
     // Acts of Science Connected hosting applications.
     let acts_connected_group = service.group("user.acts_connected");

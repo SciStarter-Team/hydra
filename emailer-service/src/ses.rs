@@ -31,7 +31,8 @@ pub fn from_email() -> &'static str {
     env!("AWS_SES_FROM_EMAIL")
 }
 
-/// Send an email via AWS SES with one-click unsubscribe headers
+/// Send an email via AWS SES, with one-click unsubscribe headers unless the
+/// email offers no way to unsubscribe
 pub async fn send_email(
     client: &SesClient,
     from_email: &str,
@@ -42,16 +43,24 @@ pub async fn send_email(
     reply_to: &[String],
     sending_id: Ulid,
     user_id: Option<Ulid>,
+    offer_unsubscribe: bool,
 ) -> Result<String, Error> {
-    // Build unsubscribe URL for one-click unsubscribe (RFC 8058)
-    // Use user_id if available, otherwise use email address for non-user recipients
-    let unsubscribe_param = user_id
-        .map(|id| id.to_string())
-        .unwrap_or_else(|| to_email.to_string());
-    let unsubscribe_url = format!(
-        "https://scistarter.org/messaging/emailer/unsubscribe?a={}&b={}",
-        sending_id, unsubscribe_param
-    );
+    // One-click unsubscribe headers (RFC 8058), emitted only when the email
+    // offers to unsubscribe.
+    let unsubscribe_headers = if offer_unsubscribe {
+        // Use user_id if available, otherwise use email address for non-user recipients
+        let unsubscribe_param = user_id
+            .map(|id| id.to_string())
+            .unwrap_or_else(|| to_email.to_string());
+
+        format!(
+            "List-Unsubscribe: <https://scistarter.org/messaging/emailer/unsubscribe?a={}&b={}>\r\n\
+             List-Unsubscribe-Post: List-Unsubscribe=One-Click\r\n",
+            sending_id, unsubscribe_param
+        )
+    } else {
+        String::new()
+    };
 
     // Build destination
     let destination = Destination::builder().to_addresses(to_email).build();
@@ -67,15 +76,14 @@ pub async fn send_email(
         format!("Reply-To: {}\r\n", reply_to.join(", "))
     };
 
-    // Build raw MIME message with List-Unsubscribe headers
+    // Build raw MIME message
     let raw_email = format!(
         "From: {}\r\n\
          To: {}\r\n\
          {}\
          Subject: {}\r\n\
          MIME-Version: 1.0\r\n\
-         List-Unsubscribe: <{}>\r\n\
-         List-Unsubscribe-Post: List-Unsubscribe=One-Click\r\n\
+         {}\
          Content-Type: multipart/alternative; boundary=\"{}\"\r\n\
          \r\n\
          --{}\r\n\
@@ -93,7 +101,7 @@ pub async fn send_email(
         to_email,
         reply_to_header,
         subject,
-        unsubscribe_url,
+        unsubscribe_headers,
         boundary,
         boundary,
         quoted_printable_encode(text_body),

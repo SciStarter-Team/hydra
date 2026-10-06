@@ -253,6 +253,9 @@
       </div><!-- end ss-container -->
     </nav>
   </header>
+  <% if let Some(verify_banner) = self.verify_banner { %>
+    <%+ verify_banner %>
+  <% } %>
 <% } else { %>
   <header>
     <nav id="nav--main" class="relative bg-white border-b border-neutral-xlight z-50">

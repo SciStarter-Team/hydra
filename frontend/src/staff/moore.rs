@@ -14,6 +14,14 @@
 //! dating is done in the user service against those columns; see
 //! `user-service/src/moore.rs`.
 //!
+//! **Libraries come from the program's tracker**, as in orrery. The grant's
+//! "# libraries" counts a network that predates the sign-up form and grows
+//! through channels the platform never sees, so the figure the program reports
+//! is kept by hand in the "Moore Grant Data & Project Timeline" sheet. The
+//! ledger reads it from there (`tracker.rs`, shared with orrery): each month
+//! shows the latest update on or before its last day. The organizations that
+//! signed up through the form are a separate column, "Libraries (form)".
+//!
 //! Two of the grant's indicators are not ledger columns. Kit-building downloads
 //! are go-link clicks, counted by the log service. Acts of Science is counted
 //! once a year during Citizen Science Month, so it gets its own table of
@@ -32,6 +40,8 @@ use jiff::{Timestamp, tz::TimeZone};
 use poem::{Response, handler};
 
 use super::csv_field;
+
+mod tracker;
 use crate::component::html_escape;
 use crate::number::thousands;
 
@@ -96,10 +106,13 @@ enum Metric {
     Approved,
     Verified,
     Accounts,
+    FormLibraries,
 }
 
 impl Metric {
-    const ALL: [Metric; 9] = [
+    /// Column order. "Libraries (form)" comes last, after it was added, so
+    /// that the CSV columns keep their places, as in orrery.
+    const ALL: [Metric; 10] = [
         Metric::Librarians,
         Metric::Libraries,
         Metric::Foundations,
@@ -109,6 +122,7 @@ impl Metric {
         Metric::Approved,
         Metric::Verified,
         Metric::Accounts,
+        Metric::FormLibraries,
     ];
 
     /// The label the metric carries in the user service's `metric` column.
@@ -123,6 +137,7 @@ impl Metric {
             Metric::Approved => "approved",
             Metric::Verified => "verified",
             Metric::Accounts => "accounts",
+            Metric::FormLibraries => "form_libraries",
         }
     }
 
@@ -148,6 +163,7 @@ impl Metric {
             Metric::Approved => "Approved Amb.",
             Metric::Verified => "Verified accounts",
             Metric::Accounts => "All accounts",
+            Metric::FormLibraries => "Libraries (form)",
         }
     }
 
@@ -163,6 +179,7 @@ impl Metric {
             Metric::Approved => "Fully approved Ambassadors",
             Metric::Verified => "Verified account holders",
             Metric::Accounts => "All account holders",
+            Metric::FormLibraries => "Libraries signed up through the form",
         }
     }
 
@@ -199,9 +216,16 @@ impl Metric {
         match self {
             // The Library Network sign-up form went live in June 2025, and
             // both of these are derived from it.
-            Metric::Librarians | Metric::Libraries => Some((2025, 6)),
+            Metric::Librarians | Metric::FormLibraries => Some((2025, 6)),
             _ => None,
         }
+    }
+
+    /// Whether the metric is read from the program's tracker rather than
+    /// accumulated from the user service. Such a metric is tracked in exactly
+    /// the months the tracker has an update for by then.
+    fn from_tracker(self) -> bool {
+        self == Metric::Libraries
     }
 }
 
@@ -210,19 +234,35 @@ struct MonthTotals {
     year: i32,
     month: u32,
     totals: [i64; Metric::ALL.len()],
+    /// Whether each metric has a figure for this month at all; one that does
+    /// not is "not tracked", never a zero.
+    tracked: [bool; Metric::ALL.len()],
 }
 
 impl MonthTotals {
+    /// A month's totals, tracked from each accumulated metric's start; the
+    /// tracker's metrics are filled in afterwards by [`apply_tracker`].
+    fn new(year: i32, month: u32, totals: [i64; Metric::ALL.len()]) -> MonthTotals {
+        MonthTotals {
+            year,
+            month,
+            totals,
+            tracked: Metric::ALL.map(|metric| {
+                !metric.from_tracker()
+                    && metric
+                        .tracked_from()
+                        .is_none_or(|start| (year, month) >= start)
+            }),
+        }
+    }
+
     fn get(&self, metric: Metric) -> i64 {
         self.totals[metric.column()]
     }
 
-    /// Whether this metric was being recorded at all by this month.
+    /// Whether this metric has a figure for this month.
     fn tracked(&self, metric: Metric) -> bool {
-        match metric.tracked_from() {
-            Some((year, month)) => (self.year, self.month) >= (year, month),
-            None => true,
-        }
+        self.tracked[metric.column()]
     }
 
     fn label(&self) -> String {
@@ -242,6 +282,9 @@ struct Ledger {
     months: Vec<MonthTotals>,
     kit_downloads: i64,
     acts: Vec<ActsYear>,
+    /// Why the program's tracker could not be read, if it couldn't; the
+    /// library figures are then not tracked anywhere on the page.
+    tracker_error: Option<String>,
 }
 
 /// One April campaign: what it counted, and what the grant asks of it.
@@ -301,11 +344,7 @@ fn accumulate(buckets: &MooreBucketsResponse) -> Vec<MonthTotals> {
         // Everything before FIRST_MONTH is accumulated but not shown, so the
         // first visible row carries the history that precedes the grant.
         if cursor >= FIRST_MONTH {
-            months.push(MonthTotals {
-                year: cursor.0,
-                month: cursor.1,
-                totals: running,
-            });
+            months.push(MonthTotals::new(cursor.0, cursor.1, running));
         }
 
         cursor = if cursor.1 == 12 {
@@ -316,6 +355,49 @@ fn accumulate(buckets: &MooreBucketsResponse) -> Vec<MonthTotals> {
     }
 
     months
+}
+
+/// Fills the tracker's metrics in from its updates: each month gets the latest
+/// one on or before the last day the row covers — the month's end, or today
+/// for the month in progress.
+fn apply_tracker(months: &mut [MonthTotals], entries: &[tracker::Entry], today: jiff::civil::Date) {
+    for month in months {
+        let Ok(first) = jiff::civil::Date::new(month.year as i16, month.month as i8, 1) else {
+            continue;
+        };
+        let through = first.last_of_month().min(today);
+        let day = tracker::Day {
+            year: i32::from(through.year()),
+            month: through.month() as u32,
+            day: through.day() as u32,
+        };
+
+        for metric in Metric::ALL.into_iter().filter(|m| m.from_tracker()) {
+            if let Some(count) = tracker::as_of(entries, day) {
+                month.totals[metric.column()] = count;
+                month.tracked[metric.column()] = true;
+            }
+        }
+    }
+}
+
+/// The library count updates from the program's tracker, read from the
+/// sheet's CSV export.
+async fn fetch_tracker() -> Result<Vec<tracker::Entry>, String> {
+    let response = reqwest::Client::new()
+        .get(tracker::CSV_URL)
+        .timeout(std::time::Duration::from_secs(15))
+        .send()
+        .await
+        .and_then(reqwest::Response::error_for_status)
+        .map_err(|e| format!("the sheet could not be fetched ({e})"))?;
+
+    let text = response
+        .text()
+        .await
+        .map_err(|e| format!("the sheet could not be read ({e})"))?;
+
+    tracker::libraries(&text).map_err(|e| e.to_string())
 }
 
 /// `YYYY-MM` to `(year, month)`.
@@ -351,7 +433,7 @@ struct Goal {
 
 fn goals(ledger: &Ledger) -> Vec<Goal> {
     let latest = ledger.months.last();
-    let at = |metric: Metric| latest.map(|m| m.get(metric));
+    let at = |metric: Metric| latest.filter(|m| m.tracked(metric)).map(|m| m.get(metric));
 
     vec![
         Goal {
@@ -393,18 +475,14 @@ fn goals(ledger: &Ledger) -> Vec<Goal> {
         Goal {
             name: "Libraries in the network",
             indicator: "\u{201c}# libraries\u{201d}, across all 50 states",
-            source: "sign-ups only; the baseline predates the form",
+            source: "the program's tracker",
             baseline: 1_000,
             target: 2_000,
-            // The agreement's baseline counts a network that existed before the
-            // sign-up form did, and the platform has no record of it. Showing
-            // our count against that baseline would read as the network having
-            // shrunk.
-            current: None,
-            pace_override: Some(match at(Metric::Libraries) {
-                Some(n) => format!("{} signed up since Jun 2025", thousands(n)),
-                None => String::from("not measured here"),
-            }),
+            current: at(Metric::Libraries),
+            pace_override: ledger
+                .tracker_error
+                .as_ref()
+                .map(|_| String::from("tracker unavailable")),
         },
     ]
 }
@@ -452,10 +530,28 @@ async fn fetch() -> Result<Ledger, anyhow::Error> {
         });
     }
 
+    let mut months = accumulate(&buckets);
+
+    let tracker_error = match fetch_tracker().await {
+        Ok(entries) => {
+            apply_tracker(
+                &mut months,
+                &entries,
+                Timestamp::now().to_zoned(TimeZone::UTC).date(),
+            );
+            None
+        }
+        Err(error) => {
+            tracing::warn!("moore: the library tracker is unavailable: {error}");
+            Some(error)
+        }
+    };
+
     Ok(Ledger {
-        months: accumulate(&buckets),
+        months,
         kit_downloads: kit.total,
         acts,
+        tracker_error,
     })
 }
 
@@ -482,7 +578,8 @@ pub async fn index() -> Result<Response, anyhow::Error> {
          .met{color:#0a7d33;}</style>\
          </head><body><h1>Moore Foundation progress</h1>\
          <p class=\"note\">Grant GBMF #9889.03. Every figure is computed from the \
-         databases on each load.</p>",
+         databases on each load.</p>\
+         <p class=\"note\"><a href=\"/staff/signup-referrals\">Sign-up referral sources</a></p>",
     );
 
     // Headline tiles, from the most recent month.
@@ -512,9 +609,23 @@ pub async fn index() -> Result<Response, anyhow::Error> {
     }
 
     // Goals.
-    html.push_str(
+    html.push_str(&format!(
         "<h2>Agreement indicators</h2>\
-         <p class=\"note\">The agreement sets a baseline and a December 2028 target. \
+         <p class=\"note\">Libraries are the program's own count, kept by hand in the \
+         <a href=\"{}\">Moore Grant Data &amp; Project Timeline</a> sheet; each month \
+         shows the latest update on or before its last day.{}</p>",
+        tracker::VIEW_URL,
+        match &ledger.tracker_error {
+            Some(error) => format!(
+                " <strong>The sheet could not be read just now ({}), so the library \
+                 figures show as not tracked.</strong>",
+                html_escape(error)
+            ),
+            None => String::new(),
+        },
+    ));
+    html.push_str(
+        "<p class=\"note\">The agreement sets a baseline and a December 2028 target. \
          The year marks below are an even split of the two across three years, and \
          are ours, not the agreement's.</p>\
          <table><tr><th>Indicator</th><th>As worded in Attachment 1</th>\
@@ -757,20 +868,122 @@ mod tests {
 
     #[test]
     fn librarians_are_untracked_before_the_form_existed() {
-        let month = MonthTotals {
-            year: 2024,
-            month: 6,
-            totals: [0; Metric::ALL.len()],
-        };
+        let month = MonthTotals::new(2024, 6, [0; Metric::ALL.len()]);
         assert!(!month.tracked(Metric::Librarians));
+        assert!(!month.tracked(Metric::FormLibraries));
         assert!(month.tracked(Metric::Accounts));
 
-        let later = MonthTotals {
-            year: 2025,
-            month: 6,
-            totals: [0; Metric::ALL.len()],
-        };
+        let later = MonthTotals::new(2025, 6, [0; Metric::ALL.len()]);
         assert!(later.tracked(Metric::Librarians));
+        assert!(later.tracked(Metric::FormLibraries));
+    }
+
+    fn tracker_entries() -> Vec<tracker::Entry> {
+        let entry = |year, month, day, count| tracker::Entry {
+            day: tracker::Day { year, month, day },
+            count,
+        };
+
+        vec![
+            entry(2024, 12, 31, 908),
+            entry(2025, 12, 31, 1_146),
+            entry(2026, 8, 24, 1_429),
+        ]
+    }
+
+    fn ledger_months() -> Vec<MonthTotals> {
+        [(2024, 11), (2024, 12), (2025, 7), (2026, 1), (2026, 8)]
+            .into_iter()
+            .map(|(year, month)| MonthTotals::new(year, month, [0; Metric::ALL.len()]))
+            .collect()
+    }
+
+    #[test]
+    fn libraries_are_the_trackers_latest_update_by_each_month_end() {
+        let mut months = ledger_months();
+        apply_tracker(
+            &mut months,
+            &tracker_entries(),
+            jiff::civil::date(2026, 8, 26),
+        );
+
+        let libraries: Vec<Option<i64>> = months
+            .iter()
+            .map(|m| {
+                m.tracked(Metric::Libraries)
+                    .then(|| m.get(Metric::Libraries))
+            })
+            .collect();
+
+        // Before the first update, the last update carried through a month
+        // without one, and the month in progress read up to today.
+        assert_eq!(
+            libraries,
+            [None, Some(908), Some(908), Some(1_146), Some(1_429)]
+        );
+    }
+
+    #[test]
+    fn the_month_in_progress_reads_only_up_to_today() {
+        let mut months = ledger_months();
+        apply_tracker(
+            &mut months,
+            &tracker_entries(),
+            jiff::civil::date(2026, 8, 20),
+        );
+        assert_eq!(months[4].get(Metric::Libraries), 1_146);
+    }
+
+    #[test]
+    fn the_library_goal_is_measured_against_the_tracker() {
+        let mut months = ledger_months();
+        apply_tracker(
+            &mut months,
+            &tracker_entries(),
+            jiff::civil::date(2026, 8, 26),
+        );
+        let ledger = Ledger {
+            months,
+            kit_downloads: 0,
+            acts: Vec::new(),
+            tracker_error: None,
+        };
+
+        let goal = goals(&ledger)
+            .into_iter()
+            .find(|g| g.name == "Libraries in the network")
+            .unwrap();
+        assert_eq!(goal.current, Some(1_429));
+        assert_eq!(goal.pace_override, None);
+    }
+
+    #[test]
+    fn an_unreadable_tracker_leaves_the_libraries_untracked_and_says_why() {
+        let ledger = Ledger {
+            months: ledger_months(),
+            kit_downloads: 0,
+            acts: Vec::new(),
+            tracker_error: Some(String::from("the sheet could not be fetched")),
+        };
+
+        assert!(ledger.months.iter().all(|m| !m.tracked(Metric::Libraries)));
+
+        let goal = goals(&ledger)
+            .into_iter()
+            .find(|g| g.name == "Libraries in the network")
+            .unwrap();
+        assert_eq!(goal.current, None);
+        assert_eq!(goal.pace_override.as_deref(), Some("tracker unavailable"));
+    }
+
+    #[test]
+    fn the_csv_keeps_its_columns_and_adds_the_forms_libraries_last() {
+        let headings: Vec<&str> = Metric::ALL.into_iter().map(Metric::csv_heading).collect();
+        assert_eq!(headings[1], "Libraries in the network");
+        assert_eq!(
+            headings.last(),
+            Some(&"Libraries signed up through the form")
+        );
     }
 
     #[test]

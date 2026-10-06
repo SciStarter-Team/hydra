@@ -145,6 +145,21 @@ fn delta_to_html_impl(delta: &Delta) -> String {
                 }
             }
 
+            // Handle button embeds (a link drawn as a call-to-action button)
+            if let Some(button) = embed.get("button").and_then(|v| v.as_object()) {
+                let url = button
+                    .get("url")
+                    .and_then(|v| v.as_str())
+                    .and_then(sanitize_url)
+                    .unwrap_or("");
+                let label = button.get("label").and_then(|v| v.as_str()).unwrap_or("");
+
+                // A button that leads nowhere or says nothing is not drawn.
+                if !url.is_empty() && !label.trim().is_empty() {
+                    html.push_str(&button_html(url, label));
+                }
+            }
+
             // Handle figure embeds (images with captions)
             if let Some(figure_data) = embed.get("figure") {
                 if let Some(obj) = figure_data.as_object() {
@@ -343,6 +358,75 @@ fn close_block_tag(block_type: BlockType) -> Option<String> {
         | BlockType::RowItem
         | BlockType::ColumnItem => None,
     }
+}
+
+/// How a button embed is drawn: centred on a line of its own, in the coral of
+/// the site's sign-up button.
+///
+/// Styled inline, and not with the classes the rest of this output uses,
+/// because the place a button most often goes is an email, and a mail client
+/// honours nothing else. These are the styles of the button in the
+/// confirmation email orrery sends.
+const BUTTON_BLOCK_STYLE: &str = "text-align:center;margin:28px 0;";
+const BUTTON_LINK_STYLE: &str = "display:inline-block;background-color:#D63511;color:#ffffff;font-weight:bold;text-decoration:none;padding:14px 32px;border-radius:6px;";
+
+fn button_html(url: &str, label: &str) -> String {
+    format!(
+        "<p style=\"{}\"><a href=\"{}\" style=\"{}\">{}</a></p>",
+        BUTTON_BLOCK_STYLE,
+        html_escape(url),
+        BUTTON_LINK_STYLE,
+        html_escape(label)
+    )
+}
+
+/// Whether an inline style draws a link as a button: a block of its own with
+/// a filled background. True of the style above, and of the buttons written
+/// by hand into the emails imported from orrery, which is what lets either
+/// come back as a button embed.
+fn is_button_style(style: &str) -> bool {
+    let style: String = style
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect::<String>()
+        .to_ascii_lowercase();
+
+    style.contains("display:inline-block") && style.contains("background-color:")
+}
+
+/// The button a paragraph consists of, as a button embed's value, when the
+/// paragraph holds a button link and nothing else.
+fn paragraph_button<'a>(
+    node: &ego_tree::NodeRef<'a, scraper::Node>,
+) -> Option<serde_json::Value> {
+    use scraper::Node;
+
+    let mut button = None;
+
+    for child in node.children() {
+        match child.value() {
+            Node::Text(text) if text.text.trim().is_empty() => {}
+            Node::Element(element)
+                if button.is_none()
+                    && element.name() == "a"
+                    && element.attr("style").is_some_and(is_button_style) =>
+            {
+                let url = element.attr("href")?;
+                let label: String = child
+                    .descendants()
+                    .filter_map(|n| match n.value() {
+                        Node::Text(text) => Some(text.text.to_string()),
+                        _ => None,
+                    })
+                    .collect();
+
+                button = Some(serde_json::json!({ "url": url, "label": label.trim() }));
+            }
+            _ => return None,
+        }
+    }
+
+    button
 }
 
 fn get_figure_class(align: &str) -> String {
@@ -673,6 +757,18 @@ fn process_node<'a>(
             match element.name() {
                 // Block elements
                 "p" => {
+                    // A button is a line to itself, so the paragraph it was
+                    // written in becomes the embed, with no line of its own.
+                    if let Some(button) = paragraph_button(node) {
+                        let mut embed = HashMap::new();
+                        embed.insert("button".to_string(), button);
+                        ops.push(Op {
+                            insert: Some(Insert::Embed(embed)),
+                            attributes: None,
+                        });
+                        return;
+                    }
+
                     is_block = true;
                 }
                 "h1" => {
@@ -1001,6 +1097,97 @@ mod tests {
         let delta = r#"{"ops":[{"insert":"Heading"},{"attributes":{"header":1},"insert":"\n"}]}"#;
         let html = delta_to_html(delta).unwrap();
         assert_eq!(html, r#"<h1>Heading</h1>"#);
+    }
+
+    /// The markup of the button in the confirmation email orrery sends, which
+    /// a button embed is meant to reproduce exactly.
+    const ORRERY_BUTTON: &str = r#"<p style="text-align:center;margin:28px 0;"><a href="https://scistarter.org/verify?code={{VERIFY_CODE}}" style="display:inline-block;background-color:#D63511;color:#ffffff;font-weight:bold;text-decoration:none;padding:14px 32px;border-radius:6px;">CONFIRM MY EMAIL</a></p>"#;
+
+    #[test]
+    fn a_button_embed_is_drawn_like_the_button_in_orrerys_email() {
+        let delta = r#"{"ops":[{"insert":"Before\n"},{"insert":{"button":{"url":"https://scistarter.org/verify?code={{VERIFY_CODE}}","label":"CONFIRM MY EMAIL"}}},{"insert":"After\n"}]}"#;
+
+        assert_eq!(
+            delta_to_html(delta).unwrap(),
+            format!("<p>Before</p>{ORRERY_BUTTON}<p>After</p>")
+        );
+    }
+
+    /// A merge field stands in for the whole link in an email, and has to
+    /// survive to be merged.
+    #[test]
+    fn a_button_may_lead_to_a_merge_field() {
+        let delta = r#"{"ops":[{"insert":{"button":{"url":"{{VERIFY_URL}}","label":"Go"}}}]}"#;
+
+        assert!(
+            delta_to_html(delta)
+                .unwrap()
+                .contains(r#"<a href="{{VERIFY_URL}}""#)
+        );
+    }
+
+    #[test]
+    fn a_button_is_escaped_and_cannot_carry_a_script() {
+        let delta = r#"{"ops":[{"insert":{"button":{"url":"https://example.org/?a=1&b=\"2\"","label":"<b>Go</b>"}}}]}"#;
+        let html = delta_to_html(delta).unwrap();
+
+        assert!(html.contains(r#"href="https://example.org/?a=1&amp;b=&quot;2&quot;""#));
+        assert!(html.contains("&lt;b&gt;Go&lt;/b&gt;"));
+
+        for delta in [
+            r#"{"ops":[{"insert":{"button":{"url":"javascript:alert(1)","label":"Go"}}}]}"#,
+            r#"{"ops":[{"insert":{"button":{"url":"https://example.org/","label":"  "}}}]}"#,
+            r#"{"ops":[{"insert":{"button":{"label":"Go"}}}]}"#,
+        ] {
+            assert_eq!(delta_to_html(delta).unwrap(), "", "{delta}");
+        }
+    }
+
+    /// An email imported from orrery keeps the button somebody wrote into it
+    /// by hand, and one this module drew comes back as it went out.
+    #[test]
+    fn a_paragraph_that_is_a_button_is_imported_as_one() {
+        let html = format!("<p>Before</p>\n\n{ORRERY_BUTTON}\n\n<p>After</p>");
+        let delta = html_to_delta(&html).unwrap();
+
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&delta).unwrap(),
+            serde_json::json!({"ops": [
+                {"insert": "Before"},
+                {"insert": "\n"},
+                {"insert": {"button": {
+                    "url": "https://scistarter.org/verify?code={{VERIFY_CODE}}",
+                    "label": "CONFIRM MY EMAIL"
+                }}},
+                {"insert": "After"},
+                {"insert": "\n"},
+            ]})
+        );
+
+        assert_eq!(
+            delta_to_html(&delta).unwrap(),
+            format!("<p>Before</p>{ORRERY_BUTTON}<p>After</p>")
+        );
+    }
+
+    /// Only a paragraph given over to the button becomes one. A styled link
+    /// in the middle of a sentence has words either side of it that a block
+    /// of its own would strand.
+    #[test]
+    fn a_styled_link_inside_a_sentence_stays_a_link() {
+        let html = r#"<p>Please <a href="https://example.org/" style="display:inline-block;background-color:#D63511;">confirm</a> today.</p>"#;
+        let delta = html_to_delta(html).unwrap();
+
+        assert!(!delta.contains("button"), "{delta}");
+        assert!(delta.contains(r#""link":"https://example.org/""#), "{delta}");
+    }
+
+    #[test]
+    fn an_ordinary_link_alone_in_a_paragraph_stays_a_link() {
+        let html = r#"<p><a href="https://example.org/">Read more</a></p>"#;
+        let delta = html_to_delta(html).unwrap();
+
+        assert!(!delta.contains("button"), "{delta}");
     }
 
     #[test]

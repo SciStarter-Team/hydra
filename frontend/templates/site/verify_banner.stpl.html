@@ -1,0 +1,24 @@
+<%#
+  The notice under the site header for a signed-in account whose email address
+  is not yet confirmed. crate::verify_email::VerifyBanner decides who sees it.
+
+  The details panel is a <details> so that it opens and closes without script;
+  verify-banner.js only adds closing it with Escape or a click elsewhere.
+%>
+<div class="verify-banner relative bg-[#d9d9d9] text-[#222] text-center px-4 py-2 [overflow-wrap:anywhere]">
+  <div class="font-bold">
+    <%= crate::i18n::tr("Please confirm your email address {email}.").replace("{email}", &self.email) %>
+    <span class="verify-banner-status" aria-live="polite"><%+ self.status %></span>
+    <details class="verify-banner-details inline-block align-middle font-normal">
+      <summary class="list-none cursor-pointer text-[#005A9C] hover:text-[#004B5C] [&::-webkit-details-marker]:hidden" aria-label="<%= crate::i18n::tr("Not getting the confirmation email?") %>">
+        <svg viewBox="0 0 24 24" width="1.125em" height="1.125em" class="fill-current" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+      </summary>
+      <%# Anchored to the banner rather than the icon, and centred, so that it fits the viewport wherever the icon lands in a wrapped line. %>
+      <div class="absolute top-full left-1/2 -translate-x-1/2 z-50 w-[26rem] max-w-[calc(100vw-2rem)] mt-1 px-5 py-4 bg-white rounded-md shadow-lg text-left">
+        <h2 class="text-base font-extrabold mb-1"><%= crate::i18n::tr("Not getting the email?") %></h2>
+        <p class="text-base"><%= crate::i18n::tr("Check your spam or junk folder, or use the link above to send it again. If it still doesn't arrive, write to us at") %> <a class="underline text-[#0071C2]" href="mailto:info@scistarter.org">info@scistarter.org</a>.</p>
+      </div>
+    </details>
+  </div>
+</div>
+<script src="/-static/js/verify-banner.js" defer></script>

@@ -12,6 +12,8 @@
 //! in a Google Sheet and imported through `/staff/google-authorize`. Unlike the
 //! signups, this service owns it.
 
+use std::collections::HashSet;
+
 use anyhow::Error;
 use async_nats::service::Request;
 use common::{
@@ -19,6 +21,7 @@ use common::{
         LibraryDirectoryEntry, LibraryDirectoryRecordResponse, LibraryMapRow, LibrarySignupFilters,
         LibrarySignupListRequest, LibrarySignupListResponse, LibrarySignupRow, LibrarySignupUpdate,
     },
+    organizations,
     service::decode_structured_message,
     shared::db,
     timestring::TimeString,
@@ -182,16 +185,19 @@ pub async fn list(req: &Request) -> Result<LibrarySignupListResponse, Error> {
 ///
 /// Signups are append-only, so two librarians from the same building each
 /// opting in would otherwise stack two pins on the same spot. Rows are
-/// collapsed on name plus address, compared case- and whitespace-insensitively
-/// because these are free-text fields typed by different people, and the
-/// surviving row is the most recent — the freshest description of a library
-/// whose web page or contact may have changed. Values are trimmed on the way
-/// out, since stray padding is noise to whatever geocodes the file.
+/// collapsed to organizations by `common::organizations` — the rule orrery's
+/// map export and both Moore ledgers use, which joins rows agreeing on a
+/// normalized name or a normalized address — and the surviving row is the most
+/// recent: the freshest description of a library whose web page or contact may
+/// have changed. Values are trimmed on the way out, since stray padding is
+/// noise to whatever geocodes the file.
 ///
 /// Deliberately unfiltered: it answers one fixed question — which libraries
 /// asked to appear — so a filter left over from browsing cannot silently
 /// shrink the map.
 pub async fn map(_req: &Request) -> Result<Vec<LibraryMapRow>, Error> {
+    // Newest first, so that the first row of each organization is its
+    // freshest description.
     let rows = sqlx::query!(
         r#"SELECT
              trim("organization_name") AS "organization_name!: String",
@@ -201,31 +207,31 @@ pub async fn map(_req: &Request) -> Result<Vec<LibraryMapRow>, Error> {
              trim("organization_zip_code") AS "organization_zip_code!: String",
              trim("organization_country") AS "organization_country!: String",
              trim("organization_web_page") AS "organization_web_page!: String"
-           FROM (
-             SELECT "organization_name", "organization_street_address",
-                    "organization_city", "organization_state",
-                    "organization_zip_code", "organization_country",
-                    "organization_web_page",
-                    ROW_NUMBER() OVER (
-                      PARTITION BY lower(trim("organization_name")),
-                                   lower(trim("organization_street_address")),
-                                   lower(trim("organization_city")),
-                                   lower(trim("organization_state")),
-                                   lower(trim("organization_zip_code"))
-                      ORDER BY "recorded" DESC, "signup_id" DESC
-                    ) AS "rank"
-             FROM "library_network_signups"
-             WHERE "add_to_map" = 1
-           )
-           WHERE "rank" = 1
-           ORDER BY lower(trim("organization_name")), lower(trim("organization_city"))"#
+           FROM "library_network_signups"
+           WHERE "add_to_map" = 1
+           ORDER BY "recorded" DESC, "orrery_id" DESC, "signup_id" DESC"#
     )
     .fetch_all(db())
     .await?;
 
-    Ok(rows
+    let keep: HashSet<usize> = organizations::first_of_each(
+        &rows
+            .iter()
+            .map(|row| organizations::Identity {
+                name: &row.organization_name,
+                address: &row.organization_street_address,
+                zip: &row.organization_zip_code,
+            })
+            .collect::<Vec<_>>(),
+    )
+    .into_iter()
+    .collect();
+
+    let mut map: Vec<LibraryMapRow> = rows
         .into_iter()
-        .map(|row| LibraryMapRow {
+        .enumerate()
+        .filter(|(index, _)| keep.contains(index))
+        .map(|(_, row)| LibraryMapRow {
             organization_name: row.organization_name,
             organization_street_address: row.organization_street_address,
             organization_city: row.organization_city,
@@ -234,7 +240,20 @@ pub async fn map(_req: &Request) -> Result<Vec<LibraryMapRow>, Error> {
             organization_country: row.organization_country,
             organization_web_page: row.organization_web_page,
         })
-        .collect())
+        .collect();
+
+    map.sort_by(|a, b| {
+        a.organization_name
+            .to_lowercase()
+            .cmp(&b.organization_name.to_lowercase())
+            .then_with(|| {
+                a.organization_city
+                    .to_lowercase()
+                    .cmp(&b.organization_city.to_lowercase())
+            })
+    });
+
+    Ok(map)
 }
 
 /// One signup, for the staff edit form (`user.library.get`).

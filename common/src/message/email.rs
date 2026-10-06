@@ -28,6 +28,11 @@ pub struct SendEmailRequest {
     /// recipient are directed here instead of to the send-from address.
     #[serde(default)]
     pub reply_to: Option<Vec<String>>,
+    /// Send without any offer to unsubscribe: no link in the footer and no
+    /// one-click header. For an email its recipient cannot opt out of, where
+    /// the offer would be a promise nothing keeps.
+    #[serde(default)]
+    pub no_unsubscribe: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -72,6 +77,9 @@ pub struct ScheduleSendRequest {
     /// Reply-To addresses to apply when the scheduled send is finally queued.
     #[serde(default)]
     pub reply_to: Option<Vec<String>>,
+    /// Send without any offer to unsubscribe, as on [`SendEmailRequest`].
+    #[serde(default)]
+    pub no_unsubscribe: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -261,6 +269,11 @@ pub struct StoredEmail {
     pub body_delta: String,     // Quill Delta JSON
     pub datasets: Vec<String>,  // Dataset names
     pub reply_to_noreply: bool, // Direct replies to NOREPLY_ADDRESS
+    /// Sent without any offer to unsubscribe, as [`SendEmailRequest`]
+    /// describes. A setting of the email, so that the trigger it is bound to
+    /// and a send from the admin agree.
+    #[serde(default)]
+    pub no_unsubscribe: bool,
     pub created_at: TimeString,
     pub updated_at: TimeString,
 }
@@ -298,6 +311,8 @@ pub struct CreateStoredEmailRequest {
     pub datasets: Vec<String>, // Dataset names
     #[serde(default)]
     pub reply_to_noreply: bool, // Direct replies to NOREPLY_ADDRESS
+    #[serde(default)]
+    pub no_unsubscribe: bool, // Offer no way to unsubscribe
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -313,6 +328,8 @@ pub struct UpdateStoredEmailRequest {
     pub body_delta: Option<String>,     // Quill Delta JSON
     pub datasets: Option<Vec<String>>,  // Dataset names
     pub reply_to_noreply: Option<bool>, // Direct replies to NOREPLY_ADDRESS
+    #[serde(default)]
+    pub no_unsubscribe: Option<bool>, // Offer no way to unsubscribe
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -464,6 +481,13 @@ pub struct TriggerEmailRequest {
     pub trigger_name: String,
     pub user_id: Ulid,
     pub additional_data: Option<Vec<(String, String)>>, // Extra merge fields
+    /// The address to reach the triggering user at, in place of whatever
+    /// their account says about receiving mail. An email that asks its
+    /// recipient to confirm an address has to go to that address, and to an
+    /// account that is not verified yet -- which a send addressed to the
+    /// user would skip.
+    #[serde(default)]
+    pub address: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

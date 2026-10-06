@@ -306,6 +306,16 @@ async fn create_account(
     .await
     .ok();
 
+    // An account that starts out unverified is asked to confirm its address
+    // straight away, as orrery asks. Not fatal, for the reason the welcome
+    // email is not: the account exists by now, and the banner it is shown
+    // offers to send the email again.
+    if !verified {
+        if let Err(e) = crate::email_verification::send_to_new_account(user_id, &email).await {
+            eprintln!("Failed to send the confirmation email to {user_id}: {e}");
+        }
+    }
+
     Ok(BasicInfo {
         user_id: user_id,
         handle,
@@ -335,6 +345,7 @@ async fn send_completion_email(email: &str, code: &str) -> Result<(), Error> {
             data_sets: vec![],
             additional_data: None,
             reply_to: noreply_reply_to(true),
+            no_unsubscribe: false,
         },
     )
     .await?;

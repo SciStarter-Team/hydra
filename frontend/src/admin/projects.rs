@@ -5,7 +5,6 @@ use crate::local_time::{TimeFormat, local_time};
 use crate::middleware::authorization::Authenticated;
 use crate::participant_file::ParticipantFile;
 use crate::peering::LoadStorePeered;
-use crate::project::ProjectRejectionReason;
 use crate::project::all::ProjectAll;
 use crate::project::field::{
     ACTIVITIES_VOCABULARY, AUDIENCE_VOCABULARY, DATA_ACCESS_VOCABULARY,
@@ -15,6 +14,7 @@ use crate::project::field::{
     ProjectFieldValue, SPONSORS_VOCABULARY, STAKEHOLDERS_VOCABULARY,
     SUSTAINABLE_DEVELOPMENT_GOALS_VOCABULARY, TOPICS_VOCABULARY,
 };
+use crate::project::{ProjectRejectionReason, SUBMISSION_REJECTION_NOTICES};
 use common::insensitivestring::InsensitiveString;
 use common::shared::db;
 use common::timestring::TimeString;
@@ -1493,7 +1493,14 @@ async fn projects_edit(
 /// told about, so re-saving an unchanged reason is silent while correcting a
 /// reason sends an updated notice. Mirrors the orrery side, which does this
 /// from `entity_post_save`.
+///
+/// Only while rejection notices are switched on: off, a reason on the project
+/// is neither sent nor recorded as sent.
 async fn notify_rejection(project_id: Ulid) -> Result<(), anyhow::Error> {
+    if !SUBMISSION_REJECTION_NOTICES {
+        return Ok(());
+    }
+
     let project_id_str = project_id.to_string();
 
     let project = sqlx::query!(

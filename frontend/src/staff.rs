@@ -13,12 +13,15 @@ mod compare_emails;
 mod curated_report;
 mod email_report;
 mod events;
+mod foundations;
 mod google;
 mod interested;
 mod masquerade;
 mod moore;
 mod project_locations;
 mod projectmap;
+mod referrals;
+mod report_range;
 mod reports;
 mod solar_system;
 mod usermap;
@@ -90,6 +93,10 @@ pub fn routes() -> impl poem::Endpoint {
         .at("/moore", get(moore::index))
         .at("/moore/data", get(moore::data))
         .at("/moore/export.csv", get(moore::export_csv))
+        .at("/signup-referrals", get(referrals::index))
+        .at("/signup-referrals/data", get(referrals::data))
+        .at("/foundations-completions", get(foundations::index))
+        .at("/foundations-completions/data", get(foundations::data))
         .at(
             "/project-locations",
             get(project_locations::project_locations),

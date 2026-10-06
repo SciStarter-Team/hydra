@@ -235,6 +235,9 @@ pub struct CreateStoredEmailForm {
     /// Absent from the form body when the checkbox is unchecked.
     #[serde(default)]
     reply_to_noreply: bool,
+    /// Absent from the form body when the checkbox is unchecked.
+    #[serde(default)]
+    no_unsubscribe: bool,
 }
 
 #[handler]
@@ -248,6 +251,7 @@ async fn email_stored_create(
         body_delta: form.body_delta,
         datasets: form.datasets,
         reply_to_noreply: form.reply_to_noreply,
+        no_unsubscribe: form.no_unsubscribe,
     };
 
     match common::service::request::<common::message::email::CreateStoredEmailResponse>(
@@ -294,6 +298,7 @@ pub struct EditStoredEmailPage {
     pub body_delta: String,
     pub selected_datasets: Vec<String>,
     pub reply_to_noreply: bool,
+    pub no_unsubscribe: bool,
     pub error_message: Option<String>,
     pub available_datasets: Vec<common::message::email::DatasetInfo>,
 }
@@ -333,6 +338,7 @@ async fn email_stored_edit(
                 body_delta: email.body_delta,
                 selected_datasets: email.datasets,
                 reply_to_noreply: email.reply_to_noreply,
+                no_unsubscribe: email.no_unsubscribe,
                 error_message: None,
                 available_datasets: datasets_response.datasets,
             };
@@ -360,6 +366,9 @@ pub struct UpdateStoredEmailForm {
     /// Absent from the form body when the checkbox is unchecked.
     #[serde(default)]
     reply_to_noreply: bool,
+    /// Absent from the form body when the checkbox is unchecked.
+    #[serde(default)]
+    no_unsubscribe: bool,
 }
 
 #[handler]
@@ -396,6 +405,7 @@ async fn email_stored_update(
                 // Always sent: the edit form posts the full checkbox state, so
                 // an absent field means "unchecked", not "leave unchanged".
                 reply_to_noreply: Some(form.reply_to_noreply),
+                no_unsubscribe: Some(form.no_unsubscribe),
             };
             common::service::request::<common::message::email::UpdateStoredEmailResponse>(
                 "emailer.stored.update",
@@ -494,6 +504,9 @@ async fn email_stored_send(
             reply_to: common::message::email::noreply_reply_to(
                 email_response.email.reply_to_noreply,
             ),
+            // The email's own setting, so that what staff see when they send
+            // it to themselves is what its trigger sends.
+            no_unsubscribe: email_response.email.no_unsubscribe,
         },
     )
     .await?;
@@ -820,6 +833,7 @@ async fn email_oneoff_send(
             reply_to: common::message::email::noreply_reply_to(
                 email_response.email.reply_to_noreply,
             ),
+            no_unsubscribe: false,
         },
     )
     .await?;
@@ -1580,6 +1594,9 @@ async fn email_oneoff_to_stored(
                 body_delta: email.body_delta,
                 datasets: email.datasets,
                 reply_to_noreply: email.reply_to_noreply,
+                // A one-off is a mailing, which always offers to unsubscribe,
+                // so there is no setting to carry over.
+                no_unsubscribe: false,
             },
         )
         .await?;

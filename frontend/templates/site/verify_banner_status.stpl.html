@@ -1,0 +1,13 @@
+<%#
+  What the unconfirmed-email banner says about sending the confirmation email
+  again, and the link that asks for it. POST /resend-verification answers with
+  another of these, which replaces this one.
+
+  5.1:1 on the grey bar; the site's usual link blue is only 3.6:1 there.
+%>
+<% if let Some(message) = &self.message { %><%= message %><% } %>
+<% if let Some(link) = &self.link { %>
+  <button type="button" class="underline cursor-pointer font-bold text-[#005A9C] hover:text-[#004B5C]"
+          hx-post="/resend-verification" hx-target="closest .verify-banner-status" hx-swap="innerHTML"
+          hx-disabled-elt="this"><%= link %><span class="htmx-indicator ml-1">…</span></button>
+<% } %>

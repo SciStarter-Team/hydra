@@ -588,6 +588,7 @@ pub async fn send_email(
         data_sets: data_sets.into(),
         additional_data: additional_data.into(),
         reply_to: reply_to.into(),
+        no_unsubscribe: false,
     };
 
     let response: SendEmailResponse = request("emailer.send", email_request).await?;
@@ -965,15 +966,51 @@ pub async fn trigger_email(
     user_id: ulid::Ulid,
     additional_data: Option<&[(String, String)]>,
 ) -> Result<(), anyhow::Error> {
+    send_trigger(trigger, user_id, additional_data, None).await
+}
+
+/// Fire a trigger whose email must reach the user at one particular address,
+/// whether or not their account is verified or accepting mail: the email that
+/// asks them to confirm that address.
+pub async fn trigger_email_to_address(
+    trigger: TriggerEvent,
+    user_id: ulid::Ulid,
+    address: &str,
+    additional_data: Option<&[(String, String)]>,
+) -> Result<(), anyhow::Error> {
+    send_trigger(trigger, user_id, additional_data, Some(address)).await
+}
+
+async fn send_trigger(
+    trigger: TriggerEvent,
+    user_id: ulid::Ulid,
+    additional_data: Option<&[(String, String)]>,
+    address: Option<&str>,
+) -> Result<(), anyhow::Error> {
     send(
         "emailer.trigger",
         crate::message::email::TriggerEmailRequest {
             trigger_name: trigger.as_ref().to_string(),
             user_id,
             additional_data: additional_data.map(|slice| slice.to_vec()),
+            address: address.map(str::to_string),
         },
     )
     .await
+}
+
+#[cfg(test)]
+mod trigger_event_tests {
+    use super::*;
+    use strum::IntoEnumIterator;
+
+    /// A trigger is bound to an event by the event's name alone.
+    #[test]
+    fn an_event_is_recovered_from_the_name_it_is_fired_under() {
+        for event in TriggerEvent::iter() {
+            assert_eq!(event.as_ref().parse::<TriggerEvent>().ok(), Some(event));
+        }
+    }
 }
 
 #[cfg(test)]

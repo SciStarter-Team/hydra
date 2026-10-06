@@ -228,6 +228,8 @@
         </div>
       </div>
 
+      <%# Offered only while picking a reason does something, which is to send the notice. %>
+      <% if crate::project::SUBMISSION_REJECTION_NOTICES { %>
       <div class="mt-4">
         <label for="project-rejection-reason" class="block text-sm font-medium text-gray-700">Rejection reason</label>
         <p class="text-xs text-gray-500 mb-1">
@@ -258,6 +260,7 @@
           <p class="mt-1 text-xs text-gray-600">No rejection notice has been sent to the submitter.</p>
         <% } %>
       </div>
+      <% } %>
 
       <!-- Note: Publish status is now managed via Entities (/-admin/entities) -->
       <div class="flex flex-wrap gap-6 mt-4">

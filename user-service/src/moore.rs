@@ -17,9 +17,12 @@
 
 use anyhow::Error;
 use async_nats::service::Request;
+use std::collections::BTreeMap;
+
 use common::{
     badge::Badge,
     message::dashboard::{MooreBucket, MooreBucketsResponse},
+    organizations,
     shared::db,
 };
 
@@ -60,18 +63,6 @@ pub async fn buckets(_req: &Request) -> Result<MooreBucketsResponse, Error> {
             SELECT min("recorded") AS t
               FROM "library_network_signups"
              GROUP BY lower(trim("email"))
-        ),
-        libraries AS (
-            -- Sign-ups are per person, so collapse them to organizations by
-            -- the same rule the Library Network map uses, and date each
-            -- organization by its earliest sign-up.
-            SELECT min("recorded") AS t
-              FROM "library_network_signups"
-             GROUP BY lower(trim("organization_name")),
-                      lower(trim("organization_street_address")),
-                      lower(trim("organization_city")),
-                      lower(trim("organization_state")),
-                      lower(trim("organization_zip_code"))
         ),
         foundations AS (
             SELECT min(t) AS t FROM (
@@ -120,9 +111,6 @@ pub async fn buckets(_req: &Request) -> Result<MooreBucketsResponse, Error> {
         SELECT 'librarians' AS "metric!", substr(t, 1, 7) AS "month", count(*) AS "count!: i64"
           FROM librarians GROUP BY substr(t, 1, 7)
         UNION ALL
-        SELECT 'libraries', substr(t, 1, 7), count(*)
-          FROM libraries GROUP BY substr(t, 1, 7)
-        UNION ALL
         SELECT 'foundations', substr(t, 1, 7), count(*)
           FROM foundations GROUP BY substr(t, 1, 7)
         UNION ALL
@@ -157,9 +145,11 @@ pub async fn buckets(_req: &Request) -> Result<MooreBucketsResponse, Error> {
 
     let buckets = rows
         .into_iter()
-        .filter_map(|row| {
+        .map(|row| (row.metric, row.month, row.count))
+        .chain(library_buckets().await?)
+        .filter_map(|(metric, month, count)| {
             // A month has to look like `YYYY-MM` to be placed on the ledger.
-            let month = row.month?;
+            let month = month?;
             let (year, rest) = month.split_once('-')?;
 
             (year.len() == 4
@@ -167,12 +157,67 @@ pub async fn buckets(_req: &Request) -> Result<MooreBucketsResponse, Error> {
                 && year.chars().all(|c| c.is_ascii_digit())
                 && rest.chars().all(|c| c.is_ascii_digit()))
             .then_some(MooreBucket {
-                metric: row.metric,
+                metric,
                 month,
-                count: row.count,
+                count,
             })
         })
         .collect();
 
     Ok(MooreBucketsResponse { buckets })
+}
+
+/// Monthly arrivals of libraries that signed up through the form, as
+/// `(metric, month, count)`. The ledger's headline library figure is the
+/// program's tracker, which the frontend reads; this is the form's share.
+///
+/// Sign-ups are one row per person, so this is not the librarian count: the
+/// rows are collapsed to organizations by `common::organizations` — the rule
+/// orrery uses, and the Library Network map — and each organization is dated
+/// by its earliest sign-up. That rule joins rows that agree on a normalized
+/// name *or* a normalized address, transitively, which SQL can't express.
+async fn library_buckets() -> Result<Vec<(String, Option<String>, i64)>, Error> {
+    struct Row {
+        recorded: String,
+        name: String,
+        address: String,
+        zip: String,
+    }
+
+    // Oldest first, so the first row of each organization is the moment it
+    // entered the network.
+    let rows = sqlx::query_as!(
+        Row,
+        r#"SELECT "recorded" AS "recorded!",
+                  "organization_name" AS "name!",
+                  "organization_street_address" AS "address!",
+                  "organization_zip_code" AS "zip!"
+             FROM "library_network_signups"
+            ORDER BY "recorded" ASC, "orrery_id" ASC, "signup_id" ASC"#
+    )
+    .fetch_all(db())
+    .await?;
+
+    let firsts = organizations::first_of_each(
+        &rows
+            .iter()
+            .map(|row| organizations::Identity {
+                name: &row.name,
+                address: &row.address,
+                zip: &row.zip,
+            })
+            .collect::<Vec<_>>(),
+    );
+
+    let mut months: BTreeMap<String, i64> = BTreeMap::new();
+
+    for index in firsts {
+        let month = rows[index].recorded.get(0..7).unwrap_or_default();
+        *months.entry(month.to_string()).or_default() += 1;
+    }
+
+    Ok(months
+        .into_iter()
+        .map(|(month, count)| (String::from("form_libraries"), Some(month), count))
+        .collect())
 }

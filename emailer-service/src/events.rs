@@ -1,13 +1,18 @@
 use anyhow::Error;
 use async_nats::service::Request;
 use common::{
-    message::email::{BounceEvent, ComplaintEvent, OpenEvent, UnsubscribeEvent},
+    message::{
+        email::{BounceEvent, ComplaintEvent, OpenEvent, UnsubscribeEvent},
+        user::BouncedEmail,
+    },
+    service::send,
     shared::db,
     timestring::TimeString,
 };
 
 /// Handle bounce event
-/// Adds email to do_not_send and updates sending metrics
+/// Adds email to do_not_send, tells the user service the address is no longer
+/// a confirmed one, and updates sending metrics
 #[tracing::instrument(skip_all)]
 pub async fn handle_bounce(req: &Request) -> Result<(), Error> {
     let mut event: BounceEvent = flexbuffers::from_slice(&req.message.payload)?;
@@ -36,6 +41,20 @@ pub async fn handle_bounce(req: &Request) -> Result<(), Error> {
     )
     .execute(db())
     .await?;
+
+    // An address that bounces is not one its owner is reading, whatever was
+    // confirmed in the past. Not fatal: the suppression above already stops
+    // the mail, and this only keeps the account's standing honest.
+    if let Err(e) = send(
+        "user.emails.bounced",
+        BouncedEmail {
+            email: event.email_address.clone(),
+        },
+    )
+    .await
+    {
+        tracing::error!(email = %event.email_address, "Failed to report bounce to user service: {e:?}");
+    }
 
     // Update sending metrics if sending_id is provided
     if let Some(sending_id) = event.sending_id {

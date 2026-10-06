@@ -18,11 +18,17 @@
         <td style="font-size:16px;width:100%;padding:16px;font-family: Arial, Helvetica, sans-serif;line-height:150%;"><%- self.content %></td>
       </tr>
       <tr>
-        <td style="background-color:#edfbfe;text-align:center;font-size:12px;width:100%;padding:16px;font-family: Arial, Helvetica, sans-serif;">
-          <div style="width:80%;margin:0 auto;">
-            <p style="margin:10px 0;">We are glad you're part of the SciStarter community. To manage your email settings, visit: <a href="https://<%= env!("DOMAIN") %>/dashboard/settings" style="color:#2a7abb;">https://<%= env!("DOMAIN") %>/dashboard/settings</a>.</p>
-            <p style="font-size: 10px;margin:10px 0;">To unsubscribe from emails from SciStarter, click here: <a href="https://<%= env!("DOMAIN") %><%= self.unsubscribe_path %>" style="color:#2a7abb;">Unsubscribe</a></p>
-          </div>
+        <td style="background-color:#edfbfe;color:#23284e;text-align:center;font-size:12px;width:100%;padding:16px;font-family: Arial, Helvetica, sans-serif;">
+          <p style="margin:10px 0;white-space:nowrap;">
+            <span style="vertical-align:middle;margin-right:3px;">Follow SciStarter:</span><% for link in SOCIAL_LINKS.iter() { %>
+            <a href="<%= link.url %>" style="display:inline-block;margin:0 3px;vertical-align:middle;"><img src="https://<%= env!("DOMAIN") %>/-static/img/email/<%= link.icon %>.png" alt="<%= link.name %>" width="24" height="24" style="display:block;border:0;" /></a><% } %>
+          </p>
+          <p style="margin:10px 0 4px;color:#666666;"><a href="https://<%= env!("DOMAIN") %>" style="color:#666666;">SciStarter.org</a> | <a href="https://<%= env!("DOMAIN") %>/dashboard/settings" style="color:#666666;">Manage email preferences</a></p>
+          <% if let Some(unsubscribe_path) = self.unsubscribe_path { %>
+          <p style="margin:4px 0 10px;"><a href="https://<%= env!("DOMAIN") %><%= unsubscribe_path %>" style="color:#666666;">Unsubscribe</a></p>
+          <% } %>
+          <p style="margin:10px 0;"><%= ORGANIZATION %><br /><%= ORGANIZATION_LOCATION %></p>
+          <p style="font-size: 10px;margin:10px 0;">&copy; <%= self.year %> <%= ORGANIZATION %></p>
         </td>
       </tr>
     </table>

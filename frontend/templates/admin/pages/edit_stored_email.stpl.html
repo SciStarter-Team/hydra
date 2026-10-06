@@ -80,6 +80,24 @@
                         </label>
                     </div>
 
+                    <!-- Unsubscribe -->
+                    <div>
+                        <label class="flex items-start">
+                            <input
+                                type="checkbox"
+                                name="no_unsubscribe"
+                                value="true"
+                                <% if self.no_unsubscribe { %>checked<% } %>
+                                hx-on:input="data.dirty = true"
+                                class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 mt-1"
+                            >
+                            <span class="ml-2">
+                                <span class="text-sm font-medium text-gray-900">No unsubscribe link</span>
+                                <span class="block text-xs text-gray-500">Send without an Unsubscribe link or one-click unsubscribe header. For an email its recipient cannot opt out of, such as the one asking them to confirm their address.</span>
+                            </span>
+                        </label>
+                    </div>
+
                     <!-- Body Editor -->
                     <div>
                         <label for="body_delta" class="block text-sm font-medium text-gray-700 mb-2">

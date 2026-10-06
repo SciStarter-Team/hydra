@@ -4,6 +4,7 @@ use common::message::user::BasicInfo;
 use sailfish::TemplateOnce;
 
 use super::Component;
+use crate::verify_email::VerifyBanner;
 
 #[derive(Debug, Default)]
 pub struct Header {
@@ -29,9 +30,12 @@ impl Component for Header {
             format!("/login?next={}", urlencoding::encode(&self.current_uri))
         };
 
+        let verify_banner = VerifyBanner::for_user(param.as_ref()).await;
+
         Ok(HeaderTpl {
             basic_info: param.clone(),
             login_url,
+            verify_banner,
         })
     }
 }
@@ -41,4 +45,7 @@ impl Component for Header {
 pub struct HeaderTpl {
     basic_info: Option<Arc<BasicInfo>>,
     login_url: String,
+    /// Shown under the header to an account whose email address is not yet
+    /// confirmed.
+    verify_banner: Option<VerifyBanner>,
 }

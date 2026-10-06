@@ -1,0 +1,15 @@
+<div class="ss-container !pt-8 !pb-12 mx-auto">
+  <div class="ss-small-container">
+    <h1 class="text-center"><%= crate::i18n::tr("This Link Is No Longer Good") %></h1>
+
+    <div class="bg-white border border-linework rounded-lg shadow-sm p-6 mt-6">
+      <p><%= crate::i18n::tr("This confirmation link has expired or has already been used.") %></p>
+      <% if self.logged_in { %>
+        <p class="mt-2"><%= crate::i18n::tr("If the top of this page still asks you to confirm your email address, use the link there to send a new confirmation email. If it doesn't, your address is already confirmed and there is nothing more to do.") %></p>
+      <% } else { %>
+        <p class="mt-2"><%= crate::i18n::tr("Log in to see whether your email address still needs confirming. If it does, the top of every page will offer to send a new confirmation email.") %></p>
+        <p class="mt-4"><a class="btn btn-primary" href="/login"><%= crate::i18n::tr("Log In") %></a></p>
+      <% } %>
+    </div>
+  </div>
+</div>
