@@ -151,6 +151,11 @@ pub struct TrainingChrome {
     /// Account-step copy when signed out. `{next}` is substituted with the
     /// path to return to, so the login link comes back to this page.
     pub signed_out_html: String,
+    /// Account-step copy when signed out with the tutorial already done --
+    /// the visitor followed the link on its last page, and the step is held
+    /// in their session until they have an account to record it on.
+    /// `{next}` is substituted as in `signed_out_html`.
+    pub completed_signed_out_html: String,
 }
 
 impl Default for TrainingChrome {
@@ -164,6 +169,7 @@ impl Default for TrainingChrome {
             complete_heading: "Complete the Training".to_string(),
             signed_in_html: "You're signed in as <b>{handle}</b>. Your SciStarter account is all set &mdash; continue with the steps below to earn your badge.".to_string(),
             signed_out_html: r#"You'll need a free SciStarter account to track your progress and claim your badge. <a href="/login?next={next}">Log in</a> or <a href="/login?next={next}">create an account</a> to get started, then return to this page."#.to_string(),
+            completed_signed_out_html: r#"<b>You've completed the tutorial!</b> <a href="/login?next={next}">Log in</a> or <a href="/login?next={next}">create a free SciStarter account</a> and your badge will be waiting for you."#.to_string(),
         }
     }
 }
@@ -180,6 +186,7 @@ impl TrainingChrome {
             complete_heading: "Completar la formación".to_string(),
             signed_in_html: "<strong>¡Muy bien!</strong> Has iniciado sesión como <b>{handle}</b> y tu progreso se guardará.".to_string(),
             signed_out_html: r#"<strong><a href="/login-es?next={next}">Crea una cuenta</a> de SciStarter o <a href="/login-es?next={next}">inicia sesión</a>.</strong> Si no completas este paso, no podrás solicitar/obtener tu insignia."#.to_string(),
+            completed_signed_out_html: r#"<strong>¡Has completado el tutorial!</strong> <a href="/login-es?next={next}">Inicia sesión</a> o <a href="/login-es?next={next}">crea una cuenta</a> de SciStarter y tu insignia te estará esperando."#.to_string(),
         }
     }
 
@@ -194,6 +201,7 @@ impl TrainingChrome {
             complete_heading: "Concluir a formação".to_string(),
             signed_in_html: "<strong>Ótimo!</strong> Você iniciou sessão como <b>{handle}</b> e seu progresso será salvo.".to_string(),
             signed_out_html: r#"<strong><a href="/login-pt?next={next}">Crie uma conta</a> SciStarter ou <a href="/login-pt?next={next}">faça login</a></strong>. Sem concluir esta etapa, você não poderá solicitar seu selo."#.to_string(),
+            completed_signed_out_html: r#"<strong>Você concluiu o tutorial!</strong> <a href="/login-pt?next={next}">Faça login</a> ou <a href="/login-pt?next={next}">crie uma conta</a> SciStarter e seu selo estará esperando por você."#.to_string(),
         }
     }
 }
@@ -208,6 +216,10 @@ pub struct SigninBody {
     pub handle: String,
     /// Local path the login/signup flow returns to after success.
     pub next_path: String,
+    /// Whether a signed-out visitor's session holds the tutorial as done
+    /// (see [`crate::session::pending_transitions`]). Meaningless once
+    /// signed in: the step was recorded as they signed in.
+    pub tutorial_pending: bool,
     pub chrome: TrainingChrome,
 }
 
@@ -216,12 +228,30 @@ impl SigninBody {
     pub fn html(&self) -> String {
         if self.logged_in {
             self.chrome.signed_in_html.replace("{handle}", &self.handle)
+        } else if self.tutorial_pending {
+            self.chrome
+                .completed_signed_out_html
+                .replace("{next}", &self.next_path)
         } else {
             self.chrome
                 .signed_out_html
                 .replace("{next}", &self.next_path)
         }
     }
+}
+
+/// Whether a signed-out visitor's session holds `workflow`'s tutorial as
+/// done, for [`SigninBody::tutorial_pending`]. Never for a signed-in user,
+/// whose held steps were recorded as they signed in.
+pub fn tutorial_pending(
+    session: &poem::session::Session,
+    workflow: WorkflowType,
+    user: &Option<Arc<BasicInfo>>,
+) -> bool {
+    user.is_none()
+        && crate::session::pending_transitions::steps_for(session, workflow)
+            .iter()
+            .any(|step| step == "tutorial")
 }
 
 /// Generic, reusable project card for any training's "participate in projects"
@@ -578,6 +608,40 @@ mod tests {
         assert!(params.contains("endpoint="));
         assert!(params.contains("auth=Bearer"));
         assert!(params.contains("actor="));
+    }
+
+    /// The account step's copy for a signed-out visitor who followed the link
+    /// on the tutorial's last page acknowledges the completion.
+    #[test]
+    fn a_held_tutorial_changes_the_account_step_copy() {
+        let body = |tutorial_pending| SigninBody {
+            logged_in: false,
+            handle: String::new(),
+            next_path: "/training/foundations".to_string(),
+            tutorial_pending,
+            chrome: TrainingChrome::default(),
+        };
+
+        assert!(body(true).html().contains("completed the tutorial"));
+        assert!(body(true).html().contains("next=/training/foundations"));
+        assert!(!body(false).html().contains("completed the tutorial"));
+    }
+
+    /// Only a signed-out visitor has anything held: a signed-in one had it
+    /// recorded as they signed in, so the page reads their progress instead.
+    #[test]
+    fn a_held_tutorial_is_only_pending_while_signed_out() {
+        use crate::session::pending_transitions;
+        let session = poem::session::Session::default();
+        pending_transitions::stash(&session, WorkflowType::Foundations, "hour1");
+
+        assert!(tutorial_pending(&session, WorkflowType::Foundations, &None));
+        assert!(!tutorial_pending(&session, WorkflowType::K12, &None));
+        assert!(!tutorial_pending(
+            &session,
+            WorkflowType::Foundations,
+            &Some(test_user())
+        ));
     }
 
     fn test_user() -> Arc<BasicInfo> {

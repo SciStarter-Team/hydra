@@ -4,8 +4,9 @@ use common::{
     message::email::{EmailRecipient, SendEmailRequest, SendEmailResponse, noreply_reply_to},
     message::user::{
         Attribution, BasicInfo, CompleteSignup, CompleteSignupResponse, DeferSignup,
-        DeferSignupOutcome, Login, Signup, SnmProfile, UserAndBadge, normalize_tag,
-        signup_grants_foundations, signup_needs_protection, welcome_trigger_for_signup,
+        DeferSignupOutcome, Login, PendingTransition, Signup, SnmProfile, UserAndBadge,
+        normalize_tag, signup_grants_foundations, signup_needs_protection,
+        welcome_trigger_for_signup,
     },
     service::{TriggerEvent, log_activity, request, send, trigger_email},
     shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower},
@@ -80,6 +81,7 @@ async fn create_account(
     let point = form.point;
     let badgeclass = form.badgeclass;
     let attribution = form.attribution;
+    let pending_transitions = form.pending_transitions;
 
     // Some signup contexts identify a cohort that needs protecting. The rule
     // lives here rather than in a frontend handler so that every lane —
@@ -291,6 +293,20 @@ async fn create_account(
         }
     }
 
+    // Training steps the visitor earned before they had an account -- a
+    // tracked go link followed signed out. Recorded here for the reasons the
+    // badge and the cohort credit are: every lane obeys it, and non-fatally,
+    // since the account is committed by now. Recorded in the order they were
+    // earned, which is the order a machine would have taken them in.
+    for PendingTransition { workflow, step } in pending_transitions {
+        if let Err(e) = crate::workflow::apply_step(&user_id_str, workflow, &step).await {
+            eprintln!(
+                "Failed to record the {} step {step:?} held for {user_id}: {e}",
+                workflow.slug()
+            );
+        }
+    }
+
     log_activity(None, "signup", user_id, None, None).await.ok();
 
     // Some cohorts are welcomed in their own words. The tag decides which,
@@ -398,6 +414,7 @@ pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
     let password = djangohashers::make_password(&form.password);
     let tags = form.tags.join(",");
     let badgeclass = form.badgeclass.map(|badge| badge.badgeclass().to_string());
+    let pending_transitions = serde_json::to_string(&form.pending_transitions)?;
     let attribution = &form.attribution;
     let now = TimeString::now().to_string();
 
@@ -428,7 +445,8 @@ pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
                        "zipcode" = ?, "protected" = ?, "point" = ?, "tags" = ?,
                        "badgeclass" = ?, "next" = ?, "ip_address" = ?, "email_sent" = ?,
                        "referer" = ?, "origin" = ?, "utm_source" = ?, "utm_medium" = ?,
-                       "utm_campaign" = ?, "utm_term" = ?, "utm_content" = ?
+                       "utm_campaign" = ?, "utm_term" = ?, "utm_content" = ?,
+                       "pending_transitions" = ?
                        where "email_lower" = ?"#,
                     form.email,
                     form.handle,
@@ -449,6 +467,7 @@ pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
                     attribution.utm_campaign,
                     attribution.utm_term,
                     attribution.utm_content,
+                    pending_transitions,
                     email_lower,
                 )
                 .execute(db())
@@ -463,7 +482,8 @@ pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
                        "zipcode" = ?, "protected" = ?, "point" = ?, "tags" = ?,
                        "badgeclass" = ?, "next" = ?, "ip_address" = ?,
                        "referer" = ?, "origin" = ?, "utm_source" = ?, "utm_medium" = ?,
-                       "utm_campaign" = ?, "utm_term" = ?, "utm_content" = ?
+                       "utm_campaign" = ?, "utm_term" = ?, "utm_content" = ?,
+                       "pending_transitions" = ?
                        where "email_lower" = ?"#,
                     form.email,
                     form.handle,
@@ -483,6 +503,7 @@ pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
                     attribution.utm_campaign,
                     attribution.utm_term,
                     attribution.utm_content,
+                    pending_transitions,
                     email_lower,
                 )
                 .execute(db())
@@ -503,8 +524,8 @@ pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
                    "newsletter", "zipcode", "protected", "point", "tags",
                    "badgeclass", "next", "ip_address", "created", "email_sent",
                    "referer", "origin", "utm_source", "utm_medium",
-                   "utm_campaign", "utm_term", "utm_content"
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                   "utm_campaign", "utm_term", "utm_content", "pending_transitions"
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
                 code,
                 form.email,
                 email_lower,
@@ -527,6 +548,7 @@ pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
                 attribution.utm_campaign,
                 attribution.utm_term,
                 attribution.utm_content,
+                pending_transitions,
             )
             .execute(db())
             .await?;
@@ -549,7 +571,7 @@ pub async fn complete_signup(req: &Request) -> Result<Option<CompleteSignupRespo
         r#"select "email", "handle", "password", "newsletter", "zipcode",
                   "protected", "point", "tags", "badgeclass", "next",
                   "referer", "origin", "utm_source", "utm_medium",
-                  "utm_campaign", "utm_term", "utm_content"
+                  "utm_campaign", "utm_term", "utm_content", "pending_transitions"
            from "pending_signups"
            where "code" = ? and datetime("created") >= datetime('now', '-7 days')"#,
         complete.code
@@ -609,6 +631,14 @@ pub async fn complete_signup(req: &Request) -> Result<Option<CompleteSignupRespo
             utm_term: row.utm_term,
             utm_content: row.utm_content,
         },
+        // Held on the row for the reason the badge is. A row written before
+        // the column existed reads as holding none, via the column default.
+        pending_transitions: serde_json::from_str(&row.pending_transitions).unwrap_or_else(
+            |error| {
+                eprintln!("Unreadable held steps on a pending signup, dropping them: {error}");
+                Vec::new()
+            },
+        ),
     };
 
     let basic_info = match create_account(form, row.password, true).await {

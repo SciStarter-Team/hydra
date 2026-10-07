@@ -4,7 +4,8 @@ use common::{
         location::LocationInfo,
         user::{
             BasicInfo, CompleteSignup, CompleteSignupResponse, DeferSignup, DeferSignupOutcome,
-            Login, Signup, UserAndBadge, signup_needs_protection,
+            Login, Signup, UserAndBadge, WorkflowProgressRequest, WorkflowProgressResponse,
+            signup_needs_protection,
         },
         webauthn::{
             WebAuthnAuthenticationCompleteRequest, WebAuthnAuthenticationCompleteResponse,
@@ -31,7 +32,7 @@ use crate::{
         authorization::Authenticated,
         rate_limit::{RateLimitConfig, RateLimitMiddleware},
     },
-    session::session_tags,
+    session::{pending_transitions, session_tags},
 };
 
 /// Look at the badge a tracked go link staked out for this visitor, without
@@ -95,6 +96,36 @@ async fn grant_staked_out_badge(session: &Session, user_id: Ulid) {
 
     if let Err(e) = send("user.badges.grant", UserAndBadge { user_id, badge }).await {
         tracing::error!("Failed to grant staked-out badge to {user_id}: {e}");
+    }
+}
+
+/// Record the training steps held in the session on someone who turned out
+/// to already have an account. The signup lanes hand them to `create_account`
+/// instead, which records them from the row that creates the user.
+///
+/// Released first and recorded after: once the account is in hand there is
+/// nothing left for the session to hold them for, and a step the user service
+/// cannot record right now is logged rather than kept to be retried on every
+/// later sign-in.
+async fn apply_pending_transitions(session: &Session, user_id: Ulid) {
+    for held in pending_transitions::clear(session) {
+        let recorded: Result<WorkflowProgressResponse, _> = request(
+            "user.workflow.progress",
+            WorkflowProgressRequest {
+                user_id: user_id.to_string(),
+                workflow: held.workflow,
+                step: held.step.clone(),
+            },
+        )
+        .await;
+
+        if let Err(e) = recorded {
+            tracing::error!(
+                "Failed to record the {} step {:?} held for {user_id}: {e}",
+                held.workflow.slug(),
+                held.step
+            );
+        }
     }
 }
 
@@ -567,6 +598,7 @@ pub async fn signup_action(
             disabled_password: false, // Regular password account
             badgeclass: staked_out_badge(session),
             attribution: first_touch(session),
+            pending_transitions: pending_transitions::list(session),
         };
 
         if !turnstile_ok {
@@ -584,10 +616,11 @@ pub async fn signup_action(
             return match request::<DeferSignupOutcome>("user.auth.defer_signup", deferral).await {
                 Ok(DeferSignupOutcome::Deferred) => {
                     session.set("pending_signup_email", &email);
-                    // The pending row holds the badge now, and it outlives
-                    // this session — the completion link may be clicked in
-                    // another browser entirely.
+                    // The pending row holds the badge and the held steps
+                    // now, and it outlives this session — the completion
+                    // link may be clicked in another browser entirely.
                     clear_staked_out_badge(session);
+                    pending_transitions::clear(session);
                     Redirect::see_other("/check-email").into_response()
                 }
                 Ok(DeferSignupOutcome::AlreadyRegistered) => {
@@ -613,6 +646,7 @@ pub async fn signup_action(
                 session.remove("signup_protected");
                 session_tags::clear(session);
                 clear_staked_out_badge(session);
+                pending_transitions::clear(session);
 
                 log_activity(None, "user_signup", basic_info.user_id, None, next.clone())
                     .await
@@ -797,6 +831,7 @@ pub async fn login_action(session: &Session, Form(form): Form<LoginForm>) -> Res
             session.set("basic_info", &basic_info);
 
             grant_staked_out_badge(session, basic_info.user_id).await;
+            apply_pending_transitions(session, basic_info.user_id).await;
 
             log_activity(None, "user_login", basic_info.user_id, None, next.clone())
                 .await
@@ -1055,6 +1090,7 @@ pub async fn webauthn_authentication_complete(
                 apply_session_tags(session, basic_info.user_id).await;
 
                 grant_staked_out_badge(session, basic_info.user_id).await;
+                apply_pending_transitions(session, basic_info.user_id).await;
 
                 log_activity(
                     None,
@@ -1356,6 +1392,7 @@ pub async fn webauthn_registration_complete(
                         disabled_password: true, // Mark as disabled password account
                         badgeclass: staked_out_badge(session),
                         attribution: first_touch(session),
+                        pending_transitions: pending_transitions::list(session),
                     };
 
                     match request_with_retry::<Option<BasicInfo>>(
@@ -1381,6 +1418,7 @@ pub async fn webauthn_registration_complete(
                             session.remove("signup_protected");
                             session_tags::clear(session);
                             clear_staked_out_badge(session);
+                            pending_transitions::clear(session);
 
                             log_activity(
                                 None,

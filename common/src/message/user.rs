@@ -31,6 +31,25 @@ pub struct Signup {
     /// decodes the message.
     #[serde(default)]
     pub attribution: Attribution,
+    /// Training steps the visitor earned before having an account to record
+    /// them on -- a tracked go link followed signed out, such as the one on
+    /// the last page of the Foundations tutorial. Carried on the signup for
+    /// the reason the badge is: every lane records them, and the deferred one
+    /// keeps them on the pending row until the emailed link is clicked.
+    #[serde(default)]
+    pub pending_transitions: Vec<PendingTransition>,
+}
+
+/// A training step a visitor earned while signed out, waiting for the account
+/// it will be recorded on: what a tracked go link leaves in the session of a
+/// visitor who has no account yet. Orrery holds the same thing under its
+/// session's `pending_transitions` key.
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct PendingTransition {
+    pub workflow: WorkflowType,
+    /// The step as the user service names it (see
+    /// [`WorkflowType::canonical_step`]).
+    pub step: String,
 }
 
 /// The visit that brought a new account's owner to the site: the referrer,
@@ -1592,6 +1611,23 @@ impl WorkflowType {
     /// carry these, so a visit can advance a training; the accompanying
     /// `transition` is the step name, which both sides already spell the same
     /// way ("tutorial", "list", …).
+    /// The step name the user service records, for a step named the way
+    /// orrery's state machine signals name it.
+    ///
+    /// Go links are synced from orrery and carry orrery's spelling: the
+    /// Foundations tutorial's own link says `hour1`, which is the signal
+    /// `FoundationsState` takes, where this side records the same thing as
+    /// `tutorial`; Libraries as Hubs likewise says `hour2`. The other
+    /// trainings spell their steps the same way on both sides.
+    pub fn canonical_step(self, step: &str) -> String {
+        match (self, step) {
+            (WorkflowType::Foundations, "hour1") | (WorkflowType::LibrariesHubs, "hour2") => {
+                "tutorial".to_string()
+            }
+            _ => step.to_string(),
+        }
+    }
+
     pub fn from_statemachine(name: &str) -> Option<WorkflowType> {
         match name.to_ascii_lowercase().as_str() {
             "foundationsstate" => Some(WorkflowType::Foundations),

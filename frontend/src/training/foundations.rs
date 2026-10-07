@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use anyhow::Error;
 use common::message::user::{BasicInfo, WorkflowStatusResponse, WorkflowType};
-use poem::{Response, handler};
+use poem::{Response, handler, session::Session};
 use sailfish::TemplateOnce;
 
 use crate::middleware::authorization::Authenticated;
@@ -18,7 +18,7 @@ use crate::peering::LoadStorePeered;
 use crate::training::{
     self, ArticulateCard, ClaimBody, ProjectCardView, SidebarBody, SigninBody, StepView, StepsView,
     TrainingChrome, TrainingContent, TutorialBody, linear_states_ungating, module_url, open_flags,
-    render_page, render_progress_fragment, tutorial_launch_url,
+    render_page, render_progress_fragment, tutorial_launch_url, tutorial_pending,
 };
 
 const BASE_PATH: &str = "/training/foundations";
@@ -182,9 +182,15 @@ impl FoundationsContent {
 
 /// Full page at `/training/foundations`.
 #[handler]
-pub async fn page(Authenticated(user_info): Authenticated) -> Result<Response, Error> {
+pub async fn page(
+    session: &Session,
+    Authenticated(user_info): Authenticated,
+) -> Result<Response, Error> {
     let content = FoundationsContent::current().await;
-    let rendered = build_content(&content, user_info.clone()).await?;
+    // The tutorial's last page links back here through a go link, and a
+    // visitor who finished it signed out arrives with the step held.
+    let pending = tutorial_pending(session, WorkflowType::Foundations, &user_info);
+    let rendered = build_content(&content, user_info.clone(), pending).await?;
     render_page(BASE_PATH, content.title.clone(), rendered, user_info).await
 }
 
@@ -192,7 +198,9 @@ pub async fn page(Authenticated(user_info): Authenticated) -> Result<Response, E
 #[handler]
 pub async fn progress(Authenticated(user_info): Authenticated) -> Result<Response, Error> {
     let content = FoundationsContent::current().await;
-    let steps = build_steps(&content, &user_info).await;
+    // Only a signed-in page subscribes to progress, and nothing is held for
+    // a signed-in visitor.
+    let steps = build_steps(&content, &user_info, false).await;
     let count = training::tutorials_completed(WorkflowType::Foundations).await;
     render_progress_fragment(steps, count)
 }
@@ -200,9 +208,10 @@ pub async fn progress(Authenticated(user_info): Authenticated) -> Result<Respons
 async fn build_content(
     content: &FoundationsContent,
     user_info: Option<Arc<BasicInfo>>,
+    tutorial_pending: bool,
 ) -> Result<TrainingContent, Error> {
     let live_updates = user_info.is_some();
-    let steps = build_steps(content, &user_info).await;
+    let steps = build_steps(content, &user_info, tutorial_pending).await;
     let tutorials_completed = training::tutorials_completed(WorkflowType::Foundations).await;
     let sidebar_html = SidebarBody {
         badge_image: content.badge_image.clone(),
@@ -243,6 +252,7 @@ async fn build_content(
 async fn build_steps(
     content: &FoundationsContent,
     user_info: &Option<Arc<BasicInfo>>,
+    tutorial_pending: bool,
 ) -> StepsView {
     let logged_in = user_info.is_some();
     let status = match user_info {
@@ -282,6 +292,7 @@ async fn build_steps(
 
     let account_body = SigninBody {
         logged_in,
+        tutorial_pending,
         handle: user_info
             .as_ref()
             .map(|user| user.handle.clone())

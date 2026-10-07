@@ -446,6 +446,7 @@ async fn build_steps(content: &DataEthicsContent, user_info: &Option<Arc<BasicIn
 
     let account_body = SigninBody {
         logged_in,
+        tutorial_pending: false,
         handle: user_info
             .as_ref()
             .map(|user| user.handle.clone())

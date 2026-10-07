@@ -1,6 +1,7 @@
 use crate::middleware::analytics::{Device, Interaction};
 use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
+use crate::session::pending_transitions;
 use crate::upload::storage::FileMetadata;
 use anyhow::{Context, Result};
 use common::message::user::{
@@ -371,27 +372,38 @@ pub struct ProgramQuery {
     pub program: Option<String>, // ULID as string
 }
 
-/// Advance a training when a signed-in user visits a tracked go link.
+/// Advance a training when a user visits a tracked go link.
 ///
 /// Mirrors orrery's `counted_redirect_later`: the link carries the workflow
 /// (`statemachine`) and the step to record (`transition`). Some trainings have
 /// no other completion signal — the K-12 tutorial has no final quiz, so this
 /// visit is the only thing that marks it done. Failures are logged and
 /// swallowed; the user still gets their redirect.
-async fn record_tracked_transition(go_url: &GoUrl, user_info: Option<&Arc<BasicInfo>>) {
+///
+/// A visitor with no account has the step held in the session instead
+/// ([`pending_transitions`]), to be recorded on whichever account that
+/// session signs up for or signs in to -- the Foundations tutorial's last
+/// page links here, and a learner who worked through it signed out has
+/// earned the same thing.
+async fn record_tracked_transition(
+    go_url: &GoUrl,
+    user_info: Option<&Arc<BasicInfo>>,
+    session: &Session,
+) {
     if go_url.statemachine.is_empty() || go_url.transition.is_empty() {
         return;
     }
-
-    let Some(user) = user_info else {
-        return;
-    };
 
     let Some(workflow) = WorkflowType::from_statemachine(&go_url.statemachine) else {
         error!(
             "Go link {} names unknown state machine {:?}",
             go_url.slug, go_url.statemachine
         );
+        return;
+    };
+
+    let Some(user) = user_info else {
+        pending_transitions::stash(session, workflow, &go_url.transition);
         return;
     };
 
@@ -472,7 +484,7 @@ pub async fn handle_go_url(
     // Look up the GoUrl entry
     match GoUrl::load(slug.clone()).await {
         Ok(go_url) => {
-            record_tracked_transition(&go_url, user_info.as_ref()).await;
+            record_tracked_transition(&go_url, user_info.as_ref(), session).await;
             apply_session_set(&go_url, session);
 
             match go_url.url_type {

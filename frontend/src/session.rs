@@ -81,6 +81,134 @@ impl SessionStorage for UserServiceSessionStorage {
     }
 }
 
+/// Training steps a visitor earned while signed out, held in the session for
+/// the account they will be recorded on.
+///
+/// A tracked go link drives a signed-in visitor's training on the spot
+/// ([`crate::gourl`]); a visitor with no account has it held here instead,
+/// and whichever account this session then signs up for or signs in to is
+/// driven through it. The training page reads what is held to acknowledge a
+/// completion the site has no row for yet. Orrery keeps the same thing under
+/// its session's `pending_transitions` key.
+pub mod pending_transitions {
+    use common::message::user::{PendingTransition, WorkflowType};
+    use poem::session::Session;
+
+    const KEY: &str = "pending_transitions";
+
+    /// Hold a step for the account to come. The step is stored as the user
+    /// service names it, so that what the page reads back and what the
+    /// service records agree whichever spelling the link used. Holding the
+    /// same step twice holds it once.
+    pub fn stash(session: &Session, workflow: WorkflowType, step: &str) {
+        let held = PendingTransition {
+            workflow,
+            step: workflow.canonical_step(step),
+        };
+
+        let mut all = list(session);
+
+        if all.contains(&held) {
+            return;
+        }
+
+        all.push(held);
+        session.set(KEY, all);
+    }
+
+    /// Everything held, in the order it was held, without releasing it. The
+    /// signup lanes pass this to `create_account`, which records it from the
+    /// row that creates the user, and clear it once that has succeeded.
+    pub fn list(session: &Session) -> Vec<PendingTransition> {
+        session
+            .get::<Vec<PendingTransition>>(KEY)
+            .unwrap_or_default()
+    }
+
+    /// The steps held for one training, as the user service names them.
+    pub fn steps_for(session: &Session, workflow: WorkflowType) -> Vec<String> {
+        list(session)
+            .into_iter()
+            .filter(|held| held.workflow == workflow)
+            .map(|held| held.step)
+            .collect()
+    }
+
+    /// Release everything held and return it, for a lane that has an
+    /// account in hand to record it on.
+    pub fn clear(session: &Session) -> Vec<PendingTransition> {
+        let all = list(session);
+        session.remove(KEY);
+        all
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        /// The Foundations tutorial's own link says `hour1`, orrery's name
+        /// for the step; it is held as `tutorial`, this side's, which is what
+        /// the page asks for and what the user service records.
+        #[test]
+        fn a_held_step_is_spelled_the_way_the_user_service_spells_it() {
+            let session = Session::default();
+
+            stash(&session, WorkflowType::Foundations, "hour1");
+
+            assert_eq!(
+                steps_for(&session, WorkflowType::Foundations),
+                vec!["tutorial"]
+            );
+        }
+
+        #[test]
+        fn following_the_same_link_twice_holds_the_step_once() {
+            let session = Session::default();
+
+            stash(&session, WorkflowType::Foundations, "hour1");
+            stash(&session, WorkflowType::Foundations, "tutorial");
+
+            assert_eq!(list(&session).len(), 1);
+        }
+
+        #[test]
+        fn steps_are_held_per_training_in_the_order_they_arrived() {
+            let session = Session::default();
+
+            stash(&session, WorkflowType::K12, "tutorial");
+            stash(&session, WorkflowType::Foundations, "hour1");
+            stash(&session, WorkflowType::Foundations, "squirrel");
+
+            assert_eq!(
+                steps_for(&session, WorkflowType::Foundations),
+                vec!["tutorial", "squirrel"]
+            );
+            assert_eq!(steps_for(&session, WorkflowType::K12), vec!["tutorial"]);
+            assert_eq!(list(&session).len(), 3);
+        }
+
+        #[test]
+        fn clearing_releases_everything_once() {
+            let session = Session::default();
+            stash(&session, WorkflowType::Foundations, "hour1");
+
+            let released = clear(&session);
+
+            assert_eq!(released.len(), 1);
+            assert!(list(&session).is_empty());
+            assert!(clear(&session).is_empty());
+        }
+
+        #[test]
+        fn a_session_holding_nothing_reads_as_empty() {
+            let session = Session::default();
+
+            assert!(list(&session).is_empty());
+            assert!(steps_for(&session, WorkflowType::Foundations).is_empty());
+        }
+    }
+}
+
 /// Session tag management helper functions
 pub mod session_tags {
     use common::message::user::normalize_tag;

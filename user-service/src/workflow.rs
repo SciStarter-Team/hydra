@@ -60,43 +60,7 @@ pub fn badge_email_fields(badge: Badge, issued: &str) -> Vec<(String, String)> {
 pub async fn record_progress(req: &Request) -> Result<WorkflowProgressResponse, anyhow::Error> {
     let request: WorkflowProgressRequest = decode_structured_message(req.message.clone())?;
 
-    let now = jiff::Zoned::now().to_string();
-
-    let badge_granted = match request.workflow {
-        WorkflowType::Foundations => {
-            update_foundations_progress(&request.user_id, &request.step, &now).await?
-        }
-        WorkflowType::LibrariesHubs => {
-            update_libraries_hubs_progress(&request.user_id, &request.step, &now).await?
-        }
-        WorkflowType::DataLiteracy => {
-            update_data_literacy_progress(&request.user_id, &request.step, &now).await?
-        }
-        WorkflowType::HigherEd => {
-            update_higher_ed_progress(&request.user_id, &request.step, &now).await?
-        }
-        WorkflowType::DataEthics => {
-            update_data_ethics_progress(&request.user_id, &request.step, &now).await?
-        }
-        WorkflowType::Ideal => update_ideal_progress(&request.user_id, &request.step, &now).await?,
-        WorkflowType::Ambassador => {
-            update_ambassador_progress(&request.user_id, &request.step, &now).await?
-        }
-        WorkflowType::K12 => update_k12_progress(&request.user_id, &request.step, &now).await?,
-    };
-
-    // Notify any open training page for this user (over the per-user SSE
-    // channel) that their progress changed, so it re-renders live. The event
-    // name is the workflow slug; the payload is just a trigger. Fire-and-forget
-    // — a failed notification must not fail progress recording.
-    if let Ok(user_id) = Ulid::from_string(&request.user_id) {
-        let _ = common::channel::send_to_user(
-            user_id,
-            "training",
-            common::channel::Event::new(request.workflow.slug(), ""),
-        )
-        .await;
-    }
+    let badge_granted = apply_step(&request.user_id, request.workflow, &request.step).await?;
 
     Ok(WorkflowProgressResponse {
         success: true,
@@ -104,7 +68,56 @@ pub async fn record_progress(req: &Request) -> Result<WorkflowProgressResponse, 
     })
 }
 
-/// Update Foundations of Citizen Science progress
+/// Record one step of a training for an account, whichever way it arrived:
+/// the module's xAPI callback, a tracked go link, or a step that waited in a
+/// visitor's session until they had an account. Returns whether recording it
+/// granted the training's badge.
+///
+/// The step is taken in orrery's spelling as well as this side's, since go
+/// links are synced from orrery and name orrery's signals.
+pub async fn apply_step(
+    user_id: &str,
+    workflow: WorkflowType,
+    step: &str,
+) -> Result<bool, anyhow::Error> {
+    let step = workflow.canonical_step(step);
+    let now = jiff::Zoned::now().to_string();
+
+    let badge_granted = match workflow {
+        WorkflowType::Foundations => update_foundations_progress(user_id, &step, &now).await?,
+        WorkflowType::LibrariesHubs => update_libraries_hubs_progress(user_id, &step, &now).await?,
+        WorkflowType::DataLiteracy => update_data_literacy_progress(user_id, &step, &now).await?,
+        WorkflowType::HigherEd => update_higher_ed_progress(user_id, &step, &now).await?,
+        WorkflowType::DataEthics => update_data_ethics_progress(user_id, &step, &now).await?,
+        WorkflowType::Ideal => update_ideal_progress(user_id, &step, &now).await?,
+        WorkflowType::Ambassador => update_ambassador_progress(user_id, &step, &now).await?,
+        WorkflowType::K12 => update_k12_progress(user_id, &step, &now).await?,
+    };
+
+    // Notify any open training page for this user (over the per-user SSE
+    // channel) that their progress changed, so it re-renders live. The event
+    // name is the workflow slug; the payload is just a trigger. Fire-and-forget
+    // — a failed notification must not fail progress recording.
+    if let Ok(user_id) = Ulid::from_string(user_id) {
+        let _ = common::channel::send_to_user(
+            user_id,
+            "training",
+            common::channel::Event::new(workflow.slug(), ""),
+        )
+        .await;
+    }
+
+    Ok(badge_granted)
+}
+
+/// Update Foundations of Citizen Science progress.
+///
+/// Completing the tutorial is the whole of the training now: the project
+/// steps that once followed it are skipped, which here means that recording
+/// any step fills in the skipped ones as well (see [`skip_foundations_stages`])
+/// before the badge rule is checked. The columns, the rule and the
+/// orrery-style state derived from them are all unchanged, so every reader
+/// of this table goes on meaning what it meant.
 async fn update_foundations_progress(
     user_id: &str,
     step: &str,
@@ -135,12 +148,7 @@ async fn update_foundations_progress(
                 trigger_email(TriggerEvent::FoundationsTutorial, user_ulid, None).await?;
             }
 
-            // The tutorial can be the last step standing: participation in the
-            // module's projects advances it whether or not the tutorial has
-            // been watched yet, and the steps are dated columns rather than a
-            // position, so somebody who did both projects first arrives here
-            // already finished. Checking only on the project steps would leave
-            // them needing a third project to be told so.
+            skip_foundations_stages(user_id, now).await?;
             badge_granted = check_foundations_badge(user_id, Participation::Observed).await?;
         }
         "squirrel" => {
@@ -156,7 +164,7 @@ async fn update_foundations_progress(
                 trigger_email(TriggerEvent::FoundationsSquirrel, user_ulid, None).await?;
             }
 
-            // Check if badge should be granted (need tutorial + 2 projects)
+            skip_foundations_stages(user_id, now).await?;
             badge_granted = check_foundations_badge(user_id, Participation::Observed).await?;
         }
         "stall" => {
@@ -172,6 +180,7 @@ async fn update_foundations_progress(
                 trigger_email(TriggerEvent::FoundationsStall, user_ulid, None).await?;
             }
 
+            skip_foundations_stages(user_id, now).await?;
             badge_granted = check_foundations_badge(user_id, Participation::Observed).await?;
         }
         "debris" => {
@@ -187,12 +196,41 @@ async fn update_foundations_progress(
                 trigger_email(TriggerEvent::FoundationsDebris, user_ulid, None).await?;
             }
 
+            skip_foundations_stages(user_id, now).await?;
             badge_granted = check_foundations_badge(user_id, Participation::Observed).await?;
         }
         _ => {}
     }
 
     Ok(badge_granted)
+}
+
+/// Carry an account that has completed the tutorial past the skipped project
+/// stages, so that the badge rule -- the tutorial and two projects, unchanged
+/// -- is met by the tutorial alone. The counterpart of orrery's
+/// `FoundationsState.skip_ahead`, which chains the skipped states' enter
+/// hooks to the same end.
+///
+/// Dated as of the step that carried the account here, and only where the
+/// tutorial is done: the projects advance an account that has not watched the
+/// tutorial yet, as they always did, and that account is not finished. Each
+/// column is COALESCEd, so a date a project actually earned is kept. The
+/// per-step emails are not sent for a skipped stage -- nobody did the thing
+/// they describe.
+async fn skip_foundations_stages(user_id: &str, now: &str) -> Result<(), anyhow::Error> {
+    sqlx::query!(
+        r#"UPDATE foundations_progress SET
+            squirrel_completed_at = COALESCE(squirrel_completed_at, ?),
+            stall_completed_at = COALESCE(stall_completed_at, ?)
+           WHERE user_id = ? AND hour1_completed_at IS NOT NULL"#,
+        now,
+        now,
+        user_id
+    )
+    .execute(db())
+    .await?;
+
+    Ok(())
 }
 
 /// Carry an account to the end of the Foundations module without it doing the
@@ -345,11 +383,10 @@ async fn check_foundations_badge(
         )
         .await?;
 
-        // The module's own contribution, recorded here at the end of it rather
-        // than when the tutorial reports itself finished. The tutorial is one
-        // step of several -- the projects come after it -- and an account that
-        // watches it and stops has not participated in the module, however far
-        // into it that leaves them.
+        // The module's own contribution, recorded here at the end of it. The
+        // end is reached in the same call that records the tutorial, since the
+        // stages after it are skipped, so it is recorded as the tutorial
+        // reports itself finished.
         //
         // Not fatal: the badge is earned either way, and this is the one place
         // that can grant it. A contribution lost to an unreachable frontend or

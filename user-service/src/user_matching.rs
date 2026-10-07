@@ -267,6 +267,7 @@ pub async fn api_create_user(req: &Request) -> Result<ApiCreateUserResponse, any
             referer: request.referer.unwrap_or_default(),
             ..Attribution::default()
         },
+        pending_transitions: Vec::new(),
     };
 
     let basic_info: Option<common::message::user::BasicInfo> =
