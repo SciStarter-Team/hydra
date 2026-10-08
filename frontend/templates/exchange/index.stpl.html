@@ -92,6 +92,12 @@
                 <input id="include-inactive" name="inactive" value="true" type="checkbox">
                 include inactive projects
               </label>
+              <% if self.exchange.info.settings.region_id.is_some() { %>
+              <label for="include-global">
+                <input id="include-global" name="global" value="true" type="checkbox" <% if self.params.global { %>checked<% } %>>
+                include global projects
+              </label>
+              <% } %>
             </div>
             <div class="u-txt-r u-mb-lg">
               <button hx-on:click="document.querySelector('#search-form').reset()" type="button" class="el-button el-button--info is-plain"><span>clear form</span></button>

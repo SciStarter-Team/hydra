@@ -8,6 +8,7 @@
     <%+ crate::component::floating_field::FormErrorNotice { error } %>
 
     <form method="post" action="/add/project" class="add-form">
+      <input type="hidden" name="exchange" value="<%= &self.values.exchange %>">
       <p class="field-help add-area-note">Fields marked <span aria-hidden="true">*</span> are required.</p>
 
       <%# The groups below are the columns of the desktop layout (the image,

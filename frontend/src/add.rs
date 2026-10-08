@@ -241,6 +241,9 @@ const MAX_OCCURRENCES: usize = 366;
 
 #[derive(Debug, Deserialize)]
 struct AddEventForm {
+    /// The `?exchange=` the form was opened with, carried in a hidden field.
+    #[serde(default)]
+    exchange: String,
     #[serde(default)]
     name: String,
     #[serde(default)]
@@ -350,6 +353,7 @@ struct InstanceValues {
 
 #[derive(Debug, Default)]
 struct EventFormValues {
+    exchange: String,
     name: String,
     description: String,
     location_mode: String,
@@ -405,6 +409,7 @@ impl From<&AddEventForm> for EventFormValues {
         }
 
         EventFormValues {
+            exchange: f.exchange.clone(),
             name: f.name.clone(),
             description: f.description.clone(),
             location_mode: f
@@ -636,18 +641,43 @@ struct TagInput {
 // Add Event: handlers
 // ---------------------------------------------------------------------------
 
+/// The query an add form can be opened with.
+#[derive(Debug, Default, Deserialize)]
+pub struct AddQuery {
+    /// The `path_id` of the exchange the submission is made through, which
+    /// is how an exchange's "Add a Project" and "Add an Event" links open
+    /// these forms.
+    #[serde(default)]
+    exchange: String,
+}
+
+impl AddQuery {
+    /// Where to send someone who must log in first, so they come back to
+    /// the same form for the same exchange.
+    fn login_redirect(&self, path: &str) -> Redirect {
+        let next = if self.exchange.is_empty() {
+            path.to_string()
+        } else {
+            format!("{path}?exchange={}", self.exchange)
+        };
+        Redirect::see_other(format!("/login?next={}", urlencoding::encode(&next)))
+    }
+}
+
 /// GET `/add/event` — render the (empty) submission form. Submitting requires
 /// authentication, so unauthenticated visitors are sent to log in first.
 #[handler]
 #[tracing::instrument]
 pub async fn add_event_page(
     Authenticated(user_info): Authenticated,
+    Query(query): Query<AddQuery>,
 ) -> Result<Response, anyhow::Error> {
     if user_info.is_none() {
-        return Ok(Redirect::see_other("/login?next=/add/event").into_response());
+        return Ok(query.login_redirect("/add/event").into_response());
     }
 
     let mut values = EventFormValues::default();
+    values.exchange = query.exchange;
     values.event_type = EventType::Other.to_string();
     values.repeat_frequency = RepeatFrequency::Once.as_str().to_string();
     values.instances.push(InstanceValues::default());
@@ -669,7 +699,11 @@ pub async fn add_event_submit(
     };
 
     match validate_and_build(&form, user_info.user_id) {
-        Ok(event) => {
+        Ok(mut event) => {
+            // Submitted through an exchange, it waits in that exchange's
+            // approval queue (`reviewed` starts false).
+            event.exchange = crate::exchange::submitted_through(&form.exchange).await?;
+
             let name = event.name.clone();
             let event_id = event.event_id;
 
@@ -1746,6 +1780,9 @@ fn parse_date(date: &str) -> Result<civil::Date, String> {
 
 #[derive(Debug, Deserialize)]
 struct AddProjectForm {
+    /// The `?exchange=` the form was opened with, carried in a hidden field.
+    #[serde(default)]
+    exchange: String,
     #[serde(default)]
     name: String,
     #[serde(default)]
@@ -1812,6 +1849,7 @@ struct AddProjectForm {
 
 #[derive(Debug, Default)]
 struct ProjectFormValues {
+    exchange: String,
     name: String,
     description: String,
     presenter: String,
@@ -1847,6 +1885,7 @@ struct ProjectFormValues {
 impl From<&AddProjectForm> for ProjectFormValues {
     fn from(f: &AddProjectForm) -> Self {
         ProjectFormValues {
+            exchange: f.exchange.clone(),
             name: f.name.clone(),
             description: f.description.clone(),
             presenter: f.presenter.clone(),
@@ -1906,11 +1945,17 @@ struct AddProjectContent {
 #[tracing::instrument]
 pub async fn add_project_page(
     Authenticated(user_info): Authenticated,
+    Query(query): Query<AddQuery>,
 ) -> Result<Response, anyhow::Error> {
     if user_info.is_none() {
-        return Ok(Redirect::see_other("/login?next=/add/project").into_response());
+        return Ok(query.login_redirect("/add/project").into_response());
     }
-    render_project_form(None, ProjectFormValues::default(), user_info).await
+
+    let values = ProjectFormValues {
+        exchange: query.exchange,
+        ..Default::default()
+    };
+    render_project_form(None, values, user_info).await
 }
 
 /// POST `/add/project` — validate, create the project (draft + unpublished),
@@ -1926,7 +1971,11 @@ pub async fn add_project_submit(
     };
 
     match validate_and_build_project(&form, user_info.user_id) {
-        Ok(project) => {
+        Ok(mut project) => {
+            // Submitted through an exchange, it waits in that exchange's
+            // approval queue (`reviewed` starts false).
+            project.exchange = crate::exchange::submitted_through(&form.exchange).await?;
+
             let name = project.name.clone();
             // Public submissions stay unpublished pending review.
             crate::project::all::persist_new_project(project, false, user_info.user_id).await?;

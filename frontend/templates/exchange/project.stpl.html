@@ -413,17 +413,10 @@
     <!-- END PAGE SPECIFIC CONTENT-->
 
 
-    <% if self.exchange.user_is_authorized() { %>
+    <% if let Some(ref squelch) = self.squelch { %>
     <div style="position: fixed; bottom: 20px; right: 20px; background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
       <h4 style="margin-top: 0;">Admin Actions</h4>
-      <button
-        hx-post="/exchange/<%= self.exchange.exchange_id() %>/<%= self.project.slug %>/hide"
-        hx-confirm="Hide this project from the exchange?"
-        hx-target="this"
-        hx-swap="outerHTML"
-        style="padding: 0.5rem 1rem; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer;">
-        Hide Project
-      </button>
+      <%- squelch %>
     </div>
     <% } %>
 
@@ -471,7 +464,7 @@
             <button class="modal__close" aria-label="Close modal" data-micromodal-close></button>
           </header>
           <main class="modal__content" id="modal-1-content">
-            <p>You will be taken to SciStarter to edit this self.project.</p>
+            <p>You will be taken to SciStarter to edit this project.</p>
             <a href="https://scistarter.org/<%= self.project.slug %>/project/edit" class="modal__btn modal__btn-primary">Continue to SciStarter</a>
             <button class="modal__btn modal__btn-text" data-micromodal-close>Cancel</button>
           </main>
@@ -487,7 +480,7 @@
             <button class="modal__close" aria-label="Close modal" data-micromodal-close></button>
           </header>
           <main class="modal__content" id="modal-1-content">
-            <p>You'll be taken to SciStarter where you'll find more tools such as stats and tools to help acquire more citizen scientists to do your self.project.</p>
+            <p>You'll be taken to SciStarter where you'll find more tools such as stats and tools to help acquire more citizen scientists to do your project.</p>
             <a href="https://scistarter.org/<%= self.project.slug %>/tools" class="modal__btn modal__btn-primary">Continue to SciStarter</a>
             <button class="modal__btn modal__btn-text" data-micromodal-close>Cancel</button>
           </main>
@@ -547,38 +540,7 @@
 
     <!-- END MODALS-->
 
-    <!-- DEFAULT MODALS -->
-    <div class="modal micromodal-slide" id="add-modal" aria-hidden="true">
-      <div class="modal__overlay" tabindex="-1" data-micromodal-close>
-        <div class="modal__container" role="dialog" aria-modal="true" aria-labelledby="add-modal-title">
-          <header class="modal__header">
-            <div>
-              <h2 class="modal__title" id="add-modal-title">Add a Citizen Science Project or Event</h2>
-              <p class="powered-by">powered by <img src="/-static/img/logo/svg/Standard__tagline-dark.svg" alt="SciStarter" /></p>
-              <p>You will be taken from this website to the <a href="https://scistarter.org">SciStarter</a> website to enter your project, event, or tool. Once approved, it will be available on SciStarter and in any SciStarter partner websites where it meets the criteria to display.</p>
-            </div>
-            <button class="modal__close" aria-label="Close modal" data-micromodal-close></button>
-          </header>
-          <main class="modal__content">
-            <div>
-              <img src="/-static/img/microscope.svg" alt="microscope icon" />
-              <h3>Add a Citizen Science Project</h3>
-              <p>Projects are typically  long term initiatives that may crowdsource data collection or analysis.</p>
-              <p><a href="https://scistarter.org/add/project?exchange=<%= self.exchange.exchange_id() %>" class="modal__btn modal__btn-primary" target="_blank"><span class="plus">+</span> Add a Project</a></p>
-              <p><a href="https://scistarter.org/finder" target="_blank">Visit SciStarter Projects Page</a></p>
-            </div>
-            <div>
-              <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon entity__tab-icon" style="fill: currentcolor;"><use xlink:href="/-static/img/icons.svg#icon--db-events"></use></svg>
-              <h3>Add a Citizen Science Event</h3>
-              <p>Events are typically short term (possibly reoccurring) events with known start and end times and may focus on trainings, meet-ups, and other activities related to a citizen science self.project.</p>
-              <p><a href="https://scistarter.org/add/event?exchange=<%= self.exchange.exchange_id() %>" class="modal__btn modal__btn-primary" target="_blank"><span class="plus">+</span> Add an Event</a></p>
-              <p><a href="https://scistarter.org/events" target="_blank">Visit SciStarter Events Page</a></p>
-            </div>
-          </main>
-        </div>
-      </div>
-    </div>
-    <!-- END DEFAULT MODALS-->
+    <% include!("add_modal.stpl.html"); %>
 
 
     <!-- https://micromodal.vercel.app/ -->
@@ -611,109 +573,7 @@
     })
     </script>
 
-    <script>
-    /* The coverage map is worth about a megabyte of Leaflet, MapLibre and the
-       adapter between them, on a page where fewer than one project in ten has
-       a polygon to show. Nothing is fetched until a reader asks for the map,
-       and the assets load once per page view. */
-    (function() {
-        const toggle = document.getElementById('coverage-map-toggle');
-        const container = document.getElementById('coverage-map');
-        const payload = document.getElementById('coverage-geojson');
-
-        if (!toggle || !container || !payload) { return; }
-
-        const STYLESHEETS = [
-            '/-static/css/leaflet.css',
-            '/-static/css/maplibre-gl.css'
-        ];
-
-        /* Ordered: the adapter needs both libraries already defined. */
-        const SCRIPTS = [
-            '/-static/js/leaflet.js',
-            '/-static/js/maplibre-gl.js',
-            '/-static/js/leaflet-maplibre-gl.js'
-        ];
-
-        function loadStylesheet(href) {
-            const link = document.createElement('link');
-            link.rel = 'stylesheet';
-            link.href = href;
-            document.head.appendChild(link);
-        }
-
-        function loadScript(src) {
-            return new Promise(function(resolve, reject) {
-                const script = document.createElement('script');
-                script.src = src;
-                script.onload = resolve;
-                script.onerror = function() { reject(new Error('failed to load ' + src)); };
-                document.body.appendChild(script);
-            });
-        }
-
-        async function loadAssets() {
-            STYLESHEETS.forEach(loadStylesheet);
-            for (const src of SCRIPTS) { await loadScript(src); }
-        }
-
-        let assets = null;
-        let map = null;
-
-        function draw() {
-            const coverage = JSON.parse(payload.textContent);
-            map = L.map('coverage-map-display', { attributionControl: false, minZoom: 1, maxZoom: 20 });
-
-            L.control.attribution().addTo(map).addAttribution(
-                '\u00a9 <a href="https://openfreemap.org" target="_blank">OpenFreeMap</a> ' +
-                '\u00a9 <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors'
-            );
-
-            map.addLayer(L.maplibreGL({ style: 'https://tiles.openfreemap.org/styles/liberty' }));
-
-            const shape = L.geoJSON(coverage, { style: { color: '#47a8d4', weight: 2, fillOpacity: 0.2 } });
-            shape.addTo(map);
-            map.fitBounds(shape.getBounds(), { padding: [20, 20] });
-        }
-
-        toggle.addEventListener('click', async function(event) {
-            event.preventDefault();
-
-            if (!container.hidden) {
-                container.hidden = true;
-                toggle.setAttribute('aria-expanded', 'false');
-                toggle.textContent = 'View map\u2026';
-                return;
-            }
-
-            container.hidden = false;
-            toggle.setAttribute('aria-expanded', 'true');
-            toggle.textContent = 'Hide map';
-
-            if (!assets) { assets = loadAssets(); }
-
-            try {
-                await assets;
-            } catch (err) {
-                /* Leave the reader with the location text rather than an empty
-                   box, and let the next click try again. */
-                assets = null;
-                container.hidden = true;
-                toggle.setAttribute('aria-expanded', 'false');
-                toggle.textContent = 'View map\u2026';
-                console.error('coverage map assets failed to load', err);
-                return;
-            }
-
-            if (!map) {
-                draw();
-            } else {
-                /* Leaflet measures a hidden container as zero-sized. */
-                map.invalidateSize();
-            }
-        });
-    })();
-    </script>
+    <% include!("coverage_map_script.stpl.html"); %>
       <%+ crate::component::Notifications %>
   </body>
 </html>

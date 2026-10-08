@@ -6,6 +6,7 @@ use crate::{
         analytics::{Device, Interaction},
         authorization::Authenticated,
     },
+    project::ProjectStatus,
 };
 use anyhow::Error;
 use common::shared::db;
@@ -546,9 +547,12 @@ pub(crate) async fn load_filter_options() -> Result<(Vec<String>, Vec<String>, V
 
 /// Apply project-specific filters to a QueryBuilder
 fn apply_project_filters<'a>(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, query: &'a FinderQuery) {
-    // Never surface test or draft projects in public results (matches the
-    // is_test gate used for public project listings elsewhere).
-    qb.push(" AND p.is_test = 0 AND p.draft = 0");
+    // A project flagged, marked a duplicate or marked a test is never
+    // listed, here or on an exchange; orrery's `find_projects` applies the
+    // same rule. Publication is what keeps a submission out until it is
+    // approved, so the draft flag -- left set on some long-published
+    // projects, and not cleared by exchange approval -- is not consulted.
+    qb.push(" AND p.flagged = 0 AND p.duplicate = 0 AND p.is_test = 0");
 
     // Filter out bad geographic data: (0,0) points and swapped lat/lng
     qb.push(" AND NOT (p.point IS NOT NULL AND ST_X(p.point) = 0 AND ST_Y(p.point) = 0)");
@@ -565,10 +569,18 @@ fn apply_project_filters<'a>(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, query: &
         _ => {}
     }
 
-    if query.show_completed.is_none() {
-        qb.push(" AND p.status != 'Complete'");
+    let statuses: &[ProjectStatus] = if query.show_completed.is_none() {
         qb.push(" AND (p.end IS NULL OR p.end = '' OR p.end >= datetime('now'))");
+        &ProjectStatus::LISTED_BY_FINDER
+    } else {
+        &ProjectStatus::LISTED_WHEN_INACTIVE
+    };
+    qb.push(" AND p.status IN (");
+    let mut separated = qb.separated(", ");
+    for status in statuses {
+        separated.push_bind(*status);
     }
+    qb.push(")");
 
     if !query.topic.is_empty() {
         qb.push(" AND p.project_id IN (SELECT project_id FROM project_topics WHERE topic IN (");
@@ -2340,5 +2352,102 @@ mod tests {
     #[test]
     fn plain_text_passes_through() {
         assert_eq!(make_snippet("Just plain text"), "Just plain text");
+    }
+
+    /// One project per case the finder's listing rule decides, named for it.
+    async fn finder_projects() -> SqlitePool {
+        // SAFETY: mod_spatialite is a trusted extension, the same one the
+        // application loads.
+        let options = unsafe { SqliteConnectOptions::new().extension("mod_spatialite") };
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options.filename(":memory:"))
+            .await
+            .unwrap();
+
+        sqlx::query(
+            "CREATE TABLE projects (project_id TEXT, name TEXT, flagged INTEGER, \
+             duplicate INTEGER, is_test INTEGER, draft INTEGER, status TEXT, \"end\" TEXT, \
+             point BLOB)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        for (name, status, end, flagged, duplicate, is_test, draft) in [
+            ("pending", "Pending", "", 0, 0, 0, 0),
+            ("active", "Active", "", 0, 0, 0, 0),
+            ("periodic", "Periodically Active", "", 0, 0, 0, 0),
+            ("hiatus", "Hiatus", "", 0, 0, 0, 0),
+            ("complete", "Complete", "", 0, 0, 0, 0),
+            ("expired", "Expired", "2000-01-01", 0, 0, 0, 0),
+            ("hidden", "Hidden", "", 0, 0, 0, 0),
+            ("ended", "Active", "2000-01-01", 0, 0, 0, 0),
+            ("flagged", "Active", "", 1, 0, 0, 0),
+            ("duplicate", "Active", "", 0, 1, 0, 0),
+            ("test", "Active", "", 0, 0, 1, 0),
+            ("stale-draft", "Active", "", 0, 0, 0, 1),
+        ] {
+            sqlx::query("INSERT INTO projects VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)")
+                .bind(name)
+                .bind(name)
+                .bind(flagged)
+                .bind(duplicate)
+                .bind(is_test)
+                .bind(draft)
+                .bind(status)
+                .bind(end)
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+
+        pool
+    }
+
+    /// The projects a finder search lists, by name.
+    async fn finder_lists(pool: &SqlitePool, show_completed: bool) -> Vec<String> {
+        let query = FinderQuery {
+            show_completed: show_completed.then(|| "on".to_string()),
+            ..default_location_query(LAT, LNG)
+        };
+
+        let mut qb = sqlx::QueryBuilder::new("SELECT p.name FROM projects p WHERE 1 = 1");
+        super::apply_project_filters(&mut qb, &query);
+        qb.push(" ORDER BY p.name");
+
+        qb.build_query_scalar::<String>()
+            .fetch_all(pool)
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn the_finder_lists_what_can_still_be_joined() {
+        let pool = finder_projects().await;
+
+        assert_eq!(
+            finder_lists(&pool, false).await,
+            ["active", "hiatus", "pending", "periodic", "stale-draft"]
+        );
+    }
+
+    #[tokio::test]
+    async fn finished_projects_come_back_when_asked_for_but_hidden_ones_never_do() {
+        let pool = finder_projects().await;
+
+        assert_eq!(
+            finder_lists(&pool, true).await,
+            [
+                "active",
+                "complete",
+                "ended",
+                "expired",
+                "hiatus",
+                "pending",
+                "periodic",
+                "stale-draft"
+            ]
+        );
     }
 }

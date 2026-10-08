@@ -25,6 +25,38 @@ pub enum ProjectStatus {
     Expired,
 }
 
+impl ProjectStatus {
+    /// The statuses a search lists when it is asked to include inactive
+    /// projects.
+    ///
+    /// Every status that describes how far along a project is belongs here.
+    /// Hidden does not: it is a decision that the project is not to be
+    /// listed at all, and it is also where the orrery sync puts any status
+    /// it does not recognise -- orrery's legacy 999 "deleted" marker among
+    /// them. Mirrors `ProjectStatus::LISTED_WHEN_INACTIVE` in orrery's
+    /// src/common.rs, which has no Expired.
+    pub const LISTED_WHEN_INACTIVE: [ProjectStatus; 6] = [
+        ProjectStatus::Pending,
+        ProjectStatus::Active,
+        ProjectStatus::PeriodicallyActive,
+        ProjectStatus::Hiatus,
+        ProjectStatus::Complete,
+        ProjectStatus::Expired,
+    ];
+
+    /// The statuses the project finder lists unless asked to show finished
+    /// projects as well, when it lists [`Self::LISTED_WHEN_INACTIVE`].
+    ///
+    /// Every status a project can still be joined in. Mirrors the default
+    /// `project__status__in=(0, 1, 2, 3)` of orrery's `find_projects`.
+    pub const LISTED_BY_FINDER: [ProjectStatus; 4] = [
+        ProjectStatus::Pending,
+        ProjectStatus::Active,
+        ProjectStatus::PeriodicallyActive,
+        ProjectStatus::Hiatus,
+    ];
+}
+
 #[derive(Clone, Copy, Default, Debug, sqlx::Type, serde::Serialize, serde::Deserialize)]
 pub enum ProjectPromotionTime {
     #[default]

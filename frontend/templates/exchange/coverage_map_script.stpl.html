@@ -1,0 +1,103 @@
+    <script>
+    /* The coverage map is worth about a megabyte of Leaflet, MapLibre and the
+       adapter between them, on a page where fewer than one project in ten has
+       a polygon to show. Nothing is fetched until a reader asks for the map,
+       and the assets load once per page view. */
+    (function() {
+        const toggle = document.getElementById('coverage-map-toggle');
+        const container = document.getElementById('coverage-map');
+        const payload = document.getElementById('coverage-geojson');
+
+        if (!toggle || !container || !payload) { return; }
+
+        const STYLESHEETS = [
+            '/-static/css/leaflet.css',
+            '/-static/css/maplibre-gl.css'
+        ];
+
+        /* Ordered: the adapter needs both libraries already defined. */
+        const SCRIPTS = [
+            '/-static/js/leaflet.js',
+            '/-static/js/maplibre-gl.js',
+            '/-static/js/leaflet-maplibre-gl.js'
+        ];
+
+        function loadStylesheet(href) {
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = href;
+            document.head.appendChild(link);
+        }
+
+        function loadScript(src) {
+            return new Promise(function(resolve, reject) {
+                const script = document.createElement('script');
+                script.src = src;
+                script.onload = resolve;
+                script.onerror = function() { reject(new Error('failed to load ' + src)); };
+                document.body.appendChild(script);
+            });
+        }
+
+        async function loadAssets() {
+            STYLESHEETS.forEach(loadStylesheet);
+            for (const src of SCRIPTS) { await loadScript(src); }
+        }
+
+        let assets = null;
+        let map = null;
+
+        function draw() {
+            const coverage = JSON.parse(payload.textContent);
+            map = L.map('coverage-map-display', { attributionControl: false, minZoom: 1, maxZoom: 20 });
+
+            L.control.attribution().addTo(map).addAttribution(
+                '\u00a9 <a href="https://openfreemap.org" target="_blank">OpenFreeMap</a> ' +
+                '\u00a9 <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors'
+            );
+
+            map.addLayer(L.maplibreGL({ style: 'https://tiles.openfreemap.org/styles/liberty' }));
+
+            const shape = L.geoJSON(coverage, { style: { color: '#47a8d4', weight: 2, fillOpacity: 0.2 } });
+            shape.addTo(map);
+            map.fitBounds(shape.getBounds(), { padding: [20, 20] });
+        }
+
+        toggle.addEventListener('click', async function(event) {
+            event.preventDefault();
+
+            if (!container.hidden) {
+                container.hidden = true;
+                toggle.setAttribute('aria-expanded', 'false');
+                toggle.textContent = 'View map\u2026';
+                return;
+            }
+
+            container.hidden = false;
+            toggle.setAttribute('aria-expanded', 'true');
+            toggle.textContent = 'Hide map';
+
+            if (!assets) { assets = loadAssets(); }
+
+            try {
+                await assets;
+            } catch (err) {
+                /* Leave the reader with the location text rather than an empty
+                   box, and let the next click try again. */
+                assets = null;
+                container.hidden = true;
+                toggle.setAttribute('aria-expanded', 'false');
+                toggle.textContent = 'View map\u2026';
+                console.error('coverage map assets failed to load', err);
+                return;
+            }
+
+            if (!map) {
+                draw();
+            } else {
+                /* Leaflet measures a hidden container as zero-sized. */
+                map.invalidateSize();
+            }
+        });
+    })();
+    </script>

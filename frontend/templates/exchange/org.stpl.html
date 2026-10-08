@@ -90,18 +90,16 @@
                 <span class="label">Organization</span>
                 <input hx-on:input="document.querySelector('#settings-feedback').textContent=''" type="text" name="name" value="<%= self.exchange.name %>" />
               </div>
-              <!-- TODO: Implement exclude_scistarter field -->
-              <!-- <div class="org-item oi-line">
+              <div class="org-item oi-line">
                 <span class="label">Only show organization projects</span>
-                <input hx-on:input="document.querySelector('#settings-feedback').textContent=''" type="checkbox" name="exclude_scistarter" value="true" />
-              </div> -->
-              <!-- TODO: Implement search field -->
-              <!-- <div class="org-item oi-line">
+                <input hx-on:input="document.querySelector('#settings-feedback').textContent=''" type="checkbox" name="exclude_scistarter" value="true" <% if self.exchange.settings.exclude_scistarter { %>checked<% } %> />
+              </div>
+              <div class="org-item oi-line">
                 <span class="label">Only show matching projects</span>
-                <textarea hx-on:input="document.querySelector('#settings-feedback').textContent=''" name="search"></textarea>
+                <textarea hx-on:input="document.querySelector('#settings-feedback').textContent=''" name="search"><%= &self.exchange.settings.search %></textarea>
                 <small>
                   This field is for entering
-                  a <a href="https://www.postgresql.org/docs/current/functions-matching.html#POSIX-SYNTAX-DETAILS"
+                  a <a href="https://docs.rs/regex/latest/regex/#syntax"
                        target="_blank">regular expression</a>, which is
                   used to select matching projects for display. For
                   most purposes, you can just enter a key word here,
@@ -109,7 +107,7 @@
                   by <strong>|</strong>, so for example you could
                   enter bird|fish|reptile into the field.
                 </small>
-              </div> -->
+              </div>
               <div class="org-item oi-line">
                 <span class="label">Only show projects available in region</span>
                 <select hx-on:input="document.querySelector('#settings-feedback').textContent=''" name="region_id">
@@ -118,6 +116,16 @@
                   <option value="<%= region %>" <% if self.exchange.settings.region_id == Some(*region) { %>selected<% } %>><%= name %></option>
                   <% } %>
                 </select>
+              </div>
+              <div class="org-item oi-line">
+                <span class="label">Global projects by default</span>
+                <input hx-on:input="document.querySelector('#settings-feedback').textContent=''" type="checkbox" name="global_by_default" value="true" <% if self.exchange.settings.global_by_default { %>checked<% } %> />
+                <small>
+                  Whether the finder's "include global projects" box is
+                  ticked when the page loads. Global projects are the ones
+                  that can be done anywhere in the world; with the box clear,
+                  a project is only listed if it reaches your region itself.
+                </small>
               </div>
               <div class="org-item oi-line">
                 <span class="label">Only staff can add projects</span>

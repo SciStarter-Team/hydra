@@ -54,6 +54,7 @@ pub enum EventFieldValue {
     Regions(Option<String>),
     Contacts(Box<[Contact]>),
     PageEditorIds(Box<[Ulid]>),
+    Reviewed(bool),
 }
 
 impl EventField {
@@ -99,6 +100,7 @@ impl EventField {
             EventFieldValue::Regions(_) => EventFieldType::Regions,
             EventFieldValue::Contacts(_) => EventFieldType::Contacts,
             EventFieldValue::PageEditorIds(_) => EventFieldType::PageEditorIds,
+            EventFieldValue::Reviewed(_) => EventFieldType::Reviewed,
         }
     }
 
@@ -267,6 +269,21 @@ impl EventField {
         sqlx::query!(
             "UPDATE events SET created = ? WHERE event_id = ?",
             created_str,
+            event_id_str
+        )
+        .execute(db())
+        .await?;
+
+        Ok(())
+    }
+
+    async fn save_reviewed(&self, reviewed: &bool) -> Result<(), Error> {
+        use common::shared::db;
+
+        let event_id_str = self.event_id.to_string();
+        sqlx::query!(
+            "UPDATE events SET reviewed = ? WHERE event_id = ?",
+            reviewed,
             event_id_str
         )
         .execute(db())
@@ -729,6 +746,21 @@ impl EventField {
         .await?;
         let created = TimeString::try_from(created_str)?;
         Ok(EventField::new(event_id, EventFieldValue::Created(created)))
+    }
+
+    async fn read_reviewed(event_id: Ulid) -> Result<Self, Error> {
+        use common::shared::db;
+        let event_id_str = event_id.to_string();
+        let reviewed = sqlx::query_scalar!(
+            r#"SELECT reviewed as "reviewed: bool" FROM events WHERE event_id = ?"#,
+            event_id_str
+        )
+        .fetch_one(db())
+        .await?;
+        Ok(EventField::new(
+            event_id,
+            EventFieldValue::Reviewed(reviewed),
+        ))
     }
 
     async fn read_flagged(event_id: Ulid) -> Result<Self, Error> {
@@ -1214,6 +1246,7 @@ impl LoadStorePeered for EventField {
             EventFieldValue::Regions(regions) => self.save_regions(regions).await,
             EventFieldValue::Contacts(contacts) => self.save_contacts(contacts).await,
             EventFieldValue::PageEditorIds(ids) => self.save_page_editor_ids(ids).await,
+            EventFieldValue::Reviewed(reviewed) => self.save_reviewed(reviewed).await,
             EventFieldValue::EventId(_) => {
                 // EventId is immutable and should not be updated
                 Err(anyhow::anyhow!("EventId cannot be updated"))
@@ -1263,6 +1296,7 @@ impl LoadStorePeered for EventField {
             EventFieldType::Regions => Self::read_regions(event_id).await,
             EventFieldType::Contacts => Self::read_contacts(event_id).await,
             EventFieldType::PageEditorIds => Self::read_page_editor_ids(event_id).await,
+            EventFieldType::Reviewed => Self::read_reviewed(event_id).await,
         }
     }
 }

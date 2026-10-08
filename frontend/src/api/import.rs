@@ -213,6 +213,8 @@ async fn import_single_event(event: ImportEvent) -> Result<(), Error> {
         address,
         tags,
         instances: vec![EventInstance { begin, end }].into_boxed_slice(),
+        // Published as it arrives, so there is nothing for anyone to review.
+        reviewed: true,
         ..Default::default()
     };
 

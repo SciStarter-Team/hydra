@@ -1,12 +1,12 @@
 <form id="squelch-form" style="padding: 1rem">
-  <% if squelch { %>
-  <p><label>Mark this note for attention: <input type=checkbox name=elevate value=true <% if elevate { %>checked<% } %>></label></p>
-  <p><textarea name=note><%= note %></textarea></p>
-  <p><button type=button hx-target="#squelch-form" hx-post="/exchange/<%= exchange %>/<%= project %>/squelch">Unpublish</button></p>
+  <% if let Some(ref hidden) = self.hidden { %>
+  <p>Unpublished from this exchange.</p>
+  <% if hidden.elevate { %><p><strong>Marked for attention</strong></p><% } %>
+  <p><%= &hidden.note %></p>
+  <p><button type=button hx-target="#squelch-form" hx-swap="outerHTML" hx-post="/exchange/<%= self.exchange %>/<%= &self.project %>/unsquelch">Republish</button></p>
   <% } else { %>
-  <input type=hidden name=elevate value=false>
-  <input type=hidden name=note value="">
-  <p><%= note %></p>
-  <p><button type=button hx-target="#squelch-form" hx-post="/exchange/<%= exchange %>/<%= project %>/unsquelch">Republish</button></p>
+  <p><label>Mark this note for attention: <input type=checkbox name=elevate value=true></label></p>
+  <p><textarea name=note></textarea></p>
+  <p><button type=button hx-target="#squelch-form" hx-swap="outerHTML" hx-post="/exchange/<%= self.exchange %>/<%= &self.project %>/squelch">Unpublish</button></p>
   <% } %>
 </form>

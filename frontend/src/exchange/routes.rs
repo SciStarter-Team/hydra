@@ -28,21 +28,31 @@ pub fn routes() -> impl Endpoint {
             "/:exchange/staff/:user_id",
             poem::delete(remove_exchange_staff),
         )
+        // `:kind` is `projects` or `events`; see `SubmissionKind`.
         .at(
-            "/:exchange/projects/:project_id/approve",
-            poem::post(approve_exchange_project),
+            "/:exchange/:kind/:id/approve",
+            poem::post(approve_submission),
         )
         .at(
-            "/:exchange/projects/:project_id/reject",
-            poem::delete(reject_exchange_project),
+            "/:exchange/:kind/:id/reject",
+            poem::delete(reject_submission),
         )
         .at(
             "/:exchange/:project_slug/project.html",
             poem::get(exchange_project),
         )
+        .at("/:exchange/:slug/event.html", poem::get(exchange_event))
+        .at("/:exchange/:slug/visit", poem::get(visit))
         .at("/:exchange/:project_slug/save", poem::post(save_project))
         .at("/:exchange/:project_slug/vote", poem::post(vote_project))
-        .at("/:exchange/:project_slug/hide", poem::post(hide_project))
+        .at(
+            "/:exchange/:project_slug/squelch",
+            poem::post(squelch_project),
+        )
+        .at(
+            "/:exchange/:project_slug/unsquelch",
+            poem::post(unsquelch_project),
+        )
         // Mark these routes as needing partitioned cookies for iframe embedding
         .with(EnablePartitionedCookies)
 }

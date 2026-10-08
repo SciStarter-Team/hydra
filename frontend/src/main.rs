@@ -710,6 +710,7 @@ async fn main() -> Result<(), Error> {
     let _synchronize_entity_lists = tokio::spawn(sync::synchronize_entity_lists());
     let _synchronize_go_urls = tokio::spawn(sync::synchronize_go_urls());
     let _synchronize_regions = tokio::spawn(sync::synchronize_regions());
+    let _synchronize_exchanges = tokio::spawn(sync::synchronize_exchanges());
     let _update_expired_statuses = tokio::spawn(sync::update_expired_statuses());
     let _periodic_maintenance = tokio::spawn(periodic_maintenance());
 
@@ -1475,8 +1476,13 @@ mod sync {
                 proj.circuit_id = data.circuit_id;
                 proj.sustainable_development_goals = data.sustainable_development_goals;
 
-                // Mark synced projects as reviewed (they come from the main database)
-                proj.reviewed = true;
+                // Reviewed unless it is waiting in its exchange's approval
+                // queue, so the queue carries over from orrery.
+                proj.reviewed = !crate::exchange::orrery::awaiting_approval(
+                    proj.exchange.as_deref(),
+                    data.publish,
+                    &data.tags,
+                );
 
                 // Use Legacy source so higher-priority sources aren't overwritten
                 proj.update_source = Some(crate::project::field_source::FieldSource::Legacy);
@@ -1561,6 +1567,8 @@ mod sync {
         scistarter_last_edited: Option<Timestamp>, // Option<TimeString>,
         name: String,
         tags: String, // HashSet<InsensitiveString>,
+        /// The ULID of the exchange the event was submitted through, if any.
+        exchange: Option<String>,
         meta_description: String,
         description: String,
         // contacts: Box<[Contact]>,
@@ -1755,6 +1763,15 @@ mod sync {
                 evt.scistarter_last_edited = data.scistarter_last_edited.map(|ts| ts.into());
 
                 evt.name = data.name;
+
+                // Reviewed unless it is waiting in its exchange's approval
+                // queue, so the queue carries over from orrery.
+                evt.reviewed = !crate::exchange::orrery::awaiting_approval(
+                    data.exchange.as_deref(),
+                    data.publish,
+                    &data.tags,
+                );
+                evt.exchange = data.exchange;
 
                 evt.tags = data
                     .tags
@@ -2588,6 +2605,72 @@ mod sync {
 
                 if let Err(e) = crate::region::rebuild_all().await {
                     eprintln!("Region match rebuild failed: {}", e);
+                }
+            }
+
+            sleep(Duration::from_secs(60 * 60)).await;
+        }
+    }
+
+    /// Keep every exchange orrery has in step with it: settings, people,
+    /// prompted searches and squelches.
+    ///
+    /// Orrery is where exchanges are set up and moderated until the
+    /// cutover, and there are only a handful, so the whole set is fetched
+    /// each time and each one replaced; see `exchange::orrery` for what is
+    /// kept from hydra's own copy. Exchanges orrery does not have are left
+    /// alone.
+    #[tracing::instrument]
+    pub async fn synchronize_exchanges() -> Result<(), anyhow::Error> {
+        use crate::exchange::orrery::{OrreryExchange, apply};
+
+        loop {
+            let client = reqwest::Client::new();
+
+            tracing::info!("Retrieving exchanges...");
+
+            let exchanges: Vec<OrreryExchange> = match client
+                .get("https://scistarter.org/staff/sync/exchanges")
+                .bearer_auth(env!("SYNC_TOKEN"))
+                .send()
+                .await
+            {
+                Ok(response) => match response.error_for_status() {
+                    Ok(resp) => match resp.text().await {
+                        Ok(text) => match serde_json::from_str(&text) {
+                            Ok(exchanges) => exchanges,
+                            Err(e) => {
+                                eprintln!("Exchanges JSON parsing error: {}", e);
+                                eprintln!("Response body: {}", text);
+                                sleep(Duration::from_secs(60)).await;
+                                continue;
+                            }
+                        },
+                        Err(e) => {
+                            eprintln!("Failed to read exchanges body: {}", e);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    },
+                    Err(e) => {
+                        eprintln!("Exchanges HTTP error: {}", e);
+                        sleep(Duration::from_secs(60)).await;
+                        continue;
+                    }
+                },
+                Err(e) => {
+                    eprintln!("Exchanges request error: {}", e);
+                    sleep(Duration::from_secs(60)).await;
+                    continue;
+                }
+            };
+
+            for exchange in exchanges.iter() {
+                if let Err(e) = apply(exchange).await {
+                    eprintln!(
+                        "Could not synchronize exchange {} ({}): {}",
+                        exchange.id, exchange.name, e
+                    );
                 }
             }
 

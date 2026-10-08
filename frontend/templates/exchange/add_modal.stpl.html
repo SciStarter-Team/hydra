@@ -1,0 +1,32 @@
+    <!-- DEFAULT MODALS -->
+    <div class="modal micromodal-slide" id="add-modal" aria-hidden="true">
+      <div class="modal__overlay" tabindex="-1" data-micromodal-close>
+        <div class="modal__container" role="dialog" aria-modal="true" aria-labelledby="add-modal-title">
+          <header class="modal__header">
+            <div>
+              <h2 class="modal__title" id="add-modal-title">Add a Citizen Science Project or Event</h2>
+              <p class="powered-by">powered by <img src="/-static/img/logo/svg/Standard__tagline-dark.svg" alt="SciStarter" /></p>
+              <p>You will be taken from this website to the <a href="https://scistarter.org">SciStarter</a> website to enter your project, event, or tool. Once approved, it will be available on SciStarter and in any SciStarter partner websites where it meets the criteria to display.</p>
+            </div>
+            <button class="modal__close" aria-label="Close modal" data-micromodal-close></button>
+          </header>
+          <main class="modal__content">
+            <div>
+              <img src="/-static/img/microscope.svg" alt="microscope icon" />
+              <h3>Add a Citizen Science Project</h3>
+              <p>Projects are typically  long term initiatives that may crowdsource data collection or analysis.</p>
+              <p><a href="https://scistarter.org/add/project?exchange=<%= self.exchange.exchange_id() %>" class="modal__btn modal__btn-primary" target="_blank"><span class="plus">+</span> Add a Project</a></p>
+              <p><a href="https://scistarter.org/finder" target="_blank">Visit SciStarter Projects Page</a></p>
+            </div>
+            <div>
+              <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon entity__tab-icon" style="fill: currentcolor;"><use xlink:href="/-static/img/icons.svg#icon--db-events"></use></svg>
+              <h3>Add a Citizen Science Event</h3>
+              <p>Events are typically short term (possibly reoccurring) events with known start and end times and may focus on trainings, meet-ups, and other activities related to a citizen science project.</p>
+              <p><a href="https://scistarter.org/add/event?exchange=<%= self.exchange.exchange_id() %>" class="modal__btn modal__btn-primary" target="_blank"><span class="plus">+</span> Add an Event</a></p>
+              <p><a href="https://scistarter.org/events" target="_blank">Visit SciStarter Events Page</a></p>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+    <!-- END DEFAULT MODALS-->

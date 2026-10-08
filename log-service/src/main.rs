@@ -38,8 +38,9 @@ use handlers::{
 use log_service::{Database, run_compactor_service};
 use parking_lot::RwLock;
 use sync::{
-    acts_of_science_synchronize, bookmark_synchronize, golink_synchronize, join_synchronize,
-    participation_synchronize, rating_synchronize, review_synchronize,
+    acts_of_science_synchronize, bookmark_synchronize, exchange_event_synchronize,
+    golink_synchronize, join_synchronize, participation_synchronize, rating_synchronize,
+    review_synchronize,
 };
 
 // Global database instance for handler access - using RwLock<Option<>> so we can take ownership for shutdown
@@ -74,6 +75,7 @@ async fn main() -> Result<()> {
     let review_cancel = CancellationToken::new();
     let golink_cancel = CancellationToken::new();
     let acts_cancel = CancellationToken::new();
+    let exchange_events_cancel = CancellationToken::new();
     let zoo_projects_cancel = CancellationToken::new();
     let zoo_users_cancel = CancellationToken::new();
     let zoo_sync_cancel = CancellationToken::new();
@@ -143,6 +145,14 @@ async fn main() -> Result<()> {
     let acts_database = Arc::clone(&database);
     background_tasks.spawn(async move {
         acts_of_science_synchronize(acts_database, acts_cancel_clone).await;
+        Ok::<(), anyhow::Error>(())
+    });
+
+    // Spawn exchange event (exchange data page history) sync task
+    let exchange_events_cancel_clone = exchange_events_cancel.clone();
+    let exchange_events_database = Arc::clone(&database);
+    background_tasks.spawn(async move {
+        exchange_event_synchronize(exchange_events_database, exchange_events_cancel_clone).await;
         Ok::<(), anyhow::Error>(())
     });
 
@@ -506,6 +516,7 @@ async fn main() -> Result<()> {
     review_cancel.cancel();
     golink_cancel.cancel();
     acts_cancel.cancel();
+    exchange_events_cancel.cancel();
     zoo_projects_cancel.cancel();
     zoo_users_cancel.cancel();
     zoo_sync_cancel.cancel();

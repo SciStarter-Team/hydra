@@ -12,6 +12,7 @@ pub mod dashboard_settings;
 pub mod email;
 pub mod entities;
 pub mod events;
+pub mod exchanges;
 pub mod files;
 pub mod girlscouts;
 pub mod integrations;
@@ -91,7 +92,7 @@ pub fn routes() -> impl Endpoint {
         .nest("/email/address-sets", sets::address_sets_routes())
         .nest("/email/user-sets", sets::user_sets_routes())
         // Integrations
-        .nest("/exchanges", integrations::exchange_routes())
+        .nest("/exchanges", exchanges::routes())
         .nest("/oauth2-clients", integrations::oauth2_routes())
         // Wiki
         .nest("/wiki", wiki::routes())

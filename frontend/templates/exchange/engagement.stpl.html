@@ -24,8 +24,8 @@
       </svg>
       <div class="data-numbers">
         <h2><%= self.exchange_visits %></h2>
-        <h3>Exchange Visits <button type="button" class="el-button el-tooltip question-mark-tooltip el-button--default" aria-label="How many times your exchange was loaded by users" data-microtip-position="top" role="tooltip" tabindex="0"><span>?</span></button></h3>
-        <h4><%= &self.selected_year_display %></h4>
+        <h3>Exchange Visits <button type="button" class="el-button el-tooltip question-mark-tooltip el-button--default" aria-label="How many visits your exchange had. Browsing its home page and project pages in one sitting is one visit." data-microtip-position="top" role="tooltip" tabindex="0"><span>?</span></button></h3>
+        <h4><%= &self.selected_year_display %><% if let Some(ref since) = self.visits_since { %> (<%= since %>)<% } %></h4>
       </div>
     </div>
   </div>
@@ -35,14 +35,15 @@
       <img src="https://static.scistarter.org/img/data/views.svg" />
       <div class="data-numbers dn-small">
         <h2><%= self.visitors %></h2>
-        <h3>Unique Visitors <button type="button" class="el-button el-tooltip question-mark-tooltip el-button--default" aria-label="How many times unique visitors visitors viewed your projects" data-microtip-position="top" role="tooltip" tabindex="0"><span>?</span></button></h3>
+        <h3>Unique Visitors <button type="button" class="el-button el-tooltip question-mark-tooltip el-button--default" aria-label="How many different devices visited your exchange." data-microtip-position="top" role="tooltip" tabindex="0"><span>?</span></button></h3>
+        <% if let Some(ref since) = self.visits_since { %><small><%= since %></small><% } %>
       </div>
     </div>
     <div class="flex2">
       <img src="https://static.scistarter.org/img/data/views.svg" />
       <div class="data-numbers dn-small">
         <h2><%= self.views %></h2>
-        <h3>Page Views <button type="button" class="el-button el-tooltip question-mark-tooltip el-button--default" aria-label="How many times projects were viewed. One user may view multiple times." data-microtip-position="top" role="tooltip" tabindex="0"><span>?</span></button></h3>
+        <h3>Page Views <button type="button" class="el-button el-tooltip question-mark-tooltip el-button--default" aria-label="How many times your exchange's home page and project pages were viewed. One person may view many times." data-microtip-position="top" role="tooltip" tabindex="0"><span>?</span></button></h3>
       </div>
     </div>
   </div>
@@ -58,15 +59,17 @@
     <div class="flex3">
       <img src="https://static.scistarter.org/img/data/referrals.svg" />
       <div class="data-numbers dn-small">
-        <h2><%= self.clickthroughs %></h2>
-        <h3>Clickthroughs (System-wide) <button type="button" class="el-button el-tooltip question-mark-tooltip el-button--default" aria-label="Total system-wide clickthroughs to project websites (not exchange-specific)" data-microtip-position="top" role="tooltip" tabindex="0"><span>?</span></button></h3>
+        <h2><%= self.referrals %></h2>
+        <h3>Referrals <button type="button" class="el-button el-tooltip question-mark-tooltip el-button--default" aria-label="How many times visitors followed a project from your exchange to the project's own website." data-microtip-position="top" role="tooltip" tabindex="0"><span>?</span></button></h3>
       </div>
     </div>
     <div class="flex3">
       <img src="https://static.scistarter.org/img/data/contributions.svg" />
       <div class="data-numbers dn-small">
         <h2><%= self.contributions %></h2>
-        <h3>Contributions (System-wide) <button type="button" class="el-button el-tooltip question-mark-tooltip el-button--default" aria-label="Total system-wide contributions to affiliated projects (not exchange-specific)" data-microtip-position="top" role="tooltip" tabindex="0"><span>?</span></button></h3>
+        <h3>Contributions to Affiliate Projects* <button type="button" class="el-button el-tooltip question-mark-tooltip el-button--default" aria-label="How many times users took part in SciStarter affiliated projects" data-microtip-position="top" role="tooltip" tabindex="0"><span>?</span></button></h3>
+        <br>
+        <small>*This number includes all contributions to SciStarter affiliate projects which appear on your Exchange.</small>
       </div>
     </div>
   </div>
@@ -80,12 +83,11 @@
       <ul class="data-nav not-d2t" role="tablist">
         <%# aria-selected is the state; the `selected` class the stylesheet %>
         <%# already keys off is derived from it rather than tracked separately. %>
-        <li><a role="tab" data-tab="views" aria-selected="true" class="selected"
+        <% for (idx, (tab, label, _)) in self.top_lists().iter().enumerate() { %>
+        <li><a role="tab" data-tab="<%= tab %>" aria-selected="<%= idx == 0 %>" <% if idx == 0 { %>class="selected"<% } %>
                :.selected="aria.selected"
-               hx-on:click="q('.data-nav a').aria.selected = false; aria.selected = true">Views</a></li>
-        <li><a role="tab" data-tab="saves" aria-selected="false"
-               :.selected="aria.selected"
-               hx-on:click="q('.data-nav a').aria.selected = false; aria.selected = true">Saves</a></li>
+               hx-on:click="q('.data-nav a').aria.selected = false; aria.selected = true"><%= label %></a></li>
+        <% } %>
       </ul>
     </div>
     <select name="year" class="el-select" hx-get="/exchange/<%= self.exchange_id %>/engagement">
@@ -96,11 +98,12 @@
     </select>
   </div>
 
-  <div role="tabpanel" :hidden="!q('.data-nav a[data-tab=views]').aria.selected">
-    <h2>Top 10 Projects by Views</h2>
+  <% for (tab, label, items) in self.top_lists().iter() { %>
+  <div role="tabpanel" :hidden="!q('.data-nav a[data-tab=<%= tab %>]').aria.selected">
+    <h2>Top 10 Projects by <%= label %></h2>
 
     <table>
-      <% for (idx, item) in self.top_views.iter().enumerate() { %>
+      <% for (idx, item) in items.iter().enumerate() { %>
       <tr>
         <td class="order-num num"><%= idx + 1 %></td>
         <td>
@@ -117,26 +120,5 @@
       <% } %>
     </table>
   </div>
-
-  <div role="tabpanel" :hidden="!q('.data-nav a[data-tab=saves]').aria.selected">
-    <h2>Top 10 Projects by Saves</h2>
-
-    <table>
-      <% for (idx, item) in self.top_saves.iter().enumerate() { %>
-      <tr>
-        <td class="order-num num"><%= idx + 1 %></td>
-        <td>
-          <div class="media-object">
-            <img src="https://media.scistarter.org/<%= item.2 %>" class="media-image" />
-            <div class="media-body">
-              <h3><%= item.0 %></h3>
-              <p><%= item.1 %></p>
-            </div>
-          </div>
-        </td>
-        <td class="count num"><%= item.3 %></td>
-      </tr>
-      <% } %>
-    </table>
-  </div>
+  <% } %>
 </div>

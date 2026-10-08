@@ -1214,3 +1214,142 @@ async fn insert_golink_as_clickthrough(database: &Database, golink: &GolinkData)
     database.clickthroughs.insert(row).await?;
     Ok(())
 }
+
+/// One exchange event as orrery's `/staff/sync/exchange_events` sends it.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ExchangeEventData {
+    pub id: i32,
+    pub exchange: String,
+    pub when: String,
+    pub device_id: String,
+    pub interaction_id: String,
+    pub who: Option<String>,
+    pub page: String,
+    pub page_id: Option<String>,
+    pub action: String,
+    pub extra: String,
+}
+
+/// The size of a page of exchange events, as orrery sends them.
+const EXCHANGE_EVENT_PAGE: usize = 1000;
+
+/// Carry orrery's exchange events into `exchange_events`, where hydra's own
+/// are recorded, so an exchange's data page reads the same history on either
+/// side of the cutover.
+///
+/// Watermark: orrery's id, which only ever grows, so every delivery is a new
+/// event. Each keeps an id derived from orrery's, which no event hydra
+/// records can share.
+///
+/// An event recorded before orrery kept analytics ids has empty ones here
+/// too, and is left out of visits and visitors: most of them were anonymous,
+/// with no session cookie to count by instead. See `get_engagement_stats`.
+pub async fn exchange_event_synchronize(
+    database: Arc<Database>,
+    cancellation_token: CancellationToken,
+) {
+    use log_service::database::tables::ExchangeEventRow;
+
+    loop {
+        if cancellation_token.is_cancelled() {
+            println!("Exchange event sync cancelled, exiting gracefully");
+            return;
+        }
+
+        let last_id = get_sync_last_id(&database, "exchange-event-sync-last-id")
+            .await
+            .unwrap_or(0);
+
+        let client = reqwest::Client::new();
+
+        let events: Vec<ExchangeEventData> = match client
+            .get("https://scistarter.org/staff/sync/exchange_events")
+            .bearer_auth(env!("SYNC_TOKEN"))
+            .query(&[("after", last_id.to_string())])
+            .send()
+            .await
+        {
+            Ok(response) => match response.error_for_status() {
+                Ok(resp) => match resp.text().await {
+                    Ok(text) => match serde_json::from_str(&text) {
+                        Ok(events) => events,
+                        Err(e) => {
+                            eprintln!("Exchange events JSON parsing error: {}", e);
+                            sleep(Duration::from_secs(60)).await;
+                            continue;
+                        }
+                    },
+                    Err(e) => {
+                        eprintln!("Failed to read exchange events body: {}", e);
+                        sleep(Duration::from_secs(60)).await;
+                        continue;
+                    }
+                },
+                Err(e) => {
+                    eprintln!("Exchange events HTTP error: {}", e);
+                    sleep(Duration::from_secs(60)).await;
+                    continue;
+                }
+            },
+            Err(e) => {
+                eprintln!("Exchange events request error: {}", e);
+                sleep(Duration::from_secs(60)).await;
+                continue;
+            }
+        };
+
+        let got_events = events.len();
+        let mut bookmark_id = last_id;
+
+        for event in events {
+            let when = match common::timestring::TimeString::try_from(event.when.clone()) {
+                Ok(when) => when.to_string(),
+                Err(e) => {
+                    eprintln!("Exchange event {} has an unreadable time: {}", event.id, e);
+                    break;
+                }
+            };
+
+            let row = ExchangeEventRow {
+                when,
+                event_id: ulid::Ulid::from_parts(0, event.id as u128).to_string(),
+                exchange_id: event.exchange,
+                device_id: event.device_id,
+                interaction_id: event.interaction_id,
+                user_id: event.who,
+                page: event.page,
+                page_id: event.page_id,
+                action: event.action,
+                extra: (!event.extra.is_empty()).then_some(event.extra),
+            };
+
+            if let Err(e) = database.exchange_events.insert(row).await {
+                eprintln!("Failed to insert exchange event {}: {}", event.id, e);
+                break;
+            }
+
+            bookmark_id = event.id;
+        }
+
+        if bookmark_id != last_id {
+            set_sync_last_id(&database, "exchange-event-sync-last-id", bookmark_id)
+                .await
+                .expect("Failed to save exchange event sync last_id");
+        }
+
+        // A full page means more are waiting; otherwise check back hourly.
+        let sleep_duration = if got_events == EXCHANGE_EVENT_PAGE {
+            Duration::from_secs(5)
+        } else {
+            Duration::from_secs(60 * 60)
+        };
+
+        tokio::select! {
+            _ = sleep(sleep_duration) => {}
+            _ = cancellation_token.cancelled() => {
+                println!("Exchange event sync cancelled during sleep, exiting gracefully");
+                return;
+            }
+        }
+    }
+}

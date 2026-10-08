@@ -75,6 +75,13 @@ pub struct EventAll {
     pub outcomes_link: Option<String>,
     pub circuit_id: Option<String>,
     pub instances: Box<[EventInstance]>,
+
+    /// The ULID of the exchange the event was submitted through, if any.
+    pub exchange: Option<String>,
+
+    /// False while the event waits for the exchange it was submitted
+    /// through to approve or reject it.
+    pub reviewed: bool,
 }
 
 impl LoadStorePeered for EventAll {
@@ -123,7 +130,9 @@ impl LoadStorePeered for EventAll {
               "outcomes_link",
               "circuit_id",
               "regions",
-              "point"
+              "point",
+              "exchange",
+              "reviewed"
             )
             values (
               ?1,
@@ -170,7 +179,9 @@ impl LoadStorePeered for EventAll {
                   SetSRID(GeomFromGeoJSON(?31), 4326)
                 else
                   GeomFromEWKT(?31)
-              end
+              end,
+              ?32,
+              ?33
             )"#,
             event_id,
             self.created,
@@ -203,6 +214,8 @@ impl LoadStorePeered for EventAll {
             self.circuit_id,
             self.regions,
             self.point,
+            self.exchange,
+            self.reviewed,
         )
         .execute(&mut tx)
         .await?;
@@ -399,7 +412,8 @@ impl LoadStorePeered for EventAll {
                 ticketing_begins,
                 outcomes_label, outcomes_link, circuit_id,
                 AsGeoJSON(regions) as "regions: Option<String>",
-                AsGeoJSON(point) as "point: Option<String>"
+                AsGeoJSON(point) as "point: Option<String>",
+                exchange, reviewed as "reviewed: bool"
             FROM events WHERE event_id = ?"#,
             event_id_str
         )
@@ -548,6 +562,8 @@ impl LoadStorePeered for EventAll {
             outcomes_link: event_row.outcomes_link,
             circuit_id: event_row.circuit_id,
             instances,
+            exchange: event_row.exchange,
+            reviewed: event_row.reviewed,
         })
     }
 }

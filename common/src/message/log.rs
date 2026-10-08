@@ -308,19 +308,34 @@ pub struct ExchangeEvent {
 pub struct ExchangeEngagementRequest {
     pub exchange_id: String, // ULID
     pub year: Option<i32>,   // None = all time
+
+    /// The projects the exchange lists, whose contributions it counts.
+    pub project_ids: Vec<String>, // ULIDs
 }
 
+/// An exchange's engagement figures, defined the same way as orrery's
+/// (`get_data_engagement` in orrery's src/module/exchange.rs), whose history
+/// is carried into the same table.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExchangeEngagementResponse {
+    /// Distinct interactions among `views`.
     pub exchange_visits: i32,
+    /// Distinct devices.
     pub visitors: i32,
+    /// Views of the exchange's home page and its project pages.
     pub views: i32,
     pub saves: i32,
-    pub clickthroughs: i32, // System-wide total
-    pub contributions: i32, // System-wide total
+    /// Times a project or event was followed out to its own website.
+    pub referrals: i32,
+    /// Summed repetitions on the projects the exchange lists.
+    pub contributions: i32,
     pub available_years: Vec<i32>,
     pub top_views: Vec<ProjectCount>,
     pub top_saves: Vec<ProjectCount>,
+    pub top_referrals: Vec<ProjectCount>,
+    /// When the exchange's first event carrying a device id was recorded.
+    /// Visits and visitors count only such events, so they run from here.
+    pub tracked_since: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

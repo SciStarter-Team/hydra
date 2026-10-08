@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= &self.event.name %></title>
+    <%+ crate::component::HtmxRuntime::default() %>
+    <script src="/-static/js/social_share.js" defer></script>
+    <script src="/-static/js/clickthrough.js" defer></script>
+    <link href="/-static/exchange/css/styles.css" rel="stylesheet">
+    <style>
+      /* The same coverage-map ids the project page styles; see there. */
+      #coverage-map { margin-top: 0.5rem; }
+      #coverage-map[hidden] { display: none; }
+      #coverage-map .display { height: 40vh; min-height: 240px; }
+      .event-instances { margin: 0; padding-left: 1.2em; }
+    </style>
+  </head>
+  <body hx-headers:inherited='{"X-CSRFToken": "<%= self.csrftoken %>"}'>
+
+    <%+ NavigationBar {exchange: &self.exchange, user: &self.user} %>
+
+    <!-- PAGE SPECIFIC CONTENT -->
+    <div class="o-wrapper u-pt u-pb-lg ss-project">
+
+      <p class="u-mb-sm b-small u-mt-0 find-more"><a href="/exchange/<%= self.exchange.exchange_id() %>/"><svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon icon--angle-left u-mr-xs v-align-middle" style="fill: currentcolor;"><use xlink:href="/img/icons.svg#icon--angle"></use></svg>
+          Find more projects
+      </a></p>
+
+      <div>
+        <article class="u-clearfix u-mt-sm">
+          <div class="mobile-flex">
+            <div class="u-fl-r@bp2 u-width-2/3@bp2 u-pl-lg@bp2 u-mb@bp2 title-holder">
+              <h1><%= &self.event.name %></h1>
+              <p class="mobile-only" style="margin-bottom: 0px !important;"><%= &self.event.presenter %></p>
+            </div>
+            <div class="u-fl-l@bp2 u-width-1/3@bp2 u-mb image-holder">
+              <% if !self.event.image.is_empty() { %>
+              <figure class="section frame entity-image u-mb-sm">
+                <div class="entity-image__container">
+                  <img loading="lazy" src="<%= &self.event.image %>" alt="event image">
+                </div>
+                <figcaption class="u-mt-xs"><% if self.event.image_credit != "null" { %><%= &self.event.image_credit %><% } %></figcaption>
+              </figure>
+              <% } %>
+            </div>
+          </div>
+          <div class="u-fl-r@bp2 u-width-2/3@bp2 u-pl-lg@bp2 info-holder">
+            <table class="table-project">
+              <caption class="u-visuallyhidden">Main Event Information</caption>
+              <tbody>
+                <% if !self.event.presenter.is_empty() { %>
+                <tr class="no-mobile">
+                  <th scope="row">Presented By</th>
+                  <td><%= &self.event.presenter %></td>
+                </tr>
+                <% } %>
+                <% if !self.event.instances.is_empty() { %>
+                <tr class="mobile-1">
+                  <th scope="row">When</th>
+                  <td class="b">
+                    <ul class="event-instances">
+                      <% for (begin, end) in self.event.instances.iter() { %>
+                      <li><%- local_time(begin, TimeFormat::DateTime) %> &ndash; <%- local_time(end, TimeFormat::DateTime) %></li>
+                      <% } %>
+                    </ul>
+                  </td>
+                </tr>
+                <% } %>
+                <% let location = self.event.location.label(); %>
+                <% if !location.is_empty() || !self.event.location_name.is_empty() { %>
+                <tr>
+                  <th scope="row">Where</th>
+                  <td class="b">
+                    <div class="ss-project-location">
+                      <% if !self.event.location_name.is_empty() { %><div><%= &self.event.location_name %></div><% } %>
+                      <% if !location.is_empty() { %><span><%= location %></span><% } %>
+                      <% if let Some(coverage) = self.event.coverage.as_deref() { %>
+                      <p>
+                        <a href="#coverage-map" id="coverage-map-toggle" role="button" aria-expanded="false" aria-controls="coverage-map">View map&hellip;</a>
+                      </p>
+                      <div class="ss-map reset-exempt" id="coverage-map" hidden>
+                        <div class="display" id="coverage-map-display"></div>
+                      </div>
+                      <script id="coverage-geojson" type="application/json"><%- coverage %></script>
+                      <% } %>
+                    </div>
+                  </td>
+                </tr>
+                <% } %>
+                <% if !self.event.description.is_empty() { %>
+                <tr>
+                  <th scope="row">Description</th>
+                  <td class="dont-break-out">
+                    <div class="ss-markdown reset-exempt collapse short">
+                      <div>
+                        <%- &self.event.description %>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+                <% } %>
+                <% if !self.event.how_to_join.is_empty() { %>
+                <tr class="get-started-row">
+                  <th scope="row">How to take part</th>
+                  <td class="dont-break-out">
+                    <div class="ss-markdown reset-exempt short">
+                      <div>
+                        <%- &self.event.how_to_join %>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+                <% } %>
+                <tr>
+                  <th scope="row">Type of Event</th>
+                  <td><%= &self.event.event_type %></td>
+                </tr>
+                <% if !self.event.tags.is_empty() { %>
+                <tr>
+                  <th scope="row">Tags</th>
+                  <td>
+                    <% { let mut first = true; for tag in &self.event.tags { %><% if !first { %>, <% } else { first = false; } %><a href="https://scistarter.org/events?phrase=<%= self.encode(tag) %>" target="_blank"><%= tag %></a><% } } %>
+                  </td>
+                </tr>
+                <% } %>
+                <% if let Some(ref url) = self.event.url { %>
+                <tr>
+                  <th scope="row">Website</th>
+                  <td class="dont-break-out"><a href="<%= url %>" target="_blank"><%= &self.event.name %></a></td>
+                </tr>
+                <% } %>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="u-fl-l@bp2 u-width-1/3@bp2">
+            <div class="mobile-overlay">
+              <div id="project-utility" class="u-mb-lg">
+                <div class="project-action-btns">
+                  <div class="p-offsite">
+                    <div class="project-flex p-flex-mobile">
+                      <% if self.event.url.is_some() { %>
+                      <a href="/exchange/<%= self.exchange.exchange_id() %>/<%= &self.event.slug %>/visit" target="_blank" class="el-button full-width btn-project el-button--primary">
+                        <span>
+                          Visit
+                          <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" class="icon icon--external u-ml-xs svg-fill-white" style="fill: currentcolor;"><use xlink:href="/img/icons.svg#icon--external-link"></use></svg>
+                        </span>
+                      </a>
+                      <% } %>
+                      <button type="button" class="el-button full-width btn-subdued btn-project el-button--default" data-custom-open="share-modal">
+                        <i class="el-icon-share"></i><span>Share</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+      </div>
+    </div>
+    <!-- END PAGE SPECIFIC CONTENT-->
+
+    <!-- FOOTER - every page -->
+    <footer>
+      <% if !self.exchange.restricted_add() || self.exchange.user_is_authorized() { %>
+      <a class="btn btn-secondary"  data-custom-open="add-modal"><span>+</span> Add a Project or Event</a>
+      <% } %>
+      <% if !self.user.is_authenticated() { %>
+      <div><a href="/login?next=<%= self.encode(&format!("/exchange/{}/{}/event.html", self.exchange.exchange_id(), self.event.slug))|disp %>">Log In</a> | <a href="/login?action=signup&next=<%= self.encode(&format!("/exchange/{}/{}/event.html", self.exchange.exchange_id(), self.event.slug))|disp %>">Sign Up</a></div>
+      <% } %>
+      <p class="powered-by">powered by <img src="/-static/img/logo/svg/Standard__tagline-dark.svg" alt="SciStarter" /></p>
+      <div style="height: 8rem"></div>
+    </footer>
+    <!-- END FOOTER -->
+
+    <!-- MODALS -->
+    <div class="modal micromodal-slide" id="share-modal" aria-hidden="true">
+      <div class="modal__overlay" tabindex="-1" data-micromodal-close>
+        <div class="modal__container" role="dialog" aria-modal="true" aria-labelledby="share-modal-title">
+          <header class="modal__header">
+            <h2 class="modal__title" id="share-modal-title">Share Event</h2>
+            <button class="modal__close" aria-label="Close modal" data-micromodal-close></button>
+          </header>
+          <main class="modal__content">
+            <div class="ss-share-this">
+              <div>
+                <% let ss_url = self.encode(&format!("https://scistarter.org/events/{}", &self.event.slug)); %>
+                <% let ss_name = self.encode(&self.event.name); %>
+                <a data-link="#share-facebook" data-no-track href="https://www.facebook.com/sharer/sharer.php?u=<%= &ss_url %>" target="_blank">
+                  <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" style="fill: currentcolor;"><use xlink:href="/img/icons.svg#icon--facebook"></use></svg>
+                  <span class="u-visuallyhidden">Share on Facebook</span>
+                </a>
+                <a data-link="#share-twitter" data-no-track href="https://twitter.com/intent/tweet?text=<%= &ss_name %>&url=<%= &ss_url %>" target="_blank">
+                  <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" style="fill: currentcolor;"><use xlink:href="/img/icons.svg#icon--twitter"></use></svg>
+                  <span class="u-visuallyhidden">Share on Twitter</span>
+                </a>
+                <a data-link="#share-linkedin" data-no-track href="https://www.linkedin.com/sharing/share-offsite/?url=<%= &ss_url %>" target="_blank">
+                  <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" style="fill: currentcolor;"><use xlink:href="/img/icons.svg#icon--linkedin"></use></svg>
+                  <span class="u-visuallyhidden">Share on LinkedIn</span>
+                </a>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+    <!-- END MODALS-->
+
+    <% include!("add_modal.stpl.html"); %>
+
+    <!-- https://micromodal.vercel.app/ -->
+    <script src="/-static/exchange/js/micromodal.js"></script>
+    <script>
+    MicroModal.init({ openTrigger: 'data-custom-open', openClass: 'is-open', disableScroll: true });
+    </script>
+
+    <% include!("coverage_map_script.stpl.html"); %>
+      <%+ crate::component::Notifications %>
+  </body>
+</html>

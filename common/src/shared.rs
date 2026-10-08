@@ -160,6 +160,9 @@ mod database {
                         .synchronous(sqlx::sqlite::SqliteSynchronous::Normal)
                         .foreign_keys(true)
                         .optimize_on_close(true, Some(1000))
+                        // An exchange's search setting is a regular
+                        // expression, matched with REGEXP.
+                        .with_regexp()
                         .extension("mod_spatialite")
                 },
             )

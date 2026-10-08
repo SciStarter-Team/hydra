@@ -1,8 +1,9 @@
 //! A project's answer to "where can you do this?", ready to display.
 //!
-//! The exchange shows this in two places -- the search card and the project
-//! page -- and both build the value here, so the card and the page cannot
-//! word the same project differently.
+//! The exchange shows this in three places -- the search card, the project
+//! page and the event page -- and all build the value here, so they cannot
+//! word the same place differently. Events carry the same location fields
+//! as projects, spelled the same way.
 //!
 //! The wording is shared with orrery, whose `Where` type in `src/common.rs`
 //! renders the same field on the same projects. The two are a cross-codebase

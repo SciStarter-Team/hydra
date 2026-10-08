@@ -1,7 +1,6 @@
-// Exchange and OAuth2 client management for admin
+// OAuth2 client management for admin
 
 use crate::component::{AdminLayout, Component};
-use crate::exchange::Exchange;
 use crate::middleware::authorization::Authenticated;
 use crate::oauth2::types::Client;
 use crate::peering::LoadStorePeered;
@@ -12,38 +11,6 @@ use poem::{
 };
 use sailfish::TemplateOnce;
 use serde::Deserialize;
-use ulid::Ulid;
-
-// ==================== Exchange Templates ====================
-
-struct ExchangeListItem {
-    exchange_id: Ulid,
-    path_id: i64,
-    slug: String,
-    name: String,
-    description: String,
-}
-
-#[derive(TemplateOnce)]
-#[template(path = "admin/exchanges.stpl.html")]
-struct ExchangesListPage {
-    exchanges: Vec<ExchangeListItem>,
-}
-
-#[derive(TemplateOnce)]
-#[template(path = "admin/exchanges_create.stpl.html")]
-struct ExchangeCreatePage {}
-
-#[derive(TemplateOnce)]
-#[template(path = "admin/exchanges_edit.stpl.html")]
-struct ExchangeEditPage {
-    exchange_id: Ulid,
-    path_id: i64,
-    slug: String,
-    name: String,
-    description: String,
-    logo_url: String,
-}
 
 // ==================== OAuth2 Templates ====================
 
@@ -76,27 +43,6 @@ struct OAuth2ClientEditPage {
     owner_user_id: String,
     redirect_uris: String,
     allowed_scopes: String,
-}
-
-// ==================== Exchange Forms ====================
-
-#[derive(Debug, Deserialize)]
-struct ExchangeCreateForm {
-    path_id: i64,
-    slug: String,
-    name: String,
-    description: String,
-    #[serde(default)]
-    logo_url: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct ExchangeUpdateForm {
-    slug: String,
-    name: String,
-    description: String,
-    #[serde(default)]
-    logo_url: String,
 }
 
 // ==================== OAuth2 Forms ====================
@@ -177,204 +123,6 @@ fn parse_redirect_uris(input: &str) -> Vec<String> {
 
 fn parse_scopes(input: &str) -> Vec<String> {
     input.split_whitespace().map(|s| s.to_string()).collect()
-}
-
-// ==================== Exchange Handlers ====================
-
-#[handler]
-async fn exchanges_list(
-    Authenticated(user_info): Authenticated,
-) -> Result<poem::Response, anyhow::Error> {
-    // Fetch exchanges from database
-    let rows = sqlx::query!(
-        "SELECT exchange_id, path_id, slug, name, description FROM exchanges ORDER BY name"
-    )
-    .fetch_all(db())
-    .await?;
-
-    let exchanges: Vec<ExchangeListItem> = rows
-        .into_iter()
-        .filter_map(|row| {
-            Ulid::from_string(&row.exchange_id)
-                .ok()
-                .map(|exchange_id| ExchangeListItem {
-                    exchange_id,
-                    path_id: row.path_id,
-                    slug: row.slug,
-                    name: row.name,
-                    description: row.description,
-                })
-        })
-        .collect();
-
-    let content = ExchangesListPage { exchanges };
-
-    let prepared = AdminLayout::new("Exchange Management", content)
-        .with_sidebar_active("engine-room-exchanges")
-        .prepare(user_info)
-        .await?;
-
-    Ok(poem::Response::builder()
-        .content_type("text/html")
-        .body(prepared.render_once()?))
-}
-
-#[handler]
-async fn exchange_create_page(
-    Authenticated(user_info): Authenticated,
-) -> Result<poem::Response, anyhow::Error> {
-    let content = ExchangeCreatePage {};
-
-    let prepared = AdminLayout::new("Create Exchange", content)
-        .with_sidebar_active("engine-room-exchanges")
-        .prepare(user_info)
-        .await?;
-
-    Ok(poem::Response::builder()
-        .content_type("text/html")
-        .body(prepared.render_once()?))
-}
-
-#[handler]
-async fn exchange_create(
-    Authenticated(user_info): Authenticated,
-    form: Form<ExchangeCreateForm>,
-) -> Result<poem::Response, anyhow::Error> {
-    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
-
-    // Create new exchange with default settings
-    let exchange = Exchange {
-        exchange_id: Ulid::new(),
-        path_id: form.path_id,
-        slug: form.slug.clone(),
-        name: form.name.clone(),
-        description: form.description.clone(),
-        logo_url: if form.logo_url.is_empty() {
-            None
-        } else {
-            Some(form.logo_url.clone())
-        },
-        settings: crate::exchange::ExchangeSettings {
-            allow_project_voting: true,
-            allow_project_reviews: true,
-            require_approval: false,
-            restricted_add: false,
-            custom_css: None,
-            // A new exchange is a view of the whole catalogue until somebody
-            // gives it a region to be a view of.
-            ..Default::default()
-        },
-        predefined_searches: Vec::new(),
-        hidden_projects: std::collections::HashSet::new(),
-    };
-
-    // Use LoadStorePeered to save and broadcast
-    exchange.store().await?;
-
-    common::service::log_activity(
-        None,
-        "exchange-create",
-        user_info.user_id,
-        Some(exchange.exchange_id),
-        None,
-    )
-    .await?;
-
-    // Redirect to exchanges list
-    Ok(poem::web::Redirect::see_other("/-admin/exchanges").into_response())
-}
-
-#[handler]
-async fn exchange_edit_page(
-    Path(exchange_id_str): Path<String>,
-    Authenticated(user_info): Authenticated,
-) -> Result<poem::Response, anyhow::Error> {
-    let exchange_id = Ulid::from_string(&exchange_id_str)?;
-
-    // Load exchange via LoadStorePeered
-    let exchange = Exchange::load(exchange_id).await?;
-
-    let content = ExchangeEditPage {
-        exchange_id: exchange.exchange_id,
-        path_id: exchange.path_id,
-        slug: exchange.slug,
-        name: exchange.name,
-        description: exchange.description,
-        logo_url: exchange.logo_url.unwrap_or_default(),
-    };
-
-    let prepared = AdminLayout::new("Edit Exchange", content)
-        .with_sidebar_active("engine-room-exchanges")
-        .prepare(user_info)
-        .await?;
-
-    Ok(poem::Response::builder()
-        .content_type("text/html")
-        .body(prepared.render_once()?))
-}
-
-#[handler]
-async fn exchange_update(
-    Path(exchange_id_str): Path<String>,
-    Authenticated(user_info): Authenticated,
-    form: Form<ExchangeUpdateForm>,
-) -> Result<poem::Response, anyhow::Error> {
-    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
-
-    let exchange_id = Ulid::from_string(&exchange_id_str)?;
-
-    // Load existing exchange
-    let mut exchange = Exchange::load(exchange_id).await?;
-
-    // Update fields
-    exchange.slug = form.slug.clone();
-    exchange.name = form.name.clone();
-    exchange.description = form.description.clone();
-    exchange.logo_url = if form.logo_url.is_empty() {
-        None
-    } else {
-        Some(form.logo_url.clone())
-    };
-
-    // Use LoadStorePeered to save and broadcast
-    exchange.store().await?;
-
-    common::service::log_activity(
-        None,
-        "exchange-update",
-        user_info.user_id,
-        Some(exchange_id),
-        None,
-    )
-    .await?;
-
-    // Redirect to exchanges list
-    Ok(poem::web::Redirect::see_other("/-admin/exchanges").into_response())
-}
-
-#[handler]
-async fn exchange_delete(
-    Path(exchange_id_str): Path<String>,
-    Authenticated(user_info): Authenticated,
-) -> Result<poem::Response, anyhow::Error> {
-    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
-
-    let exchange_id = Ulid::from_string(&exchange_id_str)?;
-
-    // Use LoadStorePeered to delete and broadcast to peers
-    Exchange::delete(exchange_id).await?;
-
-    common::service::log_activity(
-        None,
-        "exchange-delete",
-        user_info.user_id,
-        Some(exchange_id),
-        None,
-    )
-    .await?;
-
-    // Return success message for HTMX
-    Ok(Html("<div class=\"text-green-600\">Exchange deleted successfully</div>").into_response())
 }
 
 // ==================== OAuth2 Client Handlers ====================
@@ -588,18 +336,6 @@ async fn oauth2_client_delete(
 }
 
 // ==================== Routes ====================
-
-pub fn exchange_routes() -> impl Endpoint {
-    Route::new()
-        .at("/", get(exchanges_list))
-        .at("/create", get(exchange_create_page).post(exchange_create))
-        .at(
-            "/:id",
-            get(exchange_edit_page)
-                .post(exchange_update)
-                .delete(exchange_delete),
-        )
-}
 
 pub fn oauth2_routes() -> impl Endpoint {
     Route::new()
