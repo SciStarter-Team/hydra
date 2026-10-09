@@ -8,8 +8,8 @@ The recipient has demonstrated all of the following foundational citizen science
 - Identify, explore, and access one or more citizen science projects.
 - Articulate the purpose of SciStarter and explain how the platform can be used by citizen scientists and research scientists to connect curiosity with impact.
 - Successfully register for a SciStarter account.
-- Perform the requisite steps to participate in and contribute to one or more citizen science projects.
-- Perform the requisite steps to find and bookmark projects on the SciStarter platform.
+- Identify the requisite steps to participate in and contribute to one or more citizen science projects.
+- Identify the requisite steps to find and bookmark projects on SciStarter.
 
 ****
 ## Earn the Foundations of Citizen Science badge
