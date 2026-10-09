@@ -157,7 +157,7 @@
     @apply bg-bg-blue;
 }
 
-@media (max-width:768px) {
+@media (max-width:767px) {
     .tabs-style2 .tabs-tabs > li > a {
         font-size: 1rem;
     }

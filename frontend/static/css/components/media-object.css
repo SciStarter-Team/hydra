@@ -72,3 +72,19 @@
     flex-basis: 24px;
     flex-shrink: 0;
 }
+
+.ss-mo-dark .ss-mo-content {
+    @apply bg-primary-dark text-white;
+}
+
+.ss-mo-dark .ss-mo-content h3 {
+    @apply text-primary;
+}
+
+.ss-mo-dark .ss-mo-content h4 {
+    @apply text-white;
+}
+
+.ss-mo-dark .ss-mo-content a:not(.btn) {
+    @apply text-white underline;
+}

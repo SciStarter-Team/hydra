@@ -1,0 +1,1619 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SciStarter Design Guide</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;700;800;900&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" type="text/css" href="/-static/css/style.css" />
+  <!--
+  A design guide for people who build SciStarter pages in WordPress or another
+  visual editor, where nothing of ours applies and the look has to be rebuilt
+  from plain values.
+
+  Every value this page states (hex codes, sizes, line heights, spacing,
+  contrast ratios) is read by the script at the bottom from the site
+  stylesheet and from the live samples on the page, so the guide cannot drift
+  from the CSS. The prose names colors and roles; the numbers come from the
+  stylesheet. A value written here as literal text would be a second copy, so
+  don't add one: give the element a data attribute the script fills instead.
+
+  The samples use the site's own classes, so that they look exactly like the
+  site. Tailwind scans this file, so each class used here is guaranteed to
+  exist in the compiled stylesheet.
+-->
+  <style>
+    .dg-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 28.8px;
+    }
+
+    @media (min-width: 1024px) {
+      .dg-layout {
+        grid-template-columns: 220px minmax(0, 1fr);
+        gap: 57.6px;
+      }
+
+      .dg-toc {
+        position: sticky;
+        top: 28.8px;
+        align-self: start;
+      }
+    }
+
+    .dg-toc ol {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .dg-toc li {
+      margin: 0 0 7.2px;
+      max-width: none;
+      font-size: 15px;
+    }
+
+    .dg-main {
+      min-width: 0;
+      max-width: 960px;
+    }
+
+    .dg-main>section {
+      margin-bottom: 72px;
+      scroll-margin-top: 14.4px;
+    }
+
+    .dg-back {
+      font-size: 15px;
+      display: inline-block;
+      margin-bottom: 14.4px;
+    }
+
+    .dg-essentials {
+      display: grid;
+      gap: 14.4px;
+      grid-template-columns: minmax(0, 1fr);
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    @media (min-width: 640px) {
+      .dg-essentials {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    .dg-essentials li {
+      margin: 0;
+      padding: 14.4px;
+      border: 1px solid var(--color-linework);
+      border-radius: 4px;
+      max-width: none;
+    }
+
+    .dg-essentials b {
+      display: block;
+      color: var(--color-primary-dark);
+    }
+
+    .dg-specimen {
+      border-top: 1px solid var(--color-linework);
+      padding: 21.6px 0 14.4px;
+    }
+
+    .dg-specimen-sample>* {
+      margin-top: 0;
+    }
+
+    .dg-spec {
+      font-size: 15px;
+      line-height: 1.5;
+      color: var(--color-neutral-dark);
+      margin: 0;
+    }
+
+    .dg-spec span+span::before {
+      content: " · ";
+      color: var(--color-neutral-mid);
+    }
+
+    .dg-swatches {
+      display: grid;
+      gap: 21.6px;
+      grid-template-columns: minmax(0, 1fr);
+      margin: 0 0 28.8px;
+      padding: 0;
+      list-style: none;
+    }
+
+    @media (min-width: 640px) {
+      .dg-swatches {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (min-width: 1280px) {
+      .dg-swatches {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+
+    .dg-swatches>li {
+      margin: 0;
+      max-width: none;
+      display: flex;
+      gap: 14.4px;
+      align-items: flex-start;
+    }
+
+    .dg-chip {
+      flex: 0 0 64px;
+      height: 64px;
+      border-radius: 4px;
+      border: 1px solid var(--color-neutral-light);
+    }
+
+    .dg-swatch-text {
+      font-size: 15px;
+      line-height: 1.45;
+      min-width: 0;
+    }
+
+    .dg-swatch-text strong {
+      display: block;
+      font-size: 18px;
+      color: var(--color-primary-dark);
+    }
+
+    .dg-token {
+      color: var(--color-neutral-mid);
+      font-size: 12.5px;
+    }
+
+    .dg-copy {
+      font: inherit;
+      font-variant-numeric: tabular-nums;
+      background: none;
+      border: 1px solid var(--color-linework);
+      border-radius: 4px;
+      padding: 0 5.4px;
+      margin: 1px 0;
+      cursor: pointer;
+      color: inherit;
+      text-align: left;
+    }
+
+    .dg-copy:hover {
+      border-color: var(--color-primary-action);
+    }
+
+    .dg-copy:focus-visible {
+      outline: 2px solid var(--color-primary-action);
+      outline-offset: 1px;
+    }
+
+    .dg-scroll {
+      overflow-x: auto;
+      margin-bottom: 28.8px;
+    }
+
+    .dg-table {
+      border-collapse: collapse;
+      font-size: 15px;
+      line-height: 1.4;
+      width: 100%;
+    }
+
+    .dg-table th,
+    .dg-table td {
+      text-align: left;
+      vertical-align: top;
+      padding: 7.2px 10.8px;
+      border-bottom: 1px solid var(--color-linework);
+    }
+
+    .dg-table th {
+      color: var(--color-primary-dark);
+      font-weight: 700;
+    }
+
+    .dg-table td p {
+      font-size: 15px;
+      margin: 0;
+    }
+
+    .dg-matrix th,
+    .dg-matrix td {
+      text-align: center;
+      border: 1px solid var(--color-linework);
+    }
+
+    .dg-matrix th[scope="row"] {
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    .dg-matrix td {
+      padding: 0;
+      min-width: 92px;
+    }
+
+    .dg-cell {
+      padding: 7.2px;
+      line-height: 1.3;
+    }
+
+    .dg-cell-sample {
+      font-size: 22px;
+      font-weight: 700;
+      display: block;
+    }
+
+    .dg-cell-ratio {
+      font-size: 12.5px;
+      display: block;
+    }
+
+    .dg-verdict {
+      display: block;
+      font-size: 12.5px;
+      font-weight: 700;
+      background: #fff;
+      color: #000;
+      padding: 2px 0;
+    }
+
+    .dg-verdict[data-level="avoid"] {
+      text-decoration: line-through;
+      color: var(--color-neutral-mid);
+    }
+
+    .dg-panels {
+      display: grid;
+      gap: 28.8px;
+      grid-template-columns: minmax(0, 1fr);
+      margin-bottom: 28.8px;
+    }
+
+    @media (min-width: 768px) {
+      .dg-panels {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    .dg-panel-wrap>p:first-child {
+      font-weight: 700;
+      margin-bottom: 7.2px;
+    }
+
+    .dg-checks {
+      list-style: none;
+      margin: 7.2px 0 0;
+      padding: 0;
+      font-size: 12.5px;
+    }
+
+    .dg-checks li {
+      margin: 0;
+      max-width: none;
+    }
+
+    .dg-samples {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14.4px;
+      align-items: center;
+      margin-bottom: 14.4px;
+    }
+
+    .dg-note {
+      font-size: 15px;
+      color: var(--color-neutral-dark);
+    }
+
+    .dg-table td .dg-note {
+      margin: 3.6px 0 0;
+    }
+
+    #breakpoints tr.dg-current td {
+      background: var(--color-primary-light);
+    }
+
+    .dg-status {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="ss-container mx-auto my-8">
+    <div class="dg-layout">
+
+      <nav class="dg-toc" aria-label="Contents">
+        <a class="dg-back" href="index.html">← All design pages</a>
+        <ol>
+          <li><a href="#essentials">The essentials</a></li>
+          <li><a href="#fonts">Fonts</a></li>
+          <li><a href="#type">Text styles</a></li>
+          <li><a href="#color">Colors</a></li>
+          <li><a href="#combinations">Color combinations</a></li>
+          <li><a href="#links-buttons">Links and buttons</a></li>
+          <li><a href="#spacing">Spacing and layout</a></li>
+          <li><a href="#boxes">Boxes and accents</a></li>
+          <li><a href="#images">Images</a></li>
+          <li><a href="#accessibility">Accessibility checklist</a></li>
+        </ol>
+      </nav>
+
+      <main class="dg-main">
+
+        <h1>SciStarter Design Guide</h1>
+        <p class="intro">How to make a page built in WordPress, or any other visual editor, look like part of
+          SciStarter.</p>
+        <p>This guide gives every rule as a plain value: hex codes for colors, pixels for sizes. Type those values into
+          your editor's color, typography and spacing settings. Click any value in a box to copy it, ready to paste into
+          your editor.</p>
+
+        <!-- ============================================================ -->
+        <section id="essentials">
+          <h2>The essentials</h2>
+          <p>If you remember nothing else:</p>
+          <ul class="dg-essentials">
+            <li><b>Body text</b> Inter, <span data-var-px="--text-base"></span>, line height <span
+                data-measure="spec-body" data-prop="lineHeight"></span>, in Charcoal <span
+                data-hex="neutral-dark"></span>.</li>
+            <li><b>Headings</b> Bold. Aqua <span data-hex="primary"></span> on white, Indigo <span
+                data-hex="primary-dark"></span> on tinted backgrounds. Barlow for H1 and H2, Inter for H3 and H4.</li>
+            <li><b>Links and buttons</b> Link Teal <span data-hex="primary-action"></span>, darkening to Deep Teal <span
+                data-hex="primary-action-dark"></span> on hover. Nothing else is teal.</li>
+            <li><b>Spacing</b> <span data-space="4"></span> between related things, <span data-space="8"></span> inside
+              panels and between columns of text, <span data-space="16"></span> between sections.</li>
+            <li><b>Width</b> Keep paragraphs to <span data-measure="probe-reading" data-prop="maxWidth"></span> wide or
+              less. Long lines are hard to read.</li>
+            <li><b>Contrast</b> Before you put text on a colored background, check the pair in the <a
+                href="#combinations">combinations table</a>.</li>
+          </ul>
+        </section>
+
+        <!-- ============================================================ -->
+        <section id="fonts">
+          <h2>Fonts</h2>
+          <p>SciStarter uses two typefaces, both free from Google Fonts.</p>
+          <div class="dg-scroll">
+            <table class="dg-table">
+              <thead>
+                <tr>
+                  <th scope="col">Font</th>
+                  <th scope="col">Used for</th>
+                  <th scope="col">Weights</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><a href="https://fonts.google.com/specimen/Inter">Inter</a></td>
+                  <td>Everything except large headings: paragraphs, H3 and H4, buttons, labels, captions.</td>
+                  <td>Regular (400) for text, Bold (700) for headings and emphasis. Italic for titles of works.</td>
+                </tr>
+                <tr>
+                  <td><a href="https://fonts.google.com/specimen/Barlow">Barlow</a></td>
+                  <td>H1, H2 and large display headlines only. It is narrower than Inter, which suits big type but makes
+                    body text harder to read.</td>
+                  <td>Bold (700).</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>If your editor can't load these fonts, use the next font in the site's own list. Browsers try these fonts
+            in order:</p>
+          <p class="dg-note"><span data-measure="spec-body" data-prop="fontFamily" data-full="1"></span></p>
+          <p>In practice, Arial is the safe fallback everywhere.</p>
+        </section>
+
+        <!-- ============================================================ -->
+        <section id="type">
+          <h2>Text styles</h2>
+          <p>These are all the text styles. Headings are the same on every page. The phone sizes are for screens
+            narrower than 768px, which covers phones and some small tablets (see <a href="#screen-sizes">screen
+              sizes</a>). If your editor lets you set separate sizes for mobile (Stackable and many page builders do),
+            use them.</p>
+          <p>Line heights are given as multiples of the font size, which is what most editors expect. If yours asks for
+            pixels instead, multiply: body text at <span data-var-px="--text-base"></span> with a line height of <span
+              data-measure="spec-body" data-prop="lineHeight"></span> is <span data-measure="spec-body"
+              data-prop="lineHeightPx"></span>. The bottom margin is the space between the text and whatever comes next.
+          </p>
+
+          <div class="dg-specimen" data-size="--text-4xl" data-size-mobile="--text-4xl-mobile"
+            data-label="Display (hero headline)">
+            <div class="dg-specimen-sample" aria-hidden="true">
+              <p class="text-4xl text-primary-dark">Discover citizen science</p>
+            </div>
+          </div>
+          <div class="dg-specimen" data-size="--text-3xl" data-size-mobile="--text-3xl-mobile"
+            data-label="Heading 1 (page title)">
+            <div class="dg-specimen-sample" aria-hidden="true">
+              <h1>Find a project near you</h1>
+            </div>
+          </div>
+          <div class="dg-specimen" data-size="--text-2xl" data-size-mobile="--text-2xl-mobile"
+            data-label="Heading 2 (section)">
+            <div class="dg-specimen-sample" aria-hidden="true">
+              <h2>Projects for families</h2>
+            </div>
+          </div>
+          <div class="dg-specimen" data-size="--text-xl" data-size-mobile="--text-xl-mobile"
+            data-label="Heading 3 (subsection)">
+            <div class="dg-specimen-sample" aria-hidden="true">
+              <h3>What you'll need</h3>
+            </div>
+          </div>
+          <div class="dg-specimen" data-size="--text-lg" data-size-mobile="--text-lg-mobile" data-label="Heading 4">
+            <div class="dg-specimen-sample" aria-hidden="true">
+              <h4>Before you start</h4>
+            </div>
+          </div>
+          <div class="dg-specimen" data-size="--text-lg" data-size-mobile="--text-lg-mobile"
+            data-label="Intro paragraph">
+            <div class="dg-specimen-sample" aria-hidden="true">
+              <p class="intro">One or two sentences under the page title that tell readers what the page offers.</p>
+            </div>
+          </div>
+          <div class="dg-specimen" data-size="--text-base" data-label="Body text">
+            <div class="dg-specimen-sample" aria-hidden="true">
+              <p id="spec-body">Citizen science lets anyone contribute to real research by observing, measuring and
+                sharing what they find.</p>
+            </div>
+          </div>
+          <div class="dg-specimen" data-size="--text-sm" data-label="Small text (secondary details)">
+            <div class="dg-specimen-sample" aria-hidden="true">
+              <p class="text-sm">Dates, locations and other supporting details.</p>
+            </div>
+          </div>
+          <div class="dg-specimen" data-size="--text-xs" data-label="Fine print (credits, legal)">
+            <div class="dg-specimen-sample" aria-hidden="true">
+              <p><small>Photo courtesy of the project team.</small></p>
+            </div>
+          </div>
+
+          <h3>Rules for text</h3>
+          <ul class="bullets">
+            <li><strong>One Heading 1 per page:</strong> the page title. Sections start at Heading 2. Don't skip levels,
+              for example going from Heading 2 straight to Heading 4. Screen readers and search engines use the levels
+              as the page outline.</li>
+            <li><strong>Choose a heading level for its place in the outline, not its size.</strong> To make text stand
+              out, use bold, not a heading.</li>
+            <li><strong>Aqua headings only on white or Indigo.</strong> On any tinted background (Sky Blue, Off-White,
+              gray), use Indigo for headings. Aqua is too light there (see <a href="#combinations">combinations</a>).
+            </li>
+            <li><strong>Left-align paragraphs.</strong> Center only headings and short intros of one or two lines. Never
+              justify text.</li>
+            <li><strong>Don't underline text that isn't a link,</strong> and don't color it teal. Readers will try to
+              click it.</li>
+            <li><strong>Use capitals only for short labels</strong> above a heading (see <a href="#boxes">eyebrow
+                labels</a>). Never write sentences in capitals.</li>
+            <li><strong>Body text is <span data-var-px="--text-base"></span>.</strong> Don't set reading text smaller
+              than <span data-var-px="--text-sm"></span>. Use <span data-var-px="--text-xs"></span> only for credits and
+              fine print.</li>
+          </ul>
+        </section>
+
+        <!-- ============================================================ -->
+        <section id="color">
+          <h2>Colors</h2>
+          <p>Pick only from these colors. If your editor has a custom palette, add these colors to it and remove the
+            others.</p>
+
+          <h3>Blues</h3>
+          <ul class="dg-swatches">
+            <li>
+              <div class="dg-chip bg-primary" data-swatch="primary" data-name="Aqua"></div>
+              <div class="dg-swatch-text"><strong>Aqua</strong><span data-hex="primary"></span> <span
+                  class="dg-token">primary</span><br>
+                The SciStarter blue: logo, headings, decorative shapes and backgrounds. As text, only at heading sizes.
+              </div>
+            </li>
+            <li>
+              <div class="dg-chip bg-primary-dark" data-swatch="primary-dark" data-name="Indigo"></div>
+              <div class="dg-swatch-text"><strong>Indigo</strong><span data-hex="primary-dark"></span> <span
+                  class="dg-token">primary-dark</span><br>
+                Dark backgrounds and banners. Headings on tinted backgrounds.</div>
+            </li>
+            <li>
+              <div class="dg-chip bg-primary-action" data-swatch="primary-action" data-name="Link Teal"></div>
+              <div class="dg-swatch-text"><strong>Link Teal</strong><span data-hex="primary-action"></span> <span
+                  class="dg-token">primary-action</span><br>
+                Links and buttons <em>only</em>, so that teal always means “you can click this.”</div>
+            </li>
+            <li>
+              <div class="dg-chip bg-primary-action-dark" data-swatch="primary-action-dark" data-name="Deep Teal"></div>
+              <div class="dg-swatch-text"><strong>Deep Teal</strong><span data-hex="primary-action-dark"></span> <span
+                  class="dg-token">primary-action-dark</span><br>
+                Hover color for links and buttons. Links on tinted backgrounds.</div>
+            </li>
+            <li>
+              <div class="dg-chip bg-primary-light" data-swatch="primary-light" data-name="Sky Blue"></div>
+              <div class="dg-swatch-text"><strong>Sky Blue</strong><span data-hex="primary-light"></span> <span
+                  class="dg-token">primary-light</span><br>
+                Background for highlighted sections and callout boxes. Never use it for text.</div>
+            </li>
+            <li>
+              <div class="dg-chip bg-linework" data-swatch="linework" data-name="Line Blue"></div>
+              <div class="dg-swatch-text"><strong>Line Blue</strong><span data-hex="linework"></span> <span
+                  class="dg-token">linework</span><br>
+                1px borders around cards and boxes, and divider lines.</div>
+            </li>
+          </ul>
+
+          <h3>Coral</h3>
+          <ul class="dg-swatches">
+            <li>
+              <div class="dg-chip bg-accent1" data-swatch="accent1" data-name="Coral"></div>
+              <div class="dg-swatch-text"><strong>Coral</strong><span data-hex="accent1"></span> <span
+                  class="dg-token">accent1</span><br>
+                The accent: logo, underlines, icons, and the second color when a chart or diagram needs two. Never for
+                text, and never behind white text.</div>
+            </li>
+            <li>
+              <div class="dg-chip bg-accent1-action" data-swatch="accent1-action" data-name="Coral Action"></div>
+              <div class="dg-swatch-text"><strong>Coral Action</strong><span data-hex="accent1-action"></span> <span
+                  class="dg-token">accent1-action</span><br>
+                Coral darkened just enough to carry white text. Background for a single attention-grabbing button.</div>
+            </li>
+            <li>
+              <div class="dg-chip bg-accent1-dark" data-swatch="accent1-dark" data-name="Brick"></div>
+              <div class="dg-swatch-text"><strong>Brick</strong><span data-hex="accent1-dark"></span> <span
+                  class="dg-token">accent1-dark</span><br>
+                Coral as text on white, error messages, and hover for Coral Action buttons.</div>
+            </li>
+          </ul>
+
+          <h3>Neutrals</h3>
+          <ul class="dg-swatches">
+            <li>
+              <div class="dg-chip bg-white" data-swatch="white" data-name="White"></div>
+              <div class="dg-swatch-text"><strong>White</strong><span data-hex="white"></span> <span
+                  class="dg-token">white</span><br>
+                The page background. Text on Indigo and on buttons.</div>
+            </li>
+            <li>
+              <div class="dg-chip bg-neutral-xlight" data-swatch="neutral-xlight" data-name="Off-White"></div>
+              <div class="dg-swatch-text"><strong>Off-White</strong><span data-hex="neutral-xlight"></span> <span
+                  class="dg-token">neutral-xlight</span><br>
+                Background for quiet, alternating sections.</div>
+            </li>
+            <li>
+              <div class="dg-chip bg-neutral-light" data-swatch="neutral-light" data-name="Light Gray"></div>
+              <div class="dg-swatch-text"><strong>Light Gray</strong><span data-hex="neutral-light"></span> <span
+                  class="dg-token">neutral-light</span><br>
+                Dividers and inactive or disabled things.</div>
+            </li>
+            <li>
+              <div class="dg-chip bg-neutral-mid" data-swatch="neutral-mid" data-name="Mid Gray"></div>
+              <div class="dg-swatch-text"><strong>Mid Gray</strong><span data-hex="neutral-mid"></span> <span
+                  class="dg-token">neutral-mid</span><br>
+                The lightest gray that can be used for text (captions, secondary details), and only on white.</div>
+            </li>
+            <li>
+              <div class="dg-chip bg-neutral-dark" data-swatch="neutral-dark" data-name="Charcoal"></div>
+              <div class="dg-swatch-text"><strong>Charcoal</strong><span data-hex="neutral-dark"></span> <span
+                  class="dg-token">neutral-dark</span><br>
+                Body text. Softer than black and still easy to read.</div>
+            </li>
+            <li>
+              <div class="dg-chip bg-black" data-swatch="black" data-name="Black"></div>
+              <div class="dg-swatch-text"><strong>Black</strong><span data-hex="black"></span> <span
+                  class="dg-token">black</span><br>
+                Rarely needed. Prefer Charcoal for text.</div>
+            </li>
+          </ul>
+
+          <h3>Retired colors</h3>
+          <p>Older SciStarter pages still show these colors. Don't copy them into new work.</p>
+          <ul class="dg-swatches">
+            <li>
+              <div class="dg-chip bg-accent2" data-swatch="accent2" data-name="Chartreuse (retired)"></div>
+              <div class="dg-swatch-text"><strong>Chartreuse</strong><span data-hex="accent2"></span><br>Retired. Use
+                Coral as the second color.</div>
+            </li>
+            <li>
+              <div class="dg-chip bg-accent2-dark" data-swatch="accent2-dark" data-name="Moss (retired)"></div>
+              <div class="dg-swatch-text"><strong>Moss</strong><span data-hex="accent2-dark"></span><br>Retired along
+                with Chartreuse.</div>
+            </li>
+            <li>
+              <div class="dg-chip bg-orange" data-swatch="orange" data-name="Old Orange (retired)"></div>
+              <div class="dg-swatch-text"><strong>Old Orange</strong><span data-hex="orange"></span><br>From the
+                previous design. Use Coral.</div>
+            </li>
+            <li>
+              <div class="dg-chip bg-action-blue" data-swatch="action-blue" data-name="Old Link Blue (retired)"></div>
+              <div class="dg-swatch-text"><strong>Old Link Blue</strong><span data-hex="action-blue"></span><br>From the
+                previous design. Use Link Teal.</div>
+            </li>
+          </ul>
+        </section>
+
+        <!-- ============================================================ -->
+        <section id="combinations">
+          <h2>Color combinations</h2>
+          <p>Text must stand out clearly from its background, or many readers can't read it: people with low vision,
+            people with color blindness, and anyone reading a phone outdoors. The measure is the <em>contrast
+              ratio</em>, from 1:1 (invisible) to 21:1 (black on white).</p>
+          <ul class="bullets">
+            <li><strong>Any text</strong> (4.5:1 or more): fine for everything, including body text.</li>
+            <li><strong>Large text</strong> (3:1 or more): only for text at least 24px, or bold text at least 18.7px. On
+              this site that means headings, not paragraphs or buttons.</li>
+            <li><strong>Avoid</strong> (under 3:1): don't use this pair for text at all.</li>
+          </ul>
+          <p>Rows are text colors, columns are background colors. Ratios are worked out from the live colors.</p>
+          <div class="dg-scroll">
+            <table class="dg-table dg-matrix" id="contrast-matrix"
+              data-fg="neutral-dark black primary-dark primary primary-action primary-action-dark accent1-dark neutral-mid white"
+              data-bg="white neutral-xlight primary-light neutral-light primary primary-action primary-dark accent1 accent1-action">
+              <caption class="dg-status">Contrast between each text color and each background color</caption>
+            </table>
+          </div>
+
+          <h3>Recommended section styles</h3>
+          <p>These four backgrounds cover nearly every need. Each sample shows the heading, link and button colors that
+            work on it. The checks under each sample are measured from the sample itself.</p>
+          <div class="dg-panels">
+            <div class="dg-panel-wrap">
+              <p>Standard (White)</p>
+              <div class="dg-panel bg-white border border-linework rounded p-8">
+                <h3 data-check="Heading">Join a project</h3>
+                <p data-check="Body text">Thousands of projects need volunteers. <a href="#combinations"
+                    data-check="Link">Browse projects</a></p>
+                <a href="#combinations" class="btn btn-primary" data-check="Button" data-check-own-bg="1">Get
+                  started</a>
+              </div>
+            </div>
+            <div class="dg-panel-wrap">
+              <p>Highlight (Sky Blue)</p>
+              <div class="dg-panel bg-primary-light rounded p-8">
+                <h3 class="text-primary-dark" data-check="Heading">Join a project</h3>
+                <p data-check="Body text">Thousands of projects need volunteers. <a href="#combinations"
+                    class="text-primary-action-dark" data-check="Link">Browse projects</a></p>
+                <a href="#combinations" class="btn btn-primary" data-check="Button" data-check-own-bg="1">Get
+                  started</a>
+              </div>
+            </div>
+            <div class="dg-panel-wrap">
+              <p>Quiet (Off-White)</p>
+              <div class="dg-panel bg-neutral-xlight rounded p-8">
+                <h3 class="text-primary-dark" data-check="Heading">Join a project</h3>
+                <p data-check="Body text">Thousands of projects need volunteers. <a href="#combinations"
+                    class="text-primary-action-dark" data-check="Link">Browse projects</a></p>
+                <a href="#combinations" class="btn btn-primary" data-check="Button" data-check-own-bg="1">Get
+                  started</a>
+              </div>
+            </div>
+            <div class="dg-panel-wrap">
+              <p>Bold (Indigo)</p>
+              <div class="dg-panel bg-primary-dark text-white rounded p-8">
+                <h3 data-check="Heading">Join a project</h3>
+                <p data-check="Body text">Thousands of projects need volunteers. <a href="#combinations"
+                    class="text-white underline" data-check="Link">Browse projects</a></p>
+                <a href="#combinations" class="btn btn-primary" data-check="Button" data-check-own-bg="1">Get
+                  started</a>
+              </div>
+            </div>
+          </div>
+          <ul class="bullets">
+            <li>On <strong>White</strong>, use the defaults: Charcoal text, Aqua headings, Link Teal links.</li>
+            <li>On <strong>Sky Blue or Off-White</strong>, use Indigo headings and Deep Teal links. Aqua and Link Teal
+              are too pale on a tint.</li>
+            <li>On <strong>Indigo</strong>, use white text and underline links in white. Teal links disappear on Indigo.
+              Aqua headings and Link Teal buttons are fine.</li>
+            <li><strong>Coral</strong> is for shapes, lines and icons, not for areas with text in them. For a coral
+              button, use Coral Action with white text.</li>
+          </ul>
+        </section>
+
+        <!-- ============================================================ -->
+        <section id="links-buttons">
+          <h2>Links and buttons</h2>
+
+          <h3>Text links</h3>
+          <p>Links are Link Teal <span data-hex="primary-action"></span> with no underline. On hover they turn Deep Teal
+            <span data-hex="primary-action-dark"></span> and gain an underline. On tinted and dark backgrounds, follow
+            the <a href="#combinations">section styles</a> above.</p>
+          <ul class="bullets">
+            <li>Link text should say where the link goes: “Read the volunteer guide,” not “click here” or “learn more.”
+              Many people skim the links alone.</li>
+            <li>Link a few meaningful words, not a whole sentence or a bare web address.</li>
+          </ul>
+
+          <h3>Buttons</h3>
+          <p>Use a button for an action (sign up, register, download). Use a text link to go to another page that is
+            mentioned in the text.</p>
+          <div class="dg-samples">
+            <a href="#links-buttons" class="btn btn-primary" id="spec-btn-primary">Primary button</a>
+            <a href="#links-buttons" class="btn btn-secondary" id="spec-btn-secondary">Secondary button</a>
+            <a href="#links-buttons" class="btn btn-accent" id="spec-btn-attention">Attention button</a>
+          </div>
+          <div class="dg-scroll">
+            <table class="dg-table">
+              <thead>
+                <tr>
+                  <th scope="col"></th>
+                  <th scope="col">Primary</th>
+                  <th scope="col">Secondary</th>
+                  <th scope="col">Attention</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">Use for</th>
+                  <td>The main action in a section</td>
+                  <td>A second action beside a primary one</td>
+                  <td>At most one per page, for the one thing that matters most</td>
+                </tr>
+                <tr>
+                  <th scope="row">Background</th>
+                  <td><span data-measure="spec-btn-primary" data-prop="backgroundColor"></span></td>
+                  <td><span data-measure="spec-btn-secondary" data-prop="backgroundColor"></span></td>
+                  <td><span data-measure="spec-btn-attention" data-prop="backgroundColor"></span></td>
+                </tr>
+                <tr>
+                  <th scope="row">Text color</th>
+                  <td><span data-measure="spec-btn-primary" data-prop="color"></span></td>
+                  <td><span data-measure="spec-btn-secondary" data-prop="color"></span></td>
+                  <td><span data-measure="spec-btn-attention" data-prop="color"></span></td>
+                </tr>
+                <tr>
+                  <th scope="row">Font weight</th>
+                  <td><span data-measure="spec-btn-primary" data-prop="fontWeight"></span></td>
+                  <td><span data-measure="spec-btn-secondary" data-prop="fontWeight"></span></td>
+                  <td><span data-measure="spec-btn-attention" data-prop="fontWeight"></span></td>
+                </tr>
+                <tr>
+                  <th scope="row">Border</th>
+                  <td><span data-measure="spec-btn-primary" data-prop="border"></span></td>
+                  <td><span data-measure="spec-btn-secondary" data-prop="border"></span></td>
+                  <td><span data-measure="spec-btn-attention" data-prop="border"></span></td>
+                </tr>
+                <tr>
+                  <th scope="row">On hover</th>
+                  <td>Background Deep Teal <span data-hex="primary-action-dark"></span></td>
+                  <td>Background Deep Teal <span data-hex="primary-action-dark"></span>, text color White <span
+                      data-hex="white"></span></td>
+                  <td>Background Brick <span data-hex="accent1-dark"></span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>All three share the same shape: font size <span data-measure="spec-btn-primary"
+              data-prop="fontSize"></span>, padding <span data-measure="spec-btn-primary" data-prop="padding"></span>,
+            corner radius <span data-measure="spec-btn-primary" data-prop="borderRadius"></span>.</p>
+          <ul class="bullets">
+            <li>Start labels with a verb and keep them to a few words: “Register now,” “Download the guide.”</li>
+            <li>One primary button per section. If there are two choices, make the lesser one secondary.</li>
+            <li>Don't put line breaks in button labels. Buttons stay on one line.</li>
+          </ul>
+        </section>
+
+        <!-- ============================================================ -->
+        <section id="spacing">
+          <h2>Spacing and layout</h2>
+
+          <h3>Spacing steps</h3>
+          <p>SciStarter uses four standard spacing sizes, each twice the size of the one before. Use them wherever your
+            editor asks for padding, margin, gap or spacing.</p>
+          <div class="dg-scroll">
+            <table class="dg-table">
+              <thead>
+                <tr>
+                  <th scope="col">Step</th>
+                  <th scope="col">Size</th>
+                  <th scope="col">Use it for</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Small</td>
+                  <td><span data-space="2"></span></td>
+                  <td>Inside small things: the space above and below button text, around tags and labels.</td>
+                </tr>
+                <tr>
+                  <td>Half</td>
+                  <td><span data-space="4"></span></td>
+                  <td>Between closely related things: a heading and its text, paragraphs, list items. The gap between
+                    cards in a grid. Padding inside cards.</td>
+                </tr>
+                <tr>
+                  <td>Standard</td>
+                  <td><span data-space="8"></span></td>
+                  <td>Padding inside panels and colored sections. The gap between columns of text.</td>
+                </tr>
+                <tr>
+                  <td>Double</td>
+                  <td><span data-space="16"></span></td>
+                  <td>Between the major sections of a page, and above a heading that follows text.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>If something needs a size in between, use a multiple of <span data-space="1"></span>, the unit all four
+            sizes are built from. Do this rarely.</p>
+
+          <h3>Padding</h3>
+          <p>Padding is the space between the edge of a box and what's inside it.</p>
+          <div class="dg-scroll">
+            <table class="dg-table">
+              <thead>
+                <tr>
+                  <th scope="col">Where</th>
+                  <th scope="col">Padding</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Page edges: the least space allowed between content and the side of the screen</td>
+                  <td><span data-rule-selector=".ss-container" data-rule-prop="padding-left"
+                      data-rule-at="first"></span> on phones. <span data-rule-selector=".ss-container"
+                      data-rule-prop="padding-left" data-rule-at="last"></span> on tablets and anything larger, meaning
+                    any screen at least <span data-rule-selector=".ss-container" data-rule-prop="padding-left"
+                      data-rule-at="last-min"></span> wide (see <a href="#screen-sizes">screen sizes</a>).</td>
+                </tr>
+                <tr>
+                  <td>Colored band across the page (top and bottom)</td>
+                  <td><span data-space="8"></span>, or <span data-space="16"></span> for a spacious banner. Left and
+                    right follow the page edges.</td>
+                </tr>
+                <tr>
+                  <td>Panel or highlighted box</td>
+                  <td><span data-measure="spec-panel" data-prop="padding"></span> on every side</td>
+                </tr>
+                <tr>
+                  <td>Card</td>
+                  <td><span data-measure="spec-card" data-prop="padding"></span> on every side</td>
+                </tr>
+                <tr>
+                  <td>Button</td>
+                  <td><span data-measure="spec-btn-primary" data-prop="padding"></span></td>
+                </tr>
+                <tr>
+                  <td>Tag or label</td>
+                  <td><span data-measure="spec-tag" data-prop="padding"></span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>Keep padding the same on all sides of a box unless there's a reason not to. A box with more room at the top
+            than the bottom looks unfinished.</p>
+
+          <h3>Page widths</h3>
+          <p>Content uses one of three widths. In WordPress, set the theme's <em>content width</em> to the reading width
+            and its <em>wide width</em> to the wide width. Blocks then offer exactly these three choices.</p>
+          <div class="dg-scroll">
+            <table class="dg-table">
+              <thead>
+                <tr>
+                  <th scope="col">Width</th>
+                  <th scope="col">Size</th>
+                  <th scope="col">Use it for</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Reading width</td>
+                  <td><span data-measure="probe-reading" data-prop="maxWidth"></span></td>
+                  <td>Paragraphs, lists, and images that go with the text. Wider lines are tiring to read.</td>
+                </tr>
+                <tr>
+                  <td>Wide width</td>
+                  <td><span data-layout="wide"></span></td>
+                  <td>Grids of cards, columns, wide images: anything that isn't running text.</td>
+                </tr>
+                <tr>
+                  <td>Full width</td>
+                  <td>The whole screen</td>
+                  <td>Background colors and banner images only. Keep the text and buttons inside such a band within the
+                    wide width.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>The wide width is the page's widest content, <span data-measure="probe-page" data-prop="maxWidth"></span>,
+            less a <span data-rule-selector=".ss-container" data-rule-prop="padding-left" data-rule-at="last"></span>
+            page edge on each side.</p>
+          <p><strong>The space beside a column.</strong> A reading-width or wide-width column sits in the middle of the
+            screen. The space on each side of it, which many people call the margin, isn't something you set: it's
+            whatever the screen has left over, so it changes from one screen to the next. <span
+              id="dg-side-space"></span></p>
+          <p>So don't make a column narrower by giving it left and right margins or padding. Those only look right at
+            the screen width you set them on. Choose the column's width and center it, and the space on each side takes
+            care of itself. On a screen narrower than the column, the column fills the screen except for the page edges.
+          </p>
+
+          <h3>Columns</h3>
+          <p>These are the column layouts the site uses. Set column widths as percentages, not pixels: the same columns
+            have to fit every screen from a 768px tablet up to the full wide width, and percentages adjust where fixed
+            widths don't. The pixel widths below are what the columns come to at the wide width, as a guide for sizing
+            images to put in them.</p>
+          <div class="dg-scroll">
+            <table class="dg-table" id="column-layouts">
+              <thead>
+                <tr>
+                  <th scope="col">Layout</th>
+                  <th scope="col">Column widths</th>
+                  <th scope="col">Gap</th>
+                  <th scope="col">At wide width</th>
+                  <th scope="col">On smaller screens (see <a href="#screen-sizes">screen sizes</a>)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr data-parts="1 1" data-gap="8">
+                  <td>Two equal columns<p class="dg-note">Text beside text, or text beside an image.</p>
+                  </td>
+                  <td class="dg-col-pct"></td>
+                  <td class="dg-col-gap"></td>
+                  <td class="dg-col-px"></td>
+                  <td>One column on phones</td>
+                </tr>
+                <tr data-parts="2 1" data-gap="8">
+                  <td>Main and sidebar<p class="dg-note">An article with related links, key facts or a sign-up box
+                      beside it.</p>
+                  </td>
+                  <td class="dg-col-pct"></td>
+                  <td class="dg-col-gap"></td>
+                  <td class="dg-col-px"></td>
+                  <td>On tablets and phones, the sidebar moves under the main column</td>
+                </tr>
+                <tr data-parts="1 3" data-gap="8">
+                  <td>Menu and content<p class="dg-note">In-page navigation or filters beside the content they control.
+                    </p>
+                  </td>
+                  <td class="dg-col-pct"></td>
+                  <td class="dg-col-gap"></td>
+                  <td class="dg-col-px"></td>
+                  <td>On tablets and phones, the menu moves above the content</td>
+                </tr>
+                <tr data-parts="1 2" data-gap="8">
+                  <td>Image beside text<p class="dg-note">A photo, logo or video next to a description.</p>
+                  </td>
+                  <td class="dg-col-pct"></td>
+                  <td class="dg-col-gap"></td>
+                  <td class="dg-col-px"></td>
+                  <td>On phones, the image moves above the text</td>
+                </tr>
+                <tr data-parts="1 1 1" data-gap="4">
+                  <td>Three cards<p class="dg-note">Projects, events, resources, people.</p>
+                  </td>
+                  <td class="dg-col-pct"></td>
+                  <td class="dg-col-gap"></td>
+                  <td class="dg-col-px"></td>
+                  <td>Two across on tablets and large phones, one on phones</td>
+                </tr>
+                <tr data-parts="1 1 1 1" data-gap="4">
+                  <td>Four small items<p class="dg-note">Statistics, logos, short links.</p>
+                  </td>
+                  <td class="dg-col-pct"></td>
+                  <td class="dg-col-gap"></td>
+                  <td class="dg-col-px"></td>
+                  <td>Two across on tablets and large phones, one on phones</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <ul class="bullets">
+            <li><strong>No more than four columns.</strong> On phones, every layout becomes a single column.</li>
+            <li><strong>Order matters.</strong> When columns stack, the left column goes on top. Put the main content on
+              the left and the supporting material on the right. A menu that controls the content is the one exception.
+            </li>
+            <li><strong>Line up the tops</strong> of columns and cards in a row, and give cards in the same row the same
+              height.</li>
+            <li><strong>Space columns apart with your editor's gap setting, not with margins on the columns.</strong>
+              The gap goes only between columns, so the outer edges of the row still line up with the text above and
+              below it.</li>
+          </ul>
+
+          <h3 id="screen-sizes">Screen sizes</h3>
+          <p>The layout changes at a few fixed screen widths, called <em>breakpoints</em>. Many editors, WordPress
+            included, can preview a page at tablet and phone sizes. Check every page at each size before you publish.
+            Many visitors arrive on a phone.</p>
+          <p class="dg-note" id="dg-viewport" aria-live="polite"></p>
+          <div class="dg-scroll">
+            <table class="dg-table" id="breakpoints">
+              <thead>
+                <tr>
+                  <th scope="col">Screen width</th>
+                  <th scope="col">Typically</th>
+                  <th scope="col">What changes</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr data-from="0" data-to="639">
+                  <td>Under 640px</td>
+                  <td>Phone</td>
+                  <td>Everything is one column. Headings use their smaller phone sizes. Page edges are <span
+                      data-rule-selector=".ss-container" data-rule-prop="padding-left" data-rule-at="first"></span>. The
+                    menu folds into a menu button.</td>
+                </tr>
+                <tr data-from="640" data-to="767" data-bp="640">
+                  <td>640 to 767px</td>
+                  <td>Large phone, small tablet</td>
+                  <td>Card grids can go two across, and cards with an image start to put it beside their text.</td>
+                </tr>
+                <tr data-from="768" data-to="1023" data-bp="768">
+                  <td>768 to 1023px</td>
+                  <td>Tablet</td>
+                  <td>The main change. Columns sit side by side, headings reach full size, page edges grow to <span
+                      data-rule-selector=".ss-container" data-rule-prop="padding-left" data-rule-at="last"></span>, and
+                    the full menu bar appears.</td>
+                </tr>
+                <tr data-from="1024" data-to="1279" data-bp="1024">
+                  <td>1024 to 1279px</td>
+                  <td>Laptop</td>
+                  <td>Sidebars and menus move beside the main content. Card grids go three across.</td>
+                </tr>
+                <tr data-from="1280" data-bp="1280">
+                  <td>1280px and up</td>
+                  <td>Desktop</td>
+                  <td>Nothing new: the page widens until it reaches its widest content, <span data-measure="probe-page"
+                      data-prop="maxWidth"></span>, and then stays centered.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>Images fill the width of their column on phones, so anything at the edges of a wide banner becomes very
+            small there.</p>
+        </section>
+
+        <!-- ============================================================ -->
+        <section id="boxes">
+          <h2>Boxes and accents</h2>
+
+          <h3>Cards and boxes</h3>
+          <div class="ss-pc" id="spec-card">
+            <div class="ss-pc-content">
+              <p class="mb-0">A card or bordered box looks like this.</p>
+            </div>
+          </div>
+          <p>Border <span data-measure="spec-card" data-prop="border"></span>, corner radius <span
+              data-measure="spec-card" data-prop="borderRadius"></span>, padding <span data-measure="spec-card"
+              data-prop="padding"></span>, white background. Prefer a border to a shadow.</p>
+          <div class="bg-primary-light rounded p-8 mb-4" id="spec-panel">
+            <p class="mb-0">A panel or highlighted box looks like this.</p>
+          </div>
+          <p>Background Sky Blue <span data-hex="primary-light"></span>, corner radius <span data-measure="spec-panel"
+              data-prop="borderRadius"></span>, padding <span data-measure="spec-panel" data-prop="padding"></span>, no
+            border. Off-White <span data-hex="neutral-xlight"></span> works the same way for a quieter box.</p>
+
+          <h3>Tags and labels</h3>
+          <div class="ss-pc-tag-wrap" aria-hidden="true">
+            <div class="ss-pc-tag" id="spec-tag"><span>15 minutes</span></div>
+            <div class="ss-pc-tag"><span>Outdoors</span></div>
+            <div class="ss-pc-tag"><span>All ages</span></div>
+          </div>
+          <p>Small labels for facts such as time, place or audience: font size <span data-measure="spec-tag"
+              data-prop="fontSize"></span>, text color <span data-measure="spec-tag" data-prop="color"></span>,
+            background <span data-measure="spec-tag" data-prop="backgroundColor"></span>, border <span
+              data-measure="spec-tag" data-prop="border"></span>, corner radius <span data-measure="spec-tag"
+              data-prop="borderRadius"></span>, padding <span data-measure="spec-tag" data-prop="padding"></span>, and a
+            gap of <span data-space="2"></span> between tags. They aren't buttons, so don't link them.</p>
+
+          <h3>Eyebrow labels</h3>
+          <div aria-hidden="true">
+            <div class="text-sm font-bold uppercase mb-1" id="spec-eyebrow">For educators</div>
+            <h3 class="text-primary-dark">Bring citizen science to your classroom</h3>
+          </div>
+          <p>A short label above a heading, naming the audience or category: font size <span data-measure="spec-eyebrow"
+              data-prop="fontSize"></span>, weight <span data-measure="spec-eyebrow" data-prop="fontWeight"></span>, all
+            capitals, letter spacing <span data-measure="spec-eyebrow" data-prop="letterSpacing"></span>, text color
+            Charcoal <span data-hex="neutral-dark"></span> or Aqua <span data-hex="primary"></span>. One to three words.
+          </p>
+
+          <h3>Underlined heading</h3>
+          <h3 class="header-underlined" id="spec-underline">Featured projects</h3>
+          <p>A heading can carry a Coral underline, made with a bottom border: <span data-measure="spec-underline"
+              data-prop="borderBottom"></span>, with <span data-measure="spec-underline"
+              data-prop="paddingBottom"></span> of padding between the text and the border. The underline is only as
+            wide as the words. Use it to mark a few key sections, not every heading.</p>
+
+          <h3>Pull quote</h3>
+          <p class="pull-quote" id="spec-quote">“I never imagined my backyard observations could help scientists.”</p>
+          <p>For quotes from participants: a left border, <span data-measure="spec-quote"
+              data-prop="borderLeft"></span>, padding <span data-measure="spec-quote" data-prop="padding"></span> on
+            every side, and italic text at font size <span data-measure="spec-quote" data-prop="fontSize"></span>.</p>
+        </section>
+
+        <!-- ============================================================ -->
+        <section id="images">
+          <h2>Images</h2>
+          <ul class="bullets">
+            <li><strong>Upload images at twice the size they appear</strong>, so they stay sharp on high-resolution
+              screens. An image at wide width appears up to <span data-layout="wide"></span> wide, so make it <span
+                data-layout="wide" data-double="1"></span> wide. A full-width banner can be wider still on big screens,
+              so make it at least that. An image in a column of text appears up to <span data-measure="probe-reading"
+                data-prop="maxWidth"></span>, so make it <span data-measure="probe-reading" data-prop="maxWidth"
+                data-double="1"></span> wide.</li>
+            <li><strong>Banners</strong> work best about three times wider than tall (for example <span
+                data-literal>2400px</span> × <span data-literal>800px</span>). Keep faces and key details away from the
+              edges, which get cropped or become tiny on phones.</li>
+            <li><strong>Card images</strong> are landscape, twice as wide as tall (for example <span
+                data-literal>800px</span> × <span data-literal>400px</span>).</li>
+            <li><strong>Photos</strong> as JPEG or WebP, compressed. A banner should rarely be more than about 500 KB.
+              <strong>Logos and graphics</strong> as SVG or PNG with a transparent background.</li>
+            <li><strong>Don't put text in images.</strong> It can't be read on phones, by screen readers or by search
+              engines. Write it as real text next to the image.</li>
+            <li><strong>Corners</strong> are square, except images at the top of a card, which follow the card's <span
+                data-measure="spec-card" data-prop="borderRadius"></span> corner radius.</li>
+            <li><strong>Logos:</strong> use the official files from the <a href="design-system.html">Design System</a>
+              (Elements → Logos). Use the white or dark-background version on Indigo. Never stretch or recolor a logo.
+            </li>
+          </ul>
+
+          <h3>Alt text</h3>
+          <p>Every image needs a short text description (the “alt text”) for people who can't see it.</p>
+          <ul class="bullets">
+            <li>Describe what the image shows that matters to the page: “Students counting monarch butterflies in a
+              school garden.”</li>
+            <li>Don't start with “Image of” or “Photo of.” Screen readers already announce that it's an image.</li>
+            <li>For a logo, the alt text is the organization's name. For a linked image, describe where the link goes.
+            </li>
+            <li>For a purely decorative image, leave the alt text empty, so that screen readers skip it.</li>
+          </ul>
+        </section>
+
+        <!-- ============================================================ -->
+        <section id="accessibility">
+          <h2>Accessibility checklist</h2>
+          <p>Before you publish, check that:</p>
+          <ul class="bullets">
+            <li>Every text and background pair is rated “Any text” in the <a href="#combinations">combinations
+                table</a>, or “Large text” for headings only.</li>
+            <li>Headings run in order (H1, then H2, then H3), with one H1.</li>
+            <li>Links and buttons say what they do, even when read on their own.</li>
+            <li>Every meaningful image has alt text, and decorative images have empty alt text.</li>
+            <li>No information depends on color alone. Pair color with words, icons or position.</li>
+            <li>Videos have captions, and embedded players have a descriptive title.</li>
+            <li>Tables are used for data, not for laying out the page.</li>
+            <li>The page reads well and nothing is cut off at phone width.</li>
+          </ul>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- Probes: the site's own layout containers, measured for their widths. -->
+  <div aria-hidden="true" style="position:absolute; visibility:hidden; height:0; overflow:hidden;">
+    <div class="ss-container" id="probe-page"></div>
+    <div class="ss-small-container" id="probe-reading"></div>
+  </div>
+
+  <p class="dg-status" role="status" aria-live="polite" id="dg-status"></p>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var root = document.documentElement;
+      var rootStyle = getComputedStyle(root);
+      var rootPx = parseFloat(rootStyle.fontSize);
+
+      // Normalize any CSS color to #RRGGBB through the canvas, which accepts every
+      // syntax the browser does. Transparent colors normalize to null.
+      var ctx = document.createElement('canvas').getContext('2d');
+      function toHex(css) {
+        ctx.fillStyle = '#000';
+        ctx.fillStyle = css;
+        var v = ctx.fillStyle;
+        return v.charAt(0) === '#' ? v.toUpperCase() : null;
+      }
+
+      function px(n) {return (Math.round(n * 10) / 10) + 'px';}
+
+      function lengthPx(value) {
+        value = value.trim();
+        if (value.slice(-3) === 'rem') return parseFloat(value) * rootPx;
+        if (value.slice(-2) === 'px') return parseFloat(value);
+        return NaN;
+      }
+
+      function varPx(name) {return lengthPx(rootStyle.getPropertyValue(name));}
+
+      var spacing = varPx('--spacing');
+
+      // The palette, read from the swatches, which are colored by the site's own
+      // classes.
+      var palette = {}, names = {};
+      document.querySelectorAll('[data-swatch]').forEach(function (el) {
+        var hex = toHex(getComputedStyle(el).backgroundColor);
+        palette[el.dataset.swatch] = hex;
+        if (hex && !names[hex]) names[hex] = el.dataset.name;
+      });
+
+      // Every value is described as a list of parts: plain strings, and values a
+      // reader may want to paste into an editor, which `put` renders as buttons
+      // that copy themselves.
+      function copyable(value) {return {copy: String(value)};}
+      function put(el, parts) {
+        el.replaceChildren();
+        [].concat(parts).forEach(function (part) {
+          if (typeof part === 'string') {
+            el.appendChild(document.createTextNode(part));
+          } else {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'dg-copy';
+            btn.dataset.copy = part.copy;
+            btn.textContent = part.copy;
+            btn.setAttribute('aria-label', 'Copy ' + part.copy);
+            el.appendChild(btn);
+          }
+        });
+      }
+      // Joins descriptions with a separator string.
+      function joined(list, separator) {
+        return list.reduce(function (out, parts, i) {
+          return out.concat(i ? [separator] : [], parts);
+        }, []);
+      }
+      // A missing value shows as a question mark, never as something copyable.
+      function pxPart(n) {return isNaN(n) ? '?' : copyable(px(n));}
+
+      function named(hex) {return names[hex] ? names[hex] + ' ' + hex : hex;}
+      function namedParts(hex) {
+        if (!hex) return 'none';
+        return names[hex] ? [names[hex] + ' ', copyable(hex)] : [copyable(hex)];
+      }
+
+      function weightParts(w) {
+        w = parseInt(w, 10);
+        var name = w >= 800 ? 'Extra Bold' : w >= 700 ? 'Bold' : w >= 600 ? 'Semibold' : 'Regular';
+        return [name + ' ', copyable(w)];
+      }
+
+      function ratioOf(lineHeight, fontSize) {
+        return String(Math.round(parseFloat(lineHeight) / parseFloat(fontSize) * 100) / 100);
+      }
+
+      function firstFamily(s) {return s.fontFamily.split(',')[0].replace(/"/g, '').trim();}
+
+      function side(style, which) {
+        var width = parseFloat(style['border' + which + 'Width']);
+        if (!width || style['border' + which + 'Style'] === 'none') return {key: 'none', parts: 'none'};
+        var hex = toHex(style['border' + which + 'Color']);
+        return {key: px(width) + hex, parts: [copyable(px(width)), ' solid '].concat(namedParts(hex))};
+      }
+
+      function boxParts(style, prop) {
+        var t = px(parseFloat(style[prop + 'Top'])), r = px(parseFloat(style[prop + 'Right'])),
+          b = px(parseFloat(style[prop + 'Bottom'])), l = px(parseFloat(style[prop + 'Left']));
+        if (t === r && r === b && b === l) return [copyable(t)];
+        if (t === b && r === l) return [copyable(t), ' top and bottom, ', copyable(r), ' left and right'];
+        return joined([t, r, b, l].map(function (v) {return [copyable(v)];}), ' / ');
+      }
+
+      // Describe one computed property of an element in editor terms.
+      function describe(el, prop, opts) {
+        var s = getComputedStyle(el);
+        switch (prop) {
+          case 'color':
+          case 'backgroundColor': return namedParts(toHex(s[prop]));
+          case 'fontWeight': return weightParts(s.fontWeight);
+          case 'fontFamily':
+            return [copyable(opts.full ? s.fontFamily.replace(/"/g, '') : firstFamily(s))];
+          case 'lineHeight': return [copyable(ratioOf(s.lineHeight, s.fontSize))];
+          case 'lineHeightPx': return [pxPart(parseFloat(s.lineHeight))];
+          case 'letterSpacing': {
+            if (s.letterSpacing === 'normal') return 'normal';
+            var ls = parseFloat(s.letterSpacing);
+            return [copyable(px(ls)), ' (', copyable(Math.round(ls / parseFloat(s.fontSize) * 1000) / 1000 + 'em'), ')'];
+          }
+          case 'padding': return boxParts(s, 'padding');
+          case 'border': {
+            var sides = ['Top', 'Right', 'Bottom', 'Left'].map(function (w) {return side(s, w);});
+            return sides.every(function (v) {return v.key === sides[0].key;})
+              ? sides[0].parts
+              : joined(sides.map(function (v) {return v.parts;}), ' / ');
+          }
+          case 'borderBottom': return side(s, 'Bottom').parts;
+          case 'borderLeft': return side(s, 'Left').parts;
+          case 'borderRadius': return [pxPart(parseFloat(s.borderTopLeftRadius))];
+          case 'maxWidth': {
+            var w = parseFloat(s.maxWidth);
+            return [pxPart(opts.double ? w * 2 : w)];
+          }
+          default: return [pxPart(parseFloat(s[prop]))];
+        }
+      }
+
+      document.querySelectorAll('[data-hex]').forEach(function (el) {
+        put(el, palette[el.dataset.hex] ? [copyable(palette[el.dataset.hex])] : '?');
+      });
+      // Example values written into the prose, rather than read from the
+      // stylesheet, copy the same way.
+      document.querySelectorAll('[data-literal]').forEach(function (el) {
+        put(el, [copyable(el.textContent.trim())]);
+      });
+      document.querySelectorAll('[data-var-px]').forEach(function (el) {
+        put(el, [pxPart(varPx(el.dataset.varPx))]);
+      });
+      document.querySelectorAll('[data-space]').forEach(function (el) {
+        put(el, [pxPart(spacing * parseFloat(el.dataset.space))]);
+      });
+      document.querySelectorAll('[data-measure]').forEach(function (el) {
+        var target = document.getElementById(el.dataset.measure);
+        put(el, target
+          ? describe(target, el.dataset.prop, {full: !!el.dataset.full, double: !!el.dataset.double})
+          : '?');
+      });
+
+      // Layout values that only exist as stylesheet rules, such as a padding that
+      // changes at a breakpoint, are read from the rules themselves. Each style
+      // rule is visited with the min-width of every media query around it; rules
+      // under any other kind of media condition are skipped, so a value is only
+      // ever reported against the screen width it actually starts at.
+      function minWidthOf(condition) {
+        var m = /^\(\s*(?:min-width\s*:|width\s*>=)\s*([\d.]+)(px|rem)\s*\)$/.exec(condition.trim());
+        if (!m) return null;
+        return m[2] === 'rem' ? parseFloat(m[1]) * rootPx : parseFloat(m[1]);
+      }
+      function walkRules(rules, min, visit) {
+        Array.prototype.forEach.call(rules, function (rule) {
+          if (rule.media && rule.cssRules) {
+            var at = minWidthOf(rule.conditionText || rule.media.mediaText);
+            if (at !== null) walkRules(rule.cssRules, Math.max(min, at), visit);
+          } else if (rule.selectorText !== undefined) {
+            visit(rule, min);
+            if (rule.cssRules) walkRules(rule.cssRules, min, visit);
+          } else if (rule.cssRules) {
+            walkRules(rule.cssRules, min, visit);
+          }
+        });
+      }
+      var styleRules = [];
+      Array.prototype.forEach.call(document.styleSheets, function (sheet) {
+        var rules;
+        try {rules = sheet.cssRules;} catch (e) {return;}
+        walkRules(rules, 0, function (rule, min) {styleRules.push({rule: rule, min: min});});
+      });
+
+      // Every value the stylesheet gives `prop` on exactly `selector`, ordered by
+      // the screen width it applies from.
+      function ruleValues(selector, prop) {
+        return styleRules.filter(function (r) {
+          return r.rule.style.getPropertyValue(prop) &&
+            r.rule.selectorText.split(',').some(function (sel) {return sel.trim() === selector;});
+        }).map(function (r) {
+          return {min: r.min, value: r.rule.style.getPropertyValue(prop)};
+        }).sort(function (x, y) {return x.min - y.min;});
+      }
+      function ruleValue(selector, prop, at) {
+        var values = ruleValues(selector, prop);
+        if (!values.length) return NaN;
+        var v = at === 'first' ? values[0] : values[values.length - 1];
+        return at === 'last-min' ? v.min : lengthPx(v.value);
+      }
+
+      document.querySelectorAll('[data-rule-selector]').forEach(function (el) {
+        put(el, [pxPart(ruleValue(el.dataset.ruleSelector, el.dataset.ruleProp, el.dataset.ruleAt))]);
+      });
+
+      // The wide width: the page container's widest, less its widest padding.
+      var pageMax = parseFloat(getComputedStyle(document.getElementById('probe-page')).maxWidth);
+      var wideWidth = pageMax - 2 * ruleValue('.ss-container', 'padding-left', 'last');
+      document.querySelectorAll('[data-layout="wide"]').forEach(function (el) {
+        put(el, [pxPart(el.dataset.double ? wideWidth * 2 : wideWidth)]);
+      });
+
+      // Column layouts: each column's share of the space left once the gaps are
+      // taken out, which is how an editor's percentage columns divide a row.
+      document.querySelectorAll('#column-layouts tr[data-parts]').forEach(function (row) {
+        var parts = row.dataset.parts.split(' ').map(Number);
+        var total = parts.reduce(function (a, b) {return a + b;}, 0);
+        var gap = spacing * parseFloat(row.dataset.gap);
+        var room = wideWidth - gap * (parts.length - 1);
+        put(row.querySelector('.dg-col-pct'), joined(parts.map(function (p) {
+          return [copyable((Math.round(p / total * 1000) / 10) + '%')];
+        }), ' / '));
+        put(row.querySelector('.dg-col-gap'), [pxPart(gap)]);
+        var widths = parts.map(function (p) {return px(room * p / total);});
+        put(row.querySelector('.dg-col-px'),
+          widths.every(function (w) {return w === widths[0];})
+            ? [widths.length + ' × ', copyable(widths[0])]
+            : joined(widths.map(function (w) {return [copyable(w)];}), ' / '));
+      });
+
+      // Breakpoints. Each one the table names must be a width the stylesheet
+      // really changes at; if one stops being so, the row says the guide is out
+      // of date rather than quietly describing a change that no longer happens.
+      document.querySelectorAll('#breakpoints tr[data-bp]').forEach(function (row) {
+        var bp = parseFloat(row.dataset.bp);
+        var used = styleRules.some(function (r) {return r.min === bp;});
+        if (!used) {
+          var warn = document.createElement('p');
+          warn.className = 'dg-note';
+          warn.textContent = 'The stylesheet no longer changes anything at ' + bp + 'px. This row needs updating.';
+          row.lastElementChild.appendChild(warn);
+        }
+      });
+      var viewport = document.getElementById('dg-viewport');
+      function showViewport() {
+        var w = document.documentElement.clientWidth, name = '';
+        document.querySelectorAll('#breakpoints tr[data-from]').forEach(function (row) {
+          var from = parseFloat(row.dataset.from), to = row.dataset.to ? parseFloat(row.dataset.to) : Infinity;
+          var here = w >= from && w <= to;
+          row.classList.toggle('dg-current', here);
+          if (here) name = row.children[1].textContent;
+        });
+        viewport.textContent = 'You are viewing this page at ' + w + 'px wide: the ' + name.toLowerCase() + ' layout.';
+      }
+      // The space beside a centered column, on the reader's screen and on a large
+      // one: whatever the screen leaves over, but never less than the page edge.
+      var edges = ruleValues('.ss-container', 'padding-left');
+      function sideSpace(screen, width) {
+        var edge = 0;
+        edges.forEach(function (e) {if (e.min <= screen) edge = lengthPx(e.value);});
+        return Math.max(edge, (screen - width) / 2);
+      }
+      var readingWidth = parseFloat(getComputedStyle(document.getElementById('probe-reading')).maxWidth);
+      var sideNote = document.getElementById('dg-side-space');
+      function showSideSpace() {
+        var w = document.documentElement.clientWidth, big = 1920;
+        sideNote.textContent = 'On your screen, which is ' + w + 'px wide, a reading-width column has ' +
+          px(sideSpace(w, readingWidth)) + ' of space on each side, and a wide-width column has ' +
+          px(sideSpace(w, wideWidth)) + '. On a ' + big + 'px monitor, the same columns would have ' +
+          px(sideSpace(big, readingWidth)) + ' and ' + px(sideSpace(big, wideWidth)) + '.';
+      }
+      function showScreen() {showViewport(); showSideSpace();}
+      showScreen();
+      window.addEventListener('resize', showScreen);
+
+      // Text style specifications, from the specimens. Sizes come from the type
+      // scale variables, because a specimen's own size depends on the width of
+      // the screen it is being viewed on.
+      document.querySelectorAll('.dg-specimen').forEach(function (spec) {
+        var el = spec.querySelector('.dg-specimen-sample > *');
+        if (el.tagName === 'P' && el.firstElementChild && el.firstElementChild.tagName === 'SMALL') {
+          el = el.firstElementChild;
+        }
+        var s = getComputedStyle(el);
+        var size = [pxPart(varPx(spec.dataset.size))];
+        if (spec.dataset.sizeMobile) size.push(' (', pxPart(varPx(spec.dataset.sizeMobile)), ' on phones)');
+        var spaceAfter = parseFloat(getComputedStyle(spec.querySelector('.dg-specimen-sample > *')).marginBottom);
+        var items = [
+          ['font ', copyable(firstFamily(s))],
+          ['weight '].concat(weightParts(s.fontWeight), s.fontStyle === 'italic' ? [', italic'] : []),
+          ['size '].concat(size),
+          ['line height ', copyable(ratioOf(s.lineHeight, s.fontSize))],
+          ['color '].concat(namedParts(toHex(s.color))),
+          spaceAfter ? ['bottom margin ', copyable(px(spaceAfter))] : 'no bottom margin'
+        ];
+        var line = document.createElement('p');
+        line.className = 'dg-spec';
+        var label = document.createElement('strong');
+        label.textContent = spec.dataset.label + ': ';
+        line.appendChild(label);
+        items.forEach(function (parts) {
+          var span = document.createElement('span');
+          put(span, parts);
+          line.appendChild(span);
+        });
+        // Only the sample text is hidden from assistive technology; the
+        // specification under it, copy buttons included, is not.
+        spec.appendChild(line);
+      });
+
+      // Contrast, per WCAG 2.
+      function luminance(hex) {
+        var c = [1, 3, 5].map(function (i) {
+          var v = parseInt(hex.substr(i, 2), 16) / 255;
+          return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+        });
+        return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+      }
+      function contrast(a, b) {
+        var x = luminance(a), y = luminance(b);
+        return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+      }
+      function level(r) {return r >= 4.5 ? 'any' : r >= 3 ? 'large' : 'avoid';}
+      var levelText = {any: '✓ Any text', large: '◐ Large text', avoid: '✗ Avoid'};
+      function fmtRatio(r) {return (Math.round(r * 10) / 10) + ':1';}
+
+      var matrix = document.getElementById('contrast-matrix');
+      var fgs = matrix.dataset.fg.split(' '), bgs = matrix.dataset.bg.split(' ');
+      var thead = matrix.createTHead().insertRow();
+      var corner = document.createElement('th');
+      corner.textContent = 'Text ↓ / Background →';
+      corner.scope = 'col';
+      thead.appendChild(corner);
+      bgs.forEach(function (bg) {
+        var th = document.createElement('th');
+        th.scope = 'col';
+        th.textContent = names[palette[bg]] || bg;
+        thead.appendChild(th);
+      });
+      var tbody = matrix.createTBody();
+      fgs.forEach(function (fg) {
+        var row = tbody.insertRow();
+        var th = document.createElement('th');
+        th.scope = 'row';
+        th.textContent = names[palette[fg]] || fg;
+        row.appendChild(th);
+        bgs.forEach(function (bg) {
+          var td = row.insertCell();
+          if (fg === bg || !palette[fg] || !palette[bg]) {td.textContent = '—'; return;}
+          var r = contrast(palette[fg], palette[bg]), lv = level(r);
+          var cell = document.createElement('div');
+          cell.className = 'dg-cell';
+          cell.style.background = palette[bg];
+          cell.style.color = palette[fg];
+          cell.innerHTML = '<span class="dg-cell-sample" aria-hidden="true">Aa</span><span class="dg-cell-ratio"></span>';
+          cell.lastChild.textContent = fmtRatio(r);
+          td.appendChild(cell);
+          var verdict = document.createElement('span');
+          verdict.className = 'dg-verdict';
+          verdict.dataset.level = lv;
+          verdict.textContent = levelText[lv];
+          td.appendChild(verdict);
+        });
+      });
+
+      // Checks on the section samples, measured from the rendered samples.
+      function backgroundOf(el) {
+        for (; el; el = el.parentElement) {
+          var hex = toHex(getComputedStyle(el).backgroundColor);
+          if (hex) return hex;
+        }
+        return '#FFFFFF';
+      }
+      function isLarge(s) {
+        var size = parseFloat(s.fontSize), weight = parseInt(s.fontWeight, 10);
+        return size >= 24 || (size >= 18.66 && weight >= 700);
+      }
+      document.querySelectorAll('.dg-panel').forEach(function (panel) {
+        var list = document.createElement('ul');
+        list.className = 'dg-checks';
+        panel.querySelectorAll('[data-check]').forEach(function (el) {
+          var s = getComputedStyle(el);
+          var fg = toHex(s.color);
+          var bg = el.dataset.checkOwnBg ? toHex(s.backgroundColor) : backgroundOf(el.parentElement);
+          var r = contrast(fg, bg), lv = level(r);
+          var ok = lv === 'any' || (lv === 'large' && isLarge(s));
+          var li = document.createElement('li');
+          li.textContent = (ok ? '✓ ' : '✗ ') + el.dataset.check + ': ' + named(fg) + ' on ' + named(bg) +
+            ', ' + fmtRatio(r) + (ok ? ', passes' : ', fails');
+          list.appendChild(li);
+        });
+        panel.parentElement.appendChild(list);
+      });
+
+      // Clicking any value copies it. The button keeps its width while it says
+      // "Copied", so the text around it doesn't shift.
+      var status = document.getElementById('dg-status');
+      document.addEventListener('click', function (event) {
+        var btn = event.target.closest('.dg-copy');
+        if (!btn) return;
+        var value = btn.dataset.copy;
+        navigator.clipboard.writeText(value).then(function () {
+          status.textContent = 'Copied ' + value;
+          btn.style.minWidth = btn.offsetWidth + 'px';
+          btn.textContent = 'Copied';
+          setTimeout(function () {
+            btn.textContent = value;
+            btn.style.minWidth = '';
+          }, 1200);
+        });
+      });
+    })();
+  </script>
+</body>
+
+</html>

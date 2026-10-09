@@ -1,0 +1,28 @@
+/*
+  Message Box: a callout for a note, a tip or a warning, used by the
+  page-builder component of the same name. Each variant keeps the box's shape
+  and changes only its accent, so that the three read as one family.
+*/
+.ss-message {
+    @apply border border-linework border-l-4 border-l-primary rounded p-4 mb-8 bg-primary-light;
+}
+
+.ss-message-title {
+    @apply text-lg text-primary-dark mb-2;
+}
+
+.ss-message > :last-child {
+    @apply mb-0;
+}
+
+.ss-message-tip {
+    @apply bg-neutral-xlight border-l-accent1;
+}
+
+.ss-message-warn {
+    @apply bg-white border-alert;
+}
+
+.ss-message-warn .ss-message-title {
+    @apply text-alert;
+}

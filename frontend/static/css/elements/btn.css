@@ -23,7 +23,7 @@
 }
 
 .btn-accent {
-    @apply bg-accent1 text-white hover:bg-accent1-dark border border-linework;
+    @apply bg-accent1-action text-white hover:bg-accent1-dark border border-linework;
 }
 
 .btn-disabled {

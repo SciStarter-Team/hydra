@@ -1,0 +1,9 @@
+/*
+  Feature Panel: a colored panel from the page builder, whose colors are set
+  by the editor through a class parameter. Its heading takes the panel's text
+  color rather than the site's heading color, which would otherwise vanish on
+  a panel the same color as the headings.
+*/
+.ss-feature-panel > h2 {
+    color: inherit;
+}
