@@ -1068,14 +1068,27 @@ pub struct CreateTriggerForm {
     stored_email_id: String,
     action_type: String,
     delay_seconds: Option<String>,
-    cancellation_trigger_name: Option<String>,
+    #[serde(default)]
+    cancellation_trigger_names: Vec<String>,
     #[serde(default)]
     recipients: Vec<String>,
 }
 
+/// The entries of a multi-valued form field, without the empty one the form
+/// sends so that the field is present even when nothing is chosen.
+fn chosen(values: Vec<String>) -> Vec<String> {
+    values
+        .into_iter()
+        .filter(|value| !value.is_empty())
+        .collect()
+}
+
+// Both trigger forms post their many-valued fields as `name[]`, which needs
+// serde_qs: poem's own Form (serde_urlencoded) cannot read a field into a Vec
+// at all, not even from a single value.
 #[handler]
 async fn email_trigger_create(
-    Form(form): Form<CreateTriggerForm>,
+    QsForm(form): QsForm<CreateTriggerForm>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
@@ -1104,13 +1117,14 @@ async fn email_trigger_create(
         None
     };
 
-    let cancellation_trigger_name = form.cancellation_trigger_name.filter(|s| !s.is_empty());
+    let cancellation_trigger_names = chosen(form.cancellation_trigger_names);
 
-    let recipients = if form.recipients.is_empty() {
+    let recipients = chosen(form.recipients);
+
+    let recipients = if recipients.is_empty() {
         None
     } else {
-        let entries: Vec<serde_json::Value> = form
-            .recipients
+        let entries: Vec<serde_json::Value> = recipients
             .iter()
             .map(|r| recipient_form_value_to_json(r))
             .collect();
@@ -1122,7 +1136,7 @@ async fn email_trigger_create(
         stored_email_id,
         action_type,
         delay_seconds,
-        cancellation_trigger_name,
+        cancellation_trigger_names,
         recipients,
     };
 
@@ -1238,7 +1252,8 @@ pub struct UpdateTriggerForm {
     stored_email_id: Option<String>,
     action_type: Option<String>,
     delay_seconds: Option<String>,
-    cancellation_trigger_name: Option<String>,
+    #[serde(default)]
+    cancellation_trigger_names: Option<Vec<String>>,
     #[serde(default)]
     recipients: Option<Vec<String>>,
     active: Option<String>,
@@ -1247,7 +1262,7 @@ pub struct UpdateTriggerForm {
 #[handler]
 async fn email_trigger_update(
     Path(id): Path<String>,
-    Form(form): Form<UpdateTriggerForm>,
+    QsForm(form): QsForm<UpdateTriggerForm>,
     Authenticated(_user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
     use common::message::email::{
@@ -1290,13 +1305,15 @@ async fn email_trigger_update(
 
     let delay_seconds = form.delay_seconds.and_then(|s| s.parse::<i64>().ok());
 
-    let cancellation_trigger_name = form.cancellation_trigger_name.filter(|s| !s.is_empty());
+    let cancellation_trigger_names = form.cancellation_trigger_names.map(chosen);
 
     let active = form.active.map(|s| s == "true" || s == "1");
 
     let recipients = form.recipients.map(|r| {
-        let entries: Vec<serde_json::Value> =
-            r.iter().map(|v| recipient_form_value_to_json(v)).collect();
+        let entries: Vec<serde_json::Value> = chosen(r)
+            .iter()
+            .map(|v| recipient_form_value_to_json(v))
+            .collect();
         serde_json::to_string(&entries).unwrap_or_default()
     });
 
@@ -1305,7 +1322,7 @@ async fn email_trigger_update(
         stored_email_id,
         action_type,
         delay_seconds,
-        cancellation_trigger_name,
+        cancellation_trigger_names,
         recipients,
         active,
     };

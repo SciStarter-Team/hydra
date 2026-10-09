@@ -3,9 +3,9 @@
     <div class="xl:col-span-3">
         <div class="xl:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Trigger Event</div>
         <div class="text-sm font-medium text-gray-900"><%= self.trigger.trigger_name %></div>
-        <% if let Some(ref cancellation) = self.trigger.cancellation_trigger_name { %>
+        <% if !self.trigger.cancellation_trigger_names.is_empty() { %>
             <div class="text-xs text-gray-500 mt-1">
-                Cancelled by: <%= cancellation %>
+                Cancelled by: <%= self.trigger.cancellation_trigger_names.join(", ") %>
             </div>
         <% } %>
     </div>
@@ -34,6 +34,7 @@
                         <% } else if delay == 604800 { %>1 week
                         <% } else if delay == 1209600 { %>2 weeks
                         <% } else if delay == 1814400 { %>3 weeks
+                        <% } else if delay == 2592000 { %>30 days
                         <% } else { %><%= delay %> seconds<% } %>
                     </span>
                 <% } %>

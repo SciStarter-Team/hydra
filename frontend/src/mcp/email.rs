@@ -211,6 +211,32 @@ fn action_type_arg(arguments: &Value) -> Result<TriggerActionType, Error> {
     }
 }
 
+/// The events named by `name`, an array of trigger names, when it is given.
+/// Each must be one that code raises, or it could never cancel anything.
+fn cancellation_names(arguments: &Value, name: &str) -> Result<Option<Vec<String>>, Error> {
+    let Some(value) = arguments.get(name) else {
+        return Ok(None);
+    };
+
+    let names = value
+        .as_array()
+        .ok_or_else(|| anyhow!("`{name}` must be an array of event names"))?
+        .iter()
+        .map(|entry| {
+            entry
+                .as_str()
+                .map(str::to_string)
+                .ok_or_else(|| anyhow!("`{name}` must hold only event names"))
+        })
+        .collect::<Result<Vec<_>, Error>>()?;
+
+    for name in &names {
+        check_trigger_name(name)?;
+    }
+
+    Ok(Some(names))
+}
+
 /// A trigger fired by an event nothing raises will never send. Checked here
 /// rather than left to discovery in production, where the symptom is silence.
 fn check_trigger_name(name: &str) -> Result<(), Error> {
@@ -245,6 +271,7 @@ async fn tool_list_email_triggers(arguments: Value) -> Result<String, Error> {
                 "stored_email_id": trigger.stored_email_id.to_string(),
                 "action_type": trigger.action_type.as_str(),
                 "delay_seconds": trigger.delay_seconds,
+                "cancellation_trigger_names": trigger.cancellation_trigger_names,
                 "recipients": trigger.recipients,
                 "active": trigger.active,
             })
@@ -267,7 +294,11 @@ async fn tool_create_email_trigger(arguments: Value) -> Result<String, Error> {
             stored_email_id: ulid_arg(&arguments, "stored_email_id")?,
             action_type: action_type_arg(&arguments)?,
             delay_seconds: arguments.get("delay_seconds").and_then(Value::as_i64),
-            cancellation_trigger_name: optional_string(&arguments, "cancellation_trigger_name"),
+            cancellation_trigger_names: cancellation_names(
+                &arguments,
+                "cancellation_trigger_names",
+            )?
+            .unwrap_or_default(),
             recipients: optional_string(&arguments, "recipients"),
         },
     )
@@ -296,7 +327,10 @@ async fn tool_update_email_trigger(arguments: Value) -> Result<String, Error> {
             stored_email_id,
             action_type,
             delay_seconds: arguments.get("delay_seconds").and_then(Value::as_i64),
-            cancellation_trigger_name: optional_string(&arguments, "cancellation_trigger_name"),
+            cancellation_trigger_names: cancellation_names(
+                &arguments,
+                "cancellation_trigger_names",
+            )?,
             recipients: optional_string(&arguments, "recipients"),
             active: arguments.get("active").and_then(Value::as_bool),
         },
@@ -465,7 +499,7 @@ pub fn tool_definitions() -> Vec<Value> {
                     "stored_email_id": { "type": "string", "description": "ULID of the stored email to send" },
                     "action_type": { "type": "string", "enum": ["immediate", "delayed"], "description": "Send at once, or after delay_seconds (default immediate)" },
                     "delay_seconds": { "type": "integer", "description": "Required for action_type 'delayed'" },
-                    "cancellation_trigger_name": { "type": "string", "description": "Optional event that cancels a pending delayed send" },
+                    "cancellation_trigger_names": { "type": "array", "items": { "type": "string" }, "description": "Optional events, any one of which cancels the user's pending delayed send and stops one being scheduled for them afterwards" },
                     "recipients": { "type": "string", "description": "Optional recipient override; omit to send to the user the event names" }
                 },
                 "required": ["trigger_name", "stored_email_id"]
@@ -481,7 +515,7 @@ pub fn tool_definitions() -> Vec<Value> {
                     "stored_email_id": { "type": "string" },
                     "action_type": { "type": "string", "enum": ["immediate", "delayed"] },
                     "delay_seconds": { "type": "integer" },
-                    "cancellation_trigger_name": { "type": "string" },
+                    "cancellation_trigger_names": { "type": "array", "items": { "type": "string" }, "description": "Replaces the trigger's cancelling events; [] clears them" },
                     "recipients": { "type": "string" },
                     "active": { "type": "boolean" }
                 },

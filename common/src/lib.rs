@@ -11,6 +11,7 @@ pub mod insensitivestring;
 pub mod linked_platform;
 pub mod message;
 pub mod organizations;
+pub mod primary;
 #[cfg(feature = "database")]
 pub mod misc;
 #[cfg(feature = "database")]

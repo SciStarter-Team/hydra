@@ -30,6 +30,7 @@ enum SkipReason {
     OptedOut,
     Invalid,
     Failed,
+    NotPrimary,
 }
 
 /// Reject addresses whose domain has no TLD component (e.g. `user@clever`,
@@ -336,6 +337,26 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
             offer_unsubscribe.then_some(unsubscribe_url.as_str()),
         );
 
+        // Everything up to here runs whether or not this build is the
+        // primary, so that a send exercises the whole path; only handing the
+        // message to SES is withheld, since orrery is sending its own copy.
+        if !common::primary::PRIMARY {
+            tracing::info!(
+                email = %email_address,
+                subject = %merged_subject,
+                sending_id = %item.sending_id,
+                "Not the primary server, so not sending"
+            );
+            let queue_id = item
+                .queue_id
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("queue_id is NULL"))?;
+            record_skip(queue_id, &item.sending_id, &email_address, "not_primary").await?;
+            delete_from_queue(queue_id).await?;
+            update_sending_skipped(&item.sending_id, SkipReason::NotPrimary).await?;
+            return Ok(true);
+        }
+
         // Wait for rate limit and quota
         wait_until_can_send().await;
 
@@ -607,6 +628,17 @@ async fn update_sending_skipped(sending_id: &str, reason: SkipReason) -> Result<
                 r#"UPDATE sendings
                    SET messages_skipped = messages_skipped + 1,
                        send_failed = send_failed + 1
+                   WHERE sending_id = ?"#,
+                sending_id
+            )
+            .execute(db())
+            .await?;
+        }
+        SkipReason::NotPrimary => {
+            sqlx::query!(
+                r#"UPDATE sendings
+                   SET messages_skipped = messages_skipped + 1,
+                       skipped_not_primary = skipped_not_primary + 1
                    WHERE sending_id = ?"#,
                 sending_id
             )

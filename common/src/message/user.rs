@@ -2160,6 +2160,7 @@ mod tests {
             disabled_password: false,
             badgeclass: None,
             attribution: attribution.clone(),
+            pending_transitions: vec![],
         };
 
         let decoded: Signup =

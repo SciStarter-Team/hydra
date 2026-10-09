@@ -65,6 +65,7 @@ struct SendingRow {
     skipped_opted_out: i64,
     skipped_invalid: i64,
     send_failed: i64,
+    skipped_not_primary: i64,
 }
 
 /// List sendings with pagination
@@ -103,7 +104,7 @@ pub async fn handle_list_sendings(req: &Request) -> Result<ListSendingsResponse,
                   messages_bounced, unsubscribes, complaints,
                   skipped_unsubscribed, skipped_bounced, skipped_complained,
                   skipped_unverified, skipped_opted_out, skipped_invalid,
-                  send_failed
+                  send_failed, skipped_not_primary
            FROM sendings
            WHERE total_queued >= ?1
              AND (?2 IS NULL OR created_at >= ?2)
@@ -145,6 +146,7 @@ pub async fn handle_list_sendings(req: &Request) -> Result<ListSendingsResponse,
             skipped_opted_out: row.skipped_opted_out as u32,
             skipped_invalid: row.skipped_invalid as u32,
             send_failed: row.send_failed as u32,
+            skipped_not_primary: row.skipped_not_primary as u32,
         });
     }
 
@@ -163,7 +165,7 @@ pub async fn handle_get_sending(req: &Request) -> Result<GetSendingResponse, Err
                   messages_bounced, unsubscribes, complaints,
                   skipped_unsubscribed, skipped_bounced, skipped_complained,
                   skipped_unverified, skipped_opted_out, skipped_invalid,
-                  send_failed
+                  send_failed, skipped_not_primary
            FROM sendings
            WHERE sending_id = ?"#,
         sending_id_str
@@ -199,6 +201,7 @@ pub async fn handle_get_sending(req: &Request) -> Result<GetSendingResponse, Err
         skipped_opted_out: row.skipped_opted_out as u32,
         skipped_invalid: row.skipped_invalid as u32,
         send_failed: row.send_failed as u32,
+        skipped_not_primary: row.skipped_not_primary as u32,
     };
 
     Ok(GetSendingResponse { metrics })

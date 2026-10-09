@@ -157,6 +157,10 @@ pub struct SendingMetrics {
     pub skipped_opted_out: u32,
     pub skipped_invalid: u32,
     pub send_failed: u32,
+    /// Withheld because this build is not the primary server; see
+    /// `common::primary`.
+    #[serde(default)]
+    pub skipped_not_primary: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -488,6 +492,15 @@ pub struct TriggerEmailRequest {
     /// user would skip.
     #[serde(default)]
     pub address: Option<String>,
+    /// When the event happened, for an event that is being replayed rather
+    /// than happening now: the sync passes on orrery's history this way.
+    ///
+    /// A replayed event sends nothing immediately -- orrery sent whatever that
+    /// was owed at the time -- and a delayed binding counts its delay from
+    /// here, so a send that would already be overdue is not scheduled at all.
+    /// None means the event is happening now.
+    #[serde(default)]
+    pub occurred_at: Option<TimeString>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -505,7 +518,10 @@ pub struct TriggerInfo {
     pub stored_email_id: Ulid,
     pub action_type: TriggerActionType,
     pub delay_seconds: Option<i64>,
-    pub cancellation_trigger_name: Option<String>,
+    /// Events any one of which cancels this binding's pending send for the
+    /// user it happens to, and stops one being scheduled afterwards.
+    #[serde(default)]
+    pub cancellation_trigger_names: Vec<String>,
     pub recipients: Option<String>,
     pub active: bool,
     pub created_at: TimeString,
@@ -518,7 +534,8 @@ pub struct CreateTriggerRequest {
     pub stored_email_id: Ulid,
     pub action_type: TriggerActionType,
     pub delay_seconds: Option<i64>,
-    pub cancellation_trigger_name: Option<String>,
+    #[serde(default)]
+    pub cancellation_trigger_names: Vec<String>,
     pub recipients: Option<String>,
 }
 
@@ -533,7 +550,9 @@ pub struct UpdateTriggerRequest {
     pub stored_email_id: Option<Ulid>,
     pub action_type: Option<TriggerActionType>,
     pub delay_seconds: Option<i64>,
-    pub cancellation_trigger_name: Option<String>,
+    /// Replaces the binding's cancellation events when present.
+    #[serde(default)]
+    pub cancellation_trigger_names: Option<Vec<String>>,
     pub recipients: Option<String>,
     pub active: Option<bool>,
 }

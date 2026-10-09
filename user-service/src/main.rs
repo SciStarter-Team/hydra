@@ -3,9 +3,9 @@ use std::{collections::BTreeMap, time::Duration};
 use async_nats::service::ServiceExt;
 use common::{
     handler,
-    message::user::Session,
+    message::{dashboard::AmbassadorAppStatus, user::Session},
     misc, recv_handler,
-    service::log_activity,
+    service::{TriggerEvent, log_activity, replay_trigger},
     shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower, nats},
     timestring::TimeString,
     ulid::AsUlid,
@@ -478,6 +478,30 @@ async fn users_synchronize() {
 
             let user_date_active = TimeString::try_from(user.date_active).ok();
 
+            let is_new = sqlx::query_scalar!(
+                r#"SELECT NOT EXISTS (SELECT 1 FROM "users" WHERE "user_id" = ?) AS "new!: bool""#,
+                user.ulid
+            )
+            .fetch_one(db)
+            .await
+            .expect("Checking for an existing user failed");
+
+            // A new account is passed on as the signup it was, welcome and all,
+            // at the time it joined: chosen by its signup tags as a signup here
+            // chooses, so that the delayed emails bound to it are scheduled as
+            // they would have been had it joined here.
+            let joined = is_new.then(|| {
+                let tags: Vec<String> = constant_contact::decode_tags(&user.signup_tags)
+                    .into_iter()
+                    .collect();
+
+                (
+                    common::message::user::welcome_trigger_for_signup(&tags)
+                        .unwrap_or(TriggerEvent::UserWelcome),
+                    user_date_joined.clone(),
+                )
+            });
+
             // I would really like to see keyword parameters in SQLx
             // for DBs that support them.
             //
@@ -816,6 +840,12 @@ async fn users_synchronize() {
             .execute(db)
             .await
             .expect("Saving user failed");
+
+            if let (Some((welcome, when)), Ok(user_id)) = (joined, user.ulid.as_ulid()) {
+                if let Err(e) = replay_trigger(welcome, user_id, when).await {
+                    eprintln!("Failed to replay the signup of user {}: {e}", user.ulid);
+                }
+            }
 
             if let Some(stamp) = user.last_login {
                 log_activity(
@@ -1266,6 +1296,8 @@ async fn userbadges_synchronize() {
         when: String, // ISO 8601 timestamp string
         user_ulid: String,
         name: String,
+        #[serde(default)]
+        in_arrears: bool,
     }
 
     loop {
@@ -1352,16 +1384,54 @@ async fn userbadges_synchronize() {
 
             // Insert the badge into the database
             let result = sqlx::query!(
-                r#"insert into "user_badges" ("user_id", "badgeclass", "when")
-                   values (?, ?, ?)
+                r#"insert into "user_badges" ("user_id", "badgeclass", "when", "in_arrears")
+                   values (?, ?, ?, ?)
                    on conflict ("user_id", "badgeclass") do nothing"#,
                 badge.user_ulid,
                 badge.badgeclass,
                 badge_when,
+                badge.in_arrears,
             )
             .execute(db)
             .await
             .expect("Saving user badge failed");
+
+            // The flag is the one thing about an existing badge the sync
+            // corrects: orrery sets it once, at the award, but badges awarded
+            // before the sync carried it arrived without it.
+            if result.rows_affected() == 0 {
+                sqlx::query!(
+                    r#"update "user_badges" set "in_arrears" = ?
+                       where "user_id" = ? and "badgeclass" = ? and "in_arrears" <> ?"#,
+                    badge.in_arrears,
+                    badge.user_ulid,
+                    badge.badgeclass,
+                    badge.in_arrears,
+                )
+                .execute(db)
+                .await
+                .expect("Correcting user badge failed");
+            }
+
+            // A badge new to hydra is passed on as the event its award was, at
+            // the time of the award, so that the delayed emails bound to it are
+            // scheduled as they would have been had it been earned here. Not
+            // for a badge awarded in arrears, which is no fresh achievement.
+            // Fired whether or not the account has arrived yet: a scheduled
+            // send needs the account only when it falls due.
+            if result.rows_affected() > 0 && !badge.in_arrears {
+                let event = match badge.badgeclass.as_str() {
+                    "6Jg_IwmfQTaJ2kUNePsO5Q" => Some(TriggerEvent::BadgeFoundations),
+                    "9csPkdhzQLSZuk-OWREaKg" => Some(TriggerEvent::BadgeAmbassador),
+                    _ => None,
+                };
+
+                if let (Some(event), Ok(user_id)) = (event, badge.user_ulid.as_ulid()) {
+                    if let Err(e) = replay_trigger(event, user_id, badge_when.clone()).await {
+                        eprintln!("Failed to replay {event} for user {}: {e}", badge.user_ulid);
+                    }
+                }
+            }
 
             // Log the badge earning activity
             log_activity(
@@ -1883,7 +1953,7 @@ async fn certificates_synchronize() {
             let certificate_id = Ulid::new().to_string();
 
             // INSERT OR IGNORE deduplicates on (user_id, project, mode)
-            if let Err(e) = sqlx::query!(
+            let inserted = match sqlx::query!(
                 r#"INSERT OR IGNORE INTO certificates (certificate_id, created_at, user_id, project, mode)
                    VALUES (?, ?, ?, ?, ?)"#,
                 certificate_id,
@@ -1895,10 +1965,40 @@ async fn certificates_synchronize() {
             .execute(db())
             .await
             {
-                eprintln!(
-                    "Failed to save certificate for user {}: {}",
-                    cert.user_ulid, e
-                );
+                Ok(result) => result.rows_affected() > 0,
+                Err(e) => {
+                    eprintln!(
+                        "Failed to save certificate for user {}: {}",
+                        cert.user_ulid, e
+                    );
+                    false
+                }
+            };
+
+            // orrery issues the Champion certificate as the Champion training
+            // completes, once per person, so a new one is that completion:
+            // passed on at its time, for the delayed emails bound to it.
+            if inserted && cert.mode == "champion" && cert.project.is_empty() {
+                match (
+                    cert.user_ulid.as_ulid(),
+                    TimeString::try_from(cert.when.clone()),
+                ) {
+                    (Ok(user_id), Ok(when)) => {
+                        if let Err(e) =
+                            replay_trigger(TriggerEvent::AmbassadorTrainingComplete, user_id, when)
+                                .await
+                        {
+                            eprintln!(
+                                "Failed to replay Champion training completion for user {}: {e}",
+                                cert.user_ulid
+                            );
+                        }
+                    }
+                    _ => eprintln!(
+                        "Unreadable Champion certificate for user {} at {}",
+                        cert.user_ulid, cert.when
+                    ),
+                }
             }
         }
 
@@ -2064,6 +2164,13 @@ async fn apply_foundations_state(
     .execute(db)
     .await?;
 
+    let had_tutorial = sqlx::query_scalar!(
+        r#"SELECT hour1_completed_at IS NOT NULL AS "done!: bool" FROM foundations_progress WHERE user_id = ?"#,
+        user_id
+    )
+    .fetch_one(db)
+    .await?;
+
     match state {
         "hour1" => {
             sqlx::query!(
@@ -2115,7 +2222,19 @@ async fn apply_foundations_state(
                 ts, user_id
             ).execute(db).await?;
         }
-        _ => {}
+        _ => return Ok(()),
+    }
+
+    // Every state above implies the tutorial. Its completion is what makes a
+    // nudge to start Foundations moot, so it is passed on, at its time, the
+    // first time the sync sees it.
+    if !had_tutorial {
+        replay_trigger(
+            TriggerEvent::FoundationsTutorial,
+            user_id.as_ulid()?,
+            TimeString::try_from(ts.to_string())?,
+        )
+        .await?;
     }
 
     Ok(())
@@ -2745,6 +2864,17 @@ async fn applications_synchronize() {
                 break;
             }
 
+            replay_application_events(
+                &application.user_ulid,
+                ApplicationFacts {
+                    submitted: (!application.draft).then_some(application.submitted.as_str()),
+                    orientation_recorded: application.orientation.is_some(),
+                    app_status: AmbassadorAppStatus::from_i64(application.app_status.into()),
+                    updated: &application.updated,
+                },
+            )
+            .await;
+
             if application.updated > bookmark
                 || (application.updated == bookmark && application.id > bookmark_id)
             {
@@ -2771,6 +2901,76 @@ async fn applications_synchronize() {
             sleep(Duration::from_secs(60)).await;
         } else {
             sleep(Duration::from_secs(60 * 60)).await;
+        }
+    }
+}
+
+/// What an application synced from orrery says has happened, as far as the
+/// events hydra raises for it go.
+struct ApplicationFacts<'a> {
+    /// When it was submitted, if it is not a draft.
+    submitted: Option<&'a str>,
+    orientation_recorded: bool,
+    app_status: AmbassadorAppStatus,
+    /// The date orrery last changed it: the nearest it records to when the
+    /// orientation, promotion or demotion happened.
+    updated: &'a str,
+}
+
+/// Pass on what a synced application says has happened, as the events a
+/// review here would have raised, so that the delayed emails they cancel are
+/// cancelled -- or never scheduled -- as they would have been here.
+///
+/// Raised on every pass that reads the application. Each is idempotent: the
+/// emailer notes an event once per user, and cancelling what is already gone
+/// does nothing.
+async fn replay_application_events(user_ulid: &str, facts: ApplicationFacts<'_>) {
+    let Ok(user_id) = user_ulid.as_ulid() else {
+        eprintln!("Unreadable user id on synced application: {user_ulid}");
+        return;
+    };
+
+    // `updated` is a date. Counted from the start of its day.
+    let updated = TimeString::try_from(format!("{}T00:00:00Z", facts.updated)).ok();
+
+    let mut events = Vec::new();
+
+    if let Some(submitted) = facts.submitted {
+        match TimeString::try_from(submitted.to_string()) {
+            Ok(when) => events.push((TriggerEvent::AmbassadorApplicationSubmitted, when)),
+            Err(e) => eprintln!("Unreadable submission time {submitted:?} for {user_ulid}: {e}"),
+        }
+    }
+
+    let later = [
+        (
+            facts.orientation_recorded,
+            TriggerEvent::AmbassadorOrientationRecorded,
+        ),
+        (
+            facts.app_status == AmbassadorAppStatus::Ambassador,
+            TriggerEvent::AmbassadorPromoted,
+        ),
+        (
+            facts.app_status == AmbassadorAppStatus::Champion,
+            TriggerEvent::AmbassadorDemoted,
+        ),
+    ];
+
+    for (happened, event) in later {
+        if !happened {
+            continue;
+        }
+
+        match &updated {
+            Some(when) => events.push((event, when.clone())),
+            None => eprintln!("Unreadable update date {:?} for {user_ulid}", facts.updated),
+        }
+    }
+
+    for (event, when) in events {
+        if let Err(e) = replay_trigger(event, user_id, when).await {
+            eprintln!("Failed to replay {event} for user {user_ulid}: {e}");
         }
     }
 }

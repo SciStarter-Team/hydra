@@ -69,33 +69,29 @@ const TAG_ID_KEY: &str = "constant-contact-tags";
 const TOKEN_KEY: &str = "constant-contact-token";
 const TOKEN_EXPIRY_KEY: &str = "constant-contact-token-expires";
 
-/// Whether this service, rather than orrery, is the one pushing to Constant
-/// Contact.
-///
-/// Their request allowance is per API key, so the two share it. Two sweeps
-/// against one budget would contend and double-spend, so exactly one of them
-/// pushes at a time.
-///
-/// Flipping this to `true` is one step of a cutover that also needs:
-///
-/// * orrery's `sweep_constant_contact` task unscheduled, so it stops pushing;
-/// * `CONSTANTCONTACT_KEY`, `CONSTANTCONTACT_SECRET` and
-///   `CONSTANTCONTACT_TOKEN` in this service's environment;
-/// * and every account flagged once, because orrery may have pushed something
-///   whose digest never reached us through the user sync:
-///
-///   ```sql
-///   UPDATE users SET constant_contact_dirty = 1;
-///   ```
-///
-///   Safe and self-limiting rather than a month of re-sending: the digest
-///   comparison suppresses every unchanged account before any request is made,
-///   so only genuinely stale records cost anything.
-///
-/// A const rather than an environment variable on purpose. The cutover means a
-/// deploy regardless, and a switch that lives beside the thing it governs is
-/// harder to forget than one in a config file.
-const PRIMARY: bool = false;
+// Whether this service, rather than orrery, is the one pushing to Constant
+// Contact: whether this build is the primary (see `common::primary`).
+//
+// Their request allowance is per API key, so the two share it. Two sweeps
+// against one budget would contend and double-spend, so exactly one of them
+// pushes at a time.
+//
+// Becoming the primary, as far as Constant Contact is concerned, also needs:
+//
+// * orrery's `sweep_constant_contact` task unscheduled, so it stops pushing;
+// * `CONSTANTCONTACT_KEY`, `CONSTANTCONTACT_SECRET` and
+//   `CONSTANTCONTACT_TOKEN` in this service's environment;
+// * and every account flagged once, because orrery may have pushed something
+//   whose digest never reached us through the user sync:
+//
+//   ```sql
+//   UPDATE users SET constant_contact_dirty = 1;
+//   ```
+//
+//   Safe and self-limiting rather than a month of re-sending: the digest
+//   comparison suppresses every unchanged account before any request is made,
+//   so only genuinely stale records cost anything.
+use common::primary::PRIMARY;
 
 /// Constant Contact allows five hundred tags per account. Stopping short of
 /// that leaves room for tags staff make by hand, and means a runaway prefix

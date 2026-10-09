@@ -765,6 +765,17 @@ pub enum TriggerEvent {
     /// Sent when an ambassador applicant is outside the US (international)
     AmbassadorInternational,
 
+    /// When staff first record an accepted Ambassador's orientation date.
+    /// Raised to cancel the onboarding reminder rather than to send anything.
+    AmbassadorOrientationRecorded,
+
+    /// When someone is made an Ambassador outright, past acceptance.
+    AmbassadorPromoted,
+
+    /// When an applicant or Ambassador is demoted to Champion, as for a
+    /// hiatus.
+    AmbassadorDemoted,
+
     /// Sent when Foundations tutorial is completed
     FoundationsTutorial,
 
@@ -863,6 +874,11 @@ impl TriggerEvent {
             Self::AmbassadorApplicationSubmitted => "When an ambassador application is submitted",
             Self::AmbassadorRejected => "When an ambassador application is rejected",
             Self::AmbassadorInternational => "When an ambassador applicant is international",
+            Self::AmbassadorOrientationRecorded => {
+                "When an accepted Ambassador's orientation date is first recorded"
+            }
+            Self::AmbassadorPromoted => "When someone is made an Ambassador",
+            Self::AmbassadorDemoted => "When someone is demoted to Champion",
             Self::FoundationsTutorial => "When Foundations tutorial is completed",
             Self::FoundationsSquirrel => "When Squirrel Mapper project is completed (Foundations)",
             Self::FoundationsStall => "When Stall Catchers project is completed (Foundations)",
@@ -918,7 +934,10 @@ impl TriggerEvent {
             Self::AmbassadorTrainingComplete
             | Self::AmbassadorApplicationSubmitted
             | Self::AmbassadorRejected
-            | Self::AmbassadorInternational => "ambassador",
+            | Self::AmbassadorInternational
+            | Self::AmbassadorOrientationRecorded
+            | Self::AmbassadorPromoted
+            | Self::AmbassadorDemoted => "ambassador",
             Self::FoundationsTutorial
             | Self::FoundationsSquirrel
             | Self::FoundationsStall
@@ -966,7 +985,19 @@ pub async fn trigger_email(
     user_id: ulid::Ulid,
     additional_data: Option<&[(String, String)]>,
 ) -> Result<(), anyhow::Error> {
-    send_trigger(trigger, user_id, additional_data, None).await
+    send_trigger(trigger, user_id, additional_data, None, None).await
+}
+
+/// Replay an event that happened at `occurred_at`, for a sync passing on what
+/// already happened elsewhere. It sends nothing immediately, but it schedules
+/// any delayed email the event is bound to, counted from when it happened, and
+/// it cancels what the event cancels. See `TriggerEmailRequest::occurred_at`.
+pub async fn replay_trigger(
+    trigger: TriggerEvent,
+    user_id: ulid::Ulid,
+    occurred_at: crate::timestring::TimeString,
+) -> Result<(), anyhow::Error> {
+    send_trigger(trigger, user_id, None, None, Some(occurred_at)).await
 }
 
 /// Fire a trigger whose email must reach the user at one particular address,
@@ -978,7 +1009,7 @@ pub async fn trigger_email_to_address(
     address: &str,
     additional_data: Option<&[(String, String)]>,
 ) -> Result<(), anyhow::Error> {
-    send_trigger(trigger, user_id, additional_data, Some(address)).await
+    send_trigger(trigger, user_id, additional_data, Some(address), None).await
 }
 
 async fn send_trigger(
@@ -986,6 +1017,7 @@ async fn send_trigger(
     user_id: ulid::Ulid,
     additional_data: Option<&[(String, String)]>,
     address: Option<&str>,
+    occurred_at: Option<crate::timestring::TimeString>,
 ) -> Result<(), anyhow::Error> {
     send(
         "emailer.trigger",
@@ -994,6 +1026,7 @@ async fn send_trigger(
             user_id,
             additional_data: additional_data.map(|slice| slice.to_vec()),
             address: address.map(str::to_string),
+            occurred_at,
         },
     )
     .await

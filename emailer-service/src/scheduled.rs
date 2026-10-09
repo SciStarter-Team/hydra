@@ -10,7 +10,10 @@ use common::{
 };
 use ulid::Ulid;
 
-/// Core logic for scheduling an email send
+/// Core logic for scheduling an email send.
+///
+/// A user has at most one send pending under any one hook, so scheduling
+/// again while one waits changes nothing and returns None.
 pub async fn schedule_send(
     user_id: Ulid,
     hook: String,
@@ -22,7 +25,7 @@ pub async fn schedule_send(
     recipients: Option<String>,
     reply_to: Option<Vec<String>>,
     no_unsubscribe: bool,
-) -> Result<Ulid, Error> {
+) -> Result<Option<Ulid>, Error> {
     let scheduled_id = Ulid::new();
     let created_at = TimeString::now();
 
@@ -35,10 +38,11 @@ pub async fn schedule_send(
         .map(|addresses| serde_json::to_string(&addresses))
         .transpose()?;
 
-    sqlx::query!(
+    let inserted = sqlx::query!(
         r#"INSERT INTO scheduled_sends
            (scheduled_id, user_id, hook, scheduled_time, template_html, subject, data_sets, additional_data, recipients, reply_to, no_unsubscribe, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT (user_id, hook) DO NOTHING"#,
         scheduled_id_str,
         user_id_str,
         hook,
@@ -53,7 +57,17 @@ pub async fn schedule_send(
         created_at
     )
     .execute(db())
-    .await?;
+    .await?
+    .rows_affected();
+
+    if inserted == 0 {
+        tracing::info!(
+            user_id = %user_id,
+            hook = %hook,
+            "A send is already pending for this user and hook"
+        );
+        return Ok(None);
+    }
 
     tracing::info!(
         scheduled_id = %scheduled_id,
@@ -63,7 +77,7 @@ pub async fn schedule_send(
         "Email scheduled"
     );
 
-    Ok(scheduled_id)
+    Ok(Some(scheduled_id))
 }
 
 /// Handler for scheduling an email send
@@ -71,7 +85,9 @@ pub async fn schedule_send(
 pub async fn handle_schedule_send(req: &Request) -> Result<ScheduleSendResponse, Error> {
     let request: ScheduleSendRequest = flexbuffers::from_slice(&req.message.payload)?;
 
-    let scheduled_id = schedule_send(
+    let hook = request.hook.clone();
+
+    let scheduled_id = match schedule_send(
         request.user_id,
         request.hook,
         request.scheduled_time,
@@ -83,7 +99,23 @@ pub async fn handle_schedule_send(req: &Request) -> Result<ScheduleSendResponse,
         request.reply_to,
         request.no_unsubscribe,
     )
-    .await?;
+    .await?
+    {
+        Some(scheduled_id) => scheduled_id,
+        // The send already waiting under this hook is the one that stands.
+        None => {
+            let user_id_str = request.user_id.to_string();
+
+            sqlx::query_scalar!(
+                r#"SELECT scheduled_id FROM scheduled_sends WHERE user_id = ? AND hook = ?"#,
+                user_id_str,
+                hook
+            )
+            .fetch_one(db())
+            .await?
+            .parse()?
+        }
+    };
 
     Ok(ScheduleSendResponse { scheduled_id })
 }

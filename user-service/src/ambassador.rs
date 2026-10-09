@@ -1088,6 +1088,15 @@ pub async fn review(req: &Request) -> Result<(), Error> {
     let update: AmbassadorReviewUpdate = decode_structured_message(req.message.clone())?;
     let user_id_str = update.user_id.to_string();
 
+    // What the application said before this edit, to tell which of the
+    // review's events it is the moment of.
+    let before = sqlx::query!(
+        r#"SELECT "orientation", "app_status" FROM "ambassador_applications" WHERE "user_id" = ?"#,
+        user_id_str
+    )
+    .fetch_optional(db())
+    .await?;
+
     sqlx::query!(
         r#"UPDATE "ambassador_applications" SET
             "marked" = ?, "archived" = ?, "hidden" = ?, "draft" = ?, "cohort" = ?,
@@ -1124,6 +1133,27 @@ pub async fn review(req: &Request) -> Result<(), Error> {
         update.verified.is_some(),
     )
     .await?;
+
+    // Events that send nothing of their own, but cancel the reminder an
+    // accepted Ambassador gets while their onboarding is unfinished.
+    let had_orientation = before.as_ref().is_some_and(|row| row.orientation.is_some());
+
+    if update.orientation.is_some() && !had_orientation {
+        trigger_email(
+            TriggerEvent::AmbassadorOrientationRecorded,
+            update.user_id,
+            None,
+        )
+        .await?;
+    }
+
+    let was_champion = before.as_ref().is_some_and(|row| {
+        AmbassadorAppStatus::from_i64(row.app_status) == AmbassadorAppStatus::Champion
+    });
+
+    if update.app_status == AmbassadorAppStatus::Champion && !was_champion {
+        trigger_email(TriggerEvent::AmbassadorDemoted, update.user_id, None).await?;
+    }
 
     Ok(())
 }
@@ -1309,13 +1339,19 @@ async fn apply_review_effects(
     // demote). Recorded on the user record so it drives the public directory,
     // the map, and the profile "Ambassador" chip.
     if in_directory {
-        sqlx::query!(
-            "UPDATE users SET ambassador = COALESCE(ambassador, ?) WHERE user_id = ?",
+        let joined = sqlx::query!(
+            "UPDATE users SET ambassador = ? WHERE user_id = ? AND ambassador IS NULL",
             now,
             user_id_str
         )
         .execute(db())
-        .await?;
+        .await?
+        .rows_affected()
+            > 0;
+
+        if joined {
+            trigger_email(TriggerEvent::AmbassadorPromoted, user_id, None).await?;
+        }
 
         // Orrery grants this in `passed_enter`, beside the same timestamp.
         send(

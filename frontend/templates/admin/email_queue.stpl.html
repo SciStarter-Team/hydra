@@ -96,6 +96,7 @@
                                     <% if sending.skipped_opted_out > 0 { %><li>opted out: <%= sending.skipped_opted_out %></li><% } %>
                                     <% if sending.skipped_invalid > 0 { %><li>invalid address: <%= sending.skipped_invalid %></li><% } %>
                                     <% if sending.send_failed > 0 { %><li>delivery failed: <%= sending.send_failed %></li><% } %>
+                                    <% if sending.skipped_not_primary > 0 { %><li>withheld (orrery is primary): <%= sending.skipped_not_primary %></li><% } %>
                                 </ul>
                             <% } %>
                         </div>
