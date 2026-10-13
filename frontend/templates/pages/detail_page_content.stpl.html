@@ -208,6 +208,11 @@
       <%+ crate::component::detail_page_edit::ManagersDisplay { target_id: self.target_id.clone(), managers: self.managers.clone(), can_edit: self.can_edit, error: None } %>
       <% } %>
 
+      <%/* Facebook promotion answers — private, editors only (never public) */%>
+      <% if self.can_edit && self.kind.is_event() { %>
+      <%+ crate::component::detail_page_edit::FacebookEventDisplay { target_id: self.target_id.clone(), facebook_event: self.facebook_event.clone(), refused: None } %>
+      <% } %>
+
       <%/* More Info accordion (project only) */%>
       <% if self.kind.is_project() { %>
       <% let has_more_info = self.can_edit || !self.video_url.is_empty() || !self.total_expense.is_empty() || !self.time_per_participation.is_empty() || !self.audiences.is_empty() || !self.participation_schedule.is_empty() || !self.mobile_app_url.is_empty() || !self.mobile_app_url_ios.is_empty() || !self.mobile_app_url_android.is_empty() || !self.training_materials.is_empty() || !self.classroom_materials.is_empty() || !self.participant_files.is_empty() || !self.twitter_name.is_empty() || !self.facebook_page.is_empty() || !self.instagram_page.is_empty(); %>

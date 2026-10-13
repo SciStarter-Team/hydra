@@ -1,0 +1,44 @@
+<% use crate::component::facebook_questions::FacebookQuestions; %>
+<% use crate::component::floating_field::FormError; %>
+<% use crate::event::facebook::FacebookEvent; %>
+<% let error = self.refused.as_ref().map(|refused| &refused.error); %>
+<div id="event-facebook" class="edit-only border border-sky-300 rounded-sm bg-sky-50 mb-4">
+  <dl>
+    <dt class="flex items-center gap-2 px-4 py-2 bg-sky-800 text-white font-semibold tracking-wide rounded-t-sm">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 shrink-0" aria-hidden="true"><path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+      Facebook promotion <span class="text-xs font-normal opacity-90">(private)</span>
+    </dt>
+    <dd class="p-4 space-y-3">
+      <p class="text-sm">
+      <% match &self.facebook_event { FacebookEvent::Unanswered => { %>
+        Not answered.
+      <% } FacebookEvent::Exists { url: Some(url) } => { %>
+        The event has a Facebook event for SciStarter to share: <a href="<%= url %>" class="underline break-all" rel="noopener" target="_blank"><%= url %></a>
+      <% } FacebookEvent::Exists { url: None } => { %>
+        The event has a Facebook event, but no link was given.
+      <% } FacebookEvent::Missing { create_requested: Some(true) } => { %>
+        The event has no Facebook event, and the organizer would like SciStarter to create one.
+      <% } FacebookEvent::Missing { create_requested: Some(false) } => { %>
+        The event has no Facebook event, and the organizer doesn't want SciStarter to create one.
+      <% } FacebookEvent::Missing { create_requested: None } => { %>
+        The event has no Facebook event; the organizer didn't say whether SciStarter should create one.
+      <% } } %>
+      </p>
+
+      <% if let Some(error) = error { %>
+      <p class="text-sm text-red-600" id="<%= FormError::ELEMENT_ID %>"><%= &error.message %></p>
+      <% } %>
+
+      <details class="mt-2"<% if error.is_some() { %> open<% } %>>
+        <summary class="btn btn-secondary btn-xs cursor-pointer">Change</summary>
+        <form class="mt-2 p-3 border border-sky-300 rounded-sm bg-white flex flex-col gap-3"
+              hx-put="/-detail/<%= &self.target_id %>/facebook"
+              hx-target="#event-facebook"
+              hx-swap="outerHTML">
+          <%+ FacebookQuestions { answers: self.form_answers(), error } %>
+          <div><button type="submit" class="btn btn-primary btn-xs">Save</button></div>
+        </form>
+      </details>
+    </dd>
+  </dl>
+</div>

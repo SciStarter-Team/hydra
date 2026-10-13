@@ -5,7 +5,8 @@
 //! Champion tutorial. The form prefills from the user's saved application and
 //! profile; a lax draft autosave writes with `draft = true`, and final submit
 //! validates (required fields, email, age >= 18, signature date) then calls
-//! `user.ambassador.submit` (which stamps `submitted` and tags the user).
+//! `user.ambassador.submit` (which stamps `submitted` and tags the user) and
+//! redirects to the confirmation page ([`confirmation`]).
 //!
 //! Applications open periodically; [`APPLICATIONS_OPEN`] gates the submit
 //! control (the champion page copy mirrors this). Flip it when applications
@@ -29,7 +30,7 @@ use crate::component::{Component, Head, StandardLayout};
 use crate::middleware::authorization::Authenticated;
 use crate::training::fetch_status;
 
-use super::APPLY_PATH;
+use super::{APPLY_PATH, SUBMITTED_PATH};
 
 /// Whether the Ambassador program is currently accepting applications. When
 /// false the form still renders (and drafts save) but the submit control is
@@ -456,7 +457,7 @@ pub async fn submit(
     }
 
     let _: () = request("user.ambassador.submit", form.to_wire(user.user_id)).await?;
-    Ok(Redirect::see_other(APPLY_PATH).into_response())
+    Ok(Redirect::see_other(SUBMITTED_PATH).into_response())
 }
 
 /// Re-render the form after a validation failure.
@@ -468,6 +469,35 @@ async fn err(
 ) -> Result<Response, Error> {
     let content = form.into_content(gate, Some(message.to_string()));
     render(user_info, content).await
+}
+
+/// The confirmation body, rendered inside `StandardLayout`.
+#[derive(TemplateOnce)]
+#[template(path = "ambassador/submitted.stpl.html")]
+struct SubmittedContent;
+
+#[derive(TemplateOnce)]
+#[template(path = "ambassador/page.stpl.html")]
+struct SubmittedPage {
+    head: <Head as Component>::Prepared,
+    layout: <StandardLayout<SubmittedContent> as Component>::Prepared,
+    title: String,
+}
+
+/// Where a successful [`submit`] lands: a page of its own, so the applicant
+/// can't miss that the application went through.
+#[handler]
+pub async fn confirmation(Authenticated(user_info): Authenticated) -> Result<Response, Error> {
+    let layout = StandardLayout::new(SUBMITTED_PATH.to_string(), SubmittedContent)
+        .prepare(user_info)
+        .await?;
+    SubmittedPage {
+        head: Head::default().prepare(None).await?,
+        layout,
+        title: "Application Submitted".to_string(),
+    }
+    .into_response(None)
+    .await
 }
 
 #[handler]

@@ -21,12 +21,13 @@ use common::{
 use crate::{
     component::{
         Component, Head, StandardLayout,
+        facebook_questions::{self, FacebookAnswers},
         floating_field::FormError,
         image_field::{ImageField, ImageLayout, ImageUploadResult},
     },
     contact::{Contact, ContactRole},
     entity::{Entity, EntityKind, EntityTarget},
-    event::{EventInstance, EventType, all::EventAll},
+    event::{EventInstance, EventType, all::EventAll, facebook::FacebookEvent},
     form::QsForm,
     middleware::authorization::Authenticated,
     peering::LoadStorePeered,
@@ -311,6 +312,8 @@ struct AddEventForm {
     repeat_until: String,
     #[serde(default)]
     instances: Vec<InstanceInput>,
+    #[serde(flatten)]
+    facebook: FacebookAnswers,
 }
 
 #[derive(Debug, Deserialize)]
@@ -387,6 +390,7 @@ struct EventFormValues {
     repeat_frequency: String,
     repeat_until: String,
     instances: Vec<InstanceValues>,
+    facebook_event: FacebookEvent,
 }
 
 impl From<&AddEventForm> for EventFormValues {
@@ -450,6 +454,7 @@ impl From<&AddEventForm> for EventFormValues {
             repeat_frequency: f.repeat_frequency.unwrap_or_default().as_str().to_string(),
             repeat_until: f.repeat_until.clone(),
             instances,
+            facebook_event: f.facebook.facebook_event(),
         }
     }
 }
@@ -619,6 +624,7 @@ impl SectionSummary {
 
 #[derive(Clone, Copy)]
 enum SectionIcon {
+    Promote,
     Repeat,
     Details,
     Umbrella,
@@ -1510,6 +1516,11 @@ fn validate_and_build(form: &AddEventForm, user_id: Ulid) -> Result<EventAll, Fo
 
     let instances = expand_recurrence(base, form)?;
 
+    let facebook_event = form.facebook.facebook_event();
+    if let Some(problem) = facebook_event.problem() {
+        return Err(FormError::at(facebook_questions::URL_FIELD, problem));
+    }
+
     let url = form.url.trim().to_string();
 
     // Location-specific requirements.
@@ -1631,6 +1642,7 @@ fn validate_and_build(form: &AddEventForm, user_id: Ulid) -> Result<EventAll, Fo
     }
 
     event.instances = instances.into_boxed_slice();
+    event.facebook_event = facebook_event;
 
     Ok(event)
 }
@@ -2181,6 +2193,35 @@ fn validate_and_build_project(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The Facebook answers are flattened into the add-event form, which
+    /// must not stop serde_qs from reading the form's indexed date/time rows
+    /// and its enum-valued fields alongside them.
+    #[test]
+    fn add_event_form_reads_flattened_facebook_answers() {
+        let body = "name=Bioblitz&location_mode=online&repeat_frequency=weekly\
+            &instances[0][begin_date]=2026-11-01&instances[0][begin_time]=10:00\
+            &instances[0][timezone]=America/Chicago\
+            &instances[1][begin_date]=2026-11-02&instances[1][begin_time]=11:00\
+            &instances[1][timezone]=America/Chicago\
+            &facebook_event=no&facebook_event_url=https://fb.me/e/1\
+            &facebook_event_requested=yes";
+        let form: AddEventForm = serde_qs::Config::new(10, false)
+            .deserialize_bytes(body.as_bytes())
+            .unwrap();
+
+        assert_eq!(form.name, "Bioblitz");
+        assert_eq!(form.location_mode, Some(LocationMode::Online));
+        assert_eq!(form.repeat_frequency, Some(RepeatFrequency::Weekly));
+        assert_eq!(form.instances.len(), 2);
+        assert_eq!(form.instances[1].begin_time, "11:00");
+        assert_eq!(
+            form.facebook.facebook_event(),
+            FacebookEvent::Missing {
+                create_requested: Some(true)
+            }
+        );
+    }
 
     /// A venue pick's inferred zone must be a real IANA zone that the form's
     /// time-zone select actually offers, or the client-side defaulting is a

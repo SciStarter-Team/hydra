@@ -64,6 +64,7 @@ pub struct AdminEventFull {
     pub zip: String,
     pub country: String,
     pub origin: String,
+    pub facebook_event: crate::event::facebook::FacebookEvent,
 }
 
 impl AdminEventFull {
@@ -96,6 +97,7 @@ impl AdminEventFull {
             zip: event.zip,
             country: event.country,
             origin: event.origin,
+            facebook_event: event.facebook_event,
         })
     }
 }

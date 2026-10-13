@@ -1,6 +1,7 @@
 pub mod admin_layout;
 pub mod detail_page;
 pub mod detail_page_edit;
+pub mod facebook_questions;
 pub mod floating_field;
 pub mod footer;
 pub mod forum;

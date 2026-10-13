@@ -359,6 +359,30 @@ form .checkbox-option input {
     @apply w-auto;
 }
 
+/* A question answered by one of a few radio buttons, side by side under it. */
+form .choice-group {
+    @apply flex flex-col gap-1 m-0 p-0 border-0;
+}
+form .choice-group > legend {
+    @apply p-0 mb-1;
+}
+form .choice-options {
+    @apply flex flex-wrap gap-x-6 gap-y-1;
+}
+
+/* The Facebook questions (FacebookQuestions): each follow-up appears only
+   while the answer it follows up is checked, so the form needs no script. */
+form .facebook-questions {
+    @apply flex flex-col gap-3;
+}
+form .facebook-follow-up {
+    display: none;
+}
+form .facebook-questions:has(input[name="facebook_event"][value="yes"]:checked) .facebook-if-yes,
+form .facebook-questions:has(input[name="facebook_event"][value="no"]:checked) .facebook-if-no {
+    @apply flex flex-col gap-2;
+}
+
 form .add-form-submit {
     @apply w-full mt-2 py-3 text-center;
 }

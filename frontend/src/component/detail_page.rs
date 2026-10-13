@@ -417,6 +417,10 @@ pub struct DetailPageContent {
     // Additional editable fields (populated only when can_edit)
     pub additional_fields: Vec<super::detail_page_edit::AdditionalField>,
 
+    /// What an event's organizer said about promoting it on Facebook, shown
+    /// to editors only. Always unanswered for a project.
+    pub facebook_event: crate::event::facebook::FacebookEvent,
+
     // Pre-rendered per-field display partials, keyed by field_type. The full page
     // renders each editable field through the same partial as an inline save, so
     // a saved field always matches a full page render.
@@ -946,6 +950,7 @@ impl DetailPage {
             can_edit,
             is_staff_editor,
             additional_fields,
+            facebook_event: crate::event::facebook::FacebookEvent::Unanswered,
         })
     }
 
@@ -979,7 +984,10 @@ impl DetailPage {
                 ticketing_begins,
                 part_of,
                 AsGeoJSON(regions) as "region_geojson: Option<String>",
-                point IS NOT NULL as "has_point: bool"
+                point IS NOT NULL as "has_point: bool",
+                facebook_event as "facebook_event: bool",
+                facebook_event_url,
+                facebook_event_requested as "facebook_event_requested: bool"
             FROM events
             WHERE event_id = ?
             "#,
@@ -1284,6 +1292,11 @@ impl DetailPage {
             can_edit,
             is_staff_editor,
             additional_fields,
+            facebook_event: crate::event::facebook::FacebookEvent::from_columns(
+                row.facebook_event,
+                row.facebook_event_url,
+                row.facebook_event_requested,
+            ),
         })
     }
 }

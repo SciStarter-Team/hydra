@@ -1,6 +1,6 @@
 use crate::{
     contact::{Contact, ContactRole},
-    event::EventStatus,
+    event::{EventStatus, facebook::FacebookEvent},
     peering::LoadStorePeered,
 };
 use anyhow::Error;
@@ -55,6 +55,7 @@ pub enum EventFieldValue {
     Contacts(Box<[Contact]>),
     PageEditorIds(Box<[Ulid]>),
     Reviewed(bool),
+    FacebookEvent(FacebookEvent),
 }
 
 impl EventField {
@@ -101,6 +102,7 @@ impl EventField {
             EventFieldValue::Contacts(_) => EventFieldType::Contacts,
             EventFieldValue::PageEditorIds(_) => EventFieldType::PageEditorIds,
             EventFieldValue::Reviewed(_) => EventFieldType::Reviewed,
+            EventFieldValue::FacebookEvent(_) => EventFieldType::FacebookEvent,
         }
     }
 
@@ -284,6 +286,30 @@ impl EventField {
         sqlx::query!(
             "UPDATE events SET reviewed = ? WHERE event_id = ?",
             reviewed,
+            event_id_str
+        )
+        .execute(db())
+        .await?;
+
+        Ok(())
+    }
+
+    /// The three columns are written together, so the check constraints
+    /// that tie each follow-up to its answer hold at every step.
+    async fn save_facebook_event(&self, facebook_event: &FacebookEvent) -> Result<(), Error> {
+        use common::shared::db;
+
+        let event_id_str = self.event_id.to_string();
+        let has = facebook_event.has();
+        let url = facebook_event.url();
+        let requested = facebook_event.create_requested();
+        sqlx::query!(
+            r#"UPDATE events
+               SET facebook_event = ?, facebook_event_url = ?, facebook_event_requested = ?
+               WHERE event_id = ?"#,
+            has,
+            url,
+            requested,
             event_id_str
         )
         .execute(db())
@@ -760,6 +786,28 @@ impl EventField {
         Ok(EventField::new(
             event_id,
             EventFieldValue::Reviewed(reviewed),
+        ))
+    }
+
+    async fn read_facebook_event(event_id: Ulid) -> Result<Self, Error> {
+        use common::shared::db;
+        let event_id_str = event_id.to_string();
+        let row = sqlx::query!(
+            r#"SELECT facebook_event as "facebook_event: bool",
+                      facebook_event_url,
+                      facebook_event_requested as "facebook_event_requested: bool"
+               FROM events WHERE event_id = ?"#,
+            event_id_str
+        )
+        .fetch_one(db())
+        .await?;
+        Ok(EventField::new(
+            event_id,
+            EventFieldValue::FacebookEvent(FacebookEvent::from_columns(
+                row.facebook_event,
+                row.facebook_event_url,
+                row.facebook_event_requested,
+            )),
         ))
     }
 
@@ -1247,6 +1295,9 @@ impl LoadStorePeered for EventField {
             EventFieldValue::Contacts(contacts) => self.save_contacts(contacts).await,
             EventFieldValue::PageEditorIds(ids) => self.save_page_editor_ids(ids).await,
             EventFieldValue::Reviewed(reviewed) => self.save_reviewed(reviewed).await,
+            EventFieldValue::FacebookEvent(facebook_event) => {
+                self.save_facebook_event(facebook_event).await
+            }
             EventFieldValue::EventId(_) => {
                 // EventId is immutable and should not be updated
                 Err(anyhow::anyhow!("EventId cannot be updated"))
@@ -1297,6 +1348,7 @@ impl LoadStorePeered for EventField {
             EventFieldType::Contacts => Self::read_contacts(event_id).await,
             EventFieldType::PageEditorIds => Self::read_page_editor_ids(event_id).await,
             EventFieldType::Reviewed => Self::read_reviewed(event_id).await,
+            EventFieldType::FacebookEvent => Self::read_facebook_event(event_id).await,
         }
     }
 }

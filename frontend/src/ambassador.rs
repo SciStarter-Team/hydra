@@ -3,7 +3,8 @@
 //! ([`directory`]).
 //!
 //! The program lives under `/ambassador`, its overview page: the application
-//! is at `/ambassador/apply` and the directory at `/ambassador/directory`.
+//! is at `/ambassador/apply`, its confirmation at `/ambassador/apply/submitted`
+//! and the directory at `/ambassador/directory`.
 //! `/ambassadors` redirects to the overview. The addresses these pages had
 //! before, orrery's `/ambassador-apply` and `/ambassadors-directory`, and the
 //! plural and singular variants people have bookmarked, are `Redirect`
@@ -20,6 +21,9 @@ use ulid::Ulid;
 
 /// The application form.
 pub const APPLY_PATH: &str = "/ambassador/apply";
+
+/// The confirmation a successful submission of the application form lands on.
+pub const SUBMITTED_PATH: &str = "/ambassador/apply/submitted";
 
 /// The public directory.
 pub const DIRECTORY_PATH: &str = "/ambassador/directory";

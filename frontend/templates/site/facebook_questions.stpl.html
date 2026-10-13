@@ -1,0 +1,30 @@
+<% use crate::component::facebook_questions::URL_FIELD; %>
+<% use crate::component::floating_field::{FieldKind, FloatingField}; %>
+<% let has = self.answers.has(); %>
+<% let requested = self.answers.create_requested(); %>
+<%# Each follow-up is shown by add-form.css only while its answer is checked. %>
+<div class="facebook-questions">
+  <fieldset class="choice-group">
+    <legend>Does your event have a Facebook event page?</legend>
+    <div class="choice-options">
+      <label class="checkbox-option"><input type="radio" name="facebook_event" value="yes"<% if has == Some(true) { %> checked<% } %>> Yes</label>
+      <label class="checkbox-option"><input type="radio" name="facebook_event" value="no"<% if has == Some(false) { %> checked<% } %>> No</label>
+    </div>
+  </fieldset>
+
+  <div class="facebook-follow-up facebook-if-yes">
+    <p id="facebook-share-note" class="field-help">We'd love to help spread the word by sharing it through SciStarter's Facebook account.</p>
+    <%+ FloatingField::new(FieldKind::Url, URL_FIELD, "Please share the link to your Facebook event", self.answers.url().unwrap_or_default()).described_by("facebook-share-note").errors(self.error) %>
+  </div>
+
+  <div class="facebook-follow-up facebook-if-no">
+    <fieldset class="choice-group">
+      <legend>We may be able to create one through the SciStarter Facebook account to help promote your event. Would you like SciStarter to create a Facebook event for you?</legend>
+      <div class="choice-options">
+        <label class="checkbox-option"><input type="radio" name="facebook_event_requested" value="yes"<% if requested == Some(true) { %> checked<% } %>> Yes</label>
+        <label class="checkbox-option"><input type="radio" name="facebook_event_requested" value="no"<% if requested == Some(false) { %> checked<% } %>> No</label>
+      </div>
+    </fieldset>
+    <p class="field-help">Please note, Facebook event creation and sharing are subject to SciStarter staff availability. We'll use the event details you've submitted to create the Facebook event.</p>
+  </div>
+</div>

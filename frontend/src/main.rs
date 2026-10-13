@@ -414,6 +414,10 @@ fn user_facing() -> impl Endpoint {
             get(component::detail_page_edit::get_contact_edit_form),
         )
         .at(
+            "/-detail/:id/facebook",
+            put(component::detail_page_edit::update_facebook_event),
+        )
+        .at(
             "/-detail/:id/managers",
             get(component::detail_page_edit::get_managers_display)
                 .post(component::detail_page_edit::add_manager),
@@ -505,6 +509,10 @@ fn user_facing() -> impl Endpoint {
         .at(
             format!("{}/draft", ambassador::APPLY_PATH),
             post(ambassador::apply::draft),
+        )
+        .at(
+            ambassador::SUBMITTED_PATH,
+            get(ambassador::apply::confirmation),
         )
         .at(
             ambassador::DIRECTORY_PATH,
@@ -1604,6 +1612,11 @@ mod sync {
         outcomes_label: String,
         outcomes_link: String,
         circuit_id: String,
+        /// The organizer's Facebook answers, as orrery stores them: "yes",
+        /// "no", or empty when unanswered.
+        facebook_event: String,
+        facebook_event_url: String,
+        facebook_event_requested: String,
         // instances: Box<[EventInstance]>,
         begin0: Option<Timestamp>,
         end0: Option<Timestamp>,
@@ -1832,6 +1845,11 @@ mod sync {
                 evt.outcomes_label = data.outcomes_label.empty_as_none();
                 evt.outcomes_link = data.outcomes_link.empty_as_none();
                 evt.circuit_id = data.circuit_id.empty_as_none();
+                evt.facebook_event = crate::event::facebook::FacebookEvent::from_answers(
+                    &data.facebook_event,
+                    &data.facebook_event_url,
+                    &data.facebook_event_requested,
+                );
 
                 let mut instances = Vec::with_capacity(20);
 

@@ -1,0 +1,16 @@
+<div class="ss-container mx-auto py-8 max-w-3xl">
+  <ul class="ss-breadcrumbs flex gap-2 text-sm mb-4">
+    <li><a href="/training/champion">Champion Training</a></li>
+    <li>/</li>
+    <li><a href="<%= crate::ambassador::APPLY_PATH %>">Ambassador Application</a></li>
+    <li>/</li>
+    <li>Submitted</li>
+  </ul>
+  <%# The icon is centered on the heading's first line (h1 line height 1.2), so it stays put when the heading wraps. %>
+  <div class="flex items-start gap-4 mb-4">
+    <svg class="flex-none w-12 h-12 mt-[calc((1.2_*_var(--text-3xl)_-_43.2px)_/_2)] max-md:w-9 max-md:h-9 max-md:mt-[calc((1.2_*_var(--text-3xl-mobile)_-_32.4px)_/_2)] text-primary fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" aria-hidden="true"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM369 209L241 337c-9.4 9.4-24.6 9.4-33.9 0l-64-64c-9.4-9.4-9.4-24.6 0-33.9s24.6-9.4 33.9 0l47 47L335 175c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9z"/></svg>
+    <h1 class="mb-0">Application submitted</h1>
+  </div>
+  <p class="intro">Congratulations on completing your next step towards becoming a SciStarter Ambassador! Your application is complete and will be reviewed within two weeks. If you are accepted into the program, the next step will be registering for a virtual Ambassador Orientation which you will receive an invite for via email.</p>
+  <p class="mt-8"><a href="/ambassador">Return to the SciStarter Ambassador program</a></p>
+</div>

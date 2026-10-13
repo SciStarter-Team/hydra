@@ -8,7 +8,7 @@ use ulid::Ulid;
 
 use crate::{contact::Contact, peering::LoadStorePeered};
 
-use super::{EventInstance, EventType};
+use super::{EventInstance, EventType, facebook::FacebookEvent};
 
 /// Container for all event fields.
 ///
@@ -82,6 +82,9 @@ pub struct EventAll {
     /// False while the event waits for the exchange it was submitted
     /// through to approve or reject it.
     pub reviewed: bool,
+
+    /// What the organizer said about promoting the event on Facebook.
+    pub facebook_event: FacebookEvent,
 }
 
 impl LoadStorePeered for EventAll {
@@ -95,6 +98,9 @@ impl LoadStorePeered for EventAll {
         let event_id = self.event_id.to_string();
         let part_of = self.part_of.map(|u| u.to_string());
         let page_creator_id = self.page_creator_id.to_string();
+        let facebook_event = self.facebook_event.has();
+        let facebook_event_url = self.facebook_event.url();
+        let facebook_event_requested = self.facebook_event.create_requested();
 
         let mut tx = Immediate::begin_with_retry(db(), None, None).await?;
 
@@ -132,7 +138,10 @@ impl LoadStorePeered for EventAll {
               "regions",
               "point",
               "exchange",
-              "reviewed"
+              "reviewed",
+              "facebook_event",
+              "facebook_event_url",
+              "facebook_event_requested"
             )
             values (
               ?1,
@@ -181,7 +190,10 @@ impl LoadStorePeered for EventAll {
                   GeomFromEWKT(?31)
               end,
               ?32,
-              ?33
+              ?33,
+              ?34,
+              ?35,
+              ?36
             )"#,
             event_id,
             self.created,
@@ -216,6 +228,9 @@ impl LoadStorePeered for EventAll {
             self.point,
             self.exchange,
             self.reviewed,
+            facebook_event,
+            facebook_event_url,
+            facebook_event_requested,
         )
         .execute(&mut tx)
         .await?;
@@ -413,7 +428,10 @@ impl LoadStorePeered for EventAll {
                 outcomes_label, outcomes_link, circuit_id,
                 AsGeoJSON(regions) as "regions: Option<String>",
                 AsGeoJSON(point) as "point: Option<String>",
-                exchange, reviewed as "reviewed: bool"
+                exchange, reviewed as "reviewed: bool",
+                facebook_event as "facebook_event: bool",
+                facebook_event_url,
+                facebook_event_requested as "facebook_event_requested: bool"
             FROM events WHERE event_id = ?"#,
             event_id_str
         )
@@ -564,6 +582,11 @@ impl LoadStorePeered for EventAll {
             instances,
             exchange: event_row.exchange,
             reviewed: event_row.reviewed,
+            facebook_event: FacebookEvent::from_columns(
+                event_row.facebook_event,
+                event_row.facebook_event_url,
+                event_row.facebook_event_requested,
+            ),
         })
     }
 }

@@ -3,6 +3,7 @@ use std::str::FromStr;
 use common::timestring::TimeString;
 
 pub mod all;
+pub mod facebook;
 pub mod field;
 
 #[derive(Debug, thiserror::Error)]

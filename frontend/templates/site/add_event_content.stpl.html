@@ -1,5 +1,6 @@
 <% use crate::component::floating_field::{FieldIcon, FieldKind, FloatingField}; %>
 <% use crate::add::{SectionIcon, SectionSummary, TimezoneField}; %>
+<% use crate::component::facebook_questions::FacebookQuestions; %>
 <% let error = self.error.as_ref(); %>
 <div class="ss-container !pt-8 !pb-12 mx-auto">
   <div class="add-form-shell">
@@ -151,6 +152,14 @@
               <%+ FloatingField::new(FieldKind::Time, "ticketing_time", "Time", self.values.ticketing_time.as_str()).icon(FieldIcon::Clock) %>
               <%+ TimezoneField::build("ticketing_timezone", &self.values.ticketing_timezone, false).errors(error) %>
             </div>
+          </div>
+        </details>
+
+        <%# Open from the start: staff want every organizer to see it. %>
+        <details class="add-section" open>
+          <%+ SectionSummary::new(SectionIcon::Promote, "Promoting your event") %>
+          <div class="add-section-body">
+            <%+ FacebookQuestions { answers: &self.values.facebook_event, error } %>
           </div>
         </details>
       </div>

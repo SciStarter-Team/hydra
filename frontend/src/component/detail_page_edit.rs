@@ -14,8 +14,11 @@ use common::message::user::{UserByEmailRequest, UserByEmailResponse};
 use common::service::request;
 
 use crate::admin::autocomplete::resolve_user_names;
+use crate::component::facebook_questions::{self, FacebookAnswers};
+use crate::component::floating_field::FormError;
 use crate::contact::{Contact, ContactRole};
 use crate::event::EventType;
+use crate::event::facebook::FacebookEvent;
 use crate::event::field::{EventField, EventFieldType, EventFieldValue};
 use crate::local_time::{TimeFormat, local_time};
 use crate::middleware::authorization::Authenticated;
@@ -2599,6 +2602,101 @@ pub async fn update_contact(
     .await;
 
     contacts_response(id, &contacts)
+}
+
+// ---------------------------------------------------------------------------
+// Facebook promotion (events only): what the organizer said about promoting
+// the event on Facebook, private to editors. The admin event page shows the
+// same card, so staff read and change it in one place. Changes peer through
+// EventField::FacebookEvent.
+// ---------------------------------------------------------------------------
+
+#[derive(TemplateOnce)]
+#[template(path = "pages/detail_page_facebook.stpl.html")]
+pub struct FacebookEventDisplay {
+    pub target_id: String,
+    /// The answers as stored.
+    pub facebook_event: FacebookEvent,
+    /// A change that was refused, kept open in the form to be corrected.
+    pub refused: Option<RefusedFacebookAnswers>,
+}
+
+pub struct RefusedFacebookAnswers {
+    pub answers: FacebookEvent,
+    pub error: FormError,
+}
+
+impl FacebookEventDisplay {
+    /// The answers the form starts from: a refused change, or the stored
+    /// answers.
+    fn form_answers(&self) -> &FacebookEvent {
+        self.refused
+            .as_ref()
+            .map_or(&self.facebook_event, |refused| &refused.answers)
+    }
+}
+
+/// An event's Facebook answers, via the peered field.
+async fn load_facebook_event(event_id: Ulid) -> Result<FacebookEvent, Error> {
+    match EventField::load((event_id, EventFieldType::FacebookEvent))
+        .await?
+        .field
+    {
+        EventFieldValue::FacebookEvent(facebook_event) => Ok(facebook_event),
+        _ => Ok(FacebookEvent::default()),
+    }
+}
+
+/// PUT /-detail/:id/facebook — record the organizer's Facebook answers
+/// (events only, editors only).
+#[handler]
+pub async fn update_facebook_event(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+    poem::web::Form(form): poem::web::Form<FacebookAnswers>,
+) -> poem::Result<poem::Response> {
+    let user = user_info.ok_or_else(auth_required)?;
+    let (kind, target) = require_editor(&id, &user).await?;
+    if kind != DetailPageKind::Event {
+        return Err(poem::Error::from_string(
+            "Only events have Facebook answers",
+            poem::http::StatusCode::BAD_REQUEST,
+        ));
+    }
+
+    let answers = form.facebook_event();
+
+    let display = if let Some(problem) = answers.problem() {
+        FacebookEventDisplay {
+            target_id: id,
+            facebook_event: load_facebook_event(target).await.map_err(internal_error)?,
+            refused: Some(RefusedFacebookAnswers {
+                answers,
+                error: FormError::at(facebook_questions::URL_FIELD, problem),
+            }),
+        }
+    } else {
+        EventField::new(target, EventFieldValue::FacebookEvent(answers.clone()))
+            .store()
+            .await
+            .map_err(internal_error)?;
+        let _ = log_activity(
+            None,
+            edit_action(kind),
+            user.user_id,
+            target,
+            "facebook_event".to_string(),
+        )
+        .await;
+        FacebookEventDisplay {
+            target_id: id,
+            facebook_event: answers,
+            refused: None,
+        }
+    };
+
+    let html = display.render_once().map_err(internal_error)?;
+    Ok(Html(html).into_response())
 }
 
 // ---------------------------------------------------------------------------
