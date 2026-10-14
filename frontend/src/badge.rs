@@ -939,7 +939,7 @@ mod tests {
     /// issue it under the same rules.
     #[test]
     fn no_translated_string_reaches_the_credential() {
-        use crate::i18n::{Origin, Phrase, install_for_test};
+        use crate::i18n::{Origin, Phrase, Provenance, install_for_test};
 
         let email = "someone@example.invalid";
         let user_id = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
@@ -967,9 +967,7 @@ mod tests {
             let mut phrase = Phrase::new(context, source, Origin::Manual);
 
             for lang in Lang::TRANSLATABLE {
-                phrase
-                    .translations
-                    .insert(lang.code().to_owned(), marker(lang, what));
+                phrase.set_translation(lang, marker(lang, what), Provenance::Human);
             }
 
             install_for_test(&phrase);

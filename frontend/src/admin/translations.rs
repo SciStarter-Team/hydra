@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use crate::component::{AdminLayout, Component};
-use crate::i18n::{Lang, Origin, Phrase, phrase_id};
+use crate::i18n::{Lang, Origin, Phrase, Provenance, Translated, phrase_id};
 use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
 use common::shared::db;
@@ -29,9 +29,9 @@ struct PhraseRow {
     last_seen: String,
     /// One entry per language a phrase can be translated into, in the order
     /// [`Lang::TRANSLATABLE`] gives them, so the cells line up with the
-    /// headings the template writes from the same list. Empty means the
-    /// language is still outstanding.
-    translations: Vec<(Lang, String)>,
+    /// headings the template writes from the same list. Empty text means the
+    /// language is still untranslated.
+    translations: Vec<(Lang, Translated)>,
 }
 
 #[derive(TemplateOnce)]
@@ -50,7 +50,7 @@ struct TranslationsPage {
 #[template(path = "admin/translation_edit.stpl.html")]
 struct TranslationEditPage {
     phrase: Phrase,
-    languages: Vec<(Lang, String)>,
+    languages: Vec<(Lang, Translated)>,
 }
 
 #[derive(TemplateOnce)]
@@ -65,8 +65,8 @@ struct NewPhrasePage {
 pub enum Show {
     /// Everything.
     All,
-    /// Only phrases with at least one language still untranslated, which is
-    /// the working view.
+    /// Only phrases with at least one language still untranslated or only
+    /// machine translated, which is the working view.
     #[default]
     Outstanding,
 }
@@ -90,9 +90,25 @@ struct ListQuery {
 
 #[derive(Debug, Deserialize)]
 struct SaveForm {
-    /// One field per language, named for its code.
+    /// One text field per language, named for its code, and for a machine
+    /// translation an `approve-` checkbox named the same way, present only
+    /// when ticked.
     #[serde(flatten)]
-    translations: std::collections::HashMap<String, String>,
+    fields: HashMap<String, String>,
+}
+
+impl SaveForm {
+    fn translation(&self, lang: Lang) -> String {
+        self.fields
+            .get(lang.code())
+            .map(|value| value.trim().to_owned())
+            .unwrap_or_default()
+    }
+
+    fn approved(&self, lang: Lang) -> bool {
+        self.fields
+            .contains_key(&format!("approve-{}", lang.code()))
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -116,8 +132,9 @@ async fn list(
     let outstanding_only = show == Show::Outstanding;
 
     // A phrase is outstanding when any language it could be translated into
-    // is still blank -- including one that has no row yet, which is why this
-    // counts against the language list rather than against the rows present.
+    // still needs work -- including one that has no row yet, which is why
+    // this counts finished rows against the language list rather than
+    // looking for unfinished ones.
     let translatable = Lang::TRANSLATABLE.len() as i64;
 
     // One page of phrases with their translations attached, rather than a
@@ -130,13 +147,14 @@ async fn list(
                   -- Forced nullable: the LEFT JOIN can leave these absent for
                   -- a phrase with no translation rows, which SQLite's own
                   -- type inference does not report.
-                  t.lang AS "lang?", t.translated AS "translated?"
+                  t.lang AS "lang?", t.translated AS "translated?",
+                  t.provenance AS "provenance?"
            FROM (SELECT phrase_id, context, source, origin, last_seen
                    FROM translation_phrase
                   WHERE (source LIKE ? OR context LIKE ?)
                     AND (? = 0 OR (SELECT COUNT(*) FROM translation t
                                     WHERE t.phrase_id = translation_phrase.phrase_id
-                                      AND t.translated != '') < ?)
+                                      AND NOT t.needs_work) < ?)
                   ORDER BY last_seen DESC
                   LIMIT ? OFFSET ?) p
            LEFT JOIN translation t ON t.phrase_id = p.phrase_id
@@ -155,7 +173,7 @@ async fn list(
         r#"SELECT COUNT(*) FROM translation_phrase p
            WHERE (p.source LIKE ? OR p.context LIKE ?)
              AND (? = 0 OR (SELECT COUNT(*) FROM translation t
-                             WHERE t.phrase_id = p.phrase_id AND t.translated != '') < ?)"#,
+                             WHERE t.phrase_id = p.phrase_id AND NOT t.needs_work) < ?)"#,
         pattern,
         pattern,
         outstanding_only,
@@ -167,7 +185,7 @@ async fn list(
     let outstanding_total = sqlx::query_scalar!(
         r#"SELECT COUNT(*) FROM translation_phrase p
            WHERE (SELECT COUNT(*) FROM translation t
-                   WHERE t.phrase_id = p.phrase_id AND t.translated != '') < ?"#,
+                   WHERE t.phrase_id = p.phrase_id AND NOT t.needs_work) < ?"#,
         translatable,
     )
     .fetch_one(db())
@@ -189,7 +207,7 @@ async fn list(
                 last_seen: row.last_seen.clone(),
                 translations: Lang::TRANSLATABLE
                     .into_iter()
-                    .map(|lang| (lang, String::new()))
+                    .map(|lang| (lang, Translated::default()))
                     .collect(),
             });
 
@@ -198,9 +216,11 @@ async fn list(
 
         // A phrase with no rows in `translation` at all still lists, with
         // every language outstanding, which is what the LEFT JOIN is for.
-        let (Some(lang), Some(translated)) =
-            (row.lang.as_deref().and_then(Lang::from_tag), row.translated)
-        else {
+        let (Some(lang), Some(text), Some(provenance)) = (
+            row.lang.as_deref().and_then(Lang::from_tag),
+            row.translated,
+            row.provenance,
+        ) else {
             continue;
         };
 
@@ -209,7 +229,10 @@ async fn list(
             .iter_mut()
             .find(|(candidate, _)| *candidate == lang)
         {
-            *cell = translated;
+            *cell = Translated {
+                text,
+                provenance: Provenance::from_str(&provenance),
+            };
         }
     }
 
@@ -243,7 +266,7 @@ async fn edit(
     let content = TranslationEditPage {
         languages: Lang::TRANSLATABLE
             .into_iter()
-            .map(|lang| (lang, phrase.translation(lang).to_owned()))
+            .map(|lang| (lang, phrase.translated(lang).cloned().unwrap_or_default()))
             .collect(),
         phrase,
     };
@@ -269,15 +292,14 @@ async fn save(
     let mut phrase = Phrase::load(id.clone()).await?;
 
     for lang in Lang::TRANSLATABLE {
-        let translated = form
-            .translations
-            .get(lang.code())
-            .map(|value| value.trim().to_owned())
-            .unwrap_or_default();
+        let before = phrase.translated(lang).cloned().unwrap_or_default();
+        let after = form.translation(lang);
 
-        phrase
-            .translations
-            .insert(lang.code().to_owned(), translated);
+        let provenance = before
+            .provenance
+            .after_review(&before.text, &after, form.approved(lang));
+
+        phrase.set_translation(lang, after, provenance);
     }
 
     // Stores locally, hands the phrase to every other frontend instance, and

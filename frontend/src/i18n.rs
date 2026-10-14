@@ -330,6 +330,77 @@ impl Origin {
     }
 }
 
+/// Who wrote a translation.
+///
+/// A machine translation is displayed like any other -- it is better than
+/// the English to someone who cannot read English -- but it is still work
+/// outstanding: the admin lists it for review until a human edits it or
+/// approves it as it stands.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Provenance {
+    /// Written, edited or approved by a human.
+    #[default]
+    Human,
+    /// Produced by a machine translation engine and not yet reviewed.
+    Machine,
+}
+
+impl Provenance {
+    /// How the provenance is written in the database, which the `serde`
+    /// renaming above spells the same way.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Provenance::Human => "human",
+            Provenance::Machine => "machine",
+        }
+    }
+
+    /// The provenance a stored value names. The column is constrained to the
+    /// two spellings, so anything else is a value from a newer schema; it
+    /// reads as `Machine` so that it is shown to a reviewer rather than
+    /// trusted.
+    pub fn from_str(value: &str) -> Provenance {
+        match value {
+            "human" => Provenance::Human,
+            _ => Provenance::Machine,
+        }
+    }
+
+    /// The provenance a translation has once a reviewer has saved it.
+    ///
+    /// The admin form submits every language at once, so a save is not by
+    /// itself a sign that anyone read a given language: a reviewer fixing
+    /// the Spanish sends the Portuguese back unchanged. A machine translation
+    /// therefore becomes a human's only when its text was changed or the
+    /// reviewer explicitly approved it.
+    ///
+    /// "Changed" ignores what a browser does to a textarea on the way back
+    /// -- surrounding whitespace, and line endings sent as CRLF -- since a
+    /// translation coming back in a different shape is not one anybody
+    /// reviewed.
+    pub fn after_review(self, before: &str, after: &str, approved: bool) -> Provenance {
+        fn normalized(text: &str) -> String {
+            text.trim().replace("\r\n", "\n")
+        }
+
+        if approved || normalized(before) != normalized(after) {
+            Provenance::Human
+        } else {
+            self
+        }
+    }
+}
+
+/// One language's translation of a phrase.
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Translated {
+    /// Empty means not translated yet, and displays as the source text.
+    pub text: String,
+    /// Who wrote `text`. Meaningless while `text` is empty.
+    pub provenance: Provenance,
+}
+
 /// The identity of a phrase, derived rather than generated so that every
 /// instance agrees on it without having to coordinate.
 pub fn phrase_id(context: &str, source: &str) -> String {
@@ -608,9 +679,9 @@ pub struct Phrase {
     pub context: String,
     pub source: String,
     pub origin: Origin,
-    /// Keyed by language code. A language missing here, or present with an
-    /// empty string, displays as the source text.
-    pub translations: HashMap<String, String>,
+    /// Keyed by language code. A language missing here, or present with
+    /// empty text, displays as the source text.
+    pub translations: HashMap<String, Translated>,
 }
 
 impl Phrase {
@@ -624,11 +695,27 @@ impl Phrase {
         }
     }
 
+    /// What the phrase says in `lang`, empty when it hasn't been translated.
     pub fn translation(&self, lang: Lang) -> &str {
-        self.translations
-            .get(lang.code())
-            .map(String::as_str)
+        self.translated(lang)
+            .map(|translated| translated.text.as_str())
             .unwrap_or_default()
+    }
+
+    /// Everything known about the phrase in `lang`, if anything is.
+    pub fn translated(&self, lang: Lang) -> Option<&Translated> {
+        self.translations.get(lang.code())
+    }
+
+    /// Set what the phrase says in `lang`, and who wrote it.
+    pub fn set_translation(&mut self, lang: Lang, text: impl Into<String>, provenance: Provenance) {
+        self.translations.insert(
+            lang.code().to_owned(),
+            Translated {
+                text: text.into(),
+                provenance,
+            },
+        );
     }
 
     /// The statements a save runs, over a pool the caller names.
@@ -658,17 +745,20 @@ impl Phrase {
 
         for lang in Lang::TRANSLATABLE {
             let code = lang.code();
-            let translated = self.translation(lang);
+            let translated = self.translated(lang).cloned().unwrap_or_default();
+            let provenance = translated.provenance.as_str();
 
             sqlx::query!(
-                r#"INSERT INTO translation (phrase_id, lang, translated, updated)
-                   VALUES (?, ?, ?, ?)
+                r#"INSERT INTO translation (phrase_id, lang, translated, provenance, updated)
+                   VALUES (?, ?, ?, ?, ?)
                    ON CONFLICT (phrase_id, lang) DO UPDATE SET
                      translated = excluded.translated,
+                     provenance = excluded.provenance,
                      updated = excluded.updated"#,
                 self.phrase_id,
                 code,
-                translated,
+                translated.text,
+                provenance,
                 now,
             )
             .execute(pool)
@@ -704,7 +794,7 @@ impl LoadStorePeered for Phrase {
         .await?;
 
         let rows = sqlx::query!(
-            r#"SELECT lang, translated FROM translation WHERE phrase_id = ?"#,
+            r#"SELECT lang, translated, provenance FROM translation WHERE phrase_id = ?"#,
             id
         )
         .fetch_all(db())
@@ -717,7 +807,15 @@ impl LoadStorePeered for Phrase {
             origin: Origin::from_str(&phrase.origin),
             translations: rows
                 .into_iter()
-                .map(|row| (row.lang, row.translated))
+                .map(|row| {
+                    (
+                        row.lang,
+                        Translated {
+                            text: row.translated,
+                            provenance: Provenance::from_str(&row.provenance),
+                        },
+                    )
+                })
                 .collect(),
         })
     }
@@ -756,6 +854,21 @@ impl LoadStorePeered for Phrase {
 #[cfg(test)]
 pub fn install_for_test(phrase: &Phrase) {
     phrase.apply_to_catalog();
+}
+
+/// Create the translation tables in `pool` from the migrations themselves,
+/// so a test database cannot drift away from the real schema.
+#[cfg(test)]
+pub async fn create_schema_for_test(pool: &sqlx::SqlitePool) {
+    for migration in [
+        include_str!("../migrations/20260821204218_translation_phrases.sql"),
+        include_str!("../migrations/20261014132134_translation_provenance.sql"),
+    ] {
+        sqlx::raw_sql(migration)
+            .execute(pool)
+            .await
+            .expect("translation schema");
+    }
 }
 
 #[cfg(test)]
@@ -806,12 +919,8 @@ mod tests {
     fn signed_in() -> Phrase {
         let mut phrase = Phrase::new("", "Sign in", Origin::Manual);
 
-        phrase
-            .translations
-            .insert(String::from("es"), String::from("Iniciar sesión"));
-        phrase
-            .translations
-            .insert(String::from("pt"), String::new());
+        phrase.set_translation(Lang::Es, "Iniciar sesión", Provenance::Human);
+        phrase.set_translation(Lang::Pt, "", Provenance::Human);
 
         phrase
     }
@@ -886,12 +995,7 @@ mod tests {
         .await
         .expect("pool");
 
-        sqlx::raw_sql(include_str!(
-            "../migrations/20260821204218_translation_phrases.sql"
-        ))
-        .execute(&pool)
-        .await
-        .expect("schema");
+        create_schema_for_test(&pool).await;
 
         (dir, pool)
     }
@@ -939,9 +1043,7 @@ mod tests {
         let id = phrase_id("", "Sign in");
 
         let mut phrase = Phrase::new("", "Sign in", Origin::Discovered);
-        phrase
-            .translations
-            .insert(String::from("es"), String::from("Iniciar sesión"));
+        phrase.set_translation(Lang::Es, "Iniciar sesión", Provenance::Human);
         phrase.write_into(&pool).await.expect("translate");
 
         let first_seen = sqlx::query_scalar!(
@@ -980,14 +1082,10 @@ mod tests {
         let id = phrase_id("", "Sign in");
 
         let mut phrase = Phrase::new("", "Sign in", Origin::Manual);
-        phrase
-            .translations
-            .insert(String::from("es"), String::from("Entrar"));
+        phrase.set_translation(Lang::Es, "Entrar", Provenance::Human);
         phrase.write_into(&pool).await.expect("first");
 
-        phrase
-            .translations
-            .insert(String::from("es"), String::from("Iniciar sesión"));
+        phrase.set_translation(Lang::Es, "Iniciar sesión", Provenance::Human);
         phrase.write_into(&pool).await.expect("second");
 
         assert_eq!(stored(&pool, &id, Lang::Es).await, "Iniciar sesión");
@@ -1084,9 +1182,7 @@ mod tests {
 
         // A translator improves on it, and the seed runs again.
         let mut phrase = Phrase::new("", source, Origin::Manual);
-        phrase
-            .translations
-            .insert(String::from("es"), String::from("Entrar o registrarse"));
+        phrase.set_translation(Lang::Es, "Entrar o registrarse", Provenance::Human);
         phrase.write_into(&pool).await.expect("translator");
 
         sqlx::raw_sql(seed)
@@ -1095,6 +1191,148 @@ mod tests {
             .expect("seed again");
 
         assert_eq!(stored(&pool, &id, Lang::Es).await, "Entrar o registrarse");
+    }
+
+    /// The admin form sends every language back on every save, so a machine
+    /// translation nobody touched must come back still marked as one.
+    #[test]
+    fn an_untouched_machine_translation_stays_a_machine_s() {
+        assert_eq!(
+            Provenance::Machine.after_review("Iniciar sesión", "Iniciar sesión", false),
+            Provenance::Machine
+        );
+    }
+
+    /// What a browser does to a textarea is not an edit.
+    #[test]
+    fn a_textarea_round_trip_is_not_a_review() {
+        assert_eq!(
+            Provenance::Machine.after_review(
+                "Una línea\nOtra línea",
+                " Una línea\r\nOtra línea\n",
+                false
+            ),
+            Provenance::Machine
+        );
+    }
+
+    #[test]
+    fn editing_a_machine_translation_makes_it_a_human_s() {
+        assert_eq!(
+            Provenance::Machine.after_review("Iniciar sesión", "Entrar", false),
+            Provenance::Human
+        );
+    }
+
+    #[test]
+    fn approving_a_machine_translation_makes_it_a_human_s() {
+        assert_eq!(
+            Provenance::Machine.after_review("Iniciar sesión", "Iniciar sesión", true),
+            Provenance::Human
+        );
+    }
+
+    /// Review only ever promotes: there is nothing a save can do to make a
+    /// human's translation a machine's.
+    #[test]
+    fn a_human_s_translation_stays_a_human_s() {
+        assert_eq!(
+            Provenance::Human.after_review("Iniciar sesión", "Iniciar sesión", false),
+            Provenance::Human
+        );
+    }
+
+    async fn stored_provenance(pool: &sqlx::SqlitePool, id: &str, lang: Lang) -> Provenance {
+        let code = lang.code();
+
+        let provenance = sqlx::query_scalar!(
+            r#"SELECT provenance FROM translation WHERE phrase_id = ? AND lang = ?"#,
+            id,
+            code
+        )
+        .fetch_one(pool)
+        .await
+        .expect("translation row");
+
+        Provenance::from_str(&provenance)
+    }
+
+    async fn needs_work(pool: &sqlx::SqlitePool, id: &str, lang: Lang) -> bool {
+        let code = lang.code();
+
+        sqlx::query_scalar!(
+            r#"SELECT needs_work AS "needs_work: bool" FROM translation
+               WHERE phrase_id = ? AND lang = ?"#,
+            id,
+            code
+        )
+        .fetch_one(pool)
+        .await
+        .expect("translation row")
+    }
+
+    #[tokio::test]
+    async fn provenance_is_stored_per_language() {
+        let (_dir, pool) = fixture().await;
+
+        let mut phrase = Phrase::new("", "Sign in", Origin::Manual);
+        phrase.set_translation(Lang::Es, "Iniciar sesión", Provenance::Human);
+        phrase.set_translation(Lang::Pt, "Entrar", Provenance::Machine);
+        phrase.write_into(&pool).await.expect("save");
+
+        assert_eq!(
+            stored_provenance(&pool, &phrase.phrase_id, Lang::Es).await,
+            Provenance::Human
+        );
+        assert_eq!(
+            stored_provenance(&pool, &phrase.phrase_id, Lang::Pt).await,
+            Provenance::Machine
+        );
+    }
+
+    /// The rule the admin's "needs work" list and count are built on: a
+    /// translation is finished only when a human wrote it.
+    #[tokio::test]
+    async fn only_a_human_s_translation_is_finished() {
+        let (_dir, pool) = fixture().await;
+
+        record_into(&pool, "", "Sign in", Origin::Discovered)
+            .await
+            .expect("discovered");
+
+        let id = phrase_id("", "Sign in");
+
+        assert!(needs_work(&pool, &id, Lang::Es).await, "blank");
+
+        let mut phrase = Phrase::new("", "Sign in", Origin::Discovered);
+        phrase.set_translation(Lang::Es, "Iniciar sesión", Provenance::Machine);
+        phrase.set_translation(Lang::Pt, "Entrar", Provenance::Human);
+        phrase.write_into(&pool).await.expect("save");
+
+        assert!(needs_work(&pool, &id, Lang::Es).await, "machine");
+        assert!(!needs_work(&pool, &id, Lang::Pt).await, "human");
+    }
+
+    /// Everything translated before provenance existed was written by a
+    /// human, and must not turn up in the review queue.
+    #[tokio::test]
+    async fn seeded_translations_are_a_human_s() {
+        let (_dir, pool) = fixture().await;
+
+        sqlx::raw_sql(include_str!(
+            "../migrations/20260821213524_seed_login_page_translations.sql"
+        ))
+        .execute(&pool)
+        .await
+        .expect("seed");
+
+        let machine =
+            sqlx::query_scalar!(r#"SELECT COUNT(*) FROM translation WHERE provenance != 'human'"#)
+                .fetch_one(&pool)
+                .await
+                .expect("count");
+
+        assert_eq!(machine, 0);
     }
 
     #[tokio::test]

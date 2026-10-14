@@ -1620,15 +1620,19 @@ mod tests {
     /// looked up by a template.
     fn install_translations() {
         let mut plain = crate::i18n::Phrase::new("", PHRASE, crate::i18n::Origin::Content);
-        plain
-            .translations
-            .insert(String::from("es"), String::from("Sin contexto."));
+        plain.set_translation(
+            crate::i18n::Lang::Es,
+            "Sin contexto.",
+            crate::i18n::Provenance::Human,
+        );
         crate::i18n::install_for_test(&plain);
 
         let mut shouted = crate::i18n::Phrase::new("shouted", PHRASE, crate::i18n::Origin::Content);
-        shouted
-            .translations
-            .insert(String::from("es"), String::from("¡CON CONTEXTO!"));
+        shouted.set_translation(
+            crate::i18n::Lang::Es,
+            "¡CON CONTEXTO!",
+            crate::i18n::Provenance::Human,
+        );
         crate::i18n::install_for_test(&shouted);
     }
 

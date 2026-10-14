@@ -264,7 +264,7 @@ pub fn english_url(canonical_url: &str) -> String {
 mod tests {
     use super::*;
 
-    use crate::i18n::{Origin, Phrase, install_for_test, phrase_id};
+    use crate::i18n::{Origin, Phrase, Provenance, install_for_test, phrase_id};
 
     /// A badge whose phrases no other test translates.
     ///
@@ -288,9 +288,7 @@ mod tests {
         let mut phrase = Phrase::new(context, source, Origin::Manual);
 
         for lang in langs {
-            phrase
-                .translations
-                .insert(lang.code().to_owned(), text(*lang));
+            phrase.set_translation(*lang, text(*lang), Provenance::Human);
         }
 
         install_for_test(&phrase);
@@ -547,12 +545,7 @@ mod tests {
             .await
             .expect("pool");
 
-            sqlx::raw_sql(include_str!(
-                "../../migrations/20260821204218_translation_phrases.sql"
-            ))
-            .execute(&pool)
-            .await
-            .expect("schema");
+            crate::i18n::create_schema_for_test(&pool).await;
 
             sqlx::raw_sql(SEED).execute(&pool).await.expect("seed");
             sqlx::raw_sql(DATES_AND_CITATION_NOTE)
