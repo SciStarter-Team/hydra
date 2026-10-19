@@ -10,6 +10,8 @@ use tokio::fs;
 use tokio::time::{Duration, sleep, timeout};
 use tokio_util::sync::CancellationToken;
 
+mod support;
+
 /// Helper to create a temporary database instance
 async fn setup_full_database() -> Result<(TempDir, Arc<Database>)> {
     let temp_dir = TempDir::new()?;
@@ -627,7 +629,7 @@ async fn test_compactor_graceful_cancellation() -> Result<()> {
 
 #[tokio::test]
 async fn test_compactor_periodic_processing() -> Result<()> {
-    let (_temp_dir, database) = setup_full_database().await?;
+    let (temp_dir, database) = setup_full_database().await?;
 
     let cancellation_token = CancellationToken::new();
 
@@ -635,7 +637,8 @@ async fn test_compactor_periodic_processing() -> Result<()> {
     let compactor_task = {
         let token = cancellation_token.clone();
         let db = Arc::clone(&database);
-        tokio::spawn(async move { run_compactor_service(db, token).await })
+        let log_cache = support::log_cache(temp_dir.path()).await?;
+        tokio::spawn(async move { run_compactor_service(db, log_cache, token).await })
     };
 
     // Create WAL file after compactor is running in subdirectory

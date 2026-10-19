@@ -151,7 +151,7 @@ inventory::submit! {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ParticipationRow {
     pub origin: i16,
     pub when: String,

@@ -38,17 +38,13 @@ use anyhow::{Context, Result};
 use datafusion::arrow::array::{Array, BooleanArray, RecordBatch, StringArray};
 use datafusion::arrow::compute::filter_record_batch;
 use datafusion::arrow::datatypes::Schema;
-use datafusion::parquet::arrow::ArrowWriter;
-use datafusion::parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-use datafusion::parquet::basic::{Compression, ZstdLevel};
-use datafusion::parquet::file::properties::WriterProperties;
 use std::collections::HashSet;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
-use log_service::database::table::{TableRow, get_registered_tables};
+use log_service::database::rewrite::{self, DEFAULT_ROW_GROUP_SIZE, ParquetReplacement};
+use log_service::database::table::TableRow;
 use log_service::database::tables::{BookmarkRow, ClickthroughRow, JoinRow};
 
 /// What identifies one event in a table, and which of its rows are in scope.
@@ -140,47 +136,21 @@ fn main() -> Result<()> {
 /// the WAL is read last and shares the same set of seen events -- otherwise
 /// the next compaction would put duplicates straight back.
 fn run(base: &Path, repair: &Repair, dry_run: bool) -> Result<Counts> {
-    let schema = schema_for(repair.table)?;
+    let schema = rewrite::schema_for(repair.table)?;
     let mut seen: HashSet<String> = HashSet::new();
     let mut counts = Counts::default();
 
-    for path in sorted_files(&base.join("parquet").join(repair.table), "parquet")? {
+    for path in rewrite::parquet_files(base, repair.table)? {
         rewrite_parquet(&path, &schema, repair, &mut seen, &mut counts, dry_run)
             .with_context(|| format!("rewriting {}", path.display()))?;
     }
 
-    for path in sorted_files(&base.join("wal").join(repair.table), "jsonl")? {
+    for path in rewrite::wal_files(base, repair.table)? {
         rewrite_wal(&path, repair, &mut seen, &mut counts, dry_run)
             .with_context(|| format!("rewriting {}", path.display()))?;
     }
 
     Ok(counts)
-}
-
-/// The registered Arrow schema for a table, so rewritten files keep the shape
-/// the compactor would have given them.
-fn schema_for(table: &str) -> Result<Schema> {
-    get_registered_tables()
-        .into_iter()
-        .find(|registration| registration.name == table)
-        .map(|registration| (registration.schema)())
-        .ok_or_else(|| anyhow::anyhow!("no registered schema for table {table}"))
-}
-
-/// Every file of one kind in a directory, oldest first. Names carry the date
-/// (`join_table_2025-06-16.parquet`), so sorting them sorts by day.
-fn sorted_files(dir: &Path, extension: &str) -> Result<Vec<PathBuf>> {
-    if !dir.exists() {
-        return Ok(Vec::new());
-    }
-
-    let mut files: Vec<PathBuf> = std::fs::read_dir(dir)?
-        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
-        .filter(|path| path.extension().is_some_and(|ext| ext == extension))
-        .collect();
-
-    files.sort();
-    Ok(files)
 }
 
 fn rewrite_parquet(
@@ -191,7 +161,7 @@ fn rewrite_parquet(
     counts: &mut Counts,
     dry_run: bool,
 ) -> Result<()> {
-    let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(path)?)?.build()?;
+    let reader = rewrite::read_parquet(path, None)?;
 
     let mut kept_batches = Vec::new();
     let mut file_dropped = 0usize;
@@ -214,18 +184,7 @@ fn rewrite_parquet(
         return Ok(());
     }
 
-    // Write beside the original and rename over it, so an interrupted run
-    // leaves the old file intact rather than a truncated one.
-    let temporary = path.with_extension("parquet.rewriting");
-    let props = WriterProperties::builder()
-        .set_compression(Compression::ZSTD(ZstdLevel::try_new(3)?))
-        .build();
-
-    let mut writer = ArrowWriter::try_new(
-        File::create(&temporary)?,
-        Arc::new(schema.clone()),
-        Some(props),
-    )?;
+    let mut writer = ParquetReplacement::create(path, schema, DEFAULT_ROW_GROUP_SIZE)?;
     let mut rows_written = 0usize;
 
     for batch in kept_batches {
@@ -233,15 +192,15 @@ fn rewrite_parquet(
         writer.write(&batch)?;
     }
 
-    writer.close()?;
+    let replacement = writer.finish()?;
 
     // A file whose rows were every one of them duplicates has nothing left to
     // say; leaving an empty Parquet behind would only slow later reads.
     if rows_written == 0 {
-        std::fs::remove_file(&temporary)?;
+        replacement.abandon()?;
         std::fs::remove_file(path)?;
     } else {
-        std::fs::rename(&temporary, path)?;
+        replacement.commit()?;
     }
 
     Ok(())
@@ -299,17 +258,7 @@ fn rewrite_wal(
         return Ok(());
     }
 
-    let temporary = path.with_extension("jsonl.rewriting");
-
-    {
-        let mut writer = BufWriter::new(File::create(&temporary)?);
-        for line in kept_lines {
-            writeln!(writer, "{line}")?;
-        }
-        writer.flush()?;
-    }
-
-    std::fs::rename(&temporary, path)?;
+    rewrite::replace_wal(path, kept_lines)?.commit()?;
     Ok(())
 }
 
@@ -394,6 +343,7 @@ mod tests {
     use super::*;
     use datafusion::arrow::array::StringArray;
     use datafusion::arrow::datatypes::{DataType, Field, Schema};
+    use std::sync::Arc;
 
     /// Build a `join_table`-shaped batch from `(when, entity_id, user_id)`.
     fn joins(rows: &[(&str, &str, &str)]) -> RecordBatch {

@@ -984,7 +984,6 @@ pub async fn handle_project_participation_record(req: &async_nats::service::Requ
     let record: ProjectParticipationRecord = decode_structured_message(req.message.clone())?;
 
     let user_id_str = record.user_id.to_string();
-    let now = common::timestring::TimeString::now().to_string();
 
     // Insert into cache (ignore if already exists)
     let cache_result = sqlx::query!(
@@ -1010,7 +1009,13 @@ pub async fn handle_project_participation_record(req: &async_nats::service::Requ
     use log_service::database::tables::ParticipationRow;
     let row = ParticipationRow {
         origin: record.origin.unwrap_or(0), // 0 = web
-        when: record.when.unwrap_or_else(|| now.clone()),
+        // Every participation is recorded through here, so here is where a
+        // partner's spelling of the time becomes one canonical instant.
+        when: common::contribution_time::recorded_contribution_time(
+            record.when.as_deref(),
+            &record.project_id,
+        )
+        .into(),
         duration: record.duration.unwrap_or(1.0),
         where_point: record.where_point,
         magnitude: record.magnitude.unwrap_or(1),

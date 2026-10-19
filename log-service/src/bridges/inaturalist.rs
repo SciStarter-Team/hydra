@@ -1,22 +1,29 @@
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use common::linked_platform;
-use common::message::user::{InatListUsersRequest, InatUpdateLastSync, InatUser};
+use common::message::user::{InatListUsersRequest, InatProjectMap, InatUpdateLastSync, InatUser};
+use common::{contribution_time, linked_platform};
 use jiff::Timestamp;
 use serde::Deserialize;
 use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 
 use log_service::database::{Database, tables::ParticipationRow};
+use log_service::ledger::{self, Feed};
+
+use super::Platform;
 
 const INATURALIST_ORIGIN: i16 = 5;
+
+/// The origin orrery files its own iNaturalist imports under, "Import", as it
+/// always has.
+const ORRERY_ORIGINS: &[i16] = &[5];
 const INAT_USER_PAGE_SIZE: i64 = 500;
 
 #[derive(Debug, Deserialize)]
 struct InatObservation {
-    #[allow(dead_code)]
     id: i64,
     created_at: String,
     project_ids: Option<Vec<i64>>,
@@ -27,16 +34,98 @@ struct InatApiResponse {
     results: Vec<InatObservation>,
 }
 
+/// Which project an observation is credited to, fetched from the frontend at
+/// the start of each sweep.
 struct ProjectMapping {
-    entity_slug: String,
-    entity_id: String,
-    inat_project_id: i64,
+    by_inat_project: HashMap<i64, String>,
+    fallback: String,
+}
+
+impl ProjectMapping {
+    async fn fetch() -> anyhow::Result<Self> {
+        let map: InatProjectMap =
+            common::service::request("frontend.inaturalist.projects", ()).await?;
+
+        Ok(ProjectMapping {
+            by_inat_project: map
+                .projects
+                .into_iter()
+                .map(|project| (project.inat_project_id, project.project_id.to_string()))
+                .collect(),
+            fallback: map.fallback.to_string(),
+        })
+    }
+
+    /// Every project an observation can be credited to.
+    fn projects(&self) -> HashSet<String> {
+        self.by_inat_project
+            .values()
+            .cloned()
+            .chain([self.fallback.clone()])
+            .collect()
+    }
+
+    /// The projects one observation is credited to: each mapped project it
+    /// was recorded in, or the iNaturalist project when there are none.
+    fn credited(&self, inat_project_ids: Option<&[i64]>) -> Vec<String> {
+        let mapped: Vec<String> = inat_project_ids
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|inat_project_id| self.by_inat_project.get(inat_project_id).cloned())
+            .collect();
+
+        if mapped.is_empty() {
+            vec![self.fallback.clone()]
+        } else {
+            mapped
+        }
+    }
+}
+
+/// What this bridge credits; see [`BridgeCoverage`](super::BridgeCoverage).
+pub async fn coverage() -> anyhow::Result<Platform> {
+    let mapping = ProjectMapping::fetch().await?;
+    let mut links = HashMap::new();
+    let mut offset: i64 = 0;
+
+    loop {
+        let users: Vec<InatUser> = common::service::request(
+            "user.inat.list_users",
+            InatListUsersRequest {
+                offset,
+                limit: INAT_USER_PAGE_SIZE,
+            },
+        )
+        .await?;
+
+        let page_len = users.len() as i64;
+
+        for user in users {
+            links.insert(user.user_id.to_string(), user.inat_linked_at);
+        }
+
+        if page_len < INAT_USER_PAGE_SIZE {
+            break;
+        }
+
+        offset += INAT_USER_PAGE_SIZE;
+    }
+
+    Ok(Platform {
+        orrery_origins: ORRERY_ORIGINS,
+        projects: mapping
+            .projects()
+            .into_iter()
+            .map(|project| (project, None))
+            .collect(),
+        links,
+    })
 }
 
 async fn process_user(
     user: &InatUser,
     database: &Database,
-    project_mappings: &[ProjectMapping],
+    project_mapping: &ProjectMapping,
     client: &reqwest::Client,
     cancellation_token: &CancellationToken,
 ) {
@@ -60,6 +149,7 @@ async fn process_user(
     let mut max_time = since;
     let mut going = true;
     let user_id_str = user.user_id.to_string();
+    let sender = format!("iNaturalist user {}", user.inat_username);
 
     while going {
         if cancellation_token.is_cancelled() {
@@ -115,17 +205,21 @@ async fn process_user(
             break;
         }
 
+        let received = Timestamp::now();
+
         for obs in &data.results {
-            let observed = match Timestamp::from_str(&obs.created_at) {
-                Ok(observed) => observed,
-                Err(e) => {
-                    eprintln!(
-                        "Unparseable iNat observation time {:?} for {}: {}",
-                        obs.created_at, user.inat_username, e
-                    );
-                    continue;
-                }
-            };
+            // The recorded time, not the reported one, also moves the
+            // watermark: one observation stamped in the future would
+            // otherwise put every later one below it.
+            let (observed, when) =
+                match contribution_time::recorded_platform_time(&obs.created_at, received, &sender)
+                {
+                    Ok(recorded) => recorded,
+                    Err(e) => {
+                        eprintln!("{e} for {sender}");
+                        continue;
+                    }
+                };
 
             if observed < since {
                 going = false;
@@ -136,34 +230,24 @@ async fn process_user(
                 max_time = observed;
             }
 
-            // Resolve iNat project IDs to entity IDs
-            let mut entity_ids: Vec<String> = Vec::new();
-
-            if let Some(project_ids) = &obs.project_ids {
-                for inat_pid in project_ids {
-                    if let Some(mapping) = project_mappings
-                        .iter()
-                        .find(|m| m.inat_project_id == *inat_pid)
-                    {
-                        entity_ids.push(mapping.entity_id.clone());
-                    }
+            // The watermark is inclusive -- it is the newest observation the
+            // last sweep credited, so this sweep meets that one again -- and
+            // the ledger is what keeps it from being credited twice. Leaving
+            // the user without moving the watermark is always safe: the next
+            // sweep walks the same ground, and the ledger skips what is done.
+            match ledger::claim(Feed::InatObservations, obs.id).await {
+                Ok(true) => {}
+                Ok(false) => continue,
+                Err(e) => {
+                    eprintln!("Failed to claim iNat observation {}: {}", obs.id, e);
+                    return;
                 }
             }
 
-            // Default to "inaturalist" slug if no matching projects
-            if entity_ids.is_empty() {
-                let fallback = project_mappings
-                    .iter()
-                    .find(|m| m.entity_slug == "inaturalist")
-                    .map(|m| m.entity_id.clone())
-                    .unwrap_or_else(|| "inaturalist".to_string());
-                entity_ids.push(fallback);
-            }
-
-            for entity_id in entity_ids {
+            for entity_id in project_mapping.credited(obs.project_ids.as_deref()) {
                 let row = ParticipationRow {
                     origin: INATURALIST_ORIGIN,
-                    when: obs.created_at.clone(),
+                    when: when.clone(),
                     duration: 1.0,
                     where_point: None,
                     magnitude: 1,
@@ -177,6 +261,8 @@ async fn process_user(
 
                 if let Err(e) = database.participation.insert(row).await {
                     eprintln!("Error inserting iNat participation: {}", e);
+                    ledger::release(Feed::InatObservations, obs.id).await;
+                    return;
                 }
             }
         }
@@ -210,14 +296,21 @@ pub async fn inaturalist_synchronize(
             return;
         }
 
-        // Load iNat project mappings
-        let project_mappings: Vec<ProjectMapping> = sqlx::query_as!(
-            ProjectMapping,
-            "SELECT entity_slug, entity_id, inat_project_id FROM inaturalist_projects"
-        )
-        .fetch_all(common::shared::db())
-        .await
-        .unwrap_or_default();
+        // Without the mapping there is nowhere true to credit an observation,
+        // so the sweep waits for it rather than crediting somewhere false.
+        let project_mapping = match ProjectMapping::fetch().await {
+            Ok(mapping) => mapping,
+            Err(e) => {
+                eprintln!("Error fetching iNat project mapping: {}", e);
+
+                tokio::select! {
+                    _ = sleep(Duration::from_secs(5 * 60)) => {}
+                    _ = cancellation_token.cancelled() => { return; }
+                }
+
+                continue;
+            }
+        };
 
         let client = reqwest::Client::new();
         let mut offset: i64 = 0;
@@ -263,7 +356,7 @@ pub async fn inaturalist_synchronize(
                 process_user(
                     user,
                     &database,
-                    &project_mappings,
+                    &project_mapping,
                     &client,
                     &cancellation_token,
                 )
@@ -283,5 +376,48 @@ pub async fn inaturalist_synchronize(
             _ = sleep(Duration::from_secs(6 * 60 * 60)) => {}
             _ = cancellation_token.cancelled() => { return; }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use assert2::check;
+
+    use super::*;
+
+    fn mapping() -> ProjectMapping {
+        ProjectMapping {
+            by_inat_project: HashMap::from([
+                (11, "01JKXMFYFZ0000000000PROJ11".to_string()),
+                (12, "01JKXMFYFZ0000000000PROJ12".to_string()),
+            ]),
+            fallback: "01JKXMFYFZ00000000000INAT0".to_string(),
+        }
+    }
+
+    #[test]
+    fn an_observation_is_credited_to_each_mapped_project_it_is_in() {
+        check!(
+            mapping().credited(Some(&[11, 99, 12]))
+                == vec![
+                    "01JKXMFYFZ0000000000PROJ11".to_string(),
+                    "01JKXMFYFZ0000000000PROJ12".to_string()
+                ]
+        );
+    }
+
+    #[test]
+    fn an_observation_in_no_mapped_project_is_credited_to_inaturalist() {
+        for project_ids in [None, Some(&[][..]), Some(&[99][..])] {
+            check!(
+                mapping().credited(project_ids) == vec!["01JKXMFYFZ00000000000INAT0".to_string()]
+            );
+        }
+    }
+
+    #[test]
+    fn every_project_an_observation_can_land_on_is_covered() {
+        check!(mapping().projects().len() == 3);
+        check!(mapping().projects().contains("01JKXMFYFZ00000000000INAT0"));
     }
 }

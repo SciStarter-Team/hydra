@@ -11,6 +11,8 @@ use tokio::fs;
 use tokio::time::{Duration, sleep, timeout};
 use tokio_util::sync::CancellationToken;
 
+mod support;
+
 /// Complete database system setup: storage + tables + test data
 async fn setup_complete_database_system() -> Result<(TempDir, Arc<Database>)> {
     let temp_dir = TempDir::new()?;
@@ -667,16 +669,17 @@ async fn test_performance_under_load() -> Result<()> {
 
 #[tokio::test]
 async fn test_compactor_integration_with_live_system() -> Result<()> {
-    let (_temp_dir, database) = setup_complete_database_system().await?;
+    let (temp_dir, database) = setup_complete_database_system().await?;
 
     // Start compactor service
     let cancellation_token = CancellationToken::new();
     let compactor_database = Arc::clone(&database);
+    let log_cache = support::log_cache(temp_dir.path()).await?;
     let compactor_task = {
         let token = cancellation_token.clone();
         tokio::spawn(async move {
             use log_service::run_compactor_service;
-            run_compactor_service(compactor_database, token).await
+            run_compactor_service(compactor_database, log_cache, token).await
         })
     };
 

@@ -312,7 +312,7 @@ impl AnalyticsFunction for RegenerateSummaries {
 
             progress("Starting full regeneration of summary tables...".to_string());
 
-            let result = regenerate_all_summaries(database).await;
+            let result = regenerate_all_summaries(database, common::shared::db().clone()).await;
 
             match result {
                 Ok(_) => {

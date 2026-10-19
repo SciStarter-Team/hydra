@@ -3,8 +3,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
-use common::linked_platform;
 use common::message::user::{ZooniverseLink, ZooniverseListLinksRequest};
+use common::{contribution_time, linked_platform};
+use jiff::Timestamp;
 use serde::Deserialize;
 use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
@@ -13,11 +14,18 @@ use log_service::database::{
     Database, get_sync_last_id, set_sync_last_id, tables::ParticipationRow,
 };
 
+use super::Platform;
+
 /// "Import" -- how the contribution reached us, which for a classification is
 /// a scheduled pull against the Panoptes API. Deliberately the same value as
 /// `INATURALIST_ORIGIN` in the sibling bridge, because it is the same kind of
 /// arrival; the platform is told apart by the entity.
 const ZOONIVERSE_ORIGIN: i16 = 5;
+
+/// The origins orrery has filed its own Zooniverse imports under: "Import",
+/// and before April 2026, when its importer named no origin, "Unspecified".
+/// (Between the two it used 10, and has since renumbered those to 5.)
+const ORRERY_ORIGINS: &[i16] = &[5, 0];
 const PAGE_SIZE: u32 = 200;
 const REQUEST_DELAY: Duration = Duration::from_millis(500);
 const LINK_PAGE_SIZE: i64 = 500;
@@ -63,6 +71,56 @@ async fn load_link_times() -> Result<LinkTimes> {
 
         offset += LINK_PAGE_SIZE;
     }
+}
+
+/// What this bridge credits; see [`BridgeCoverage`](super::BridgeCoverage).
+///
+/// A classification is credited to every account that claims the Zooniverse
+/// account it was made by, so the accounts are those the mapping names, each
+/// with its connection time as the sweep reads it.
+pub async fn coverage() -> Result<Platform> {
+    let projects = sqlx::query!(
+        r#"SELECT entity_id AS "entity_id!", MIN(credited_since) AS credited_since
+           FROM zooniverse_projects GROUP BY entity_id"#
+    )
+    .fetch_all(common::shared::db())
+    .await?
+    .into_iter()
+    .map(|project| {
+        let credited_since = project.credited_since.and_then(|since| {
+            since
+                .parse::<jiff::Timestamp>()
+                .inspect_err(|e| {
+                    eprintln!(
+                        "Unreadable credited_since {since:?} for Zooniverse project {}: {e}",
+                        project.entity_id
+                    )
+                })
+                .ok()
+        });
+
+        (project.entity_id, credited_since)
+    })
+    .collect();
+
+    let link_times = load_link_times().await?;
+
+    let links = sqlx::query_scalar!("SELECT DISTINCT user_id FROM zooniverse_users")
+        .fetch_all(common::shared::db())
+        .await?
+        .into_iter()
+        .flatten()
+        .map(|user_id| {
+            let linked_at = link_times.get(&user_id).cloned().flatten();
+            (user_id, linked_at)
+        })
+        .collect();
+
+    Ok(Platform {
+        orrery_origins: ORRERY_ORIGINS,
+        projects,
+        links,
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -124,7 +182,6 @@ pub async fn zooniverse_sync_projects(
         id: i32,
         zooniverse_id: i64,
         entity_ulid: String,
-        last_classification_id: i64,
     }
 
     loop {
@@ -177,13 +234,17 @@ pub async fn zooniverse_sync_projects(
             if project.id > max_id {
                 max_id = project.id;
             }
-            // INSERT OR IGNORE so we never roll the local last_classification_id
-            // backwards if hydra has already advanced it past orrery's value.
+            // A project new here starts from classification zero, not from
+            // wherever orrery's importer has reached: this importer is the
+            // one of record for the classifications it credits, and what
+            // orrery credited before this project arrived would otherwise be
+            // credited by neither. The connection floor keeps the walk from
+            // crediting anybody's back catalogue. INSERT OR IGNORE so a
+            // project already here keeps the watermark it has advanced.
             sqlx::query!(
-                "INSERT OR IGNORE INTO zooniverse_projects (zooniverse_id, entity_id, last_classification_id) VALUES (?, ?, ?)",
+                "INSERT OR IGNORE INTO zooniverse_projects (zooniverse_id, entity_id, last_classification_id) VALUES (?, ?, 0)",
                 project.zooniverse_id,
                 project.entity_ulid,
-                project.last_classification_id,
             )
             .execute(common::shared::db())
             .await
@@ -531,6 +592,8 @@ async fn sync_project(
         }
 
         let mut page_max_id = last_classification_id;
+        let received = Timestamp::now();
+        let sender = format!("Zooniverse project {zooniverse_id}");
 
         for classification in &classifications.classifications {
             let class_id = match classification.id.parse::<i64>() {
@@ -587,6 +650,20 @@ async fn sync_project(
                 continue;
             }
 
+            // Unreadable is refused here as well as by the connection floor
+            // below, which cannot credit a time it cannot place.
+            let when = match contribution_time::recorded_platform_time(
+                &classification.created_at,
+                received,
+                &sender,
+            ) {
+                Ok((_, when)) => when,
+                Err(e) => {
+                    eprintln!("{e} for {sender}, classification {class_id}");
+                    continue;
+                }
+            };
+
             for user_id in scistarter_users {
                 // A classification made before the account was connected here
                 // is not backfilled. The project watermark does not settle
@@ -602,7 +679,7 @@ async fn sync_project(
 
                 let row = ParticipationRow {
                     origin: ZOONIVERSE_ORIGIN,
-                    when: classification.created_at.clone(),
+                    when: when.clone(),
                     duration: 1.0,
                     where_point: None,
                     magnitude: 1,

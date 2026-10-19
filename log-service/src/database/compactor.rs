@@ -5,10 +5,8 @@ use datafusion::arrow::array::builder::{
 };
 use datafusion::arrow::datatypes::{DataType, Schema};
 use datafusion::arrow::record_batch::RecordBatch;
-use datafusion::parquet::arrow::ArrowWriter;
-use datafusion::parquet::basic::{Compression, ZstdLevel};
-use datafusion::parquet::file::properties::WriterProperties;
 use serde_json::Value;
+use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
@@ -16,10 +14,9 @@ use std::sync::Arc;
 use tokio::time::{Duration, interval};
 use tokio_util::sync::CancellationToken;
 
+use crate::database::retraction;
+use crate::database::rewrite::{self, ParquetReplacement};
 use crate::database::storage::Database;
-
-/// Default batch size for WAL compaction (number of records per Parquet row group)
-const DEFAULT_COMPACTOR_BATCH_SIZE: usize = 10_000;
 
 /// Background service that compacts WAL files to Parquet
 pub struct Compactor {
@@ -28,6 +25,10 @@ pub struct Compactor {
     retention_days: u64,
     batch_size: usize,
     database: Arc<Database>,
+    /// The log cache, where summaries keep track of how far they have got
+    /// and participation retractions are queued (see [`retraction`]).
+    /// Without it the compactor compacts, and maintains neither.
+    log_cache: Option<SqlitePool>,
 }
 
 impl Compactor {
@@ -46,7 +47,7 @@ impl Compactor {
         let batch_size = std::env::var("COMPACTOR_BATCH_SIZE")
             .ok()
             .and_then(|s| s.parse().ok())
-            .unwrap_or(DEFAULT_COMPACTOR_BATCH_SIZE);
+            .unwrap_or(rewrite::DEFAULT_ROW_GROUP_SIZE);
 
         Self::with_config(
             database.clone(),
@@ -68,7 +69,15 @@ impl Compactor {
             retention_days,
             batch_size,
             database,
+            log_cache: None,
         }
+    }
+
+    /// Also maintain the summaries and carry out the participation
+    /// retractions kept in `log_cache`.
+    pub fn with_log_cache(mut self, log_cache: SqlitePool) -> Self {
+        self.log_cache = Some(log_cache);
+        self
     }
 
     /// Main compaction loop
@@ -86,6 +95,16 @@ impl Compactor {
                         return Ok(());
                     }
 
+                    // A replacement recorded for a rename that an interrupted
+                    // cycle did not make would otherwise be discarded as
+                    // abandoned when its table is compacted.
+                    if let Some(log_cache) = &self.log_cache
+                        && let Err(e) = retraction::finish_moves(log_cache).await
+                    {
+                        eprintln!("Unable to finish an interrupted file replacement: {e}");
+                        continue;
+                    }
+
                     // Only run summary generation if compaction processed any files
                     match self.compact_all_tables().await {
                         Ok(files_processed) => {
@@ -99,6 +118,12 @@ impl Compactor {
                         Err(e) => {
                             eprintln!("Compaction error: {}", e);
                         }
+                    }
+
+                    if let Some(log_cache) = &self.log_cache
+                        && let Err(e) = retraction::apply_pending(log_cache, &self.base_path).await
+                    {
+                        eprintln!("Participation retraction error: {e:#}");
                     }
 
                     if let Err(e) = self.cleanup_old_processed_files().await {
@@ -117,7 +142,12 @@ impl Compactor {
     async fn update_summary_tables(&self) -> Result<()> {
         use crate::database::summaries::update_summary_tables;
 
-        update_summary_tables(self.database.clone()).await
+        match &self.log_cache {
+            Some(log_cache) => {
+                update_summary_tables(self.database.clone(), log_cache.clone()).await
+            }
+            None => Ok(()),
+        }
     }
 
     /// Compact WAL files for all table types
@@ -146,41 +176,26 @@ impl Compactor {
     }
 
     /// Compact WAL files for a specific table
-    /// Returns true if any files were processed, false otherwise  
+    /// Returns true if any files were processed, false otherwise
     async fn compact_table(&self, table_name: &str, schema: &Schema) -> Result<bool> {
-        let wal_dir = self.base_path.join("wal");
         let parquet_dir = self.base_path.join("parquet").join(table_name);
 
         // Create parquet directory if it doesn't exist
         tokio::fs::create_dir_all(&parquet_dir).await?;
 
-        // Find WAL files for this table in its specific subdirectory
-        let table_wal_dir = wal_dir.join(table_name);
-        let wal_pattern = format!("{}_", table_name);
-        let mut wal_files = Vec::new();
+        // A conversion that was interrupted left its Parquet unfinished, and
+        // its WAL file where it was; converting that again below replaces it.
+        rewrite::discard_unfinished(&parquet_dir)?;
 
-        if table_wal_dir.exists() {
-            let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
-            let mut read_dir = tokio::fs::read_dir(&table_wal_dir).await?;
-            while let Some(entry) = read_dir.next_entry().await? {
-                let file_name = entry.file_name().to_string_lossy().to_string();
-
-                if file_name.starts_with(&wal_pattern) && file_name.ends_with(".jsonl") {
-                    // Skip today's WAL files - they may still be receiving writes
-                    if file_name.contains(&format!("_{}.jsonl", today)) {
-                        continue;
-                    }
-
-                    // Check if this file has already been processed
-                    let parquet_name = file_name.replace(".jsonl", ".parquet");
-                    let parquet_path = parquet_dir.join(&parquet_name);
-
-                    if !parquet_path.exists() {
-                        wal_files.push(entry.path());
-                    }
-                }
-            }
-        }
+        // Every finished day's WAL file is compacted, whether or not a Parquet
+        // of that day exists: one that does was converted by a pass that
+        // stopped before it could move the WAL file out of the way, and the
+        // WAL file is the whole of that day, so it is converted again.
+        let today = jiff::Timestamp::now().strftime("%Y-%m-%d").to_string();
+        let wal_files: Vec<_> = rewrite::wal_files(&self.base_path, table_name)?
+            .into_iter()
+            .filter(|path| !path.to_string_lossy().ends_with(&format!("_{today}.jsonl")))
+            .collect();
 
         // Process each WAL file
         let files_processed = !wal_files.is_empty();
@@ -222,7 +237,7 @@ impl Compactor {
                     let schema = schema.clone();
                     let batch_size = self.batch_size;
 
-                    let result = tokio::task::spawn_blocking(move || {
+                    tokio::task::spawn_blocking(move || {
                         Self::stream_wal_to_parquet(
                             &wal_file_path,
                             &parquet_dir,
@@ -230,11 +245,7 @@ impl Compactor {
                             batch_size,
                         )
                     })
-                    .await?;
-
-                    if let Err(e) = result {
-                        return Err(e);
-                    }
+                    .await??;
 
                     // Step 2: Move to processed directory while still holding lock
                     let processed_dir = self.base_path.join("processed");
@@ -245,8 +256,7 @@ impl Compactor {
                         .ok_or_else(|| LogServiceError::InvalidFilePath(wal_file.to_path_buf()))?;
                     let dest_path = processed_dir.join(file_name);
 
-                    fs::rename(wal_file, &dest_path)?;
-                    // WAL file processed successfully
+                    rewrite::move_into_place(wal_file, &dest_path)?;
 
                     // Lock automatically released when file handle drops
                     return Ok(());
@@ -270,6 +280,9 @@ impl Compactor {
 
     /// Stream WAL file line by line and write to Parquet in batches
     /// This is the memory-efficient version that processes large files without loading them entirely
+    ///
+    /// The Parquet appears only once it is complete, so a conversion that
+    /// stops part-way leaves no file a query could count from.
     fn stream_wal_to_parquet(
         wal_file: &std::path::Path,
         parquet_dir: &std::path::Path,
@@ -288,14 +301,7 @@ impl Compactor {
         let file = File::open(wal_file)?;
         let reader = BufReader::with_capacity(64 * 1024, file); // 64KB buffer
 
-        // Create Parquet writer
-        let parquet_file = File::create(&parquet_path)?;
-        let props = WriterProperties::builder()
-            .set_compression(Compression::ZSTD(ZstdLevel::try_new(3)?))
-            .set_max_row_group_size(batch_size)
-            .build();
-
-        let mut writer = ArrowWriter::try_new(parquet_file, Arc::new(schema.clone()), Some(props))?;
+        let mut writer = ParquetReplacement::create(&parquet_path, schema, batch_size)?;
 
         // Process file in batches
         let mut records: Vec<Value> = Vec::with_capacity(batch_size);
@@ -321,7 +327,7 @@ impl Compactor {
 
                     // When batch is full, write it to Parquet
                     if records.len() >= batch_size {
-                        let batch = Self::json_records_to_batch(&records, schema)?;
+                        let batch = json_records_to_batch(&records, schema)?;
                         writer.write(&batch)?;
                         records.clear();
                     }
@@ -335,179 +341,25 @@ impl Compactor {
 
         // Write remaining records
         if !records.is_empty() {
-            let batch = Self::json_records_to_batch(&records, schema)?;
+            let batch = json_records_to_batch(&records, schema)?;
             writer.write(&batch)?;
         }
 
-        // Close the writer
-        writer.close()?;
+        let replacement = writer.finish()?;
 
-        // If no records were written, remove the empty parquet file
+        // A day with no records has no Parquet: an empty one would only slow
+        // later reads.
         if total_records == 0 {
-            let _ = fs::remove_file(&parquet_path);
+            replacement.abandon()?;
+
+            if parquet_path.exists() {
+                fs::remove_file(&parquet_path)?;
+            }
+        } else {
+            replacement.commit()?;
         }
 
         Ok(())
-    }
-
-    /// Convert JSON records to Arrow RecordBatch (static method for use in blocking context)
-    fn json_records_to_batch(records: &[Value], schema: &Schema) -> Result<RecordBatch> {
-        let mut builders: HashMap<String, Box<dyn ArrayBuilder>> = HashMap::new();
-
-        // Initialize builders for each field
-        for field in schema.fields() {
-            let builder: Box<dyn ArrayBuilder> = match field.data_type() {
-                DataType::Utf8 => Box::new(StringBuilder::new()),
-                DataType::Boolean => Box::new(BooleanBuilder::new()),
-                DataType::Int16 => Box::new(Int16Builder::new()),
-                DataType::Int32 => Box::new(Int32Builder::new()),
-                DataType::Float64 => Box::new(Float64Builder::new()),
-                DataType::List(inner_field)
-                    if matches!(inner_field.data_type(), DataType::Utf8) =>
-                {
-                    // Create ListBuilder with the exact same field schema as expected
-                    let list_builder =
-                        ListBuilder::new(StringBuilder::new()).with_field(inner_field.clone());
-                    Box::new(list_builder)
-                }
-                _ => {
-                    return Err(LogServiceError::UnsupportedDataType(format!(
-                        "{:?}",
-                        field.data_type()
-                    )));
-                }
-            };
-            builders.insert(field.name().clone(), builder);
-        }
-
-        // Process each record
-        for record in records {
-            for field in schema.fields() {
-                let field_name = field.name();
-                let builder = builders
-                    .get_mut(field_name)
-                    .ok_or_else(|| LogServiceError::MissingField(field_name.clone()))?;
-
-                let value = record.get(field_name);
-
-                match field.data_type() {
-                    DataType::Utf8 => {
-                        let string_builder = builder
-                            .as_any_mut()
-                            .downcast_mut::<StringBuilder>()
-                            .unwrap();
-
-                        match value {
-                            Some(Value::String(s)) => string_builder.append_value(s),
-                            Some(v) => string_builder.append_value(&v.to_string()),
-                            None => string_builder.append_null(),
-                        }
-                    }
-                    DataType::Boolean => {
-                        let bool_builder = builder
-                            .as_any_mut()
-                            .downcast_mut::<BooleanBuilder>()
-                            .unwrap();
-
-                        match value {
-                            Some(Value::Bool(b)) => bool_builder.append_value(*b),
-                            None => bool_builder.append_null(),
-                            _ => bool_builder.append_null(),
-                        }
-                    }
-                    DataType::Int16 => {
-                        let int_builder =
-                            builder.as_any_mut().downcast_mut::<Int16Builder>().unwrap();
-
-                        match value {
-                            Some(Value::Number(n)) => {
-                                if let Some(i) = n.as_i64() {
-                                    int_builder.append_value(i as i16);
-                                } else {
-                                    int_builder.append_null();
-                                }
-                            }
-                            None => int_builder.append_null(),
-                            _ => int_builder.append_null(),
-                        }
-                    }
-                    DataType::Int32 => {
-                        let int_builder =
-                            builder.as_any_mut().downcast_mut::<Int32Builder>().unwrap();
-
-                        match value {
-                            Some(Value::Number(n)) => {
-                                if let Some(i) = n.as_i64() {
-                                    int_builder.append_value(i as i32);
-                                } else {
-                                    int_builder.append_null();
-                                }
-                            }
-                            None => int_builder.append_null(),
-                            _ => int_builder.append_null(),
-                        }
-                    }
-                    DataType::Float64 => {
-                        let float_builder = builder
-                            .as_any_mut()
-                            .downcast_mut::<Float64Builder>()
-                            .unwrap();
-
-                        match value {
-                            Some(Value::Number(n)) => {
-                                if let Some(f) = n.as_f64() {
-                                    float_builder.append_value(f);
-                                } else {
-                                    float_builder.append_null();
-                                }
-                            }
-                            None => float_builder.append_null(),
-                            _ => float_builder.append_null(),
-                        }
-                    }
-                    DataType::List(inner_field)
-                        if matches!(inner_field.data_type(), DataType::Utf8) =>
-                    {
-                        let list_builder = builder
-                            .as_any_mut()
-                            .downcast_mut::<ListBuilder<StringBuilder>>()
-                            .unwrap();
-
-                        match value {
-                            Some(Value::Array(arr)) => {
-                                for item in arr {
-                                    if let Value::String(s) = item {
-                                        list_builder.values().append_value(s);
-                                    } else {
-                                        list_builder.values().append_value(&item.to_string());
-                                    }
-                                }
-                                list_builder.append(true);
-                            }
-                            None => list_builder.append_null(),
-                            _ => list_builder.append_null(),
-                        }
-                    }
-                    _ => {
-                        return Err(LogServiceError::UnsupportedDataType(format!(
-                            "{:?}",
-                            field.data_type()
-                        )));
-                    }
-                }
-            }
-        }
-
-        // Build arrays
-        let mut arrays = Vec::new();
-        for field in schema.fields() {
-            let builder = builders
-                .remove(field.name())
-                .ok_or_else(|| LogServiceError::MissingField(field.name().clone()))?;
-            arrays.push(builder.finish());
-        }
-
-        Ok(RecordBatch::try_new(Arc::new(schema.clone()), arrays)?)
     }
 
     /// Clean up old processed WAL files
@@ -606,6 +458,167 @@ impl Compactor {
     }
 }
 
+/// Convert JSON records to an Arrow RecordBatch of `schema`.
+///
+/// The one way a row becomes Arrow, for the WAL and for every rewrite.
+pub(crate) fn json_records_to_batch(records: &[Value], schema: &Schema) -> Result<RecordBatch> {
+    let mut builders: HashMap<String, Box<dyn ArrayBuilder>> = HashMap::new();
+
+    // Initialize builders for each field
+    for field in schema.fields() {
+        let builder: Box<dyn ArrayBuilder> = match field.data_type() {
+            DataType::Utf8 => Box::new(StringBuilder::new()),
+            DataType::Boolean => Box::new(BooleanBuilder::new()),
+            DataType::Int16 => Box::new(Int16Builder::new()),
+            DataType::Int32 => Box::new(Int32Builder::new()),
+            DataType::Float64 => Box::new(Float64Builder::new()),
+            DataType::List(inner_field) if matches!(inner_field.data_type(), DataType::Utf8) => {
+                // Create ListBuilder with the exact same field schema as expected
+                let list_builder =
+                    ListBuilder::new(StringBuilder::new()).with_field(inner_field.clone());
+                Box::new(list_builder)
+            }
+            _ => {
+                return Err(LogServiceError::UnsupportedDataType(format!(
+                    "{:?}",
+                    field.data_type()
+                )));
+            }
+        };
+        builders.insert(field.name().clone(), builder);
+    }
+
+    // Process each record
+    for record in records {
+        for field in schema.fields() {
+            let field_name = field.name();
+            let builder = builders
+                .get_mut(field_name)
+                .ok_or_else(|| LogServiceError::MissingField(field_name.clone()))?;
+
+            let value = record.get(field_name);
+
+            match field.data_type() {
+                DataType::Utf8 => {
+                    let string_builder = builder
+                        .as_any_mut()
+                        .downcast_mut::<StringBuilder>()
+                        .unwrap();
+
+                    // A JSON null is an absent value, not the word "null":
+                    // spelled out, it reads as a user, a place or a task
+                    // named "null" to everything that tests for NULL.
+                    match value {
+                        Some(Value::String(s)) => string_builder.append_value(s),
+                        Some(Value::Null) | None => string_builder.append_null(),
+                        Some(v) => string_builder.append_value(&v.to_string()),
+                    }
+                }
+                DataType::Boolean => {
+                    let bool_builder = builder
+                        .as_any_mut()
+                        .downcast_mut::<BooleanBuilder>()
+                        .unwrap();
+
+                    match value {
+                        Some(Value::Bool(b)) => bool_builder.append_value(*b),
+                        None => bool_builder.append_null(),
+                        _ => bool_builder.append_null(),
+                    }
+                }
+                DataType::Int16 => {
+                    let int_builder = builder.as_any_mut().downcast_mut::<Int16Builder>().unwrap();
+
+                    match value {
+                        Some(Value::Number(n)) => {
+                            if let Some(i) = n.as_i64() {
+                                int_builder.append_value(i as i16);
+                            } else {
+                                int_builder.append_null();
+                            }
+                        }
+                        None => int_builder.append_null(),
+                        _ => int_builder.append_null(),
+                    }
+                }
+                DataType::Int32 => {
+                    let int_builder = builder.as_any_mut().downcast_mut::<Int32Builder>().unwrap();
+
+                    match value {
+                        Some(Value::Number(n)) => {
+                            if let Some(i) = n.as_i64() {
+                                int_builder.append_value(i as i32);
+                            } else {
+                                int_builder.append_null();
+                            }
+                        }
+                        None => int_builder.append_null(),
+                        _ => int_builder.append_null(),
+                    }
+                }
+                DataType::Float64 => {
+                    let float_builder = builder
+                        .as_any_mut()
+                        .downcast_mut::<Float64Builder>()
+                        .unwrap();
+
+                    match value {
+                        Some(Value::Number(n)) => {
+                            if let Some(f) = n.as_f64() {
+                                float_builder.append_value(f);
+                            } else {
+                                float_builder.append_null();
+                            }
+                        }
+                        None => float_builder.append_null(),
+                        _ => float_builder.append_null(),
+                    }
+                }
+                DataType::List(inner_field)
+                    if matches!(inner_field.data_type(), DataType::Utf8) =>
+                {
+                    let list_builder = builder
+                        .as_any_mut()
+                        .downcast_mut::<ListBuilder<StringBuilder>>()
+                        .unwrap();
+
+                    match value {
+                        Some(Value::Array(arr)) => {
+                            for item in arr {
+                                if let Value::String(s) = item {
+                                    list_builder.values().append_value(s);
+                                } else {
+                                    list_builder.values().append_value(&item.to_string());
+                                }
+                            }
+                            list_builder.append(true);
+                        }
+                        None => list_builder.append_null(),
+                        _ => list_builder.append_null(),
+                    }
+                }
+                _ => {
+                    return Err(LogServiceError::UnsupportedDataType(format!(
+                        "{:?}",
+                        field.data_type()
+                    )));
+                }
+            }
+        }
+    }
+
+    // Build arrays
+    let mut arrays = Vec::new();
+    for field in schema.fields() {
+        let builder = builders
+            .remove(field.name())
+            .ok_or_else(|| LogServiceError::MissingField(field.name().clone()))?;
+        arrays.push(builder.finish());
+    }
+
+    Ok(RecordBatch::try_new(Arc::new(schema.clone()), arrays)?)
+}
+
 /// Trait for dynamic array building
 trait ArrayBuilder: Send {
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
@@ -669,8 +682,39 @@ impl ArrayBuilder for ListBuilder<StringBuilder> {
 /// Run the compactor service
 pub async fn run_compactor_service(
     database: Arc<Database>,
+    log_cache: SqlitePool,
     cancellation_token: CancellationToken,
 ) -> Result<()> {
-    let compactor = Compactor::new(database);
+    let compactor = Compactor::new(database).with_log_cache(log_cache);
     compactor.run(cancellation_token).await
+}
+
+#[cfg(test)]
+mod tests {
+    use assert2::check;
+    use datafusion::arrow::array::{Array, StringArray};
+    use datafusion::arrow::datatypes::{DataType, Field};
+
+    use super::*;
+
+    #[test]
+    fn an_absent_string_compacts_to_null_not_to_the_word() {
+        let schema = Schema::new(vec![Field::new("task_name", DataType::Utf8, true)]);
+        let records = vec![
+            serde_json::json!({"task_name": null}),
+            serde_json::json!({}),
+            serde_json::json!({"task_name": "Data collection"}),
+        ];
+
+        let batch = json_records_to_batch(&records, &schema).unwrap();
+        let tasks = batch
+            .column(0)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+
+        check!(tasks.is_null(0));
+        check!(tasks.is_null(1));
+        check!(tasks.value(2) == "Data collection");
+    }
 }

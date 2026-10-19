@@ -1,6 +1,7 @@
 pub mod all;
 pub mod field;
 pub mod field_source;
+pub mod inaturalist;
 pub mod investigator;
 pub mod location;
 pub mod reference;

@@ -4,6 +4,7 @@ extern crate self as common;
 
 pub mod badge;
 pub mod channel;
+pub mod contribution_time;
 pub mod elect;
 pub mod email;
 pub mod foundations;

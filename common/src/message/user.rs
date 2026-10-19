@@ -2059,6 +2059,25 @@ pub struct InatUpdateLastSync {
     pub inat_last_update: String,
 }
 
+/// Which SciStarter project an iNaturalist observation is credited to, as
+/// `frontend.inaturalist.projects` answers it.
+///
+/// The mapping is the `inat_project_id` field of the frontend's projects, so
+/// the importer asks for it once per sweep rather than keeping a copy that
+/// nothing would update. An observation in none of `projects` is credited to
+/// `fallback`, the iNaturalist project itself, as orrery's importer does.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct InatProjectMap {
+    pub projects: Vec<InatProject>,
+    pub fallback: Ulid,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct InatProject {
+    pub inat_project_id: i64,
+    pub project_id: Ulid,
+}
+
 // ============================================================================
 // Zooniverse
 // ============================================================================

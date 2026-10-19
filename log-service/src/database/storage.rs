@@ -775,12 +775,16 @@ async fn load_bookmarks(database_path: &Path) -> Result<BookmarkStorage> {
     }
 }
 
-pub async fn get_sync_bookmark(database: &Database, key: &str) -> Result<String> {
+/// The value stored under `key`, or `None` when nothing has been, for a
+/// reader that has to tell "never set" from any value it could default to.
+pub async fn get_sync_entry(database: &Database, key: &str) -> Result<Option<String>> {
     let storage = load_bookmarks(&database.path).await?;
-    Ok(storage
-        .bookmarks
-        .get(key)
-        .cloned()
+    Ok(storage.bookmarks.get(key).cloned())
+}
+
+pub async fn get_sync_bookmark(database: &Database, key: &str) -> Result<String> {
+    Ok(get_sync_entry(database, key)
+        .await?
         .unwrap_or_else(|| String::from("1900-01-01T00:00:00Z")))
 }
 
@@ -793,8 +797,7 @@ pub async fn set_sync_bookmark(database: &Database, key: &str, value: &str) -> R
 }
 
 pub async fn get_sync_last_id(database: &Database, key: &str) -> Result<i32> {
-    let storage = load_bookmarks(&database.path).await?;
-    match storage.bookmarks.get(key) {
+    match get_sync_entry(database, key).await? {
         Some(value) => Ok(value.parse::<i32>().unwrap_or(0)),
         None => Ok(0),
     }

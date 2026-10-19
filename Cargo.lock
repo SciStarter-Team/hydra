@@ -1623,6 +1623,7 @@ name = "common"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "assert2",
  "async-nats",
  "base64 0.22.1",
  "ego-tree",
@@ -4783,6 +4784,7 @@ name = "log-service"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "assert2",
  "async-nats",
  "clap",
  "common",

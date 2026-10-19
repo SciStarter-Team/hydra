@@ -7,6 +7,7 @@ use datafusion::parquet::arrow::ArrowWriter;
 use datafusion::parquet::file::properties::WriterProperties;
 use datafusion::prelude::*;
 use jiff::{Span, Timestamp, Zoned, civil::Date};
+use sqlx::SqlitePool;
 use std::fs::File;
 use std::path::Path;
 use std::sync::Arc;
@@ -14,16 +15,21 @@ use std::sync::Arc;
 /// Generate and write summary tables incrementally from parquet data
 pub struct SummaryGenerator {
     database: Arc<Database>,
+    /// The log cache, where how far each summary has got is kept.
+    log_cache: SqlitePool,
 }
 
 impl SummaryGenerator {
-    pub fn new(database: Arc<Database>) -> Self {
-        Self { database }
+    pub fn new(database: Arc<Database>, log_cache: SqlitePool) -> Self {
+        Self {
+            database,
+            log_cache,
+        }
     }
 
     /// Get the last processed date for a summary table
     async fn get_last_processed_date(&self, table_name: &str) -> Result<Option<Date>> {
-        let db = common::shared::db();
+        let db = &self.log_cache;
 
         let row = sqlx::query!(
             "SELECT last_processed_date FROM summary_metadata WHERE table_name = ?",
@@ -41,7 +47,7 @@ impl SummaryGenerator {
 
     /// Update the last processed date for a summary table
     async fn set_last_processed_date(&self, table_name: &str, date: Date) -> Result<()> {
-        let db = common::shared::db();
+        let db = &self.log_cache;
         let now = Timestamp::now().as_microsecond();
         let date_string = date.to_string();
 
@@ -411,7 +417,7 @@ impl SummaryGenerator {
 
     /// Clear all summary metadata to force full regeneration
     async fn clear_summary_metadata(&self) -> Result<()> {
-        let db = common::shared::db();
+        let db = &self.log_cache;
 
         sqlx::query!("DELETE FROM summary_metadata")
             .execute(db)
@@ -423,15 +429,18 @@ impl SummaryGenerator {
 }
 
 /// Update summary tables (typically called after compaction runs)
-pub async fn update_summary_tables(database: Arc<Database>) -> Result<()> {
-    let generator = SummaryGenerator::new(database);
+pub async fn update_summary_tables(database: Arc<Database>, log_cache: SqlitePool) -> Result<()> {
+    let generator = SummaryGenerator::new(database, log_cache);
     generator.update_all_summaries().await?;
     Ok(())
 }
 
 /// Regenerate all summary tables from scratch using all available parquet data
-pub async fn regenerate_all_summaries(database: Arc<Database>) -> Result<()> {
-    let generator = SummaryGenerator::new(database);
+pub async fn regenerate_all_summaries(
+    database: Arc<Database>,
+    log_cache: SqlitePool,
+) -> Result<()> {
+    let generator = SummaryGenerator::new(database, log_cache);
     generator.regenerate_all_summaries().await?;
     Ok(())
 }

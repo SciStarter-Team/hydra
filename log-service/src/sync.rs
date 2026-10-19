@@ -2,17 +2,30 @@
 //!
 //! Each feed is paged with a watermark: the importer remembers how far it has
 //! read and asks for everything after that. Which column the watermark follows
-//! decides whether a delivery and an event are the same thing.
+//! decides two things: whether every row crosses it, and whether a delivery
+//! and an event are the same thing.
 //!
-//! Most feeds page on `when`, the moment the thing happened, which orrery never
-//! changes. A row crosses that watermark exactly once, so every delivery is a
-//! new event and logging each one is correct.
+//! Every row crosses a watermark only if the watermark follows the order rows
+//! *arrive* in; one that follows any other order passes over every row that
+//! arrives behind it, for good. Golinks, ratings and reviews page on `when`,
+//! which orrery stamps as the row is created, so for them it is arrival order
+//! and each row crosses exactly once: every delivery is a new event.
+//!
+//! Participation does not. Its `when` is the moment the contribution was
+//! made, which imports set from the past -- and one row dated in the future
+//! once held the whole feed back for six months. Nor is an event written
+//! once: later contributions fold into it. So it pages on the revision orrery
+//! numbers every write with, and a delivery is a new state of an event that
+//! [`participation_ledger`] turns into a change to the log; see
+//! [`log_service::participation_feed`].
 //!
 //! Joins and bookmarks page on `activity`, which orrery bumps whenever the row
 //! is touched. Those rows cross the watermark again on every change, and the
-//! importer is handed an event it has already logged. For those two feeds a
-//! delivery is *not* an event, and they consult [`claim_source_row`] before
-//! writing. Adding a feed that pages on a mutable column means doing the same.
+//! importer is handed an event it has already logged.
+//!
+//! So for joins and bookmarks a delivery is *not* an event, and they consult
+//! [`ledger::claim`] before writing. Adding a feed that can deliver a row
+//! twice means doing the same.
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -20,75 +33,19 @@ use std::time::Duration;
 use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 
+use anyhow::Context;
+use futures::TryStreamExt;
+use jiff::Timestamp;
+use log_service::database::tables::ParticipationRow;
 use log_service::database::{
     Database, get_sync_bookmark, get_sync_last_id, set_sync_bookmark, set_sync_last_id,
 };
+use log_service::ledger::{self, Feed};
+use log_service::participation_feed::{self, FeedCursor, FeedItem};
+use log_service::participation_ledger;
 use std::sync::Arc;
 
-/// Feed names for [`claim_source_row`]. orrery's ids are only unique within
-/// one of its tables, so the ledger is keyed by both.
-const JOIN_FEED: &str = "joins";
-const BOOKMARK_FEED: &str = "bookmarks";
-
-/// Claim `source_id` for `feed`, reporting whether this importer had it already.
-///
-/// `true` means the row has not been logged before and its events should be
-/// written; `false` means this is a re-delivery of a row whose `activity`
-/// moved, and writing it again would log the same event twice.
-///
-/// The claim is taken before the write rather than after, so that a crash
-/// between the two costs one duplicated event rather than a silently dropped
-/// one. A write that fails outright gives the claim back via
-/// [`release_source_row`].
-async fn claim_source_row(feed: &str, source_id: i32) -> Result<bool> {
-    let claimed = sqlx::query!(
-        r#"INSERT OR IGNORE INTO synced_source_rows ("feed", "source_id") VALUES (?, ?)"#,
-        feed,
-        source_id
-    )
-    .execute(common::shared::db())
-    .await?
-    .rows_affected();
-
-    Ok(claimed > 0)
-}
-
-/// Give back a claim whose events could not be written, so that the next pass
-/// treats the row as new rather than as a re-delivery.
-///
-/// A failure here is only reported: the row keeps its claim, the event stays
-/// unlogged, and the repair tooling is what recovers it. Propagating would
-/// take down an importer over a row it was already failing to write.
-async fn release_source_row(feed: &str, source_id: i32) {
-    let released = sqlx::query!(
-        r#"DELETE FROM synced_source_rows WHERE "feed" = ? AND "source_id" = ?"#,
-        feed,
-        source_id
-    )
-    .execute(common::shared::db())
-    .await;
-
-    if let Err(e) = released {
-        eprintln!("Failed to release {feed} row {source_id} after a failed write: {e}");
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ParticipationEventData {
-    pub id: i32,
-    pub origin: i16,
-    pub when: String, // ISO 8601 timestamp string
-    pub duration: Option<f64>,
-    pub where_point: Option<String>,
-    pub magnitude: Option<i32>,
-    pub authenticated: Option<bool>,
-    pub extra: Option<String>,
-    pub repetitions: i32,
-    pub fidelity: Option<f64>,
-    pub entity_ulid: String,
-    pub profile_user_ulid: Option<String>,
-    pub task_name: Option<String>,
-}
+use crate::bridges::{BridgeCoverage, Contribution};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BookmarkData {
@@ -148,117 +105,44 @@ pub struct ReviewData {
     pub checked: bool,
 }
 
-/// Watermark: the immutable `when`, so every delivery is a new event.
+/// Watermark: the revision orrery numbers each write to an event with, with
+/// a settling window re-read behind it. A delivery is the event as the write
+/// left it, reconciled with what the log holds through
+/// [`participation_ledger`]. See [`log_service::participation_feed`].
 pub async fn participation_synchronize(
     database: Arc<Database>,
     cancellation_token: CancellationToken,
 ) {
+    let client = reqwest::Client::new();
+
     loop {
-        // Check for cancellation at start of loop
         if cancellation_token.is_cancelled() {
             println!("Participation sync cancelled, exiting gracefully");
             return;
         }
 
-        let last = get_sync_bookmark(&database, "participation-sync-bookmark")
-            .await
-            .unwrap_or_else(|_| String::from("1900-01-01T00:00:00Z"));
-        let last_id = get_sync_last_id(&database, "participation-sync-last-id")
-            .await
-            .unwrap_or_else(|_| 0);
-
-        println!(
-            "Syncing participation events since {} with last_id {}",
-            last, last_id
-        );
-
-        let sync_token = env!("SYNC_TOKEN");
-
-        let client = reqwest::Client::new();
-
-        let participation_events: Vec<ParticipationEventData> = match client
-            .get("https://scistarter.org/staff/sync/affiliate_events")
-            .bearer_auth(sync_token)
-            .query(&[("since", &last), ("last_id", &last_id.to_string())])
-            .send()
-            .await
+        let sleep_duration = match participation_pass(&database, &client, &cancellation_token).await
         {
-            Ok(response) => match response.error_for_status() {
-                Ok(resp) => {
-                    let response_text = match resp.text().await {
-                        Ok(text) => text,
-                        Err(e) => {
-                            eprintln!("Failed to read response body: {}", e);
-                            sleep(Duration::from_secs(60)).await;
-                            continue;
-                        }
-                    };
-
-                    match serde_json::from_str(&response_text) {
-                        Ok(events) => events,
-                        Err(e) => {
-                            eprintln!("JSON parsing error: {}", e);
-                            eprintln!("Response body: {}", response_text);
-                            sleep(Duration::from_secs(60)).await;
-                            continue;
-                        }
-                    }
-                }
-                Err(e) => {
-                    eprintln!("HTTP error: {}", e);
-                    sleep(Duration::from_secs(60)).await;
-                    continue;
-                }
-            },
-            Err(e) => {
-                eprintln!("Request error: {}", e);
-                sleep(Duration::from_secs(60)).await;
-                continue;
+            Ok(Pass::Read(rows)) => {
+                println!("Participation sync read {rows} rows");
+                Duration::from_secs(60 * 60)
             }
-        };
-
-        let got_events = participation_events.len();
-
-        if got_events == 0 {
-            println!("No new participation events to sync");
-        } else {
-            let mut bookmark = last.clone();
-            let mut bookmark_id = last_id;
-
-            for event in participation_events {
-                if let Err(e) = insert_participation(&database, &event).await {
-                    eprintln!("Failed to insert participation event: {}", e);
-                    continue;
-                }
-
-                // Update bookmark to the latest timestamp and id
-                if event.when > bookmark || (event.when == bookmark && event.id > bookmark_id) {
-                    bookmark = event.when.clone();
-                    bookmark_id = event.id;
-                }
-
-                println!(
-                    "Inserted {} repetitions for participation event {}",
-                    event.repetitions, event.id
+            Ok(Pass::NotStarted) => {
+                eprintln!(
+                    "Participation sync has no cursor; the participation-repair tool \
+                     sets where it starts"
                 );
+                Duration::from_secs(60 * 60)
             }
-
-            set_sync_bookmark(&database, "participation-sync-bookmark", &bookmark)
-                .await
-                .expect("Failed to save sync bookmark");
-            set_sync_last_id(&database, "participation-sync-last-id", bookmark_id)
-                .await
-                .expect("Failed to save sync last_id");
-        }
-
-        // If we got the full batch size, sync again quickly, otherwise wait longer
-        let sleep_duration = if got_events == 500 {
-            Duration::from_secs(60)
-        } else {
-            Duration::from_secs(60 * 60)
+            Ok(Pass::Cancelled) => return,
+            Err(e) => {
+                // The cursor is left where it was, so the next pass reads
+                // from the same place, the failed write included.
+                eprintln!("Participation sync pass failed: {e}");
+                Duration::from_secs(60)
+            }
         };
 
-        // Use cancellation-aware sleep
         tokio::select! {
             _ = sleep(sleep_duration) => {}
             _ = cancellation_token.cancelled() => {
@@ -269,8 +153,177 @@ pub async fn participation_synchronize(
     }
 }
 
+enum Pass {
+    /// Read the feed to its end, this many writes of it.
+    Read(usize),
+    NotStarted,
+    Cancelled,
+}
+
+/// Read everything after the settled mark, in revision order, and move the
+/// cursor.
+///
+/// Stops at the first write it cannot finish with: one it passed over would
+/// be passed over for good once the cursor settled past it.
+async fn participation_pass(
+    database: &Database,
+    client: &reqwest::Client,
+    cancellation_token: &CancellationToken,
+) -> Result<Pass> {
+    let Some(cursor) = FeedCursor::load(database).await? else {
+        return Ok(Pass::NotStarted);
+    };
+
+    // Fetched per pass, since accounts link and projects join between them.
+    let coverage = BridgeCoverage::fetch().await?;
+    take_back_newly_covered(&coverage).await?;
+    let started = Timestamp::now();
+    let mut read_through = cursor.settled;
+    let mut rows = 0;
+
+    loop {
+        if cancellation_token.is_cancelled() {
+            return Ok(Pass::Cancelled);
+        }
+
+        let page = participation_feed::fetch_page(client, read_through).await?;
+
+        for item in &page {
+            import_participation(database, &coverage, item).await?;
+            read_through = item.revision;
+        }
+
+        rows += page.len();
+
+        if page.len() < participation_feed::PAGE_SIZE {
+            break;
+        }
+    }
+
+    cursor
+        .after_pass(started, read_through, Timestamp::now())
+        .store(database)
+        .await?;
+
+    Ok(Pass::Read(rows))
+}
+
+/// Take back what the log holds for events a bridge has come to cover since
+/// they were last delivered.
+///
+/// A delivery is checked against coverage as it stands when it is read. But
+/// an account can link a platform after its events were read, or its link
+/// can reach here after them, and a project can join a bridge; orrery writes
+/// nothing to the events then, so no delivery would bring them back.
+async fn take_back_newly_covered(coverage: &BridgeCoverage) -> Result<()> {
+    let newly_covered: Vec<i32> = participation_ledger::uncovered()
+        .try_filter_map(|(source_id, row)| {
+            let covered = coverage.covers(Contribution::of_row(&row));
+            std::future::ready(Ok(covered.then_some(source_id)))
+        })
+        .try_collect()
+        .await?;
+
+    for source_id in newly_covered {
+        let entry = participation_ledger::load(source_id).await?;
+        let reconciliation = participation_ledger::cover(&entry);
+
+        if !reconciliation.is_change(&entry) {
+            continue;
+        }
+
+        participation_ledger::record(
+            source_id,
+            &reconciliation,
+            participation_ledger::Cause::Coverage,
+        )
+        .await
+        .with_context(|| format!("recording participation event {source_id}"))?
+        .commit()
+        .await
+        .with_context(|| format!("recording participation event {source_id}"))?;
+
+        report(source_id, &reconciliation);
+    }
+
+    Ok(())
+}
+
+/// Bring the log into line with one write to an event.
+async fn import_participation(
+    database: &Database,
+    coverage: &BridgeCoverage,
+    item: &FeedItem,
+) -> Result<()> {
+    let entry = participation_ledger::load(item.id).await?;
+    let covered = item
+        .event
+        .as_ref()
+        .is_some_and(|event| coverage.covers(Contribution::of_event(event)));
+
+    let reconciliation = participation_ledger::reconcile(
+        &entry,
+        item.id,
+        item.event.as_ref(),
+        covered,
+        Timestamp::now(),
+    );
+
+    if !reconciliation.is_change(&entry) {
+        return Ok(());
+    }
+
+    // Outside the ledger's transaction, which holds the cache's write lock;
+    // noting a participant twice is harmless.
+    if let Some((row, _)) = &reconciliation.append {
+        note_participant(row).await?;
+    }
+
+    let recording = participation_ledger::record(
+        item.id,
+        &reconciliation,
+        participation_ledger::Cause::Delivery(item.revision),
+    )
+    .await
+    .with_context(|| format!("recording participation event {}", item.id))?;
+
+    if let Some((row, copies)) = &reconciliation.append {
+        database
+            .participation
+            .insert_all(vec![row.clone(); *copies as usize])
+            .await
+            .with_context(|| format!("logging participation event {}", item.id))?;
+    }
+
+    recording
+        .commit()
+        .await
+        .with_context(|| format!("recording participation event {}", item.id))?;
+
+    if let Some((row, _)) = &reconciliation.append {
+        announce_participation(row).await;
+    }
+
+    report(item.id, &reconciliation);
+
+    Ok(())
+}
+
+fn report(source_id: i32, reconciliation: &participation_ledger::Reconciliation) {
+    if let Some((_, copies)) = &reconciliation.append {
+        println!("Logged {copies} repetitions of participation event {source_id}");
+    }
+
+    if let Some((_, copies, reason)) = &reconciliation.retract {
+        println!(
+            "Queued {copies} repetitions of participation event {source_id} for retraction: {}",
+            reason.describe()
+        );
+    }
+}
+
 /// Watermark: the mutable `activity`, so a delivery is not an event and
-/// rows are claimed through [`claim_source_row`] before being logged.
+/// rows are claimed through [`ledger::claim`] before being logged.
 pub async fn bookmark_synchronize(database: Arc<Database>, cancellation_token: CancellationToken) {
     loop {
         // Check for cancellation at start of loop
@@ -342,7 +395,7 @@ pub async fn bookmark_synchronize(database: Arc<Database>, cancellation_token: C
             for bm in bookmarks {
                 // Pages on the mutable `activity`, exactly as joins do, so the
                 // same bookmark arrives again every time it is touched.
-                let first_delivery = match claim_source_row(BOOKMARK_FEED, bm.id).await {
+                let first_delivery = match ledger::claim(Feed::Bookmarks, bm.id.into()).await {
                     Ok(claimed) => claimed,
                     Err(e) => {
                         eprintln!("Failed to claim bookmark {}: {}", bm.id, e);
@@ -353,7 +406,7 @@ pub async fn bookmark_synchronize(database: Arc<Database>, cancellation_token: C
                 if first_delivery {
                     if let Err(e) = insert_bookmark(&database, &bm).await {
                         eprintln!("Failed to insert bookmark {}: {}", bm.id, e);
-                        release_source_row(BOOKMARK_FEED, bm.id).await;
+                        ledger::release(Feed::Bookmarks, bm.id.into()).await;
                         continue;
                     }
 
@@ -392,7 +445,7 @@ pub async fn bookmark_synchronize(database: Arc<Database>, cancellation_token: C
 }
 
 /// Watermark: the mutable `activity`, so a delivery is not an event and
-/// rows are claimed through [`claim_source_row`] before being logged.
+/// rows are claimed through [`ledger::claim`] before being logged.
 pub async fn join_synchronize(database: Arc<Database>, cancellation_token: CancellationToken) {
     loop {
         // Check for cancellation at start of loop
@@ -464,9 +517,9 @@ pub async fn join_synchronize(database: Arc<Database>, cancellation_token: Cance
             for join in joins {
                 // This feed pages on `activity`, which orrery mutates, so the
                 // same join arrives again every time it is touched. Only the
-                // first delivery is an event; see `claim_source_row`.
+                // first delivery is an event; see `ledger::claim`.
                 let first_delivery = match join.kind {
-                    0 | 1 => match claim_source_row(JOIN_FEED, join.id).await {
+                    0 | 1 => match ledger::claim(Feed::Joins, join.id.into()).await {
                         Ok(claimed) => claimed,
                         Err(e) => {
                             eprintln!("Failed to claim join {}: {}", join.id, e);
@@ -498,7 +551,7 @@ pub async fn join_synchronize(database: Arc<Database>, cancellation_token: Cance
                         eprintln!("Failed to insert join {}: {}", join.id, e);
                         // Hand the row back so the retry logs it rather than
                         // mistaking it for a delivery it has already seen.
-                        release_source_row(JOIN_FEED, join.id).await;
+                        ledger::release(Feed::Joins, join.id.into()).await;
                         continue;
                     }
                 }
@@ -854,54 +907,38 @@ pub async fn golink_synchronize(database: Arc<Database>, cancellation_token: Can
     }
 }
 
-async fn insert_participation(database: &Database, event: &ParticipationEventData) -> Result<()> {
-    use log_service::database::tables::ParticipationRow;
-
-    // Insert one record for each repetition
-    for _rep in 0..event.repetitions {
-        let row = ParticipationRow {
-            origin: event.origin,
-            when: event.when.clone(),
-            duration: event.duration.unwrap_or(1.0),
-            where_point: event.where_point.clone(),
-            magnitude: event.magnitude.unwrap_or(1),
-            authenticated: event.authenticated.unwrap_or(false),
-            extra: event.extra.clone().unwrap_or_default(),
-            fidelity: event.fidelity.unwrap_or(0.5),
-            entity_id: event.entity_ulid.clone(),
-            user_id: event.profile_user_ulid.clone(),
-            task_name: event.task_name.clone(),
-        };
-
-        database.participation.insert(row).await?;
-    }
-
-    // Update cache and send SSE notification if user participated
-    if let Some(user_id_str) = &event.profile_user_ulid {
-        // Update cache (ignore if already exists)
+/// Note that the row's account has participated in the row's project.
+async fn note_participant(row: &ParticipationRow) -> Result<()> {
+    if let Some(user_id_str) = &row.user_id {
         sqlx::query!(
             r#"
             INSERT OR IGNORE INTO project_participations_cache (user_id, project_id)
             VALUES (?, ?)
             "#,
             user_id_str,
-            event.entity_ulid
+            row.entity_id
         )
         .execute(common::shared::db())
         .await?;
-
-        // Send SSE notification to user
-        if let Ok(user_id) = user_id_str.parse::<ulid::Ulid>() {
-            let _ = common::channel::send_to_user(
-                user_id,
-                "completion",
-                common::channel::Event::new("project_participation", &event.entity_ulid),
-            )
-            .await;
-        }
     }
 
     Ok(())
+}
+
+/// Tell the row's account, if it is online, that its participation arrived.
+async fn announce_participation(row: &ParticipationRow) {
+    if let Some(user_id) = row
+        .user_id
+        .as_deref()
+        .and_then(|user_id| user_id.parse::<ulid::Ulid>().ok())
+    {
+        let _ = common::channel::send_to_user(
+            user_id,
+            "completion",
+            common::channel::Event::new("project_participation", &row.entity_id),
+        )
+        .await;
+    }
 }
 
 async fn insert_bookmark(database: &Database, bookmark: &BookmarkData) -> Result<()> {

@@ -246,7 +246,6 @@ async fn users_synchronize() {
         facebook_url: String,
         twitter_profile: String,
         inat_username: String,
-        inat_last_update: Option<String>,
         // Absent from a payload orrery sent before it learned to report the
         // connection time. Read as "connected, when unknown", which is the
         // same thing null means for an account connected before the August
@@ -502,6 +501,24 @@ async fn users_synchronize() {
                 )
             });
 
+            // orrery's iNaturalist watermark is not copied: hydra's importer
+            // keeps its own, since it is the importer of record for the
+            // accounts it serves, and adopting orrery's would skip whatever
+            // orrery's importer reached first. A different username is a
+            // different account, though, and the old account's watermark says
+            // nothing about it, so it goes before the save that names the new
+            // one -- as it does for an edit made here, in
+            // `profile::stamp_platform_links`.
+            sqlx::query!(
+                r#"UPDATE "users" SET "inat_last_update" = NULL
+                   WHERE "user_id" = ? AND COALESCE("inat_username", '') != ?"#,
+                user.ulid,
+                user.inat_username,
+            )
+            .execute(db)
+            .await
+            .expect("Clearing a changed account's iNaturalist watermark failed");
+
             // I would really like to see keyword parameters in SQLx
             // for DBs that support them.
             //
@@ -546,7 +563,6 @@ async fn users_synchronize() {
                      "facebook_url",
                      "twitter_profile",
                      "inat_username",
-                     "inat_last_update",
                      "inat_linked_at",
                      "zipcode",
                      "country",
@@ -671,13 +687,12 @@ async fn users_synchronize() {
                      ?67,
                      ?68,
                      ?69,
-                     ?70,
+                     GeomFromEWKT(?70),
                      GeomFromEWKT(?71),
-                     GeomFromEWKT(?72),
+                     ?72,
                      ?73,
                      ?74,
                      ?75,
-                     ?76,
                      -- Orrery is doing the pushing for as long as it is the
                      -- primary and this sync is running, and the digest it
                      -- sends says the record is current.
@@ -715,7 +730,6 @@ async fn users_synchronize() {
                      "facebook_url" = excluded."facebook_url",
                      "twitter_profile" = excluded."twitter_profile",
                      "inat_username" = excluded."inat_username",
-                     "inat_last_update" = excluded."inat_last_update",
                      "inat_linked_at" = excluded."inat_linked_at",
                      "zipcode" = excluded."zipcode",
                      "country" = excluded."country",
@@ -793,7 +807,6 @@ async fn users_synchronize() {
                 user.facebook_url,
                 user.twitter_profile,
                 user.inat_username,
-                user.inat_last_update,
                 user.inat_linked_at,
                 user.zipcode,
                 user.country,

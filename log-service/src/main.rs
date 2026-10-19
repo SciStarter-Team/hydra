@@ -86,7 +86,13 @@ async fn main() -> Result<()> {
     let compactor_cancel_clone = compactor_cancel.clone();
     let compactor_database = Arc::clone(&database);
     background_tasks.spawn(async move {
-        if let Err(e) = run_compactor_service(compactor_database, compactor_cancel_clone).await {
+        if let Err(e) = run_compactor_service(
+            compactor_database,
+            shared::db().clone(),
+            compactor_cancel_clone,
+        )
+        .await
+        {
             eprintln!("WAL compactor service error: {}", e);
         }
         Ok::<(), anyhow::Error>(())

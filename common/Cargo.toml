@@ -30,4 +30,5 @@ pulldown-cmark = "0.13.0"
 ego-tree = "0.10.0"
 
 [dev-dependencies]
+assert2 = "0.3.16"
 tempfile = "3.21.0"

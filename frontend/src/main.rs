@@ -758,9 +758,21 @@ async fn main() -> Result<(), Error> {
         tasks.join_all().await;
     });
 
+    let inaturalist_group = service.group("frontend.inaturalist");
+    tokio::spawn(async move {
+        use common::handler;
+        let mut tasks = tokio::task::JoinSet::new();
+        tasks.spawn(handler!(
+            inaturalist_group,
+            "projects",
+            project::inaturalist::projects
+        ));
+        tasks.join_all().await;
+    });
+
     println!("Listening on {}", env!("LISTEN_ON"));
     println!(
-        "Frontend NATS service started: frontend.health.check, frontend.entity.summary_by_id, frontend.entity.summary_by_slug"
+        "Frontend NATS service started: frontend.health.check, frontend.entity.summary_by_id, frontend.entity.summary_by_slug, frontend.inaturalist.projects"
     );
     // The id peer messages are tagged with, and the one the staff query
     // tool reports as having answered a query against this instance's
