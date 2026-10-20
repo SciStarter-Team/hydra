@@ -1558,6 +1558,21 @@ pub struct ValidateApiKeyResponse {
     /// create via the API. Defaults to false.
     #[serde(default)]
     pub automatic_affiliate: bool,
+    /// Whether the project reviewers hear of each project the key's user
+    /// adds via the API. Defaults to true, as orrery's flag does.
+    #[serde(default = "notify_reviewers_by_default")]
+    pub api_projects_notify_reviewers: bool,
+    /// The project (ULID) the key's user puts the projects they add via the
+    /// API under, if any.
+    #[serde(default)]
+    pub umbrella_project_id: Option<String>,
+    /// The key's user's primary email address.
+    #[serde(default)]
+    pub email: Option<String>,
+}
+
+fn notify_reviewers_by_default() -> bool {
+    true
 }
 
 // ============================================================================

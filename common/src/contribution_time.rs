@@ -215,8 +215,7 @@ pub fn recorded_platform_time(
     received: Timestamp,
     sender: &str,
 ) -> Result<(Timestamp, String), UnreadableTime> {
-    let reported =
-        Timestamp::from_str(spelled).map_err(|_| UnreadableTime(spelled.to_string()))?;
+    let reported = Timestamp::from_str(spelled).map_err(|_| UnreadableTime(spelled.to_string()))?;
     let recorded = not_after_arrival(reported, received, sender);
 
     if recorded == reported {

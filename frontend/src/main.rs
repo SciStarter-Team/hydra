@@ -13,9 +13,11 @@ pub mod communities;
 pub mod component;
 pub mod concierge;
 pub mod contact;
+pub mod coverage;
 pub mod csm;
 pub mod dashboard;
 pub mod dev;
+pub mod edit_access;
 pub mod emailer;
 pub mod embed;
 pub mod entity;
@@ -678,6 +680,7 @@ async fn main() -> Result<(), Error> {
         tokio::spawn(project::reference::ProjectReference::peering_task());
     let _project_investigator_updates =
         tokio::spawn(project::investigator::ProjectInvestigator::peering_task());
+    let _ala_import_updates = tokio::spawn(project::ala::AlaImport::peering_task());
     let _entity_list_updates = tokio::spawn(entity_list::EntityList::peering_task());
     let _entity_list_entry_updates = tokio::spawn(entity_list::EntityListEntry::peering_task());
     let _entity_list_viewer_updates = tokio::spawn(entity_list::EntityListViewer::peering_task());
@@ -720,6 +723,7 @@ async fn main() -> Result<(), Error> {
     let _synchronize_regions = tokio::spawn(sync::synchronize_regions());
     let _synchronize_exchanges = tokio::spawn(sync::synchronize_exchanges());
     let _update_expired_statuses = tokio::spawn(sync::update_expired_statuses());
+    let _ala_import = tokio::spawn(project::ala::import_periodically());
     let _periodic_maintenance = tokio::spawn(periodic_maintenance());
 
     // Start NATS service
@@ -861,7 +865,8 @@ mod sync {
         page_manager,
         peering::LoadStorePeered,
         project::{
-            ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus, all::ProjectAll,
+            ProjectParticipationDegree, ProjectPromotionTime, ProjectStatus, ala::AlaImport,
+            all::ProjectAll, field::ProjectFieldType, field_source::FieldSource,
         },
     };
 
@@ -1057,6 +1062,45 @@ mod sync {
         stakeholders: String, // multiple, joined by ||
         circuit_id: String,
         sustainable_development_goals: String,
+        // Bookkeeping
+        protected_fields: String, // ProjectAuthority columns that are set, joined by ","
+        ala_last_updated: Option<Timestamp>,
+    }
+
+    /// The fields orrery protects from imports (its ProjectAuthority), as
+    /// fields this sync writes as Form edits, which imports may not
+    /// overwrite. Contact fields are one field here, and authority names
+    /// with no field here are dropped.
+    fn protected_field_sources(names: &str) -> Box<[(ProjectFieldType, FieldSource)]> {
+        let mut fields: Vec<(ProjectFieldType, FieldSource)> = Vec::new();
+
+        for name in names
+            .split(',')
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+        {
+            let field_type = match name {
+                "last_editor" => Some(ProjectFieldType::ProjectLastEditor),
+                "contact_is_manager" | "technical_contact_email" | "notification_email" => {
+                    Some(ProjectFieldType::Contacts)
+                }
+                _ if name.starts_with("contact_")
+                    || name.starts_with("manager_")
+                    || name.starts_with("additional_contact_") =>
+                {
+                    Some(ProjectFieldType::Contacts)
+                }
+                _ => ProjectFieldType::from_name(name),
+            };
+
+            if let Some(field_type) = field_type {
+                if !fields.iter().any(|(held, _)| *held == field_type) {
+                    fields.push((field_type, FieldSource::Form));
+                }
+            }
+        }
+
+        fields.into_boxed_slice()
     }
 
     #[tracing::instrument]
@@ -1504,12 +1548,27 @@ mod sync {
                     &data.tags,
                 );
 
-                // Use Legacy source so higher-priority sources aren't overwritten
-                proj.update_source = Some(crate::project::field_source::FieldSource::Legacy);
+                // Use Legacy source so higher-priority sources aren't
+                // overwritten, except for the fields orrery protects, which
+                // are written as the Form edits they stand for.
+                proj.update_source = Some(FieldSource::Legacy);
+                proj.field_sources = protected_field_sources(&data.protected_fields);
 
                 if let Err(err) = proj.store().await {
                     tracing::error!("Error saving {}: {}", &proj.name, err);
                     continue;
+                }
+
+                if let Some(last_updated) = data.ala_last_updated {
+                    let state = AlaImport {
+                        project_id: proj.project_id,
+                        last_updated: Some(last_updated.into()),
+                    };
+
+                    if let Err(err) = state.store().await {
+                        tracing::error!("Error saving ALA import state of {}: {}", &proj.name, err);
+                        continue;
+                    }
                 }
 
                 // Update page manager status for users associated with this project
@@ -2818,8 +2877,37 @@ mod sync {
         }
     }
 
+    /// Each midnight UTC, marks the projects and events that have ended as
+    /// expired. One instance is elected to do it; a failed night is logged
+    /// and the task carries on to the next.
     #[tracing::instrument]
-    pub async fn update_expired_statuses() -> Result<(), anyhow::Error> {
+    pub async fn update_expired_statuses() {
+        use jiff::Timestamp;
+
+        loop {
+            let wait = until_next_utc_midnight(Timestamp::now()).unwrap_or_else(|err| {
+                tracing::error!("Expired-status task: unable to find the next midnight: {err:#}");
+                Duration::from_secs(60 * 60)
+            });
+            sleep(wait).await;
+
+            if let Err(err) = expire_statuses(Timestamp::now()).await {
+                tracing::error!("Expired-status task: {err:#}");
+            }
+        }
+    }
+
+    fn until_next_utc_midnight(now: jiff::Timestamp) -> Result<Duration, anyhow::Error> {
+        use jiff::tz::TimeZone;
+
+        let tomorrow = now.to_zoned(TimeZone::UTC).date().tomorrow()?;
+        let midnight_tomorrow = tomorrow.at(0, 0, 0, 0).to_zoned(TimeZone::UTC)?;
+        Ok(Duration::from_secs(
+            (midnight_tomorrow.timestamp() - now).total(jiff::Unit::Second)? as u64,
+        ))
+    }
+
+    async fn expire_statuses(execution_time: jiff::Timestamp) -> Result<(), anyhow::Error> {
         use crate::event::{EventStatus, field::EventField};
         use crate::peering::LoadStorePeered;
         use crate::project::{ProjectStatus, field::ProjectField};
@@ -2827,140 +2915,150 @@ mod sync {
             elect,
             shared::{db, nats},
         };
-        use jiff::{Timestamp, tz::TimeZone};
+        use jiff::tz::TimeZone;
         use std::time::Duration as StdDuration;
 
-        loop {
-            let now = Timestamp::now();
-            let today = now.to_zoned(TimeZone::UTC).date();
-            let tomorrow = today.tomorrow()?;
-            let midnight_tomorrow = tomorrow.at(0, 0, 0, 0).to_zoned(TimeZone::UTC)?;
+        let today_str = execution_time.to_zoned(TimeZone::UTC).date().to_string();
+        let instance_id = ulid::Ulid::new().to_string();
 
-            // Calculate seconds until next midnight UTC
-            let sleep_duration =
-                (midnight_tomorrow.timestamp() - now).total(jiff::Unit::Second)? as u64;
+        // Use elect function to determine if we should run the task
+        let elected = elect::elect_instance(
+            "TASK_CLAIMS",
+            &format!("expired-status-{today_str}"),
+            &instance_id,
+            StdDuration::from_secs(25 * 60 * 60), // 25 hours to handle timezone edge cases
+        )
+        .await?;
 
-            // Sleep until next midnight UTC
-            sleep(Duration::from_secs(sleep_duration)).await;
+        if elected {
+            tracing::info!("Elected to run expired status task for {}", today_str);
 
-            // Get fresh timestamp after sleep
-            let execution_time = Timestamp::now();
-            let today_str = execution_time.to_zoned(TimeZone::UTC).date().to_string();
-            let subject = format!("tasks.expired-status.claim.{}", today_str);
-            let instance_id = ulid::Ulid::new().to_string();
+            // Publish notification that this instance is running the task
+            let notification = format!("running:{}:{}", instance_id, today_str);
+            if let Err(err) = nats()
+                .publish(
+                    "frontend.tasks.expired-status.status",
+                    notification.into_bytes().into(),
+                )
+                .await
+            {
+                tracing::warn!("Failed to publish task notification: {}", err);
+            }
 
-            // Use elect function to determine if we should run the task
-            let elected = elect::elect_instance(
-                "TASK_CLAIMS",
-                &subject,
-                &instance_id,
-                StdDuration::from_secs(25 * 60 * 60), // 25 hours to handle timezone edge cases
-            )
-            .await?;
+            let now_str = execution_time.to_string();
 
-            if elected {
-                tracing::info!("Elected to run expired status task for {}", today_str);
-
-                // Publish notification that this instance is running the task
-                let notification = format!("running:{}:{}", instance_id, today_str);
-                if let Err(err) = nats()
-                    .publish(
-                        "frontend.tasks.expired-status.status",
-                        notification.into_bytes().into(),
-                    )
-                    .await
-                {
-                    tracing::warn!("Failed to publish task notification: {}", err);
-                }
-
-                let now_str = execution_time.to_string();
-
-                // Find and update expired projects using ProjectField and peering
-                let expired_projects = sqlx::query!(
-                    r#"SELECT project_id FROM projects 
+            // Find and update expired projects using ProjectField and peering
+            let expired_projects = sqlx::query!(
+                r#"SELECT project_id FROM projects 
                        WHERE status IN ('Active', 'Periodically Active') 
                        AND end IS NOT NULL 
                        AND end < ?"#,
-                    now_str
-                )
-                .fetch_all(db())
-                .await?;
+                now_str
+            )
+            .fetch_all(db())
+            .await?;
 
-                let mut projects_updated = 0;
-                for project in expired_projects {
-                    let project_id: ulid::Ulid = project.project_id.parse()?;
-                    let status_field = ProjectField {
-                        project_id,
-                        field: crate::project::field::ProjectFieldValue::Status(
-                            ProjectStatus::Expired,
-                        ),
-                        source: None,
-                    };
+            let mut projects_updated = 0;
+            for project in expired_projects {
+                let project_id: ulid::Ulid = project.project_id.parse()?;
+                let status_field = ProjectField {
+                    project_id,
+                    field: crate::project::field::ProjectFieldValue::Status(ProjectStatus::Expired),
+                    source: None,
+                };
 
-                    // Use the peering system to update the status
-                    if let Err(err) = status_field.store().await {
-                        tracing::error!("Failed to update project {} status: {}", project_id, err);
-                    } else {
-                        projects_updated += 1;
-                    }
+                // Use the peering system to update the status
+                if let Err(err) = status_field.store().await {
+                    tracing::error!("Failed to update project {} status: {}", project_id, err);
+                } else {
+                    projects_updated += 1;
                 }
+            }
 
-                // Find and update expired events using EventField and peering
-                let expired_events = sqlx::query!(
-                    r#"SELECT DISTINCT e.event_id 
+            // Find and update expired events using EventField and peering
+            let expired_events = sqlx::query!(
+                r#"SELECT DISTINCT e.event_id 
                        FROM events e
                        INNER JOIN event_instances ei ON e.event_id = ei.event_id
                        WHERE e.status = 'Active'
                        GROUP BY e.event_id
                        HAVING MAX(ei.end) < ?"#,
-                    now_str
-                )
-                .fetch_all(db())
-                .await?;
+                now_str
+            )
+            .fetch_all(db())
+            .await?;
 
-                let mut events_updated = 0;
-                for event in expired_events {
-                    let event_id: ulid::Ulid = event
-                        .event_id
-                        .ok_or_else(|| anyhow::anyhow!("Event has no event_id"))?
-                        .parse()?;
-                    let status_field = EventField {
-                        event_id,
-                        field: crate::event::field::EventFieldValue::Status(EventStatus::Expired),
-                    };
+            let mut events_updated = 0;
+            for event in expired_events {
+                let event_id: ulid::Ulid = event
+                    .event_id
+                    .ok_or_else(|| anyhow::anyhow!("Event has no event_id"))?
+                    .parse()?;
+                let status_field = EventField {
+                    event_id,
+                    field: crate::event::field::EventFieldValue::Status(EventStatus::Expired),
+                };
 
-                    // Use the peering system to update the status
-                    if let Err(err) = status_field.store().await {
-                        tracing::error!("Failed to update event {} status: {}", event_id, err);
-                    } else {
-                        events_updated += 1;
-                    }
+                // Use the peering system to update the status
+                if let Err(err) = status_field.store().await {
+                    tracing::error!("Failed to update event {} status: {}", event_id, err);
+                } else {
+                    events_updated += 1;
                 }
-
-                tracing::info!(
-                    "Updated {} projects and {} events to expired status for {}",
-                    projects_updated,
-                    events_updated,
-                    today_str
-                );
-
-                // Publish completion notification
-                let completion = format!(
-                    "completed:{}:{}:projects={}:events={}",
-                    instance_id, today_str, projects_updated, events_updated
-                );
-                if let Err(err) = nats()
-                    .publish(
-                        "frontend.tasks.expired-status.status",
-                        completion.into_bytes().into(),
-                    )
-                    .await
-                {
-                    tracing::warn!("Failed to publish completion notification: {}", err);
-                }
-            } else {
-                tracing::debug!("Not elected to run expired status task for {}", today_str);
             }
+
+            tracing::info!(
+                "Updated {} projects and {} events to expired status for {}",
+                projects_updated,
+                events_updated,
+                today_str
+            );
+
+            // Publish completion notification
+            let completion = format!(
+                "completed:{}:{}:projects={}:events={}",
+                instance_id, today_str, projects_updated, events_updated
+            );
+            if let Err(err) = nats()
+                .publish(
+                    "frontend.tasks.expired-status.status",
+                    completion.into_bytes().into(),
+                )
+                .await
+            {
+                tracing::warn!("Failed to publish completion notification: {}", err);
+            }
+        } else {
+            tracing::debug!("Not elected to run expired status task for {}", today_str);
+        }
+        Ok(())
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use assert2::check;
+
+        #[test]
+        fn orrery_authority_names_become_protected_fields() {
+            let fields = protected_field_sources(
+                "name,contact_email,manager_name,contact_is_manager,last_editor,form,regions",
+            );
+
+            check!(
+                fields.as_ref()
+                    == [
+                        (ProjectFieldType::Name, FieldSource::Form),
+                        (ProjectFieldType::Contacts, FieldSource::Form),
+                        (ProjectFieldType::ProjectLastEditor, FieldSource::Form),
+                        (ProjectFieldType::Regions, FieldSource::Form),
+                    ]
+            );
+        }
+
+        #[test]
+        fn no_authority_protects_nothing() {
+            check!(protected_field_sources("").is_empty());
         }
     }
 }

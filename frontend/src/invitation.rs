@@ -26,7 +26,10 @@ use crate::{
     event::field::{EventField, EventFieldType, EventFieldValue},
     middleware::authorization::Authenticated,
     peering::LoadStorePeered,
-    project::field::{ProjectField, ProjectFieldType, ProjectFieldValue},
+    project::{
+        field::{ProjectField, ProjectFieldType, ProjectFieldValue},
+        field_source::FieldSource,
+    },
 };
 
 /// A page whose creator is one of these is unclaimed in practice: it was
@@ -311,13 +314,11 @@ pub async fn grant_page_stewardship(
                     steward_contacts(&contacts, &steward).into_boxed_slice(),
                 ),
             ] {
-                ProjectField {
-                    project_id: page_id,
-                    field,
-                    source: None,
-                }
-                .store()
-                .await?;
+                // The steward is the project's own person now, so what they
+                // took over stands against imports as their own edits do.
+                ProjectField::with_source(page_id, field, FieldSource::Form)
+                    .store()
+                    .await?;
             }
         }
         PageKind::Event => {

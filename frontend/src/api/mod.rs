@@ -10,16 +10,15 @@ pub mod user;
 pub mod v1;
 pub mod v2;
 
-/// Check if an API key is valid and has permission to write to a project
-/// (project page creator, a page manager, or staff/superuser). Shared by the
-/// v1 and v2 participation endpoints to decide the `authenticated` flag.
+/// Check if an API key is valid and its user may write to a project. Shared
+/// by the v1 and v2 participation endpoints to decide the `authenticated`
+/// flag.
 pub(crate) async fn check_api_key_permission(
     api_key: &str,
     project_id: &str,
 ) -> Result<bool, anyhow::Error> {
     use common::message::user::{ValidateApiKeyRequest, ValidateApiKeyResponse};
     use common::service::request;
-    use common::shared::db;
 
     let validation: ValidateApiKeyResponse = request(
         "user.api_key.validate",
@@ -29,36 +28,39 @@ pub(crate) async fn check_api_key_permission(
     )
     .await?;
 
+    key_may_write_project(&validation, project_id).await
+}
+
+/// Whether the user of an API key, already validated, may write to a
+/// project, by the rule every edit follows ([`crate::edit_access`]).
+pub(crate) async fn key_may_write_project(
+    validation: &common::message::user::ValidateApiKeyResponse,
+    project_id: &str,
+) -> Result<bool, anyhow::Error> {
+    use crate::edit_access::{Editor, Page, may_edit};
+
     if !validation.valid {
         return Ok(false);
     }
 
-    // Staff/superuser can always write
-    if validation.is_staff || validation.is_superuser {
-        return Ok(true);
-    }
-
-    let Some(user_id) = validation.user_id else {
+    let Some(user_id) = validation
+        .user_id
+        .as_deref()
+        .and_then(|id| ulid::Ulid::from_string(id).ok())
+    else {
         return Ok(false);
     };
 
-    // Check if user is the project page creator or a page manager
-    let has_permission = sqlx::query_scalar!(
-        r#"SELECT 1 as "has_permission: bool" FROM projects
-         WHERE project_id = ? AND page_creator_id = ?
-         UNION
-         SELECT 1 FROM project_page_editors
-         WHERE project_id = ? AND user_id = ?
-         LIMIT 1"#,
-        project_id,
-        user_id,
-        project_id,
-        user_id
-    )
-    .fetch_optional(db())
-    .await?;
+    let Ok(project_id) = ulid::Ulid::from_string(project_id) else {
+        return Ok(false);
+    };
 
-    Ok(has_permission.is_some())
+    let editor = Editor {
+        user_id,
+        is_staff: validation.is_staff || validation.is_superuser,
+    };
+
+    may_edit(Page::Project(project_id), editor).await
 }
 
 /// Wrap a user-facing page endpoint in the same session/authorization stack

@@ -14,6 +14,7 @@ use crate::project::field::{
     ProjectFieldValue, SPONSORS_VOCABULARY, STAKEHOLDERS_VOCABULARY,
     SUSTAINABLE_DEVELOPMENT_GOALS_VOCABULARY, TOPICS_VOCABULARY,
 };
+use crate::project::field_source::FieldSource;
 use crate::project::{ProjectRejectionReason, SUBMISSION_REJECTION_NOTICES};
 use common::insensitivestring::InsensitiveString;
 use common::shared::db;
@@ -1976,7 +1977,7 @@ async fn projects_update_field(
     // For checkboxes, an unchecked box sends no value, so treat None/empty as empty string
     let form_value = form.value.unwrap_or_default();
 
-    let project_field = crate::project::field::ProjectField::new(
+    let project_field = crate::project::field::ProjectField::with_source(
         parsed_project_id,
         match field_type_enum {
             // Core project fields
@@ -2834,6 +2835,7 @@ async fn projects_update_field(
                 crate::project::field::ProjectFieldValue::SustainableDevelopmentGoals(form_value)
             }
         },
+        FieldSource::Staff,
     );
 
     // Store the field using the LoadStorePeered implementation
@@ -2989,7 +2991,7 @@ async fn projects_update_multiselect_field(
         }
     };
 
-    let project_field = ProjectField::new(project_ulid, field_value);
+    let project_field = ProjectField::with_source(project_ulid, field_value, FieldSource::Staff);
 
     let field_label = get_field_label(&field_type);
 
@@ -3078,7 +3080,11 @@ async fn projects_add_array_item(
         items.push(new_item.clone());
     }
 
-    let new_project_field = ProjectField::new_array(project_ulid, field_enum, items.clone())?;
+    let new_project_field = ProjectField::with_source(
+        project_ulid,
+        ProjectFieldValue::array(field_enum, items.clone())?,
+        FieldSource::Staff,
+    );
     let field_label = get_field_label(&field_type);
 
     match new_project_field.store().await {
@@ -3153,7 +3159,11 @@ async fn projects_update_array_item(
         }
     }
 
-    let new_project_field = ProjectField::new_array(project_ulid, field_enum, items.clone())?;
+    let new_project_field = ProjectField::with_source(
+        project_ulid,
+        ProjectFieldValue::array(field_enum, items.clone())?,
+        FieldSource::Staff,
+    );
     let field_label = get_field_label(&field_type);
 
     match new_project_field.store().await {
@@ -3224,7 +3234,11 @@ async fn projects_remove_array_item(
         items.remove(item_index);
     }
 
-    let new_project_field = ProjectField::new_array(project_ulid, field_enum, items.clone())?;
+    let new_project_field = ProjectField::with_source(
+        project_ulid,
+        ProjectFieldValue::array(field_enum, items.clone())?,
+        FieldSource::Staff,
+    );
     let field_label = get_field_label(&field_type);
 
     match new_project_field.store().await {
@@ -3389,10 +3403,17 @@ async fn projects_create(
     new_project.origin = "scistarter".to_string();
     new_project.authoritative = true;
     new_project.status = crate::project::ProjectStatus::Active;
+    // Staff wrote it, so imports may not overwrite it.
+    new_project.update_source = Some(FieldSource::Staff);
 
     // Persist via the shared create core (also used by the public add form).
-    match crate::project::all::persist_new_project(new_project, form.publish, user_info.user_id)
-        .await
+    match crate::project::all::persist_new_project(
+        new_project,
+        form.publish,
+        user_info.user_id,
+        crate::project::all::Submission::Submitted,
+    )
+    .await
     {
         Ok(_slug) => {
             // Redirect to the project edit page
@@ -3439,7 +3460,11 @@ async fn projects_add_tag(
         tags.push(new_tag.clone());
     }
 
-    let new_project_field = ProjectField::new_array(project_ulid, field_enum, tags.clone())?;
+    let new_project_field = ProjectField::with_source(
+        project_ulid,
+        ProjectFieldValue::array(field_enum, tags.clone())?,
+        FieldSource::Staff,
+    );
     new_project_field.store().await?;
 
     // Log the activity
@@ -3482,7 +3507,11 @@ async fn projects_remove_tag(
     // Remove the tag (Path extractor handles URL decoding automatically)
     tags.retain(|t| t != &tag);
 
-    let new_project_field = ProjectField::new_array(project_ulid, field_enum, tags.clone())?;
+    let new_project_field = ProjectField::with_source(
+        project_ulid,
+        ProjectFieldValue::array(field_enum, tags.clone())?,
+        FieldSource::Staff,
+    );
     new_project_field.store().await?;
 
     // Log the activity
@@ -3570,9 +3599,10 @@ async fn projects_add_contact(
     contacts.push(new_contact);
 
     // Save updated contacts
-    let new_project_field = ProjectField::new(
+    let new_project_field = ProjectField::with_source(
         project_ulid,
         ProjectFieldValue::Contacts(contacts.clone().into_boxed_slice()),
+        FieldSource::Staff,
     );
     new_project_field
         .store()
@@ -3635,9 +3665,10 @@ async fn projects_update_contact(
     }
 
     // Save updated contacts
-    let new_project_field = ProjectField::new(
+    let new_project_field = ProjectField::with_source(
         project_ulid,
         ProjectFieldValue::Contacts(contacts.clone().into_boxed_slice()),
+        FieldSource::Staff,
     );
     new_project_field
         .store()
@@ -3693,9 +3724,10 @@ async fn projects_remove_contact(
     contacts.retain(|c| c.contact_id != contact_ulid);
 
     // Save updated contacts
-    let new_project_field = ProjectField::new(
+    let new_project_field = ProjectField::with_source(
         project_ulid,
         ProjectFieldValue::Contacts(contacts.clone().into_boxed_slice()),
+        FieldSource::Staff,
     );
     new_project_field
         .store()
@@ -3743,9 +3775,10 @@ async fn store_participant_files(
     project_ulid: Ulid,
     files: Vec<ParticipantFile>,
 ) -> Result<(), poem::Error> {
-    let new_project_field = ProjectField::new(
+    let new_project_field = ProjectField::with_source(
         project_ulid,
         ProjectFieldValue::ParticipantFiles(files.into_boxed_slice()),
+        FieldSource::Staff,
     );
     new_project_field
         .store()

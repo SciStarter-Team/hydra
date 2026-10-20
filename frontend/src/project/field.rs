@@ -123,7 +123,9 @@ pub const STAKEHOLDERS_VOCABULARY: &[&str] = &[
     "State or local government",
 ];
 
-pub const DIFFICULTY_VOCABULARY: &[&str] = &["Beginner", "Intermediate", "Advanced", "Expert"];
+/// How hard a project is, as orrery's choices name it and the sync, the
+/// partner API and the ALA import write it.
+pub const DIFFICULTY_VOCABULARY: &[&str] = &["Easy", "Medium", "Difficult"];
 
 pub const TOPICS_VOCABULARY: &[&str] = &[
     "Agriculture",
@@ -398,6 +400,17 @@ impl TryFrom<&str> for ProjectFieldType {
     }
 }
 
+impl ProjectFieldType {
+    /// The field type a name stands for, as `Display` writes it (and as
+    /// `project_field_sources` stores it), whether or not it is an array
+    /// field.
+    pub fn from_name(name: &str) -> Option<ProjectFieldType> {
+        use strum::IntoEnumIterator;
+
+        ProjectFieldType::iter().find(|field_type| field_type.to_string() == name)
+    }
+}
+
 impl From<ProjectFieldType> for String {
     fn from(field_type: ProjectFieldType) -> String {
         field_type.to_string()
@@ -435,32 +448,9 @@ impl TryFrom<&ProjectField> for Vec<String> {
     }
 }
 
-impl ProjectField {
-    /// Create a new ProjectField with the given project_id and field value.
-    /// Source defaults to None for backward compatibility.
-    pub fn new(project_id: Ulid, field: ProjectFieldValue) -> Self {
-        Self {
-            project_id,
-            field,
-            source: None,
-        }
-    }
-
-    /// Create a new ProjectField with explicit source for permission checking.
-    pub fn with_source(project_id: Ulid, field: ProjectFieldValue, source: FieldSource) -> Self {
-        Self {
-            project_id,
-            field,
-            source: Some(source),
-        }
-    }
-
-    /// Create a new ProjectField with an array field type and items
-    pub fn new_array(
-        project_id: Ulid,
-        field_type: ProjectFieldType,
-        items: Vec<String>,
-    ) -> Result<Self, anyhow::Error> {
+impl ProjectFieldValue {
+    /// The value of an array field of type `field_type` holding `items`.
+    pub fn array(field_type: ProjectFieldType, items: Vec<String>) -> Result<Self, anyhow::Error> {
         let boxed_items: Box<[String]> = items.into_boxed_slice();
 
         let field_value = match field_type {
@@ -507,7 +497,28 @@ impl ProjectField {
             }
         };
 
-        Ok(Self::new(project_id, field_value))
+        Ok(field_value)
+    }
+}
+
+impl ProjectField {
+    /// Create a new ProjectField with the given project_id and field value.
+    /// Source defaults to None for backward compatibility.
+    pub fn new(project_id: Ulid, field: ProjectFieldValue) -> Self {
+        Self {
+            project_id,
+            field,
+            source: None,
+        }
+    }
+
+    /// Create a new ProjectField with explicit source for permission checking.
+    pub fn with_source(project_id: Ulid, field: ProjectFieldValue, source: FieldSource) -> Self {
+        Self {
+            project_id,
+            field,
+            source: Some(source),
+        }
     }
 
     #[tracing::instrument]
@@ -3808,7 +3819,8 @@ impl ProjectField {
         // Insert or update source tracking (only when source is new or higher priority)
         let source_str = new_source.as_str();
         sqlx::query!(
-            "INSERT OR REPLACE INTO project_field_sources (project_id, field_type, source) VALUES (?, ?, ?)",
+            "INSERT INTO project_field_sources (project_id, field_type, source) VALUES (?, ?, ?)
+                     ON CONFLICT (project_id, field_type) DO UPDATE SET source = excluded.source",
             project_id_str,
             field_type_str,
             source_str,

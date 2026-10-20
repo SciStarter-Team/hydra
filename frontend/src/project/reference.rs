@@ -130,10 +130,18 @@ impl LoadStorePeered for ProjectReference {
         let sort_order_i64 = self.sort_order as i64;
 
         sqlx::query!(
-            r#"INSERT OR REPLACE INTO project_references (
+            r#"INSERT INTO project_references (
                  reference_id, entity_id, label, reference_type, url, citation, detailed_citation, sort_order
                )
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT (reference_id) DO UPDATE SET
+                 entity_id = excluded.entity_id,
+                 label = excluded.label,
+                 reference_type = excluded.reference_type,
+                 url = excluded.url,
+                 citation = excluded.citation,
+                 detailed_citation = excluded.detailed_citation,
+                 sort_order = excluded.sort_order"#,
             reference_id_str,
             entity_id_str,
             self.label,

@@ -1988,9 +1988,20 @@ pub async fn add_project_submit(
             // approval queue (`reviewed` starts false).
             project.exchange = crate::exchange::submitted_through(&form.exchange).await?;
 
+            // Everything the project's own person wrote stands against
+            // imports, as orrery gives a project made through its form full
+            // authority.
+            project.update_source = Some(crate::project::field_source::FieldSource::Form);
+
             let name = project.name.clone();
             // Public submissions stay unpublished pending review.
-            crate::project::all::persist_new_project(project, false, user_info.user_id).await?;
+            crate::project::all::persist_new_project(
+                project,
+                false,
+                user_info.user_id,
+                crate::project::all::Submission::Submitted,
+            )
+            .await?;
             Ok(Redirect::see_other(format!(
                 "/add/project/submitted?name={}",
                 urlencoding::encode(&name)
@@ -2161,12 +2172,12 @@ fn validate_and_build_project(
     match mode {
         LocationMode::Online => {
             project.entirely_online = true;
-            project.location_type = "Global, anywhere on the planet".to_string();
+            project.location_type = crate::project::location::ANYWHERE.to_string();
         }
         LocationMode::InPerson => {
             project.entirely_online = false;
             project.in_person = true;
-            project.location_type = "At a specific address".to_string();
+            project.location_type = crate::project::location::AT_AN_ADDRESS.to_string();
             project.location_name = form.location_name.trim().to_string();
             project.address = form.address.trim().to_string();
             project.city = form.city.trim().to_string();
@@ -2179,7 +2190,7 @@ fn validate_and_build_project(
             // A region is defined by the drawn polygon + the location note; it
             // doesn't carry a single city/state/country.
             project.entirely_online = false;
-            project.location_type = "In a geographic location or range".to_string();
+            project.location_type = crate::project::location::IN_A_RANGE.to_string();
             let regions = form.regions.trim();
             if !regions.is_empty() {
                 project.regions = Some(regions.to_string());

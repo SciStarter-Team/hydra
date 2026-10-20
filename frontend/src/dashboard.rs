@@ -142,12 +142,12 @@ pub async fn entity_counts(endpoint: &'static str, entity_ids: &[String]) -> Has
     response.counts.into_iter().collect()
 }
 
-/// The ids of every project and event the user can edit, read from the
-/// page-editor tables that the entity sync and the detail-page editor
-/// management maintain. These tables are the site's authoritative
-/// ownership store (the detail pages authorize edits against them).
-/// Failures read as "none owned" so dashboard pages still render if
-/// the database is unavailable.
+/// The ids of every project and event the user is named an editor of, read
+/// from the page-editor tables that the entity sync and the detail-page
+/// editor management maintain. These are the user's own pages; others they
+/// may edit (as staff, or through an exchange they run) are not listed, as
+/// [`crate::edit_access`] explains. Failures read as "none owned" so
+/// dashboard pages still render if the database is unavailable.
 pub async fn owned_entity_ids(user_id_str: &str) -> Vec<String> {
     let projects = sqlx::query_scalar!(
         r#"SELECT "project_id" FROM "project_page_editors" WHERE "user_id" = ?"#,
@@ -166,37 +166,6 @@ pub async fn owned_entity_ids(user_id_str: &str) -> Vec<String> {
     .unwrap_or_default();
 
     projects.into_iter().chain(events).collect()
-}
-
-/// Whether the user is a page editor of the given entity, per the same
-/// page-editor tables `owned_entity_ids` reads.
-pub async fn manages_entity(user_id_str: &str, summary: &EntitySummary) -> Result<bool, Error> {
-    let entity_id = summary.id.to_string();
-    let found = match summary.kind {
-        EntitySummaryKind::Project => {
-            sqlx::query_scalar!(
-                r#"SELECT 1 as "v!: i32"
-            FROM "project_page_editors"
-            WHERE "project_id" = ? AND "user_id" = ?"#,
-                entity_id,
-                user_id_str
-            )
-            .fetch_optional(db())
-            .await?
-        }
-        EntitySummaryKind::Event => {
-            sqlx::query_scalar!(
-                r#"SELECT 1 as "v!: i32"
-            FROM "event_page_editors"
-            WHERE "event_id" = ? AND "user_id" = ?"#,
-                entity_id,
-                user_id_str
-            )
-            .fetch_optional(db())
-            .await?
-        }
-    };
-    Ok(found.is_some())
 }
 
 /// Card-sized view of a project or event, shared by the dashboard panels

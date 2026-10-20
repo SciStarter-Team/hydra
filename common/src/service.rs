@@ -557,8 +557,10 @@ pub fn log_share(
 ///
 /// ```no_run
 /// use common::message::email::EmailRecipient;
+/// use common::service::send_email;
 /// use ulid::Ulid;
 ///
+/// # async fn example(user_id: Ulid) -> Result<(), anyhow::Error> {
 /// let sending_id = send_email(
 ///     vec![EmailRecipient::UserId(user_id)],
 ///     "Welcome to SciStarter",
@@ -567,6 +569,8 @@ pub fn log_share(
 ///     None,
 ///     None,
 /// ).await?;
+/// # Ok(())
+/// # }
 /// ```
 ///
 /// `reply_to` sets optional Reply-To addresses; pass `None` for the default
@@ -817,6 +821,12 @@ pub enum TriggerEvent {
     /// Sent when a new project is submitted for review (staff notification)
     ProjectCreatedStaff,
 
+    /// Sent when a partner's API key adds a new project, naming the key's
+    /// account (staff notification). Not sent for an account whose
+    /// `api_projects_notify_reviewers` is off, as orrery's
+    /// `project-created-api` is not.
+    ProjectCreatedApi,
+
     /// Sent when a new forum post is created
     ForumNewPost,
 
@@ -894,6 +904,9 @@ impl TriggerEvent {
             Self::ProjectCreatedStaff => {
                 "When a new project is submitted for review (staff notification)"
             }
+            Self::ProjectCreatedApi => {
+                "When a partner's API key adds a new project (staff notification)"
+            }
             Self::ForumNewPost => "When a new forum post is created",
             Self::ForumPostReply => "When someone replies to a forum post",
             Self::ForumPostEdited => "When a forum post is edited",
@@ -920,7 +933,8 @@ impl TriggerEvent {
             | Self::ProjectRejected
             | Self::ProjectPublished
             | Self::EventPublished
-            | Self::ProjectCreatedStaff => "project",
+            | Self::ProjectCreatedStaff
+            | Self::ProjectCreatedApi => "project",
             Self::BadgeFoundations
             | Self::BadgeLibrariesHubs
             | Self::BadgeDataLiteracy

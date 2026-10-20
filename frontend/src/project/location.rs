@@ -13,6 +13,15 @@
 //! codes `ANY`/`NEAR`/`AT`, and its sync translates them into the display
 //! strings hydra stores, so each side matches on what it holds.
 
+/// The `location_type` of a project doable anywhere.
+pub const ANYWHERE: &str = "Global, anywhere on the planet";
+
+/// The `location_type` of a project confined to an area, its `regions`.
+pub const IN_A_RANGE: &str = "In a geographic location or range";
+
+/// The `location_type` of a project tied to its address.
+pub const AT_AN_ADDRESS: &str = "At a specific address";
+
 /// A project's location, as a reader should see it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum Where {
@@ -59,14 +68,14 @@ impl Where {
     ) -> Where {
         match location_type {
             "Online" => Where::Online,
-            "Global, anywhere on the planet" => Where::Anywhere {
+            ANYWHERE => Where::Anywhere {
                 landuse: landuse.trim().to_owned(),
             },
-            "In a geographic location or range" => Where::Area {
+            IN_A_RANGE => Where::Area {
                 coverage,
                 description: description.trim().to_owned(),
             },
-            "At a specific address" => Where::At {
+            AT_AN_ADDRESS => Where::At {
                 address: Where::address_line(city, state, country, address),
             },
             _ => Where::Unstated,

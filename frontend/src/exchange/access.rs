@@ -53,10 +53,15 @@ pub async fn may_manage(exchange_id: Ulid, user: Option<&BasicInfo>) -> Result<b
         return Ok(true);
     }
 
+    holds_role(exchange_id, user.user_id).await
+}
+
+/// Whether `user_id` is the exchange's owner or one of its staff.
+pub async fn holds_role(exchange_id: Ulid, user_id: Ulid) -> Result<bool, Error> {
     let response = request::<PermissionCheckResponse>(
         "user.permissions.check",
         PermissionCheckRequest {
-            user_id: user.user_id.to_string(),
+            user_id: user_id.to_string(),
             resource_type: RESOURCE_TYPE.to_string(),
             resource_id: exchange_id.to_string(),
         },

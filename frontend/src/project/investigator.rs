@@ -83,10 +83,15 @@ impl LoadStorePeered for ProjectInvestigator {
         let sort_order_i64 = self.sort_order as i64;
 
         sqlx::query!(
-            r#"INSERT OR REPLACE INTO project_investigators (
+            r#"INSERT INTO project_investigators (
                  investigator_id, entity_id, name, affiliation, sort_order
                )
-               VALUES (?, ?, ?, ?, ?)"#,
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT (investigator_id) DO UPDATE SET
+                 entity_id = excluded.entity_id,
+                 name = excluded.name,
+                 affiliation = excluded.affiliation,
+                 sort_order = excluded.sort_order"#,
             investigator_id_str,
             entity_id_str,
             self.name,

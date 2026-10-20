@@ -248,7 +248,7 @@ fn build_base_where_clause<'a>(
 ///
 /// Spelled out rather than coded, because that is how orrery's sync sends it
 /// and therefore how hydra stores it.
-const GLOBAL_LOCATION_TYPE: &str = "Global, anywhere on the planet";
+const GLOBAL_LOCATION_TYPE: &str = crate::project::location::ANYWHERE;
 
 /// Narrow a query to the projects this exchange is a view of.
 ///

@@ -335,48 +335,23 @@ async fn check_entity_access(
         return Ok(EntityAccessResult::Granted);
     }
 
-    // Check if user is staff/superuser
+    // Whoever may edit the page may see it unpublished.
     if let Some(user_info) = user_info {
-        if user_info.is_staff || user_info.is_superuser {
-            return Ok(EntityAccessResult::Granted);
-        }
+        let editor = crate::edit_access::Editor::from(user_info);
 
-        // Check if user is a page manager for this entity's target
-        let is_manager = match (&entity.kind, &entity.target) {
+        let may_edit = match (&entity.kind, &entity.target) {
             (EntityKind::Project, EntityTarget::Ulid(project_id)) => {
-                let user_id_str = user_info.user_id.to_string();
-                let project_id_str = project_id.to_string();
-
-                sqlx::query_scalar!(
-                    r#"SELECT EXISTS(
-                        SELECT 1 FROM project_page_editors
-                        WHERE project_id = ? AND user_id = ?
-                    ) as "exists: bool""#,
-                    project_id_str,
-                    user_id_str
-                )
-                .fetch_one(db())
-                .await?
+                crate::edit_access::may_edit(crate::edit_access::Page::Project(*project_id), editor)
+                    .await?
             }
             (EntityKind::Event, EntityTarget::Ulid(event_id)) => {
-                let user_id_str = user_info.user_id.to_string();
-                let event_id_str = event_id.to_string();
-
-                sqlx::query_scalar!(
-                    r#"SELECT EXISTS(
-                        SELECT 1 FROM event_page_editors
-                        WHERE event_id = ? AND user_id = ?
-                    ) as "exists: bool""#,
-                    event_id_str,
-                    user_id_str
-                )
-                .fetch_one(db())
-                .await?
+                crate::edit_access::may_edit(crate::edit_access::Page::Event(*event_id), editor)
+                    .await?
             }
-            _ => false,
+            _ => editor.is_staff,
         };
 
-        if is_manager {
+        if may_edit {
             return Ok(EntityAccessResult::Granted);
         }
     }

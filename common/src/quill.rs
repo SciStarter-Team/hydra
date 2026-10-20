@@ -396,9 +396,7 @@ fn is_button_style(style: &str) -> bool {
 
 /// The button a paragraph consists of, as a button embed's value, when the
 /// paragraph holds a button link and nothing else.
-fn paragraph_button<'a>(
-    node: &ego_tree::NodeRef<'a, scraper::Node>,
-) -> Option<serde_json::Value> {
+fn paragraph_button<'a>(node: &ego_tree::NodeRef<'a, scraper::Node>) -> Option<serde_json::Value> {
     use scraper::Node;
 
     let mut button = None;
@@ -656,7 +654,7 @@ pub fn content_to_html(content: &str) -> Result<(String, Option<String>), anyhow
 ///
 /// You can optionally specify the format to skip auto-detection:
 /// ```
-/// use frontend::quill::{to_delta, ContentFormat};
+/// use common::quill::{to_delta, ContentFormat};
 ///
 /// // Auto-detect format
 /// let result = to_delta("**bold**", None).unwrap();
@@ -1179,7 +1177,10 @@ mod tests {
         let delta = html_to_delta(html).unwrap();
 
         assert!(!delta.contains("button"), "{delta}");
-        assert!(delta.contains(r#""link":"https://example.org/""#), "{delta}");
+        assert!(
+            delta.contains(r#""link":"https://example.org/""#),
+            "{delta}"
+        );
     }
 
     #[test]

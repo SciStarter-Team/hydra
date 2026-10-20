@@ -216,12 +216,27 @@ pub struct ProjectAll {
     /// If None, permission checking is bypassed (backward compatibility).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub update_source: Option<FieldSource>,
+
+    /// Fields this update writes from a source other than `update_source`.
+    /// Only consulted when `update_source` is set.
+    #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
+    pub field_sources: Box<[(ProjectFieldType, FieldSource)]>,
 }
 
 impl ProjectAll {
-    /// Gets the set of field types that are protected from this source
-    /// (i.e., fields where the existing source has higher priority)
-    async fn get_protected_fields(
+    /// The source this update writes `field_type` from, given that the
+    /// update as a whole comes from `default`.
+    fn source_of(&self, field_type: ProjectFieldType, default: FieldSource) -> FieldSource {
+        self.field_sources
+            .iter()
+            .find(|(field, _)| *field == field_type)
+            .map_or(default, |(_, source)| *source)
+    }
+
+    /// Gets the set of field types that are protected from this update
+    /// (i.e., fields where the existing source has higher priority than the
+    /// one the update writes them from)
+    pub(crate) async fn get_protected_fields(
         &self,
         new_source: FieldSource,
     ) -> Result<HashSet<ProjectFieldType>, Error> {
@@ -238,10 +253,14 @@ impl ProjectAll {
             .into_iter()
             .filter_map(|row| {
                 let existing_source = FieldSource::try_from(row.source.as_str()).ok()?;
-                if !new_source.can_overwrite(existing_source) {
-                    // Try to parse the field_type string into a ProjectFieldType
-                    // If parsing fails, we skip this field (it might be an old/deprecated field)
-                    ProjectFieldType::try_from(row.field_type.as_str()).ok()
+                // A name that parses to no field type is skipped (it might be
+                // an old/deprecated field)
+                let field_type = ProjectFieldType::from_name(&row.field_type)?;
+                if !self
+                    .source_of(field_type, new_source)
+                    .can_overwrite(existing_source)
+                {
+                    Some(field_type)
                 } else {
                     None
                 }
@@ -259,14 +278,15 @@ impl ProjectAll {
         protected: &HashSet<ProjectFieldType>,
     ) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
-        let source_str = source.as_str();
 
         // Iterate over all field types using the EnumIter derive
         for field_type in ProjectFieldType::iter() {
             if !protected.contains(&field_type) {
                 let field_type_str = field_type.to_string();
+                let source_str = self.source_of(field_type, source).as_str();
                 sqlx::query!(
-                    "INSERT OR REPLACE INTO project_field_sources (project_id, field_type, source) VALUES (?, ?, ?)",
+                    "INSERT INTO project_field_sources (project_id, field_type, source) VALUES (?, ?, ?)
+                     ON CONFLICT (project_id, field_type) DO UPDATE SET source = excluded.source",
                     project_id_str,
                     field_type_str,
                     source_str,
@@ -279,265 +299,23 @@ impl ProjectAll {
         Ok(())
     }
 
-    /// Merges protected fields from current database state into a clone of self.
-    /// Protected fields use values from `current`, non-protected fields use values from `self`.
-    fn merge_protected(&self, current: &Self, protected: &HashSet<ProjectFieldType>) -> Self {
-        macro_rules! merge_field {
-            ($field:ident, $variant:ident) => {
-                if protected.contains(&ProjectFieldType::$variant) {
-                    current.$field.clone()
-                } else {
-                    self.$field.clone()
-                }
-            };
-            ($field:ident, $variant:ident, copy) => {
-                if protected.contains(&ProjectFieldType::$variant) {
-                    current.$field
-                } else {
-                    self.$field
-                }
-            };
-        }
-
-        Self {
-            project_id: self.project_id,
-            update_source: self.update_source,
-
-            // Identity fields
-            legacy_id: merge_field!(legacy_id, LegacyId, copy),
-            legacy_v1_project_id: merge_field!(legacy_v1_project_id, LegacyV1ProjectId, copy),
-            legacy_v2_project_id: merge_field!(legacy_v2_project_id, LegacyV2ProjectId, copy),
-            foreign_id: merge_field!(foreign_id, ForeignId),
-
-            // Admin section
-            duplicate: merge_field!(duplicate, Duplicate, copy),
-            authoritative: merge_field!(authoritative, Authoritative, copy),
-            flagged: merge_field!(flagged, Flagged, copy),
-            is_test: merge_field!(is_test, IsTest, copy),
-            status: merge_field!(status, Status, copy),
-            promotion_time: merge_field!(promotion_time, PromotionTime, copy),
-            promotion_target: merge_field!(promotion_target, PromotionTarget),
-            admin_notes: merge_field!(admin_notes, AdminNotes),
-            created: merge_field!(created, Created),
-            wild_hope: merge_field!(wild_hope, WildHope, copy),
-            exchange: merge_field!(exchange, Exchange),
-            origin: merge_field!(origin, Origin),
-            suborigin: merge_field!(suborigin, Suborigin),
-            guid: merge_field!(guid, Guid),
-            opengraph_description: merge_field!(opengraph_description, OpengraphDescription),
-            is_affiliate: merge_field!(is_affiliate, IsAffiliate, copy),
-            is_inaturalist: merge_field!(is_inaturalist, IsInaturalist, copy),
-            inat_project_id: merge_field!(inat_project_id, InatProjectId, copy),
-            welcomed: merge_field!(welcomed, Welcomed, copy),
-            page_creator_id: merge_field!(page_creator_id, PageCreatorId, copy),
-            page_editor_ids: merge_field!(page_editor_ids, PageEditorIds),
-            extra: merge_field!(extra, Extra),
-            project_last_editor: merge_field!(project_last_editor, ProjectLastEditor, copy),
-            project_last_edited: merge_field!(project_last_edited, ProjectLastEdited),
-            scistarter_last_editor: merge_field!(
-                scistarter_last_editor,
-                ScistarterLastEditor,
-                copy
-            ),
-            scistarter_last_edited: merge_field!(scistarter_last_edited, ScistarterLastEdited),
-            reviewed: merge_field!(reviewed, Reviewed, copy),
-
-            // Project section
-            draft: merge_field!(draft, Draft, copy),
-            name: merge_field!(name, Name),
-            tags: merge_field!(tags, Tags),
-            participation_degree: merge_field!(participation_degree, ParticipationDegree, copy),
-            participant_instructions: merge_field!(
-                participant_instructions,
-                ParticipantInstructions
-            ),
-            participant_instructions_email: merge_field!(
-                participant_instructions_email,
-                ParticipantInstructionsEmail
-            ),
-            participant_files: merge_field!(participant_files, ParticipantFiles),
-            us_federally_funded: merge_field!(us_federally_funded, UsFederallyFunded, copy),
-            presenter: merge_field!(presenter, Presenter),
-            goal: merge_field!(goal, Goal),
-            task: merge_field!(task, Task),
-            description: merge_field!(description, Description),
-            image: merge_field!(image, Image),
-            image_credit: merge_field!(image_credit, ImageCredit),
-            connect_opaque_url: merge_field!(connect_opaque_url, ConnectOpaqueUrl),
-            connect_opaque_url1: merge_field!(connect_opaque_url1, ConnectOpaqueUrl1),
-            connect_opaque_url2: merge_field!(connect_opaque_url2, ConnectOpaqueUrl2),
-            contacts: merge_field!(contacts, Contacts),
-
-            // Web section
-            url: merge_field!(url, Url),
-            video_url: merge_field!(video_url, VideoUrl),
-            blog_url: merge_field!(blog_url, BlogUrl),
-            twitter_name: merge_field!(twitter_name, TwitterName),
-            facebook_page: merge_field!(facebook_page, FacebookPage),
-            instagram_page: merge_field!(instagram_page, InstagramPage),
-
-            // Categorization section
-            topics: merge_field!(topics, Topics),
-            fields_of_science: merge_field!(fields_of_science, FieldsOfScience),
-            practices: merge_field!(practices, Practices),
-            practices_how: merge_field!(practices_how, PracticesHow),
-            search_terms: merge_field!(search_terms, SearchTerms),
-            difficulty: merge_field!(difficulty, Difficulty),
-            diy: merge_field!(diy, Diy, copy),
-            audience: merge_field!(audience, Audience),
-
-            // Joining section
-            signup_url: merge_field!(signup_url, SignupUrl),
-            prefix_how_to_logged_in: merge_field!(prefix_how_to_logged_in, PrefixHowToLoggedIn),
-            prefix_how_to_logged_out: merge_field!(prefix_how_to_logged_out, PrefixHowToLoggedOut),
-            how_to_join: merge_field!(how_to_join, HowToJoin),
-            howto_video: merge_field!(howto_video, HowtoVideo),
-            outcomes_label: merge_field!(outcomes_label, OutcomesLabel),
-            outcomes_link: merge_field!(outcomes_link, OutcomesLink),
-            time_required: merge_field!(time_required, TimeRequired),
-            training_materials: merge_field!(training_materials, TrainingMaterials),
-            classroom_materials: merge_field!(classroom_materials, ClassroomMaterials),
-            consent_statement: merge_field!(consent_statement, ConsentStatement),
-            consent_statement_date: merge_field!(consent_statement_date, ConsentStatementDate),
-            participation_tools: merge_field!(participation_tools, ParticipationTools, copy),
-            participation_prompt: merge_field!(participation_prompt, ParticipationPrompt),
-            participation_confirmation_message: merge_field!(
-                participation_confirmation_message,
-                ParticipationConfirmationMessage
-            ),
-            participation_notification_email: merge_field!(
-                participation_notification_email,
-                ParticipationNotificationEmail
-            ),
-            participation_usage: merge_field!(participation_usage, ParticipationUsage),
-
-            // Relations section
-            part_of: merge_field!(part_of, PartOf, copy),
-            associated_projects: merge_field!(associated_projects, AssociatedProjects),
-
-            // Participants Need section
-            total_expense: merge_field!(total_expense, TotalExpense, copy),
-            materials: merge_field!(materials, Materials),
-            gear: merge_field!(gear, Gear),
-            mobile_app_url_android: merge_field!(mobile_app_url_android, MobileAppUrlAndroid),
-            mobile_app_url_ios: merge_field!(mobile_app_url_ios, MobileAppUrlIos),
-            mobile_app_url: merge_field!(mobile_app_url, MobileAppUrl),
-
-            // Where section
-            location_type: merge_field!(location_type, LocationType),
-            entirely_online: merge_field!(entirely_online, EntirelyOnline, copy),
-            on_demand: merge_field!(on_demand, OnDemand, copy),
-            in_person: merge_field!(in_person, InPerson, copy),
-            indoors: merge_field!(indoors, Indoors, copy),
-            outdoors: merge_field!(outdoors, Outdoors, copy),
-            regions: merge_field!(regions, Regions),
-            regions_description: merge_field!(regions_description, RegionsDescription),
-            point: merge_field!(point, Point),
-            address: merge_field!(address, Address),
-            city: merge_field!(city, City),
-            state: merge_field!(state, State),
-            zip: merge_field!(zip, Zip),
-            country: merge_field!(country, Country),
-            other: merge_field!(other, Other),
-            location_name: merge_field!(location_name, LocationName),
-            location_landuse: merge_field!(location_landuse, LocationLanduse),
-            location_description: merge_field!(location_description, LocationDescription),
-            geographic_scope: merge_field!(geographic_scope, GeographicScope),
-            united_nations_region: merge_field!(united_nations_region, UnitedNationsRegion),
-
-            // When section
-            begin: merge_field!(begin, Begin),
-            end: merge_field!(end, End),
-            project_timing: merge_field!(project_timing, ProjectTiming),
-            participation_schedule: merge_field!(participation_schedule, ParticipationSchedule),
-            time_per_participation: merge_field!(time_per_participation, TimePerParticipation),
-            year_started: merge_field!(year_started, YearStarted, copy),
-            year_completed: merge_field!(year_completed, YearCompleted, copy),
-            month_completed: merge_field!(month_completed, MonthCompleted, copy),
-
-            // Skills section
-            participation_tasks: merge_field!(participation_tasks, ParticipationTasks),
-            activities: merge_field!(activities, Activities),
-            special_skills: merge_field!(special_skills, SpecialSkills),
-
-            // Data section
-            data_results: merge_field!(data_results, DataResults),
-            data_aggregation: merge_field!(data_aggregation, DataAggregation),
-            data_consent: merge_field!(data_consent, DataConsent),
-            data_visualization: merge_field!(data_visualization, DataVisualization, copy),
-            data_access: merge_field!(data_access, DataAccess),
-            data_quality: merge_field!(data_quality, DataQuality, copy),
-            metadata_publication_url: merge_field!(
-                metadata_publication_url,
-                MetadataPublicationUrl
-            ),
-            data_publication_url: merge_field!(data_publication_url, DataPublicationUrl),
-            data_license: merge_field!(data_license, DataLicense),
-
-            // Outcomes section
-            intended_outcomes: merge_field!(intended_outcomes, IntendedOutcomes),
-            outcome_other: merge_field!(outcome_other, OutcomeOther),
-
-            // Sponsors section
-            university_affiliation: merge_field!(university_affiliation, UniversityAffiliation),
-            sponsors: merge_field!(sponsors, Sponsors),
-            stakeholders: merge_field!(stakeholders, Stakeholders),
-            circuit_id: merge_field!(circuit_id, CircuitId),
-            sustainable_development_goals: merge_field!(
-                sustainable_development_goals,
-                SustainableDevelopmentGoals
-            ),
-        }
-    }
-}
-
-impl LoadStorePeered for ProjectAll {
-    //type DatabaseKey<'k> = Ulid;
-    type DatabaseKey = Ulid;
-
-    const GROUP: &str = "project";
-    const SPECIFIC: &str = "all";
-
-    #[tracing::instrument]
-    async fn save_to_database(&self) -> Result<(), Error> {
-        // Check for protected fields if update_source is specified
-        let (data, protected): (&Self, HashSet<ProjectFieldType>) =
-            if let Some(source) = self.update_source {
-                let protected = self.get_protected_fields(source).await?;
-                if protected.is_empty() {
-                    (self, protected)
-                } else {
-                    // Need to merge with current state to preserve protected fields
-                    let current = Self::read_from_database(self.project_id).await?;
-                    let merged = self.merge_protected(&current, &protected);
-                    // Recursively save the merged data, but clear update_source to avoid infinite loop
-                    // and skip source tracking since we'll do it in the outer call
-                    let mut merged_no_source = merged;
-                    merged_no_source.update_source = None;
-                    Box::pin(merged_no_source.save_to_database()).await?;
-
-                    // Now update source tracking for non-protected fields
-                    let mut tx = Immediate::begin_with_retry(db(), None, None).await?;
-                    self.update_source_tracking(&mut tx, source, &protected)
-                        .await?;
-                    tx.commit().await?;
-
-                    return Ok(());
-                }
-            } else {
-                (self, HashSet::new())
-            };
-
+    /// Writes this project's columns and child rows, and, given `tracking`,
+    /// records the sources of the fields it wrote, all in one transaction,
+    /// then refreshes what is derived from the project's location.
+    async fn write(
+        &self,
+        tracking: Option<(FieldSource, &HashSet<ProjectFieldType>)>,
+    ) -> Result<(), Error> {
         let mut tx = Immediate::begin_with_retry(db(), None, None).await?;
 
         //let mut tx = db().begin().await?;
 
-        let project_id = data.project_id.to_string();
-        let page_creator_id = data.page_creator_id.to_string();
-        let part_of = data.part_of.map(|u| u.to_string());
+        let project_id = self.project_id.to_string();
+        let page_creator_id = self.page_creator_id.to_string();
+        let part_of = self.part_of.map(|u| u.to_string());
 
         sqlx::query!(
-            r#"insert or replace into projects (
+            r#"insert into projects (
           "project_id",
           "legacy_id",
           "legacy_v1_project_id",
@@ -654,7 +432,7 @@ impl LoadStorePeered for ProjectAll {
           "point"
         ) values (
           ?1,
-          ?2,
+          ?114,
           ?2,
           ?3,
           ?4,
@@ -781,7 +559,122 @@ impl LoadStorePeered for ProjectAll {
             else
               GeomFromEWKT(?113)
           end
-        )"#,
+        )
+        on conflict ("project_id") do update set
+          "legacy_id" = excluded."legacy_id",
+          "legacy_v1_project_id" = excluded."legacy_v1_project_id",
+          "legacy_v2_project_id" = excluded."legacy_v2_project_id",
+          "foreign_id" = excluded."foreign_id",
+          "duplicate" = excluded."duplicate",
+          "authoritative" = excluded."authoritative",
+          "flagged" = excluded."flagged",
+          "is_test" = excluded."is_test",
+          "status" = excluded."status",
+          "promotion_time" = excluded."promotion_time",
+          "promotion_target" = excluded."promotion_target",
+          "admin_notes" = excluded."admin_notes",
+          "created" = excluded."created",
+          "wild_hope" = excluded."wild_hope",
+          "exchange" = excluded."exchange",
+          "origin" = excluded."origin",
+          "suborigin" = excluded."suborigin",
+          "guid" = excluded."guid",
+          "opengraph_description" = excluded."opengraph_description",
+          "is_affiliate" = excluded."is_affiliate",
+          "is_inaturalist" = excluded."is_inaturalist",
+          "inat_project_id" = excluded."inat_project_id",
+          "welcomed" = excluded."welcomed",
+          "page_creator_id" = excluded."page_creator_id",
+          "extra" = excluded."extra",
+          "reviewed" = excluded."reviewed",
+          "draft" = excluded."draft",
+          "name" = excluded."name",
+          "participation_degree" = excluded."participation_degree",
+          "participant_instructions" = excluded."participant_instructions",
+          "participant_instructions_email" = excluded."participant_instructions_email",
+          "us_federally_funded" = excluded."us_federally_funded",
+          "presenter" = excluded."presenter",
+          "goal" = excluded."goal",
+          "task" = excluded."task",
+          "description" = excluded."description",
+          "image" = excluded."image",
+          "image_credit" = excluded."image_credit",
+          "connect_opaque_url" = excluded."connect_opaque_url",
+          "connect_opaque_url1" = excluded."connect_opaque_url1",
+          "connect_opaque_url2" = excluded."connect_opaque_url2",
+          "url" = excluded."url",
+          "video_url" = excluded."video_url",
+          "blog_url" = excluded."blog_url",
+          "twitter_name" = excluded."twitter_name",
+          "facebook_page" = excluded."facebook_page",
+          "instagram_page" = excluded."instagram_page",
+          "practices_how" = excluded."practices_how",
+          "search_terms" = excluded."search_terms",
+          "difficulty" = excluded."difficulty",
+          "diy" = excluded."diy",
+          "signup_url" = excluded."signup_url",
+          "prefix_how_to_logged_in" = excluded."prefix_how_to_logged_in",
+          "prefix_how_to_logged_out" = excluded."prefix_how_to_logged_out",
+          "how_to_join" = excluded."how_to_join",
+          "howto_video" = excluded."howto_video",
+          "outcomes_label" = excluded."outcomes_label",
+          "outcomes_link" = excluded."outcomes_link",
+          "time_required" = excluded."time_required",
+          "training_materials" = excluded."training_materials",
+          "classroom_materials" = excluded."classroom_materials",
+          "consent_statement" = excluded."consent_statement",
+          "consent_statement_date" = excluded."consent_statement_date",
+          "participation_tools" = excluded."participation_tools",
+          "participation_prompt" = excluded."participation_prompt",
+          "participation_confirmation_message" = excluded."participation_confirmation_message",
+          "participation_notification_email" = excluded."participation_notification_email",
+          "participation_usage" = excluded."participation_usage",
+          "part_of" = excluded."part_of",
+          "total_expense" = excluded."total_expense",
+          "materials" = excluded."materials",
+          "gear" = excluded."gear",
+          "mobile_app_url_android" = excluded."mobile_app_url_android",
+          "mobile_app_url_ios" = excluded."mobile_app_url_ios",
+          "mobile_app_url" = excluded."mobile_app_url",
+          "location_type" = excluded."location_type",
+          "entirely_online" = excluded."entirely_online",
+          "on_demand" = excluded."on_demand",
+          "in_person" = excluded."in_person",
+          "indoors" = excluded."indoors",
+          "outdoors" = excluded."outdoors",
+          "regions_description" = excluded."regions_description",
+          "address" = excluded."address",
+          "city" = excluded."city",
+          "state" = excluded."state",
+          "zip" = excluded."zip",
+          "country" = excluded."country",
+          "other" = excluded."other",
+          "location_name" = excluded."location_name",
+          "location_landuse" = excluded."location_landuse",
+          "location_description" = excluded."location_description",
+          "united_nations_region" = excluded."united_nations_region",
+          "begin" = excluded."begin",
+          "end" = excluded."end",
+          "project_timing" = excluded."project_timing",
+          "participation_schedule" = excluded."participation_schedule",
+          "time_per_participation" = excluded."time_per_participation",
+          "year_started" = excluded."year_started",
+          "year_completed" = excluded."year_completed",
+          "month_completed" = excluded."month_completed",
+          "special_skills" = excluded."special_skills",
+          "data_results" = excluded."data_results",
+          "data_visualization" = excluded."data_visualization",
+          "data_quality" = excluded."data_quality",
+          "metadata_publication_url" = excluded."metadata_publication_url",
+          "data_publication_url" = excluded."data_publication_url",
+          "data_license" = excluded."data_license",
+          "outcome_other" = excluded."outcome_other",
+          "university_affiliation" = excluded."university_affiliation",
+          "circuit_id" = excluded."circuit_id",
+          "sustainable_development_goals" = excluded."sustainable_development_goals",
+          "regions" = excluded."regions",
+          "point" = excluded."point"
+        "#,
             project_id,
             self.legacy_v1_project_id,
             self.legacy_v2_project_id,
@@ -895,6 +788,7 @@ impl LoadStorePeered for ProjectAll {
             self.sustainable_development_goals,
             self.regions,
             self.point,
+            self.legacy_id,
         )
         .execute(&mut tx)
         .await?;
@@ -1408,22 +1302,20 @@ impl LoadStorePeered for ProjectAll {
             .await?;
         }
 
-        // Update source tracking for all fields if update_source is specified
-        // (This only runs when there are no protected fields, otherwise we returned early)
-        if let Some(source) = self.update_source {
-            self.update_source_tracking(&mut tx, source, &protected)
+        if let Some((source, protected)) = tracking {
+            self.update_source_tracking(&mut tx, source, protected)
                 .await?;
         }
 
         tx.commit().await?;
 
         // Auto-geocode if point is missing but address fields exist
-        if data.point.is_none()
-            && (!data.city.is_empty() || !data.state.is_empty() || !data.country.is_empty())
+        if self.point.is_none()
+            && (!self.city.is_empty() || !self.state.is_empty() || !self.country.is_empty())
         {
-            if let Err(e) = crate::geocode::geocode_and_update_project_point(data.project_id).await
+            if let Err(e) = crate::geocode::geocode_and_update_project_point(self.project_id).await
             {
-                eprintln!("Auto-geocode for project {} failed: {e}", data.project_id);
+                eprintln!("Auto-geocode for project {} failed: {e}", self.project_id);
             }
         }
 
@@ -1431,11 +1323,250 @@ impl LoadStorePeered for ProjectAll {
         // moved: measuring one project against the region list costs a
         // couple of milliseconds here, and a save that quietly left the
         // cache behind would take a region search with it.
-        if let Err(e) = crate::region::refresh_project(&data.project_id.to_string()).await {
-            eprintln!("Region refresh for project {} failed: {e}", data.project_id);
+        if let Err(e) = crate::region::refresh_project(&self.project_id.to_string()).await {
+            eprintln!("Region refresh for project {} failed: {e}", self.project_id);
         }
 
         Ok(())
+    }
+
+    /// Merges protected fields from current database state into a clone of self.
+    /// Protected fields use values from `current`, non-protected fields use values from `self`.
+    fn merge_protected(&self, current: &Self, protected: &HashSet<ProjectFieldType>) -> Self {
+        macro_rules! merge_field {
+            ($field:ident, $variant:ident) => {
+                if protected.contains(&ProjectFieldType::$variant) {
+                    current.$field.clone()
+                } else {
+                    self.$field.clone()
+                }
+            };
+            ($field:ident, $variant:ident, copy) => {
+                if protected.contains(&ProjectFieldType::$variant) {
+                    current.$field
+                } else {
+                    self.$field
+                }
+            };
+        }
+
+        Self {
+            project_id: self.project_id,
+            update_source: self.update_source,
+            field_sources: self.field_sources.clone(),
+
+            // Identity fields
+            legacy_id: merge_field!(legacy_id, LegacyId, copy),
+            legacy_v1_project_id: merge_field!(legacy_v1_project_id, LegacyV1ProjectId, copy),
+            legacy_v2_project_id: merge_field!(legacy_v2_project_id, LegacyV2ProjectId, copy),
+            foreign_id: merge_field!(foreign_id, ForeignId),
+
+            // Admin section
+            duplicate: merge_field!(duplicate, Duplicate, copy),
+            authoritative: merge_field!(authoritative, Authoritative, copy),
+            flagged: merge_field!(flagged, Flagged, copy),
+            is_test: merge_field!(is_test, IsTest, copy),
+            status: merge_field!(status, Status, copy),
+            promotion_time: merge_field!(promotion_time, PromotionTime, copy),
+            promotion_target: merge_field!(promotion_target, PromotionTarget),
+            admin_notes: merge_field!(admin_notes, AdminNotes),
+            created: merge_field!(created, Created),
+            wild_hope: merge_field!(wild_hope, WildHope, copy),
+            exchange: merge_field!(exchange, Exchange),
+            origin: merge_field!(origin, Origin),
+            suborigin: merge_field!(suborigin, Suborigin),
+            guid: merge_field!(guid, Guid),
+            opengraph_description: merge_field!(opengraph_description, OpengraphDescription),
+            is_affiliate: merge_field!(is_affiliate, IsAffiliate, copy),
+            is_inaturalist: merge_field!(is_inaturalist, IsInaturalist, copy),
+            inat_project_id: merge_field!(inat_project_id, InatProjectId, copy),
+            welcomed: merge_field!(welcomed, Welcomed, copy),
+            page_creator_id: merge_field!(page_creator_id, PageCreatorId, copy),
+            page_editor_ids: merge_field!(page_editor_ids, PageEditorIds),
+            extra: merge_field!(extra, Extra),
+            project_last_editor: merge_field!(project_last_editor, ProjectLastEditor, copy),
+            project_last_edited: merge_field!(project_last_edited, ProjectLastEdited),
+            scistarter_last_editor: merge_field!(
+                scistarter_last_editor,
+                ScistarterLastEditor,
+                copy
+            ),
+            scistarter_last_edited: merge_field!(scistarter_last_edited, ScistarterLastEdited),
+            reviewed: merge_field!(reviewed, Reviewed, copy),
+
+            // Project section
+            draft: merge_field!(draft, Draft, copy),
+            name: merge_field!(name, Name),
+            tags: merge_field!(tags, Tags),
+            participation_degree: merge_field!(participation_degree, ParticipationDegree, copy),
+            participant_instructions: merge_field!(
+                participant_instructions,
+                ParticipantInstructions
+            ),
+            participant_instructions_email: merge_field!(
+                participant_instructions_email,
+                ParticipantInstructionsEmail
+            ),
+            participant_files: merge_field!(participant_files, ParticipantFiles),
+            us_federally_funded: merge_field!(us_federally_funded, UsFederallyFunded, copy),
+            presenter: merge_field!(presenter, Presenter),
+            goal: merge_field!(goal, Goal),
+            task: merge_field!(task, Task),
+            description: merge_field!(description, Description),
+            image: merge_field!(image, Image),
+            image_credit: merge_field!(image_credit, ImageCredit),
+            connect_opaque_url: merge_field!(connect_opaque_url, ConnectOpaqueUrl),
+            connect_opaque_url1: merge_field!(connect_opaque_url1, ConnectOpaqueUrl1),
+            connect_opaque_url2: merge_field!(connect_opaque_url2, ConnectOpaqueUrl2),
+            contacts: merge_field!(contacts, Contacts),
+
+            // Web section
+            url: merge_field!(url, Url),
+            video_url: merge_field!(video_url, VideoUrl),
+            blog_url: merge_field!(blog_url, BlogUrl),
+            twitter_name: merge_field!(twitter_name, TwitterName),
+            facebook_page: merge_field!(facebook_page, FacebookPage),
+            instagram_page: merge_field!(instagram_page, InstagramPage),
+
+            // Categorization section
+            topics: merge_field!(topics, Topics),
+            fields_of_science: merge_field!(fields_of_science, FieldsOfScience),
+            practices: merge_field!(practices, Practices),
+            practices_how: merge_field!(practices_how, PracticesHow),
+            search_terms: merge_field!(search_terms, SearchTerms),
+            difficulty: merge_field!(difficulty, Difficulty),
+            diy: merge_field!(diy, Diy, copy),
+            audience: merge_field!(audience, Audience),
+
+            // Joining section
+            signup_url: merge_field!(signup_url, SignupUrl),
+            prefix_how_to_logged_in: merge_field!(prefix_how_to_logged_in, PrefixHowToLoggedIn),
+            prefix_how_to_logged_out: merge_field!(prefix_how_to_logged_out, PrefixHowToLoggedOut),
+            how_to_join: merge_field!(how_to_join, HowToJoin),
+            howto_video: merge_field!(howto_video, HowtoVideo),
+            outcomes_label: merge_field!(outcomes_label, OutcomesLabel),
+            outcomes_link: merge_field!(outcomes_link, OutcomesLink),
+            time_required: merge_field!(time_required, TimeRequired),
+            training_materials: merge_field!(training_materials, TrainingMaterials),
+            classroom_materials: merge_field!(classroom_materials, ClassroomMaterials),
+            consent_statement: merge_field!(consent_statement, ConsentStatement),
+            consent_statement_date: merge_field!(consent_statement_date, ConsentStatementDate),
+            participation_tools: merge_field!(participation_tools, ParticipationTools, copy),
+            participation_prompt: merge_field!(participation_prompt, ParticipationPrompt),
+            participation_confirmation_message: merge_field!(
+                participation_confirmation_message,
+                ParticipationConfirmationMessage
+            ),
+            participation_notification_email: merge_field!(
+                participation_notification_email,
+                ParticipationNotificationEmail
+            ),
+            participation_usage: merge_field!(participation_usage, ParticipationUsage),
+
+            // Relations section
+            part_of: merge_field!(part_of, PartOf, copy),
+            associated_projects: merge_field!(associated_projects, AssociatedProjects),
+
+            // Participants Need section
+            total_expense: merge_field!(total_expense, TotalExpense, copy),
+            materials: merge_field!(materials, Materials),
+            gear: merge_field!(gear, Gear),
+            mobile_app_url_android: merge_field!(mobile_app_url_android, MobileAppUrlAndroid),
+            mobile_app_url_ios: merge_field!(mobile_app_url_ios, MobileAppUrlIos),
+            mobile_app_url: merge_field!(mobile_app_url, MobileAppUrl),
+
+            // Where section
+            location_type: merge_field!(location_type, LocationType),
+            entirely_online: merge_field!(entirely_online, EntirelyOnline, copy),
+            on_demand: merge_field!(on_demand, OnDemand, copy),
+            in_person: merge_field!(in_person, InPerson, copy),
+            indoors: merge_field!(indoors, Indoors, copy),
+            outdoors: merge_field!(outdoors, Outdoors, copy),
+            regions: merge_field!(regions, Regions),
+            regions_description: merge_field!(regions_description, RegionsDescription),
+            point: merge_field!(point, Point),
+            address: merge_field!(address, Address),
+            city: merge_field!(city, City),
+            state: merge_field!(state, State),
+            zip: merge_field!(zip, Zip),
+            country: merge_field!(country, Country),
+            other: merge_field!(other, Other),
+            location_name: merge_field!(location_name, LocationName),
+            location_landuse: merge_field!(location_landuse, LocationLanduse),
+            location_description: merge_field!(location_description, LocationDescription),
+            geographic_scope: merge_field!(geographic_scope, GeographicScope),
+            united_nations_region: merge_field!(united_nations_region, UnitedNationsRegion),
+
+            // When section
+            begin: merge_field!(begin, Begin),
+            end: merge_field!(end, End),
+            project_timing: merge_field!(project_timing, ProjectTiming),
+            participation_schedule: merge_field!(participation_schedule, ParticipationSchedule),
+            time_per_participation: merge_field!(time_per_participation, TimePerParticipation),
+            year_started: merge_field!(year_started, YearStarted, copy),
+            year_completed: merge_field!(year_completed, YearCompleted, copy),
+            month_completed: merge_field!(month_completed, MonthCompleted, copy),
+
+            // Skills section
+            participation_tasks: merge_field!(participation_tasks, ParticipationTasks),
+            activities: merge_field!(activities, Activities),
+            special_skills: merge_field!(special_skills, SpecialSkills),
+
+            // Data section
+            data_results: merge_field!(data_results, DataResults),
+            data_aggregation: merge_field!(data_aggregation, DataAggregation),
+            data_consent: merge_field!(data_consent, DataConsent),
+            data_visualization: merge_field!(data_visualization, DataVisualization, copy),
+            data_access: merge_field!(data_access, DataAccess),
+            data_quality: merge_field!(data_quality, DataQuality, copy),
+            metadata_publication_url: merge_field!(
+                metadata_publication_url,
+                MetadataPublicationUrl
+            ),
+            data_publication_url: merge_field!(data_publication_url, DataPublicationUrl),
+            data_license: merge_field!(data_license, DataLicense),
+
+            // Outcomes section
+            intended_outcomes: merge_field!(intended_outcomes, IntendedOutcomes),
+            outcome_other: merge_field!(outcome_other, OutcomeOther),
+
+            // Sponsors section
+            university_affiliation: merge_field!(university_affiliation, UniversityAffiliation),
+            sponsors: merge_field!(sponsors, Sponsors),
+            stakeholders: merge_field!(stakeholders, Stakeholders),
+            circuit_id: merge_field!(circuit_id, CircuitId),
+            sustainable_development_goals: merge_field!(
+                sustainable_development_goals,
+                SustainableDevelopmentGoals
+            ),
+        }
+    }
+}
+
+impl LoadStorePeered for ProjectAll {
+    //type DatabaseKey<'k> = Ulid;
+    type DatabaseKey = Ulid;
+
+    const GROUP: &str = "project";
+    const SPECIFIC: &str = "all";
+
+    #[tracing::instrument]
+    async fn save_to_database(&self) -> Result<(), Error> {
+        let Some(source) = self.update_source else {
+            return self.write(None).await;
+        };
+
+        // Fields whose recorded source outranks this update keep their
+        // current values.
+        let protected = self.get_protected_fields(source).await?;
+        if protected.is_empty() {
+            self.write(Some((source, &protected))).await
+        } else {
+            let current = Self::read_from_database(self.project_id).await?;
+            self.merge_protected(&current, &protected)
+                .write(Some((source, &protected)))
+                .await
+        }
     }
 
     #[tracing::instrument]
@@ -1939,46 +2070,41 @@ impl LoadStorePeered for ProjectAll {
             sustainable_development_goals: project_row.sustainable_development_goals,
 
             update_source: None,
+            field_sources: Box::default(),
         })
     }
 }
 
 /// Persist a brand-new project and its page entity, then fire the submission
 /// triggers. This is the single source of truth for project creation, shared by
-/// the admin "Add Project" handler and the public `/add/project` form — callers
-/// build the `ProjectAll` with whatever fields their form collects and set the
-/// system fields (page_creator_id, created, origin, authoritative, status,
-/// draft); this function handles the persistence/entity/notification sequence.
+/// the admin "Add Project" handler, the public `/add/project` form, the partner
+/// API and the ALA import — callers build the `ProjectAll` with whatever fields
+/// they collect and set the system fields (page_creator_id, created, origin,
+/// authoritative, status, draft); this function gives the project its integer
+/// id and handles the persistence/entity/notification sequence.
 ///
 /// `publish` controls the page entity's visibility (public submissions pass
-/// `false` so the project stays unpublished pending review). Returns the
-/// entity slug.
+/// `false` so the project stays unpublished pending review). `submission`
+/// says who is told of it. Returns the entity slug.
 pub async fn persist_new_project(
-    project: ProjectAll,
+    mut project: ProjectAll,
     publish: bool,
     user_id: Ulid,
+    submission: Submission,
 ) -> Result<String, Error> {
-    use crate::entity::{Entity, EntityKind, EntityTarget};
     use common::service::{TriggerEvent, log_activity, trigger_email};
 
     let project_id = project.project_id;
     let name = project.name.clone();
 
+    if project.legacy_id.is_none() {
+        project.legacy_id = Some(next_legacy_id().await?);
+    }
+
     // Save (and distribute to peers) via LoadStorePeered.
     project.store().await?;
 
-    // Create the page entity with the requested publish state — it becomes
-    // resolvable at /projects/<slug> only once published.
-    let entity =
-        Entity::new_by_name(&name, EntityKind::Project, EntityTarget::Ulid(project_id)).await?;
-    let entity = Entity::new_with_publish(
-        entity.slug(),
-        *entity.kind(),
-        entity.target().clone(),
-        publish,
-    );
-    let slug = entity.slug().to_string();
-    entity.store().await?;
+    let slug = create_page_entity(project_id, &name, publish).await?;
 
     log_activity(
         None,
@@ -1996,13 +2122,101 @@ pub async fn persist_new_project(
             "project_link".to_string(),
             format!("https://{}/projects/{slug}", env!("DOMAIN")),
         ),
+        (
+            "admin_link".to_string(),
+            format!("https://{}/-admin/projects/{project_id}", env!("DOMAIN")),
+        ),
     ];
-    trigger_email(TriggerEvent::ProjectSubmitted, user_id, Some(&merge))
-        .await
-        .ok();
-    trigger_email(TriggerEvent::ProjectCreatedStaff, user_id, Some(&merge))
-        .await
-        .ok();
+    match submission {
+        Submission::Submitted => {
+            trigger_email(TriggerEvent::ProjectSubmitted, user_id, Some(&merge))
+                .await
+                .ok();
+            trigger_email(TriggerEvent::ProjectCreatedStaff, user_id, Some(&merge))
+                .await
+                .ok();
+        }
+        Submission::Imported => {
+            trigger_email(TriggerEvent::ProjectCreatedStaff, user_id, Some(&merge))
+                .await
+                .ok();
+        }
+        Submission::Api {
+            key_email,
+            notify_reviewers,
+        } => {
+            if notify_reviewers {
+                let mut merge = merge.to_vec();
+                merge.push(("name".to_string(), name.clone()));
+                merge.push(("key_email".to_string(), key_email));
+                trigger_email(TriggerEvent::ProjectCreatedApi, user_id, Some(&merge))
+                    .await
+                    .ok();
+            }
+        }
+    }
 
     Ok(slug)
+}
+
+/// Where the integer ids of projects created here begin. Partners know
+/// projects by integer id (the v1 API answers with one, and takes one back as
+/// `scistarter_id`), so every project needs one. orrery's are its entity ids
+/// plus 100,000,000 (about 100,013,000 as of October 2026), so starting here
+/// keeps the two apart while both create projects.
+pub const LEGACY_ID_DOMAIN: i64 = 200_000_000;
+
+/// The integer id for a new project, never one already given.
+async fn next_legacy_id() -> Result<i64, Error> {
+    let floor = sqlx::query_scalar!(
+        r#"SELECT max(legacy_id) AS "highest: i64" FROM projects WHERE legacy_id >= ?"#,
+        LEGACY_ID_DOMAIN
+    )
+    .fetch_one(db())
+    .await?
+    .unwrap_or(LEGACY_ID_DOMAIN);
+
+    common::sequence::next("project-legacy-id", floor).await
+}
+
+/// Create a project's page entity, its slug made from `name`, with the
+/// requested publish state — it becomes resolvable at /projects/<slug> only
+/// once published. Returns the slug.
+pub async fn create_page_entity(
+    project_id: Ulid,
+    name: &str,
+    publish: bool,
+) -> Result<String, Error> {
+    use crate::entity::{Entity, EntityKind, EntityTarget};
+
+    let entity =
+        Entity::new_by_name(name, EntityKind::Project, EntityTarget::Ulid(project_id)).await?;
+    let entity = Entity::new_with_publish(
+        entity.slug(),
+        *entity.kind(),
+        entity.target().clone(),
+        publish,
+    );
+    let slug = entity.slug().to_string();
+    entity.store().await?;
+
+    Ok(slug)
+}
+
+/// How a new project reached SciStarter, which decides who hears about it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Submission {
+    /// A person submitted it through a form. They are told it was received,
+    /// and the reviewers hear of it.
+    Submitted,
+    /// It arrived from an imported catalog. The reviewers hear of it.
+    Imported,
+    /// A partner's API key added it. The reviewers hear of it in their own
+    /// words, naming the key's account (`key_email`), unless that account is
+    /// set not to tell them. The account itself is not told, as orrery does
+    /// not tell it.
+    Api {
+        key_email: String,
+        notify_reviewers: bool,
+    },
 }

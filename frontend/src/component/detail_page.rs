@@ -50,7 +50,31 @@ pub enum DetailPageKind {
     Event,
 }
 
+/// Whether the viewer may edit the page, and whether as staff.
+async fn edit_permission(
+    user: Option<&BasicInfo>,
+    page: crate::edit_access::Page,
+) -> Result<(bool, bool), Error> {
+    let Some(user) = user else {
+        return Ok((false, false));
+    };
+
+    let editor = crate::edit_access::Editor::from(user);
+    Ok((
+        crate::edit_access::may_edit(page, editor).await?,
+        editor.is_staff,
+    ))
+}
+
 impl DetailPageKind {
+    /// The page of this kind that `target` names, as edit access knows it.
+    pub fn page(self, target: Ulid) -> crate::edit_access::Page {
+        match self {
+            DetailPageKind::Project => crate::edit_access::Page::Project(target),
+            DetailPageKind::Event => crate::edit_access::Page::Event(target),
+        }
+    }
+
     pub fn is_project(self) -> bool {
         matches!(self, Self::Project)
     }
@@ -571,7 +595,6 @@ impl DetailPage {
         let id_str2 = id_str.clone();
         let id_str3 = id_str.clone();
         let id_str4 = id_str.clone();
-        let id_str5 = id_str.clone();
         let id_str6 = id_str.clone();
         let user_info_clone = user_info.clone();
         let user_info_clone2 = user_info.clone();
@@ -689,26 +712,10 @@ impl DetailPage {
                 Ok::<_, Error>(cached)
             },
             // Edit permission check
-            async {
-                if let Some(ref user) = user_info_clone2 {
-                    if user.is_staff || user.is_superuser {
-                        Ok::<_, Error>((true, true))
-                    } else {
-                        let user_str = user.user_id.to_string();
-                        let exists = sqlx::query_scalar!(
-                            r#"SELECT 1 as "v!: i32" FROM project_page_editors WHERE project_id = ? AND user_id = ?"#,
-                            id_str5,
-                            user_str
-                        )
-                        .fetch_optional(db())
-                        .await?
-                        .is_some();
-                        Ok((exists, false))
-                    }
-                } else {
-                    Ok((false, false))
-                }
-            },
+            edit_permission(
+                user_info_clone2.as_deref(),
+                DetailPageKind::Project.page(project_id)
+            ),
         )?;
 
         let (saved, joined) = engagement;
@@ -999,7 +1006,6 @@ impl DetailPage {
 
         let id_str2 = id_str.clone();
         let id_str3 = id_str.clone();
-        let id_str4 = id_str.clone();
         let event_id = self.target_id;
         let user_info_clone = user_info.clone();
         let user_info_likes = user_info.clone();
@@ -1045,26 +1051,10 @@ impl DetailPage {
                 Ok::<_, Error>((count, liked))
             },
             // Edit permission check
-            async {
-                if let Some(ref user) = user_info_clone {
-                    if user.is_staff || user.is_superuser {
-                        Ok::<_, Error>((true, true))
-                    } else {
-                        let user_str = user.user_id.to_string();
-                        let exists = sqlx::query_scalar!(
-                            r#"SELECT 1 as "v!: i32" FROM event_page_editors WHERE event_id = ? AND user_id = ?"#,
-                            id_str4,
-                            user_str
-                        )
-                        .fetch_optional(db())
-                        .await?
-                        .is_some();
-                        Ok((exists, false))
-                    }
-                } else {
-                    Ok((false, false))
-                }
-            },
+            edit_permission(
+                user_info_clone.as_deref(),
+                DetailPageKind::Event.page(event_id)
+            ),
         )?;
 
         let (like_count, user_has_liked) = likes;

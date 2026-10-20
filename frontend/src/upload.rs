@@ -18,6 +18,7 @@ use common::service::log_activity;
 use sailfish::TemplateOnce;
 
 pub mod processing;
+pub mod rehost;
 pub mod storage;
 
 use crate::middleware::error_pages::error_response;

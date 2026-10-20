@@ -48,9 +48,12 @@ async fn authorize_manager(
         return Ok(None);
     };
 
-    let allowed = user.is_staff
-        || user.is_superuser
-        || crate::dashboard::manages_entity(&user.user_id.to_string(), &summary).await?;
+    let page = match summary.kind {
+        EntitySummaryKind::Project => crate::edit_access::Page::Project(summary.id),
+        EntitySummaryKind::Event => crate::edit_access::Page::Event(summary.id),
+    };
+    let allowed =
+        crate::edit_access::may_edit(page, crate::edit_access::Editor::from(user.as_ref())).await?;
 
     if allowed {
         Ok(Some((user, summary)))

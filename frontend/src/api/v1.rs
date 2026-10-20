@@ -13,6 +13,7 @@ use common::{
     },
     service::{request, send},
     shared::db,
+    timestring::TimeString,
 };
 use poem::{
     IntoResponse, Response, handler,
@@ -22,9 +23,13 @@ use serde::Deserialize;
 use ulid::Ulid;
 
 use super::check_api_key_permission;
+use crate::contact::{edit_contact_person, edit_manager};
 use crate::peering::LoadStorePeered;
 use crate::project::ProjectStatus;
-use crate::project::all::ProjectAll;
+use crate::project::all::{ProjectAll, Submission, persist_new_project};
+use crate::project::choice_ids;
+use crate::project::field_source::FieldSource;
+use crate::project::location::{ANYWHERE, AT_AN_ADDRESS, IN_A_RANGE};
 
 #[derive(Debug, Deserialize)]
 struct ApiKeyQuery {
@@ -679,489 +684,577 @@ pub async fn participation_failure(Form(form): Form<FailureForm>) -> Response {
 // POST /api/project/add
 // ============================================================================
 
-/// PPSR Core field name → hydra field name mapping
-fn ppsr_map_field(name: &str) -> &str {
-    match name {
-        "ProjectGUID" => "guid",
-        "ProjectName" => "name",
-        "ProjectDataProvider" => "origin",
-        "ProjectDescription" => "description",
-        "ProjectContactName" => "contact_name",
-        "ProjectCoordinator" => "manager_name",
-        "ProjectContactEmail" => "contact_email",
-        "ProjectContactPhone" => "project_owner_phone",
-        "ProjectContactAddress" => "contact_address",
-        "ProjectInstitutionName" | "ProjectOrganization" => "presenter",
-        "ProjectURL" => "url",
-        "ProjectFacebook" => "facebook_page",
-        "ProjectTwitter" => "twitter_name",
-        "ProjectKeywords" => "search_terms",
-        other => other,
+/// PPSR Core fields, and the project fields they write. A field named twice
+/// takes the later one's value.
+const PPSR_FIELDS: &[(&str, PpsrField)] = &[
+    ("ProjectDataProvider", PpsrField::Origin),
+    ("ProjectDescription", PpsrField::Description),
+    ("ProjectContactName", PpsrField::ContactName),
+    ("ProjectCoordinator", PpsrField::ManagerName),
+    ("ProjectContactEmail", PpsrField::ContactEmail),
+    ("ProjectContactPhone", PpsrField::ContactPhone),
+    ("ProjectContactAddress", PpsrField::ContactAddress),
+    ("ProjectInstitutionName", PpsrField::Presenter),
+    ("ProjectOrganization", PpsrField::Presenter),
+    ("ProjectURL", PpsrField::Url),
+    ("ProjectFacebook", PpsrField::FacebookPage),
+    ("ProjectTwitter", PpsrField::TwitterName),
+    ("ProjectKeywords", PpsrField::SearchTerms),
+];
+
+#[derive(Debug, Clone, Copy)]
+enum PpsrField {
+    Origin,
+    Description,
+    ContactName,
+    ManagerName,
+    ContactEmail,
+    ContactPhone,
+    ContactAddress,
+    Presenter,
+    Url,
+    FacebookPage,
+    TwitterName,
+    SearchTerms,
+}
+
+impl PpsrField {
+    fn assign(self, proj: &mut ProjectAll, value: String) {
+        match self {
+            PpsrField::Origin => proj.origin = value,
+            PpsrField::Description => proj.description = value,
+            PpsrField::ContactName => {
+                edit_contact_person(&mut proj.contacts, |c| c.name = Some(value.clone()))
+            }
+            PpsrField::ManagerName => {
+                edit_manager(&mut proj.contacts, |m| m.name = Some(value.clone()))
+            }
+            PpsrField::ContactEmail => {
+                edit_contact_person(&mut proj.contacts, |c| c.email = value.clone())
+            }
+            PpsrField::ContactPhone => {
+                edit_contact_person(&mut proj.contacts, |c| c.phone = Some(value.clone()))
+            }
+            PpsrField::ContactAddress => {
+                edit_contact_person(&mut proj.contacts, |c| c.address = Some(value.clone()))
+            }
+            PpsrField::Presenter => proj.presenter = value,
+            PpsrField::Url => proj.url = value,
+            PpsrField::FacebookPage => proj.facebook_page = value,
+            PpsrField::TwitterName => proj.twitter_name = value,
+            PpsrField::SearchTerms => proj.search_terms = value,
+        }
     }
 }
 
+/// The project status a PPSR status name stands for, or Hidden for a name it
+/// does not know.
+fn ppsr_status(name: &str) -> ProjectStatus {
+    match name.to_lowercase().as_str() {
+        "starting" | "pending" => ProjectStatus::Pending,
+        "active" => ProjectStatus::Active,
+        "hiatus" => ProjectStatus::Hiatus,
+        "complete" => ProjectStatus::Complete,
+        _ => ProjectStatus::Hidden,
+    }
+}
+
+/// The difficulty a partner's difficulty name stands for.
+fn api_difficulty(name: &str) -> &'static str {
+    match name.to_lowercase().as_str() {
+        "hard" => "Difficult",
+        "medium" => "Medium",
+        _ => "Easy",
+    }
+}
+
+/// Whether text is an ISO 8601 date, or date and time, as Python's
+/// `datetime.fromisoformat` reads them.
+fn is_iso_time(text: &str) -> bool {
+    text.parse::<jiff::Timestamp>().is_ok()
+        || text.parse::<jiff::civil::DateTime>().is_ok()
+        || text.parse::<jiff::civil::Date>().is_ok()
+}
+
+/// A partner's value for a text field: text as given, a number written out,
+/// and null as empty. Anything else is no value for a text field.
+fn api_text(value: &serde_json::Value) -> Option<String> {
+    match value {
+        serde_json::Value::String(text) => Some(text.clone()),
+        serde_json::Value::Number(number) => Some(number.to_string()),
+        serde_json::Value::Null => Some(String::new()),
+        _ => None,
+    }
+}
+
+/// Whether a partner's value is true, as Python's `bool()` decides.
+fn api_truthy(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Null => false,
+        serde_json::Value::Bool(flag) => *flag,
+        serde_json::Value::Number(number) => number.as_f64().is_some_and(|n| n != 0.0),
+        serde_json::Value::String(text) => !text.is_empty(),
+        serde_json::Value::Array(items) => !items.is_empty(),
+        serde_json::Value::Object(fields) => !fields.is_empty(),
+    }
+}
+
+/// A partner's `scistarter_id`, as Python's `int()` reads it, or 0 for one
+/// that is not a number.
+fn api_scistarter_id(value: Option<&serde_json::Value>) -> i64 {
+    match value {
+        Some(serde_json::Value::Number(number)) => number
+            .as_i64()
+            .or_else(|| number.as_f64().map(|n| n.trunc() as i64))
+            .unwrap_or(0),
+        Some(serde_json::Value::String(text)) => text.trim().parse().unwrap_or(0),
+        Some(serde_json::Value::Bool(flag)) => *flag as i64,
+        _ => 0,
+    }
+}
+
+fn api_refusal(status: poem::http::StatusCode, message: &str) -> Response {
+    Json(serde_json::json!({
+        "result": "error",
+        "error": status.as_u16(),
+        "message": message,
+    }))
+    .with_status(status)
+    .into_response()
+}
+
+/// Where a partner says a project happens.
+enum Border {
+    Nowhere,
+    Address,
+    Online,
+    Anywhere,
+    Regions(String),
+}
+
+/// Add a project, or update one the key may write, from a partner's record:
+/// SciStarter's own field names, or PPSR Core's. A port of orrery's
+/// `project_add`.
+///
+/// Everything that can refuse the request, the network work among it (the
+/// image and the coverage), is settled before anything is written. New
+/// projects are created unpublished, for the reviewers to look over.
 #[handler]
-pub async fn project_add(Json(mut data): Json<serde_json::Value>) -> Result<Response, Error> {
-    // Validate API key from JSON body
-    let api_key = data
+pub async fn project_add(body: String) -> Result<Response, Error> {
+    use poem::http::StatusCode;
+
+    let Ok(serde_json::Value::Object(mut obj)) = serde_json::from_str::<serde_json::Value>(&body)
+    else {
+        return Ok(Json(serde_json::json!({
+            "result": "error",
+            "message": "Unable to parse JSON"
+        }))
+        .with_status(StatusCode::BAD_REQUEST)
+        .into_response());
+    };
+
+    let api_key = obj
         .get("key")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-
-    let Some(api_key) = api_key else {
-        return Ok(Json(serde_json::json!({
-            "result": "error",
-            "error": 400,
-            "message": "API key required"
-        }))
-        .into_response());
-    };
-
-    let validation: ValidateApiKeyResponse = request(
-        "user.api_key.validate",
-        ValidateApiKeyRequest {
-            api_key: api_key.clone(),
-        },
-    )
-    .await?;
-
-    if !validation.valid {
-        return Ok(Json(serde_json::json!({
-            "result": "error",
-            "error": 403,
-            "message": "Invalid API key"
-        }))
-        .into_response());
-    };
-
-    // The API key's own user (owner default + image-upload attribution).
-    let api_user_id = validation
-        .user_id
-        .as_ref()
-        .and_then(|s| s.parse::<Ulid>().ok());
-
-    // Apply PPSR field name mapping
-    if let Some(obj) = data.as_object_mut() {
-        let keys: Vec<String> = obj.keys().cloned().collect();
-        for key in keys {
-            let mapped = ppsr_map_field(&key);
-            if mapped != key {
-                if let Some(val) = obj.remove(&key) {
-                    obj.insert(mapped.to_string(), val);
-                }
-            }
-        }
-    }
-
-    // Goal and task are required (orrery rejects creation/update without them).
-    let has_field = |k: &str| {
-        data.get(k)
-            .and_then(|v| v.as_str())
-            .map(|s| !s.is_empty())
-            .unwrap_or(false)
-    };
-    if !has_field("goal") || !has_field("task") {
-        return Ok(Json(serde_json::json!({
-            "result": "error",
-            "error": 400,
-            "message": "Goal and task are required."
-        }))
-        .with_status(poem::http::StatusCode::BAD_REQUEST)
-        .into_response());
-    }
-
-    let guid = data
-        .get("guid")
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
-    let scistarter_id = data
-        .get("scistarter_id")
-        .and_then(|v| v.as_str())
-        .or_else(|| {
-            data.get("scistarter_id")
-                .and_then(|v| v.as_i64())
-                .map(|_| "")
-        });
-    let scistarter_id_int = data.get("scistarter_id").and_then(|v| v.as_i64());
 
-    if guid.is_empty() && scistarter_id.is_none() && scistarter_id_int.is_none() {
-        return Ok(Json(serde_json::json!({
-            "result": "error",
-            "error": 400,
-            "message": "guid or scistarter_id required"
-        }))
-        .into_response());
+    if api_key.is_empty() {
+        return Ok(api_refusal(StatusCode::FORBIDDEN, "Invalid key"));
     }
 
-    // Try to find existing project by GUID or legacy ID
-    let existing_project_id = if !guid.is_empty() {
+    let validation: ValidateApiKeyResponse =
+        request("user.api_key.validate", ValidateApiKeyRequest { api_key }).await?;
+
+    let Some(api_user_id) = validation
+        .user_id
+        .as_deref()
+        .and_then(|id| id.parse::<Ulid>().ok())
+        .filter(|_| validation.valid)
+    else {
+        return Ok(api_refusal(StatusCode::FORBIDDEN, "Invalid key"));
+    };
+
+    let mut take = |key: &str| obj.remove(key);
+
+    let name_fields = [take("name"), take("ProjectName")];
+    let name = name_fields
+        .iter()
+        .flatten()
+        .next()
+        .and_then(api_text)
+        .unwrap_or_default();
+
+    // PPSR Core spells it ProjectGUID; ProjectGuid is accepted as well,
+    // because callers have long sent it that way.
+    let guid_fields = [take("guid"), take("ProjectGUID"), take("ProjectGuid")];
+    let guid = guid_fields
+        .iter()
+        .flatten()
+        .filter_map(api_text)
+        .find(|guid| !guid.is_empty())
+        .unwrap_or_default();
+
+    let scistarter_id = api_scistarter_id(take("scistarter_id").as_ref());
+
+    let obj = obj;
+
+    let present = |key: &str| obj.get(key).is_some_and(api_truthy);
+    if !present("goal") || !present("task") {
+        return Ok(api_refusal(
+            StatusCode::BAD_REQUEST,
+            "Goal and task are required.",
+        ));
+    }
+
+    let status_key = if obj.contains_key("status") {
+        "status"
+    } else {
+        "ProjectStatus"
+    };
+    for key in [status_key, "difficulty"] {
+        if obj.get(key).is_some_and(|value| !value.is_string()) {
+            return Ok(api_refusal(
+                StatusCode::BAD_REQUEST,
+                &format!("{key} must be a string."),
+            ));
+        }
+    }
+
+    // Checked as orrery checks it, though the project keeps its own record of
+    // when it was last edited rather than the partner's.
+    if let Some(last_updated) = obj.get("ProjectDataLastUpdated") {
+        if !last_updated.as_str().is_some_and(is_iso_time) {
+            return Ok(api_refusal(
+                StatusCode::BAD_REQUEST,
+                "ProjectDataLastUpdated must be an ISO 8601 date and time.",
+            ));
+        }
+    }
+
+    // Find the project the record describes.
+    let existing = if !guid.is_empty() {
         sqlx::query_scalar!(
-            "SELECT project_id FROM projects WHERE guid = ? LIMIT 1",
+            r#"SELECT project_id AS "project_id!" FROM projects WHERE guid = ?
+               ORDER BY created, project_id LIMIT 1"#,
             guid
         )
         .fetch_optional(db())
         .await?
-    } else if let Some(legacy_id) = scistarter_id_int {
-        sqlx::query_scalar!(
-            "SELECT project_id FROM projects WHERE legacy_id = ? LIMIT 1",
-            legacy_id
+    } else if scistarter_id != 0 {
+        let found = sqlx::query_scalar!(
+            r#"SELECT project_id AS "project_id!" FROM projects WHERE legacy_id = ? LIMIT 1"#,
+            scistarter_id
         )
         .fetch_optional(db())
-        .await?
-    } else {
-        None
-    };
+        .await?;
 
-    // A scistarter_id (with no guid) must reference an existing project; orrery
-    // returns 400 rather than creating a new project in that case.
-    if guid.is_empty() && scistarter_id_int.is_some() && existing_project_id.is_none() {
-        return Ok(Json(serde_json::json!({
-            "result": "error",
-            "error": 400,
-            "message": "scistarter_id does not contain a valid id"
-        }))
-        .with_status(poem::http::StatusCode::BAD_REQUEST)
-        .into_response());
-    }
-
-    let (project_ulid, is_new) = if let Some(ref pid) = existing_project_id {
-        (pid.parse::<Ulid>()?, false)
-    } else {
-        (Ulid::new(), true)
-    };
-
-    // For an existing project, only a writer (page creator/manager or staff) may
-    // update it; otherwise report that it already exists without overwriting.
-    if !is_new {
-        let project_id_str = project_ulid.to_string();
-        if !check_api_key_permission(&api_key, &project_id_str).await? {
-            let legacy_id = sqlx::query_scalar!(
-                "SELECT legacy_id FROM projects WHERE project_id = ?",
-                project_id_str
-            )
-            .fetch_optional(db())
-            .await?
-            .flatten();
-            return Ok(Json(serde_json::json!({
-                "result": "success",
-                "message": "This project already exists in the database",
-                "project_id": legacy_id
-            }))
-            .into_response());
+        if found.is_none() {
+            return Ok(api_refusal(
+                StatusCode::BAD_REQUEST,
+                "scistarter_id does not contain a valid id",
+            ));
         }
-    }
 
-    // Load existing or create new. The update below only assigns the fields
-    // the request actually carries, so an existing project has to be loaded
-    // for real: substituting a default here would save a blank row over
-    // everything the request left out — the exchange it was contributed
-    // through, its tags, its origin. `is_new` is false only because a row was
-    // just found by guid/legacy_id, so a failure to load it is a genuine
-    // error and belongs to the caller.
-    let mut proj = if is_new {
-        let mut p = ProjectAll::default();
-        p.project_id = project_ulid;
-        p
+        found
     } else {
-        ProjectAll::load(project_ulid).await?
+        return Ok(api_refusal(
+            StatusCode::BAD_REQUEST,
+            "Project GUID is required for new records",
+        ));
     };
 
-    // Apply fields from request data
-    let obj = data.as_object().cloned().unwrap_or_default();
+    let is_new = existing.is_none();
 
-    if let Some(v) = obj.get("name").and_then(|v| v.as_str()) {
-        proj.name = v.to_string();
-    }
-    if let Some(v) = obj.get("guid").and_then(|v| v.as_str()) {
-        proj.guid = v.to_string();
-    }
-    if let Some(v) = obj.get("description").and_then(|v| v.as_str()) {
-        proj.description = v.to_string();
-    }
-    if let Some(v) = obj.get("url").and_then(|v| v.as_str()) {
-        proj.url = v.to_string();
-    }
-    if let Some(v) = obj.get("origin").and_then(|v| v.as_str()) {
-        proj.origin = v.to_string();
-    }
-    if let Some(v) = obj.get("presenter").and_then(|v| v.as_str()) {
-        proj.presenter = v.to_string();
-    }
-    if let Some(v) = obj.get("search_terms").and_then(|v| v.as_str()) {
-        proj.search_terms = v.to_string();
-    }
-    if let Some(v) = obj.get("contact_name").and_then(|v| v.as_str()) {
-        proj.contacts = vec![crate::contact::Contact {
-            contact_id: Ulid::new(),
-            name: Some(v.to_string()),
-            email: obj
-                .get("contact_email")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
-            phone: obj
-                .get("contact_phone")
-                .and_then(|v| v.as_str())
-                .or_else(|| obj.get("project_owner_phone").and_then(|v| v.as_str()))
-                .map(String::from),
-            affiliation: obj
-                .get("contact_affiliation")
-                .and_then(|v| v.as_str())
-                .map(String::from),
-            address: obj
-                .get("contact_address")
-                .and_then(|v| v.as_str())
-                .map(String::from),
-            role: crate::contact::ContactRole::ContactPerson,
-        }]
-        .into_boxed_slice();
-    }
-    if let Some(v) = obj.get("facebook_page").and_then(|v| v.as_str()) {
-        proj.facebook_page = v.to_string();
-    }
-    if let Some(v) = obj.get("twitter_name").and_then(|v| v.as_str()) {
-        proj.twitter_name = v.to_string();
-    }
-    if let Some(v) = obj.get("video_url").and_then(|v| v.as_str()) {
-        proj.video_url = v.to_string();
-    }
-    if let Some(v) = obj.get("blog_url").and_then(|v| v.as_str()) {
-        proj.blog_url = v.to_string();
-    }
-    if let Some(v) = obj.get("image_credit").and_then(|v| v.as_str()) {
-        proj.image_credit = v.to_string();
-    }
-    if let Some(v) = obj.get("how_to_join").and_then(|v| v.as_str()) {
-        proj.how_to_join = v.to_string();
-    }
-    if let Some(v) = obj.get("special_skills").and_then(|v| v.as_str()) {
-        proj.special_skills = v.to_string();
-    }
-    if let Some(v) = obj.get("gear").and_then(|v| v.as_str()) {
-        proj.gear = v.to_string();
-    }
-    if let Some(v) = obj.get("goal").and_then(|v| v.as_str()) {
-        proj.goal = v.to_string();
-    }
-    if let Some(v) = obj.get("task").and_then(|v| v.as_str()) {
-        proj.task = v.to_string();
-    }
+    let mut proj = match existing {
+        Some(project_id) => {
+            if !super::key_may_write_project(&validation, &project_id).await? {
+                let legacy_id = sqlx::query_scalar!(
+                    "SELECT legacy_id FROM projects WHERE project_id = ?",
+                    project_id
+                )
+                .fetch_optional(db())
+                .await?
+                .flatten();
 
-    // Image: re-host the supplied URL adjacent to our untracked uploads (orrery
-    // does the same via url_to_file). A fetch/processing failure aborts the
-    // request with the same error orrery returns.
-    if let Some(image_url) = obj
-        .get("image")
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-    {
-        let uploaded_by = api_user_id.unwrap_or_else(Ulid::nil);
-        match rehost_image_url(image_url, uploaded_by).await {
-            Some(hosted) => proj.image = hosted,
-            None => {
                 return Ok(Json(serde_json::json!({
                     "result": "error",
-                    "error": 400,
-                    "message": "Unable to load and process the project image"
+                    "error": 403,
+                    "message": "This project already exists in the database, and this key may not change it",
+                    "project_id": legacy_id,
                 }))
-                .with_status(poem::http::StatusCode::BAD_REQUEST)
+                .with_status(StatusCode::FORBIDDEN)
                 .into_response());
             }
+
+            ProjectAll::load(project_id.parse()?).await?
         }
-    }
+        None => {
+            let namesakes = sqlx::query_scalar!(
+                r#"SELECT count(*) AS "count!: i64" FROM projects WHERE lower(name) = lower(?)"#,
+                name
+            )
+            .fetch_one(db())
+            .await?;
 
-    // Status mapping
-    if let Some(v) = obj
-        .get("status")
-        .or(obj.get("ProjectStatus"))
-        .and_then(|v| v.as_str())
-    {
-        proj.status = match v.to_lowercase().as_str() {
-            "starting" | "pending" => ProjectStatus::Pending,
-            "active" => ProjectStatus::Active,
-            "complete" => ProjectStatus::Complete,
-            "hiatus" => ProjectStatus::Hiatus,
-            _ => ProjectStatus::Active,
-        };
-    }
+            let mut proj = ProjectAll::default();
+            proj.project_id = Ulid::new();
+            proj.created = TimeString::now();
+            proj.name = name.clone();
+            proj.guid = guid.clone();
+            proj.duplicate = namesakes > 1;
+            proj.page_creator_id = api_user_id;
+            proj
+        }
+    };
 
-    // Difficulty
-    if let Some(v) = obj.get("difficulty").and_then(|v| v.as_str()) {
-        proj.difficulty = match v.to_lowercase().as_str() {
-            "hard" | "difficult" => "3".to_string(),
-            "medium" => "2".to_string(),
-            _ => "1".to_string(),
-        };
-    }
+    // The image and the coverage, which can refuse the request.
+    let image = match obj.get("image") {
+        None => None,
+        Some(image_url) => {
+            let hosted = match image_url.as_str().filter(|url| !url.is_empty()) {
+                Some(url) => crate::upload::rehost::rehost_image_url(url, api_user_id).await,
+                None => None,
+            };
 
-    // Boolean fields
-    if let Some(v) = obj.get("outdoors").and_then(|v| v.as_bool()) {
-        proj.outdoors = v;
-    }
-    if let Some(v) = obj.get("indoors").and_then(|v| v.as_bool()) {
-        proj.indoors = v;
-    }
-    if let Some(v) = obj.get("entirely_online").and_then(|v| v.as_bool()) {
-        proj.entirely_online = v;
-    }
-
-    // Preregistration → participation_tools
-    if let Some(v) = obj.get("preregistration").and_then(|v| v.as_bool()) {
-        proj.participation_tools = v;
-    }
-
-    // new_member_url → signup_url
-    if let Some(v) = obj.get("new_member_url").and_then(|v| v.as_str()) {
-        proj.signup_url = v.to_string();
-    }
-
-    // Location fields
-    if let Some(v) = obj.get("address").and_then(|v| v.as_str()) {
-        proj.address = v.to_string();
-    }
-    if let Some(v) = obj.get("city").and_then(|v| v.as_str()) {
-        proj.city = v.to_string();
-    }
-    if let Some(v) = obj.get("state").and_then(|v| v.as_str()) {
-        proj.state = v.to_string();
-    }
-    if let Some(v) = obj.get("zip").and_then(|v| v.as_str()) {
-        proj.zip = v.to_string();
-    }
-    if let Some(v) = obj.get("country").and_then(|v| v.as_str()) {
-        proj.country = v.to_string();
-    }
-
-    // Tags
-    if let Some(tags_val) = obj.get("tags") {
-        let tag_list: Vec<String> = if let Some(arr) = tags_val.as_array() {
-            arr.iter()
-                .filter_map(|v| v.as_str().map(String::from))
-                .collect()
-        } else if let Some(s) = tags_val.as_str() {
-            s.split(',')
-                .map(|t| t.trim().to_string())
-                .filter(|t| !t.is_empty())
-                .collect()
-        } else {
-            vec![]
-        };
-        proj.tags = tag_list.into_iter().map(|t| t.into()).collect();
-    }
-
-    // Topics
-    if let Some(topics_val) = obj.get("topics") {
-        let topic_list: Vec<String> = if let Some(arr) = topics_val.as_array() {
-            arr.iter()
-                .filter_map(|v| v.as_str().map(String::from))
-                .collect()
-        } else if let Some(s) = topics_val.as_str() {
-            s.split(',')
-                .map(|t| t.trim().to_string())
-                .filter(|t| !t.is_empty())
-                .collect()
-        } else {
-            vec![]
-        };
-        proj.topics = topic_list.into_boxed_slice();
-    }
-
-    // Audience
-    if let Some(audience_val) = obj.get("audience") {
-        let audience_list: Vec<String> = if let Some(arr) = audience_val.as_array() {
-            arr.iter()
-                .filter_map(|v| v.as_str().map(String::from))
-                .collect()
-        } else if let Some(s) = audience_val.as_str() {
-            s.split(',')
-                .map(|t| t.trim().to_string())
-                .filter(|t| !t.is_empty())
-                .collect()
-        } else {
-            vec![]
-        };
-        proj.audience = audience_list.into_boxed_slice();
-    }
-
-    // Activities
-    if let Some(activities_val) = obj.get("activities") {
-        let activity_list: Vec<String> = if let Some(arr) = activities_val.as_array() {
-            arr.iter()
-                .filter_map(|v| v.as_str().map(String::from))
-                .collect()
-        } else if let Some(s) = activities_val.as_str() {
-            s.split(',')
-                .map(|t| t.trim().to_string())
-                .filter(|t| !t.is_empty())
-                .collect()
-        } else {
-            vec![]
-        };
-        proj.activities = activity_list.into_boxed_slice();
-    }
-
-    // Presenting org (alternative to presenter)
-    if let Some(v) = obj.get("presenting_org").and_then(|v| v.as_str()) {
-        proj.presenter = v.to_string();
-    }
-
-    // Regions/border/ProjectCoverageBoundary → location_type + regions
-    if let Some(regions_val) = obj
-        .get("regions")
-        .or(obj.get("border"))
-        .or(obj.get("ProjectCoverageBoundary"))
-    {
-        if let Some(s) = regions_val.as_str() {
-            match s.to_lowercase().as_str() {
-                "" | "none" => {
-                    proj.location_type = "NONE".to_string();
-                }
-                "address" => {
-                    proj.location_type = "AT".to_string();
-                }
-                "online" => {
-                    proj.location_type = "ANY".to_string();
-                    proj.entirely_online = true;
-                }
-                "anywhere" => {
-                    proj.location_type = "ANY".to_string();
-                }
-                _ => {
-                    proj.location_type = "NEAR".to_string();
-                    proj.regions = Some(s.to_string());
+            match hosted {
+                Some(hosted) => Some(hosted),
+                None => {
+                    return Ok(api_refusal(
+                        StatusCode::BAD_REQUEST,
+                        "Unable to load and process the project image",
+                    ));
                 }
             }
-        } else if regions_val.is_null() {
-            proj.location_type = "NONE".to_string();
         }
-    } else if proj.location_type.is_empty() {
-        // orrery defaults the coverage to "ANY" (global) when no boundary is
-        // supplied, to accommodate CitSci.org projects.
-        proj.location_type = "ANY".to_string();
+    };
+
+    let border = obj
+        .get("regions")
+        .or_else(|| obj.get("border"))
+        .or_else(|| obj.get("ProjectCoverageBoundary"));
+
+    let border = match border {
+        None => None,
+        Some(serde_json::Value::Null) => Some(Border::Nowhere),
+        Some(serde_json::Value::String(text)) if text.is_empty() || text == "none" => {
+            Some(Border::Nowhere)
+        }
+        Some(serde_json::Value::String(text)) if text == "address" => Some(Border::Address),
+        Some(serde_json::Value::String(text)) if text == "online" => Some(Border::Online),
+        Some(serde_json::Value::String(text)) if text == "anywhere" => Some(Border::Anywhere),
+        Some(value) if crate::coverage::is_global(value) => Some(Border::Anywhere),
+        Some(value) => match crate::coverage::multipolygon(db(), value).await {
+            Ok(regions) => Some(Border::Regions(regions)),
+            Err(crate::coverage::CoverageError::Database(err)) => {
+                return Err(anyhow::anyhow!(
+                    "examining a partner's coverage failed: {err}"
+                ));
+            }
+            Err(err) => return Ok(api_refusal(StatusCode::BAD_REQUEST, &err.to_string())),
+        },
+    };
+
+    // The record's fields.
+    let text = |key: &str| obj.get(key).and_then(api_text);
+    let truthy = |key: &str| obj.get(key).map(api_truthy);
+
+    for (key, field) in PPSR_FIELDS {
+        if let Some(value) = text(key) {
+            field.assign(&mut proj, value);
+        }
     }
 
-    // Extra
-    if let Some(v) = obj.get("extra") {
-        proj.extra = v.to_string();
+    if let Some(status) = obj.get(status_key).and_then(|v| v.as_str()) {
+        proj.status = ppsr_status(status);
+    }
+    if let Some(difficulty) = obj.get("difficulty").and_then(|v| v.as_str()) {
+        proj.difficulty = api_difficulty(difficulty).to_string();
+    }
+    if let Some(flag) = truthy("preregistration") {
+        proj.participation_tools = flag;
+    }
+    if let Some(value) = text("new_member_url") {
+        proj.signup_url = value;
+    }
+    if let Some(value) = text("goal") {
+        proj.goal = value;
+    }
+    if let Some(value) = text("task") {
+        proj.task = value;
     }
 
-    // Mark not draft for API-created projects
     proj.draft = false;
 
-    // Default origin if not set
-    if proj.origin.is_empty() {
-        proj.origin = "API import".to_string();
+    if let Some(value) = text("image_credit") {
+        proj.image_credit = value;
+    }
+    if let Some(value) = text("how_to_join") {
+        proj.how_to_join = value;
+    }
+    if let Some(value) = text("special_skills") {
+        proj.special_skills = value;
+    }
+    if let Some(flag) = truthy("outdoors") {
+        proj.outdoors = flag;
+    }
+    if let Some(flag) = truthy("indoors") {
+        proj.indoors = flag;
+    }
+    if let Some(value) = text("gear") {
+        proj.gear = value;
     }
 
-    // Affiliate flag, keyed on the user's `automatic_affiliate` flag (synced
-    // from orrery), matching orrery exactly.
+    if !name.is_empty() {
+        proj.name = name;
+    }
+
+    for (key, field) in [
+        ("description", &mut proj.description),
+        ("url", &mut proj.url),
+        ("video_url", &mut proj.video_url),
+        ("blog_url", &mut proj.blog_url),
+        ("twitter_name", &mut proj.twitter_name),
+        ("facebook_page", &mut proj.facebook_page),
+        ("presenting_org", &mut proj.presenter),
+    ] {
+        if let Some(value) = text(key) {
+            *field = value;
+        }
+    }
+
+    if let Some(value) = text("contact_name") {
+        edit_contact_person(&mut proj.contacts, |c| c.name = Some(value.clone()));
+    }
+    if let Some(value) = text("contact_affiliation") {
+        edit_contact_person(&mut proj.contacts, |c| c.affiliation = Some(value.clone()));
+    }
+    if let Some(value) = text("contact_email") {
+        edit_contact_person(&mut proj.contacts, |c| c.email = value.clone());
+    }
+    if let Some(value) = text("contact_phone") {
+        edit_contact_person(&mut proj.contacts, |c| c.phone = Some(value.clone()));
+    }
+    if let Some(value) = text("contact_address") {
+        edit_contact_person(&mut proj.contacts, |c| c.address = Some(value.clone()));
+    }
+
+    if let Some(value) = text("address") {
+        proj.location_type = AT_AN_ADDRESS.to_string();
+        proj.address = value;
+    }
+    for (key, field) in [
+        ("city", &mut proj.city),
+        ("state", &mut proj.state),
+        ("zip", &mut proj.zip),
+        ("country", &mut proj.country),
+    ] {
+        if let Some(value) = text(key) {
+            *field = value;
+        }
+    }
+
+    // `origin` takes precedence over PPSR's ProjectDataProvider, which
+    // PPSR_FIELDS has already written. A new project named by neither is
+    // labelled with the account that imported it.
+    let imported_by = || {
+        format!(
+            "API import by {}",
+            validation
+                .email
+                .clone()
+                .unwrap_or_else(|| api_user_id.to_string())
+        )
+    };
+    if let Some(origin) = text("origin") {
+        proj.origin = if origin.is_empty() {
+            imported_by()
+        } else {
+            origin
+        };
+    } else if is_new && !obj.contains_key("ProjectDataProvider") {
+        proj.origin = imported_by();
+    }
+
+    if let Some(umbrella) = validation
+        .umbrella_project_id
+        .as_deref()
+        .and_then(|id| id.parse::<Ulid>().ok())
+    {
+        proj.part_of = Some(umbrella);
+    }
+
+    if let Some(flag) = truthy("entirely_online") {
+        proj.entirely_online = flag;
+    }
+
+    if let Some(image) = image {
+        proj.image = image;
+    }
+
+    match obj.get("extra") {
+        Some(serde_json::Value::String(extra)) => proj.extra = extra.clone(),
+        Some(extra) => proj.extra = extra.to_string(),
+        None if is_new => proj.extra = "{}".to_string(),
+        None => {}
+    }
+
+    match obj.get("tags") {
+        Some(serde_json::Value::String(tags)) => {
+            for tag in tags.split(',').map(str::trim).filter(|tag| !tag.is_empty()) {
+                proj.tags.insert(tag.into());
+            }
+        }
+        Some(serde_json::Value::Array(tags)) => {
+            for tag in tags
+                .iter()
+                .filter_map(|tag| tag.as_str())
+                .map(str::trim)
+                .filter(|tag| !tag.is_empty())
+            {
+                proj.tags.insert(tag.into());
+            }
+        }
+        _ => {}
+    }
+
     if validation.automatic_affiliate {
         proj.is_affiliate = true;
     }
 
-    // Owner / page managers. orrery resolves admin_email_hashes to users (owner
-    // and managers) and otherwise falls back to the API key's own user.
+    if let Some(audience) = obj.get("audience") {
+        proj.audience = choice_ids::all_named(choice_ids::AUDIENCE, audience);
+    }
+    if let Some(topics) = obj.get("topics") {
+        proj.topics = choice_ids::all_named(choice_ids::TOPICS, topics);
+    }
+    if let Some(activities) = obj.get("activities") {
+        proj.activities = choice_ids::all_named(choice_ids::ACTIVITIES, activities);
+    }
+
+    match border {
+        // A new project that says nothing of where it happens is taken to
+        // happen anywhere, as CitSci.org's projects need.
+        None => {
+            if is_new && !obj.contains_key("address") {
+                proj.location_type = ANYWHERE.to_string();
+            }
+        }
+        Some(Border::Nowhere) => proj.location_type = String::new(),
+        Some(Border::Address) => proj.location_type = AT_AN_ADDRESS.to_string(),
+        Some(Border::Online) => {
+            proj.location_type = ANYWHERE.to_string();
+            proj.entirely_online = true;
+        }
+        Some(Border::Anywhere) => proj.location_type = ANYWHERE.to_string(),
+        Some(Border::Regions(regions)) => {
+            proj.location_type = IN_A_RANGE.to_string();
+            proj.regions = Some(regions);
+        }
+    }
+
+    // Owner and page managers: whoever the record's admin_email_hashes name,
+    // or failing them the key's own account.
     let mut manager_ids: Vec<Ulid> = proj.page_editor_ids.to_vec();
     if let Some(hashes) = obj.get("admin_email_hashes").and_then(|v| v.as_array()) {
         for hash in hashes {
@@ -1185,35 +1278,36 @@ pub async fn project_add(Json(mut data): Json<serde_json::Value>) -> Result<Resp
         }
     }
     if proj.page_creator_id == Ulid::default() {
-        if let Some(uid) = api_user_id {
-            proj.page_creator_id = uid;
-            if !manager_ids.contains(&uid) {
-                manager_ids.push(uid);
-            }
+        proj.page_creator_id = api_user_id;
+        if !manager_ids.contains(&api_user_id) {
+            manager_ids.push(api_user_id);
         }
     }
     proj.page_editor_ids = manager_ids.into_boxed_slice();
 
-    // Persist. New projects go through the shared creation path (store, page
-    // entity, activity log, and submitter/reviewer notification emails); updates
-    // just store the changed fields.
+    proj.update_source = Some(FieldSource::Api);
+
+    let project_id = proj.project_id;
+
     let slug = if is_new {
-        let creator = api_user_id.unwrap_or(proj.page_creator_id);
-        crate::project::all::persist_new_project(proj, true, creator).await?
+        let submission = Submission::Api {
+            key_email: validation.email.clone().unwrap_or_default(),
+            notify_reviewers: validation.api_projects_notify_reviewers,
+        };
+        persist_new_project(proj, false, api_user_id, submission).await?
     } else {
         proj.store().await?;
-        let project_id_str = project_ulid.to_string();
+        let project_id_str = project_id.to_string();
         sqlx::query_scalar!(
             "SELECT slug FROM entities WHERE target = ? LIMIT 1",
             project_id_str
         )
         .fetch_optional(db())
         .await?
-        .unwrap_or_else(|| project_ulid.to_string())
+        .unwrap_or_else(|| project_id.to_string())
     };
 
-    // Look up legacy_id for response
-    let project_id_str = project_ulid.to_string();
+    let project_id_str = project_id.to_string();
     let legacy_id = sqlx::query_scalar!(
         "SELECT legacy_id FROM projects WHERE project_id = ?",
         project_id_str
@@ -1224,7 +1318,7 @@ pub async fn project_add(Json(mut data): Json<serde_json::Value>) -> Result<Resp
 
     Ok(Json(serde_json::json!({
         "result": "success",
-        "project_id": legacy_id.unwrap_or(0),
+        "project_id": legacy_id,
         "project_slug": slug
     }))
     .into_response())
@@ -1251,67 +1345,6 @@ pub async fn event_add() -> Response {
 // ============================================================================
 // Helpers
 // ============================================================================
-
-/// Fetch a remote image and re-host it adjacent to our untracked uploads,
-/// returning the hosted path (`/-uploaded/<id>`). Returns None on any
-/// fetch/upload failure so the caller can report it. Mirrors orrery's
-/// `url_to_file`.
-async fn rehost_image_url(url: &str, uploaded_by: Ulid) -> Option<String> {
-    let response = reqwest::get(url).await.ok()?;
-    if !response.status().is_success() {
-        return None;
-    }
-    let content_type = response
-        .headers()
-        .get(reqwest::header::CONTENT_TYPE)
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string());
-    let data = response.bytes().await.ok()?.to_vec();
-    if data.is_empty() {
-        return None;
-    }
-
-    let metadata = crate::upload::storage::FileMetadata {
-        file_id: Ulid::new(),
-        original_filename: rehosted_filename(url, content_type.as_deref()),
-        content_type,
-        size: data.len() as u64,
-        uploaded_by,
-        access: crate::upload::storage::FileAccess::Untracked,
-        variant: None,
-        force_download: false,
-    };
-    crate::upload::STORAGE
-        .upload_file(metadata, data)
-        .await
-        .ok()
-}
-
-/// The name a re-hosted image is stored under: the last segment of its URL,
-/// as orrery's `url_to_file` names it. The name's extension becomes the stored
-/// object's, which is what lets the thumbnail service resize the image, so a
-/// name without one takes it from the image's content type.
-fn rehosted_filename(url: &str, content_type: Option<&str>) -> Option<String> {
-    let url = url::Url::parse(url).ok()?;
-    let name = url
-        .path_segments()
-        .and_then(|mut segments| segments.next_back())
-        .filter(|name| !name.is_empty())
-        .unwrap_or("image");
-    if std::path::Path::new(name).extension().is_some() {
-        return Some(name.to_string());
-    }
-    let essence = content_type?.split(';').next()?.trim().to_ascii_lowercase();
-    let extension = match essence.as_str() {
-        "image/jpeg" => "jpg",
-        "image/png" => "png",
-        "image/gif" => "gif",
-        "image/webp" => "webp",
-        "image/avif" => "avif",
-        _ => return Some(name.to_string()),
-    };
-    Some(format!("{name}.{extension}"))
-}
 
 /// Resolve a legacy project ID (integer) or slug to a project_id ULID string
 async fn resolve_legacy_project_id(id_or_slug: &str) -> Option<String> {
@@ -1345,31 +1378,76 @@ async fn resolve_legacy_project_id(id_or_slug: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert2::check;
+    use serde_json::json;
 
     #[test]
-    fn rehosted_images_are_named_after_their_url() {
-        assert_eq!(
-            rehosted_filename(
-                "https://example.org/a/b/photo.JPG?size=big",
-                Some("image/jpeg")
-            ),
-            Some("photo.JPG".to_string())
-        );
+    fn ppsr_statuses_map_onto_ours() {
+        check!(matches!(ppsr_status("Starting"), ProjectStatus::Pending));
+        check!(matches!(ppsr_status("active"), ProjectStatus::Active));
+        check!(matches!(ppsr_status("HIATUS"), ProjectStatus::Hiatus));
+        check!(matches!(ppsr_status("complete"), ProjectStatus::Complete));
+        check!(matches!(ppsr_status("retired"), ProjectStatus::Hidden));
     }
 
     #[test]
-    fn a_name_without_an_extension_takes_one_from_the_content_type() {
-        assert_eq!(
-            rehosted_filename("https://cdn.example.org/img/12345", Some("image/png; q=1")),
-            Some("12345.png".to_string())
-        );
-        assert_eq!(
-            rehosted_filename("https://cdn.example.org/", Some("image/webp")),
-            Some("image.webp".to_string())
-        );
-        assert_eq!(
-            rehosted_filename("https://cdn.example.org/doc", Some("application/pdf")),
-            Some("doc".to_string())
-        );
+    fn difficulty_is_easy_unless_said_otherwise() {
+        check!(api_difficulty("Hard") == "Difficult");
+        check!(api_difficulty("medium") == "Medium");
+        check!(api_difficulty("difficult") == "Easy");
+        check!(api_difficulty("") == "Easy");
+    }
+
+    #[test]
+    fn iso_times_are_dates_or_dates_and_times() {
+        check!(is_iso_time("2026-10-20T12:30:00Z"));
+        check!(is_iso_time("2026-10-20T12:30:00+10:00"));
+        check!(is_iso_time("2026-10-20T12:30:00"));
+        check!(is_iso_time("2026-10-20"));
+        check!(!is_iso_time("20 October 2026"));
+        check!(!is_iso_time(""));
+    }
+
+    #[test]
+    fn truth_is_pythons() {
+        check!(!api_truthy(&json!(null)));
+        check!(!api_truthy(&json!(0)));
+        check!(!api_truthy(&json!("")));
+        check!(!api_truthy(&json!([])));
+        check!(api_truthy(&json!("no")));
+        check!(api_truthy(&json!(2)));
+        check!(api_truthy(&json!({"a": 1})));
+    }
+
+    #[test]
+    fn scistarter_ids_are_read_as_int_reads_them() {
+        check!(api_scistarter_id(Some(&json!(42))) == 42);
+        check!(api_scistarter_id(Some(&json!(" 42 "))) == 42);
+        check!(api_scistarter_id(Some(&json!(42.9))) == 42);
+        check!(api_scistarter_id(Some(&json!("forty-two"))) == 0);
+        check!(api_scistarter_id(Some(&json!(null))) == 0);
+        check!(api_scistarter_id(None) == 0);
+    }
+
+    #[test]
+    fn text_fields_take_text_numbers_and_null() {
+        check!(api_text(&json!("words")) == Some("words".to_string()));
+        check!(api_text(&json!(7)) == Some("7".to_string()));
+        check!(api_text(&json!(null)) == Some(String::new()));
+        check!(api_text(&json!(["words"])) == None);
+    }
+
+    #[test]
+    fn a_ppsr_contact_field_edits_the_contact_person() {
+        let mut proj = ProjectAll::default();
+
+        PpsrField::ContactEmail.assign(&mut proj, "ada@example.org".to_string());
+        PpsrField::ContactName.assign(&mut proj, "Ada".to_string());
+        PpsrField::ManagerName.assign(&mut proj, "Grace".to_string());
+
+        check!(proj.contacts.len() == 2);
+        check!(proj.contacts[0].email == "ada@example.org");
+        check!(proj.contacts[0].name.as_deref() == Some("Ada"));
+        check!(proj.contacts[1].name.as_deref() == Some("Grace"));
     }
 }

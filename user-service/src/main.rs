@@ -208,6 +208,10 @@ async fn sessions_synchronize() {
     }
 }
 
+fn notify_reviewers_by_default() -> bool {
+    true
+}
+
 // dev feature, remove when this codebase becomes the primary version
 async fn users_synchronize() {
     #[derive(serde::Deserialize)]
@@ -295,6 +299,11 @@ async fn users_synchronize() {
         ai_opt_out: bool,
         umbrella_project_id: Option<String>,
         automatic_affiliate: bool,
+        // Absent from a payload orrery sent before it learned to carry the
+        // flag, and read as orrery's default, so this sync survives orrery
+        // deploying second without silencing every key's reviewer notices.
+        #[serde(default = "notify_reviewers_by_default")]
+        api_projects_notify_reviewers: bool,
         primary_email: i64,
         circuit_id: Option<String>,
         home_page: String,
@@ -467,6 +476,11 @@ async fn users_synchronize() {
                 false => 0,
             };
 
+            let user_api_projects_notify_reviewers = match user.api_projects_notify_reviewers {
+                true => 1,
+                false => 0,
+            };
+
             let user_date_joined = match TimeString::try_from(user.date_joined) {
                 Ok(ts) => ts,
                 Err(err) => {
@@ -615,7 +629,8 @@ async fn users_synchronize() {
                      -- digests for the same account.
                      "signup_tags",
                      "badge_allowed",
-                     "constant_contact_dirty"
+                     "constant_contact_dirty",
+                     "api_projects_notify_reviewers"
                    )
                    values (
                      ?1,
@@ -696,7 +711,8 @@ async fn users_synchronize() {
                      -- Orrery is doing the pushing for as long as it is the
                      -- primary and this sync is running, and the digest it
                      -- sends says the record is current.
-                     0
+                     0,
+                     ?76
                    )
                    on conflict ("user_id") do update set
                      "legacy_v2_id" = excluded."legacy_v2_id",
@@ -772,7 +788,8 @@ async fn users_synchronize() {
                      "constant_contact_digest" = excluded."constant_contact_digest",
                      "signup_tags" = excluded."signup_tags",
                      "badge_allowed" = excluded."badge_allowed",
-                     "constant_contact_dirty" = excluded."constant_contact_dirty"
+                     "constant_contact_dirty" = excluded."constant_contact_dirty",
+                     "api_projects_notify_reviewers" = excluded."api_projects_notify_reviewers"
                    "#,
                 user.ulid,
                 user.legacy_id,
@@ -849,6 +866,7 @@ async fn users_synchronize() {
                 user.constant_contact_digest,
                 user.signup_tags,
                 user.badge_allowed,
+                user_api_projects_notify_reviewers,
             )
             .execute(db)
             .await

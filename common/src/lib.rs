@@ -11,19 +11,22 @@ pub mod foundations;
 pub mod insensitivestring;
 pub mod linked_platform;
 pub mod message;
-pub mod organizations;
-pub mod primary;
 #[cfg(feature = "database")]
 pub mod misc;
+pub mod organizations;
+pub mod primary;
 #[cfg(feature = "database")]
 pub mod query;
 pub mod quill;
 pub mod referrals;
 pub mod report_kit;
+pub mod sequence;
 pub mod serde_utils;
 pub mod service;
 pub mod shared;
 pub mod tag;
+#[cfg(test)]
+mod test_nats;
 pub mod timestring;
 #[cfg(feature = "database")]
 pub mod transaction;

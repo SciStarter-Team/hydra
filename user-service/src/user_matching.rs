@@ -329,7 +329,9 @@ pub async fn validate_api_key(req: &Request) -> Result<ValidateApiKeyResponse, a
 
     let row = sqlx::query!(
         r#"SELECT user_id, is_staff, is_superuser,
-            automatic_affiliate AS "automatic_affiliate: bool"
+            automatic_affiliate AS "automatic_affiliate: bool",
+            api_projects_notify_reviewers AS "api_projects_notify_reviewers: bool",
+            umbrella_project_id, primary_email
            FROM users WHERE api_key = ? LIMIT 1"#,
         request.api_key
     )
@@ -343,6 +345,9 @@ pub async fn validate_api_key(req: &Request) -> Result<ValidateApiKeyResponse, a
             is_staff: user.is_staff != 0,
             is_superuser: user.is_superuser != 0,
             automatic_affiliate: user.automatic_affiliate,
+            api_projects_notify_reviewers: user.api_projects_notify_reviewers,
+            umbrella_project_id: user.umbrella_project_id,
+            email: Some(user.primary_email),
         })
     } else {
         Ok(ValidateApiKeyResponse {
@@ -351,6 +356,9 @@ pub async fn validate_api_key(req: &Request) -> Result<ValidateApiKeyResponse, a
             is_staff: false,
             is_superuser: false,
             automatic_affiliate: false,
+            api_projects_notify_reviewers: false,
+            umbrella_project_id: None,
+            email: None,
         })
     }
 }

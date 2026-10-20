@@ -335,7 +335,7 @@ fn compute_location_display(
     country: &str,
 ) -> String {
     // If entirely online or global location type
-    if entirely_online || location_type == "Global, anywhere on the planet" {
+    if entirely_online || location_type == crate::project::location::ANYWHERE {
         return "Anywhere".to_string();
     }
 

@@ -24,7 +24,9 @@ use crate::local_time::{TimeFormat, local_time};
 use crate::middleware::authorization::Authenticated;
 use crate::participant_file::ParticipantFile;
 use crate::peering::LoadStorePeered;
-use crate::project::field::{ProjectField, ProjectFieldType, ProjectFieldValue};
+use crate::project::field::{
+    AUDIENCE_VOCABULARY, DIFFICULTY_VOCABULARY, ProjectField, ProjectFieldType, ProjectFieldValue,
+};
 use crate::project::field_source::FieldSource;
 
 use super::detail_page::DetailPageKind;
@@ -64,14 +66,21 @@ static EVENT_TYPE_OPTIONS: LazyLock<Vec<(&'static str, &'static str)>> = LazyLoc
         .collect()
 });
 
-static AUDIENCE_OPTIONS: &[(&str, &str)] = &[
-    ("Families", "Families"),
-    ("Adults", "Adults"),
-    ("Targeted group", "Targeted group"),
-    ("Teens (13-17)", "Teens (13-17)"),
-    ("Elementary school (6-10)", "Elementary school (6-10)"),
-    ("Middle school (11-13)", "Middle school (11-13)"),
-];
+/// The audiences a project may name, built from the vocabulary every other
+/// reader and writer of `project_audiences` uses, for the reason given at
+/// [`EVENT_TYPE_OPTIONS`].
+static AUDIENCE_OPTIONS: LazyLock<Vec<(&'static str, &'static str)>> =
+    LazyLock::new(|| vocabulary_options(AUDIENCE_VOCABULARY));
+
+/// The difficulties a project may have, from the same vocabulary as the
+/// admin's.
+static DIFFICULTY_OPTIONS: LazyLock<Vec<(&'static str, &'static str)>> =
+    LazyLock::new(|| vocabulary_options(DIFFICULTY_VOCABULARY));
+
+/// Options whose values are their own labels.
+fn vocabulary_options(vocabulary: &[&'static str]) -> Vec<(&'static str, &'static str)> {
+    vocabulary.iter().map(|value| (*value, *value)).collect()
+}
 
 /// Map field_type string to its metadata. Returns None for unknown fields.
 pub fn field_meta(field_type: &str, kind: DetailPageKind) -> Option<FieldMeta> {
@@ -201,7 +210,7 @@ pub fn field_meta(field_type: &str, kind: DetailPageKind) -> Option<FieldMeta> {
         }),
         ("audiences", DetailPageKind::Project) => Some(FieldMeta {
             label: "Audiences",
-            input_kind: FieldInputKind::MultiCheckbox(AUDIENCE_OPTIONS),
+            input_kind: FieldInputKind::MultiCheckbox(&AUDIENCE_OPTIONS),
         }),
 
         // Project additional fields
@@ -218,7 +227,7 @@ pub fn field_meta(field_type: &str, kind: DetailPageKind) -> Option<FieldMeta> {
         }),
         ("difficulty", DetailPageKind::Project) => Some(FieldMeta {
             label: "Difficulty",
-            input_kind: FieldInputKind::Text,
+            input_kind: FieldInputKind::Select(&DIFFICULTY_OPTIONS),
         }),
         ("search_terms", DetailPageKind::Project) => Some(FieldMeta {
             label: "Search Terms",
@@ -334,42 +343,23 @@ pub fn field_meta(field_type: &str, kind: DetailPageKind) -> Option<FieldMeta> {
 // Permission helper
 // ---------------------------------------------------------------------------
 
-/// Check whether the user can edit the given project/event.
+/// Check whether the user can edit the given project/event, by the rule
+/// every edit follows ([`crate::edit_access`]).
 /// Returns (can_edit, is_staff_editor).
 pub async fn check_edit_permission(
     target_id: &str,
     user: &BasicInfo,
     kind: DetailPageKind,
 ) -> Result<(bool, bool), Error> {
-    if user.is_staff || user.is_superuser {
-        return Ok((true, true));
-    }
+    use crate::edit_access::{Editor, may_edit};
 
-    let user_str = user.user_id.to_string();
-    let exists = match kind {
-        DetailPageKind::Project => {
-            sqlx::query_scalar!(
-                r#"SELECT 1 as "v!: i32" FROM project_page_editors WHERE project_id = ? AND user_id = ?"#,
-                target_id,
-                user_str
-            )
-            .fetch_optional(db())
-            .await?
-            .is_some()
-        }
-        DetailPageKind::Event => {
-            sqlx::query_scalar!(
-                r#"SELECT 1 as "v!: i32" FROM event_page_editors WHERE event_id = ? AND user_id = ?"#,
-                target_id,
-                user_str
-            )
-            .fetch_optional(db())
-            .await?
-            .is_some()
-        }
+    let editor = Editor::from(user);
+
+    let Ok(target) = Ulid::from_string(target_id) else {
+        return Ok((false, editor.is_staff));
     };
 
-    Ok((exists, false))
+    Ok((may_edit(kind.page(target), editor).await?, editor.is_staff))
 }
 
 /// Determine the kind (Project vs Event) for a target_id by checking which table it exists in.
@@ -1393,11 +1383,7 @@ pub async fn save_field(
         poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST)
     })?;
 
-    let source = if is_staff {
-        FieldSource::Staff
-    } else {
-        FieldSource::Form
-    };
+    let source = edit_source(is_staff);
 
     match kind {
         DetailPageKind::Project => {
@@ -2328,9 +2314,12 @@ fn internal_error<E: std::fmt::Display>(e: E) -> poem::Error {
 /// Resolve the target's kind, confirm the user may edit it, and parse its id.
 /// Rejects unauthenticated callers (handled by the caller's `ok_or`) and
 /// non-editors (403). Works for both projects and events.
-async fn require_editor(id: &str, user: &BasicInfo) -> poem::Result<(DetailPageKind, Ulid)> {
+async fn require_editor(
+    id: &str,
+    user: &BasicInfo,
+) -> poem::Result<(DetailPageKind, Ulid, FieldSource)> {
     let kind = resolve_kind(id).await.map_err(internal_error)?;
-    let (can_edit, _) = check_edit_permission(id, user, kind)
+    let (can_edit, is_staff) = check_edit_permission(id, user, kind)
         .await
         .map_err(internal_error)?;
     if !can_edit {
@@ -2342,7 +2331,17 @@ async fn require_editor(id: &str, user: &BasicInfo) -> poem::Result<(DetailPageK
     let target = Ulid::from_string(id).map_err(|e| {
         poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST)
     })?;
-    Ok((kind, target))
+    Ok((kind, target, edit_source(is_staff)))
+}
+
+/// The source an edit on the page is written from: staff edits outrank the
+/// project's own people's, and both outrank imports.
+fn edit_source(is_staff: bool) -> FieldSource {
+    if is_staff {
+        FieldSource::Staff
+    } else {
+        FieldSource::Form
+    }
 }
 
 /// The activity-log action name for an edit of the given kind.
@@ -2389,6 +2388,7 @@ async fn store_contacts(
     kind: DetailPageKind,
     target: Ulid,
     contacts: &[Contact],
+    source: FieldSource,
 ) -> Result<(), Error> {
     let boxed = contacts.to_vec().into_boxed_slice();
     match kind {
@@ -2398,7 +2398,7 @@ async fn store_contacts(
                 .await
         }
         DetailPageKind::Project => {
-            ProjectField::new(target, ProjectFieldValue::Contacts(boxed))
+            ProjectField::with_source(target, ProjectFieldValue::Contacts(boxed), source)
                 .store()
                 .await
         }
@@ -2425,7 +2425,7 @@ pub async fn add_contact(
     poem::web::Form(form): poem::web::Form<ContactForm>,
 ) -> poem::Result<poem::Response> {
     let user = user_info.ok_or_else(auth_required)?;
-    let (kind, target) = require_editor(&id, &user).await?;
+    let (kind, target, source) = require_editor(&id, &user).await?;
 
     let email = form.email.trim();
     if email.is_empty() {
@@ -2446,7 +2446,7 @@ pub async fn add_contact(
         address: trimmed_option(&form.address),
     });
 
-    store_contacts(kind, target, &contacts)
+    store_contacts(kind, target, &contacts, source)
         .await
         .map_err(internal_error)?;
 
@@ -2469,7 +2469,7 @@ pub async fn delete_contact(
     Authenticated(user_info): Authenticated,
 ) -> poem::Result<poem::Response> {
     let user = user_info.ok_or_else(auth_required)?;
-    let (kind, target) = require_editor(&id, &user).await?;
+    let (kind, target, source) = require_editor(&id, &user).await?;
 
     let contacts: Vec<Contact> = load_contacts(kind, target)
         .await
@@ -2478,7 +2478,7 @@ pub async fn delete_contact(
         .filter(|c| c.contact_id.to_string() != contact_id)
         .collect();
 
-    store_contacts(kind, target, &contacts)
+    store_contacts(kind, target, &contacts, source)
         .await
         .map_err(internal_error)?;
 
@@ -2514,7 +2514,7 @@ pub async fn get_contacts_display(
     Authenticated(user_info): Authenticated,
 ) -> poem::Result<poem::Response> {
     let user = user_info.ok_or_else(auth_required)?;
-    let (kind, target) = require_editor(&id, &user).await?;
+    let (kind, target, _) = require_editor(&id, &user).await?;
     let contacts = load_contacts(kind, target).await.map_err(internal_error)?;
     contacts_response(id, &contacts)
 }
@@ -2526,7 +2526,7 @@ pub async fn get_contact_edit_form(
     Authenticated(user_info): Authenticated,
 ) -> poem::Result<poem::Response> {
     let user = user_info.ok_or_else(auth_required)?;
-    let (kind, target) = require_editor(&id, &user).await?;
+    let (kind, target, _) = require_editor(&id, &user).await?;
 
     let contact = load_contacts(kind, target)
         .await
@@ -2560,7 +2560,7 @@ pub async fn update_contact(
     poem::web::Form(form): poem::web::Form<ContactForm>,
 ) -> poem::Result<poem::Response> {
     let user = user_info.ok_or_else(auth_required)?;
-    let (kind, target) = require_editor(&id, &user).await?;
+    let (kind, target, source) = require_editor(&id, &user).await?;
 
     let email = form.email.trim();
     if email.is_empty() {
@@ -2588,7 +2588,7 @@ pub async fn update_contact(
     contact.phone = trimmed_option(&form.phone);
     contact.address = trimmed_option(&form.address);
 
-    store_contacts(kind, target, &contacts)
+    store_contacts(kind, target, &contacts, source)
         .await
         .map_err(internal_error)?;
 
@@ -2656,7 +2656,7 @@ pub async fn update_facebook_event(
     poem::web::Form(form): poem::web::Form<FacebookAnswers>,
 ) -> poem::Result<poem::Response> {
     let user = user_info.ok_or_else(auth_required)?;
-    let (kind, target) = require_editor(&id, &user).await?;
+    let (kind, target, _) = require_editor(&id, &user).await?;
     if kind != DetailPageKind::Event {
         return Err(poem::Error::from_string(
             "Only events have Facebook answers",
@@ -2752,7 +2752,12 @@ async fn load_manager_ids(kind: DetailPageKind, target: Ulid) -> Result<Vec<Ulid
 }
 
 /// Persist the manager (page-editor) ids via the peered field for either kind.
-async fn store_manager_ids(kind: DetailPageKind, target: Ulid, ids: &[Ulid]) -> Result<(), Error> {
+async fn store_manager_ids(
+    kind: DetailPageKind,
+    target: Ulid,
+    ids: &[Ulid],
+    source: FieldSource,
+) -> Result<(), Error> {
     let boxed = ids.to_vec().into_boxed_slice();
     match kind {
         DetailPageKind::Event => {
@@ -2761,7 +2766,7 @@ async fn store_manager_ids(kind: DetailPageKind, target: Ulid, ids: &[Ulid]) -> 
                 .await
         }
         DetailPageKind::Project => {
-            ProjectField::new(target, ProjectFieldValue::PageEditorIds(boxed))
+            ProjectField::with_source(target, ProjectFieldValue::PageEditorIds(boxed), source)
                 .store()
                 .await
         }
@@ -2824,7 +2829,7 @@ pub async fn get_managers_display(
     Authenticated(user_info): Authenticated,
 ) -> poem::Result<poem::Response> {
     let user = user_info.ok_or_else(auth_required)?;
-    let (kind, target) = require_editor(&id, &user).await?;
+    let (kind, target, _) = require_editor(&id, &user).await?;
     let ids = load_manager_ids(kind, target)
         .await
         .map_err(internal_error)?;
@@ -2839,7 +2844,7 @@ pub async fn add_manager(
     poem::web::Form(form): poem::web::Form<ManagerForm>,
 ) -> poem::Result<poem::Response> {
     let user = user_info.ok_or_else(auth_required)?;
-    let (kind, target) = require_editor(&id, &user).await?;
+    let (kind, target, source) = require_editor(&id, &user).await?;
 
     let mut ids = load_manager_ids(kind, target)
         .await
@@ -2861,7 +2866,7 @@ pub async fn add_manager(
 
     if !ids.contains(&new_id) {
         ids.push(new_id);
-        store_manager_ids(kind, target, &ids)
+        store_manager_ids(kind, target, &ids, source)
             .await
             .map_err(internal_error)?;
         let _ = log_activity(
@@ -2916,7 +2921,7 @@ pub async fn update_manager(
     poem::web::Form(form): poem::web::Form<ManagerForm>,
 ) -> poem::Result<poem::Response> {
     let user = user_info.ok_or_else(auth_required)?;
-    let (kind, target) = require_editor(&id, &user).await?;
+    let (kind, target, source) = require_editor(&id, &user).await?;
 
     let mut ids = load_manager_ids(kind, target)
         .await
@@ -2937,7 +2942,7 @@ pub async fn update_manager(
     ids.retain(|uid| uid.to_string() != user_id && *uid != new_id);
     ids.push(new_id);
 
-    store_manager_ids(kind, target, &ids)
+    store_manager_ids(kind, target, &ids, source)
         .await
         .map_err(internal_error)?;
 
@@ -2960,7 +2965,7 @@ pub async fn delete_manager(
     Authenticated(user_info): Authenticated,
 ) -> poem::Result<poem::Response> {
     let user = user_info.ok_or_else(auth_required)?;
-    let (kind, target) = require_editor(&id, &user).await?;
+    let (kind, target, source) = require_editor(&id, &user).await?;
 
     let ids: Vec<Ulid> = load_manager_ids(kind, target)
         .await
@@ -2969,7 +2974,7 @@ pub async fn delete_manager(
         .filter(|uid| uid.to_string() != user_id)
         .collect();
 
-    store_manager_ids(kind, target, &ids)
+    store_manager_ids(kind, target, &ids, source)
         .await
         .map_err(internal_error)?;
 
@@ -3006,11 +3011,12 @@ struct ParticipantFileForm {
 }
 
 /// Require that the request comes from a user who may edit this project,
-/// returning a 401/403 otherwise.
+/// returning a 401/403 otherwise, and the source their edits are written
+/// from.
 async fn require_project_editor(
     id: &str,
     user_info: &Option<std::sync::Arc<BasicInfo>>,
-) -> poem::Result<()> {
+) -> poem::Result<FieldSource> {
     let user = user_info.as_ref().ok_or_else(|| {
         poem::Error::from_string(
             "Authentication required",
@@ -3018,7 +3024,7 @@ async fn require_project_editor(
         )
     })?;
 
-    let (can_edit, _) = check_edit_permission(id, user, DetailPageKind::Project)
+    let (can_edit, is_staff) = check_edit_permission(id, user, DetailPageKind::Project)
         .await
         .map_err(|e| {
             poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
@@ -3031,7 +3037,7 @@ async fn require_project_editor(
         ));
     }
 
-    Ok(())
+    Ok(edit_source(is_staff))
 }
 
 async fn load_participant_files(id: &str) -> poem::Result<Vec<ParticipantFile>> {
@@ -3056,14 +3062,16 @@ async fn load_participant_files(id: &str) -> poem::Result<Vec<ParticipantFile>> 
 async fn store_and_render_participant_files(
     id: &str,
     files: Vec<ParticipantFile>,
+    source: FieldSource,
 ) -> poem::Result<poem::Response> {
     let ulid = Ulid::from_string(id).map_err(|e| {
         poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST)
     })?;
 
-    ProjectField::new(
+    ProjectField::with_source(
         ulid,
         ProjectFieldValue::ParticipantFiles(files.clone().into_boxed_slice()),
+        source,
     )
     .store()
     .await
@@ -3130,7 +3138,7 @@ pub async fn add_participant_file(
     Authenticated(user_info): Authenticated,
     poem::web::Form(form): poem::web::Form<ParticipantFileForm>,
 ) -> poem::Result<poem::Response> {
-    require_project_editor(&id, &user_info).await?;
+    let source = require_project_editor(&id, &user_info).await?;
 
     let mut files = load_participant_files(&id).await?;
     let new_file = ParticipantFile {
@@ -3142,7 +3150,7 @@ pub async fn add_participant_file(
     }
 
     log_project_edit(&user_info, &id, "add=participant_files".to_string());
-    store_and_render_participant_files(&id, files).await
+    store_and_render_participant_files(&id, files, source).await
 }
 
 /// PUT /-detail/:id/participant-files/:index — edit a resource in place.
@@ -3152,7 +3160,7 @@ pub async fn update_participant_file(
     Authenticated(user_info): Authenticated,
     poem::web::Form(form): poem::web::Form<ParticipantFileForm>,
 ) -> poem::Result<poem::Response> {
-    require_project_editor(&id, &user_info).await?;
+    let source = require_project_editor(&id, &user_info).await?;
 
     let mut files = load_participant_files(&id).await?;
     if index >= files.len() {
@@ -3167,7 +3175,7 @@ pub async fn update_participant_file(
     };
 
     log_project_edit(&user_info, &id, format!("participant_files[{}]", index));
-    store_and_render_participant_files(&id, files).await
+    store_and_render_participant_files(&id, files, source).await
 }
 
 /// DELETE /-detail/:id/participant-files/:index — remove a resource.
@@ -3176,7 +3184,7 @@ pub async fn delete_participant_file(
     Path((id, index)): Path<(String, usize)>,
     Authenticated(user_info): Authenticated,
 ) -> poem::Result<poem::Response> {
-    require_project_editor(&id, &user_info).await?;
+    let source = require_project_editor(&id, &user_info).await?;
 
     let mut files = load_participant_files(&id).await?;
     if index < files.len() {
@@ -3188,7 +3196,7 @@ pub async fn delete_participant_file(
         &id,
         format!("remove=participant_files[{}]", index),
     );
-    store_and_render_participant_files(&id, files).await
+    store_and_render_participant_files(&id, files, source).await
 }
 
 // ---------------------------------------------------------------------------
