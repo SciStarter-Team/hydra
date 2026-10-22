@@ -54,3 +54,7 @@ simplest mechanism for the affiliate to implement, but because it puts a
 bit more work on the user (who has to issue the token on their dashboard
 page and then copy-and-paste it into a field on the affiliate), it is
 rarely used.
+
+### Username Linking
+
+Functionally, *username linking* is a subset of the Link Token method, using the user's name on the other site as a link token. This is only used in a couple of specialized cases.
