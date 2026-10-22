@@ -1,0 +1,15 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Publishing Projects</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <% include!("import_review_style.stpl.html"); %>
+  </head>
+  <body>
+    <main>
+      <p>Published <%= self.count %> project<% if self.count != 1 { %>s<% } %> from <%= self.origin %>.</p>
+      <p><a href="<%= self.back_url %>">&laquo; Back to import review</a></p>
+    </main>
+  </body>
+</html>

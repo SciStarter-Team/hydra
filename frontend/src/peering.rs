@@ -48,6 +48,15 @@ pub trait LoadStorePeered:
             self,
         )
         .await?;
+        self.after_store().await?;
+        Ok(())
+    }
+
+    /// Called by [`Self::store`] once the value is saved and sent to the
+    /// peers. Only the instance that stored the value calls it: a peer saving
+    /// the copy it was sent does not. So it is where to do what should happen
+    /// once per change rather than once per copy, such as logging the change.
+    async fn after_store(&self) -> Result<(), Error> {
         Ok(())
     }
 

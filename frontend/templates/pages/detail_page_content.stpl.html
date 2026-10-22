@@ -52,6 +52,13 @@
           <%+ crate::component::detail_page::LikeButtonInclude { like_count: self.like_count, user_has_liked: self.user_has_liked, target_id: &self.target_id } %>
         </div>
 
+        <% if self.is_affiliate { %>
+        <p class="mb-4 flex items-center gap-3 text-sm max-w-md">
+          <img src="/-static/img/affiliate-logo.svg" alt="" class="h-12 w-auto shrink-0">
+          <span><strong>SciStarter Affiliate:</strong> your contributions to this project will be tracked and credited in your <a class="text-primary-action underline" href="/dashboard">SciStarter dashboard</a>.</span>
+        </p>
+        <% } %>
+
         <div id="project-actions" class="flex gap-2 z-40">
           <% if !self.url.is_empty() { %>
           <a href="<%= &self.url %>" target="_blank" rel="noopener" class="btn btn-primary btn-icon btn-thin">Visit<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M320 0c-17.7 0-32 14.3-32 32s14.3 32 32 32l82.7 0L201.4 265.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L448 109.3l0 82.7c0 17.7 14.3 32 32 32s32-14.3 32-32l0-160c0-17.7-14.3-32-32-32L320 0zM80 32C35.8 32 0 67.8 0 112L0 432c0 44.2 35.8 80 80 80l320 0c44.2 0 80-35.8 80-80l0-112c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 112c0 8.8-7.2 16-16 16L80 448c-8.8 0-16-7.2-16-16l0-320c0-8.8 7.2-16 16-16l112 0c17.7 0 32-14.3 32-32s-14.3-32-32-32L80 32z"/></svg></a>
@@ -179,8 +186,47 @@
       </div>
       <% } %>
 
-      <% if !self.how_to_join.is_empty() || self.can_edit { %>
-      <%+ self.field("how_to_join") %>
+      <% let has_guidance = !self.guidance.is_nothing() || !self.howto_video.is_empty(); %>
+      <% if has_guidance || !self.how_to_join.is_empty() || self.can_edit { %>
+      <div class="border border-linework rounded-sm bg-primary-light mb-4<% if !has_guidance && self.how_to_join.is_empty() { %> edit-only<% } %>">
+        <dl>
+          <dt class="ribbon-project bg-primary-dark text-white">How to Get Started</dt>
+          <dd class="p-4">
+            <% if !self.howto_video.is_empty() { %>
+            <details class="mb-3">
+              <summary class="cursor-pointer text-primary-action underline">View the How-To Video</summary>
+              <% if self.howto_video.contains("youtube") { %>
+              <iframe class="mt-2 w-full max-w-md aspect-video" src="<%= &self.howto_video %>" title="How-to video" frameborder="0" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+              <% } else { %>
+              <video class="mt-2 w-full max-w-md" controls src="<%= &self.howto_video %>">Sorry, your browser won't play this video. You may be able to download it from <a href="<%= &self.howto_video %>">its address</a>.</video>
+              <% } %>
+            </details>
+            <% } %>
+
+            <% match &self.guidance { GetStartedGuidance::Custom(html) => { %>
+            <div class="mb-3"><%- html %></div>
+            <% } GetStartedGuidance::LinkedPlatform(form) => { %>
+            <h3 class="text-lg font-semibold text-primary-dark mb-2">Track Your Citizen Science Contributions</h3>
+            <p class="mb-3">iNaturalist and Zooniverse are popular citizen science platforms featuring projects promoted by SciStarter. Connect your accounts to track your participation in <strong>SciStarter Affiliate projects</strong> on your SciStarter dashboard.</p>
+            <p class="mb-3">All iNaturalist projects are SciStarter Affiliates, but only select Zooniverse projects qualify. <a class="text-primary-action underline" href="<%= crate::search::FinderQuery::projects().with_misc_filter(crate::search::MiscFilter::ZooniverseAffiliate).url() %>" target="_blank" rel="noopener">View eligible Zooniverse projects</a>.</p>
+            <p class="mb-3">More integrations coming soon!</p>
+            <h4 class="font-semibold text-primary-dark mt-6 mb-2">Connect Your <%= form.platform.label() %> Account</h4>
+            <%+ form.clone() %>
+            <% if form.platform.username_case_sensitive() { %>
+            <p class="text-sm mb-3">Usernames are case-sensitive. Enter yours exactly as it appears on <%= form.platform.label() %>.</p>
+            <% } %>
+            <p class="mb-3">Please note: Contributions may take 24 hours or longer to appear on your SciStarter dashboard. As of August 2026, only contributions made after connecting your accounts are tracked. Earlier contributions cannot be added retroactively. Your existing contribution records on iNaturalist and Zooniverse remain unchanged.</p>
+            <% } GetStartedGuidance::Affiliate => { %>
+            <p class="mb-3">Good news! This is a SciStarter Affiliate project. You can earn credit in your <a class="text-primary-action underline" href="/dashboard" target="_blank">SciStarter Dashboard</a> for your participation.</p>
+            <p class="mb-3">Click the <q>Visit</q> button on this page. You will be directed to the project's website or app and invited to create a project account there. <strong>Use the same email address (<em>case sensitive!</em>) you used to create your SciStarter account to join this project.</strong></p>
+            <% } GetStartedGuidance::Nothing => {} } %>
+
+            <% if !self.how_to_join.is_empty() || self.can_edit { %>
+            <%+ self.field("how_to_join") %>
+            <% } %>
+          </dd>
+        </dl>
+      </div>
       <% } %>
 
       <%/* Event instances */%>

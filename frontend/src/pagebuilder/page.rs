@@ -1,7 +1,7 @@
 //! PageBuilderPage - Pages built from components with slot-based composition
 
 use anyhow::Error;
-use common::{shared::db, timestring::TimeString};
+use common::{message::log::PageChange, service::log_activity, shared::db, timestring::TimeString};
 use ulid::Ulid;
 
 use crate::peering::LoadStorePeered;
@@ -95,6 +95,11 @@ impl LoadStorePeered for PageBuilderPage {
     type DatabaseKey = Ulid;
 
     const GROUP: &str = "pagebuilder_page";
+
+    /// Storing a page is an edit to it.
+    async fn after_store(&self) -> Result<(), Error> {
+        log_activity(None, PageChange::ContentEdit, None, self.page_id, None).await
+    }
 
     async fn save_to_database(&self) -> Result<(), Error> {
         let page_id_str = self.page_id.to_string();

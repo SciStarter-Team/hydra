@@ -981,7 +981,7 @@ pub async fn dispatch_search(input: &serde_json::Value) -> Result<ToolCallResult
         show_past: None,
     };
 
-    let finder_url = finder_url_for(&query);
+    let finder_url = query.url();
     let search_result = search::run_finder_search(&query, 1, FtsTermStyle::AllWords, kinds).await?;
 
     let mut results = search_result.results;
@@ -1085,17 +1085,6 @@ pub async fn dispatch_communities(input: &serde_json::Value) -> Result<ToolCallR
         more_url: "/communities".to_string(),
         more_label: "Browse all communities".to_string(),
     })
-}
-
-/// Build a `/finder` URL reproducing this query.
-fn finder_url_for(query: &FinderQuery) -> String {
-    let params = query.to_query_string();
-
-    if params.is_empty() {
-        "/finder".to_string()
-    } else {
-        format!("/finder?{params}")
-    }
 }
 
 #[cfg(test)]

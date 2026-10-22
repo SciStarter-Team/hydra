@@ -1,0 +1,56 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Import review</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <% include!("import_review_style.stpl.html"); %>
+  </head>
+  <body>
+    <main>
+      <h1>Import review</h1>
+
+      <p>
+        Projects that partner catalogs have sent since
+        <strong><%= self.since %> UTC</strong><% match self.source { SinceSource::PreviousVisit => { %>, your last visit to this page<% } SinceSource::FirstVisit => { %>, <%= self.lookback_days %> days ago, since this is your first visit<% } SinceSource::Chosen => {} } %>.
+        Projects added by hand on SciStarter are not listed, and are never approved here.
+      </p>
+
+      <form method="get">
+        <label>Show projects added since
+          <input type="date" name="since" value="<%= self.since_date %>">
+        </label>
+        <button type="submit">Show</button>
+      </form>
+
+      <% if self.origins.is_empty() { %>
+      <h3>Nothing has been imported since then.</h3>
+      <% } else { %>
+      <table>
+        <thead>
+          <tr>
+            <th>Origin</th>
+            <th>New</th>
+            <th>Awaiting approval</th>
+            <th>Held back</th>
+            <th>Already published</th>
+            <th>Latest arrival</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% for row in &self.origins { %>
+          <tr>
+            <td><a href="<%= row.url %>"><%= row.origin %></a></td>
+            <td><%= row.new %></td>
+            <td><% if row.awaiting > 0 { %><strong><%= row.awaiting %></strong><% } else { %>0<% } %></td>
+            <td><%= row.held %></td>
+            <td><%= row.published %></td>
+            <td><%= row.latest %></td>
+          </tr>
+          <% } %>
+        </tbody>
+      </table>
+      <% } %>
+    </main>
+  </body>
+</html>

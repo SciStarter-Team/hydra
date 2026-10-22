@@ -716,16 +716,92 @@ pub struct ReviewSetRequest {
     pub private: bool,
 }
 
-/// Request the last-edited timestamp for a project or event.
+/// A change to a page, as the activity log records it.
+///
+/// When a page last changed is when the latest of these was logged against
+/// its target -- the project, event, piece of content or community it shows
+/// -- which is what `log.last_changed` reports, and nothing keeps an
+/// `updated` column of its own. So every way of changing a page logs one of
+/// these, and an action that is not one of them does not count as a change.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PageChange {
+    ProjectCreate,
+    ProjectEdit,
+    ProjectPublish,
+    EventCreate,
+    EventEdit,
+    /// The content of a content page or a page-builder page was stored.
+    ContentEdit,
+    /// An entity, the address of a page, was created, changed or published.
+    EntityCreate,
+    EntityUpdate,
+    EntityPublish,
+    CommunityCreate,
+    CommunityUpdate,
+}
+
+impl PageChange {
+    pub const ALL: [PageChange; 11] = [
+        PageChange::ProjectCreate,
+        PageChange::ProjectEdit,
+        PageChange::ProjectPublish,
+        PageChange::EventCreate,
+        PageChange::EventEdit,
+        PageChange::ContentEdit,
+        PageChange::EntityCreate,
+        PageChange::EntityUpdate,
+        PageChange::EntityPublish,
+        PageChange::CommunityCreate,
+        PageChange::CommunityUpdate,
+    ];
+
+    /// The action the change is logged as.
+    pub const fn action(self) -> &'static str {
+        match self {
+            PageChange::ProjectCreate => "project-create",
+            PageChange::ProjectEdit => "project-edit",
+            PageChange::ProjectPublish => "project-publish",
+            PageChange::EventCreate => "event-create",
+            PageChange::EventEdit => "event-edit",
+            PageChange::ContentEdit => "content-edit",
+            PageChange::EntityCreate => "entity-create",
+            PageChange::EntityUpdate => "entity-update",
+            PageChange::EntityPublish => "entity-publish",
+            PageChange::CommunityCreate => "community-create",
+            PageChange::CommunityUpdate => "community-update",
+        }
+    }
+}
+
+impl From<PageChange> for String {
+    fn from(change: PageChange) -> String {
+        change.action().to_string()
+    }
+}
+
+/// Ask when each of `targets` last changed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LastEditedRequest {
-    pub target_id: String,
+pub struct LastChangedRequest {
+    pub targets: Vec<Ulid>,
+}
+
+impl LastChangedRequest {
+    /// The most targets one request may name, which keeps the request and
+    /// its response well inside one NATS message.
+    pub const MAX_TARGETS: usize = 1000;
+}
+
+/// When each target that has a [`PageChange`] logged against it last
+/// changed. A target with none is left out.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LastChangedResponse {
+    pub changes: Vec<LastChange>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LastEditedResponse {
-    /// ISO 8601 timestamp of the most recent edit, or empty if never edited.
-    pub when: String,
+pub struct LastChange {
+    pub target: Ulid,
+    pub when: TimeString,
 }
 
 /// Request the recent edit log for a project or event (staff view).

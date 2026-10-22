@@ -3,9 +3,11 @@ use std::time::Duration;
 
 use anyhow::Error;
 use common::{
+    linked_platform::LinkedPlatform,
     message::{
+        dashboard::{UserProfile, UserProfileUpdate},
         log::{
-            LastEditedRequest, LastEditedResponse, ProjectLikesRequest, ProjectLikesResponse,
+            LastChangedRequest, LastChangedResponse, ProjectLikesRequest, ProjectLikesResponse,
             ProjectMemberCountRequest, ProjectMemberCountResponse, ProjectReviewsRequest,
             ProjectReviewsResponse, RatingSetRequest, ReviewEntry, ReviewSetRequest, SharePlatform,
         },
@@ -21,7 +23,7 @@ use common::{
 };
 use poem::{
     IntoResponse, handler,
-    web::{Html, Path},
+    web::{Form, Html, Path},
 };
 use sailfish::TemplateOnce;
 use std::collections::HashMap;
@@ -190,14 +192,15 @@ impl LazyCached for ParticipantCount {
     }
 }
 
+/// When a page last changed, cached on each frontend instance.
 #[derive(Clone)]
-struct LastEdited {
+struct LastChanged {
     target_id: Ulid,
 }
 
-impl LazyCached for LastEdited {
+impl LazyCached for LastChanged {
     fn cache_key(&self) -> String {
-        format!("last_edited:{}", self.target_id)
+        format!("last_changed:{}", self.target_id)
     }
 
     fn max_age(&self) -> Duration {
@@ -205,14 +208,19 @@ impl LazyCached for LastEdited {
     }
 
     async fn fetch_fresh(&self) -> Result<String, Error> {
-        let resp: LastEditedResponse = request(
-            "log.last_edited",
-            LastEditedRequest {
-                target_id: self.target_id.to_string(),
+        let resp: LastChangedResponse = request(
+            "log.last_changed",
+            LastChangedRequest {
+                targets: vec![self.target_id],
             },
         )
         .await?;
-        Ok(resp.when)
+        Ok(resp
+            .changes
+            .into_iter()
+            .next()
+            .map(|change| change.when.to_string())
+            .unwrap_or_default())
     }
 }
 
@@ -372,6 +380,12 @@ pub struct DetailPageContent {
     /// Plain-text excerpt of the description, for the og:description share tag.
     pub meta_description: String,
     pub how_to_join: String,
+    /// Whether the project credits participation to the participant's
+    /// SciStarter account.
+    pub is_affiliate: bool,
+    pub howto_video: String,
+    /// What the "How to Get Started" box says ahead of `how_to_join`.
+    pub guidance: GetStartedGuidance,
 
     // Location
     pub location_type: String,
@@ -468,6 +482,85 @@ impl DetailPageContent {
                 )
             })
     }
+}
+
+/// What the "How to Get Started" box says ahead of the project's own
+/// instructions, in the order the cases are tried.
+#[derive(Clone)]
+pub enum GetStartedGuidance {
+    /// The project's own replacement for everything below, in the variant for
+    /// a signed-in or a signed-out visitor. Staff-written HTML.
+    Custom(String),
+    /// Connect an account on the platform that credits this project.
+    LinkedPlatform(PlatformAccountForm),
+    /// An affiliate that credits participation recorded under the
+    /// participant's SciStarter email address.
+    Affiliate,
+    Nothing,
+}
+
+impl GetStartedGuidance {
+    /// The guidance for a project page, by the precedence orrery's project
+    /// page gives it.
+    fn for_project(
+        signed_in: bool,
+        prefix_logged_in: String,
+        prefix_logged_out: String,
+        is_affiliate: bool,
+        platform_account: Option<PlatformAccountForm>,
+    ) -> Self {
+        let custom = if signed_in {
+            prefix_logged_in
+        } else {
+            prefix_logged_out
+        };
+
+        if !custom.is_empty() {
+            GetStartedGuidance::Custom(custom)
+        } else if let Some(form) = platform_account {
+            GetStartedGuidance::LinkedPlatform(form)
+        } else if is_affiliate {
+            GetStartedGuidance::Affiliate
+        } else {
+            GetStartedGuidance::Nothing
+        }
+    }
+
+    pub fn is_nothing(&self) -> bool {
+        matches!(self, GetStartedGuidance::Nothing)
+    }
+}
+
+/// The form a visitor names their username on a project's platform with, or
+/// for a visitor who is not signed in, the way to sign in first.
+#[derive(TemplateOnce, Clone)]
+#[template(path = "pages/detail_page_platform_account.stpl.html")]
+pub struct PlatformAccountForm {
+    pub target_id: String,
+    pub platform: LinkedPlatform,
+    pub visitor: PlatformAccountVisitor,
+    pub outcome: PlatformAccountOutcome,
+}
+
+#[derive(Clone)]
+pub enum PlatformAccountVisitor {
+    /// Signed in, with the username they have named on the platform, "" if
+    /// none.
+    SignedIn(String),
+    /// Not signed in; `page_path` is where to come back to afterwards.
+    SignedOut { page_path: String },
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum PlatformAccountOutcome {
+    Unsubmitted,
+    Saved,
+    Blank,
+}
+
+/// The path a project's page is served at.
+fn project_page_path(slug: &str) -> String {
+    format!("{}{slug}", crate::entity::EntityKind::Project.path_prefix())
 }
 
 // ---------------------------------------------------------------------------
@@ -580,7 +673,12 @@ impl DetailPage {
                 mobile_app_url_ios,
                 participation_schedule,
                 point IS NOT NULL as "has_point: bool",
-                created
+                created,
+                is_affiliate as "is_affiliate: bool",
+                is_inaturalist as "is_inaturalist: bool",
+                prefix_how_to_logged_in,
+                prefix_how_to_logged_out,
+                howto_video
             FROM projects
             WHERE project_id = ?
             "#,
@@ -599,6 +697,13 @@ impl DetailPage {
         let user_info_clone = user_info.clone();
         let user_info_clone2 = user_info.clone();
 
+        let linked_platform = crate::project::linked_platform::for_project(
+            project_id,
+            row.is_affiliate,
+            row.is_inaturalist,
+        )
+        .await?;
+
         let (
             tags,
             audiences,
@@ -609,6 +714,7 @@ impl DetailPage {
             member_count,
             last_edited_str,
             edit_permission,
+            platform_username,
         ) = tokio::try_join!(
             // Tags
             async {
@@ -703,9 +809,9 @@ impl DetailPage {
                     .parse::<i64>()
                     .map_err(|e| anyhow::anyhow!("parse member count: {e}"))
             },
-            // Last edited (lazy cached)
+            // Last changed (lazy cached)
             async {
-                let cached = get_cached(&LastEdited {
+                let cached = get_cached(&LastChanged {
                     target_id: project_id,
                 })
                 .await?;
@@ -716,6 +822,17 @@ impl DetailPage {
                 user_info_clone2.as_deref(),
                 DetailPageKind::Project.page(project_id)
             ),
+            // The visitor's username on the platform that credits this project
+            async {
+                match (linked_platform, &user_info_clone) {
+                    (Some(platform), Some(user)) => {
+                        let profile: UserProfile =
+                            request("user.profile.get", user.user_id.to_string()).await?;
+                        Ok::<_, Error>(Some(profile.platform_username(platform).to_string()))
+                    }
+                    _ => Ok(None),
+                }
+            },
         )?;
 
         let (saved, joined) = engagement;
@@ -886,6 +1003,24 @@ impl DetailPage {
             });
         }
 
+        let guidance = GetStartedGuidance::for_project(
+            user_info.is_some(),
+            row.prefix_how_to_logged_in,
+            row.prefix_how_to_logged_out,
+            row.is_affiliate,
+            linked_platform.map(|platform| PlatformAccountForm {
+                target_id: self.target_id.to_string(),
+                platform,
+                visitor: match platform_username {
+                    Some(username) => PlatformAccountVisitor::SignedIn(username),
+                    None => PlatformAccountVisitor::SignedOut {
+                        page_path: project_page_path(&self.slug),
+                    },
+                },
+                outcome: PlatformAccountOutcome::Unsubmitted,
+            }),
+        );
+
         Ok(DetailPageContent {
             kind: DetailPageKind::Project,
             editable_fields,
@@ -906,6 +1041,9 @@ impl DetailPage {
             description: description_html,
             meta_description,
             how_to_join: how_to_join_html,
+            is_affiliate: row.is_affiliate,
+            howto_video: row.howto_video,
+            guidance,
             location_type: row.location_type,
             entirely_online: row.entirely_online,
             location_name: row.location_name,
@@ -1238,6 +1376,9 @@ impl DetailPage {
             description: description_html,
             meta_description,
             how_to_join: how_to_join_html,
+            is_affiliate: false,
+            howto_video: String::new(),
+            guidance: GetStartedGuidance::Nothing,
             location_type: row.location_type,
             entirely_online: row.entirely_online,
             location_name: row.location_name,
@@ -1873,6 +2014,86 @@ pub async fn record_join(
     Ok(Html("<div class=\"text-sm text-green-700\">Participation recorded!</div>").into_response())
 }
 
+#[derive(serde::Deserialize)]
+pub struct PlatformAccountSubmission {
+    username: String,
+}
+
+/// Name the visitor's username on the platform that credits this project.
+///
+/// Which platform is the project's to say, not the form's, so a submission
+/// can only set the username the page asked for. Saving through
+/// `user.profile.save` stamps the connection time, the floor for importing
+/// that platform's activity.
+#[handler]
+pub async fn connect_platform_account(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+    Form(submission): Form<PlatformAccountSubmission>,
+) -> poem::Result<poem::Response> {
+    let internal = |e: Error| {
+        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    };
+
+    let user = user_info.ok_or_else(|| {
+        poem::Error::from_string(
+            "Authentication required",
+            poem::http::StatusCode::UNAUTHORIZED,
+        )
+    })?;
+
+    let project_id: Ulid = id
+        .parse()
+        .map_err(|_| poem::Error::from_status(poem::http::StatusCode::NOT_FOUND))?;
+    let id_str = project_id.to_string();
+
+    let project = sqlx::query!(
+        r#"SELECT is_affiliate as "is_affiliate: bool", is_inaturalist as "is_inaturalist: bool"
+           FROM projects WHERE project_id = ?"#,
+        id_str
+    )
+    .fetch_optional(db())
+    .await
+    .map_err(|e| internal(e.into()))?
+    .ok_or_else(|| poem::Error::from_status(poem::http::StatusCode::NOT_FOUND))?;
+
+    let platform = crate::project::linked_platform::for_project(
+        project_id,
+        project.is_affiliate,
+        project.is_inaturalist,
+    )
+    .await
+    .map_err(internal)?
+    .ok_or_else(|| poem::Error::from_status(poem::http::StatusCode::NOT_FOUND))?;
+
+    let username = submission.username.trim().to_string();
+
+    let outcome = if username.is_empty() {
+        PlatformAccountOutcome::Blank
+    } else {
+        let _: () = request(
+            "user.profile.save",
+            UserProfileUpdate::unchanged(user.user_id)
+                .with_platform_username(platform, username.clone()),
+        )
+        .await
+        .map_err(internal)?;
+
+        PlatformAccountOutcome::Saved
+    };
+
+    let html = PlatformAccountForm {
+        target_id: id_str,
+        platform,
+        visitor: PlatformAccountVisitor::SignedIn(username),
+        outcome,
+    }
+    .render_once()
+    .map_err(|e| internal(e.into()))?;
+
+    Ok(Html(html).into_response())
+}
+
 /// Staff-only edit log (lazy loaded via HTMX)
 #[handler]
 pub async fn edit_log(
@@ -2029,4 +2250,91 @@ struct EditLogEntryDisplay {
     user_handle: String,
     field: String,
     is_creation: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn platform_form() -> PlatformAccountForm {
+        PlatformAccountForm {
+            target_id: Ulid::new().to_string(),
+            platform: LinkedPlatform::Zooniverse,
+            visitor: PlatformAccountVisitor::SignedIn(String::new()),
+            outcome: PlatformAccountOutcome::Unsubmitted,
+        }
+    }
+
+    fn guidance(
+        signed_in: bool,
+        prefixes: (&str, &str),
+        is_affiliate: bool,
+        platform: bool,
+    ) -> GetStartedGuidance {
+        GetStartedGuidance::for_project(
+            signed_in,
+            prefixes.0.to_string(),
+            prefixes.1.to_string(),
+            is_affiliate,
+            platform.then(platform_form),
+        )
+    }
+
+    #[test]
+    fn the_projects_own_guidance_replaces_everything_else() {
+        let signed_in = guidance(true, ("<p>in</p>", "<p>out</p>"), true, true);
+        assert!(matches!(signed_in, GetStartedGuidance::Custom(html) if html == "<p>in</p>"));
+
+        let signed_out = guidance(false, ("<p>in</p>", "<p>out</p>"), true, true);
+        assert!(matches!(signed_out, GetStartedGuidance::Custom(html) if html == "<p>out</p>"));
+    }
+
+    #[test]
+    fn guidance_for_the_other_visitor_does_not_apply() {
+        assert!(matches!(
+            guidance(true, ("", "<p>out</p>"), true, true),
+            GetStartedGuidance::LinkedPlatform(_)
+        ));
+    }
+
+    #[test]
+    fn a_platform_project_asks_for_the_account_ahead_of_the_email_advice() {
+        assert!(matches!(
+            guidance(true, ("", ""), true, true),
+            GetStartedGuidance::LinkedPlatform(_)
+        ));
+        assert!(matches!(
+            guidance(true, ("", ""), true, false),
+            GetStartedGuidance::Affiliate
+        ));
+    }
+
+    #[test]
+    fn a_project_that_credits_nothing_adds_nothing() {
+        assert!(guidance(true, ("", ""), false, false).is_nothing());
+    }
+
+    #[test]
+    fn the_platform_form_renders_for_either_visitor() {
+        let signed_in = PlatformAccountForm {
+            visitor: PlatformAccountVisitor::SignedIn("Stargazer".to_string()),
+            outcome: PlatformAccountOutcome::Saved,
+            ..platform_form()
+        }
+        .render_once()
+        .unwrap();
+        assert!(signed_in.contains(r#"value="Stargazer""#));
+        assert!(signed_in.contains("Your Zooniverse account is connected."));
+
+        let signed_out = PlatformAccountForm {
+            visitor: PlatformAccountVisitor::SignedOut {
+                page_path: project_page_path("backyard-worlds"),
+            },
+            ..platform_form()
+        }
+        .render_once()
+        .unwrap();
+        assert!(signed_out.contains("/login?next=%2Fprojects%2Fbackyard-worlds"));
+        assert!(!signed_out.contains("<form"));
+    }
 }

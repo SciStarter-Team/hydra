@@ -1,3 +1,4 @@
+use common::message::log::PageChange;
 use std::sync::Arc;
 
 use jiff::{Zoned, civil, tz::TimeZone};
@@ -731,7 +732,7 @@ pub async fn add_event_submit(
 
             log_activity(
                 None,
-                "event-create",
+                PageChange::EventCreate,
                 user_info.user_id,
                 event_id,
                 format!("name={name}"),

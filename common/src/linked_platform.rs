@@ -9,6 +9,37 @@
 use std::str::FromStr;
 
 use jiff::{Span, Timestamp};
+use serde::{Deserialize, Serialize};
+
+/// An outside platform whose participation is credited to an account once
+/// the account names its username there. Mirrors orrery's `LinkedPlatform`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LinkedPlatform {
+    INaturalist,
+    Zooniverse,
+}
+
+impl LinkedPlatform {
+    pub fn label(self) -> &'static str {
+        match self {
+            LinkedPlatform::INaturalist => "iNaturalist",
+            LinkedPlatform::Zooniverse => "Zooniverse",
+        }
+    }
+
+    /// Whether a username has to be given exactly as the platform spells it.
+    ///
+    /// iNaturalist's observation search matches a login regardless of case.
+    /// A Zooniverse classification is matched to an account by comparing the
+    /// Panoptes login with the stored username exactly, so a username that
+    /// differs only in capitalization is never credited.
+    pub fn username_case_sensitive(self) -> bool {
+        match self {
+            LinkedPlatform::INaturalist => false,
+            LinkedPlatform::Zooniverse => true,
+        }
+    }
+}
 
 /// The date the policy took effect.
 ///

@@ -25,7 +25,7 @@ use handlers::{
     handle_contributors, handle_edit_log, handle_email_event, handle_entity_list_stats,
     handle_external_link_clickthrough, handle_external_links, handle_go_url_stats,
     handle_gourl_totals, handle_health_check, handle_join, handle_last_active_for,
-    handle_last_edited, handle_page_view, handle_participation_analytics,
+    handle_last_changed, handle_page_view, handle_participation_analytics,
     handle_participation_by_email, handle_participation_by_users, handle_participation_summary,
     handle_project_likes, handle_project_member_count, handle_project_participation,
     handle_project_participation_record, handle_project_reviews, handle_rating_set,
@@ -335,7 +335,7 @@ async fn main() -> Result<()> {
         handle_reviewers_by_projects
     ));
     toplevel.spawn(handler!(log_group, "review_set", handle_review_set));
-    toplevel.spawn(handler!(log_group, "last_edited", handle_last_edited));
+    toplevel.spawn(handler!(log_group, "last_changed", handle_last_changed));
     toplevel.spawn(handler!(log_group, "edit_log", handle_edit_log));
     toplevel.spawn(handler!(
         log_group,
@@ -399,6 +399,14 @@ async fn main() -> Result<()> {
     toplevel.spawn(handler!(acts_group, "to_date", handle_acts_to_date));
     toplevel.spawn(handler!(acts_group, "contributors", handle_contributors));
 
+    // Platform bridge endpoints
+    let zooniverse_group = svc.group("log.zooniverse");
+    toplevel.spawn(handler!(
+        zooniverse_group,
+        "projects",
+        bridges::zooniverse::handle_projects
+    ));
+
     // Health endpoint
     let health_group = svc.group("log.health");
     toplevel.spawn(handler!(health_group, "check", handle_health_check));
@@ -435,6 +443,7 @@ async fn main() -> Result<()> {
     println!("  - log.cache.user_tags_update");
     println!("  - log.cache.user_emails_update");
     println!("  - log.health.check");
+    println!("  - log.zooniverse.projects");
     println!("  - log.project_likes");
     println!("  - log.rating_set");
     println!("  - log.project_reviews");

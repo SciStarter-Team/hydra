@@ -8,7 +8,7 @@ pub enum ContactRole {
     Notification,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Contact {
     pub contact_id: Ulid,
     pub role: ContactRole,
@@ -131,6 +131,25 @@ pub fn remove_manager(contacts: &mut Box<[Contact]>) {
         .collect();
 
     *contacts = held.into_boxed_slice();
+}
+
+/// The address of the project's contact person (orrery's `contact_email`),
+/// read without loading the whole project. Empty when it has none. The rows
+/// are stored in list order, so the first is the contact person.
+pub async fn contact_person_email(project_id: Ulid) -> Result<String, anyhow::Error> {
+    let project_id = project_id.to_string();
+
+    let email = sqlx::query_scalar!(
+        r#"SELECT email FROM project_contacts
+           WHERE project_id = ? AND role = ?
+           ORDER BY rowid LIMIT 1"#,
+        project_id,
+        ContactRole::ContactPerson,
+    )
+    .fetch_optional(common::shared::db())
+    .await?;
+
+    Ok(email.unwrap_or_default())
 }
 
 #[cfg(test)]

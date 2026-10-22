@@ -13,7 +13,10 @@ use common::{
         DatePresence, TriState,
     },
     message::email::EmailRecipient,
-    message::user::{AmbassadorLocation, AmbassadorPassedLocationsResponse, UserAndBadge},
+    message::user::{
+        AmbassadorDirectoryListingResponse, AmbassadorLocation, AmbassadorPassedLocationsResponse,
+        UserAndBadge,
+    },
     service::{TriggerEvent, decode_structured_message, send, send_email, trigger_email},
     shared::db,
     timestring::TimeString,
@@ -128,6 +131,24 @@ pub async fn passed_locations(_req: &Request) -> Result<AmbassadorPassedLocation
         .collect();
 
     Ok(AmbassadorPassedLocationsResponse { locations })
+}
+
+/// Every ambassador the public directory lists (the
+/// `ambassador_directory_listing` view), each of whom has a public profile.
+/// Backs the sitemap.
+pub async fn directory_listing(
+    _req: &Request,
+) -> Result<AmbassadorDirectoryListingResponse, Error> {
+    let user_ids = sqlx::query_scalar!(
+        r#"SELECT l.user_id AS "user_id!" FROM ambassador_directory_listing l ORDER BY l.user_id"#,
+    )
+    .fetch_all(db())
+    .await?
+    .into_iter()
+    .filter_map(|id| id.as_ulid().ok())
+    .collect();
+
+    Ok(AmbassadorDirectoryListingResponse { user_ids })
 }
 
 pub async fn get(req: &Request) -> Result<Option<AmbassadorApplication>, Error> {

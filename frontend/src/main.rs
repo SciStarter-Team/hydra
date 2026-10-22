@@ -59,6 +59,7 @@ pub mod region;
 pub mod schedule;
 pub mod search;
 pub mod session;
+pub mod sitemap;
 pub mod ssrf;
 pub mod staff;
 pub mod staff_pick;
@@ -379,6 +380,10 @@ fn user_facing() -> impl Endpoint {
             post(component::detail_page::record_join),
         )
         .at(
+            "/-detail/:id/platform-account",
+            post(component::detail_page::connect_platform_account),
+        )
+        .at(
             "/-detail/:id/edit-log",
             get(component::detail_page::edit_log),
         )
@@ -621,6 +626,9 @@ async fn main() -> Result<(), Error> {
             "/apple-touch-icon.png",
             StaticFile::new("apple-touch-icon.png"),
         )
+        .at("/robots.txt", get(sitemap::robots_txt))
+        .at("/sitemap.xml", get(sitemap::sitemap_index))
+        .at("/sitemap/:file_name", get(sitemap::section_sitemap))
         .nest("/-static", StaticFiles::new())
         .nest(upload::storage::UNTRACKED_PATH, upload::anonymous_routes())
         .nest("/messaging/emailer", emailer::routes())
@@ -681,6 +689,8 @@ async fn main() -> Result<(), Error> {
     let _project_investigator_updates =
         tokio::spawn(project::investigator::ProjectInvestigator::peering_task());
     let _ala_import_updates = tokio::spawn(project::ala::AlaImport::peering_task());
+    let _import_review_visit_updates =
+        tokio::spawn(staff::import_review::ImportReviewVisit::peering_task());
     let _entity_list_updates = tokio::spawn(entity_list::EntityList::peering_task());
     let _entity_list_entry_updates = tokio::spawn(entity_list::EntityListEntry::peering_task());
     let _entity_list_viewer_updates = tokio::spawn(entity_list::EntityListViewer::peering_task());
@@ -853,14 +863,17 @@ async fn periodic_maintenance() {
 mod sync {
     use std::time::Duration;
 
-    use common::{insensitivestring::InsensitiveString, misc};
+    use common::{
+        insensitivestring::InsensitiveString, message::log::PageChange, misc,
+        service::log_activity, timestring::TimeString,
+    };
     use jiff::Timestamp;
     use tokio::time::sleep;
     use ulid::Ulid;
 
     use crate::{
         contact::{Contact, ContactRole},
-        entity::Entity,
+        entity::{Entity, EntityKind},
         event::{EventInstance, all::EventAll},
         page_manager,
         peering::LoadStorePeered,
@@ -886,6 +899,113 @@ mod sync {
         }
     }
 
+    /// What this instance holds of a project or event and its page, so that
+    /// whether storing a copy from orrery changed any of it can be told by
+    /// comparing what is held before and after.
+    ///
+    /// Orrery stamps a record as updated whenever it is saved, changed or
+    /// not, so its timestamp alone would count as changes the saves that
+    /// made none. And the copy arrives again on every instance, so the
+    /// comparison is also what keeps one change from being logged once per
+    /// instance: a peer that has already saved the copy it was sent finds
+    /// nothing changed.
+    #[derive(PartialEq)]
+    struct Stored<T> {
+        /// The record in its canonical form, if there is one.
+        record: Option<T>,
+        /// The slug of its page, and whether the page is published.
+        page: Option<(String, bool)>,
+    }
+
+    impl<T: PartialEq + serde::Serialize> Stored<T> {
+        /// What an edit synced from orrery is logged as having changed, in
+        /// the place of the field a hydra edit names: what differs between
+        /// `self`, held before the store, and `after`.
+        fn edit(&self, after: &Stored<T>) -> String {
+            let mut fields = match (&self.record, &after.record) {
+                (Some(before), Some(after)) => changed_fields(before, after),
+                _ => vec!["all".to_string()],
+            };
+
+            match (&self.page, &after.page) {
+                (Some((before_slug, before_publish)), Some((after_slug, after_publish))) => {
+                    if before_slug != after_slug {
+                        fields.push("slug".to_string());
+                    }
+                    if before_publish != after_publish {
+                        fields.push("publish".to_string());
+                    }
+                }
+                (None, Some(_)) => fields.push("page".to_string()),
+                _ => {}
+            }
+
+            format!("{} (from orrery)", fields.join(", "))
+        }
+    }
+
+    impl Stored<ProjectAll> {
+        async fn of_project(project_id: Ulid) -> Stored<ProjectAll> {
+            Stored {
+                record: ProjectAll::load(project_id)
+                    .await
+                    .ok()
+                    .map(ProjectAll::canonical),
+                page: page(EntityKind::Project, project_id).await,
+            }
+        }
+    }
+
+    impl Stored<EventAll> {
+        async fn of_event(event_id: Ulid) -> Stored<EventAll> {
+            Stored {
+                record: EventAll::load(event_id).await.ok().map(EventAll::canonical),
+                page: page(EntityKind::Event, event_id).await,
+            }
+        }
+    }
+
+    /// The names of the fields that differ between two canonical forms. Tags
+    /// are a set held in no particular order, so their order is not a
+    /// difference.
+    fn changed_fields<T: serde::Serialize>(before: &T, after: &T) -> Vec<String> {
+        use serde_json::Value;
+
+        let (Ok(Value::Object(before)), Ok(Value::Object(after))) =
+            (serde_json::to_value(before), serde_json::to_value(after))
+        else {
+            return vec!["all".to_string()];
+        };
+
+        let sorted = |value: &Value| {
+            let mut items: Vec<String> = match value {
+                Value::Array(items) => items.iter().map(Value::to_string).collect(),
+                other => vec![other.to_string()],
+            };
+            items.sort_unstable();
+            items
+        };
+
+        after
+            .iter()
+            .filter(|(field, value)| match before.get(*field) {
+                Some(was) if field.as_str() == "tags" => sorted(was) != sorted(value),
+                Some(was) => was != *value,
+                None => true,
+            })
+            .map(|(field, _)| field.clone())
+            .collect()
+    }
+
+    /// The slug of the page of `target`, and whether it is published.
+    async fn page(kind: EntityKind, target: Ulid) -> Option<(String, bool)> {
+        Entity::page_of(kind, target)
+            .await
+            .ok()
+            .flatten()
+            .map(|page| (page.slug().to_string(), page.publish()))
+    }
+
     #[derive(Default, Debug, serde::Deserialize)]
     #[serde(default)]
     struct ProjectData {
@@ -897,9 +1017,6 @@ mod sync {
         foreign_id: String, // default blank, partial index
         created: Timestamp,
         updated: Timestamp,
-        last_editor: Option<String>,
-        updated_staff: Option<Timestamp>,
-        last_editor_staff: Option<String>,
         name: String,
         tags: String,
         meta_description: String,
@@ -1240,16 +1357,6 @@ mod sync {
                     .collect::<Vec<_>>()
                     .into_boxed_slice();
                 proj.extra = data.extra;
-                proj.project_last_editor = data
-                    .last_editor
-                    .and_then(|s| s.empty_as_none())
-                    .and_then(|s| s.parse().ok());
-                proj.project_last_edited = Some(data.updated.into());
-                proj.scistarter_last_editor = data
-                    .last_editor_staff
-                    .and_then(|s| s.empty_as_none())
-                    .and_then(|s| s.parse().ok());
-                proj.scistarter_last_edited = data.updated_staff.map(|ts| ts.into());
                 proj.draft = data.draft;
                 proj.name = data.name;
                 proj.tags = data
@@ -1554,6 +1661,8 @@ mod sync {
                 proj.update_source = Some(FieldSource::Legacy);
                 proj.field_sources = protected_field_sources(&data.protected_fields);
 
+                let before = Stored::of_project(proj.project_id).await;
+
                 if let Err(err) = proj.store().await {
                     tracing::error!("Error saving {}: {}", &proj.name, err);
                     continue;
@@ -1604,6 +1713,21 @@ mod sync {
                     continue;
                 }
 
+                let after = Stored::of_project(proj.project_id).await;
+                if after != before {
+                    if let Err(err) = log_activity(
+                        TimeString::from(data.updated),
+                        PageChange::ProjectEdit,
+                        None,
+                        proj.project_id,
+                        before.edit(&after),
+                    )
+                    .await
+                    {
+                        tracing::error!("Error logging the change to {}: {}", &proj.name, err);
+                    }
+                }
+
                 let new_bookmark = (updated, legacy_id);
                 if new_bookmark > bookmark {
                     bookmark = new_bookmark;
@@ -1638,12 +1762,9 @@ mod sync {
         flagged: bool,
         admin_notes: String,
         welcomed: bool,
-        page_creator_id: String,           // Ulid,        // NB was "owner"
-        page_editor_ids: String,           // Box<[Ulid]>, // NB was "managers"
-        event_last_editor: Option<String>, // Option<Ulid>,
+        page_creator_id: String, // Ulid,        // NB was "owner"
+        page_editor_ids: String, // Box<[Ulid]>, // NB was "managers"
         event_last_edited: Option<Timestamp>, // Option<TimeString>,
-        scistarter_last_editor: Option<String>, // Option<Ulid>,
-        scistarter_last_edited: Option<Timestamp>, // Option<TimeString>,
         name: String,
         tags: String, // HashSet<InsensitiveString>,
         /// The ULID of the exchange the event was submitted through, if any.
@@ -1832,20 +1953,6 @@ mod sync {
                     .collect::<Vec<_>>()
                     .into_boxed_slice();
 
-                evt.event_last_editor = data
-                    .event_last_editor
-                    .and_then(|s| s.empty_as_none())
-                    .and_then(|s| s.parse().ok());
-
-                evt.event_last_edited = data.event_last_edited.map(|ts| ts.into());
-
-                evt.scistarter_last_editor = data
-                    .scistarter_last_editor
-                    .and_then(|s| s.empty_as_none())
-                    .and_then(|s| s.parse().ok());
-
-                evt.scistarter_last_edited = data.scistarter_last_edited.map(|ts| ts.into());
-
                 evt.name = data.name;
 
                 // Reviewed unless it is waiting in its exchange's approval
@@ -1933,6 +2040,8 @@ mod sync {
 
                 evt.instances = instances.into_boxed_slice();
 
+                let before = Stored::of_event(evt.event_id).await;
+
                 if let Err(err) = evt.store().await {
                     tracing::error!("Error saving {}: {}", &evt.name, err);
                     continue;
@@ -1969,6 +2078,21 @@ mod sync {
                         err
                     );
                     continue;
+                }
+
+                let after = Stored::of_event(evt.event_id).await;
+                if after != before {
+                    if let Err(err) = log_activity(
+                        data.event_last_edited.map(TimeString::from),
+                        PageChange::EventEdit,
+                        None,
+                        evt.event_id,
+                        before.edit(&after),
+                    )
+                    .await
+                    {
+                        tracing::error!("Error logging the change to {}: {}", &evt.name, err);
+                    }
                 }
 
                 let new_bookmark = (updated, legacy_id);

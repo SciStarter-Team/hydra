@@ -1,3 +1,4 @@
+use common::message::log::PageChange;
 use std::collections::HashSet;
 
 use anyhow::Error;
@@ -43,7 +44,7 @@ use super::{
 /// Note: The `tags_text` database column is NOT included here as it's
 /// a computed field for FTS search optimization, not a real project field.
 /// Tags are managed separately via the project_tags table.
-#[derive(Default, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Default, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct ProjectAll {
     pub project_id: Ulid,
@@ -224,6 +225,37 @@ pub struct ProjectAll {
 }
 
 impl ProjectAll {
+    /// This project with what does not tell one version of it from another
+    /// set aside, so that two versions are the same project exactly when
+    /// their canonical forms are equal: the order of the fields that are
+    /// sets, which orrery does not keep, and the ids of the contacts, which
+    /// are minted afresh whenever the contacts are written wholesale.
+    pub fn canonical(mut self) -> ProjectAll {
+        for set in [
+            &mut self.topics,
+            &mut self.fields_of_science,
+            &mut self.practices,
+            &mut self.audience,
+            &mut self.geographic_scope,
+            &mut self.participation_tasks,
+            &mut self.activities,
+            &mut self.data_aggregation,
+            &mut self.data_consent,
+            &mut self.data_access,
+            &mut self.intended_outcomes,
+            &mut self.sponsors,
+            &mut self.stakeholders,
+        ] {
+            set.sort_unstable();
+        }
+        self.page_editor_ids.sort_unstable();
+        self.associated_projects.sort_unstable();
+        for contact in &mut self.contacts {
+            contact.contact_id = Ulid::nil();
+        }
+        self
+    }
+
     /// The source this update writes `field_type` from, given that the
     /// update as a whole comes from `default`.
     fn source_of(&self, field_type: ProjectFieldType, default: FieldSource) -> FieldSource {
@@ -828,29 +860,11 @@ impl ProjectAll {
 
         // "project_last_editor",
         // "project_last_edited",
-        if let Some(last_editor) = self.project_last_editor {
-            common::service::log_activity(
-                self.project_last_edited.clone(),
-                "user-edit",
-                last_editor,
-                self.project_id,
-                Some("all".to_string()),
-            )
-            .await?;
-        }
-
         // "scistarter_last_editor",
         // "scistarter_last_edited",
-        if let Some(last_editor) = self.scistarter_last_editor {
-            common::service::log_activity(
-                self.scistarter_last_edited.clone(),
-                "staff-edit",
-                last_editor,
-                self.project_id,
-                Some("all".to_string()),
-            )
-            .await?;
-        }
+        // Not stored: when a project changed is the activity log's to say. The
+        // change is logged once, by whatever made it, rather than here, where
+        // every peer saving its copy would log it again.
 
         // "tags",
         sqlx::query!(
@@ -2108,7 +2122,7 @@ pub async fn persist_new_project(
 
     log_activity(
         None,
-        "project-create",
+        PageChange::ProjectCreate,
         user_id,
         project_id,
         format!("name={name}"),

@@ -90,7 +90,7 @@
         <div class="max-w-[960px]">
           <p>Your participation helps reach the collective goal.</p>
           <ul class="px-4 my-2" style="list-style-type: disc">
-            <li>Participation in <strong><a href="/finder?projects=true&active=true&filters=4" target="_blank">SciStarter Affiliate Projects</a></strong> is tracked automatically. SciStarter Affiliate projects are marked with a <img alt="the SciStarter affiliate logo" src="/-static/img/affiliate-logo.svg" style="display: inline-block; height: 2rem"> logo.</li>
+            <li>Participation in <strong><a href="<%= crate::search::FinderQuery::projects().with_misc_filter(crate::search::MiscFilter::IsAffiliate).url() %>" target="_blank">SciStarter Affiliate Projects</a></strong> is tracked automatically. SciStarter Affiliate projects are marked with a <img alt="the SciStarter affiliate logo" src="/-static/img/affiliate-logo.svg" style="display: inline-block; height: 2rem"> logo.</li>
             <li><strong>Coming soon:</strong> Report any <em>Act of Science</em> using the <strong>Report Acts</strong> tab. You do not need an account on SciStarter to use the Report tool.</li>
           </ul>
           <p>Sharing your experience helps inspire others and social media posts count as <em>Acts of Science</em>. Post a photo using <strong>#ActsofScience</strong> to appear on the <strong>Wall of Fame</strong>.</p>
@@ -245,7 +245,7 @@
         <div class="max-w-[960px]">
           <p>Your participation helps reach the collective goal.</p>
           <ul class="px-4 my-2" style="list-style-type: disc">
-            <li>Participation in <strong><a href="/finder?projects=true&active=true&filters=4" target="_blank">SciStarter Affiliate Projects</a></strong> is tracked automatically. SciStarter Affiliate projects are marked with a <img alt="the SciStarter affiliate logo" src="/-static/img/affiliate-logo.svg" style="display: inline-block; height: 2rem"> logo.</li>
+            <li>Participation in <strong><a href="<%= crate::search::FinderQuery::projects().with_misc_filter(crate::search::MiscFilter::IsAffiliate).url() %>" target="_blank">SciStarter Affiliate Projects</a></strong> is tracked automatically. SciStarter Affiliate projects are marked with a <img alt="the SciStarter affiliate logo" src="/-static/img/affiliate-logo.svg" style="display: inline-block; height: 2rem"> logo.</li>
             <li>Report any <em>Act of Science</em> using the <strong><a href="/citizensciencemonth/report">Report Acts</a></strong> tab. You do not need an account on SciStarter to use the Report tool.</li>
           </ul>
           <p>Sharing your experience helps inspire others and social media posts count as <em>Acts of Science</em>. Post a photo using <strong>#ActsofScience</strong> to appear on the <strong>Wall of Fame</strong>.</p>

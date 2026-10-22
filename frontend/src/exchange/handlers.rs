@@ -26,9 +26,9 @@ use super::{
 };
 use crate::component::html_escape;
 use crate::middleware::error_pages::error_response;
-use crate::project::ProjectStatus;
 use crate::project::all::ProjectAll;
 use crate::project::location::Where;
+use crate::project::{ProjectStatus, push_listing_rule};
 
 // Cache for filter options (loaded once on first use)
 static FILTER_CACHE: OnceLock<FilterOptions> = OnceLock::new();
@@ -368,18 +368,10 @@ fn push_listing_filter(
     params: &SearchParams,
     now: &str,
 ) {
-    query_builder.push(" AND p.flagged = false AND p.duplicate = false AND p.is_test = false");
-
     if params.inactive {
-        query_builder.push(" AND p.status IN (");
-        let mut separated = query_builder.separated(", ");
-        for status in ProjectStatus::LISTED_WHEN_INACTIVE {
-            separated.push_bind(status);
-        }
-        query_builder.push(")");
+        push_listing_rule(query_builder, &ProjectStatus::LISTED_WHEN_INACTIVE);
     } else {
-        query_builder.push(" AND p.status = ");
-        query_builder.push_bind(ProjectStatus::Active);
+        push_listing_rule(query_builder, &[ProjectStatus::Active]);
         query_builder.push(" AND (p.\"end\" IS NULL OR p.\"end\" = '' OR p.\"end\" > ");
         query_builder.push_bind(now.to_owned());
         query_builder.push(")");
@@ -2659,7 +2651,7 @@ pub async fn approve_submission(
     device: Device,
     interaction: Interaction,
 ) -> Result<poem::Response, Error> {
-    use crate::entity::{Entity, EntityTarget};
+    use crate::entity::Entity;
 
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
     let exchange = ExchangeInfo::load_by_id(path_id).await?;
@@ -2680,28 +2672,7 @@ pub async fn approve_submission(
         ));
     };
 
-    let id_str = id.to_string();
-    let entity_kind = kind.entity_kind();
-    let existing_entity = sqlx::query!(
-        r#"SELECT slug, created FROM entities WHERE kind = ? AND target = ?"#,
-        entity_kind,
-        id_str
-    )
-    .fetch_optional(db())
-    .await?;
-
-    let entity = match existing_entity {
-        Some(existing) => Entity::new_with_created(
-            existing.slug,
-            entity_kind,
-            EntityTarget::Ulid(id),
-            true, // publish = true
-            TimeString::try_from(existing.created)?,
-        ),
-        None => Entity::new_by_name(&name, entity_kind, EntityTarget::Ulid(id)).await?,
-    };
-
-    entity.store().await?;
+    Entity::publish_page(kind.entity_kind(), id, &name).await?;
     mark_reviewed(kind, id).await?;
 
     tracking::record(

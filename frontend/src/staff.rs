@@ -15,6 +15,7 @@ mod email_report;
 mod events;
 mod foundations;
 mod google;
+pub mod import_review;
 mod interested;
 mod masquerade;
 mod moore;
@@ -86,6 +87,11 @@ pub fn routes() -> impl poem::Endpoint {
             get(google::authorize_form).post(google::authorize),
         )
         .at("/google-authorized", get(google::authorized))
+        .at("/import-review", get(import_review::index))
+        .at(
+            "/import-review/origin",
+            get(import_review::review_origin).post(import_review::approve),
+        )
         .at(
             "/interested",
             get(interested::slug_form).post(interested::interested),

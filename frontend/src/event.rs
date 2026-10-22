@@ -12,7 +12,7 @@ pub enum EventError {
     EventTypeParse,
 }
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EventInstance {
     pub begin: TimeString,
     pub end: TimeString,

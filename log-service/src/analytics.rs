@@ -3,14 +3,15 @@ use common::badge::Badge;
 use common::message::log::{
     AnalyticsQuery, AnalyticsResponse, GoUrlChartPoint, GoUrlStatsRequest, GoUrlStatsResponse,
     GoUrlTotalsRequest, GoUrlTotalsResponse, GoUrlViewEntry, LastActiveEntry, LastActiveForRequest,
-    LastActiveForResponse, ParticipationByEmailEntry, ParticipationByEmailRequest,
-    ParticipationByEmailResponse, ParticipationByUsersEntry, ParticipationByUsersRequest,
-    ParticipationByUsersResponse, ParticipationSummaryEntry, ParticipationSummaryRequest,
-    ParticipationSummaryResponse, RecentActivityItem, RecentActivityRequest,
-    RecentActivityResponse, TopItemCount, TopPerformersQuery, UserFirstParticipationEntry,
-    UserFirstParticipationRequest, UserFirstParticipationResponse, UsersActiveSinceRequest,
-    UsersActiveSinceResponse, WeeklyCount,
+    LastActiveForResponse, LastChange, LastChangedRequest, LastChangedResponse, PageChange,
+    ParticipationByEmailEntry, ParticipationByEmailRequest, ParticipationByEmailResponse,
+    ParticipationByUsersEntry, ParticipationByUsersRequest, ParticipationByUsersResponse,
+    ParticipationSummaryEntry, ParticipationSummaryRequest, ParticipationSummaryResponse,
+    RecentActivityItem, RecentActivityRequest, RecentActivityResponse, TopItemCount,
+    TopPerformersQuery, UserFirstParticipationEntry, UserFirstParticipationRequest,
+    UserFirstParticipationResponse, UsersActiveSinceRequest, UsersActiveSinceResponse, WeeklyCount,
 };
+use common::timestring::TimeString;
 use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::functions_aggregate::expr_fn::count;
 use datafusion::prelude::*;
@@ -1419,4 +1420,63 @@ pub async fn get_last_active_for(
     }
 
     Ok(LastActiveForResponse { entries })
+}
+
+/// When each of the requested pages last changed: the latest [`PageChange`]
+/// logged against it.
+///
+/// A page with no change logged is absent from the response, so the caller
+/// can tell "we have no record" from "the record says a long time ago".
+pub async fn get_last_changed(
+    database: Arc<Database>,
+    request: LastChangedRequest,
+) -> Result<LastChangedResponse> {
+    use datafusion::functions_aggregate::expr_fn::max;
+
+    if request.targets.is_empty() {
+        return Ok(LastChangedResponse {
+            changes: Vec::new(),
+        });
+    }
+
+    let actions = PageChange::ALL
+        .iter()
+        .map(|change| lit(change.action()))
+        .collect();
+    let targets = request
+        .targets
+        .iter()
+        .map(|target| lit(target.to_string()))
+        .collect();
+
+    let batches = database
+        .context()
+        .table("activity_log_realtime")
+        .await?
+        .filter(col("action").in_list(actions, false))?
+        .filter(col("target").in_list(targets, false))?
+        .aggregate(vec![col("target")], vec![max(col("when")).alias("when")])?
+        .collect()
+        .await?;
+
+    let mut changes = Vec::new();
+
+    for batch in batches {
+        let targets = batch.column(0);
+        let whens = batch.column(1);
+
+        for row in 0..batch.num_rows() {
+            let (Some(target), Some(when)) = (string_at(targets, row), string_at(whens, row))
+            else {
+                continue;
+            };
+
+            changes.push(LastChange {
+                target: target.parse()?,
+                when: TimeString::try_from(when)?,
+            });
+        }
+    }
+
+    Ok(LastChangedResponse { changes })
 }

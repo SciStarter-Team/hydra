@@ -23,7 +23,7 @@ use crate::training::{
     render_progress_fragment, tutorial_launch_url,
 };
 
-const BASE_PATH: &str = "/training/higher-ed";
+pub const BASE_PATH: &str = "/training/higher-ed";
 const PROGRESS_PATH: &str = "/training/higher-ed/-progress";
 /// Records the "explore" step then redirects to the AAPS site.
 pub const EXPLORE_PATH: &str = "/training/higher-ed/explore";

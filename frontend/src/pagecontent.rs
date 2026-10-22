@@ -1,4 +1,4 @@
-use common::shared::db;
+use common::{message::log::PageChange, service::log_activity, shared::db};
 use ulid::Ulid;
 
 use crate::peering::LoadStorePeered;
@@ -108,6 +108,18 @@ impl LoadStorePeered for PageContent {
     type DatabaseKey = (PageContentKind, Ulid);
 
     const GROUP: &str = "pagecontent";
+
+    /// Storing a page's content is an edit to the page.
+    async fn after_store(&self) -> Result<(), anyhow::Error> {
+        log_activity(
+            None,
+            PageChange::ContentEdit,
+            None,
+            self.pagecontent_id,
+            None,
+        )
+        .await
+    }
 
     async fn save_to_database(&self) -> Result<(), anyhow::Error> {
         let pagecontent_id_string = self.pagecontent_id.to_string();

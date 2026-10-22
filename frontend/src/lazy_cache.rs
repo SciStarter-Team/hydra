@@ -75,6 +75,21 @@ pub async fn get_cached<T: LazyCached>(source: &T) -> Result<String, Error> {
     }
 }
 
+/// Push a scalar subquery reading `source`'s cached value, so that a query
+/// built synchronously can use it.
+///
+/// It reads whatever is stored, stale or not, and NULL when nothing is: call
+/// [`get_cached`] beforehand so there is a value and its refresh is
+/// scheduled.
+pub(crate) fn push_cached_value<T: LazyCached>(
+    qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>,
+    source: &T,
+) {
+    qb.push("(SELECT value FROM lazy_cache WHERE cache_key = ");
+    qb.push_bind(source.cache_key());
+    qb.push(")");
+}
+
 async fn refresh_cache<T: LazyCached>(source: &T) -> Result<(), Error> {
     let value = source.fetch_fresh().await?;
     store_cached(&source.cache_key(), &value).await

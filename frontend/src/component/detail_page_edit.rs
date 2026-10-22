@@ -1,4 +1,5 @@
 use anyhow::Error;
+use common::message::log::PageChange;
 use common::{message::user::BasicInfo, service::log_activity, shared::db, timestring::TimeString};
 use poem::{
     IntoResponse, handler,
@@ -1111,8 +1112,9 @@ impl FieldDisplay {
 }
 
 /// Fields whose rendered content already carries its own heading (ribbon
-/// boxes / the online toggle), or that are icon-only links — for these the
-/// wrapper should not add a separate label.
+/// boxes / the online toggle), that sit in a box the page heads with their
+/// name, or that are icon-only links — for these the wrapper should not add a
+/// separate label.
 fn field_self_labeled(field_type: &str) -> bool {
     matches!(
         field_type,
@@ -1413,8 +1415,8 @@ pub async fn save_field(
 
     // Log activity
     let action = match kind {
-        DetailPageKind::Project => "project-edit",
-        DetailPageKind::Event => "event-edit",
+        DetailPageKind::Project => PageChange::ProjectEdit,
+        DetailPageKind::Event => PageChange::EventEdit,
     };
     let _ = log_activity(None, action, user.user_id, target_ulid, field_type.clone()).await;
 
@@ -1619,14 +1621,15 @@ async fn format_display_value(
                 ribbon_box("Description", &html)
             }
         }
+        // Inside the page's "How to Get Started" box, which also carries the
+        // guidance the page adds ahead of the project's own instructions.
         "how_to_join" => {
             if empty {
-                ribbon_box("How to Get Started", not_set())
+                not_set().to_string()
             } else {
-                let html = common::quill::content_to_html(value)
+                common::quill::content_to_html(value)
                     .map(|(h, _)| h)
-                    .unwrap_or_else(|_| value.to_string());
-                ribbon_box("How to Get Started", &html)
+                    .unwrap_or_else(|_| value.to_string())
             }
         }
 
@@ -1973,7 +1976,7 @@ pub async fn add_instance(
     })?;
     let _ = log_activity(
         None,
-        "event-edit",
+        PageChange::EventEdit,
         user.user_id,
         target_ulid,
         "instances".to_string(),
@@ -2090,7 +2093,7 @@ pub async fn update_instance(
     })?;
     let _ = log_activity(
         None,
-        "event-edit",
+        PageChange::EventEdit,
         user.user_id,
         target_ulid,
         "instances".to_string(),
@@ -2187,7 +2190,7 @@ pub async fn delete_instance(
     })?;
     let _ = log_activity(
         None,
-        "event-edit",
+        PageChange::EventEdit,
         user.user_id,
         target_ulid,
         "instances".to_string(),
@@ -2345,10 +2348,10 @@ fn edit_source(is_staff: bool) -> FieldSource {
 }
 
 /// The activity-log action name for an edit of the given kind.
-fn edit_action(kind: DetailPageKind) -> &'static str {
+fn edit_action(kind: DetailPageKind) -> PageChange {
     match kind {
-        DetailPageKind::Project => "project-edit",
-        DetailPageKind::Event => "event-edit",
+        DetailPageKind::Project => PageChange::ProjectEdit,
+        DetailPageKind::Event => PageChange::EventEdit,
     }
 }
 
@@ -3096,7 +3099,7 @@ fn log_project_edit(user_info: &Option<std::sync::Arc<BasicInfo>>, id: &str, det
     if let (Some(user), Ok(ulid)) = (user_info.as_ref(), Ulid::from_string(id)) {
         let user_id = user.user_id;
         tokio::spawn(async move {
-            let _ = log_activity(None, "project-edit", user_id, ulid, detail).await;
+            let _ = log_activity(None, PageChange::ProjectEdit, user_id, ulid, detail).await;
         });
     }
 }

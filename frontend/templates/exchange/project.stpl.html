@@ -203,7 +203,7 @@
                 <tr>
                   <th scope="row">Ideal Age Group</th>
                   <td>
-                    <% { let mut first = true; for (id, name) in &self.project.audience { %><% if !first { %>, <% } else { first = false; } %><a href="https://scistarter.org/finder?audience=<%= id %>" target="_blank"><%= name %></a><% } } %>
+                    <% { let mut first = true; for (id, name) in &self.project.audience { %><% if !first { %>, <% } else { first = false; } %><a href="<%= crate::search::FinderQuery::projects().with_audience(id).url() %>" target="_blank"><%= name %></a><% } } %>
                   </td>
                 </tr>
                 <% } %>
@@ -223,7 +223,7 @@
                 <tr>
                   <th scope="row">Type of Activity</th>
                   <td>
-                    <% { let mut first = true; for (id, name) in &self.project.activities { %><% if !first { %>, <% } else { first = false; } %><a href="https://scistarter.org/finder?activity=<%= id %>" target="_blank"><%= name %></a><% } } %>
+                    <% { let mut first = true; for (id, name) in &self.project.activities { %><% if !first { %>, <% } else { first = false; } %><a href="<%= crate::search::FinderQuery::projects().with_activity(id).url() %>" target="_blank"><%= name %></a><% } } %>
                   </td>
                 </tr>
                 <% } %>
@@ -231,7 +231,7 @@
                 <tr>
                   <th scope="row">Topics</th>
                   <td>
-                    <% { let mut first = true; for (id, name) in &self.project.topics { %><% if !first { %>, <% } else { first = false; } %><a href="https://scistarter.org/finder?topic=<%= id %>" target="_blank"><%= name %></a><% } } %>
+                    <% { let mut first = true; for (id, name) in &self.project.topics { %><% if !first { %>, <% } else { first = false; } %><a href="<%= crate::search::FinderQuery::projects().with_topic(id).url() %>" target="_blank"><%= name %></a><% } } %>
                   </td>
                 </tr>
                 <% } %>
@@ -248,7 +248,7 @@
                 <tr>
                   <th scope="row">Tags</th>
                   <td>
-                    <% { let mut first = true; for tag in &self.project.tags { %><% if !first { %>, <% } else { first = false; } %><a href="https://scistarter.org/finder?phrase=<%= tag %>" target="_blank"><%= tag %></a><% } } %>
+                    <% { let mut first = true; for tag in &self.project.tags { %><% if !first { %>, <% } else { first = false; } %><a href="<%= crate::search::FinderQuery::projects().with_text(tag).url() %>" target="_blank"><%= tag %></a><% } } %>
                   </td>
                 </tr>
                 <% } %>

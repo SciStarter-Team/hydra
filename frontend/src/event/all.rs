@@ -33,7 +33,7 @@ use super::{EventInstance, EventType, facebook::FacebookEvent};
 /// Note: The `tags_text` database column is NOT included here as it's
 /// a computed field for FTS search optimization, not a real event field.
 /// Tags are managed separately via the event_tags table.
-#[derive(Default, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Default, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct EventAll {
     pub event_id: Ulid,
@@ -85,6 +85,21 @@ pub struct EventAll {
 
     /// What the organizer said about promoting the event on Facebook.
     pub facebook_event: FacebookEvent,
+}
+
+impl EventAll {
+    /// This event with what does not tell one version of it from another set
+    /// aside, so that two versions are the same event exactly when their
+    /// canonical forms are equal: the order of its editors, which orrery does
+    /// not keep, and the ids of its contacts, which are minted afresh whenever
+    /// the contacts are written wholesale.
+    pub fn canonical(mut self) -> EventAll {
+        self.page_editor_ids.sort_unstable();
+        for contact in &mut self.contacts {
+            contact.contact_id = Ulid::nil();
+        }
+        self
+    }
 }
 
 impl LoadStorePeered for EventAll {
@@ -263,29 +278,11 @@ impl LoadStorePeered for EventAll {
 
         // "event_last_editor",
         // "event_last_edited",
-        if let Some(last_editor) = self.event_last_editor {
-            common::service::log_activity(
-                self.event_last_edited.clone(),
-                "user-edit",
-                last_editor,
-                self.event_id,
-                Some("all".to_string()),
-            )
-            .await?;
-        }
-
         // "scistarter_last_editor",
         // "scistarter_last_edited",
-        if let Some(last_editor) = self.scistarter_last_editor {
-            common::service::log_activity(
-                self.scistarter_last_edited.clone(),
-                "staff-edit",
-                last_editor,
-                self.event_id,
-                Some("all".to_string()),
-            )
-            .await?;
-        }
+        // Not stored: when a event changed is the activity log's to say. The
+        // change is logged once, by whatever made it, rather than here, where
+        // every peer saving its copy would log it again.
 
         // "tags",
         sqlx::query!(r#"delete from event_tags where event_id = ?"#, event_id)

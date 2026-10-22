@@ -11,9 +11,12 @@
     <% } else { %>
     <span class="font-medium">Created</span>
     <% } %>
-    <% } else { %>
+    <% } else if !entry.user_handle.is_empty() { %>
     <span class="font-medium"><%= &entry.user_handle %></span>
     <span>edited</span>
+    <span class="font-medium"><%= &entry.field %></span>
+    <% } else { %>
+    <span class="font-medium">Edited</span>
     <span class="font-medium"><%= &entry.field %></span>
     <% } %>
     <% if let Some(when) = &entry.when { %>

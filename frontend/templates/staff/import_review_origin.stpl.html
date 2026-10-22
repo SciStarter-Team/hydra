@@ -1,0 +1,92 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Import review: <%= self.origin %></title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <% include!("import_review_style.stpl.html"); %>
+  </head>
+  <body>
+    <main>
+      <p><a href="<%= self.back_url %>">&laquo; All origins</a></p>
+
+      <h1><%= self.origin %></h1>
+
+      <% match &self.summary { None => { %>
+      <h3><%= self.origin %> has sent no projects since <%= self.since %> UTC.</h3>
+      <% } Some(summary) => { %>
+      <p>
+        Since <strong><%= self.since %> UTC</strong>, <%= self.origin %> has sent
+        <%= summary.new %> new project<% if summary.new != 1 { %>s<% } %>:
+        <%= summary.awaiting %> awaiting approval, <%= summary.held %> held back,
+        and <%= summary.published %> already published.
+      </p>
+
+      <% if self.sample.is_empty() { %>
+      <h3>None of these projects are awaiting approval.</h3>
+      <% } else { %>
+      <h2>A random sample of <%= self.sample.len() %> awaiting approval</h2>
+      <% if self.sample.len() < summary.awaiting { %>
+      <p><a href="">Draw another sample</a></p>
+      <% } %>
+
+      <% for project in &self.sample { %>
+      <section class="sample">
+        <% if !project.image.is_empty() { %><img src="<%= project.image %>" alt=""><% } %>
+        <h3><%= project.name %></h3>
+        <p>
+          <% if !project.project_url.is_empty() { %><a href="<%= project.project_url %>" target="_blank">Project page</a> &middot;<% } %>
+          <a href="<%= project.admin_url %>" target="_blank">Admin</a>
+          <% if !project.url.is_empty() { %>&middot; <a href="<%= project.url %>" target="_blank" rel="noopener">Their site</a><% } %>
+        </p>
+        <dl>
+          <dt>Added</dt><dd><%= project.added %> UTC</dd>
+          <dt>Status</dt><dd><%= project.status %></dd>
+          <dt>Location</dt><dd><%= project.location %></dd>
+          <dt>Contact</dt><dd><% if project.contact.is_empty() { %>(none)<% } else { %><%= project.contact %><% } %></dd>
+          <dt>Goal</dt><dd><% if project.goal.is_empty() { %>(none)<% } else { %><%= project.goal %><% } %></dd>
+          <dt>Task</dt><dd><% if project.task.is_empty() { %>(none)<% } else { %><%= project.task %><% } %></dd>
+          <dt>Description</dt><dd><% if project.description.is_empty() { %>(none)<% } else { %><%= project.description %><% } %></dd>
+        </dl>
+      </section>
+      <% } %>
+
+      <details>
+        <summary>All <%= self.everything.len() %> project<% if self.everything.len() != 1 { %>s<% } %> awaiting approval</summary>
+        <ol>
+          <% for row in &self.everything { %>
+          <li><% if row.project_url.is_empty() { %><%= row.name %><% } else { %><a href="<%= row.project_url %>" target="_blank"><%= row.name %></a><% } %>
+            (<a href="<%= row.admin_url %>" target="_blank">admin</a>)</li>
+          <% } %>
+        </ol>
+      </details>
+
+      <form method="post" class="approve">
+        <input type="hidden" name="origin" value="<%= self.origin %>">
+        <input type="hidden" name="since" value="<%= self.since_param %>">
+        <input type="hidden" name="ids" value="<%= self.ids %>">
+        <p>Publishing tells each project's submitter, as publishing from its admin page does.</p>
+        <button type="submit">Publish all <%= self.everything.len() %></button>
+      </form>
+      <% } %>
+
+      <% if !self.held.is_empty() { %>
+      <h2>Held back</h2>
+      <p>Unpublished projects that a batch approval leaves alone, because somebody already made a decision about them.</p>
+      <table>
+        <thead><tr><th>Project</th><th>Why</th><th>Added</th></tr></thead>
+        <tbody>
+          <% for project in &self.held { %>
+          <tr>
+            <td><a href="<%= project.admin_url %>" target="_blank"><%= project.name %></a></td>
+            <td><%= project.reasons %></td>
+            <td><%= project.added %></td>
+          </tr>
+          <% } %>
+        </tbody>
+      </table>
+      <% } %>
+      <% } } %>
+    </main>
+  </body>
+</html>

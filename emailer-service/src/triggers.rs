@@ -1,6 +1,12 @@
 use anyhow::{Error, Result};
 use async_nats::service::Request;
-use common::{message::email::*, shared::db, timestring::TimeString};
+use common::{
+    message::email::*,
+    message::user::{UserEmailInfo, UserEmailInfoRequest},
+    service::{TriggerEvent, request},
+    shared::db,
+    timestring::TimeString,
+};
 use sqlx::QueryBuilder;
 use ulid::Ulid;
 
@@ -307,6 +313,86 @@ fn pin_triggering_user(recipients_json: &Option<String>, address: Option<&str>) 
     };
 
     Some(serde_json::Value::Array(pinned).to_string())
+}
+
+/// The addresses of the general inbox. Its accounts stand in as the creator
+/// of every page nobody else holds, so project notices meant for a page's
+/// creator often name one. Mail to the .com address is forwarded to the .org.
+const INFO_ADDRESSES: [&str; 2] = ["info@scistarter.org", "info@scistarter.com"];
+
+/// Where staff read mail about projects.
+const PROJECTS_ADDRESS: &str = "projects@scistarter.org";
+
+fn is_info_inbox(address: &str) -> bool {
+    let address = address.trim();
+
+    INFO_ADDRESSES
+        .iter()
+        .any(|info| address.eq_ignore_ascii_case(info))
+}
+
+/// Where a project notice addressed to `address` is delivered: the projects
+/// inbox in place of the general one, and anywhere else as addressed.
+/// Mirrors orrery's `project_notice_address`.
+fn project_notice_address(address: &str) -> &str {
+    if is_info_inbox(address) {
+        PROJECTS_ADDRESS
+    } else {
+        address
+    }
+}
+
+/// A binding's recipients JSON as a project notice reaches them: every
+/// address entry passed through [`project_notice_address`], and everything
+/// else, unreadable JSON included, left for `resolve_trigger_recipients` to
+/// make of it.
+fn project_notice_recipients(recipients_json: &Option<String>) -> Option<String> {
+    let json = recipients_json.as_deref()?;
+
+    let Ok(entries) = serde_json::from_str::<Vec<serde_json::Value>>(json) else {
+        return recipients_json.clone();
+    };
+
+    let entries = entries
+        .into_iter()
+        .map(|mut entry| {
+            if let Some(email) = entry.get_mut("email")
+                && let Some(address) = email.as_str()
+            {
+                *email = serde_json::Value::String(project_notice_address(address).to_string());
+            }
+            entry
+        })
+        .collect();
+
+    Some(serde_json::Value::Array(entries).to_string())
+}
+
+/// The address a project notice reaches the triggering user at, if not as
+/// their account: the address the event named, or the projects inbox when
+/// the account is the general inbox's. An account is otherwise left to the
+/// queue, which checks that it is verified and accepting mail; the projects
+/// inbox is a staff mailbox and is written to directly.
+///
+/// When the account cannot be looked up, it is reached as an account, as it
+/// would be for any other notice, rather than the notice being lost.
+async fn project_notice_triggering_address(user_id: Ulid, address: Option<&str>) -> Option<String> {
+    if let Some(address) = address {
+        return Some(project_notice_address(address).to_string());
+    }
+
+    match request::<UserEmailInfo>("user.info.email_info", UserEmailInfoRequest { user_id }).await {
+        Ok(info) if is_info_inbox(&info.primary_email) => Some(PROJECTS_ADDRESS.to_string()),
+        Ok(_) => None,
+        Err(err) => {
+            tracing::warn!(
+                %user_id,
+                error = %err,
+                "Could not look up the triggering user of a project notice; reaching them as their account"
+            );
+            None
+        }
+    }
 }
 
 /// Resolve the recipients JSON into a list of EmailRecipient values.
@@ -646,9 +732,30 @@ pub async fn handle_trigger_event(req: &Request) -> Result<TriggerEmailResponse,
     .fetch_all(db())
     .await?;
 
+    // A project notice meant for the general inbox goes to the projects
+    // inbox, whether the general inbox is the triggering user or one of a
+    // binding's configured recipients.
+    let project_notice = !trigger_rows.is_empty()
+        && request
+            .trigger_name
+            .parse::<TriggerEvent>()
+            .is_ok_and(|event| event.is_project_notice());
+
+    let address = if project_notice {
+        project_notice_triggering_address(request.user_id, request.address.as_deref()).await
+    } else {
+        request.address.clone()
+    };
+
     for row in trigger_rows {
         let trigger_id_str = row.trigger_id.clone().unwrap_or_default();
         let trigger = convert_trigger_row(row, cancellations_of(&trigger_id_str).await?)?;
+
+        let recipients_json = if project_notice {
+            project_notice_recipients(&trigger.recipients)
+        } else {
+            trigger.recipients.clone()
+        };
 
         // Settle whether this binding acts at all before rendering anything.
         let cancelled = trigger.action_type == TriggerActionType::Delayed
@@ -713,9 +820,9 @@ pub async fn handle_trigger_event(req: &Request) -> Result<TriggerEmailResponse,
         match due {
             None => {
                 let recipients = resolve_trigger_recipients(
-                    &trigger.recipients,
+                    &recipients_json,
                     request.user_id,
-                    request.address.as_deref(),
+                    address.as_deref(),
                 );
 
                 let _sending_id = send_email(
@@ -746,7 +853,7 @@ pub async fn handle_trigger_event(req: &Request) -> Result<TriggerEmailResponse,
                     stored_email.subject,
                     datasets,
                     Some(additional_data),
-                    pin_triggering_user(&trigger.recipients, request.address.as_deref()),
+                    pin_triggering_user(&recipients_json, address.as_deref()),
                     reply_to,
                     no_unsubscribe,
                 )
@@ -894,6 +1001,82 @@ mod tests {
             targets(resolve_trigger_recipients(&pinned, user(), None)),
             vec![format!("email:{ADDRESS}"), "address_set:staff".to_string()]
         );
+    }
+
+    #[test]
+    fn a_project_notice_for_the_general_inbox_goes_to_the_projects_inbox() {
+        for address in [
+            "info@scistarter.org",
+            "Info@SciStarter.org",
+            " info@scistarter.org ",
+            "info@scistarter.com",
+            "Info@SciStarter.com",
+        ] {
+            assert_eq!(
+                project_notice_address(address),
+                PROJECTS_ADDRESS,
+                "address: {address:?}"
+            );
+        }
+
+        assert_eq!(project_notice_address(ADDRESS), ADDRESS);
+        assert_eq!(project_notice_address(PROJECTS_ADDRESS), PROJECTS_ADDRESS);
+    }
+
+    #[test]
+    fn a_project_notice_binding_reaches_the_projects_inbox_in_place_of_the_general_one() {
+        let configured = Some(
+            r#"["triggering_user", {"address_set": "staff"}, {"email": "info@scistarter.org"}, {"email": "ada@example.invalid"}]"#
+                .to_string(),
+        );
+
+        assert_eq!(
+            targets(resolve_trigger_recipients(
+                &project_notice_recipients(&configured),
+                user(),
+                None
+            )),
+            vec![
+                format!("user:{USER}"),
+                "address_set:staff".to_string(),
+                format!("email:{PROJECTS_ADDRESS}"),
+                format!("email:{ADDRESS}"),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_project_notice_leaves_bindings_without_addresses_as_they_are() {
+        for recipients in [None, Some("not json")] {
+            let recipients = recipients.map(str::to_string);
+
+            assert_eq!(project_notice_recipients(&recipients), recipients);
+        }
+    }
+
+    /// The projects inbox named for the triggering user has to survive being
+    /// scheduled, as any other named address does.
+    #[test]
+    fn a_delayed_project_notice_remembers_the_projects_inbox() {
+        let configured = Some(r#"["triggering_user"]"#.to_string());
+        let pinned = pin_triggering_user(
+            &project_notice_recipients(&configured),
+            Some(PROJECTS_ADDRESS),
+        );
+
+        assert_eq!(
+            targets(resolve_trigger_recipients(&pinned, user(), None)),
+            vec![format!("email:{PROJECTS_ADDRESS}")]
+        );
+    }
+
+    #[test]
+    fn only_project_and_event_notices_are_project_notices() {
+        assert!(TriggerEvent::ProjectPublished.is_project_notice());
+        assert!(TriggerEvent::EventPublished.is_project_notice());
+        assert!(TriggerEvent::ProjectRejected.is_project_notice());
+        assert!(!TriggerEvent::UserWelcome.is_project_notice());
+        assert!(!TriggerEvent::StaffNotification.is_project_notice());
     }
 
     async fn migrated() -> sqlx::SqlitePool {

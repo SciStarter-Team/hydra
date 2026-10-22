@@ -20,7 +20,7 @@ use crate::training::{
     render_progress_fragment, tutorial_launch_url,
 };
 
-const BASE_PATH: &str = "/training/libraries-hubs";
+pub const BASE_PATH: &str = "/training/libraries-hubs";
 const PROGRESS_PATH: &str = "/training/libraries-hubs/-progress";
 const SLUG: &str = "libraries-hubs";
 

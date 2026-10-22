@@ -1,0 +1,18 @@
+<div id="platform-account" class="mb-3">
+  <% match &self.visitor { crate::component::detail_page::PlatformAccountVisitor::SignedIn(username) => { %>
+  <form hx-post="/-detail/<%= &self.target_id %>/platform-account" hx-target="#platform-account" hx-swap="outerHTML">
+    <label for="platform-username" class="block text-sm font-semibold mb-1"><%= self.platform.label() %> username</label>
+    <div class="flex gap-2 max-w-md">
+      <input id="platform-username" name="username" type="text" value="<%= username %>" autocomplete="off" spellcheck="false" class="flex-1 min-w-0 border border-linework rounded-sm px-3 py-2 text-sm bg-white">
+      <button type="submit" class="btn btn-primary btn-thin">Save</button>
+    </div>
+  </form>
+  <% if self.outcome == crate::component::detail_page::PlatformAccountOutcome::Saved { %>
+  <p class="text-sm text-green-700 mt-2" role="status">Your <%= self.platform.label() %> account is connected.</p>
+  <% } else if self.outcome == crate::component::detail_page::PlatformAccountOutcome::Blank { %>
+  <p class="text-sm text-red-700 mt-2" role="alert">Please enter your <%= self.platform.label() %> username.</p>
+  <% } %>
+  <% } crate::component::detail_page::PlatformAccountVisitor::SignedOut { page_path } => { %>
+  <p><a class="text-primary-action underline" href="/login?next=<%= urlencoding::encode(page_path) %>">Sign up or log in</a> to connect your <%= self.platform.label() %> account.</p>
+  <% } } %>
+</div>

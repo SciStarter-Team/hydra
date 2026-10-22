@@ -23,7 +23,7 @@ use crate::training::{
     render_progress_fragment, tutorial_launch_url,
 };
 
-const BASE_PATH: &str = "/training/champion";
+pub const BASE_PATH: &str = "/training/champion";
 const PROGRESS_PATH: &str = "/training/champion/-progress";
 const SLUG: &str = "champion";
 

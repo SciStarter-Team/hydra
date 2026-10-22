@@ -966,6 +966,13 @@ impl TriggerEvent {
             Self::StaffNotification => "staff",
         }
     }
+
+    /// Whether this event's email tells someone about a particular project
+    /// or event. Mail of that kind meant for the general inbox goes to the
+    /// projects inbox instead; see emailer-service's `project_notice_address`.
+    pub fn is_project_notice(&self) -> bool {
+        self.category() == "project"
+    }
 }
 
 /// Fire an email trigger event with a user and optional additional data
@@ -1014,9 +1021,11 @@ pub async fn replay_trigger(
     send_trigger(trigger, user_id, None, None, Some(occurred_at)).await
 }
 
-/// Fire a trigger whose email must reach the user at one particular address,
-/// whether or not their account is verified or accepting mail: the email that
-/// asks them to confirm that address.
+/// Fire a trigger whose email must reach one particular address, whether or
+/// not the user's account is verified or accepting mail: the email that asks
+/// them to confirm that address, or the review notice for a project an
+/// account imported, which goes to the contact its source catalog supplied.
+/// The do-not-send list still applies.
 pub async fn trigger_email_to_address(
     trigger: TriggerEvent,
     user_id: ulid::Ulid,

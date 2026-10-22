@@ -17,7 +17,7 @@ use crate::training::{
     render_progress_fragment, tutorial_launch_url,
 };
 
-const BASE_PATH: &str = "/training/k12";
+pub const BASE_PATH: &str = "/training/k12";
 const PROGRESS_PATH: &str = "/training/k12/-progress";
 const SLUG: &str = "k12";
 

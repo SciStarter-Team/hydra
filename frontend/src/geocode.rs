@@ -18,6 +18,12 @@ pub async fn geocode_address_to_point(city: &str, state: &str, country: &str) ->
 /// more to offer than a city and a state — a street address and a postal code,
 /// say — can pass those too.
 pub async fn geocode_parts(parts: &[&str]) -> Option<String> {
+    Some(locate(parts).await?.to_string())
+}
+
+/// Where the address made of `parts` is, taking them as [`geocode_parts`]
+/// does.
+pub async fn locate(parts: &[&str]) -> Option<Point> {
     let parts: Vec<&str> = parts
         .iter()
         .copied()
@@ -36,12 +42,10 @@ pub async fn geocode_parts(parts: &[&str]) -> Option<String> {
             .await
             .ok()?;
 
-    let point = Point {
+    Some(Point {
         latitude: response.latitude,
         longitude: response.longitude,
-    };
-
-    Some(point.to_string())
+    })
 }
 
 /// Read current address fields from DB and geocode to update the project's point column.

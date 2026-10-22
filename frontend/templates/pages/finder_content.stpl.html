@@ -144,18 +144,9 @@
               <div class="project-filter">
                 <span class="kind-note">Projects only</span>
                 <select multiple name="misc_filter[]" data-placeholder="Only projects that...">
-                  <option value="has_classroom_materials" <% if self.has_classroom_materials {
-                      %>selected<% } %>>Have classroom materials</option>
-                  <option value="has_app" <% if self.has_app { %>selected<% } %>>Use a
-                    smartphone or tablet app</option>
-                  <option value="is_affiliate" <% if self.is_affiliate { %>selected<% } %>>Are
-                    SciStarter affiliates</option>
-                  <option value="usa_only" <% if self.usa_only { %>selected<% } %>>Are within
-                    the USA</option>
-                  <option value="outside_usa" <% if self.outside_usa { %>selected<% } %>>Are
-                    outside the USA</option>
-                  <option value="exclusively_outdoors" <% if self.exclusively_outdoors { %>
-                    selected<% } %>>Exclusively outdoors</option>
+                  <% for filter in crate::search::MiscFilter::ALL { %>
+                  <option value="<%= filter.param() %>" <% if self.selected_misc_filters.contains(&filter) { %>selected<% } %>><%= filter.label() %></option>
+                  <% } %>
                 </select>
               </div>
 

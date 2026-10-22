@@ -1,5 +1,6 @@
 use anyhow::Result;
 use common::message::dashboard::{EntitySummary, EntitySummaryKind};
+use common::timestring::TimeString;
 use common::{
     message::log::{
         ActsOfScienceCreateRequest, ActsOfScienceCreateResponse, ActsOfScienceSource,
@@ -9,16 +10,16 @@ use common::{
         EditLogEntry, EditLogRequest, EditLogResponse, EntityListContributions,
         EntityListParticipant, EntityListStatsRequest, EntityListStatsResponse,
         ExternalLinkClickthroughResponse, ExternalLinksResponse, GoUrlStatsRequest,
-        GoUrlStatsResponse, LastEditedRequest, LastEditedResponse, ProjectLikesRequest,
-        ProjectLikesResponse, ProjectMemberCountRequest, ProjectMemberCountResponse,
-        ProjectParticipationRecord, ProjectParticipationRequest, ProjectParticipationResponse,
-        ProjectReviewsRequest, ProjectReviewsResponse, RatingSetRequest, RecentActivityRequest,
-        RecentActivityResponse, ReviewEntry, ReviewSetRequest, ReviewersByProjectsRequest,
-        ReviewersByProjectsResponse, UserLastViewRequest, UserLastViewResponse,
-        UserParticipationBreakdownEntry, UserParticipationBreakdownRequest,
-        UserParticipationBreakdownResponse, UserParticipationEntry, UserParticipationRequest,
-        UserParticipationResponse, UserRecentVisit, UserRecentVisitsRequest,
-        UserRecentVisitsResponse,
+        GoUrlStatsResponse, LastChangedRequest, LastChangedResponse, PageChange,
+        ProjectLikesRequest, ProjectLikesResponse, ProjectMemberCountRequest,
+        ProjectMemberCountResponse, ProjectParticipationRecord, ProjectParticipationRequest,
+        ProjectParticipationResponse, ProjectReviewsRequest, ProjectReviewsResponse,
+        RatingSetRequest, RecentActivityRequest, RecentActivityResponse, ReviewEntry,
+        ReviewSetRequest, ReviewersByProjectsRequest, ReviewersByProjectsResponse,
+        UserLastViewRequest, UserLastViewResponse, UserParticipationBreakdownEntry,
+        UserParticipationBreakdownRequest, UserParticipationBreakdownResponse,
+        UserParticipationEntry, UserParticipationRequest, UserParticipationResponse,
+        UserRecentVisit, UserRecentVisitsRequest, UserRecentVisitsResponse,
     },
     query::{QUERY_TIMEOUT, QueryRequest, QueryResponse},
     service::{
@@ -31,9 +32,10 @@ use ulid::Ulid;
 use log_service::{
     analytics::{
         get_clickthrough_analytics_realtime, get_go_url_stats, get_go_url_totals,
-        get_last_active_for, get_participation_analytics_realtime, get_participation_by_email,
-        get_participation_by_users, get_participation_summary, get_recent_activity,
-        get_top_performers, get_user_first_participation, get_users_active_since,
+        get_last_active_for, get_last_changed, get_participation_analytics_realtime,
+        get_participation_by_email, get_participation_by_users, get_participation_summary,
+        get_recent_activity, get_top_performers, get_user_first_participation,
+        get_users_active_since,
     },
     cache::{update_user_emails_cache, update_user_tags_cache},
     health::HealthResponse,
@@ -1085,7 +1087,6 @@ pub async fn handle_external_links(
     req: &async_nats::service::Request,
 ) -> Result<ExternalLinksResponse, anyhow::Error> {
     use common::message::log::ExternalLinksRequest;
-    use common::timestring::TimeString;
 
     let request: ExternalLinksRequest = decode_structured_message(req.message.clone())?;
 
@@ -1655,10 +1656,12 @@ pub async fn handle_review_set(req: &async_nats::service::Request) -> Result<Rev
     })
 }
 
-pub async fn handle_last_edited(req: &async_nats::service::Request) -> Result<LastEditedResponse> {
-    use datafusion::arrow::array::{Array, StringArray};
-
-    let request: LastEditedRequest = decode_structured_message(req.message.clone())?;
+/// When each of the requested targets last changed: the latest
+/// [`PageChange`] logged against it.
+pub async fn handle_last_changed(
+    req: &async_nats::service::Request,
+) -> Result<LastChangedResponse> {
+    let request: LastChangedRequest = decode_structured_message(req.message.clone())?;
 
     let database = DATABASE
         .read()
@@ -1666,41 +1669,9 @@ pub async fn handle_last_edited(req: &async_nats::service::Request) -> Result<La
         .expect("Database not initialized")
         .clone();
 
-    let ctx = database.context();
-
-    let df = ctx
-        .table("activity_log_realtime")
-        .await?
-        .filter(
-            col("action")
-                .eq(lit("project-edit"))
-                .or(col("action").eq(lit("event-edit"))),
-        )?
-        .filter(col("target").eq(lit(&request.target_id)))?
-        .select(vec![col("when")])?
-        .sort(vec![col("when").sort(false, true)])?
-        .limit(0, Some(1))?;
-
-    let batches = df.collect().await?;
-
-    let when = batches
-        .first()
-        .filter(|b| b.num_rows() > 0)
-        .and_then(|b| {
-            b.column(0)
-                .as_any()
-                .downcast_ref::<StringArray>()
-                .and_then(|a| {
-                    if a.is_null(0) {
-                        None
-                    } else {
-                        Some(a.value(0).to_string())
-                    }
-                })
-        })
-        .unwrap_or_default();
-
-    Ok(LastEditedResponse { when })
+    get_last_changed(database, request)
+        .await
+        .map_err(Into::into)
 }
 
 pub async fn handle_user_participation(
@@ -1996,8 +1967,8 @@ pub async fn handle_edit_log(req: &async_nats::service::Request) -> Result<EditL
         .await?
         .filter(
             col("action")
-                .eq(lit("project-edit"))
-                .or(col("action").eq(lit("event-edit"))),
+                .eq(lit(PageChange::ProjectEdit.action()))
+                .or(col("action").eq(lit(PageChange::EventEdit.action()))),
         )?
         .filter(col("target").eq(lit(&request.target_id)))?
         .select(vec![col("when"), col("user_id"), col("extra")])?

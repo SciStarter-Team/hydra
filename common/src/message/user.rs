@@ -1485,6 +1485,20 @@ pub struct AmbassadorPassedLocationsResponse {
 }
 
 // ============================================================================
+// Ambassador directory listing (for the sitemap)
+// ============================================================================
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AmbassadorDirectoryListingRequest {}
+
+/// Every ambassador the public directory lists, each of whom has a public
+/// profile.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AmbassadorDirectoryListingResponse {
+    pub user_ids: Vec<Ulid>,
+}
+
+// ============================================================================
 // API User Creation (for v1 API compat)
 // ============================================================================
 

@@ -6,14 +6,24 @@ use crate::{
         analytics::{Device, Interaction},
         authorization::Authenticated,
     },
-    project::ProjectStatus,
+    project::{
+        ProjectStatus,
+        linked_platform::{push_zooniverse_affiliate_filter, zooniverse_affiliates},
+        push_listing_rule,
+    },
 };
 use anyhow::Error;
 use common::shared::db;
 use jiff::civil::Date;
-use poem::{Endpoint, Response, Result, Route, get, handler, session::Session, web::Query};
+use poem::{
+    Endpoint, FromRequest, IntoResponse, Request, Response, Result, Route, get, handler,
+    session::Session,
+    web::{Query, Redirect},
+};
 use sailfish::TemplateOnce;
 use serde::Deserialize;
+
+mod orrery;
 
 /// A search result for public entity search
 #[derive(Debug, Clone)]
@@ -66,7 +76,58 @@ pub(crate) const EVENT_KIND: &str = "event";
 /// so rather than looking like a form that was never filled in.
 const NO_KIND: &str = "none";
 
-#[derive(Debug, Clone, Deserialize)]
+/// The finder's "Only projects that..." filters.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MiscFilter {
+    HasClassroomMaterials,
+    HasApp,
+    IsAffiliate,
+    ZooniverseAffiliate,
+    UsaOnly,
+    OutsideUsa,
+    ExclusivelyOutdoors,
+}
+
+impl MiscFilter {
+    /// Every filter, in the order the sidebar offers them.
+    pub(crate) const ALL: [MiscFilter; 7] = [
+        MiscFilter::HasClassroomMaterials,
+        MiscFilter::HasApp,
+        MiscFilter::IsAffiliate,
+        MiscFilter::ZooniverseAffiliate,
+        MiscFilter::UsaOnly,
+        MiscFilter::OutsideUsa,
+        MiscFilter::ExclusivelyOutdoors,
+    ];
+
+    /// The `misc_filter[]` value that asks for this filter.
+    pub(crate) fn param(self) -> &'static str {
+        match self {
+            MiscFilter::HasClassroomMaterials => "has_classroom_materials",
+            MiscFilter::HasApp => "has_app",
+            MiscFilter::IsAffiliate => "is_affiliate",
+            MiscFilter::ZooniverseAffiliate => "zooniverse_affiliate",
+            MiscFilter::UsaOnly => "usa_only",
+            MiscFilter::OutsideUsa => "outside_usa",
+            MiscFilter::ExclusivelyOutdoors => "exclusively_outdoors",
+        }
+    }
+
+    /// How the sidebar finishes "Only projects that..." for this filter.
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            MiscFilter::HasClassroomMaterials => "Have classroom materials",
+            MiscFilter::HasApp => "Use a smartphone or tablet app",
+            MiscFilter::IsAffiliate => "Are SciStarter affiliates",
+            MiscFilter::ZooniverseAffiliate => "Are Zooniverse affiliates",
+            MiscFilter::UsaOnly => "Are within the USA",
+            MiscFilter::OutsideUsa => "Are outside the USA",
+            MiscFilter::ExclusivelyOutdoors => "Exclusively outdoors",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct FinderQuery {
     pub q: Option<String>,
     #[serde(default, deserialize_with = "deserialize_optional_f64")]
@@ -146,6 +207,65 @@ impl SingleKindFilters {
 }
 
 impl FinderQuery {
+    /// A search for projects alone, for a link into the finder: narrow it with
+    /// the `with_*` methods and link to [`Self::url`].
+    ///
+    /// Age groups, activities and the miscellaneous filters narrow projects
+    /// only, and the finder sets them aside when events are searched too, so
+    /// a link that names one of them has to search projects alone.
+    pub(crate) fn projects() -> Self {
+        FinderQuery {
+            kind: vec![PROJECT_KIND.to_string()],
+            ..Default::default()
+        }
+    }
+
+    /// Narrowed to what matches the words in `text`.
+    pub(crate) fn with_text(mut self, text: &str) -> Self {
+        self.q = Some(text.to_string());
+        self
+    }
+
+    /// Narrowed to the topic `topic`.
+    pub(crate) fn with_topic(mut self, topic: &str) -> Self {
+        self.topic.push(topic.to_string());
+        self
+    }
+
+    /// Narrowed to the age group `audience`.
+    pub(crate) fn with_audience(mut self, audience: &str) -> Self {
+        self.audience.push(audience.to_string());
+        self
+    }
+
+    /// Narrowed to the kind of activity `activity`.
+    pub(crate) fn with_activity(mut self, activity: &str) -> Self {
+        self.activity.push(activity.to_string());
+        self
+    }
+
+    /// Narrowed by `filter`.
+    pub(crate) fn with_misc_filter(mut self, filter: MiscFilter) -> Self {
+        self.misc_filter.push(filter.param().to_string());
+        self
+    }
+
+    /// Whether the search asks for `filter`.
+    pub(crate) fn has_misc_filter(&self, filter: MiscFilter) -> bool {
+        self.misc_filter.iter().any(|v| v == filter.param())
+    }
+
+    /// The `/finder` URL that runs this search.
+    pub(crate) fn url(&self) -> String {
+        let params = self.to_query_string();
+
+        if params.is_empty() {
+            "/finder".to_string()
+        } else {
+            format!("/finder?{params}")
+        }
+    }
+
     /// The query as the finder's sidebar offers it for a search of `kinds`.
     ///
     /// Whatever the sidebar does not offer must not narrow anything either, or
@@ -173,10 +293,7 @@ impl FinderQuery {
         let mut offered = self.clone();
 
         if !projects {
-            offered.audience.clear();
-            offered.activity.clear();
-            offered.misc_filter.clear();
-            offered.show_completed = None;
+            offered.set_aside_project_filters();
         }
 
         if !events {
@@ -186,6 +303,26 @@ impl FinderQuery {
         }
 
         offered
+    }
+
+    /// Whether the search narrows projects in a way that has no meaning for
+    /// events, so that only a search of projects alone is sure to honour it.
+    ///
+    /// Names the same fields as [`Self::set_aside_project_filters`].
+    pub(crate) fn narrows_projects_only(&self) -> bool {
+        !self.audience.is_empty()
+            || !self.activity.is_empty()
+            || !self.misc_filter.is_empty()
+            || self.show_completed.is_some()
+    }
+
+    /// Drop what narrows projects alone. Names the same fields as
+    /// [`Self::narrows_projects_only`].
+    fn set_aside_project_filters(&mut self) {
+        self.audience.clear();
+        self.activity.clear();
+        self.misc_filter.clear();
+        self.show_completed = None;
     }
 
     /// The finder's own query string for this search, without `page`:
@@ -509,12 +646,7 @@ struct FinderContent {
     show_past: bool,
     event_start: String,
     event_end: String,
-    has_classroom_materials: bool,
-    has_app: bool,
-    is_affiliate: bool,
-    usa_only: bool,
-    outside_usa: bool,
-    exclusively_outdoors: bool,
+    selected_misc_filters: Vec<MiscFilter>,
 }
 
 /// The finder URL for `page` of the search `filter_params` describes.
@@ -547,13 +679,6 @@ pub(crate) async fn load_filter_options() -> Result<(Vec<String>, Vec<String>, V
 
 /// Apply project-specific filters to a QueryBuilder
 fn apply_project_filters<'a>(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, query: &'a FinderQuery) {
-    // A project flagged, marked a duplicate or marked a test is never
-    // listed, here or on an exchange; orrery's `find_projects` applies the
-    // same rule. Publication is what keeps a submission out until it is
-    // approved, so the draft flag -- left set on some long-published
-    // projects, and not cleared by exchange approval -- is not consulted.
-    qb.push(" AND p.flagged = 0 AND p.duplicate = 0 AND p.is_test = 0");
-
     // Filter out bad geographic data: (0,0) points and swapped lat/lng
     qb.push(" AND NOT (p.point IS NOT NULL AND ST_X(p.point) = 0 AND ST_Y(p.point) = 0)");
     qb.push(" AND NOT (p.point IS NOT NULL AND ABS(ST_Y(p.point)) > 90)");
@@ -575,12 +700,7 @@ fn apply_project_filters<'a>(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, query: &
     } else {
         &ProjectStatus::LISTED_WHEN_INACTIVE
     };
-    qb.push(" AND p.status IN (");
-    let mut separated = qb.separated(", ");
-    for status in statuses {
-        separated.push_bind(*status);
-    }
-    qb.push(")");
+    push_listing_rule(qb, statuses);
 
     if !query.topic.is_empty() {
         qb.push(" AND p.project_id IN (SELECT project_id FROM project_topics WHERE topic IN (");
@@ -613,26 +733,34 @@ fn apply_project_filters<'a>(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, query: &
         qb.push("))");
     }
 
-    let mf = &query.misc_filter;
-    if mf.iter().any(|v| v == "has_classroom_materials") {
-        qb.push(" AND p.classroom_materials != ''");
-    }
-    if mf.iter().any(|v| v == "has_app") {
-        qb.push(
-            " AND (p.mobile_app_url != '' OR p.mobile_app_url_android != '' OR p.mobile_app_url_ios != '')",
-        );
-    }
-    if mf.iter().any(|v| v == "is_affiliate") {
-        qb.push(" AND p.is_affiliate = 1");
-    }
-    if mf.iter().any(|v| v == "usa_only") {
-        qb.push(" AND p.country = 'United States'");
-    }
-    if mf.iter().any(|v| v == "outside_usa") {
-        qb.push(" AND p.country != 'United States' AND p.country != ''");
-    }
-    if mf.iter().any(|v| v == "exclusively_outdoors") {
-        qb.push(" AND p.outdoors = 1 AND p.indoors = 0");
+    for filter in MiscFilter::ALL {
+        if !query.has_misc_filter(filter) {
+            continue;
+        }
+
+        match filter {
+            MiscFilter::HasClassroomMaterials => {
+                qb.push(" AND p.classroom_materials != ''");
+            }
+            MiscFilter::HasApp => {
+                qb.push(
+                    " AND (p.mobile_app_url != '' OR p.mobile_app_url_android != '' OR p.mobile_app_url_ios != '')",
+                );
+            }
+            MiscFilter::IsAffiliate => {
+                qb.push(" AND p.is_affiliate = 1");
+            }
+            MiscFilter::ZooniverseAffiliate => push_zooniverse_affiliate_filter(qb),
+            MiscFilter::UsaOnly => {
+                qb.push(" AND p.country = 'United States'");
+            }
+            MiscFilter::OutsideUsa => {
+                qb.push(" AND p.country != 'United States' AND p.country != ''");
+            }
+            MiscFilter::ExclusivelyOutdoors => {
+                qb.push(" AND p.outdoors = 1 AND p.indoors = 0");
+            }
+        }
     }
 }
 
@@ -1635,6 +1763,12 @@ pub(crate) async fn run_finder_search(
         });
     }
 
+    // The filter reads the list from the cache in SQL, so make sure there is
+    // one to read.
+    if query.has_misc_filter(MiscFilter::ZooniverseAffiliate) {
+        zooniverse_affiliates().await?;
+    }
+
     let q = query.q.as_deref().unwrap_or("").trim();
     let has_query = !q.is_empty();
 
@@ -1650,12 +1784,21 @@ pub(crate) async fn run_finder_search(
 
 #[handler]
 pub async fn handle_finder(
+    req: &Request,
     _session: &Session,
-    QsQuery(query): QsQuery<FinderQuery>,
     Authenticated(user_info): Authenticated,
     device: Device,
     interaction: Interaction,
 ) -> Result<Response, poem::Error> {
+    // A link written for orrery's finder is sent on to the same search in
+    // hydra's terms -- before the query is read, since hydra cannot read
+    // orrery's. The redirect is temporary so that browsers do not hold on to
+    // a translation that may yet improve.
+    if let Some(target) = orrery::redirect_target(req.uri().query().unwrap_or("")).await {
+        return Ok(Redirect::temporary(target).into_response());
+    }
+
+    let QsQuery(query) = QsQuery::<FinderQuery>::from_request_without_body(req).await?;
     let q = query.q.as_deref().unwrap_or("").trim().to_string();
     let lat = query.lat;
     let lng = query.lng;
@@ -1801,18 +1944,10 @@ pub async fn handle_finder(
             event_end: parse_date(&query.end)
                 .map(|date| date.to_string())
                 .unwrap_or_default(),
-            has_classroom_materials: query
-                .misc_filter
-                .iter()
-                .any(|v| v == "has_classroom_materials"),
-            has_app: query.misc_filter.iter().any(|v| v == "has_app"),
-            is_affiliate: query.misc_filter.iter().any(|v| v == "is_affiliate"),
-            usa_only: query.misc_filter.iter().any(|v| v == "usa_only"),
-            outside_usa: query.misc_filter.iter().any(|v| v == "outside_usa"),
-            exclusively_outdoors: query
-                .misc_filter
-                .iter()
-                .any(|v| v == "exclusively_outdoors"),
+            selected_misc_filters: MiscFilter::ALL
+                .into_iter()
+                .filter(|filter| query.has_misc_filter(*filter))
+                .collect(),
         },
     )
     .prepare(user_info.clone())
@@ -1845,8 +1980,8 @@ pub async fn handle_finder(
 #[cfg(test)]
 mod tests {
     use super::{
-        EVENT_KIND, EventWindow, EventWindowStart, FinderQuery, LocatedTable, PROJECT_KIND,
-        SearchKinds, SingleKindFilters, WHOLE_WORLD_KM, apply_event_filters,
+        EVENT_KIND, EventWindow, EventWindowStart, FinderQuery, LocatedTable, MiscFilter,
+        PROJECT_KIND, SearchKinds, SingleKindFilters, WHOLE_WORLD_KM, apply_event_filters,
         default_location_query, make_snippet, push_distance_km, push_event_comparison,
         push_project_comparison,
     };
@@ -2129,6 +2264,110 @@ mod tests {
             .unwrap();
 
         assert_eq!(SearchKinds::from_query(&query), SearchKinds::EventsOnly);
+    }
+
+    /// The finder's reading of `url`, as a click on a link to it delivers it.
+    async fn followed(url: &str) -> FinderQuery {
+        use crate::form::QsQuery;
+        use poem::FromRequest;
+
+        let request = poem::Request::builder()
+            .uri(url.parse::<poem::http::Uri>().unwrap())
+            .finish();
+
+        let QsQuery(query) = QsQuery::<FinderQuery>::from_request_without_body(&request)
+            .await
+            .unwrap();
+
+        query
+    }
+
+    /// A project page links each of its topics, age groups, activities and
+    /// tags to the finder; the finder has to read the link back as the
+    /// search it describes, whatever characters the value holds.
+    #[tokio::test]
+    async fn a_link_to_projects_runs_the_search_it_describes() {
+        let url = FinderQuery::projects()
+            .with_topic("Ocean, Water, Marine & Terrestrial")
+            .with_audience("Teens (13 - 17 years)")
+            .with_activity("At the beach")
+            .with_text("sea #stars")
+            .url();
+
+        let query = followed(&url).await;
+
+        assert_eq!(SearchKinds::from_query(&query), SearchKinds::ProjectsOnly);
+        assert_eq!(query.topic, ["Ocean, Water, Marine & Terrestrial"]);
+        assert_eq!(query.audience, ["Teens (13 - 17 years)"]);
+        assert_eq!(query.activity, ["At the beach"]);
+        assert_eq!(query.q.as_deref(), Some("sea #stars"));
+    }
+
+    /// Age groups, activities and the miscellaneous filters narrow projects
+    /// alone, so a link naming one must not leave the search open to events,
+    /// where the finder would set it aside.
+    #[tokio::test]
+    async fn a_link_to_a_project_only_filter_keeps_it_in_force() {
+        for filter in MiscFilter::ALL {
+            let query = followed(&FinderQuery::projects().with_misc_filter(filter).url()).await;
+            let kinds = SearchKinds::from_query(&query);
+
+            assert!(
+                query
+                    .as_offered(kinds, SingleKindFilters::CURRENT)
+                    .has_misc_filter(filter),
+                "{filter:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_query_naming_no_filter_has_none_in_force() {
+        let query = FinderQuery {
+            misc_filter: vec!["no_such_filter".to_string()],
+            ..FinderQuery::default()
+        };
+
+        assert!(
+            MiscFilter::ALL
+                .into_iter()
+                .all(|filter| !query.has_misc_filter(filter))
+        );
+    }
+
+    #[test]
+    fn a_bare_search_links_to_the_bare_finder() {
+        assert_eq!(FinderQuery::default().url(), "/finder");
+    }
+
+    /// The two lists of what narrows projects alone must agree, or a link
+    /// built to keep such a filter in force would lose it.
+    #[test]
+    fn what_is_set_aside_is_what_narrows_projects_alone() {
+        let mut query = every_filter();
+        assert!(query.narrows_projects_only());
+
+        query.set_aside_project_filters();
+        assert!(!query.narrows_projects_only(), "{query:?}");
+
+        for narrowed in [
+            FinderQuery::projects().with_audience("Adults"),
+            FinderQuery::projects().with_activity("At night"),
+            FinderQuery::projects().with_misc_filter(MiscFilter::HasApp),
+            FinderQuery {
+                show_completed: Some("on".to_string()),
+                ..FinderQuery::default()
+            },
+        ] {
+            assert!(narrowed.narrows_projects_only(), "{narrowed:?}");
+        }
+
+        assert!(
+            !FinderQuery::default()
+                .with_topic("Birds")
+                .with_text("owls")
+                .narrows_projects_only()
+        );
     }
 
     /// Everything a sidebar can be filled in with, so that what survives

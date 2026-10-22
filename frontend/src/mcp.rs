@@ -21,6 +21,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use ulid::Ulid;
 
+use crate::project::{ProjectStatus, push_listing_rule};
+
 /// Base URL for SciStarter
 const SCISTARTER_BASE_URL: &str = "https://scistarter.org";
 
@@ -277,6 +279,16 @@ pub(crate) fn tool_result(id: Option<Value>, result: Result<String, Error>) -> J
 
 // Tool implementations
 
+/// A project as `search_projects` lists it.
+#[derive(sqlx::FromRow)]
+struct ProjectSearchRow {
+    project_id: String,
+    name: String,
+    description: String,
+    status: String,
+    slug: String,
+}
+
 async fn tool_search_projects(args: Value) -> Result<String, Error> {
     let query = args
         .get("query")
@@ -295,23 +307,23 @@ async fn tool_search_projects(args: Value) -> Result<String, Error> {
 
     let search_term = crate::search::fts5_prefix_query(query);
 
-    let rows = sqlx::query!(
-        r#"
-        SELECT p.project_id, p.name, p.description, p.status, ent.slug
-        FROM projects_fts f
-        JOIN projects p ON f.project_id = p.project_id
-        JOIN entities ent ON ent.target = p.project_id AND ent.kind = 'Project'
-        WHERE f.name MATCH ?
-        AND ent.publish = 1
-        AND p.flagged = 0
-        ORDER BY rank
-        LIMIT ?
-        "#,
-        search_term,
-        limit
-    )
-    .fetch_all(db())
-    .await?;
+    let mut qb = sqlx::QueryBuilder::new(
+        "SELECT p.project_id, p.name, p.description, p.status, ent.slug \
+         FROM projects_fts f \
+         JOIN projects p ON f.project_id = p.project_id \
+         JOIN entities ent ON ent.target = p.project_id AND ent.kind = 'Project' \
+         WHERE f.name MATCH ",
+    );
+    qb.push_bind(search_term);
+    qb.push(" AND ent.publish = 1");
+    push_listing_rule(&mut qb, &ProjectStatus::LISTED_WHEN_INACTIVE);
+    qb.push(" ORDER BY rank LIMIT ");
+    qb.push_bind(limit);
+
+    let rows = qb
+        .build_query_as::<ProjectSearchRow>()
+        .fetch_all(db())
+        .await?;
 
     let results: Vec<Value> = rows
         .into_iter()
@@ -329,6 +341,27 @@ async fn tool_search_projects(args: Value) -> Result<String, Error> {
     Ok(serde_json::to_string_pretty(&results)?)
 }
 
+/// A project as `get_project` describes it.
+#[derive(sqlx::FromRow)]
+struct ProjectRow {
+    project_id: String,
+    name: String,
+    description: String,
+    status: String,
+    goal: String,
+    task: String,
+    difficulty: String,
+    time_required: String,
+    location_type: String,
+    city: String,
+    state: String,
+    country: String,
+    begin: Option<String>,
+    end: Option<String>,
+    image: String,
+    slug: String,
+}
+
 async fn tool_get_project(args: Value) -> Result<String, Error> {
     let project_id_str = args
         .get("project_id")
@@ -339,21 +372,22 @@ async fn tool_get_project(args: Value) -> Result<String, Error> {
         .parse()
         .map_err(|_| anyhow::anyhow!("Invalid project_id format"))?;
 
-    let row = sqlx::query!(
-        r#"
-        SELECT p.project_id, p.name, p.description, p.status, p.goal, p.task,
-               p.difficulty, p.time_required, p.location_type, p.city, p.state, p.country,
-               p.begin, p.end, p.image, ent.slug
-        FROM projects p
-        JOIN entities ent ON ent.target = p.project_id AND ent.kind = 'Project'
-        WHERE p.project_id = ?
-        AND ent.publish = 1
-        AND p.flagged = 0
-        "#,
-        project_id_str
-    )
-    .fetch_optional(db())
-    .await?;
+    let mut qb = sqlx::QueryBuilder::new(
+        "SELECT p.project_id, p.name, p.description, p.status, p.goal, p.task, \
+                p.difficulty, p.time_required, p.location_type, p.city, p.state, p.country, \
+                p.begin, p.end, p.image, ent.slug \
+         FROM projects p \
+         JOIN entities ent ON ent.target = p.project_id AND ent.kind = 'Project' \
+         WHERE p.project_id = ",
+    );
+    qb.push_bind(project_id_str);
+    qb.push(" AND ent.publish = 1");
+    push_listing_rule(&mut qb, &ProjectStatus::LISTED_WHEN_INACTIVE);
+
+    let row = qb
+        .build_query_as::<ProjectRow>()
+        .fetch_optional(db())
+        .await?;
 
     let Some(row) = row else {
         return Err(anyhow::anyhow!("Project not found or not available"));

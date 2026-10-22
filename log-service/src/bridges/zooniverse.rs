@@ -9,6 +9,7 @@ use jiff::Timestamp;
 use serde::Deserialize;
 use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
+use ulid::Ulid;
 
 use log_service::database::{
     Database, get_sync_last_id, set_sync_last_id, tables::ParticipationRow,
@@ -71,6 +72,32 @@ async fn load_link_times() -> Result<LinkTimes> {
 
         offset += LINK_PAGE_SIZE;
     }
+}
+
+/// NATS `log.zooniverse.projects`: every project this bridge credits.
+///
+/// Which projects belong to the Zooniverse affiliate program is known only
+/// here, where the sweep keeps them. The frontend asks so that a project page
+/// can invite its visitors to connect their Zooniverse accounts, and so that
+/// the finder can list the projects that would credit them.
+pub async fn handle_projects(_req: &async_nats::service::Request) -> Result<Vec<Ulid>> {
+    let entity_ids = sqlx::query_scalar!(
+        r#"SELECT DISTINCT entity_id AS "entity_id!" FROM zooniverse_projects ORDER BY entity_id"#
+    )
+    .fetch_all(common::shared::db())
+    .await?;
+
+    Ok(entity_ids
+        .into_iter()
+        .filter_map(|entity_id| {
+            entity_id
+                .parse::<Ulid>()
+                .inspect_err(|e| {
+                    eprintln!("Unreadable Zooniverse project entity {entity_id:?}: {e}")
+                })
+                .ok()
+        })
+        .collect())
 }
 
 /// What this bridge credits; see [`BridgeCoverage`](super::BridgeCoverage).

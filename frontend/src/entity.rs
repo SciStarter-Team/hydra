@@ -2,7 +2,11 @@ use std::{fmt::Display, sync::Arc};
 
 use anyhow::Error;
 use common::{
-    message::user::BasicInfo, shared::db, timestring::TimeString, transaction::Immediate,
+    message::{log::PageChange, user::BasicInfo},
+    service::log_activity,
+    shared::db,
+    timestring::TimeString,
+    transaction::Immediate,
 };
 use poem::{
     IntoResponse,
@@ -164,6 +168,11 @@ impl EntityKind {
             EntityKind::Event => "/events/",
             _ => "/",
         }
+    }
+
+    /// The path at which the entity of this kind with `slug` is served.
+    pub fn path(&self, slug: &str) -> String {
+        format!("{}{}", self.path_prefix(), slug)
     }
 }
 
@@ -819,7 +828,7 @@ impl Entity {
     /// live under `/projects/<slug>` and `/events/<slug>`; all other
     /// kinds are served at `/<slug>`.
     pub fn canonical_path(&self) -> String {
-        format!("{}{}", self.kind.path_prefix(), self.slug)
+        self.kind.path(&self.slug)
     }
 
     pub fn kind(&self) -> &EntityKind {
@@ -850,6 +859,67 @@ impl Entity {
     /// Create a copy of this entity with a different publication status
     pub fn with_publish(self, publish: bool) -> Entity {
         Entity { publish, ..self }
+    }
+
+    /// Publish the page of a project or event, keeping its slug and creation
+    /// time. A target without a page yet gets one, its slug made from `name`.
+    #[tracing::instrument(skip(name))]
+    pub async fn publish_page(
+        kind: EntityKind,
+        target: Ulid,
+        name: impl AsRef<str>,
+    ) -> Result<(), Error> {
+        let entity = match Entity::page_of(kind, target).await? {
+            Some(page) => page.with_publish(true),
+            None => Entity::new_by_name(name, kind, EntityTarget::Ulid(target)).await?,
+        };
+
+        entity.store().await?;
+        log_activity(
+            None,
+            PageChange::EntityPublish,
+            None,
+            target,
+            Some(entity.slug().to_string()),
+        )
+        .await
+    }
+
+    /// Unpublish the page of a project or event. A target without a page is
+    /// unpublished already.
+    #[tracing::instrument]
+    pub async fn unpublish_page(kind: EntityKind, target: Ulid) -> Result<(), Error> {
+        match Entity::page_of(kind, target).await? {
+            Some(page) => page.with_publish(false).store().await,
+            None => Ok(()),
+        }
+    }
+
+    /// The page of a project or event as it stands, password included.
+    pub async fn page_of(kind: EntityKind, target: Ulid) -> Result<Option<Entity>, Error> {
+        let target_str = target.to_string();
+
+        let Some(existing) = sqlx::query!(
+            r#"SELECT slug, created, publish, password FROM entities WHERE kind = ? AND target = ?"#,
+            kind,
+            target_str
+        )
+        .fetch_optional(db())
+        .await?
+        else {
+            return Ok(None);
+        };
+
+        Ok(Some(
+            Entity::new_with_created(
+                existing.slug,
+                kind,
+                EntityTarget::Ulid(target),
+                existing.publish,
+                TimeString::try_from(existing.created)?,
+            )
+            .with_password(existing.password),
+        ))
     }
 
     /// Create a copy of this entity with a different kind

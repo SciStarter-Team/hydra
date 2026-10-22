@@ -8,6 +8,7 @@ use crate::component::{AdminLayout, Component, admin_layout::AdminLayoutPrepared
 use crate::local_time::{TimeFormat, local_time};
 use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
+use common::message::log::PageChange;
 use common::message::user::BasicInfo;
 use common::shared::db;
 use common::timestring::TimeString;
@@ -577,7 +578,7 @@ async fn events_update_field(
     if let Some(user_info) = &user_info {
         common::service::log_activity(
             None,
-            "event-edit",
+            PageChange::EventEdit,
             user_info.user_id,
             event_ulid,
             field_type,

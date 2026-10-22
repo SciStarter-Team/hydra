@@ -5,6 +5,7 @@ use crate::entity::{Entity, EntityKind, EntityTarget};
 use crate::middleware::authorization::Authenticated;
 use crate::pagecontent::PageContentKind;
 use crate::peering::LoadStorePeered;
+use common::message::log::PageChange;
 use common::shared::db;
 use poem::{
     Endpoint, Route, get, handler, post,
@@ -243,7 +244,7 @@ async fn entities_create(
     Form(form): Form<CreateEntityForm>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    match (async || -> Result<String, anyhow::Error> {
+    match (async || -> Result<(String, Option<Ulid>), anyhow::Error> {
         if form.slug.trim().is_empty() {
             return Err(anyhow::anyhow!("Slug is required"));
         }
@@ -258,17 +259,17 @@ async fn entities_create(
         let entity = Entity::new(&form.slug, kind, target);
         entity.store().await?;
 
-        Ok(form.slug.clone())
+        Ok((form.slug.clone(), entity.target().as_ulid()))
     })()
     .await
     {
-        Ok(slug) => {
+        Ok((slug, target)) => {
             if let Some(user_info) = &user_info {
                 common::service::log_activity(
                     None,
-                    "entity-create",
+                    PageChange::EntityCreate,
                     user_info.user_id,
-                    None,
+                    target,
                     format!("slug={} kind={}", slug, form.kind),
                 )
                 .await?;
@@ -425,9 +426,9 @@ async fn entities_update(
             if let Some(user_info) = &user_info {
                 common::service::log_activity(
                     None,
-                    "entity-update",
+                    PageChange::EntityUpdate,
                     user_info.user_id,
-                    None,
+                    updated_entity.target().as_ulid(),
                     format!("slug={} kind={}", slug, form.kind),
                 )
                 .await?;
@@ -585,12 +586,12 @@ async fn entities_publish_toggle(
         let _ = common::service::log_activity(
             None,
             if publish {
-                "entity-publish"
+                PageChange::EntityPublish.action()
             } else {
                 "entity-unpublish"
             },
             user_info.user_id,
-            None,
+            updated_entity.target().as_ulid(),
             Some(slug.clone()),
         )
         .await;

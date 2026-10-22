@@ -5,7 +5,9 @@ pub mod field;
 pub mod field_source;
 pub mod inaturalist;
 pub mod investigator;
+pub mod linked_platform;
 pub mod location;
+pub mod publish;
 pub mod reference;
 
 /// Tags whose name begins with `_` (e.g. `_nasa`) are internal/system tags used
@@ -15,7 +17,9 @@ pub fn is_hidden_tag(tag: &str) -> bool {
     tag.starts_with('_')
 }
 
-#[derive(Clone, Copy, Default, Debug, sqlx::Type, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Copy, Default, Debug, PartialEq, sqlx::Type, serde::Serialize, serde::Deserialize,
+)]
 pub enum ProjectStatus {
     Pending,
     #[default]
@@ -60,7 +64,29 @@ impl ProjectStatus {
     ];
 }
 
-#[derive(Clone, Copy, Default, Debug, sqlx::Type, serde::Serialize, serde::Deserialize)]
+/// Narrow a query over `projects p` to the projects that may be listed, and
+/// to those of them whose status is one of `statuses`.
+///
+/// A project flagged, marked a duplicate or marked a test is never listed,
+/// whatever its status: not by the finder, not on an exchange, not in the
+/// sitemap, not by the public MCP tools, and not among the catalogue figures
+/// of `/data`. Orrery's `find_projects` and exchange search apply the same
+/// rule. Publication is what keeps a submission out until it is approved, so
+/// the draft flag -- left set on some long-published projects, and not
+/// cleared by exchange approval -- is not consulted.
+pub fn push_listing_rule(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, statuses: &[ProjectStatus]) {
+    qb.push(" AND p.flagged = 0 AND p.duplicate = 0 AND p.is_test = 0");
+    qb.push(" AND p.status IN (");
+    let mut separated = qb.separated(", ");
+    for status in statuses {
+        separated.push_bind(*status);
+    }
+    qb.push(")");
+}
+
+#[derive(
+    Clone, Copy, Default, Debug, PartialEq, sqlx::Type, serde::Serialize, serde::Deserialize,
+)]
 pub enum ProjectPromotionTime {
     #[default]
     #[sqlx(rename = "Promote at any time")]
@@ -128,7 +154,9 @@ impl ProjectRejectionReason {
     }
 }
 
-#[derive(Clone, Copy, Default, Debug, sqlx::Type, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Copy, Default, Debug, PartialEq, sqlx::Type, serde::Serialize, serde::Deserialize,
+)]
 pub enum ProjectParticipationDegree {
     #[default]
     Collegial,

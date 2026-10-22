@@ -1,6 +1,6 @@
 use crate::component::{AdminLayout, Component, admin_layout::AdminLayoutPrepared};
 use crate::contact::Contact;
-use crate::entity::{Entity, EntityKind, EntityTarget};
+use crate::entity::{Entity, EntityKind};
 use crate::local_time::{TimeFormat, local_time};
 use crate::middleware::authorization::Authenticated;
 use crate::participant_file::ParticipantFile;
@@ -15,8 +15,10 @@ use crate::project::field::{
     SUSTAINABLE_DEVELOPMENT_GOALS_VOCABULARY, TOPICS_VOCABULARY,
 };
 use crate::project::field_source::FieldSource;
+use crate::project::publish::Submitter;
 use crate::project::{ProjectRejectionReason, SUBMISSION_REJECTION_NOTICES};
 use common::insensitivestring::InsensitiveString;
+use common::message::log::PageChange;
 use common::shared::db;
 use common::timestring::TimeString;
 use poem::{
@@ -31,7 +33,7 @@ use ulid::Ulid;
 
 use super::types::lookup_user_email;
 use common::message::user::BasicInfo;
-use common::service::{TriggerEvent, trigger_email};
+use common::service::TriggerEvent;
 
 pub fn routes() -> Route {
     Route::new()
@@ -1505,7 +1507,7 @@ async fn notify_rejection(project_id: Ulid) -> Result<(), anyhow::Error> {
     let project_id_str = project_id.to_string();
 
     let project = sqlx::query!(
-        r#"SELECT name, page_creator_id,
+        r#"SELECT name,
                   rejection_reason as "reason: ProjectRejectionReason",
                   rejection_notified as "notified: ProjectRejectionReason"
            FROM projects WHERE project_id = ?"#,
@@ -1518,25 +1520,21 @@ async fn notify_rejection(project_id: Ulid) -> Result<(), anyhow::Error> {
         return Ok(());
     }
 
-    let Ok(creator_id) = project.page_creator_id.parse::<Ulid>() else {
-        eprintln!(
-            "Rejection notice for project {project_id_str} not sent: page_creator_id {:?} is not a user id",
-            project.page_creator_id
-        );
+    let Some(submitter) = Submitter::of(project_id).await? else {
         return Ok(());
     };
 
-    trigger_email(
-        TriggerEvent::ProjectRejected,
-        creator_id,
-        Some(&[
-            ("project_name".to_string(), project.name),
-            ("project_id".to_string(), project_id_str.clone()),
-            ("submission_type".to_string(), "project".to_string()),
-            ("reason".to_string(), project.reason.message().to_string()),
-        ]),
-    )
-    .await?;
+    submitter
+        .notify(
+            TriggerEvent::ProjectRejected,
+            &[
+                ("project_name".to_string(), project.name),
+                ("project_id".to_string(), project_id_str.clone()),
+                ("submission_type".to_string(), "project".to_string()),
+                ("reason".to_string(), project.reason.message().to_string()),
+            ],
+        )
+        .await?;
 
     let notified = project.reason;
     sqlx::query!(
@@ -1554,80 +1552,15 @@ async fn notify_rejection(project_id: Ulid) -> Result<(), anyhow::Error> {
 async fn projects_publish(
     Path(project_id): Path<String>,
     Query(query): Query<std::collections::HashMap<String, String>>,
-    Authenticated(_user_info): Authenticated,
+    Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
     let project_ulid = project_id
         .parse::<Ulid>()
         .map_err(|_| anyhow::anyhow!("Invalid project ID format"))?;
-
-    // Try to load existing entity
     let project_id_str = project_ulid.to_string();
-    let existing = sqlx::query!(
-        r#"SELECT slug, created FROM entities WHERE kind = 'Project' AND target = ?"#,
-        project_id_str
-    )
-    .fetch_optional(db())
-    .await?;
 
-    if let Some(existing) = existing {
-        // Entity exists, update it with publish=true
-        let entity = Entity::new_with_created(
-            existing.slug,
-            EntityKind::Project,
-            EntityTarget::Ulid(project_ulid),
-            true, // publish = true
-            common::timestring::TimeString::try_from(existing.created)?,
-        );
-        entity.store().await?;
-    } else {
-        // No entity exists, create new one with publish=true
-        let project = sqlx::query!(
-            "SELECT name FROM projects WHERE project_id = ?",
-            project_id_str
-        )
-        .fetch_one(db())
-        .await?;
-
-        Entity::new_by_name(
-            &project.name,
-            EntityKind::Project,
-            EntityTarget::Ulid(project_ulid),
-        )
-        .await?;
-    }
-
-    // Fire publish trigger to the project creator
-    if let Ok(project_info) = sqlx::query!(
-        r#"SELECT p.name, p.page_creator_id,
-                  (SELECT e.slug FROM entities e
-                    WHERE e.kind = 'Project' AND e.target = p.project_id) as "slug?"
-             FROM projects p WHERE p.project_id = ?"#,
-        project_id_str
-    )
-    .fetch_one(db())
-    .await
-    {
-        if let Ok(creator_id) = project_info.page_creator_id.parse::<Ulid>() {
-            trigger_email(
-                TriggerEvent::ProjectPublished,
-                creator_id,
-                Some(&[
-                    ("project_name".to_string(), project_info.name),
-                    ("project_id".to_string(), project_id_str.clone()),
-                    (
-                        "project_link".to_string(),
-                        format!(
-                            "https://{}/projects/{}",
-                            env!("DOMAIN"),
-                            project_info.slug.unwrap_or_default()
-                        ),
-                    ),
-                ]),
-            )
-            .await
-            .ok();
-        }
-    }
+    crate::project::publish::publish(project_ulid, user_info.user_id).await?;
 
     // Check if this is from the edit page
     let is_edit_context = query.get("context").map(|s| s.as_str()) == Some("edit");
@@ -1702,28 +1635,9 @@ async fn projects_unpublish(
     let project_ulid = project_id
         .parse::<Ulid>()
         .map_err(|_| anyhow::anyhow!("Invalid project ID format"))?;
-
-    // Load existing entity
     let project_id_str = project_ulid.to_string();
-    let existing = sqlx::query!(
-        r#"SELECT slug, created FROM entities WHERE kind = 'Project' AND target = ?"#,
-        project_id_str
-    )
-    .fetch_optional(db())
-    .await?;
 
-    if let Some(existing) = existing {
-        // Entity exists, update it with publish=false
-        let entity = Entity::new_with_created(
-            existing.slug,
-            EntityKind::Project,
-            EntityTarget::Ulid(project_ulid),
-            false, // publish = false
-            common::timestring::TimeString::try_from(existing.created)?,
-        );
-        entity.store().await?;
-    }
-    // If no entity exists, it's already unpublished (no action needed)
+    Entity::unpublish_page(EntityKind::Project, project_ulid).await?;
 
     // Check if this is from the edit page
     let is_edit_context = query.get("context").map(|s| s.as_str()) == Some("edit");
@@ -2844,7 +2758,7 @@ async fn projects_update_field(
             if let Some(user_info) = &user_info {
                 common::service::log_activity(
                     None,
-                    "project-edit",
+                    PageChange::ProjectEdit,
                     user_info.user_id,
                     parsed_project_id,
                     format!("{:?}", field_type),
@@ -3001,7 +2915,7 @@ async fn projects_update_multiselect_field(
             if let Some(user_info) = &user_info {
                 common::service::log_activity(
                     None,
-                    "project-edit",
+                    PageChange::ProjectEdit,
                     user_info.user_id,
                     project_ulid,
                     field_type.clone(),
@@ -3093,7 +3007,7 @@ async fn projects_add_array_item(
             if let Some(user_info) = &user_info {
                 common::service::log_activity(
                     None,
-                    "project-edit",
+                    PageChange::ProjectEdit,
                     user_info.user_id,
                     project_ulid,
                     format!("add={}[{}]", field_type, new_item),
@@ -3172,7 +3086,7 @@ async fn projects_update_array_item(
             if let Some(user_info) = &user_info {
                 common::service::log_activity(
                     None,
-                    "project-edit",
+                    PageChange::ProjectEdit,
                     user_info.user_id,
                     project_ulid,
                     format!("{}[{}]", field_type, item_index),
@@ -3247,7 +3161,7 @@ async fn projects_remove_array_item(
             if let Some(user_info) = &user_info {
                 common::service::log_activity(
                     None,
-                    "project-edit",
+                    PageChange::ProjectEdit,
                     user_info.user_id,
                     project_ulid,
                     format!("remove={}[{}]", field_type, item_index),
@@ -3471,7 +3385,7 @@ async fn projects_add_tag(
     if let Some(user_info) = &user_info {
         common::service::log_activity(
             None,
-            "project-edit",
+            PageChange::ProjectEdit,
             user_info.user_id,
             project_ulid,
             format!("add=tags[{}]", new_tag),
@@ -3518,7 +3432,7 @@ async fn projects_remove_tag(
     if let Some(user_info) = &user_info {
         common::service::log_activity(
             None,
-            "project-edit",
+            PageChange::ProjectEdit,
             user_info.user_id,
             project_ulid,
             format!("remove=tags[{}]", tag),
@@ -3613,7 +3527,7 @@ async fn projects_add_contact(
     if let Some(user_info) = &user_info {
         let _ = common::service::log_activity(
             None,
-            "project-edit",
+            PageChange::ProjectEdit,
             user_info.user_id,
             project_ulid,
             format!("add=contact[{}]", new_contact_id),
@@ -3679,7 +3593,7 @@ async fn projects_update_contact(
     if let Some(user_info) = &user_info {
         let _ = common::service::log_activity(
             None,
-            "project-edit",
+            PageChange::ProjectEdit,
             user_info.user_id,
             project_ulid,
             format!("contact[{}]", contact_ulid),
@@ -3738,7 +3652,7 @@ async fn projects_remove_contact(
     if let Some(user_info) = &user_info {
         let _ = common::service::log_activity(
             None,
-            "project-edit",
+            PageChange::ProjectEdit,
             user_info.user_id,
             project_ulid,
             format!("remove=contact[{}]", contact_ulid),
@@ -3832,7 +3746,7 @@ async fn projects_add_participant_file(
     if let Some(user_info) = &user_info {
         let _ = common::service::log_activity(
             None,
-            "project-edit",
+            PageChange::ProjectEdit,
             user_info.user_id,
             project_ulid,
             "add=participant_files".to_string(),
@@ -3868,7 +3782,7 @@ async fn projects_update_participant_file(
     if let Some(user_info) = &user_info {
         let _ = common::service::log_activity(
             None,
-            "project-edit",
+            PageChange::ProjectEdit,
             user_info.user_id,
             project_ulid,
             format!("participant_files[{}]", index),
@@ -3902,7 +3816,7 @@ async fn projects_remove_participant_file(
     if let Some(user_info) = &user_info {
         let _ = common::service::log_activity(
             None,
-            "project-edit",
+            PageChange::ProjectEdit,
             user_info.user_id,
             project_ulid,
             format!("remove=participant_files[{}]", index),

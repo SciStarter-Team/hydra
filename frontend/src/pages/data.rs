@@ -19,6 +19,7 @@ use common::{
 };
 use poem::{Response, handler};
 use sailfish::TemplateOnce;
+use sqlx::QueryBuilder;
 use std::time::Duration;
 
 use crate::{
@@ -26,6 +27,7 @@ use crate::{
     lazy_cache::{LazyCached, get_cached},
     middleware::authorization::Authenticated,
     number::thousands,
+    project::{ProjectStatus, push_listing_rule},
 };
 
 /// How long a frontend instance holds a figure gathered from another service
@@ -211,6 +213,7 @@ async fn account_count() -> Result<i64, Error> {
 // ---------------------------------------------------------------------------
 
 /// A labelled count, drawn as one bar of a chart.
+#[derive(sqlx::FromRow)]
 struct Bar {
     label: String,
     value: i64,
@@ -218,10 +221,12 @@ struct Bar {
 
 /// What the catalogue of published projects looks like.
 ///
-/// Every figure counts the same population — published, unflagged, real
-/// projects — so that the parts are comparable with the whole. orrery counted
-/// its topic, audience and status bars over slightly different populations,
-/// which is why its bars did not add up.
+/// Every figure counts the same population -- the published projects the
+/// finder lists when asked for finished projects too ([`push_listing_rule`]
+/// with [`ProjectStatus::LISTED_WHEN_INACTIVE`]), which leaves out hidden and
+/// deleted ones -- so that the parts are comparable with the whole. orrery counted its topic,
+/// audience and status bars over slightly different populations, which is
+/// why its bars did not add up.
 struct ProjectStats {
     alltime: i64,
     active: i64,
@@ -239,76 +244,75 @@ struct ProjectStats {
     audiences: Vec<Bar>,
 }
 
+/// The single-number figures of [`ProjectStats`], as one row.
+#[derive(sqlx::FromRow)]
+struct ProjectCounts {
+    alltime: i64,
+    active: i64,
+    expired: i64,
+    hiatus: i64,
+    inperson: i64,
+    online: i64,
+    global: i64,
+    region: i64,
+    point: i64,
+    indoors: i64,
+    outdoors: i64,
+    indoors_and_outdoors: i64,
+}
+
 impl ProjectStats {
     async fn load() -> Result<Self, Error> {
-        let counts = sqlx::query!(
-            r#"
-            WITH published AS (
-                SELECT p.*
-                FROM projects p
-                JOIN entities e
-                  ON e.target = p.project_id AND e.kind = 'Project' AND e.publish = 1
-                WHERE p.flagged = 0 AND p.duplicate = 0 AND p.is_test = 0
-            )
-            SELECT
-                (SELECT COUNT(*) FROM published) AS "alltime!: i64",
-                (SELECT COUNT(*) FROM published WHERE status = 'Active') AS "active!: i64",
-                (SELECT COUNT(*) FROM published WHERE status IN ('Complete', 'Expired')) AS "expired!: i64",
-                (SELECT COUNT(*) FROM published WHERE status IN ('Hiatus', 'Hidden')) AS "hiatus!: i64",
-                (SELECT COUNT(*) FROM published WHERE location_type IN ('At a specific address', 'In a geographic location or range')) AS "inperson!: i64",
-                (SELECT COUNT(*) FROM published WHERE entirely_online = 1) AS "online!: i64",
-                (SELECT COUNT(*) FROM published WHERE location_type = 'Global, anywhere on the planet') AS "global!: i64",
-                (SELECT COUNT(*) FROM published WHERE location_type = 'In a geographic location or range') AS "region!: i64",
-                (SELECT COUNT(*) FROM published WHERE location_type = 'At a specific address') AS "point!: i64",
-                (SELECT COUNT(*) FROM published WHERE indoors = 1) AS "indoors!: i64",
-                (SELECT COUNT(*) FROM published WHERE outdoors = 1) AS "outdoors!: i64",
-                (SELECT COUNT(*) FROM published WHERE indoors = 1 AND outdoors = 1) AS "indoors_and_outdoors!: i64"
-            "#
-        )
-        .fetch_one(db())
-        .await?;
+        let mut counts = QueryBuilder::new(
+            "WITH published AS ( \
+                SELECT p.* \
+                FROM projects p \
+                JOIN entities e ON e.target = p.project_id AND e.kind = 'Project' \
+                WHERE e.publish = 1",
+        );
+        push_listing_rule(&mut counts, &ProjectStatus::LISTED_WHEN_INACTIVE);
+        counts.push(
+            ") \
+            SELECT \
+                (SELECT COUNT(*) FROM published) AS alltime, \
+                (SELECT COUNT(*) FROM published WHERE status = 'Active') AS active, \
+                (SELECT COUNT(*) FROM published WHERE status IN ('Complete', 'Expired')) AS expired, \
+                (SELECT COUNT(*) FROM published WHERE status = 'Hiatus') AS hiatus, \
+                (SELECT COUNT(*) FROM published WHERE location_type IN ('At a specific address', 'In a geographic location or range')) AS inperson, \
+                (SELECT COUNT(*) FROM published WHERE entirely_online = 1) AS online, \
+                (SELECT COUNT(*) FROM published WHERE location_type = 'Global, anywhere on the planet') AS global, \
+                (SELECT COUNT(*) FROM published WHERE location_type = 'In a geographic location or range') AS region, \
+                (SELECT COUNT(*) FROM published WHERE location_type = 'At a specific address') AS point, \
+                (SELECT COUNT(*) FROM published WHERE indoors = 1) AS indoors, \
+                (SELECT COUNT(*) FROM published WHERE outdoors = 1) AS outdoors, \
+                (SELECT COUNT(*) FROM published WHERE indoors = 1 AND outdoors = 1) AS indoors_and_outdoors",
+        );
+        let counts = counts
+            .build_query_as::<ProjectCounts>()
+            .fetch_one(db())
+            .await?;
 
-        let topics = sqlx::query!(
-            r#"
-            SELECT t.topic AS "label!: String", COUNT(*) AS "value!: i64"
-            FROM project_topics t
-            JOIN projects p ON p.project_id = t.project_id
-            JOIN entities e
-              ON e.target = p.project_id AND e.kind = 'Project' AND e.publish = 1
-            WHERE p.flagged = 0 AND p.duplicate = 0 AND p.is_test = 0
-            GROUP BY t.topic
-            ORDER BY COUNT(*) DESC, t.topic
-            "#
-        )
-        .fetch_all(db())
-        .await?
-        .into_iter()
-        .map(|row| Bar {
-            label: row.label,
-            value: row.value,
-        })
-        .collect();
+        let mut topics = QueryBuilder::new(
+            "SELECT t.topic AS label, COUNT(*) AS value \
+            FROM project_topics t \
+            JOIN projects p ON p.project_id = t.project_id \
+            JOIN entities e ON e.target = p.project_id AND e.kind = 'Project' \
+            WHERE e.publish = 1",
+        );
+        push_listing_rule(&mut topics, &ProjectStatus::LISTED_WHEN_INACTIVE);
+        topics.push(" GROUP BY t.topic ORDER BY COUNT(*) DESC, t.topic");
+        let topics = topics.build_query_as::<Bar>().fetch_all(db()).await?;
 
-        let audiences = sqlx::query!(
-            r#"
-            SELECT a.audience AS "label!: String", COUNT(*) AS "value!: i64"
-            FROM project_audiences a
-            JOIN projects p ON p.project_id = a.project_id
-            JOIN entities e
-              ON e.target = p.project_id AND e.kind = 'Project' AND e.publish = 1
-            WHERE p.flagged = 0 AND p.duplicate = 0 AND p.is_test = 0
-            GROUP BY a.audience
-            ORDER BY COUNT(*) DESC, a.audience
-            "#
-        )
-        .fetch_all(db())
-        .await?
-        .into_iter()
-        .map(|row| Bar {
-            label: row.label,
-            value: row.value,
-        })
-        .collect();
+        let mut audiences = QueryBuilder::new(
+            "SELECT a.audience AS label, COUNT(*) AS value \
+            FROM project_audiences a \
+            JOIN projects p ON p.project_id = a.project_id \
+            JOIN entities e ON e.target = p.project_id AND e.kind = 'Project' \
+            WHERE e.publish = 1",
+        );
+        push_listing_rule(&mut audiences, &ProjectStatus::LISTED_WHEN_INACTIVE);
+        audiences.push(" GROUP BY a.audience ORDER BY COUNT(*) DESC, a.audience");
+        let audiences = audiences.build_query_as::<Bar>().fetch_all(db()).await?;
 
         Ok(ProjectStats {
             alltime: counts.alltime,

@@ -3624,6 +3624,11 @@ async fn main() {
         "directory",
         ambassador::directory
     ));
+    toplevel.spawn(handler!(
+        ambassador_group,
+        "directory_listing",
+        ambassador::directory_listing
+    ));
     toplevel.spawn(handler!(ambassador_group, "profile", ambassador::profile));
     toplevel.spawn(handler!(
         ambassador_group,

@@ -1,5 +1,6 @@
 use crate::component::{AdminLayout, Component};
 use crate::middleware::authorization::Authenticated;
+use common::message::log::PageChange;
 use common::message::user::{
     CommunityCreateRequest, CommunityDeleteRequest, CommunityInfo, CommunityJoinRequest,
     CommunityLeaveRequest, CommunityListRequest, CommunityListResponse, CommunityMembersRequest,
@@ -248,6 +249,8 @@ async fn communities_create(
         .filter(|s| !s.is_empty())
         .collect();
 
+    let slug = form.slug.clone();
+
     match common::service::request::<CommunitySuccessResponse>(
         "user.communities.create",
         CommunityCreateRequest {
@@ -270,11 +273,18 @@ async fn communities_create(
     {
         Ok(_) => {
             if let Some(user_info) = &user_info {
+                // Logged against the new community, so that its page counts
+                // as changed from the moment it exists.
+                let community_id = crate::communities::get_community(&slug)
+                    .await
+                    .ok()
+                    .flatten()
+                    .map(|community| community.community_id);
                 common::service::log_activity(
                     None,
-                    "community-create",
+                    PageChange::CommunityCreate,
                     user_info.user_id,
-                    None::<ulid::Ulid>,
+                    community_id,
                     None::<String>,
                 )
                 .await
@@ -380,7 +390,7 @@ async fn communities_update(
             if let Some(user_info) = &user_info {
                 common::service::log_activity(
                     None,
-                    "community-update",
+                    PageChange::CommunityUpdate,
                     user_info.user_id,
                     community.community_id,
                     None::<String>,

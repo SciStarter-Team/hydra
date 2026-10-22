@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
+use crate::linked_platform::LinkedPlatform;
+
 /// Full self-readable view of a user's profile. Returned by
 /// `user.profile.get` for the user themselves or for staff.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,6 +45,16 @@ pub struct UserProfile {
     pub extra_tools: String,
 }
 
+impl UserProfile {
+    /// The username this account has named on `platform`, or "" if none.
+    pub fn platform_username(&self, platform: LinkedPlatform) -> &str {
+        match platform {
+            LinkedPlatform::INaturalist => self.inat_username.as_deref().unwrap_or(""),
+            LinkedPlatform::Zooniverse => &self.zooniverse_username,
+        }
+    }
+}
+
 /// Fields that the user is allowed to update on their own profile.
 /// Sent via `user.profile.save`. Fields wrapped in `Option` are only
 /// updated when `Some(_)`.
@@ -80,6 +92,55 @@ pub struct UserProfileUpdate {
     pub ai_opt_out: Option<bool>,
     pub extra_skills: Option<String>,
     pub extra_tools: Option<String>,
+}
+
+impl UserProfileUpdate {
+    /// An update for `user_id` that changes nothing until fields are set.
+    pub fn unchanged(user_id: Ulid) -> Self {
+        UserProfileUpdate {
+            user_id,
+            handle: None,
+            first_name: None,
+            last_name: None,
+            image: None,
+            bio: None,
+            birthday: None,
+            gender: None,
+            zipcode: None,
+            country: None,
+            country_code: None,
+            mailing_address: None,
+            facebook_url: None,
+            twitter_profile: None,
+            home_page: None,
+            inat_username: None,
+            zooniverse_username: None,
+            orcid: None,
+            degree: None,
+            ethnicity: None,
+            income: None,
+            scientist: None,
+            educator: None,
+            public: None,
+            protected: None,
+            accept_emails: None,
+            newsletter: None,
+            accept_messages: None,
+            track_contributions: None,
+            ai_opt_out: None,
+            extra_skills: None,
+            extra_tools: None,
+        }
+    }
+
+    /// Name the account's username on `platform`.
+    pub fn with_platform_username(mut self, platform: LinkedPlatform, username: String) -> Self {
+        match platform {
+            LinkedPlatform::INaturalist => self.inat_username = Some(username),
+            LinkedPlatform::Zooniverse => self.zooniverse_username = Some(username),
+        }
+        self
+    }
 }
 
 /// Privacy-respecting public view of a user. Returned by

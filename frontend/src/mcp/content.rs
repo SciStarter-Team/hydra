@@ -31,7 +31,7 @@
 use std::str::FromStr;
 
 use anyhow::{Error, anyhow, bail};
-use common::{shared::db, timestring::TimeString};
+use common::{message::log::PageChange, service::log_activity, shared::db, timestring::TimeString};
 use poem::{
     IntoResponse, Response, handler,
     http::{HeaderMap, StatusCode},
@@ -880,9 +880,16 @@ async fn tool_create_entity(args: Value) -> Result<String, Error> {
         .and_then(|value| value.as_bool())
         .unwrap_or(true);
 
-    Entity::new_with_publish(&slug, kind, target, publish)
-        .store()
-        .await?;
+    let entity = Entity::new_with_publish(&slug, kind, target, publish);
+    entity.store().await?;
+    log_activity(
+        None,
+        PageChange::EntityCreate,
+        None,
+        entity.target().as_ulid(),
+        format!("slug={slug} kind={}", kind.as_ref()),
+    )
+    .await?;
 
     Ok(serde_json::to_string_pretty(&json!({
         "slug": slug,
@@ -931,13 +938,20 @@ async fn tool_update_entity(args: Value) -> Result<String, Error> {
         }
     };
 
-    existing
+    let entity = existing
         .with_kind(kind)
         .with_target(target)
         .with_publish(publish)
-        .with_password(password)
-        .store()
-        .await?;
+        .with_password(password);
+    entity.store().await?;
+    log_activity(
+        None,
+        PageChange::EntityUpdate,
+        None,
+        entity.target().as_ulid(),
+        format!("slug={slug} kind={}", kind.as_ref()),
+    )
+    .await?;
 
     Ok(serde_json::to_string_pretty(&json!({
         "slug": slug,

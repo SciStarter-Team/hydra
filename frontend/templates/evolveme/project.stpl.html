@@ -152,7 +152,7 @@
                 <th scope="row">Tags</th>
                 <td>
                   <% for tag in &self.project.tags { %>
-                  <a href="/finder?phrase=<%= tag %>"><%= tag %></a>,
+                  <a href="<%= crate::search::FinderQuery::projects().with_text(tag).url() %>"><%= tag %></a>,
                   <% } %>
                 </td>
               </tr>
