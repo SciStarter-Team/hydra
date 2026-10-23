@@ -16,7 +16,7 @@ use poem::{Response, handler, web::Redirect};
 use sailfish::TemplateOnce;
 
 use crate::middleware::authorization::Authenticated;
-use crate::peering::LoadStorePeered;
+use crate::training::content::TrainingCopy;
 use crate::training::{
     self, ArticulateCard, SidebarBody, SigninBody, StepView, StepsView, TrainingChrome,
     TrainingContent, TutorialBody, linear_states, module_url, open_flags, render_page,
@@ -52,10 +52,9 @@ pub async fn record_list_step(user_id: &str) {
     .await;
 }
 
-/// Editable copy for the Higher Education training. `#[serde(default)]` required
-/// (see [`crate::training::foundations::FoundationsContent`]).
+/// Editable copy for the Higher Education training (see
+/// [`crate::training::content`]).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(default)]
 pub struct HigherEdContent {
     pub title: String,
     pub sponsor: String,
@@ -79,8 +78,14 @@ pub struct HigherEdContent {
     pub sidebar_html: String,
 }
 
-impl Default for HigherEdContent {
-    fn default() -> Self {
+impl TrainingCopy for HigherEdContent {
+    type Record = ();
+
+    fn row(_: ()) -> &'static str {
+        SLUG
+    }
+
+    fn built_in(_: ()) -> HigherEdContent {
         HigherEdContent {
             title: "Teaching in Higher Education with Citizen Science".to_string(),
             sponsor: String::new(),
@@ -112,37 +117,16 @@ impl Default for HigherEdContent {
     }
 }
 
-impl LoadStorePeered for HigherEdContent {
-    type DatabaseKey = ();
-
-    const GROUP: &str = "training_content";
-    const SPECIFIC: &str = SLUG;
-
-    async fn save_to_database(&self) -> Result<(), Error> {
-        training::save_content_json(SLUG, self).await
-    }
-
-    async fn read_from_database(_key: ()) -> Result<Self, Error> {
-        training::read_content_json(SLUG).await
-    }
-}
-
-impl HigherEdContent {
-    pub async fn current() -> HigherEdContent {
-        HigherEdContent::load(()).await.unwrap_or_default()
-    }
-}
-
 #[handler]
 pub async fn page(Authenticated(user_info): Authenticated) -> Result<Response, Error> {
-    let content = HigherEdContent::current().await;
+    let content = HigherEdContent::current(()).await;
     let rendered = build_content(&content, user_info.clone()).await?;
     render_page(BASE_PATH, content.title.clone(), rendered, user_info).await
 }
 
 #[handler]
 pub async fn progress(Authenticated(user_info): Authenticated) -> Result<Response, Error> {
-    let content = HigherEdContent::current().await;
+    let content = HigherEdContent::current(()).await;
     let steps = build_steps(&content, &user_info).await;
     let count = training::tutorials_completed(WorkflowType::HigherEd).await;
     render_progress_fragment(steps, count)
@@ -152,7 +136,7 @@ pub async fn progress(Authenticated(user_info): Authenticated) -> Result<Respons
 /// the hydra equivalent of orrery's state-trigger link.
 #[handler]
 pub async fn explore(Authenticated(user_info): Authenticated) -> Redirect {
-    let content = HigherEdContent::current().await;
+    let content = HigherEdContent::current(()).await;
     if let Some(user) = user_info {
         let _: Result<WorkflowProgressResponse, _> = common::service::request(
             "user.workflow.progress",
@@ -236,6 +220,7 @@ async fn build_steps(content: &HigherEdContent, user_info: &Option<Arc<BasicInfo
     .unwrap_or_default();
 
     let tutorial_body = TutorialBody {
+        notice: String::new(),
         intro: content.tutorial_intro.clone(),
         cards: vec![ArticulateCard {
             href: tutorial_launch_url(

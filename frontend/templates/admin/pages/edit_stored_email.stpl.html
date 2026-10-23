@@ -179,12 +179,13 @@
                     >
                         Cancel
                     </a>
+                    <%# Its own request: the form's inherited hx-vals sets action=save on anything the form itself submits, overwriting a submit button's own value. %>
                     <button
-                        type="submit"
-                        name="action"
-                        value="delete"
+                        type="button"
                         class="relative px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500"
-                        hx-on:click="return confirm('Are you sure you want to delete this stored email?')"
+                        hx-post="/-admin/email/stored/<%= self.stored_email_id|disp %>"
+                        hx-vals='{"action": "delete"}'
+                        hx-confirm="Are you sure you want to delete this stored email?"
                     >
                         <span>Delete</span>
                     </button>

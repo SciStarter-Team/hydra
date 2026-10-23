@@ -2,14 +2,12 @@
 ## Skills and Competencies
 The recipient has demonstrated all of the following foundational citizen science skills/competencies within the SciStarter platform and obtained a score of 80% or better via traditional assessment:
 
-- Recognize how citizen science can address real-world challenges and questions.
-- Elaborate on ways that participation in citizen science projects benefits the scientific community and society.
-- Recognize high-level eligibility requirements for who can contribute to citizen science projects.
-- Identify, explore, and access one or more citizen science projects.
-- Articulate the purpose of SciStarter and explain how the platform can be used by citizen scientists and research scientists to connect curiosity with impact.
-- Successfully register for a SciStarter account.
-- Identify the requisite steps to participate in and contribute to one or more citizen science projects.
-- Identify the requisite steps to find and bookmark projects on SciStarter.
+- **Recognize** what citizen science is and how it can be used to address real-world questions in collaboration with others.
+- **Articulate** how participating in citizen science benefits science and society.
+- **Recognize** who can participate in different citizen science projects.
+- **Recall** the types of citizen science projects you can participate in, the skills you can practice or acquire, and the ways you can advance real-world research.
+- **Recall** what SciStarter is and how it can connect you to citizen science projects and help you track your participation.
+- **Complete** the steps to register for an account on SciStarter, participate in contributory citizen science projects, and find and bookmark projects on SciStarter.
 
 ****
 ## Earn the Foundations of Citizen Science badge

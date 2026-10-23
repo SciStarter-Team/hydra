@@ -20,7 +20,7 @@
   <body>
     <div class="ss-container mx-auto !py-4 ss-text">
       <% include!("language.stpl.html"); %>
-      <div class="flex flex-col sm:flex-row max-w-[1120px] mx-auto mb-8 mt-4">
+      <div class="flex flex-col sm:flex-row max-w-[1120px] mx-auto mt-4">
         <span class="flex justify-center">
           <img src="<%= &self.image_url %>" title="<%= crate::i18n::tr("example {name} badge image").replace("{name}", &self.name) %>" class="self-center md:self-start w-[200px] h-[200px] mr-4 mb-4 sm:mb-0" />
         </span>
@@ -31,7 +31,7 @@
           <div class="min-h-[70px]">
             <% if let Some(url) = self.earn_url { %>
             <div class="mb-2">
-              <a href="<%= url %>" class="btn btn-blue"><%= crate::i18n::tr("learn how to earn this badge") %></a>
+              <a href="<%= url %>" class="btn btn-blue"><%= crate::i18n::tr(crate::badge::LEARN_HOW_TO_EARN) %></a>
             </div>
             <% } %>
             <div class="sharethis-inline-share-buttons"></div>
@@ -49,6 +49,8 @@
           </div>
         </div>
       </div>
+
+      <hr class="badge-rule badge-rule-before-details" />
 
       <div class="flex flex-col sm:flex-row">
         <div class="w-full p-4 gap-8 md:flex">

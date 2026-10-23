@@ -139,29 +139,33 @@
                 <!-- Form Footer -->
                 <div class="flex items-center justify-between pt-6 border-t border-gray-200 mt-6">
                     <div class="flex items-center space-x-2">
+                        <%# Each of these issues its own request: the form's inherited hx-vals sets action=save on anything the form itself submits, overwriting a submit button's own value. %>
+                        <%# Archiving reloads the editor to show the new state, so it asks first when there are edits it would discard. %>
                         <button
-                            type="submit"
-                            name="action"
-                            value="delete"
+                            type="button"
                             class="relative px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500"
-                            hx-on:click="return confirm('Are you sure you want to delete this one-off email?')"
+                            hx-post="/-admin/email/oneoff/<%= self.oneoff_email_id|disp %>"
+                            hx-vals='{"action": "delete"}'
+                            hx-confirm="Are you sure you want to delete this one-off email?"
                         >
                             <span>Delete</span>
                         </button>
                         <% if self.archived { %>
                             <button
-                                type="submit"
-                                name="action"
-                                value="unarchive"
+                                type="button"
+                                hx-post="/-admin/email/oneoff/<%= self.oneoff_email_id|disp %>"
+                                hx-vals='{"action": "unarchive"}'
+                                hx-confirm="js:!data.dirty || confirm('Unarchive without saving your edits? They will be lost.')"
                                 class="relative px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
                             >
                                 <span>Unarchive</span>
                             </button>
                         <% } else { %>
                             <button
-                                type="submit"
-                                name="action"
-                                value="archive"
+                                type="button"
+                                hx-post="/-admin/email/oneoff/<%= self.oneoff_email_id|disp %>"
+                                hx-vals='{"action": "archive"}'
+                                hx-confirm="js:!data.dirty || confirm('Archive without saving your edits? They will be lost.')"
                                 class="relative px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500"
                             >
                                 <span>Archive</span>

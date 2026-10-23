@@ -1,3 +1,4 @@
+<% if !self.notice.is_empty() { %><p><%- self.notice %></p><% } %>
 <p><%- self.intro %></p>
 <div class="flex flex-col md:flex-row gap-2">
   <% for card in &self.cards { %>

@@ -1,21 +1,64 @@
 <div class="space-y-6">
-    <% if self.saved { %>
+    <% if let Some(notice) = &self.notice { %>
     <div class="rounded-md bg-green-50 border border-green-200 p-4">
-        <p class="text-sm text-green-700">Saved. Changes are live across all frontends.</p>
+        <p class="text-sm text-green-700"><%= notice %></p>
     </div>
     <% } %>
 
     <form method="post" action="<%= self.action %>" class="space-y-8">
+        <div class="bg-white rounded-lg shadow border border-gray-200 p-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <p class="text-sm text-gray-600">
+                <% if self.changed == 0 { %>
+                Every field shows the built-in copy, and follows it as the code changes.
+                <% } else if self.changed == 1 { %>
+                1 field differs from the built-in copy. Every other field follows the built-in copy as the code changes.
+                <% } else { %>
+                <%= self.changed %> fields differ from the built-in copy. Every other field follows the built-in copy as the code changes.
+                <% } %>
+            </p>
+            <div class="flex gap-3 shrink-0">
+                <%# The first submit button in the form is the one pressing Enter in a text field uses, so it has to be Save, not a revert. %>
+                <button type="submit" class="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    Save changes
+                </button>
+                <% if self.changed > 0 { %>
+                <button type="submit" name="revert" value="*" onclick="return confirm('Put every field back to the built-in copy? Unsaved edits on this page are discarded too.')" class="inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    Revert all to built-in
+                </button>
+                <% } %>
+            </div>
+        </div>
+
         <% for section in &self.sections { %>
         <div class="bg-white rounded-lg shadow border border-gray-200 p-6 space-y-4">
             <h3 class="text-base font-semibold text-gray-900"><%= section.heading %></h3>
             <% for field in &section.fields { %>
             <div>
-                <label class="block text-sm font-medium text-gray-700"><%= field.label %></label>
+                <div class="flex items-center justify-between gap-4">
+                    <label for="field-<%= field.name %>" class="block text-sm font-medium text-gray-700"><%= field.label %></label>
+                    <% if field.changed { %>
+                    <div class="flex items-center gap-3 shrink-0">
+                        <span class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Changed</span>
+                        <button type="submit" name="revert" value="<%= field.name %>" class="text-xs font-medium text-indigo-600 hover:text-indigo-900">Revert to built-in</button>
+                    </div>
+                    <% } %>
+                </div>
                 <% if field.rows == 0 { %>
-                <input type="text" name="<%= field.name %>" value="<%= field.value %>" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm" />
+                <input type="text" id="field-<%= field.name %>" name="<%= field.name %>" value="<%= field.value %>" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm" />
                 <% } else { %>
-                <textarea name="<%= field.name %>" rows="<%= field.rows %>" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm <% if field.mono { %>font-mono text-xs<% } else { %>sm:text-sm<% } %>"><%= field.value %></textarea>
+                <%# The HTML parser drops one newline directly after <textarea>, so one is written there for it to drop; a value that itself starts with a newline then keeps it. %>
+                <textarea id="field-<%= field.name %>" name="<%= field.name %>" rows="<%= field.rows %>" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm <% if field.mono { %>font-mono text-xs<% } else { %>sm:text-sm<% } %>">
+<%= field.value %></textarea>
+                <% } %>
+                <% if field.changed { %>
+                <details class="mt-2">
+                    <summary class="cursor-pointer text-xs text-gray-500 hover:text-gray-700">Built-in copy</summary>
+                    <% if field.built_in.is_empty() { %>
+                    <p class="mt-1 text-xs italic text-gray-500">(empty)</p>
+                    <% } else { %>
+                    <pre class="mt-1 whitespace-pre-wrap break-words rounded-md bg-gray-50 border border-gray-200 p-3 font-mono text-xs text-gray-700"><%= field.built_in %></pre>
+                    <% } %>
+                </details>
                 <% } %>
             </div>
             <% } %>

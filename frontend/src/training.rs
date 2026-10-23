@@ -16,7 +16,6 @@ use common::message::user::{
     BasicInfo, WorkflowStatusRequest, WorkflowStatusResponse, WorkflowTutorialCountRequest,
     WorkflowTutorialCountResponse, WorkflowType,
 };
-use common::shared::db;
 use poem::{IntoResponse, Response, web::Html};
 use sailfish::TemplateOnce;
 
@@ -24,6 +23,7 @@ use crate::articulate::{ArticulateParams, LRS_URL, standalone_url, with_query};
 use crate::component::{Component, Head, StandardLayout};
 
 pub mod champion;
+pub mod content;
 pub mod dataethics;
 pub mod dataliteracy;
 pub mod foundations;
@@ -254,21 +254,6 @@ pub fn tutorial_pending(
             .any(|step| step == "tutorial")
 }
 
-/// Generic, reusable project card for any training's "participate in projects"
-/// step. Links to the project's canonical page and shows a completion badge.
-#[derive(TemplateOnce)]
-#[template(path = "training/project_card.stpl.html")]
-pub struct ProjectCardView {
-    pub image: String,
-    pub alt: String,
-    pub title: String,
-    pub description: String,
-    pub time_tag: String,
-    pub place_tag: String,
-    pub link: String,
-    pub completed: bool,
-}
-
 /// Generic body for the final "Claim your badge" step; `html` is the editable
 /// congratulations copy.
 #[derive(TemplateOnce)]
@@ -341,6 +326,9 @@ pub struct ArticulateCard {
 #[derive(TemplateOnce)]
 #[template(path = "training/tutorial.stpl.html")]
 pub struct TutorialBody {
+    /// HTML shown above the intro when the visitor's situation calls for a
+    /// word first -- a tutorial they have already finished. Empty for none.
+    pub notice: String,
     pub intro: String,
     pub cards: Vec<ArticulateCard>,
     pub extra: String,
@@ -409,38 +397,6 @@ struct TrainingPage {
 struct StepsFragment {
     steps: StepsView,
     tutorials_completed: String,
-}
-
-/// Persist a training's typed content struct as JSON in the shared
-/// `training_content` table. Each training's `LoadStorePeered` impl delegates
-/// its `save_to_database` here; `store()` then peers the change to all
-/// frontends.
-pub async fn save_content_json<T: serde::Serialize>(
-    workflow: &str,
-    value: &T,
-) -> Result<(), Error> {
-    let json = serde_json::to_string(value)?;
-    sqlx::query!(
-        r#"INSERT OR REPLACE INTO "training_content" ("workflow", "content") VALUES (?, ?)"#,
-        workflow,
-        json,
-    )
-    .execute(db())
-    .await?;
-    Ok(())
-}
-
-/// Read a training's typed content struct from the shared `training_content`
-/// table. A missing row is an error; callers fall back to `Default` (the live
-/// copy) so a training renders unchanged until its content is first edited.
-pub async fn read_content_json<T: serde::de::DeserializeOwned>(workflow: &str) -> Result<T, Error> {
-    let row = sqlx::query!(
-        r#"SELECT "content" FROM "training_content" WHERE "workflow" = ?"#,
-        workflow,
-    )
-    .fetch_one(db())
-    .await?;
-    Ok(serde_json::from_str(&row.content)?)
 }
 
 /// Fetch the user's completion-timestamp status for a workflow, defaulting to

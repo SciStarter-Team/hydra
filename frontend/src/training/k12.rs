@@ -10,7 +10,7 @@ use poem::{Response, handler};
 use sailfish::TemplateOnce;
 
 use crate::middleware::authorization::Authenticated;
-use crate::peering::LoadStorePeered;
+use crate::training::content::TrainingCopy;
 use crate::training::{
     self, ArticulateCard, SidebarBody, SigninBody, StepView, StepsView, TrainingChrome,
     TrainingContent, TutorialBody, linear_states, module_url, open_flags, render_page,
@@ -26,10 +26,9 @@ const K12_URL: &str = "https://media.scistarter.org/k12/scormdriver/indexAPI.htm
 /// The Rise package's own xAPI activity id, as its `tincan.xml` spells it.
 const K12_ACTIVITY_ID: &str = "http://Fr0w9cmLH3BLsC9yKP_zbzhERPeLDG6t_rise";
 
-/// Editable copy for the K-12 Educators training. `#[serde(default)]` required
-/// (see [`crate::training::foundations::FoundationsContent`]).
+/// Editable copy for the K-12 Educators training (see
+/// [`crate::training::content`]).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(default)]
 pub struct K12Content {
     pub title: String,
     pub sponsor: String,
@@ -51,8 +50,14 @@ pub struct K12Content {
     pub sidebar_html: String,
 }
 
-impl Default for K12Content {
-    fn default() -> Self {
+impl TrainingCopy for K12Content {
+    type Record = ();
+
+    fn row(_: ()) -> &'static str {
+        SLUG
+    }
+
+    fn built_in(_: ()) -> K12Content {
         K12Content {
             title: "Citizen Science for K-12 Educators".to_string(),
             sponsor: "Presented by SciStarter".to_string(),
@@ -93,37 +98,16 @@ impl Default for K12Content {
     }
 }
 
-impl LoadStorePeered for K12Content {
-    type DatabaseKey = ();
-
-    const GROUP: &str = "training_content";
-    const SPECIFIC: &str = SLUG;
-
-    async fn save_to_database(&self) -> Result<(), Error> {
-        training::save_content_json(SLUG, self).await
-    }
-
-    async fn read_from_database(_key: ()) -> Result<Self, Error> {
-        training::read_content_json(SLUG).await
-    }
-}
-
-impl K12Content {
-    pub async fn current() -> K12Content {
-        K12Content::load(()).await.unwrap_or_default()
-    }
-}
-
 #[handler]
 pub async fn page(Authenticated(user_info): Authenticated) -> Result<Response, Error> {
-    let content = K12Content::current().await;
+    let content = K12Content::current(()).await;
     let rendered = build_content(&content, user_info.clone()).await?;
     render_page(BASE_PATH, content.title.clone(), rendered, user_info).await
 }
 
 #[handler]
 pub async fn progress(Authenticated(user_info): Authenticated) -> Result<Response, Error> {
-    let content = K12Content::current().await;
+    let content = K12Content::current(()).await;
     let steps = build_steps(&content, &user_info).await;
     let count = training::tutorials_completed(WorkflowType::K12).await;
     render_progress_fragment(steps, count)
@@ -211,6 +195,7 @@ async fn build_steps(content: &K12Content, user_info: &Option<Arc<BasicInfo>>) -
     );
 
     let tutorial_body = TutorialBody {
+        notice: String::new(),
         intro: content.tutorial_intro.clone(),
         cards: vec![ArticulateCard {
             href: tutorial_href,

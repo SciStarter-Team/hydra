@@ -93,6 +93,9 @@
 
 @import "./main.css" layer(hydra);
 
+/* After main.css, so that its type sizes give way on the badge pages. */
+@import "./pages/badge.css" layer(hydra);
+
 
 @custom-variant dark (&:is(.dark *));
 

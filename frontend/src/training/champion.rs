@@ -16,7 +16,7 @@ use poem::{Response, handler};
 use sailfish::TemplateOnce;
 
 use crate::middleware::authorization::Authenticated;
-use crate::peering::LoadStorePeered;
+use crate::training::content::TrainingCopy;
 use crate::training::{
     self, ArticulateCard, SidebarBody, SigninBody, StepState, StepView, StepsView, TrainingChrome,
     TrainingContent, TutorialBody, linear_states, module_url, open_flags, render_page,
@@ -34,10 +34,8 @@ const CHAMPION_URL: &str =
 /// it. A SCORM Driver export reports no result without it.
 const CHAMPION_ACTIVITY_ID: &str = "http://cD2GSPUMolo6VyXCZLI9dnAvy4skHGNE_rise";
 
-/// Editable copy for the Champion training. `#[serde(default)]` required (see
-/// [`crate::training::foundations::FoundationsContent`]).
+/// Editable copy for the Champion training (see [`crate::training::content`]).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(default)]
 pub struct ChampionContent {
     pub title: String,
     pub sponsor: String,
@@ -63,8 +61,14 @@ pub struct ChampionContent {
     pub sidebar_html: String,
 }
 
-impl Default for ChampionContent {
-    fn default() -> Self {
+impl TrainingCopy for ChampionContent {
+    type Record = ();
+
+    fn row(_: ()) -> &'static str {
+        SLUG
+    }
+
+    fn built_in(_: ()) -> ChampionContent {
         ChampionContent {
             title: "Citizen Science Champion Training".to_string(),
             sponsor: "Presented by SciStarter".to_string(),
@@ -134,37 +138,16 @@ Your <strong>Champion Certificate</strong> is now available on your <a href="/da
     }
 }
 
-impl LoadStorePeered for ChampionContent {
-    type DatabaseKey = ();
-
-    const GROUP: &str = "training_content";
-    const SPECIFIC: &str = SLUG;
-
-    async fn save_to_database(&self) -> Result<(), Error> {
-        training::save_content_json(SLUG, self).await
-    }
-
-    async fn read_from_database(_key: ()) -> Result<Self, Error> {
-        training::read_content_json(SLUG).await
-    }
-}
-
-impl ChampionContent {
-    pub async fn current() -> ChampionContent {
-        ChampionContent::load(()).await.unwrap_or_default()
-    }
-}
-
 #[handler]
 pub async fn page(Authenticated(user_info): Authenticated) -> Result<Response, Error> {
-    let content = ChampionContent::current().await;
+    let content = ChampionContent::current(()).await;
     let rendered = build_content(&content, user_info.clone()).await?;
     render_page(BASE_PATH, content.title.clone(), rendered, user_info).await
 }
 
 #[handler]
 pub async fn progress(Authenticated(user_info): Authenticated) -> Result<Response, Error> {
-    let content = ChampionContent::current().await;
+    let content = ChampionContent::current(()).await;
     let steps = build_steps(&content, &user_info).await;
     let count = training::tutorials_completed(WorkflowType::Ambassador).await;
     render_progress_fragment(steps, count)
@@ -268,6 +251,7 @@ async fn build_steps(content: &ChampionContent, user_info: &Option<Arc<BasicInfo
     );
 
     let tutorial_body = TutorialBody {
+        notice: String::new(),
         intro: content.tutorial_intro.clone(),
         cards: vec![ArticulateCard {
             href: tutorial_href,

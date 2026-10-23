@@ -1,58 +1,63 @@
 //! Foundations of Citizen Science — the first training built on the shared
 //! [`crate::training`] framework. Ported from orrery's `/training-foundations`
-//! (now served at `/training/foundations`). State is derived from the user's
+//! (served here at `/training/foundations`). State is derived from the user's
 //! `foundations_progress` completion timestamps in the user-service.
 //!
+//! The training is the tutorial alone: account, tutorial, badge. A visitor
+//! may work through the tutorial without an account, and its last page links
+//! back here through go links that hold the completion in their session
+//! until they sign up or sign in.
+//!
 //! Editable copy lives in [`FoundationsContent`] (admin-managed, peered);
-//! structure, gating, and project-completion mappings live in code here.
+//! structure and gating live in code here.
 
 use std::sync::Arc;
 
 use anyhow::Error;
+use common::badge::Badge;
 use common::message::user::{BasicInfo, WorkflowStatusResponse, WorkflowType};
 use poem::{Response, handler, session::Session};
 use sailfish::TemplateOnce;
 
 use crate::middleware::authorization::Authenticated;
-use crate::peering::LoadStorePeered;
+use crate::training::content::TrainingCopy;
 use crate::training::{
-    self, ArticulateCard, ClaimBody, ProjectCardView, SidebarBody, SigninBody, StepView, StepsView,
-    TrainingChrome, TrainingContent, TutorialBody, linear_states_ungating, module_url, open_flags,
-    render_page, render_progress_fragment, tutorial_launch_url, tutorial_pending,
+    self, ArticulateCard, SidebarBody, SigninBody, StepState, StepView, StepsView, TrainingChrome,
+    TrainingContent, TutorialBody, linear_states_ungating, module_url, open_flags, render_page,
+    render_progress_fragment, tutorial_launch_url, tutorial_pending,
 };
 
 pub const BASE_PATH: &str = "/training/foundations";
 const PROGRESS_PATH: &str = "/training/foundations/-progress";
-const SLUG: &str = "foundations";
 
-// Canonical project pages and the completion keys they map to. Structural — not
-// editable content.
-// The tutorial's two builds. Both are older Rise exports that report a
-// result without a launch activity id, so they are launched without one --
-// but with everything else, or they report nothing at all.
-const FOUNDATIONS_EN_URL: &str = "https://media.scistarter.org/foundations/index.html";
+/// Where the page's own log-in links return to: the steps, which is where a
+/// visitor coming back from signing in has something to see.
+const RETURN_PATH: &str = "/training/foundations%23start";
+
+/// The key [`FoundationsContent`] is stored under. It is the copy of the
+/// tutorial-only page; copy saved for the four-step page that preceded it,
+/// if any was, sits under `foundations` and is not read.
+const CONTENT_KEY: &str = "foundations-tutorial";
+
+// The tutorial's two builds. The English one is the October 2026 SCORM
+// Driver rebuild, which reports its quiz result only when launched with its
+// activity id. The Spanish one is an older Rise export that reports without
+// one, so it is launched without one -- but with everything else, or it
+// reports nothing at all.
+const FOUNDATIONS_EN_URL: &str =
+    "https://media.scistarter.org/foundations-v2/scormdriver/indexAPI.html";
+const FOUNDATIONS_EN_ACTIVITY_ID: &str = "http://FoundationsStandardized";
 const FOUNDATIONS_ES_URL: &str = "https://media.scistarter.org/fundamentos/index.html";
-
-const SQUIRREL_LINK: &str = "/projects/project-squirrel";
-const STALL_LINK: &str = "/projects/stall-catchers-by-eyesonalz";
 
 // The EN/ES tutorial card images are fixed design assets (the editable part is
 // the Articulate URL each links to).
 const ARTICULATE_EN_IMAGE: &str = "https://static.scistarter.org/img/training/foundations-en.png";
 const ARTICULATE_ES_IMAGE: &str = "https://static.scistarter.org/img/training/foundations-es.png";
 
-/// Editable text content for the Foundations training. Structure, gating, and
-/// project-completion mappings live in code (below); this holds only the copy
-/// the Engine Room admin can edit. `Default` carries the live copy, so it
-/// doubles as the seed and the page renders unchanged until first edited.
-///
-/// `#[serde(default)]` is essential: stored JSON is read back through this
-/// struct, so when a field is added later, rows saved before it deserialize by
-/// filling the new field from `Default` rather than failing (which would
-/// silently discard an admin's saved edits). Every training content struct must
-/// carry it.
+/// Editable text content for the Foundations training. Structure and gating
+/// live in code (below); this holds only the copy the Engine Room admin can
+/// edit, as [`crate::training::content`] describes.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(default)]
 pub struct FoundationsContent {
     pub title: String,
     pub sponsor: String,
@@ -63,29 +68,39 @@ pub struct FoundationsContent {
     pub skills: Vec<String>,
     pub skills_footnote: String,
     pub account_heading: String,
+    /// The account step's copy for a signed-out visitor who has not done the
+    /// tutorial. `{next}` is substituted with the path to return to.
+    pub account_signed_out_html: String,
     pub tutorial_heading: String,
     pub tutorial_intro: String,
+    /// Shown above the tutorial's intro to a signed-out visitor who has
+    /// finished it.
+    pub tutorial_done_html: String,
     pub articulate_en: String,
     pub articulate_es: String,
-    pub projects_heading: String,
-    pub projects_intro: String,
-    pub squirrel_title: String,
-    pub squirrel_description: String,
-    pub squirrel_image: String,
-    pub squirrel_time_tag: String,
-    pub squirrel_place_tag: String,
-    pub stall_title: String,
-    pub stall_description: String,
-    pub stall_image: String,
-    pub stall_time_tag: String,
-    pub stall_place_tag: String,
     pub claim_heading: String,
+    /// The header's button for a signed-out visitor who has finished the
+    /// tutorial, in place of "Start Now". It leads to the badge step.
+    pub claim_button: String,
+    /// The badge step's congratulations, above the earner's own badge links.
     pub claim_html: String,
+    /// The badge step's copy below the earner's badge links.
+    pub next_steps_html: String,
+    /// The badge step's copy for a signed-out visitor who has finished the
+    /// tutorial: the badge waits on an account, and this is their last
+    /// chance to make one.
+    pub last_chance_html: String,
     pub sidebar_html: String,
 }
 
-impl Default for FoundationsContent {
-    fn default() -> Self {
+impl TrainingCopy for FoundationsContent {
+    type Record = ();
+
+    fn row(_: ()) -> &'static str {
+        CONTENT_KEY
+    }
+
+    fn built_in(_: ()) -> FoundationsContent {
         FoundationsContent {
             title: "Foundations of Citizen Science".to_string(),
             sponsor: "Presented by SciStarter with support from the National Library of Medicine"
@@ -96,53 +111,57 @@ impl Default for FoundationsContent {
                 .to_string(),
             estimated_time: "1 hour".to_string(),
             badge_image: "/-static/img/badges/foundations.png".to_string(),
-            skills_intro: "By the end of this tutorial and the required steps to earn this badge, \
-                you'll demonstrate all of the following foundational citizen science \
-                skills/competencies within the SciStarter platform and obtain a score of 80% or \
-                better on the quiz embedded in the tutorial:"
+            skills_intro: "By the end of this tutorial, you'll demonstrate all of the following \
+                foundational citizen science skills/competencies within the SciStarter platform \
+                and obtain a score of 80% or better on the quiz embedded in the tutorial:"
                 .to_string(),
             skills: vec![
-                "Recognize how citizen science can address real-world challenges and questions."
+                "<strong>Recognize</strong> what citizen science is and how it can be used to \
+                    address real-world questions in collaboration with others."
                     .to_string(),
-                "Elaborate on ways that participation in citizen science projects benefits the \
-                    scientific community and society."
+                "<strong>Articulate</strong> how participating in citizen science benefits science \
+                    and society."
                     .to_string(),
-                "Recognize high-level eligibility requirements for who can contribute to citizen \
-                    science projects."
+                "<strong>Recognize</strong> who can participate in different citizen science \
+                    projects."
                     .to_string(),
-                "Identify, explore, and access one or more citizen science projects.".to_string(),
-                "Articulate the purpose of SciStarter and explain how citizen scientists and \
-                    research scientists can use the platform to connect curiosity with impact."
+                "<strong>Recall</strong> the types of citizen science projects you can participate \
+                    in, the skills you can practice or acquire, and the ways you can advance \
+                    real-world research."
                     .to_string(),
-                "Successfully register for a SciStarter account.".to_string(),
-                "Perform the requisite steps to participate in and contribute to one or more \
-                    citizen science projects."
+                "<strong>Recall</strong> what SciStarter is and how it can connect you to citizen \
+                    science projects and help you track your participation."
                     .to_string(),
-                "Follow the necessary steps to locate and bookmark projects on the SciStarter \
-                    platform."
+                "<strong>Complete</strong> the steps to register for an account on SciStarter, \
+                    participate in contributory citizen science projects, and find and bookmark \
+                    projects on SciStarter."
                     .to_string(),
             ],
             skills_footnote: r#"You'll also practice or acquire the following skills which are part of an "open skills taxonomy" used by employers and schools: <a href="https://lightcast.io/open-skills/skills/KS120GV6C72JMSZKMTD7/data-analysis" target="_blank">data analysis</a>, <a href="https://lightcast.io/open-skills/skills/KS122NY60HCYYDXHQGQN/data-entry" target="_blank">data entry</a>, <a href="https://lightcast.io/open-skills/skills/ESE2D5EA264FB06F5C4F/information-gathering" target="_blank">information gathering</a>, and <a href="https://lightcast.io/open-skills/skills/KSG21Y30BQVH1S8XMJHK/questioning-skills" target="_blank">questioning skills</a>."#.to_string(),
             account_heading: "SciStarter Account".to_string(),
+            account_signed_out_html: r#"<b><a href="/login?next={next}">Create</a> or <a href="/login?next={next}">log in</a> to your SciStarter account</b> before you start, and your badge will be added to your profile as soon as you finish the tutorial. You can also create an account or log in after you finish."#.to_string(),
             tutorial_heading: "Self-guided tutorial and quiz".to_string(),
-            tutorial_intro: r#"<b>Complete this self-guided tutorial and quiz.</b> Score an 80% or higher to move on to the next steps towards claiming your badge! This module opens in a new tab. Return to this page upon completion to finish earning your badge."#.to_string(),
+            tutorial_intro: r#"<b>Complete this self-guided tutorial and quiz.</b> Score 80% or higher on the quiz to earn your badge. The tutorial opens in a new tab, and its last page brings you back here. If you're logged in to SciStarter when you start, your badge is added to your profile as soon as you finish; if not, you can log in or create an account when you return to claim it.
+<br><small>This tutorial was created using Articulate; for Safari users, Articulate requires Safari 17.4 or a newer version.</small>"#.to_string(),
+            tutorial_done_html: "<b>You've completed the tutorial.</b> Log in or create an account to receive your badge.".to_string(),
             articulate_en: FOUNDATIONS_EN_URL.to_string(),
             articulate_es: FOUNDATIONS_ES_URL.to_string(),
-            projects_heading: "Participate in Two Citizen Science Projects".to_string(),
-            projects_intro: r#"<b>Participate in two citizen science projects.</b> It's time to participate in two projects selected because they represent common types of citizen science projects: one where you add data observations to help when there's not enough data; and another where you review and classify data to help when there's too much data. Even if you've completed these projects before, repeat them now to proceed to Step 4 of the training. Important: When you create your Stall Catchers account, be sure to use the same email address you used to create your SciStarter account! And remember, you can find thousands of additional projects anytime on SciStarter.org."#.to_string(),
-            squirrel_title: "Project Squirrel".to_string(),
-            squirrel_description: "Help scientists better understand tree squirrel ecology. Zero is an important data point too! Participate in this project from anywhere.".to_string(),
-            squirrel_image: "https://orrery-media.s3.amazonaws.com/library/project_squirrel-card_NqhYvGZ.jpeg".to_string(),
-            squirrel_time_tag: "15–30 minutes".to_string(),
-            squirrel_place_tag: "outdoors".to_string(),
-            stall_title: "Stall Catchers".to_string(),
-            stall_description: "Accelerate Alzheimer's research by playing an online game. Make at least one classification and return here.".to_string(),
-            stall_image: "https://orrery-media.s3.amazonaws.com/library/stall_catchers_card_IMAGE_ahutvR6.png".to_string(),
-            stall_time_tag: "15–30 minutes".to_string(),
-            stall_place_tag: "indoors".to_string(),
-            claim_heading: "Claim your badge".to_string(),
-            claim_html: r#"<h2>Congratulations!</h2>
-<p>You'll find your badge on your <a href="/dashboard/profile">SciStarter profile</a>, and you'll receive an email with instructions for sharing the verified badge and metadata on LinkedIn.</p>"#.to_string(),
+            claim_heading: "Congratulations!".to_string(),
+            claim_button: "Claim your badge".to_string(),
+            claim_html: "<p><b>You've completed the Foundations of Citizen Science training.</b></p>".to_string(),
+            next_steps_html: r#"<p><b>What's next?</b> Put what you've learned into action by finding a project that matches your interests, location, or available time.</p>
+<p><a href="/finder" class="btn btn-primary">Find a project</a></p>
+<p>Or keep learning! Explore additional SciStarter trainings and opportunities to earn more badges and certificates.</p>
+<p><a href="/training" class="btn btn-primary">Explore more trainings</a></p>"#.to_string(),
+            last_chance_html: r#"<p><b>You completed the Foundations of Citizen Science training.</b> One last step to receive your digital badge.</p>
+<p>Log in to SciStarter or create a free account now so we can connect you with your completed training and award your <b>Foundations of Citizen Science digital badge</b>.</p>
+<p><b>This is your final opportunity to claim your badge.</b> Once you leave this page, we will no longer be able to associate you with your completed Foundations training.</p>
+<p>Your badge will appear on your SciStarter profile, where you can share it on LinkedIn and other platforms.</p>
+<div class="flex flex-col md:flex-row gap-4 mb-4">
+  <a href="/login?next=/training/foundations%23start" class="btn btn-accent text-center" style="white-space: normal">Log in or create an account &amp; get my badge</a>
+  <a href="/training" class="btn btn-secondary text-center" style="white-space: normal">Find more trainings</a>
+</div>
+<p class="text-sm">After you log in or sign up, you'll be brought back to this page, and your badge will appear on your SciStarter profile.</p>"#.to_string(),
             sidebar_html: r#"<img src="https://static.scistarter.org/backport/img/training/nlm_logo.png" alt="National Library of Medicine logo" class="mt-8" />
 <div>
     <p class="text-sm">With support from the National Library of Medicine, Arizona State University, North Carolina State University, the Moore Foundation, and the Institute for Museum and Library Services, SciStarter assembled a team with expertise in instructional design, education, inclusive practices, digital design, micro accreditation, and, of course, citizen science to produce a series of online, self-guided training modules and accompanying badges and resources to help people from all walks of life engage in science and bring citizen science to new communities.</p>
@@ -157,37 +176,14 @@ impl Default for FoundationsContent {
     }
 }
 
-impl LoadStorePeered for FoundationsContent {
-    type DatabaseKey = ();
-
-    const GROUP: &str = "training_content";
-    const SPECIFIC: &str = SLUG;
-
-    async fn save_to_database(&self) -> Result<(), Error> {
-        training::save_content_json(SLUG, self).await
-    }
-
-    async fn read_from_database(_key: ()) -> Result<Self, Error> {
-        training::read_content_json(SLUG).await
-    }
-}
-
-impl FoundationsContent {
-    /// The current editable content, or the built-in defaults if none has been
-    /// saved yet.
-    pub async fn current() -> FoundationsContent {
-        FoundationsContent::load(()).await.unwrap_or_default()
-    }
-}
-
 /// Full page at `/training/foundations`.
 #[handler]
 pub async fn page(
     session: &Session,
     Authenticated(user_info): Authenticated,
 ) -> Result<Response, Error> {
-    let content = FoundationsContent::current().await;
-    // The tutorial's last page links back here through a go link, and a
+    let content = FoundationsContent::current(()).await;
+    // The tutorial's last page links back here through go links, and a
     // visitor who finished it signed out arrives with the step held.
     let pending = tutorial_pending(session, WorkflowType::Foundations, &user_info);
     let rendered = build_content(&content, user_info.clone(), pending).await?;
@@ -197,7 +193,7 @@ pub async fn page(
 /// SSE-triggered fragment at `/training/foundations/-progress`.
 #[handler]
 pub async fn progress(Authenticated(user_info): Authenticated) -> Result<Response, Error> {
-    let content = FoundationsContent::current().await;
+    let content = FoundationsContent::current(()).await;
     // Only a signed-in page subscribes to progress, and nothing is held for
     // a signed-in visitor.
     let steps = build_steps(&content, &user_info, false).await;
@@ -220,8 +216,16 @@ async fn build_content(
     .render_once()
     .unwrap_or_default();
 
+    // A visitor back from the tutorial with no account is sent down to the
+    // badge step, which tells them how to claim the badge, rather than
+    // invited to start.
+    let mut chrome = TrainingChrome::default();
+    if tutorial_pending {
+        chrome.start_now = content.claim_button.clone();
+    }
+
     Ok(TrainingContent {
-        chrome: TrainingChrome::default(),
+        chrome,
         breadcrumb_label: content.title.clone(),
         badge_image: content.badge_image.clone(),
         badge_alt: "Foundations of Citizen Science badge".to_string(),
@@ -242,13 +246,49 @@ async fn build_content(
     })
 }
 
-/// Build the four-step accordion from the user's completion timestamps and the
-/// editable content.
+/// The display state of the account, tutorial and badge steps.
 ///
-/// Step gating is linear: the SciStarter Account step is complete once the user
-/// is signed in; the tutorial completes when `tutorial` is recorded; the
-/// projects step completes once any two of the three eligible projects are
-/// recorded; the badge step completes when the badge is granted.
+/// The tutorial counts as done once the badge is granted, since finishing it
+/// is what grants the badge: a learner short of the badge is still on the
+/// tutorial, whatever their recorded steps say. The tutorial is open to
+/// everyone -- a visitor with no account can work through it, they just
+/// cannot be credited for it, which orrery's page says with
+/// `data-unblocked`.
+///
+/// A signed-out visitor who has finished it is past the order the steps are
+/// laid out in: the tutorial is done, the account is still to do, and the
+/// badge step is where they are told how to claim the badge. Orrery's
+/// status reports the same position as step 3 with step 1 outstanding.
+fn step_states(logged_in: bool, badge_granted: bool, tutorial_pending: bool) -> Vec<StepState> {
+    if tutorial_pending {
+        return vec![
+            StepState::Available,
+            StepState::Completed,
+            StepState::Current,
+        ];
+    }
+
+    linear_states_ungating(
+        &[logged_in, badge_granted, badge_granted],
+        &[false, true, false],
+    )
+}
+
+/// Which steps start open: the current one, as for every training, and the
+/// tutorial whenever it can be worked on -- orrery's `data-open` -- so a
+/// signed-out visitor sees it beside the invitation to make an account.
+fn step_opens(states: &[StepState]) -> Vec<bool> {
+    let mut opens = open_flags(states);
+
+    if states[1] == StepState::Available {
+        opens[1] = true;
+    }
+
+    opens
+}
+
+/// Build the three-step accordion from the user's completion timestamps and
+/// the editable content.
 async fn build_steps(
     content: &FoundationsContent,
     user_info: &Option<Arc<BasicInfo>>,
@@ -266,29 +306,8 @@ async fn build_steps(
         },
     };
 
-    let done = |key: &str| status.completed_steps.iter().any(|step| step == key);
-    let squirrel_done = done("squirrel");
-    let stall_done = done("stall");
-    let debris_done = done("debris");
-    let projects_done = [squirrel_done, stall_done, debris_done]
-        .iter()
-        .filter(|done| **done)
-        .count()
-        >= 2;
-
-    // The tutorial is open to everyone: a visitor with no account can work
-    // through it, they just cannot be credited for it. Orrery's page says the
-    // same thing with `data-unblocked`.
-    let states = linear_states_ungating(
-        &[
-            logged_in,
-            done("tutorial"),
-            projects_done,
-            status.badge_granted,
-        ],
-        &[false, true, false, false],
-    );
-    let opens = open_flags(&states);
+    let states = step_states(logged_in, status.badge_granted, tutorial_pending);
+    let opens = step_opens(&states);
 
     let account_body = SigninBody {
         logged_in,
@@ -297,19 +316,27 @@ async fn build_steps(
             .as_ref()
             .map(|user| user.handle.clone())
             .unwrap_or_default(),
-        next_path: BASE_PATH.to_string(),
-        chrome: TrainingChrome::default(),
+        next_path: RETURN_PATH.to_string(),
+        chrome: TrainingChrome {
+            signed_out_html: content.account_signed_out_html.clone(),
+            ..TrainingChrome::default()
+        },
     }
     .render_once()
     .unwrap_or_default();
 
     let tutorial_body = TutorialBody {
+        notice: if tutorial_pending {
+            content.tutorial_done_html.clone()
+        } else {
+            String::new()
+        },
         intro: content.tutorial_intro.clone(),
         cards: vec![
             ArticulateCard {
                 href: tutorial_launch_url(
                     module_url(&content.articulate_en, FOUNDATIONS_EN_URL),
-                    None,
+                    Some(FOUNDATIONS_EN_ACTIVITY_ID),
                     user_info,
                 ),
                 image: ARTICULATE_EN_IMAGE.to_string(),
@@ -328,34 +355,12 @@ async fn build_steps(
     .render_once()
     .unwrap_or_default();
 
-    let projects_body = ProjectsBody {
-        intro: content.projects_intro.clone(),
-        squirrel: ProjectCardView {
-            image: content.squirrel_image.clone(),
-            alt: "squirrel".to_string(),
-            title: content.squirrel_title.clone(),
-            description: content.squirrel_description.clone(),
-            time_tag: content.squirrel_time_tag.clone(),
-            place_tag: content.squirrel_place_tag.clone(),
-            link: SQUIRREL_LINK.to_string(),
-            completed: squirrel_done,
-        },
-        stall: ProjectCardView {
-            image: content.stall_image.clone(),
-            alt: "someone playing Stall Catchers".to_string(),
-            title: content.stall_title.clone(),
-            description: content.stall_description.clone(),
-            time_tag: content.stall_time_tag.clone(),
-            place_tag: content.stall_place_tag.clone(),
-            link: STALL_LINK.to_string(),
-            completed: stall_done,
-        },
-    }
-    .render_once()
-    .unwrap_or_default();
-
-    let claim_body = ClaimBody {
-        html: content.claim_html.clone(),
+    let badge_body = BadgeBody {
+        tutorial_pending,
+        claim_html: content.claim_html.clone(),
+        earned_html: crate::badge::earned_html(user_info, Badge::FoundationsOfCitizenScience).await,
+        next_steps_html: content.next_steps_html.clone(),
+        last_chance_html: content.last_chance_html.clone(),
     }
     .render_once()
     .unwrap_or_default();
@@ -374,54 +379,102 @@ async fn build_steps(
             body: tutorial_body,
         },
         StepView {
-            heading: content.projects_heading.clone(),
+            heading: content.claim_heading.clone(),
             state: states[2],
             open: opens[2],
-            body: projects_body,
-        },
-        StepView {
-            heading: content.claim_heading.clone(),
-            state: states[3],
-            open: opens[3],
-            body: claim_body,
+            body: badge_body,
         },
     ];
 
     StepsView { steps }
 }
 
+/// The badge step: congratulations and the earner's own badge links, or --
+/// for a signed-out visitor who has finished the tutorial -- the last chance
+/// to make the account the badge waits on.
 #[derive(TemplateOnce)]
-#[template(path = "training/foundations/projects.stpl.html")]
-struct ProjectsBody {
-    intro: String,
-    squirrel: ProjectCardView,
-    stall: ProjectCardView,
+#[template(path = "training/foundations/badge.stpl.html")]
+struct BadgeBody {
+    tutorial_pending: bool,
+    claim_html: String,
+    earned_html: String,
+    next_steps_html: String,
+    last_chance_html: String,
 }
 
 #[cfg(test)]
 mod tests {
-    use super::FoundationsContent;
+    use super::{BadgeBody, FoundationsContent, step_opens, step_states};
+    use crate::training::StepState::{Available, Blocked, Completed, Current};
+    use crate::training::content::TrainingCopy;
+    use sailfish::TemplateOnce;
 
-    /// Stored content is read back through this struct, so a field added in a
-    /// future version must deserialize from older rows by filling that one field
-    /// from `Default` — without discarding the rest of the admin's saved edits.
+    /// A signed-out visitor is invited to make an account, and offered the
+    /// tutorial beside it; the badge waits.
     #[test]
-    fn missing_field_fills_from_default_without_discarding_edits() {
-        let saved = FoundationsContent {
-            title: "Edited Title".to_string(),
-            ..FoundationsContent::default()
+    fn a_signed_out_visitor_is_offered_the_account_and_the_tutorial() {
+        let states = step_states(false, false, false);
+
+        assert_eq!(states, vec![Current, Available, Blocked]);
+        assert_eq!(step_opens(&states), vec![true, true, false]);
+    }
+
+    /// Short of the badge, an account is on the tutorial, whatever steps of
+    /// the retired four-step training it has recorded.
+    #[test]
+    fn an_account_short_of_the_badge_is_on_the_tutorial() {
+        let states = step_states(true, false, false);
+
+        assert_eq!(states, vec![Completed, Current, Blocked]);
+        assert_eq!(step_opens(&states), vec![false, true, false]);
+    }
+
+    /// The badge holder's view of the badge step is the one left open.
+    #[test]
+    fn the_badge_holder_sees_the_badge_step() {
+        let states = step_states(true, true, false);
+
+        assert_eq!(states, vec![Completed, Completed, Completed]);
+        assert_eq!(step_opens(&states), vec![false, false, true]);
+    }
+
+    /// Back from the tutorial with no account: the tutorial is done, the
+    /// account is still to do but not pressed open, and the badge step --
+    /// where the last chance to claim the badge is -- is open.
+    #[test]
+    fn a_visitor_back_from_the_tutorial_lands_on_the_badge_step() {
+        let states = step_states(false, false, true);
+
+        assert_eq!(states, vec![Available, Completed, Current]);
+        assert_eq!(step_opens(&states), vec![false, false, true]);
+    }
+
+    /// The badge step tells a visitor holding a finished tutorial how to
+    /// claim the badge, and tells anyone else -- the earner -- that they
+    /// have it.
+    #[test]
+    fn the_badge_step_says_last_chance_or_congratulations() {
+        let content = FoundationsContent::built_in(());
+        let body = |tutorial_pending| {
+            BadgeBody {
+                tutorial_pending,
+                claim_html: content.claim_html.clone(),
+                earned_html: "EARNED".to_string(),
+                next_steps_html: content.next_steps_html.clone(),
+                last_chance_html: content.last_chance_html.clone(),
+            }
+            .render_once()
+            .unwrap()
         };
 
-        // Serialize, then drop a field, simulating JSON written before that
-        // field existed.
-        let mut value = serde_json::to_value(&saved).unwrap();
-        value.as_object_mut().unwrap().remove("sponsor");
+        let pending = body(true);
+        assert!(pending.contains("final opportunity"));
+        assert!(pending.contains("next=/training/foundations%23start"));
+        assert!(!pending.contains("EARNED"));
 
-        let loaded: FoundationsContent = serde_json::from_value(value).unwrap();
-
-        // The edited field survives; the dropped field fills from Default
-        // rather than resetting the whole record.
-        assert_eq!(loaded.title, "Edited Title");
-        assert_eq!(loaded.sponsor, FoundationsContent::default().sponsor);
+        let earned = body(false);
+        assert!(earned.contains("You've completed the Foundations"));
+        assert!(earned.contains("EARNED"));
+        assert!(!earned.contains("final opportunity"));
     }
 }

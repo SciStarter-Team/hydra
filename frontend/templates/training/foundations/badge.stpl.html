@@ -1,0 +1,7 @@
+<% if self.tutorial_pending { %>
+<%- self.last_chance_html %>
+<% } else { %>
+<%- self.claim_html %>
+<div class="mb-8"><%- self.earned_html %></div>
+<%- self.next_steps_html %>
+<% } %>

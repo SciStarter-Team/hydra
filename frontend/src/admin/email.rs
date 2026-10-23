@@ -354,10 +354,48 @@ async fn email_stored_edit(
     }
 }
 
+/// Where an edit form's request leaves the editor once its action is done.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum AfterEdit {
+    /// Stay on the editor, as it is: a save, which may go on to open the
+    /// send dialog.
+    Stay,
+    /// Reload the editor, so it shows a state the action changed.
+    Reload,
+    /// Go back to the list: the email is gone.
+    Leave,
+}
+
+/// The response that ends an edit form's request. An htmx request is told
+/// where to go next; a plain form post goes back to `list` whatever it did.
+fn after_edit(req: &poem::Request, after: AfterEdit, list: &str) -> poem::Response {
+    if req.headers().get("HX-Request").is_none() {
+        return poem::Response::builder()
+            .status(poem::http::StatusCode::SEE_OTHER)
+            .header("Location", list)
+            .finish();
+    }
+
+    let response = poem::Response::builder().status(poem::http::StatusCode::OK);
+    match after {
+        AfterEdit::Stay => response.finish(),
+        AfterEdit::Reload => response.header("HX-Refresh", "true").finish(),
+        AfterEdit::Leave => response.header("HX-Redirect", list).finish(),
+    }
+}
+
+/// What the stored-email editor's form asks for.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum StoredEmailAction {
+    Save,
+    Delete,
+}
+
 // Stored email update handler
 #[derive(Debug, Deserialize)]
 pub struct UpdateStoredEmailForm {
-    action: String,
+    action: StoredEmailAction,
     slug: Option<String>,
     subject: Option<String>,
     body_delta: Option<String>,
@@ -382,16 +420,17 @@ async fn email_stored_update(
         .parse::<ulid::Ulid>()
         .map_err(|_| anyhow::anyhow!("Invalid stored email ID format"))?;
 
-    match form.action.as_str() {
-        "delete" => {
+    let after = match form.action {
+        StoredEmailAction::Delete => {
             let request = common::message::email::DeleteStoredEmailRequest { stored_email_id };
             common::service::request::<common::message::email::DeleteStoredEmailResponse>(
                 "emailer.stored.delete",
                 request,
             )
             .await?;
+            AfterEdit::Leave
         }
-        "save" => {
+        StoredEmailAction::Save => {
             let request = common::message::email::UpdateStoredEmailRequest {
                 stored_email_id,
                 slug: form.slug,
@@ -412,22 +451,11 @@ async fn email_stored_update(
                 request,
             )
             .await?;
+            AfterEdit::Stay
         }
-        _ => return Err(anyhow::anyhow!("Invalid action")),
-    }
+    };
 
-    // If this is an HTMX request, just return 200 OK
-    if req.headers().get("HX-Request").is_some() {
-        Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::OK)
-            .finish())
-    } else {
-        // Otherwise redirect to the list page
-        Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::SEE_OTHER)
-            .header("Location", "/-admin/email/stored")
-            .finish())
-    }
+    Ok(after_edit(req, after, "/-admin/email/stored"))
 }
 
 #[derive(Debug, Deserialize)]
@@ -675,10 +703,20 @@ async fn email_oneoff_edit(
     }
 }
 
+/// What the one-off email editor's form asks for.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum OneoffEmailAction {
+    Save,
+    Delete,
+    Archive,
+    Unarchive,
+}
+
 // Oneoff email update handler
 #[derive(Debug, Deserialize)]
 pub struct UpdateOneoffEmailForm {
-    action: String,
+    action: OneoffEmailAction,
     subject: Option<String>,
     body_delta: Option<String>,
     #[serde(default, deserialize_with = "deserialize_string_or_vec")]
@@ -699,16 +737,17 @@ async fn email_oneoff_update(
         .parse::<ulid::Ulid>()
         .map_err(|_| anyhow::anyhow!("Invalid oneoff email ID format"))?;
 
-    match form.action.as_str() {
-        "delete" => {
+    let after = match form.action {
+        OneoffEmailAction::Delete => {
             let request = common::message::email::DeleteOneoffEmailRequest { oneoff_email_id };
             common::service::request::<common::message::email::DeleteOneoffEmailResponse>(
                 "emailer.oneoff.delete",
                 request,
             )
             .await?;
+            AfterEdit::Leave
         }
-        "archive" => {
+        OneoffEmailAction::Archive => {
             let request = common::message::email::ArchiveOneoffEmailRequest {
                 oneoff_email_id,
                 archived: true,
@@ -718,8 +757,9 @@ async fn email_oneoff_update(
                 request,
             )
             .await?;
+            AfterEdit::Reload
         }
-        "unarchive" => {
+        OneoffEmailAction::Unarchive => {
             let request = common::message::email::ArchiveOneoffEmailRequest {
                 oneoff_email_id,
                 archived: false,
@@ -729,8 +769,9 @@ async fn email_oneoff_update(
                 request,
             )
             .await?;
+            AfterEdit::Reload
         }
-        "save" => {
+        OneoffEmailAction::Save => {
             let request = common::message::email::UpdateOneoffEmailRequest {
                 oneoff_email_id,
                 subject: form.subject,
@@ -749,22 +790,11 @@ async fn email_oneoff_update(
                 request,
             )
             .await?;
+            AfterEdit::Stay
         }
-        _ => return Err(anyhow::anyhow!("Invalid action")),
-    }
+    };
 
-    // If this is an HTMX request, just return 200 OK
-    if req.headers().get("HX-Request").is_some() {
-        Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::OK)
-            .finish())
-    } else {
-        // Otherwise redirect to the list page
-        Ok(poem::Response::builder()
-            .status(poem::http::StatusCode::SEE_OTHER)
-            .header("Location", "/-admin/email/oneoff")
-            .finish())
-    }
+    Ok(after_edit(req, after, "/-admin/email/oneoff"))
 }
 
 #[handler]
@@ -1701,5 +1731,69 @@ async fn email_dataset_variables(
                 .body(json))
         }
         Err(e) => Err(anyhow::anyhow!("Failed to fetch dataset variables: {}", e)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn htmx_request() -> poem::Request {
+        poem::Request::builder().header("HX-Request", "true").finish()
+    }
+
+    /// After an htmx request, a save stays put, a delete leaves the editor of
+    /// an email that no longer exists, and an archive change reloads it so
+    /// the page shows the new state.
+    #[test]
+    fn an_htmx_edit_is_told_where_to_go_next() {
+        let list = "/-admin/email/oneoff";
+
+        let stay = after_edit(&htmx_request(), AfterEdit::Stay, list);
+        assert_eq!(stay.status(), poem::http::StatusCode::OK);
+        assert!(stay.headers().get("HX-Redirect").is_none());
+        assert!(stay.headers().get("HX-Refresh").is_none());
+
+        let leave = after_edit(&htmx_request(), AfterEdit::Leave, list);
+        assert_eq!(leave.headers().get("HX-Redirect").unwrap(), list);
+
+        let reload = after_edit(&htmx_request(), AfterEdit::Reload, list);
+        assert_eq!(reload.headers().get("HX-Refresh").unwrap(), "true");
+    }
+
+    /// A plain form post goes back to the list whatever it did.
+    #[test]
+    fn a_plain_post_goes_back_to_the_list() {
+        let request = poem::Request::builder().finish();
+
+        for after in [AfterEdit::Stay, AfterEdit::Reload, AfterEdit::Leave] {
+            let response = after_edit(&request, after, "/-admin/email/stored");
+            assert_eq!(response.status(), poem::http::StatusCode::SEE_OTHER);
+            assert_eq!(
+                response.headers().get("Location").unwrap(),
+                "/-admin/email/stored"
+            );
+        }
+    }
+
+    /// The buttons send their action by name; a name the editor does not
+    /// offer is refused rather than taken as some other action.
+    #[test]
+    fn actions_are_read_by_name() {
+        let parse = |body: &str| serde_urlencoded::from_str::<UpdateOneoffEmailForm>(body);
+
+        assert_eq!(
+            parse("action=archive&subject=Hi").unwrap().action,
+            OneoffEmailAction::Archive
+        );
+        assert_eq!(
+            parse("action=delete").unwrap().action,
+            OneoffEmailAction::Delete
+        );
+        assert!(parse("action=explode").is_err());
+        assert!(
+            serde_urlencoded::from_str::<UpdateStoredEmailForm>("action=archive").is_err(),
+            "stored emails have no archive"
+        );
     }
 }

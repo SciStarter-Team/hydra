@@ -4,14 +4,26 @@
             <h3 class="text-lg font-medium text-gray-900">Trainings</h3>
             <p class="mt-1 text-sm text-gray-500">
                 Edit the text content of each training page &mdash; titles, prose, Articulate
-                links, project-card copy, and the sidebar. Step structure, gating, and progress
-                tracking are managed in code; this edits only the copy.
+                links, and the sidebar. Step structure, gating, and progress tracking are
+                managed in code; this edits only the copy. A field nobody has changed shows
+                the built-in copy, and follows it as the code changes.
             </p>
         </div>
         <div class="divide-y divide-gray-200">
-            <% for training in self.trainings { %>
-            <div class="flex items-center justify-between px-6 py-4">
-                <div class="text-sm font-medium text-gray-900"><%= training.name %></div>
+            <% for training in &self.trainings { %>
+            <div class="flex items-center justify-between gap-4 px-6 py-4">
+                <div>
+                    <div class="text-sm font-medium text-gray-900"><%= training.name %></div>
+                    <div class="text-xs text-gray-500">
+                        <% if training.changed == 0 { %>
+                        Built-in copy
+                        <% } else if training.changed == 1 { %>
+                        1 field changed
+                        <% } else { %>
+                        <%= training.changed %> fields changed
+                        <% } %>
+                    </div>
+                </div>
                 <a href="/-admin/trainings/<%= training.slug %>" class="text-sm font-medium text-indigo-600 hover:text-indigo-900">Edit content</a>
             </div>
             <% } %>

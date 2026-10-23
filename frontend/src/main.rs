@@ -702,18 +702,8 @@ async fn main() -> Result<(), Error> {
     let _home_settings_updates = tokio::spawn(home::HomeSettings::peering_task());
     let _pagecontent_updates = tokio::spawn(pagecontent::PageContent::peering_task());
     let _mcp_token_updates = tokio::spawn(mcp_token::McpToken::peering_task());
-    let _foundations_content_updates =
-        tokio::spawn(training::foundations::FoundationsContent::peering_task());
-    let _dataethics_content_updates =
-        tokio::spawn(training::dataethics::DataEthicsContent::peering_task());
-    let _dataliteracy_content_updates =
-        tokio::spawn(training::dataliteracy::DataLiteracyContent::peering_task());
-    let _highered_content_updates =
-        tokio::spawn(training::highered::HigherEdContent::peering_task());
-    let _libraries_content_updates =
-        tokio::spawn(training::libraries::LibrariesContent::peering_task());
-    let _champion_content_updates =
-        tokio::spawn(training::champion::ChampionContent::peering_task());
+    let _training_content_updates =
+        tokio::spawn(training::content::TrainingOverrides::peering_task());
     let _archive_entry_updates = tokio::spawn(admin::archive::ArchiveEntry::peering_task());
     let _file_metadata_updates = tokio::spawn(upload::storage::FileMetadata::peering_task());
 

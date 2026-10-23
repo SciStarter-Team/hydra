@@ -19,7 +19,7 @@ use poem::{Response, handler};
 use sailfish::TemplateOnce;
 
 use crate::middleware::authorization::Authenticated;
-use crate::peering::LoadStorePeered;
+use crate::training::content::TrainingCopy;
 use crate::training::{
     self, ArticulateCard, ClaimBody, SidebarBody, SigninBody, StepView, StepsView, TrainingChrome,
     TrainingContent, TutorialBody, linear_states_ungating, module_url, open_flags, render_page,
@@ -31,9 +31,8 @@ use crate::training::{
 /// launches, and which completion step it reports.
 ///
 /// One badge for all three — only the page, the module and the email differ.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DataEthicsLanguage {
-    #[default]
     English,
     Spanish,
     Portuguese,
@@ -120,18 +119,10 @@ impl DataEthicsLanguage {
     }
 }
 
-/// Editable copy for the Data Ethics training. See
-/// [`crate::training::foundations::FoundationsContent`] for the pattern;
-/// `#[serde(default)]` is required so added fields fill from `Default` instead
-/// of discarding saved edits.
+/// Editable copy for the Data Ethics training, one record per language (see
+/// [`crate::training::content`]).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(default)]
 pub struct DataEthicsContent {
-    /// Which page this copy belongs to. Carried in the record rather than
-    /// implied by where it was read from, because `save_to_database` is handed
-    /// nothing but the value -- including on a peer applying somebody else's
-    /// edit -- and has to know which row to write.
-    pub language: DataEthicsLanguage,
     pub title: String,
     pub sponsor: String,
     pub intro: String,
@@ -150,10 +141,10 @@ pub struct DataEthicsContent {
     pub sidebar_html: String,
 }
 
-impl Default for DataEthicsContent {
-    fn default() -> Self {
+impl DataEthicsContent {
+    /// The copy of orrery's English `training-dataethics` page.
+    fn english() -> DataEthicsContent {
         DataEthicsContent {
-            language: DataEthicsLanguage::English,
             title: "Data Ethics for Practitioners".to_string(),
             sponsor: String::new(),
             intro: r#"The "Data Ethics" tutorial and badge are designed for practitioners and leaders of participatory science projects, including citizen science and community science projects. The tutorial will help you “think like an ethicist” by identifying relevant ethical obligations, tensions, and issues that may arise in your project, and use them to make decisions. The tutorial is intended to help you understand the unique obligations for collecting, stewarding, and disseminating project data in ways that foster trust between practitioners, participants, and partners.
@@ -191,38 +182,19 @@ impl Default for DataEthicsContent {
     }
 }
 
-impl LoadStorePeered for DataEthicsContent {
-    type DatabaseKey = DataEthicsLanguage;
+impl TrainingCopy for DataEthicsContent {
+    type Record = DataEthicsLanguage;
 
-    const GROUP: &str = "training_content";
-    // One peering channel for all three languages: the value carries its own,
-    // so a peer knows which row an arriving edit belongs to.
-    const SPECIFIC: &str = "data-ethics";
-
-    async fn save_to_database(&self) -> Result<(), Error> {
-        training::save_content_json(self.language.content_slug(), self).await
-    }
-
-    async fn read_from_database(language: DataEthicsLanguage) -> Result<Self, Error> {
-        training::read_content_json(language.content_slug()).await
-    }
-}
-
-impl DataEthicsContent {
-    /// Current editable content for a language, or its built-in copy if none
-    /// has been saved yet.
-    pub async fn current(language: DataEthicsLanguage) -> DataEthicsContent {
-        DataEthicsContent::load(language)
-            .await
-            .unwrap_or_else(|_| DataEthicsContent::built_in(language))
+    fn row(language: DataEthicsLanguage) -> &'static str {
+        language.content_slug()
     }
 
     /// The copy a language ships with: orrery's English page for
     /// [`DataEthicsLanguage::English`], and the wording of its translated
     /// pages for the other two.
-    pub fn built_in(language: DataEthicsLanguage) -> DataEthicsContent {
+    fn built_in(language: DataEthicsLanguage) -> DataEthicsContent {
         match language {
-            DataEthicsLanguage::English => DataEthicsContent::default(),
+            DataEthicsLanguage::English => DataEthicsContent::english(),
             DataEthicsLanguage::Spanish => DataEthicsContent::spanish(),
             DataEthicsLanguage::Portuguese => DataEthicsContent::portuguese(),
         }
@@ -236,7 +208,6 @@ impl DataEthicsContent {
     /// Amazónicas, RBCC and RICAP; it is their wording, not ours to reword.
     fn spanish() -> DataEthicsContent {
         DataEthicsContent {
-            language: DataEthicsLanguage::Spanish,
             title: "Ética de datos para las ciencias participativas".to_string(),
             sponsor: String::new(),
             intro: r#"El tutorial y la insignia de “Ética de datos” están diseñados para participantes y líderes de proyectos de ciencia participativa, incluidos proyectos de ciencia ciudadana y ciencia comunitaria. El tutorial te ayudará a “pensar como una persona experta en ética”, identificando las obligaciones, tensiones y cuestiones relevantes en los aspectos éticos que pueden surgir en tu proyecto, y usándolas para orientar la toma de decisiones. El tutorial busca ayudarte a comprender las obligaciones específicas relacionadas con la recolección, gestión responsable y difusión de los datos del proyecto, de manera que fortalezcan la confianza entre profesionales, participantes y socios.
@@ -279,7 +250,6 @@ impl DataEthicsContent {
     /// The copy of orrery's `training-dataethics-pt` page (entity 13062).
     fn portuguese() -> DataEthicsContent {
         DataEthicsContent {
-            language: DataEthicsLanguage::Portuguese,
             title: "Ética de dados para ciência cidadã".to_string(),
             sponsor: String::new(),
             intro: r#"O tutorial e o selo de “Ética de Dados” foram desenvolvidos para profissionais e lideranças de projetos de ciência participativa, incluindo projetos de ciência cidadã e ciência comunitária. O tutorial ajudará você a “pensar como uma pessoa especialista em ética”, identificando obrigações éticas, tensões e questões relevantes que podem surgir em seu projeto, e usando-as para orientar a tomada de decisões. O tutorial busca ajudar você a compreender as obrigações específicas relacionadas à coleta, gestão responsável e disseminação dos dados do projeto, de forma a fortalecer a confiança entre profissionais, participantes e parceiros.
@@ -343,7 +313,7 @@ async fn render(
     user_info: Option<Arc<BasicInfo>>,
 ) -> Result<Response, Error> {
     let content = DataEthicsContent::current(language).await;
-    let rendered = build_content(&content, user_info.clone()).await?;
+    let rendered = build_content(language, &content, user_info.clone()).await?;
     render_page(
         language.base_path(),
         content.title.clone(),
@@ -376,17 +346,18 @@ async fn render_progress(
     user_info: Option<Arc<BasicInfo>>,
 ) -> Result<Response, Error> {
     let content = DataEthicsContent::current(language).await;
-    let steps = build_steps(&content, &user_info).await;
+    let steps = build_steps(language, &content, &user_info).await;
     let count = training::tutorials_completed(WorkflowType::DataEthics).await;
     render_progress_fragment(steps, count)
 }
 
 async fn build_content(
+    language: DataEthicsLanguage,
     content: &DataEthicsContent,
     user_info: Option<Arc<BasicInfo>>,
 ) -> Result<TrainingContent, Error> {
     let live_updates = user_info.is_some();
-    let steps = build_steps(content, &user_info).await;
+    let steps = build_steps(language, content, &user_info).await;
     let tutorials_completed = training::tutorials_completed(WorkflowType::DataEthics).await;
     let sidebar_html = SidebarBody {
         badge_image: content.badge_image.clone(),
@@ -396,7 +367,7 @@ async fn build_content(
     .unwrap_or_default();
 
     Ok(TrainingContent {
-        chrome: content.language.chrome(),
+        chrome: language.chrome(),
         breadcrumb_label: content.title.clone(),
         badge_image: content.badge_image.clone(),
         badge_alt: "Data Ethics for Practitioners badge".to_string(),
@@ -413,12 +384,16 @@ async fn build_content(
         live_updates,
         sse_channel: "training".to_string(),
         sse_event: WorkflowType::DataEthics.slug().to_string(),
-        progress_path: content.language.progress_path().to_string(),
+        progress_path: language.progress_path().to_string(),
     })
 }
 
 /// Three linear steps: account (signed in) → tutorial (recorded) → badge.
-async fn build_steps(content: &DataEthicsContent, user_info: &Option<Arc<BasicInfo>>) -> StepsView {
+async fn build_steps(
+    language: DataEthicsLanguage,
+    content: &DataEthicsContent,
+    user_info: &Option<Arc<BasicInfo>>,
+) -> StepsView {
     let logged_in = user_info.is_some();
     let status = match user_info {
         Some(user) => {
@@ -434,7 +409,7 @@ async fn build_steps(content: &DataEthicsContent, user_info: &Option<Arc<BasicIn
     let tutorial_done = status
         .completed_steps
         .iter()
-        .any(|step| step == content.language.step());
+        .any(|step| step == language.step());
     // The tutorial is open to everyone: a visitor with no account can work
     // through it, they just cannot be awarded the badge at the end. Orrery's
     // three pages say the same thing with `data-unblocked`.
@@ -451,19 +426,20 @@ async fn build_steps(content: &DataEthicsContent, user_info: &Option<Arc<BasicIn
             .as_ref()
             .map(|user| user.handle.clone())
             .unwrap_or_default(),
-        next_path: content.language.base_path().to_string(),
-        chrome: content.language.chrome(),
+        next_path: language.base_path().to_string(),
+        chrome: language.chrome(),
     }
     .render_once()
     .unwrap_or_default();
 
     let tutorial_href = tutorial_launch_url(
-        module_url(&content.articulate_url, content.language.module_url()),
-        Some(content.language.activity_id()),
+        module_url(&content.articulate_url, language.module_url()),
+        Some(language.activity_id()),
         user_info,
     );
 
     let tutorial_body = TutorialBody {
+        notice: String::new(),
         intro: content.tutorial_intro.clone(),
         cards: vec![ArticulateCard {
             href: tutorial_href,
@@ -581,30 +557,27 @@ mod tests {
         );
     }
 
-    /// Each language reads and writes its own row, and its built-in copy says
-    /// so -- a record that named the wrong language would overwrite another
-    /// language's page the first time an admin saved it.
+    /// A language's record holds only what staff changed on that page; the
+    /// rest of the page reads as that language's own built-in copy. Filling
+    /// the gaps from any other language's copy -- English, say -- would put
+    /// English text on the Spanish page.
     #[test]
-    fn built_in_copy_names_the_language_it_belongs_to() {
-        for language in [
-            DataEthicsLanguage::English,
-            DataEthicsLanguage::Spanish,
-            DataEthicsLanguage::Portuguese,
-        ] {
-            assert_eq!(DataEthicsContent::built_in(language).language, language);
-        }
-    }
+    fn a_changed_record_fills_the_rest_from_its_own_language() {
+        use crate::training::content::{TrainingOverrides, copy_fields};
 
-    /// A stored record written before the language field existed is the
-    /// English one; `#[serde(default)]` has to fill it in as such rather than
-    /// failing the read and silently reverting the page to built-in copy.
-    #[test]
-    fn content_saved_before_the_language_field_reads_back_as_english() {
-        let stored = serde_json::json!({ "title": "Data Ethics for Practitioners" });
-        let content: DataEthicsContent = serde_json::from_value(stored).expect("reads back");
+        let spanish = DataEthicsContent::built_in(DataEthicsLanguage::Spanish);
+        let overrides = TrainingOverrides {
+            row: DataEthicsContent::row(DataEthicsLanguage::Spanish).to_string(),
+            fields: [("title".to_string(), serde_json::json!("Título editado"))].into(),
+        };
 
-        assert_eq!(content.language, DataEthicsLanguage::English);
-        assert_eq!(content.title, "Data Ethics for Practitioners");
+        let fields = overrides.apply(copy_fields(&spanish).unwrap());
+        let current: DataEthicsContent =
+            serde_json::from_value(serde_json::Value::Object(fields)).unwrap();
+
+        assert_eq!(current.title, "Título editado");
+        assert_eq!(current.intro, spanish.intro);
+        assert_eq!(current.claim_html, spanish.claim_html);
     }
 
     /// The three pages are distinct places, and the legacy orrery URLs point
