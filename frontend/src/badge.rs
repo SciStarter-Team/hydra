@@ -329,9 +329,9 @@ fn badge_url(badge: Badge, user_id: &str) -> String {
     )
 }
 
-// The earner's own view of the badge page has a section on showing the
-// badge off, with one part for LinkedIn's Licenses & Certifications and one
-// for posting it. Its phrases are named here, rather than written into the
+// The badge page has a section on how the earner can show the badge off,
+// with one part for LinkedIn's Licenses & Certifications and one for
+// posting it. Its phrases are named here, rather than written into the
 // template, so the seed test can find them; migration
 // `seed_badge_share_text_translations` translates them under exactly this
 // wording.
@@ -343,15 +343,26 @@ const LINKEDIN_EXPLANATION: &str = "Permanently showcase your achievement in the
 const SOCIAL_HEADING: &str = "Share on Social";
 const SOCIAL_EXPLANATION: &str = "Celebrate your achievement with your network! Share your badge to highlight your citizen science skills and inspire others to get involved.";
 
+// The section's LinkedIn button and suggested post, translated by migration
+// `seed_badge_suggested_post_translations`. The button is ours rather than
+// LinkedIn's own button image, which is only in English. The suggested post
+// is the share buttons' post, for anywhere the buttons don't reach;
+// `COPY_POST` names its copy button for readers who cannot see the icon, and
+// `COPIED` is what that button says once it has done it.
+const LINKEDIN_BUTTON: &str = "Add to profile";
+const SUGGESTED_POST: &str = "Suggested post:";
+const COPY_POST: &str = "Copy the suggested post";
+const COPIED: &str = "Copied!";
+
 /// The button to the training that earns a badge, on its class page and on
 /// everyone else's view of an earner's. Migration
 /// `seed_badge_share_text_translations` gives it the translations the
 /// lowercase wording it replaced had.
 const LEARN_HOW_TO_EARN: &str = "Learn How to Earn This Badge";
 
-// Everyone else's view of the badge page has a section for confirming whom
-// the badge was issued to. Its phrases are named here for the seed test, as
-// the earner's are above. `CONFIRM_INTRO` uses `{name}`.
+// The badge page also has a section for confirming whom the badge was
+// issued to. Its phrases are named here for the seed test, as the showcase
+// section's are above. `CONFIRM_INTRO` uses `{name}`.
 const CONFIRM_HEADING: &str = "Confirm This Badge's Recipient";
 const CONFIRM_AUDIENCE: &str = "For employers, schools, and credential reviewers";
 const CONFIRM_INTRO: &str = "Want to confirm that this {name} badge, issued by SciStarter, belongs to a particular person? Enter their email address below to confirm whether it was issued to them.";
@@ -937,7 +948,8 @@ struct BadgeTemplate {
     /// the page is in.
     issued_on: String,
     earn_url: Option<String>,
-    /// The earner's post, for the share buttons that take one.
+    /// The earner's post, for the share buttons that take one and as
+    /// the suggested post to paste into those that don't.
     share_text: String,
     /// How a link to this page presents itself where it is shared.
     link_title: String,
@@ -1220,16 +1232,24 @@ const SHARE_INVITING: &str = "I'm happy to share that I've earned the {name} cer
 /// certification and has nowhere to send anyone.
 const SHARE_PLAIN: &str = "I'm happy to share that I've earned the {name} badge from @SciStarter.";
 
+/// The hashtags that end the earner's post. Never passed through `tr`: a
+/// hashtag is worth what everyone else posting under it makes it worth, and
+/// a translated one would only split them up.
+const SHARE_HASHTAGS: &str = "#CitizenScience #SciStarter #DigitalBadge";
+
 /// What the earner's share buttons offer to post about the badge called
 /// `name`: a certification, with an invitation to the training at
-/// `earn_url`, or a plain badge when there is no training to earn it by.
+/// `earn_url`, or a plain badge when there is no training to earn it by,
+/// followed by [`SHARE_HASHTAGS`].
 fn share_text(name: &str, earn_url: Option<&str>) -> String {
-    match earn_url {
+    let post = match earn_url {
         Some(url) => tr(SHARE_INVITING)
             .replace("{name}", name)
             .replace("{url}", &readable_url(url)),
         None => tr(SHARE_PLAIN).replace("{name}", name),
-    }
+    };
+
+    format!("{post} {SHARE_HASHTAGS}")
 }
 
 /// What a link to an earner's page says was earned, above the badge's name
@@ -1531,6 +1551,7 @@ mod tests {
             include_str!("../migrations/20260908180257_seed_badge_page_translations.sql"),
             include_str!("../migrations/20261022191434_seed_badge_linkedin_hint_translation.sql"),
             include_str!("../migrations/20261022195218_seed_badge_share_text_translations.sql"),
+            include_str!("../migrations/20261026123401_seed_badge_suggested_post_translations.sql"),
         ] {
             sqlx::raw_sql(seed).execute(&pool).await.expect("seed");
         }
@@ -1543,6 +1564,10 @@ mod tests {
             LINKEDIN_EXPLANATION,
             SOCIAL_HEADING,
             SOCIAL_EXPLANATION,
+            LINKEDIN_BUTTON,
+            SUGGESTED_POST,
+            COPY_POST,
+            COPIED,
             SHARE_INVITING,
             SHARE_PLAIN,
             CONFIRM_HEADING,
@@ -1585,7 +1610,7 @@ mod tests {
 
         assert_eq!(
             share_text(foundations.name(), foundations.earn_url()),
-            "I'm happy to share that I've earned the Foundations of Citizen Science certification from @SciStarter. You can too at SciStarter.org/training-foundations"
+            "I'm happy to share that I've earned the Foundations of Citizen Science certification from @SciStarter. You can too at SciStarter.org/training-foundations #CitizenScience #SciStarter #DigitalBadge"
         );
 
         assert_eq!(
@@ -1594,7 +1619,7 @@ mod tests {
                 Badge::OneMillionActsOfScience2026.earn_url()
             ),
             format!(
-                "I'm happy to share that I've earned the {} badge from @SciStarter.",
+                "I'm happy to share that I've earned the {} badge from @SciStarter. #CitizenScience #SciStarter #DigitalBadge",
                 Badge::OneMillionActsOfScience2026.name()
             )
         );

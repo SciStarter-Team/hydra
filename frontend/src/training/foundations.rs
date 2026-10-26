@@ -148,7 +148,7 @@ impl TrainingCopy for FoundationsContent {
             articulate_es: FOUNDATIONS_ES_URL.to_string(),
             claim_heading: "Congratulations!".to_string(),
             claim_button: "Claim your badge".to_string(),
-            claim_html: "<p><b>You've completed the Foundations of Citizen Science training.</b></p>".to_string(),
+            claim_html: "<p>🎉 <b>You've completed the Foundations of Citizen Science training!</b> 🎉</p>".to_string(),
             next_steps_html: r#"<p><b>What's next?</b> Put what you've learned into action by finding a project that matches your interests, location, or available time.</p>
 <p><a href="/finder" class="btn btn-primary">Find a project</a></p>
 <p>Or keep learning! Explore additional SciStarter trainings and opportunities to earn more badges and certificates.</p>

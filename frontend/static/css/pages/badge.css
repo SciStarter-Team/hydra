@@ -6,10 +6,21 @@
     margin-block: 1.5rem;
 }
 
-/* A section heading: blue, like the badge's name above it, and well below
-   it in size. */
+/* The sections where the earner shows the badge off and where anyone
+   confirms whom it was issued to sit on a cool tint, set apart from the
+   credential above them. */
+.badge-panel {
+    background: var(--color-bg-cool);
+    border: 1px solid var(--color-linework);
+    border-radius: 12px;
+    padding: 1.25rem;
+    margin-top: 1.5rem;
+}
+
+/* A section heading: indigo, the site's heading colour on a tint, and well
+   below the badge's name in size. */
 .badge-section-heading {
-    color: var(--color-primary);
+    color: var(--color-primary-dark);
     font-size: 1.75rem;
     font-weight: 700;
     line-height: 1.2;
@@ -26,6 +37,153 @@
     margin-block: 1rem 0.25rem;
 }
 
+/* One thing to do with the badge: an icon beside what it does, on a white
+   card within its section. A bare one is the same arrangement with no card
+   of its own, for an icon beside the section's own heading. */
+.badge-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    background: var(--color-white);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-top: 1rem;
+}
+.badge-option-bare {
+    background: none;
+    padding: 0;
+    margin-top: 0;
+}
+.badge-option-body {
+    flex: 1;
+    min-width: 0;
+}
+.badge-option-body > .badge-subheading:first-child {
+    margin-top: 0;
+}
+.badge-panel > :last-child,
+.badge-option-body > :last-child {
+    margin-bottom: 0;
+}
+.badge-option-icon {
+    flex: none;
+    width: 3rem;
+    height: 3rem;
+}
+.badge-icon-linkedin {
+    color: #0A66C2;
+}
+.badge-icon-social {
+    color: var(--color-primary);
+}
+.badge-icon-confirm {
+    color: var(--color-primary-dark);
+}
+
+/* Who the confirmation section is for, as a subheading under its heading. */
+.badge-audience {
+    font-size: 1rem;
+    margin-top: 0.25rem;
+}
+
+/* LinkedIn's colours and glyph, with our words, which can be translated
+   where LinkedIn's own button image cannot. */
+.badge-linkedin-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    background: #0A66C2;
+    color: var(--color-white);
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1.2;
+    padding: 0.65rem 1.25rem;
+    border-radius: 6px;
+    text-decoration: none;
+}
+.badge-linkedin-button:hover,
+.badge-linkedin-button:focus-visible {
+    background: #004182;
+    color: var(--color-white);
+    text-decoration: none;
+}
+.badge-linkedin-button svg {
+    width: 1.25rem;
+    height: 1.25rem;
+}
+
+/* Notes under a section's action. Dark enough to read on the tint as well
+   as on white. */
+.badge-fine-print {
+    color: var(--color-gray-600);
+    font-size: 0.85rem;
+    margin-top: 0.35rem;
+}
+
+/* The suggested post: the text the share buttons post, on the tint, with a
+   button to copy it. */
+.badge-suggested-post {
+    background: var(--color-bg-cool);
+    border: 1px solid var(--color-linework);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    margin-top: 1rem;
+}
+.badge-suggested-post-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    color: var(--color-primary-dark);
+}
+.badge-suggested-post-text {
+    font-size: 0.95rem;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+    margin: 0.25rem 0 0;
+}
+.badge-copy {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--color-primary-dark);
+    background: none;
+    border: 0;
+    border-radius: 4px;
+    padding: 0.25rem;
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+.badge-copy:hover,
+.badge-copy:focus-visible {
+    background: var(--color-linework);
+}
+.badge-copy.copied {
+    color: var(--color-primary-action);
+}
+.badge-copy svg {
+    width: 1.5rem;
+    height: 1.5rem;
+}
+
+/* The address and its button share a row while both fit, and the button
+   takes a row of its own when they don't. */
+.badge-confirm-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+.badge-confirm-row input {
+    flex: 1 1 14rem;
+    min-width: 0;
+    background: var(--color-white);
+    border: 1px solid var(--color-neutral-mid);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    font-size: 1rem;
+}
+
 /* The details below this rule begin with padding of their own, so the rule
    keeps less space beneath it to match the gaps above the sections. */
 .badge-rule-before-details {
@@ -35,6 +193,35 @@
 /* On a phone the issuer's column drops below the earner's sections, which
    end with a section of their own, so it is ruled off from them too. */
 @media (max-width: 639px) {
+    .badge-panel {
+        padding: 1rem;
+    }
+    /* A phone has no width to spare for a column of icons, so each icon
+       sits beside its heading and everything after the heading spans the
+       card. */
+    .badge-option {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        align-items: center;
+        gap: 0.25rem 0.75rem;
+        padding: 0.75rem;
+    }
+    .badge-option-body {
+        display: contents;
+    }
+    .badge-option-body > * {
+        grid-column: 1 / -1;
+    }
+    .badge-option-body > .badge-linkedin-button {
+        justify-self: start;
+    }
+    .badge-option-body > :first-child {
+        grid-column: 2;
+    }
+    .badge-option-icon {
+        width: 2.25rem;
+        height: 2.25rem;
+    }
     .badge-issuer {
         border-top: 1px solid #E5E7EB;
         margin-top: 1.5rem;
